@@ -52,6 +52,11 @@ public:
   // devolve a última textura escrita naquele slot, não lixo nem a dummy.
   void unregisterTexture(u32 index);
 
+  // Troca a imagem/sampler de um slot já registrado, sem mudar o índice que os
+  // materiais usam (streaming de mipmaps, S2). O chamador garante que nenhum
+  // quadro em voo ainda lê o slot: com um único quadro em voo, depois da fence.
+  bool rewriteTexture(u32 index, VkImageView imageView, VkSampler sampler, VkImageLayout imageLayout);
+
 private:
   VkDevice device_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout layout_ = VK_NULL_HANDLE;

@@ -39,6 +39,32 @@ bool hasClamp(const ResolvedRenderingPolicy &policy, const char *axis, PolicyCla
 
 } // namespace
 
+AE_TEST(policy_texture_streaming_is_opt_in_with_level_defaults_and_safe_limits) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_TRUE(!policy.textures.streaming, "herdado: desligado, como o padrão da Unity");
+  settings.textureStreaming = FeatureOverride::Enabled;
+  policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_TRUE(policy.textures.streaming, "ligado pelo autor");
+  AE_EXPECT_EQ(policy.textures.streamingBudgetBytes, 384ull << 20, "orçamento do nível Médio");
+  AE_EXPECT_EQ(policy.textures.streamingMaxLevelReduction, 2u, "redução máxima da Unity");
+  AE_EXPECT_EQ(policy.textures.streamingUploadBytesPerFrame, 4u << 20, "teto de envio padrão");
+  settings.preset = QualityPreset::S;
+  AE_EXPECT_EQ(resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None).textures.streamingBudgetBytes,
+               768ull << 20, "Ultra tem orçamento maior");
+  settings.textureStreamingBudgetMegabytes = 1;
+  settings.textureStreamingMaxLevelReduction = 40;
+  settings.textureStreamingUploadKilobytesPerFrame = 1;
+  policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.textures.streamingBudgetBytes, 32ull << 20, "orçamento nunca abaixo de 32 MB");
+  AE_EXPECT_EQ(policy.textures.streamingMaxLevelReduction, 7u, "redução limitada a 7 níveis");
+  AE_EXPECT_EQ(policy.textures.streamingUploadBytesPerFrame, 256u << 10, "envio nunca abaixo de 256 KB");
+  settings.textureStreaming = FeatureOverride::Disabled;
+  AE_EXPECT_TRUE(!resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None).textures.streaming,
+                 "desligado explicitamente");
+}
+
 AE_TEST(policy_upscaling_is_independent_of_aa_and_forces_a_real_resolve) {
   ProjectRenderingSettings settings{};
   settings.preset=QualityPreset::C;

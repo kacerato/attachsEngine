@@ -17,7 +17,8 @@ bool RuntimeRenderingState::validate(const renderer::ProjectRenderingSettings &s
      !feature(settings.staticShadowCache)||!feature(settings.lodSelection)||
      !feature(settings.materialShaderVariants)||!feature(settings.environmentSplitSumBrdf)||
      !feature(settings.thermalDistanceScaling)||!feature(settings.postFxaa)||
-     !feature(settings.postVignette)||!feature(settings.dynamicResolution)) return false;
+     !feature(settings.postVignette)||!feature(settings.dynamicResolution)||
+     !feature(settings.textureStreaming)) return false;
   renderer::ProjectRenderingSettings parsed{};
   return renderer::readRenderingSettings(renderer::writeRenderingSettings(settings), parsed);
 }

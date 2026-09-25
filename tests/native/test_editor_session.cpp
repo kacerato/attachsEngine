@@ -2391,6 +2391,50 @@ AE_TEST(the_reference_scene_template_builds_interior_and_exterior_in_one_undo_st
   AE_EXPECT_TRUE(!bare.createSceneTemplate(99), "índice fora do catálogo é recusado");
 }
 
+AE_TEST(the_quality_textures_tab_edits_mipmap_streaming_and_shows_what_the_gpu_holds) {
+  Fixture fixture;
+  fixture.session.setRenderingSettings({});
+  fixture.session.update();
+  tapWidget(fixture, widgetId(EditorWidget::QualityOpen));
+  tapWidget(fixture, widgetId(EditorWidget::QualityTabTextures));
+  AE_EXPECT_EQ(fixture.session.screen().qualityTab, 4u, "aba Texturas");
+  AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::QualityTextureStreaming)).x >= 0,
+                 "linha do streaming na aba");
+  // Herdado -> Desligado -> Ligado: o ciclo das outras linhas do painel.
+  tapWidget(fixture, widgetId(EditorWidget::QualityTextureStreaming));
+  tapWidget(fixture, widgetId(EditorWidget::QualityTextureStreaming));
+  const auto &draft = fixture.session.screen().qualityDraft;
+  AE_EXPECT_EQ(draft.textureStreaming, renderer::FeatureOverride::Enabled, "streaming ligado no rascunho");
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetUp));
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetUp));
+  AE_EXPECT_EQ(draft.textureStreamingBudgetMegabytes, 256u, "orçamento sobe pelos degraus do Memory Budget");
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetDown));
+  AE_EXPECT_EQ(draft.textureStreamingBudgetMegabytes, 128u, "e desce");
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingReductionUp));
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingReductionUp));
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingReductionUp));
+  AE_EXPECT_EQ(draft.textureStreamingMaxLevelReduction, 3u, "redução máxima em degraus de um nível");
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingUploadUp));
+  AE_EXPECT_EQ(draft.textureStreamingUploadKilobytesPerFrame, 512u, "envio por quadro");
+  tapWidget(fixture, widgetId(EditorWidget::QualityApply));
+  renderer::ProjectRenderingSettings requested;
+  AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(requested) &&
+                 requested.textureStreaming == renderer::FeatureOverride::Enabled &&
+                 requested.textureStreamingBudgetMegabytes == 128 && requested.textureStreamingMaxLevelReduction == 3 &&
+                 requested.textureStreamingUploadKilobytesPerFrame == 512, "Aplicar leva os quatro campos");
+  // O que o renderer relata aparece no painel, sem inventar números no host.
+  renderer::TextureStreamingStats stats;
+  stats.active = true;
+  stats.currentBytes = 96ull << 20;
+  stats.budgetBytes = 128ull << 20;
+  stats.streamingTextures = 72;
+  stats.pendingLoads = 5;
+  fixture.session.setTextureStreamingStatus(stats);
+  fixture.session.update();
+  AE_EXPECT_TRUE(fixture.session.screen().qualityTextureStreaming.streamingTextures == 72 &&
+                 fixture.session.screen().qualityTextureStreaming.pendingLoads == 5, "estado do renderer chega à tela");
+}
+
 AE_TEST(the_quality_panel_edits_a_draft_and_applies_it_on_request) {
   Fixture fixture;
   renderer::ProjectRenderingSettings project;

@@ -2,6 +2,7 @@
 
 #include "renderer/rendering_policy.h"
 #include "renderer/rendering_settings_file.h"
+#include "renderer/texture_streaming.h"
 
 #include <functional>
 
@@ -31,6 +32,9 @@ public:
   void setExecution(renderer::UpscalingFilter executed, renderer::TemporalUpscalerAvailability status) {
     executedUpscaler_=executed;executedStatus_=status;
   }
+  // S2: memória e trocas do streaming de mipmaps no último quadro.
+  void setTextureStreaming(const renderer::TextureStreamingStats &stats) { textureStreaming_ = stats; }
+  const renderer::TextureStreamingStats &textureStreaming() const noexcept { return textureStreaming_; }
   renderer::UpscalingFilter executedUpscaler() const noexcept { return executedUpscaler_; }
   renderer::TemporalUpscalerAvailability executedStatus() const noexcept { return executedStatus_; }
   bool refresh(u32 expectedWorld, renderer::RenderingCapabilities capabilities,
@@ -57,6 +61,7 @@ private:
   renderer::ThermalPressure thermal_ = renderer::ThermalPressure::None;
   RequestSink sink_;
   renderer::UpscalingFilter executedUpscaler_ = renderer::UpscalingFilter::Bilinear;
+  renderer::TextureStreamingStats textureStreaming_{};
   renderer::TemporalUpscalerAvailability executedStatus_ = renderer::TemporalUpscalerAvailability::Available;
   u32 world_ = 0;
   u64 nextRequestId_ = 1, pendingId_ = 0;

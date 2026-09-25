@@ -1057,6 +1057,11 @@ public:
     state_.qualityTemporalAaExecuted=nativeTaa;
     playScene_.setScriptRenderingExecution(executed,status);
   }
+  // S2: relatório do streaming de mipmaps do renderer, a cada quadro.
+  void setTextureStreamingStatus(const renderer::TextureStreamingStats &stats) {
+    state_.qualityTextureStreaming=stats;
+    playScene_.setScriptTextureStreaming(stats);
+  }
   bool temporalDebugViewAvailable(u32 view) const {
     if(view==0) return true;
     if(!state_.qualityTemporalAvailable || view>6) return false;

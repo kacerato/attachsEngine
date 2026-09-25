@@ -130,6 +130,26 @@ AE_TEST(the_editor_renders_native_unless_the_project_asks_otherwise) {
   AE_EXPECT_TRUE(policy.resolutionScale >= .999f, "resolução nativa");
 }
 
+AE_TEST(rendering_settings_persist_texture_streaming_and_reject_out_of_range) {
+  ProjectRenderingSettings settings;
+  settings.textureStreaming = FeatureOverride::Enabled;
+  settings.textureStreamingBudgetMegabytes = 768;
+  settings.textureStreamingMaxLevelReduction = 3;
+  settings.textureStreamingUploadKilobytesPerFrame = 2048;
+  ProjectRenderingSettings restored;
+  AE_EXPECT_TRUE(readRenderingSettings(writeRenderingSettings(settings), restored), "arquivo volta");
+  AE_EXPECT_TRUE(restored.textureStreaming == FeatureOverride::Enabled && restored.textureStreamingBudgetMegabytes == 768 &&
+                 restored.textureStreamingMaxLevelReduction == 3 && restored.textureStreamingUploadKilobytesPerFrame == 2048,
+                 "streaming, orçamento, redução e envio sobrevivem");
+  ProjectRenderingSettings untouched;
+  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 3\ntexture_streaming_max_level_reduction=9\n", untouched) &&
+                 untouched.textureStreamingMaxLevelReduction == 0, "redução fora de 1..7 recusa o arquivo");
+  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 3\ntexture_streaming_budget_mb=8\n", untouched),
+                 "orçamento abaixo de 32 MB recusado");
+  AE_EXPECT_TRUE(readRenderingSettings("astra_rendering 3\nquality=b\n", untouched) &&
+                 untouched.textureStreaming == FeatureOverride::Inherit, "arquivo anterior segue sem streaming");
+}
+
 AE_TEST(rendering_settings_v3_persist_temporal_upscaler_and_reject_future_names) {
   ProjectRenderingSettings settings;
   settings.upscalingFilter = UpscalingFilter::ArmAsr;

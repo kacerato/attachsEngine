@@ -204,6 +204,40 @@ e [Godot 4.4 CameraAttributes](https://docs.godotengine.org/en/4.4/classes/class
 A implementação do histograma/adaptação é própria. HDR intermediário e compute
 são requisitos; indisponibilidade deve ser diagnosticada, sem anunciar efeito ativo.
 
+### Streaming de mipmaps — 24/09/2026 (S2)
+
+Referência: [Unity 6.0 Mipmap Streaming](https://docs.unity3d.com/6000.0/Documentation/Manual/TextureStreaming.html)
+e os campos `QualitySettings.streamingMipmaps*`. O eixo `textureStreaming` (Inherit =
+desligado em todos os níveis, como na Unity) liga a residência por textura das
+texturas de autoria. `textureStreamingBudgetMegabytes` (Memory Budget; padrão 256/384/
+512/768 MB para Baixo/Médio/Alto/Ultra, 32–8192), `textureStreamingMaxLevelReduction`
+(Max Level Reduction; padrão 2, 1–7) e `textureStreamingUploadKilobytesPerFrame`
+(teto de envio por quadro; padrão 4 MB, 256 KB–64 MB) persistem em `rendering.astra`
+com chaves novas no arquivo v3 — uma engine anterior as ignora e continua sem streaming.
+
+O plano (`renderer/texture_streaming.h`) é puro e testado no host: o mip pedido por
+um uso é `floor(log2(texels por pixel))`, com a densidade vinda da métrica de UV da
+malha (raiz de área/área de UV, como `Mesh.GetUVDistributionMetric`) e da escala do
+objeto; o conjunto cabe no orçamento tirando níveis primeiro de quem tem menor
+prioridade; a redução é contada a partir do limite global de mip da qualidade; as
+trocas descem antes de subir e respeitam o teto de bytes, com pelo menos uma por
+quadro. No Android o consumidor roda logo após a fence do quadro anterior (há um
+único quadro em voo), cria a imagem nova, sobe a cauda da cadeia e regrava o mesmo
+slot bindless; a imagem anterior só sai depois de a nova existir.
+
+Diferenças explícitas: a fonte dos mips é a cadeia preparada em memória, não o disco
+— o streaming economiza residência na GPU, não RAM; todos os usos visíveis contam,
+sem recorte de frustum (girar a câmera não provoca troca); o lado maior da superfície
+é a altura da vista (erra para mais detalhe, nunca para menos). Aplicar pelo painel
+ou por `Graphics.ApplyRuntime` segue o mesmo ponto seguro de reconstrução dos outros
+eixos; a política ativa (térmica) também troca os campos de streaming sem recriar
+recursos. Com o streaming ligado, a textura nova entra na publicação pelo fim da
+faixa e sobe conforme a tela pede. `Graphics.State` expõe
+`TextureStreaming` com `CurrentBytes`, `DesiredBytes`, `TargetBytes`, `TotalBytes`,
+`NonStreamingBytes`, orçamento, pendências e falhas; `GraphicsSettings` e
+`ResolvedGraphicsSettings` ganham os quatro campos no fim. O tamanho das estruturas
+é travado dos dois lados (static_assert e teste gerenciado).
+
 A separação segue a diferença da Unity 6 entre a intenção alterada via `QualitySettings`
 e o pipeline atual consultável. Na Astra, o acknowledge assíncrono é explícito porque
 alguns eixos exigem reconstrução Vulkan; portanto um setter aceito não é apresentado

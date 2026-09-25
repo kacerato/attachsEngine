@@ -136,7 +136,7 @@ enum class QualityPreset : u32 { Auto = 0, C, B, A, S, Custom };
 // produziria dois campos capazes de se contradizer no arquivo do projeto.
 enum class FeatureOverride : u32 { Inherit = 0, Disabled, Enabled };
 
-inline constexpr u32 RenderingSettingsSchemaVersion = 10;
+inline constexpr u32 RenderingSettingsSchemaVersion = 11;
 
 // ---------------------------------------------------------------------------
 // Entrada 3 da ADR — escolha global serializada do projeto.
@@ -231,6 +231,14 @@ struct ProjectRenderingSettings final {
   float dynamicResolutionRecoveryHeadroomRatio = 0.0f;
   u32 dynamicResolutionOverloadFrames = 0;
   u32 dynamicResolutionRecoveryFrames = 0;
+
+  // Schema 11 (S2): Mipmap Streaming do Quality da Unity. Inherit fica
+  // desligado em todos os níveis, como o padrão da Unity: ligar muda o que a
+  // GPU guarda e é escolha do autor. Zero nos números herda o nível.
+  FeatureOverride textureStreaming = FeatureOverride::Inherit;
+  u32 textureStreamingBudgetMegabytes = 0;       // Memory Budget
+  u32 textureStreamingMaxLevelReduction = 0;     // Max Level Reduction
+  u32 textureStreamingUploadKilobytesPerFrame = 0; // teto de envio por quadro
 };
 
 // ---------------------------------------------------------------------------
@@ -347,6 +355,12 @@ struct TextureSettings final {
   // Deslocamento de mip aplicado na residência: 0 = resolução autoral.
   u32 residencyMipBias = 0;
   float samplerAnisotropy = 1.0f;
+  // Streaming de mipmaps (S2): residência por textura pela tela, dentro do
+  // orçamento. Desligado, toda textura fica a partir de `residencyMipBias`.
+  bool streaming = false;
+  u64 streamingBudgetBytes = 512ull << 20;
+  u32 streamingMaxLevelReduction = 2;
+  u32 streamingUploadBytesPerFrame = 4u << 20;
 };
 
 // Por que um eixo resolvido difere do pedido. A ADR exige "motivo registrado".

@@ -416,7 +416,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
                  std::span<const renderer::SharedAuthoringTexture>{},extraTextures,
       authoringResidencyMipBias_,textureResidencyMipBias_);
   std::vector<u8> samplerReused(extraTextures.size());
-  std::vector<u32> residentLevels(extraTextures.size());
+  std::vector<AuthoringResidency> nextResidency(extraTextures.size());
   MaterialTextureResidencyReport residency{};
   residency.requestedMipBias=textureResidencyMipBias_;
   textureResidencyDiagnostic_.clear();
@@ -459,51 +459,43 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
         return refuseTexture("Não foi possível gerar o mip de residência da textura autoral.");
       image.mipLevels=generatedLevels;generated=true;++residency.generatedMipTextures;
     }
-    const u32 requiredBias=(image.width==1 && image.height==1)?0:textureResidencyMipBias_;
-    auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
-                                                 std::numeric_limits<u64>::max(),requiredBias);
-    if(!resident.valid()) return refuseTexture("Textura autoral não possui o mip pedido pela qualidade.");
-    const u8 *source=generated?generatedChain.data():texture->mipChain.data();
-    if(generated) {
-      // `mipmaps=false`: o nível reduzido vira a base, sem habilitar os níveis
-      // seguintes que o perfil autoral recusou.
-      resident.description.mipLevels=1;
-      resident.byteSize=rhi::sampledMipByteSize(resident.description.format,
-                                                 resident.description.width,resident.description.height);
-    }
-    residentLevels[t]=resident.description.mipLevels;
-    residency.residentBytes+=resident.byteSize;
-    if(resident.baseMip) ++residency.reducedTextures;
     const bool reuseImage=plan.reuse[t]!=renderer::AuthoringTextureNoReuse;
-    if(!reuseImage) {
-      if(resident.byteOffset+resident.byteSize>(generated?generatedChain.size():texture->mipChain.size()) ||
-         !allocator.createImage(resident.description,&nextImages[t]) ||
-         !upload.uploadSampledMipChain(allocator,source+resident.byteOffset,resident.byteSize,nextImages[t]))
-        return refuseTexture("Falha ao enviar a residência reduzida da textura autoral.");
+    if(reuseImage && authoringResidency_.size()==authoringImages_.size()) {
+      // A imagem reaproveitada continua no nível em que o streaming a deixou;
+      // o sampler novo precisa saber quantos níveis ela tem de verdade.
+      nextResidency[t]=authoringResidency_[plan.reuse[t]];
+    } else {
+      u32 requiredBias=(image.width==1 && image.height==1)?0:textureResidencyMipBias_;
+      // S2: com streaming, a textura nova entra pelo fim da faixa (pequena) e o
+      // streaming sobe os níveis que a tela pedir; a publicação fica rápida.
+      if(!generated && textureStreamingInitialMip_>requiredBias && image.mipLevels>1)
+        requiredBias=std::min(image.mipLevels-1,textureStreamingInitialMip_);
+      auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
+                                                   std::numeric_limits<u64>::max(),requiredBias);
+      if(!resident.valid()) return refuseTexture("Textura autoral não possui o mip pedido pela qualidade.");
+      const u8 *source=generated?generatedChain.data():texture->mipChain.data();
+      if(generated) {
+        // `mipmaps=false`: o nível reduzido vira a base, sem habilitar os níveis
+        // seguintes que o perfil autoral recusou.
+        resident.description.mipLevels=1;
+        resident.byteSize=rhi::sampledMipByteSize(resident.description.format,
+                                                   resident.description.width,resident.description.height);
+      }
+      nextResidency[t]={generated?0u:resident.baseMip,resident.description.mipLevels,resident.byteSize,generated};
+      if(!reuseImage) {
+        if(resident.byteOffset+resident.byteSize>(generated?generatedChain.size():texture->mipChain.size()) ||
+           !allocator.createImage(resident.description,&nextImages[t]) ||
+           !upload.uploadSampledMipChain(allocator,source+resident.byteOffset,resident.byteSize,nextImages[t]))
+          return refuseTexture("Falha ao enviar a residência reduzida da textura autoral.");
+      }
     }
+    residency.residentBytes+=nextResidency[t].bytes;
+    if(nextResidency[t].baseMip || nextResidency[t].generated) ++residency.reducedTextures;
     // O sampler reaproveitado só vale se a anisotropia da política não mudou.
     if(reuseImage && authoringAnisotropy_==samplerAnisotropy_ && authoringMipLodBias_==samplerMipLodBias_) {
       samplerReused[t]=1;continue;
     }
-    const u32 flags=texture->samplerFlags;
-    const auto filter=renderer::decodeTextureSampler(flags);
-    const auto wrap=[flags](u32 repeat,u32 mirror) {
-      return (flags&mirror)?VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:
-             (flags&repeat)?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    };
-    rhi::SamplerDesc sampling{};
-    sampling.minFilter=filter.minLinear?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
-    sampling.magFilter=filter.magLinear?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
-    sampling.mipmapMode=filter.mipLinear?VK_SAMPLER_MIPMAP_MODE_LINEAR:VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    sampling.addressU=wrap(renderer::AuthoringTextureRepeatU,renderer::AuthoringTextureMirrorU);
-    sampling.addressV=wrap(renderer::AuthoringTextureRepeatV,renderer::AuthoringTextureMirrorV);
-    sampling.maxLod=filter.mipEnabled?static_cast<float>(residentLevels[t]-1):0.0f;
-    // R4 (T13): anisotropia da qualidade escolhida, salvo quando o perfil da textura a desliga.
-    if(samplerAnisotropy_>1.0f && filter.minLinear && !(flags&renderer::AuthoringTextureNoAnisotropy)) {
-      sampling.enableAnisotropy=true;sampling.maxAnisotropy=samplerAnisotropy_;
-    }
-    if(filter.mipEnabled) sampling.mipLodBias=samplerMipLodBias_;
-    if(!nextSamplers[t].initialize(device.handle(),sampling))
+    if(!createAuthoringSampler(device,*texture,nextResidency[t].levels,nextSamplers[t]))
       return refuseTexture("Falha ao criar sampler da textura autoral residente.");
   }
   // Tudo o que é novo existe e subiu: só agora as imagens reaproveitadas mudam de
@@ -516,6 +508,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   }
   if(!sameGeometry) {vertices_=std::move(nextVertices);indices_=std::move(nextIndices);}
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
+  authoringResidency_=std::move(nextResidency);
   authoringTextureSources_.assign(extraTextures.begin(),extraTextures.end());
   authoringAnisotropy_=samplerAnisotropy_;
   authoringMipLodBias_=samplerMipLodBias_;
@@ -525,6 +518,64 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
   draws_=std::move(draws);materials_=std::move(materials);
   header_.vertexStride=renderer::MapVertexStride;
+  return true;
+}
+
+bool DirtRoadResources::createAuthoringSampler(rhi::VulkanDevice &device,const renderer::AuthoringTexture &texture,
+                                               u32 residentLevels,rhi::VulkanSampler &out) const {
+  const u32 flags=texture.samplerFlags;
+  const auto filter=renderer::decodeTextureSampler(flags);
+  const auto wrap=[flags](u32 repeat,u32 mirror) {
+    return (flags&mirror)?VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:
+           (flags&repeat)?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  };
+  rhi::SamplerDesc sampling{};
+  sampling.minFilter=filter.minLinear?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+  sampling.magFilter=filter.magLinear?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+  sampling.mipmapMode=filter.mipLinear?VK_SAMPLER_MIPMAP_MODE_LINEAR:VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  sampling.addressU=wrap(renderer::AuthoringTextureRepeatU,renderer::AuthoringTextureMirrorU);
+  sampling.addressV=wrap(renderer::AuthoringTextureRepeatV,renderer::AuthoringTextureMirrorV);
+  sampling.maxLod=filter.mipEnabled&&residentLevels?static_cast<float>(residentLevels-1):0.0f;
+  // R4 (T13): anisotropia da qualidade escolhida, salvo quando o perfil da textura a desliga.
+  if(samplerAnisotropy_>1.0f && filter.minLinear && !(flags&renderer::AuthoringTextureNoAnisotropy)) {
+    sampling.enableAnisotropy=true;sampling.maxAnisotropy=samplerAnisotropy_;
+  }
+  if(filter.mipEnabled) sampling.mipLodBias=samplerMipLodBias_;
+  return out.initialize(device.handle(),sampling);
+}
+
+// S2: nova residência de uma textura de autoria, a partir de `baseMip`. A
+// imagem e o sampler novos existem e subiram antes de a antiga sair; o slot
+// bindless é regravado por quem chama, depois da fence do quadro anterior.
+bool DirtRoadResources::restreamAuthoringTexture(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload,
+                                                 u32 index,u32 baseMip) {
+  if(index>=authoringImages_.size() || authoringResidency_.size()!=authoringImages_.size() ||
+     authoringTextureSources_.size()!=authoringImages_.size()) return false;
+  const auto &texture=authoringTextureSources_[index];
+  auto &current=authoringResidency_[index];
+  if(!texture || !texture->valid() || current.generated || baseMip>=texture->levels) return false;
+  if(current.baseMip==baseMip) return true;
+  rhi::ImageDesc image{};
+  image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
+  switch(texture->format) {
+    case renderer::AuthoringTextureAstc4x4:image.format=texture->srgb?VK_FORMAT_ASTC_4x4_SRGB_BLOCK:VK_FORMAT_ASTC_4x4_UNORM_BLOCK;break;
+    case renderer::AuthoringTextureAstc6x6:image.format=texture->srgb?VK_FORMAT_ASTC_6x6_SRGB_BLOCK:VK_FORMAT_ASTC_6x6_UNORM_BLOCK;break;
+    case renderer::AuthoringTextureAstc8x8:image.format=texture->srgb?VK_FORMAT_ASTC_8x8_SRGB_BLOCK:VK_FORMAT_ASTC_8x8_UNORM_BLOCK;break;
+    default:image.format=texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM;break;
+  }
+  image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+  image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
+  const auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
+                                                     std::numeric_limits<u64>::max(),baseMip);
+  if(!resident.valid() || resident.byteOffset+resident.byteSize>texture->mipChain.size()) return false;
+  auto &allocator=device.memoryAllocator();
+  rhi::VulkanImage next;rhi::VulkanSampler sampler;
+  if(!allocator.createImage(resident.description,&next) ||
+     !upload.uploadSampledMipChain(allocator,texture->mipChain.data()+resident.byteOffset,resident.byteSize,next) ||
+     !createAuthoringSampler(device,*texture,resident.description.mipLevels,sampler)) return false;
+  authoringTextureResidency_.residentBytes=authoringTextureResidency_.residentBytes-current.bytes+resident.byteSize;
+  current={resident.baseMip,resident.description.mipLevels,resident.byteSize,false};
+  authoringImages_[index]=std::move(next);authoringSamplers_[index]=std::move(sampler);
   return true;
 }
 

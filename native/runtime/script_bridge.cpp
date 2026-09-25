@@ -57,6 +57,9 @@ scene::ScriptRenderingSettings toAbi(const renderer::ProjectRenderingSettings &s
   o.antiAliasing=(u32)s.antiAliasing;o.upscalingFilter=(u32)s.upscalingFilter;o.postFxaa=(u32)s.postFxaa;o.postVignette=(u32)s.postVignette;o.bloomThreshold=s.bloomThreshold;o.bloomIntensity=s.bloomIntensity;o.postContrast=s.postContrast;o.postSaturation=s.postSaturation;o.postSharpen=s.postSharpen;o.temporalHistoryWeight=s.temporalHistoryWeight;
   o.dynamicResolution=(u32)s.dynamicResolution;o.dynamicResolutionMinimumScale=s.dynamicResolutionMinimumScale;o.dynamicResolutionDecreaseStep=s.dynamicResolutionDecreaseStep;o.dynamicResolutionIncreaseStep=s.dynamicResolutionIncreaseStep;o.dynamicResolutionRecoveryHeadroomRatio=s.dynamicResolutionRecoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=s.dynamicResolutionOverloadFrames;o.dynamicResolutionRecoveryFrames=s.dynamicResolutionRecoveryFrames;
   o.temporalUpscalerQuality=(u32)s.temporalUpscalerQuality;
+  o.textureStreaming=(u32)s.textureStreaming;o.textureStreamingBudgetMegabytes=s.textureStreamingBudgetMegabytes;
+  o.textureStreamingMaxLevelReduction=s.textureStreamingMaxLevelReduction;
+  o.textureStreamingUploadKilobytesPerFrame=s.textureStreamingUploadKilobytesPerFrame;
   return o;
 }
 
@@ -70,6 +73,9 @@ renderer::ProjectRenderingSettings fromAbi(const scene::ScriptRenderingSettings 
   o.antiAliasing=(renderer::AntiAliasingMode)s.antiAliasing;o.upscalingFilter=(renderer::UpscalingFilter)s.upscalingFilter;o.postFxaa=(renderer::FeatureOverride)s.postFxaa;o.postVignette=(renderer::FeatureOverride)s.postVignette;o.bloomThreshold=s.bloomThreshold;o.bloomIntensity=s.bloomIntensity;o.postContrast=s.postContrast;o.postSaturation=s.postSaturation;o.postSharpen=s.postSharpen;o.temporalHistoryWeight=s.temporalHistoryWeight;
   o.dynamicResolution=(renderer::FeatureOverride)s.dynamicResolution;o.dynamicResolutionMinimumScale=s.dynamicResolutionMinimumScale;o.dynamicResolutionDecreaseStep=s.dynamicResolutionDecreaseStep;o.dynamicResolutionIncreaseStep=s.dynamicResolutionIncreaseStep;o.dynamicResolutionRecoveryHeadroomRatio=s.dynamicResolutionRecoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=s.dynamicResolutionOverloadFrames;o.dynamicResolutionRecoveryFrames=s.dynamicResolutionRecoveryFrames;
   o.temporalUpscalerQuality=(renderer::TemporalUpscalerQuality)s.temporalUpscalerQuality;
+  o.textureStreaming=(renderer::FeatureOverride)s.textureStreaming;o.textureStreamingBudgetMegabytes=s.textureStreamingBudgetMegabytes;
+  o.textureStreamingMaxLevelReduction=s.textureStreamingMaxLevelReduction;
+  o.textureStreamingUploadKilobytesPerFrame=s.textureStreamingUploadKilobytesPerFrame;
   return o;
 }
 
@@ -82,6 +88,9 @@ scene::ScriptResolvedRenderingPolicy toAbi(const renderer::ResolvedRenderingPoli
   o.lodSelection=p.geometry.lodSelection;o.materialShaderVariants=p.geometry.materialShaderVariants;o.waterMesh=(u32)p.geometry.waterMesh;o.textureResidencyMipBias=p.textures.residencyMipBias;o.samplerAnisotropy=p.textures.samplerAnisotropy;o.normalMapMaximumDistance=p.materialDistance.normalMapMaximumDistance;o.specularProbeMaximumDistance=p.materialDistance.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=p.materialDistance.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=p.materialDistance.emissiveMaximumDistance;o.materialDetailFadeBandRatio=p.materialDistance.fadeBandRatio;
   o.dynamicResolutionEnabled=p.dynamicResolution.enabled;o.dynamicResolutionMinimumScale=p.dynamicResolution.minimumScale;o.dynamicResolutionMaximumScale=p.dynamicResolution.maximumScale;o.dynamicResolutionDecreaseStep=p.dynamicResolution.decreaseStep;o.dynamicResolutionIncreaseStep=p.dynamicResolution.increaseStep;o.dynamicResolutionRecoveryHeadroomRatio=p.dynamicResolution.recoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=p.dynamicResolution.overloadFrames;o.dynamicResolutionRecoveryFrames=p.dynamicResolution.recoveryFrames;o.resolutionScale=p.resolutionScale;o.effectiveProfile=(u32)p.effectiveProfile;o.clampCount=p.clampCount;
   o.temporalUpscalerQuality=(u32)p.post.temporalUpscalerQuality;
+  o.textureStreaming=p.textures.streaming;o.textureStreamingBudgetMegabytes=static_cast<u32>(p.textures.streamingBudgetBytes>>20);
+  o.textureStreamingMaxLevelReduction=p.textures.streamingMaxLevelReduction;
+  o.textureStreamingUploadKilobytesPerFrame=p.textures.streamingUploadBytesPerFrame>>10;
   return o;
 }
 
@@ -470,6 +479,13 @@ void ScriptBridge::installAccess() {
     out->capabilities.supportsDepthSampling=cap.supportsDepthSampling;out->capabilities.maximumSamplerAnisotropy=cap.maximumSamplerAnisotropy;out->capabilities.displayHz=cap.displayHz;
     out->capabilities.armAsr=(u32)cap.armAsr;out->capabilities.fsr2=(u32)cap.fsr2;
     out->executedUpscaler=(u32)s.rendering_.executedUpscaler();out->executedStatus=(u32)s.rendering_.executedStatus();
+    const auto &streaming=s.rendering_.textureStreaming();auto &ts=out->textureStreaming;
+    ts.budgetBytes=streaming.budgetBytes;ts.totalBytes=streaming.totalBytes;ts.desiredBytes=streaming.desiredBytes;
+    ts.targetBytes=streaming.targetBytes;ts.currentBytes=streaming.currentBytes;ts.nonStreamingBytes=streaming.nonStreamingBytes;
+    ts.uploadedBytesLastFrame=streaming.uploadedBytesLastFrame;ts.active=streaming.active;ts.overBudget=streaming.overBudget;
+    ts.streamingTextures=streaming.streamingTextures;ts.pendingLoads=streaming.pendingLoads;
+    ts.budgetReducedTextures=streaming.budgetReducedTextures;ts.uploadsLastFrame=streaming.uploadsLastFrame;
+    ts.failedUploads=streaming.failedUploads;
     s.lastStatus_=WorldStatus::Ok;return 1;
   };
   access_.setRenderingSettings = [](void *c,u32 expectedWorld,const scene::ScriptRenderingSettings *value,u64 *request)->int {

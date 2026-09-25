@@ -126,6 +126,26 @@ u32 BindlessTextureRegistry::registerTexture(VkImageView imageView, VkSampler sa
   return index;
 }
 
+bool BindlessTextureRegistry::rewriteTexture(u32 index, VkImageView imageView, VkSampler sampler,
+                                             VkImageLayout imageLayout) {
+  if (!isReady() || index >= allocator_.capacity() || imageView == VK_NULL_HANDLE || sampler == VK_NULL_HANDLE)
+    return false;
+  VkDescriptorImageInfo imageInfo{};
+  imageInfo.sampler = sampler;
+  imageInfo.imageView = imageView;
+  imageInfo.imageLayout = imageLayout;
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = descriptorSet_;
+  write.dstBinding = 0;
+  write.dstArrayElement = index;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &imageInfo;
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  return true;
+}
+
 void BindlessTextureRegistry::unregisterTexture(u32 index) {
   allocator_.release(index);
 }

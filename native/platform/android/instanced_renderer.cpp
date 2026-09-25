@@ -345,6 +345,12 @@ void InstancedRenderer::setRuntimeRenderingPolicy(
     active.post.saturation = 1.0f;
   }
   active.textures = resourceRenderingPolicy_.textures;
+  // S2: o streaming não muda o layout de recurso nenhum; orçamento, redução e
+  // teto de envio valem já no próximo quadro, inclusive pedidos por script.
+  active.textures.streaming = policy.textures.streaming;
+  active.textures.streamingBudgetBytes = policy.textures.streamingBudgetBytes;
+  active.textures.streamingMaxLevelReduction = policy.textures.streamingMaxLevelReduction;
+  active.textures.streamingUploadBytesPerFrame = policy.textures.streamingUploadBytesPerFrame;
   active.shadows.enabled = active.shadows.enabled && resourceRenderingPolicy_.shadows.enabled;
   active.shadows.cascadeCount =
       std::min(active.shadows.cascadeCount, resourceRenderingPolicy_.shadows.cascadeCount);
@@ -4607,6 +4613,114 @@ void InstancedRenderer::beginGpuRegion(GpuPassClass pass) {
                                  color[2]);
 }
 
+void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &camera) {
+  const auto &policy=renderingPolicy_.textures;
+  const auto sources=dirtRoadResources_.authoringTextureSources();
+  const auto residency=dirtRoadResources_.authoringResidency();
+  const u32 package=dirtRoadResources_.packageTextureCount();
+  const usize count=sources.size();
+  auto &stats=textureStreamingStats_;
+  const u32 failures=stats.failedUploads;
+  if(!dirtRoadPreview_ || !rhiDevice_ || count==0 || residency.size()!=count || dirtTextureSlots_.size()<package+count) {
+    stats={};stats.active=policy.streaming;stats.failedUploads=failures;
+    streamingPlan_={};streamingLoaded_.clear();
+    return;
+  }
+  // Planejar a cada quatro quadros basta para a câmera; com troca pendente, a
+  // cada quadro, até o conjunto chegar ao alvo.
+  if(stats.pendingLoads==0 && (streamingFrame_++%4u)!=0 && streamingLoaded_.size()==count) {
+    stats.uploadsLastFrame=0;stats.uploadedBytesLastFrame=0;
+    return;
+  }
+  renderer::TextureStreamingSettings settings;
+  settings.minimumMip=policy.residencyMipBias;
+  // Desligado, a mesma rotina devolve cada textura ao limite global, aos
+  // poucos, em vez de deixar níveis reduzidos para trás.
+  settings.maxLevelReduction=policy.streaming?policy.streamingMaxLevelReduction:0u;
+  settings.budgetBytes=policy.streaming?policy.streamingBudgetBytes:~0ull;
+  settings.uploadBytesPerFrame=policy.streamingUploadBytesPerFrame;
+  streamingTextures_.resize(count);streamingLoaded_.resize(count);
+  for(usize t=0;t<count;++t) {
+    auto &entry=streamingTextures_[t];
+    const auto &source=sources[t];
+    entry={};
+    if(source) {entry.width=source->width;entry.height=source->height;entry.levels=source->levels;entry.format=source->format;}
+    // Cadeia gerada na publicação (perfil sem mip) tem um nível só na GPU.
+    entry.streamable=!residency[t].generated && entry.levels>1;
+    if(residency[t].generated) entry.levels=1;
+    streamingLoaded_[t]=residency[t].generated?0u:residency[t].baseMip;
+  }
+  streamingUses_.clear();
+  if(policy.streaming) {
+    const auto draws=std::span<const renderer::MapDrawRecord>(dirtRoadResources_.draws());
+    const auto &materials=dirtRoadResources_.materials();
+    const auto vertices=dirtRoadResources_.pickingVertices();
+    const auto indices=dirtRoadResources_.pickingIndices();
+    for(usize i=0;i<draws.size();++i) {
+      if(i<authoredVisibility_.size() && !authoredVisibility_[i]) continue;
+      const auto &draw=draws[i];
+      if(draw.materialIndex>=materials.size()) continue;
+      const auto material=i<authoredMaterials_.size()
+          ?renderer::applyMaterialOverride(materials[draw.materialIndex],authoredMaterials_[i],package):materials[draw.materialIndex];
+      float metric=0;
+      // Desenho de rota de água usa índices próprios: sem métrica, detalhe máximo.
+      if(i<authoredDrawIdentities_.size() && !authoredDrawIdentities_[i].route) {
+        const u32 source=authoredDrawIdentities_[i].sourceDrawIndex;
+        if(source<sourceDrawUvMetric_.size()) {
+          if(sourceDrawUvMetric_[source]<0)
+            sourceDrawUvMetric_[source]=renderer::meshUvMetersPerUnit(vertices,indices,sourceMapDraws_[source]);
+          metric=sourceDrawUvMetric_[source]*renderer::textureStreamingModelScale(draw.model);
+        }
+      }
+      for(u32 slot=0;slot<4;++slot) {
+        const u32 texture=material.textureIndices[slot];
+        if(texture==renderer::InvalidMapTexture || texture<package || texture-package>=count) continue;
+        renderer::TextureStreamingUse use;
+        use.texture=texture-package;
+        std::copy(draw.boundsCenter,draw.boundsCenter+3,use.center);
+        use.radius=draw.boundsRadius;use.metersPerUv=metric;
+        streamingUses_.push_back(use);
+      }
+    }
+  }
+  // Altura do alvo: o maior lado da superfície. Pede no máximo um nível a mais
+  // do que o necessário quando a vista é a do lado menor — nunca um a menos.
+  const float height=static_cast<float>(std::max(swapchain_->width(),swapchain_->height()));
+  renderer::TextureStreamingView view;
+  std::copy(camera.position,camera.position+3,view.position);
+  if(sceneOrthographicHalfHeight_>0) view.orthographicPixelsPerMeter=height/(2.0f*sceneOrthographicHalfHeight_);
+  else view.pixelsPerMeterAtUnitDistance=height/(2.0f*std::tan(sceneFieldOfView()*.5f));
+  if(!renderer::planTextureStreaming(streamingTextures_,streamingUses_,std::span(&view,1),settings,streamingLoaded_,
+                                     streamingPlan_)) return;
+  u32 applied=0;u64 uploaded=0,failed=0;
+  for(const u32 t:streamingPlan_.loads) {
+    const u32 target=streamingPlan_.targetMip[t];
+    if(!dirtRoadResources_.restreamAuthoringTexture(*rhiDevice_,uploadContext_,t,target)) {++failed;continue;}
+    const u32 slot=dirtTextureSlots_[package+t];
+    if(useBindless_ && slot!=baseTextureIndex_)
+      bindlessRegistry_.rewriteTexture(slot,dirtRoadResources_.view(package+t),dirtRoadResources_.sampler(package+t),
+                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    streamingLoaded_[t]=target;
+    ++applied;uploaded+=renderer::textureStreamingChainBytes(streamingTextures_[t],target);
+  }
+  if(failed && !streamingFailureLogged_) {
+    // Memória da GPU esgotada ou envio recusado: a residência anterior fica.
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[Streaming] %llu troca(s) de residência recusadas; nível anterior mantido.",
+                        static_cast<unsigned long long>(failed));
+    streamingFailureLogged_=true;
+  }
+  const auto &plan=streamingPlan_;
+  stats.active=policy.streaming;stats.overBudget=policy.streaming && plan.overBudget;
+  stats.budgetBytes=policy.streaming?policy.streamingBudgetBytes:0;
+  stats.totalBytes=plan.totalBytes;stats.desiredBytes=plan.desiredBytes;stats.targetBytes=plan.targetBytes;
+  stats.nonStreamingBytes=plan.nonStreamingBytes;stats.streamingTextures=plan.streamingTextures;
+  stats.budgetReducedTextures=plan.budgetReducedTextures;
+  stats.pendingLoads=plan.pendingLoads+static_cast<u32>(failed);
+  stats.uploadsLastFrame=applied;stats.uploadedBytesLastFrame=uploaded;stats.failedUploads=failures+static_cast<u32>(failed);
+  stats.currentBytes=0;
+  for(usize t=0;t<count;++t) stats.currentBytes+=renderer::textureStreamingChainBytes(streamingTextures_[t],streamingLoaded_[t]);
+}
+
 void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
   if (commandBuffer_ == VK_NULL_HANDLE) return;
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
@@ -4661,6 +4775,8 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   authoringTextureSlots_.clear();
   dirtRoadResources_.setSamplerAnisotropy(renderingPolicy_.textures.samplerAnisotropy);
   dirtRoadResources_.setTextureResidencyMipBias(resourceRenderingPolicy_.textures.residencyMipBias);
+  dirtRoadResources_.setTextureStreamingInitialMip(renderingPolicy_.textures.streaming
+      ? renderingPolicy_.textures.residencyMipBias+renderingPolicy_.textures.streamingMaxLevelReduction : 0u);
   if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures)) {
     registerAuthoringTextures();
     __android_log_print(ANDROID_LOG_ERROR,LogTag,
@@ -4721,6 +4837,7 @@ bool InstancedRenderer::rebuildDrawOrders() {
   levelZeroSolidDrawOrder_.clear();levelZeroCoverageDrawOrder_.clear();
   cameraWaterHorizonFillActive_=false;
   sourceMapDraws_=dirtRoadResources_.draws();
+  sourceDrawUvMetric_.assign(sourceMapDraws_.size(),-1.0f);
   if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
   instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
   for (u32 index = 0; index < instanceCount_; ++index) {
@@ -5036,6 +5153,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(submittedPreview_.requestId) {
     completedPreview_=submittedPreview_;submittedPreview_={};previewCompletionSuccess_=true;
   }
+  updateTextureStreaming(camera);
   if(previewCloseRequested_) {destroyCameraPreview();previewCloseRequested_=false;}
   if (gpuTimingEnabled()) {
     rhi::GpuFrameTimings gpuTimings{};

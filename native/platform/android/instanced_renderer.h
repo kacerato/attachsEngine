@@ -36,6 +36,7 @@
 #include "renderer/lod_selection.h"
 #include "renderer/render_instance.h"
 #include "renderer/rendering_policy.h"
+#include "renderer/texture_streaming.h"
 #include "renderer/runtime_hud.h"
 #include "renderer/shadow_cascades.h"
 #include "renderer/shadow_atlas.h"
@@ -402,6 +403,11 @@ public:
   const renderer::ResolvedRenderingPolicy &activeRenderingPolicy() const noexcept {
     return renderingPolicy_;
   }
+  // S2: estado do streaming de mipmaps no último quadro (Quality, Inspector, API).
+  const renderer::TextureStreamingStats &textureStreamingStats() const noexcept { return textureStreamingStats_; }
+  // Por textura de autoria, na ordem da publicação: mip pela tela e carregado.
+  std::span<const u32> textureStreamingDesiredMips() const noexcept { return streamingPlan_.calculatedMip; }
+  std::span<const u32> textureStreamingLoadedMips() const noexcept { return streamingLoaded_; }
   // Scene/transform systems call this when any static caster, material alpha or
   // sun configuration changes. A câmera não precisa invalidar manualmente: o
   // renderer testa contenção de cada cascata antes de reutilizá-la.
@@ -1121,6 +1127,20 @@ private:
   float waterDisplacementCapacity_ = 5.0f;
   float waterBaseHeight_ = 0.0f;
   renderer::DynamicResolutionController dynamicResolution_{};
+  // S2: streaming de mipmaps das texturas de autoria. Roda logo depois da fence
+  // do quadro anterior (um único quadro em voo), único ponto em que trocar a
+  // imagem de um slot bindless não alcança um comando ainda na GPU.
+  void updateTextureStreaming(const platform::FreeCameraState &camera);
+  renderer::TextureStreamingStats textureStreamingStats_{};
+  renderer::TextureStreamingPlan streamingPlan_{};
+  std::vector<renderer::TextureStreamingTexture> streamingTextures_;
+  std::vector<renderer::TextureStreamingUse> streamingUses_;
+  std::vector<u32> streamingLoaded_;
+  // Métrica de UV por desenho da biblioteca (`sourceMapDraws_`), medida uma vez
+  // por publicação e só dos desenhos que usam textura de autoria. Negativo = a medir.
+  std::vector<float> sourceDrawUvMetric_;
+  u32 streamingFrame_ = 0;
+  bool streamingFailureLogged_ = false;
 
   // HZB (Hi-Z) occlusion culling -- see setHzbOcclusionEnabled() above and
   // native/renderer/hzb_visibility.h. All levels share one small render pass

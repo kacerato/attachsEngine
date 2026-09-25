@@ -2561,6 +2561,13 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       using Override=renderer::FeatureOverride;
       return value==Override::Inherit?Override::Disabled:value==Override::Disabled?Override::Enabled:Override::Inherit;
     };
+    // Próximo/anterior numa escada fixa; valor fora dela volta ao degrau mais perto abaixo.
+    const auto stepList=[](const auto &steps,u32 value,bool up) {
+      usize index=0;
+      for(usize i=0;i<std::size(steps);++i) if(steps[i]<=value) index=i;
+      if(up) return steps[std::min(index+1,std::size(steps)-1)];
+      return steps[index==0||steps[index]!=value?index:index-1];
+    };
     const auto step=[](float value,float inherited,float initial,float delta,float minimum,float maximum,bool up) {
       const float current=value==inherited?initial:value;
       return std::round(std::clamp(current+(up?delta:-delta),minimum,maximum)/delta)*delta;
@@ -2571,6 +2578,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::QualityTabShadows)) {state_.qualityTab=1;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabLighting)) {state_.qualityTab=2;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabPerformance)) {state_.qualityTab=3;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualityTabTextures)) {state_.qualityTab=4;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityPagePrevious)) {if(state_.qualityPage) --state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityPageNext)) {++state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityTemporalDebug)) {
@@ -2672,6 +2680,18 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       draft.lodHysteresisBandRatio=step(draft.lodHysteresisBandRatio,0.0f,.75f,.05f,.10f,.95f,is(EditorWidget::QualityLodHysteresisUp));
     } else if(is(EditorWidget::QualityMaterialVariants)) {
       draft.materialShaderVariants=cycleOverride(draft.materialShaderVariants);
+    } else if(is(EditorWidget::QualityTextureStreaming)) {
+      draft.textureStreaming=cycleOverride(draft.textureStreaming);
+    } else if(is(EditorWidget::QualityStreamingBudgetDown)||is(EditorWidget::QualityStreamingBudgetUp)) {
+      // Passos do Memory Budget; abaixo do menor volta a "Do nível".
+      static constexpr u32 steps[]{0,128,256,384,512,768,1024,1536,2048,3072,4096};
+      draft.textureStreamingBudgetMegabytes=stepList(steps,draft.textureStreamingBudgetMegabytes,is(EditorWidget::QualityStreamingBudgetUp));
+    } else if(is(EditorWidget::QualityStreamingReductionDown)||is(EditorWidget::QualityStreamingReductionUp)) {
+      static constexpr u32 steps[]{0,1,2,3,4,5,6,7};
+      draft.textureStreamingMaxLevelReduction=stepList(steps,draft.textureStreamingMaxLevelReduction,is(EditorWidget::QualityStreamingReductionUp));
+    } else if(is(EditorWidget::QualityStreamingUploadDown)||is(EditorWidget::QualityStreamingUploadUp)) {
+      static constexpr u32 steps[]{0,512,1024,2048,4096,8192,16384,32768};
+      draft.textureStreamingUploadKilobytesPerFrame=stepList(steps,draft.textureStreamingUploadKilobytesPerFrame,is(EditorWidget::QualityStreamingUploadUp));
     } else if(is(EditorWidget::QualityApply)) {
       // Um ampliador temporal que o aparelho recusa não é salvo como se fosse
       // funcionar: o motivo aparece e o rascunho continua pendente.

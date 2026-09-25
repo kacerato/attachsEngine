@@ -3437,9 +3437,10 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   router.addRegion(close, widgetId(EditorWidget::QualityClose));
   builder.label(header, "Gráficos do projeto", theme.color.text, theme.type.cardName);
   auto tabs=takeTop(content,34);
-  const std::array<std::tuple<const char *,EditorWidget>,4> tabItems{{
+  const std::array<std::tuple<const char *,EditorWidget>,5> tabItems{{
     {"Geral",EditorWidget::QualityTabGeneral},{"Sombras",EditorWidget::QualityTabShadows},
-    {"Luz e pós",EditorWidget::QualityTabLighting},{"Desempenho",EditorWidget::QualityTabPerformance}}};
+    {"Luz e pós",EditorWidget::QualityTabLighting},{"Desempenho",EditorWidget::QualityTabPerformance},
+    {"Texturas",EditorWidget::QualityTabTextures}}};
   for(u32 index=0;index<tabItems.size();++index) {
     auto cell=deflate(takeLeft(tabs,tabs.width/static_cast<float>(tabItems.size()-index)),UiInsets::all(2));
     list.addRect(cell,index==state.qualityTab?theme.color.accent:theme.color.raised,theme.radius.control);
@@ -3455,7 +3456,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:6u;
+  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?7u:6u;
   const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
   const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
   const u32 page=std::min(state.qualityPage,pageCount-1u);
@@ -3566,6 +3567,28 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
         EditorWidget::QualityTemporalDebug,state.qualityTemporalAvailable);
     stepper("Nitidez",percent(draft.postSharpen,-1.0f),EditorWidget::QualitySharpenDown,EditorWidget::QualitySharpenUp);
     row("Vinheta",renderer::featureOverrideLabel(draft.postVignette),EditorWidget::QualityVignette);
+  } else if(state.qualityTab==4) {
+    // Seção Textures do Quality da Unity: limite global de mip, anisotropia e
+    // Mipmap Streaming (Memory Budget, Max Level Reduction). As duas últimas
+    // linhas são leitura: o que o renderer tem na GPU agora.
+    const auto megabytes=[](u64 bytes) {return decimalText(static_cast<float>(bytes)/1048576.0f,bytes<(10ull<<20)?1:0)+" MB";};
+    const auto &streaming=state.qualityTextureStreaming;
+    row("Qualidade / anisotropia",renderer::textureQualityLabel(draft.textures),EditorWidget::QualityTextures);
+    row("Streaming de mipmaps",draft.textureStreaming==renderer::FeatureOverride::Inherit?std::string("Do nível · desligado"):
+        std::string(renderer::featureOverrideLabel(draft.textureStreaming)),EditorWidget::QualityTextureStreaming);
+    stepper("Orçamento de memória",draft.textureStreamingBudgetMegabytes?std::to_string(draft.textureStreamingBudgetMegabytes)+" MB":
+            std::string("Do nível"),EditorWidget::QualityStreamingBudgetDown,EditorWidget::QualityStreamingBudgetUp);
+    stepper("Redução máxima",draft.textureStreamingMaxLevelReduction?std::to_string(draft.textureStreamingMaxLevelReduction)+" nível(is)":
+            std::string("Do nível · 2"),EditorWidget::QualityStreamingReductionDown,EditorWidget::QualityStreamingReductionUp);
+    stepper("Envio por quadro",draft.textureStreamingUploadKilobytesPerFrame?
+            megabytes(static_cast<u64>(draft.textureStreamingUploadKilobytesPerFrame)<<10):std::string("Do nível · 4 MB"),
+            EditorWidget::QualityStreamingUploadDown,EditorWidget::QualityStreamingUploadUp);
+    row("Na GPU agora",!streaming.active?std::string("Streaming desligado · ")+megabytes(streaming.currentBytes):
+        megabytes(streaming.currentBytes)+" de "+megabytes(streaming.budgetBytes)+(streaming.overBudget?" · acima do orçamento":""),
+        EditorWidget::QualityTextureStreaming,false);
+    row("Trocas",!streaming.active?std::string("—"):std::to_string(streaming.streamingTextures)+" texturas · "+
+        std::to_string(streaming.pendingLoads)+" pendentes · "+std::to_string(streaming.budgetReducedTextures)+" reduzidas pelo orçamento",
+        EditorWidget::QualityTextureStreaming,false);
   } else {
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
     stepper("Escala dinâmica mínima",percent(draft.dynamicResolutionMinimumScale,0.0f),EditorWidget::QualityDynamicMinimumDown,EditorWidget::QualityDynamicMinimumUp);

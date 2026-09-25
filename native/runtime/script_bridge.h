@@ -57,6 +57,8 @@ public:
   void setRenderingExecution(renderer::UpscalingFilter executed, renderer::TemporalUpscalerAvailability status) {
     rendering_.setExecution(executed, status);
   }
+  // S2: Graphics.State.TextureStreaming.
+  void setTextureStreaming(const renderer::TextureStreamingStats &stats) { rendering_.setTextureStreaming(stats); }
   bool completeRenderingRequest(u64 requestId, bool success,
                                 const renderer::ResolvedRenderingPolicy &effective,
                                 bool effectiveAvailable=true) {

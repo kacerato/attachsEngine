@@ -21,6 +21,7 @@
 #pragma once
 
 #include "renderer/rendering_policy.h"
+#include "renderer/texture_streaming.h"
 #include "resources/environment_map_asset.h"
 #include "resources/texture_profile.h"
 #include "core/base.h"
@@ -231,6 +232,9 @@ enum class EditorWidget : u32 {
   QualityLodErrorDown, QualityLodErrorUp, QualityLodHysteresisDown,
   QualityLodHysteresisUp, QualityMaterialVariants,
   QualityTemporalMode, QualityTemporalQuality, QualityTemporalModeQuick,
+  // S2: aba Texturas do painel Qualidade (Mipmap Streaming da Unity).
+  QualityTabTextures, QualityTextureStreaming, QualityStreamingBudgetDown, QualityStreamingBudgetUp,
+  QualityStreamingReductionDown, QualityStreamingReductionUp, QualityStreamingUploadDown, QualityStreamingUploadUp,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   EnvironmentPanoramaDown, EnvironmentPanoramaUp,
   EnvironmentSpecularDown, EnvironmentSpecularUp,
@@ -507,6 +511,8 @@ struct EditorScreenState final {
   renderer::UpscalingFilter qualityExecutedUpscaler=renderer::UpscalingFilter::Bilinear;
   renderer::TemporalUpscalerAvailability qualityExecutedStatus=renderer::TemporalUpscalerAvailability::Available;
   bool qualityTemporalAaExecuted=false;
+  // S2: o que o streaming de mipmaps fez no último quadro do aparelho.
+  renderer::TextureStreamingStats qualityTextureStreaming{};
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;

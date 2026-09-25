@@ -99,6 +99,10 @@ std::string writeRenderingSettings(const ProjectRenderingSettings &s) {
   append(text,"dynamic_resolution_recovery_headroom_ratio",s.dynamicResolutionRecoveryHeadroomRatio);
   append(text,"dynamic_resolution_overload_frames",s.dynamicResolutionOverloadFrames);
   append(text,"dynamic_resolution_recovery_frames",s.dynamicResolutionRecoveryFrames);
+  append(text,"texture_streaming",overrideName(s.textureStreaming));
+  append(text,"texture_streaming_budget_mb",s.textureStreamingBudgetMegabytes);
+  append(text,"texture_streaming_max_level_reduction",s.textureStreamingMaxLevelReduction);
+  append(text,"texture_streaming_upload_kb_per_frame",s.textureStreamingUploadKilobytesPerFrame);
   return text;
 }
 
@@ -169,6 +173,12 @@ bool readRenderingSettings(std::string_view text,ProjectRenderingSettings &out) 
     else if(key=="dynamic_resolution_recovery_headroom_ratio") {if(!parseRangedFloat(value,result.dynamicResolutionRecoveryHeadroomRatio,.5f,.95f,0.0f)) return false;}
     else if(key=="dynamic_resolution_overload_frames") {if(!parseRangedUnsigned(value,result.dynamicResolutionOverloadFrames,1,240)) return false;}
     else if(key=="dynamic_resolution_recovery_frames") {if(!parseRangedUnsigned(value,result.dynamicResolutionRecoveryFrames,1,1200)) return false;}
+    // S2: chaves novas no mesmo arquivo v3; uma engine anterior as ignora e
+    // continua sem streaming, que é o comportamento que ela já tinha.
+    else if(key=="texture_streaming") {if(!parseOverride(value,result.textureStreaming)) return false;}
+    else if(key=="texture_streaming_budget_mb") {if(!parseRangedUnsigned(value,result.textureStreamingBudgetMegabytes,32,8192)) return false;}
+    else if(key=="texture_streaming_max_level_reduction") {if(!parseRangedUnsigned(value,result.textureStreamingMaxLevelReduction,1,7)) return false;}
+    else if(key=="texture_streaming_upload_kb_per_frame") {if(!parseRangedUnsigned(value,result.textureStreamingUploadKilobytesPerFrame,256,65536)) return false;}
   }
   if(!header) return false;
   // v1 had only six keys. Missing v2 axes keep the caller/default value.

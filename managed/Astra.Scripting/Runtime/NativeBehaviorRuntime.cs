@@ -431,7 +431,7 @@ public static unsafe class NativeBehaviorRuntime
             }
             return new(state.Requested, state.Effective, state.Capabilities, state.Pending != 0,
                 state.PendingRequestId, state.LastRequestSucceeded != 0, state.EffectiveAvailable != 0, diagnostics,
-                state.ExecutedUpscaler, state.ExecutedStatus);
+                state.ExecutedUpscaler, state.ExecutedStatus, state.TextureStreaming);
         }
         public bool SetGraphicsSettings(uint expectedWorld, GraphicsSettings settings, out ulong requestId)
         {

@@ -126,6 +126,19 @@ public static class AstraBehaviorTests
         Assert.True(failed.Diagnostics.Any(d => d.Error && d.File == "Behavior.cs" && d.Line == 1));
     }
     [Test]
+    public static void GraphicsAbiStructs_MatchTheNativeLayout()
+    {
+        // Os mesmos números do static_assert em native/scene/script_runtime.h:
+        // a ponte recusa tamanho diferente, e no aparelho isso vira "gráficos
+        // indisponíveis" em vez de um erro de compilação.
+        Assert.Equal(224, System.Runtime.CompilerServices.Unsafe.SizeOf<GraphicsSettings>(), "GraphicsSettings");
+        Assert.Equal(272, System.Runtime.CompilerServices.Unsafe.SizeOf<ResolvedGraphicsSettings>(), "ResolvedGraphicsSettings");
+        Assert.Equal(44, System.Runtime.CompilerServices.Unsafe.SizeOf<GraphicsCapabilities>(), "GraphicsCapabilities");
+        Assert.Equal(88, System.Runtime.CompilerServices.Unsafe.SizeOf<TextureStreamingStats>(), "TextureStreamingStats");
+        Assert.Equal(672, System.Runtime.CompilerServices.Unsafe.SizeOf<NativeGraphicsState>(), "NativeGraphicsState");
+    }
+
+    [Test]
     public static void DocumentationExamples_CompileWithTheShippedApi()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

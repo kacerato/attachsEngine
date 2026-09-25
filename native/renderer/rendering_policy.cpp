@@ -520,6 +520,21 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   if (textures == TextureQuality::Full && textureSettings.samplerAnisotropy < 8.0f) {
     note("textures.samplerAnisotropy", PolicyClamp::Capability);
   }
+  // S2: o orçamento padrão acompanha o nível (a Unity parte de 512 MB); a
+  // redução máxima padrão é a da Unity (2) e o teto de envio evita que uma
+  // virada de câmera pare o quadro subindo dezenas de MB de uma vez.
+  textureSettings.streaming = enabledOverride(settings.textureStreaming, false);
+  const u32 budgetMegabytes = policy.effectiveProfile == rhi::DeviceProfile::S ? 768u
+                            : policy.effectiveProfile == rhi::DeviceProfile::A ? 512u
+                            : policy.effectiveProfile == rhi::DeviceProfile::B ? 384u : 256u;
+  textureSettings.streamingBudgetBytes =
+      static_cast<u64>(settings.textureStreamingBudgetMegabytes
+                           ? std::clamp(settings.textureStreamingBudgetMegabytes, 32u, 8192u) : budgetMegabytes) << 20;
+  textureSettings.streamingMaxLevelReduction =
+      settings.textureStreamingMaxLevelReduction ? std::clamp(settings.textureStreamingMaxLevelReduction, 1u, 7u) : 2u;
+  textureSettings.streamingUploadBytesPerFrame =
+      (settings.textureStreamingUploadKilobytesPerFrame
+           ? std::clamp(settings.textureStreamingUploadKilobytesPerFrame, 256u, 65536u) : 4096u) << 10;
 
   // --- cadência: reaproveita a política já existente -------------------------
   const float requestedHz = settings.maximumRenderHz != 0

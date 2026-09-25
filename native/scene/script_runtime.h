@@ -90,6 +90,9 @@ struct ScriptRenderingSettings {
   float dynamicResolutionIncreaseStep=0,dynamicResolutionRecoveryHeadroomRatio=0;
   u32 dynamicResolutionOverloadFrames=0,dynamicResolutionRecoveryFrames=0;
   u32 temporalUpscalerQuality=0;
+  // S2: Mipmap Streaming. Anexado ao fim; o tamanho exato separa as versões.
+  u32 textureStreaming=0,textureStreamingBudgetMegabytes=0,textureStreamingMaxLevelReduction=0;
+  u32 textureStreamingUploadKilobytesPerFrame=0;
 };
 
 struct ScriptResolvedRenderingPolicy {
@@ -111,6 +114,16 @@ struct ScriptResolvedRenderingPolicy {
   u32 dynamicResolutionOverloadFrames=0,dynamicResolutionRecoveryFrames=0;
   float resolutionScale=0; u32 effectiveProfile=0,clampCount=0;
   u32 temporalUpscalerQuality=0;
+  u32 textureStreaming=0,textureStreamingBudgetMegabytes=0,textureStreamingMaxLevelReduction=0;
+  u32 textureStreamingUploadKilobytesPerFrame=0;
+};
+
+// S2: Texture.*TextureMemory e contagens do streaming no último quadro.
+struct ScriptTextureStreamingStats {
+  u64 budgetBytes=0,totalBytes=0,desiredBytes=0,targetBytes=0,currentBytes=0,nonStreamingBytes=0;
+  u64 uploadedBytesLastFrame=0;
+  u32 active=0,overBudget=0,streamingTextures=0,pendingLoads=0,budgetReducedTextures=0;
+  u32 uploadsLastFrame=0,failedUploads=0,reserved=0;
 };
 
 struct ScriptRenderingCapabilities {
@@ -128,6 +141,7 @@ struct ScriptRenderingState {
   // What the renderer actually ran in the last presented frame, and why a
   // requested temporal upscaler did not run (TemporalUpscalerAvailability).
   u32 executedUpscaler=0,executedStatus=0;
+  ScriptTextureStreamingStats textureStreaming{};
 };
 
 struct ScriptSceneAccess {
@@ -226,6 +240,11 @@ static_assert(offsetof(ScriptSceneAccess,cameraLook)==offsetof(ScriptSceneAccess
 static_assert(offsetof(ScriptSceneAccess,animationCommand)==offsetof(ScriptSceneAccess,cameraLook)+sizeof(void*));
 static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,animationClipAt)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
+// Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
+// exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.
+static_assert(sizeof(ScriptRenderingSettings)==224 && sizeof(ScriptResolvedRenderingPolicy)==272 &&
+              sizeof(ScriptRenderingCapabilities)==44 && sizeof(ScriptTextureStreamingStats)==88 &&
+              sizeof(ScriptRenderingState)==672);
 struct ScriptRuntimeApi {
   int (*start)(const u8 *,int,const u8 *,int,const ScriptSceneAccess *)=nullptr;
   int (*update)(float)=nullptr;

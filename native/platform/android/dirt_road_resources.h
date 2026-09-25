@@ -81,6 +81,16 @@ public:
   // Limite global de materiais: 1 deixa de enviar o mip de maior resolução.
   // Ambiente, LUTs e recursos de UI não passam por este caminho.
   void setTextureResidencyMipBias(u32 value) { textureResidencyMipBias_=value; }
+  // S2: com streaming ativo, o nível em que uma textura NOVA entra na
+  // publicação (o fim da faixa do streaming). Zero publica pelo limite global.
+  void setTextureStreamingInitialMip(u32 value) { textureStreamingInitialMip_=value; }
+  // Residência de cada textura de autoria: mip base na GPU e níveis dela.
+  struct AuthoringResidency {u32 baseMip=0,levels=0;u64 bytes=0;bool generated=false;};
+  std::span<const AuthoringResidency> authoringResidency() const {return authoringResidency_;}
+  std::span<const renderer::SharedAuthoringTexture> authoringTextureSources() const {return authoringTextureSources_;}
+  // Troca a residência de uma textura de autoria; a anterior só sai depois de a
+  // nova subir. Quem chama regrava o slot bindless com `view`/`sampler`.
+  bool restreamAuthoringTexture(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload, u32 index, u32 baseMip);
   u32 textureResidencyMipBias() const {return textureResidencyMipBias_;}
   const MaterialTextureResidencyReport &packageTextureResidency() const {return packageTextureResidency_;}
   const MaterialTextureResidencyReport &authoringTextureResidency() const {return authoringTextureResidency_;}
@@ -172,6 +182,10 @@ private:
   // Texturas das fontes importadas (M09.1), trocadas inteiras a cada publicação.
   std::vector<rhi::VulkanImage> authoringImages_;
   std::vector<rhi::VulkanSampler> authoringSamplers_;
+  std::vector<AuthoringResidency> authoringResidency_;
+  u32 textureStreamingInitialMip_ = 0;
+  bool createAuthoringSampler(rhi::VulkanDevice &device, const renderer::AuthoringTexture &texture,
+                              u32 residentLevels, rhi::VulkanSampler &out) const;
   float samplerAnisotropy_ = 1.0f;
   float samplerMipLodBias_ = 0.0f;
   float authoringMipLodBias_ = 0.0f;

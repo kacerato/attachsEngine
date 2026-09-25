@@ -2556,6 +2556,8 @@ void android_main(android_app *app) {
           shell.editorSession.setTemporalUpscalerStatus(shell.renderingCapabilities.armAsr,
               shell.renderingCapabilities.fsr2,shell.instancedRenderer.executedUpscaler(),
               shell.instancedRenderer.executedUpscalerStatus(),shell.instancedRenderer.nativeTaaExecuted());
+        if(shell.instancedRendererReady)
+          shell.editorSession.setTextureStreamingStatus(shell.instancedRenderer.textureStreamingStats());
         shell.instancedRenderer.setTemporalDebugView(static_cast<ae::platform::android::TemporalDebugView>(
             !editorPlaying && shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene
                 ? std::min(shell.editorSession.screen().qualityTemporalDebug,6u) : 0u));

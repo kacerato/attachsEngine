@@ -47,6 +47,10 @@ public struct GraphicsSettings
     public float DynamicResolutionIncreaseStep, DynamicResolutionRecoveryHeadroomRatio;
     public uint DynamicResolutionOverloadFrames, DynamicResolutionRecoveryFrames;
     public GraphicsTemporalQuality TemporalUpscalerQuality;
+    /// <summary>Mipmap Streaming (QualitySettings.streamingMipmapsActive da Unity).
+    /// Zero nos números herda o nível; <c>Inherit</c> fica desligado.</summary>
+    public GraphicsFeature TextureStreaming;
+    public uint TextureStreamingBudgetMegabytes, TextureStreamingMaxLevelReduction, TextureStreamingUploadKilobytesPerFrame;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -70,6 +74,21 @@ public struct ResolvedGraphicsSettings
     public uint DynamicResolutionOverloadFrames, DynamicResolutionRecoveryFrames;
     public float ResolutionScale; public uint EffectiveProfile, ClampCount;
     public GraphicsTemporalQuality TemporalUpscalerQuality;
+    public uint TextureStreaming, TextureStreamingBudgetMegabytes, TextureStreamingMaxLevelReduction, TextureStreamingUploadKilobytesPerFrame;
+}
+
+/// <summary>Memória de textura do último quadro, nos termos da Unity:
+/// <c>CurrentBytes</c> (currentTextureMemory), <c>DesiredBytes</c> (desiredTextureMemory),
+/// <c>TargetBytes</c> (targetTextureMemory, depois do orçamento), <c>TotalBytes</c>
+/// (totalTextureMemory) e <c>NonStreamingBytes</c>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct TextureStreamingStats
+{
+    public ulong BudgetBytes, TotalBytes, DesiredBytes, TargetBytes, CurrentBytes, NonStreamingBytes;
+    public ulong UploadedBytesLastFrame;
+    public uint Active, OverBudget, StreamingTextures, PendingLoads, BudgetReducedTextures;
+    public uint UploadsLastFrame, FailedUploads;
+    internal uint Reserved;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -92,6 +111,7 @@ public struct NativeGraphicsState
     public GraphicsCapabilities Capabilities;
     public GraphicsUpscaling ExecutedUpscaler;
     public GraphicsTemporalAvailability ExecutedStatus;
+    public TextureStreamingStats TextureStreaming;
 }
 
 /// <summary>Estado gráfico da sessão. <c>ExecutedUpscaler</c> é o algoritmo que o
@@ -101,7 +121,8 @@ public readonly record struct GraphicsSnapshot(GraphicsSettings Requested,
     ResolvedGraphicsSettings Effective, GraphicsCapabilities Capabilities,
     bool Pending, ulong PendingRequestId, bool LastRequestSucceeded, bool EffectiveAvailable,
     string Diagnostics, GraphicsUpscaling ExecutedUpscaler = GraphicsUpscaling.Bilinear,
-    GraphicsTemporalAvailability ExecutedStatus = GraphicsTemporalAvailability.Available);
+    GraphicsTemporalAvailability ExecutedStatus = GraphicsTemporalAvailability.Available,
+    TextureStreamingStats TextureStreaming = default);
 
 /// <summary>Política gráfica da sessão Play. Alterações não persistem no projeto.</summary>
 public static class Graphics
