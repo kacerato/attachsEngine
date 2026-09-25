@@ -59,6 +59,7 @@ public:
     scripts_.setRenderingExecution(executed,status);
   }
   void setScriptTextureStreaming(const renderer::TextureStreamingStats &stats) {scripts_.setTextureStreaming(stats);}
+  void setScriptSceneStatistics(const renderer::SceneStatistics &stats) {scripts_.setSceneStatistics(stats);}
   bool completeScriptRenderingRequest(u64 requestId,bool success,
                                       const renderer::ResolvedRenderingPolicy &effective,
                                       bool effectiveAvailable=true) {

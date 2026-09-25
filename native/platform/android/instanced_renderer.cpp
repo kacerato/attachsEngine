@@ -2522,7 +2522,8 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     if(geometry.buffer!=boundGeometry) {
       vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&offset);boundGeometry=geometry.buffer;
     }
-    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,geometry.vertexOffset,drawIndex);
+    const auto range=drawIndexRange(drawIndex);
+    vkCmdDrawIndexed(commandBuffer_,range.indexCount,1,range.firstIndex,geometry.vertexOffset,drawIndex);
     ++shadowSubmittedDraws_;
   };
   for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
@@ -2654,7 +2655,8 @@ void InstancedRenderer::recordLocalShadowPass() {
     if(geometry.buffer!=boundGeometry) {
       vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&offset);boundGeometry=geometry.buffer;
     }
-    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,geometry.vertexOffset,drawIndex);
+    const auto range=drawIndexRange(drawIndex);
+    vkCmdDrawIndexed(commandBuffer_,range.indexCount,1,range.firstIndex,geometry.vertexOffset,drawIndex);
   };
   const std::vector<u32> &solidDraws = lodGroups_.empty() ? solidDrawOrder_ : levelZeroSolidDrawOrder_;
   const std::vector<u32> &coverageDraws =
@@ -4726,6 +4728,59 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
   for(usize t=0;t<count;++t) stats.currentBytes+=renderer::textureStreamingChainBytes(streamingTextures_[t],streamingLoaded_[t]);
 }
 
+InstancedRenderer::IndexRange InstancedRenderer::drawIndexRange(u32 drawIndex) const {
+  const auto &draw=dirtRoadResources_.draws()[drawIndex];
+  if(drawIndex<authoredLodLevel_.size() && authoredLodLevel_[drawIndex] && drawIndex<authoredDrawIdentities_.size()) {
+    const auto lods=dirtRoadResources_.meshLodsOf(authoredDrawIdentities_[drawIndex].sourceDrawIndex);
+    const u32 level=authoredLodLevel_[drawIndex];
+    if(level-1<lods.size()) return {lods[level-1].firstIndex,lods[level-1].indexCount};
+  }
+  return {draw.firstIndex,draw.indexCount};
+}
+
+void InstancedRenderer::updateAuthoredMeshLods(const platform::FreeCameraState &camera) {
+  const auto draws=std::span<const renderer::MapDrawRecord>(dirtRoadResources_.draws());
+  meshLodStats_={};
+  if(!dirtRoadPreview_ || authoredDrawIdentities_.size()!=draws.size()) {authoredLodLevel_.clear();return;}
+  authoredLodLevel_.resize(draws.size(),0);
+  authoredLodState_.resize(draws.size());
+  // Orçamento em pixels da tela FINAL, como no pacote: a resolução interna
+  // (escala dinâmica) não pode tirar geometria com a câmera parada.
+  const float verticalPixels=std::max(1.0f,static_cast<float>(swapchain_->displayExtent().height));
+  renderer::LodLevelInfo levels[renderer::MeshLodMaximumLevels];
+  for(usize i=0;i<draws.size();++i) {
+    u8 &chosen=authoredLodLevel_[i];
+    chosen=0;
+    const auto &identity=authoredDrawIdentities_[i];
+    if(identity.route) continue;
+    const auto lods=dirtRoadResources_.meshLodsOf(identity.sourceDrawIndex);
+    if(lods.empty()) continue;
+    const auto &draw=draws[i];
+    ++meshLodStats_.drawsWithLods;
+    meshLodStats_.baseTriangles+=draw.indexCount/3;
+    const bool visible=i>=authoredVisibility_.size() || authoredVisibility_[i];
+    if(!lodSelectionEnabled_ || !visible) {
+      authoredLodState_[i]={};
+      if(visible) meshLodStats_.selectedTriangles+=draw.indexCount/3;
+      continue;
+    }
+    // Erro guardado no espaço da malha; a escala do objeto o leva ao mundo.
+    const float scale=renderer::textureStreamingModelScale(draw.model);
+    const u32 count=static_cast<u32>(std::min<usize>(lods.size()+1,renderer::MeshLodMaximumLevels));
+    levels[0]={0,0.0f};
+    for(u32 level=1;level<count;++level) levels[level]={level,lods[level-1].geometricError*scale};
+    float distanceSquared=0;
+    for(u32 axis=0;axis<3;++axis) {const float d=draw.boundsCenter[axis]-camera.position[axis];distanceSquared+=d*d;}
+    const float distance=std::max(std::sqrt(distanceSquared)-draw.boundsRadius,1.0e-3f);
+    const auto selection=renderer::selectLodLevel(levels,count,distance,sceneFieldOfView(),verticalPixels,
+                                                   lodPixelErrorBudget_,lodHysteresisBandRatio_,authoredLodState_[i],
+                                                   sceneOrthographicHalfHeight_);
+    chosen=static_cast<u8>(std::min(selection.level,count-1));
+    if(chosen) ++meshLodStats_.reducedDraws;
+    meshLodStats_.selectedTriangles+=(chosen?lods[chosen-1].indexCount:draw.indexCount)/3;
+  }
+}
+
 bool InstancedRenderer::textureStreamingDebugTint(u32 texture,float tint[3]) const {
   const u32 package=dirtRoadResources_.packageTextureCount();
   // Cinza: sem textura de autoria ou fora do streaming (como a Unity mostra
@@ -4797,7 +4852,8 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   dirtRoadResources_.setTextureResidencyMipBias(resourceRenderingPolicy_.textures.residencyMipBias);
   dirtRoadResources_.setTextureStreamingInitialMip(renderingPolicy_.textures.streaming
       ? renderingPolicy_.textures.residencyMipBias+renderingPolicy_.textures.streamingMaxLevelReduction : 0u);
-  if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures)) {
+  if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures,
+                                                 deformation.meshLods)) {
     registerAuthoringTextures();
     __android_log_print(ANDROID_LOG_ERROR,LogTag,
         "[Import] biblioteca recusada: vertices=%zu indices=%zu desenhos=%zu materiais=%zu",
@@ -5174,6 +5230,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     completedPreview_=submittedPreview_;submittedPreview_={};previewCompletionSuccess_=true;
   }
   updateTextureStreaming(camera);
+  updateAuthoredMeshLods(camera);
   if(previewCloseRequested_) {destroyCameraPreview();previewCloseRequested_=false;}
   if (gpuTimingEnabled()) {
     rhi::GpuFrameTimings gpuTimings{};
@@ -5902,9 +5959,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       const auto geometry=route?DrawGeometry{routeVertices_.handle(),static_cast<i32>(draw.vertexOffset)}:drawGeometry(drawIndex);
       vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&zero);
       vkCmdBindIndexBuffer(commandBuffer_,route?routeIndices_.handle():dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
-      vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,geometry.vertexOffset,drawIndex);
+      const auto range=drawIndexRange(drawIndex);
+    vkCmdDrawIndexed(commandBuffer_,range.indexCount,1,range.firstIndex,geometry.vertexOffset,drawIndex);
       ++visibilityTelemetry_.submittedDrawCalls;
-      visibilityTelemetry_.submittedTriangles += draw.indexCount / 3;
+      visibilityTelemetry_.submittedTriangles += range.indexCount / 3;
     };
     auto nearestBoundsDistanceSquared = [&](u32 drawIndex) {
       const auto &draw=dirtRoadResources_.draws()[drawIndex];float distanceSquared=0;
@@ -6131,10 +6189,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                static_cast<u32>(indirectCommands_.size()), 0, 0,
                                distantMaterial});
           }
-          indirectCommands_.push_back({draw.indexCount, 1, draw.firstIndex,
+          const auto range = drawIndexRange(drawIndex);
+          indirectCommands_.push_back({range.indexCount, 1, range.firstIndex,
                                        static_cast<i32>(draw.vertexOffset), drawIndex});
           ++batches.back().commandCount;
-          batches.back().triangles += draw.indexCount / 3;
+          batches.back().triangles += range.indexCount / 3;
         }
         return;
       }
@@ -6155,10 +6214,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           const auto &draw = dirtRoadResources_.draws()[drawIndex];
           if (draw.materialIndex != batch.materialIndex ||
               usesDistantMaterialPipeline(drawIndex) != batch.distantMaterial) continue;
-          indirectCommands_.push_back({draw.indexCount, 1, draw.firstIndex,
+          const auto range = drawIndexRange(drawIndex);
+          indirectCommands_.push_back({range.indexCount, 1, range.firstIndex,
                                        static_cast<i32>(draw.vertexOffset), drawIndex});
           ++batch.commandCount;
-          batch.triangles += draw.indexCount / 3;
+          batch.triangles += range.indexCount / 3;
         }
       }
     };

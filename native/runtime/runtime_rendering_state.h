@@ -3,6 +3,7 @@
 #include "renderer/rendering_policy.h"
 #include "renderer/rendering_settings_file.h"
 #include "renderer/texture_streaming.h"
+#include "renderer/scene_statistics.h"
 
 #include <functional>
 
@@ -35,6 +36,9 @@ public:
   // S2: memória e trocas do streaming de mipmaps no último quadro.
   void setTextureStreaming(const renderer::TextureStreamingStats &stats) { textureStreaming_ = stats; }
   const renderer::TextureStreamingStats &textureStreaming() const noexcept { return textureStreaming_; }
+  // S5: o último quadro da cena como o renderer o relatou.
+  void setSceneStatistics(const renderer::SceneStatistics &stats) { sceneStatistics_ = stats; }
+  const renderer::SceneStatistics &sceneStatistics() const noexcept { return sceneStatistics_; }
   renderer::UpscalingFilter executedUpscaler() const noexcept { return executedUpscaler_; }
   renderer::TemporalUpscalerAvailability executedStatus() const noexcept { return executedStatus_; }
   bool refresh(u32 expectedWorld, renderer::RenderingCapabilities capabilities,
@@ -62,6 +66,7 @@ private:
   RequestSink sink_;
   renderer::UpscalingFilter executedUpscaler_ = renderer::UpscalingFilter::Bilinear;
   renderer::TextureStreamingStats textureStreaming_{};
+  renderer::SceneStatistics sceneStatistics_{};
   renderer::TemporalUpscalerAvailability executedStatus_ = renderer::TemporalUpscalerAvailability::Available;
   u32 world_ = 0;
   u64 nextRequestId_ = 1, pendingId_ = 0;

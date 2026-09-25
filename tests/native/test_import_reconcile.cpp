@@ -360,9 +360,12 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   FakeRenderer renderer;
   start(session, renderer);
   AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
-  // Fonte nova sem padrão do projeto: embutido + o preset de importação nova (ASTC 6x6, S1).
+  // Fonte nova sem padrão do projeto: embutido + o preset de importação nova
+  // (ASTC 6x6 do S1; LOD e ordem de polígonos do S3).
   resources::ImportProfile preset;
   preset.textureCompression = 6;
+  preset.generateLods = true;
+  preset.optimizePolygonOrder = true;
   AE_EXPECT_TRUE(resources::sameImportProfile(session.importProfileForPath(kSource), preset), "sem arquivos: preset de fonte nova");
   AE_EXPECT_TRUE(session.saveProjectImportProfile(profileOf(0.01f, 1024)), "padrão do projeto gravado");
   AE_EXPECT_EQ(session.importProfileForPath(kSource).maximumTextureDimension, 1024u, "fonte nova usa o padrão");

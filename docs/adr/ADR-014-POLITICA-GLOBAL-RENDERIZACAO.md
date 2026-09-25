@@ -249,6 +249,37 @@ depuração da Scene View (só no editor, fora do Play): a cor base do desenho �
 pelo estado da textura de cor dele — verde no nível pedido, vermelho abaixo (orçamento
 ou pendente), azul acima, cinza fora do streaming.
 
+### LOD na própria malha e estatísticas do quadro — 25/09/2026 (S3/S5)
+
+Referências: [Unity 6 Mesh LOD](https://docs.unity3d.com/6000.3/Documentation/Manual/lod/mesh-lod-introduction.html)
+e o [gerador](https://docs.unity3d.com/6000.3/Documentation/Manual/lod/mesh-lod-generator.html),
+[Godot Mesh LOD](https://docs.godotengine.org/en/stable/tutorials/3d/mesh_lod.html) e o
+[meshoptimizer v1.2](https://github.com/zeux/meshoptimizer) (MIT, já vendorizado; entraram
+`vcacheoptimizer.cpp` e `indexanalyzer.cpp` do mesmo commit). O perfil de importação
+(schema 11) tem "Níveis de detalhe (LOD)", "Máximo de níveis" (2–4, contando o 0) e
+"Otimizar ordem dos polígonos"; fonte nova já vem com os dois ligados, fontes publicadas
+continuam como estavam. Regras do gerador da Unity: começa com 256 triângulos, cada nível
+com cerca de metade dos índices, para abaixo de 64 triângulos ou sem redução real, sem
+vértice novo; cada nível parte do nível 0, com as bordas presas (desenhos vizinhos não
+abrem fresta). Desenho com skin ou blend shapes não recebe LOD. A ordem de índices usa o
+otimizador de cache de vértices e o ACMR (cache de 16) antes/depois aparece no resumo da
+importação — o ganho declarado é essa medida, não FPS.
+
+Os níveis são faixas extras do buffer de índices sobre os mesmos vértices, guardadas no
+derivado de importação (seção opcional: derivados sem LOD continuam válidos e a chave só
+muda com LOD ligado). O renderer escolhe o nível de cada desenho autoral uma vez por quadro
+com a mesma regra do pacote de mapa (`selectLodLevel`: erro geométrico × escala do objeto
+projetado em pixels da tela final, orçamento "Erro de LOD" e histerese do painel
+Qualidade, "Seleção de LOD" desligada força o nível 0). A escolha vale para a cena, o
+caminho indireto e as sombras. Diferenças: sem cross-fade entre níveis da malha (troca
+seca com histerese); sombras usam o nível da câmera principal; sem viés por objeto ainda.
+
+S5: "Estatísticas no viewport" (aba Desempenho) mostra intervalo do quadro, GPU (medida
+só com o painel ou as estatísticas abertos), resolução, desenhos e triângulos realmente
+enviados, LOD (reduzidos/total e triângulos do nível 0 → escolhidos) e texturas na GPU.
+`Graphics.State.Frame` entrega os mesmos números aos scripts (`FrameStatistics`, 56 bytes,
+travado dos dois lados).
+
 A separação segue a diferença da Unity 6 entre a intenção alterada via `QualitySettings`
 e o pipeline atual consultável. Na Astra, o acknowledge assíncrono é explícito porque
 alguns eixos exigem reconstrução Vulkan; portanto um setter aceito não é apresentado

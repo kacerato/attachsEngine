@@ -2447,6 +2447,35 @@ AE_TEST(the_quality_textures_tab_edits_mipmap_streaming_and_shows_what_the_gpu_h
   AE_EXPECT_TRUE(!fixture.session.screen().qualityTextureStreamingDebug, "e desliga");
 }
 
+AE_TEST(scene_statistics_overlay_toggles_from_the_performance_tab_and_shows_the_renderer_report) {
+  Fixture fixture;
+  fixture.session.setRenderingSettings({});
+  fixture.session.update();
+  tapWidget(fixture, widgetId(EditorWidget::QualityOpen));
+  tapWidget(fixture, widgetId(EditorWidget::QualityTabPerformance));
+  for (u32 page = 0; page < 4 && locateWidget(fixture.session, widgetId(EditorWidget::QualitySceneStatistics)).x < 0; ++page)
+    tapWidget(fixture, widgetId(EditorWidget::QualityPageNext));
+  const bool dirtyBefore = fixture.session.screen().qualityDirty;
+  tapWidget(fixture, widgetId(EditorWidget::QualitySceneStatistics));
+  AE_EXPECT_TRUE(fixture.session.screen().sceneStatisticsVisible && fixture.session.screen().qualityDirty == dirtyBefore,
+                 "estatísticas ligam sem mexer no rascunho do projeto");
+  renderer::SceneStatistics statistics;
+  statistics.frameIntervalMs = 16.7f;
+  statistics.drawCalls = 412;
+  statistics.triangles = 1200000;
+  statistics.lodDraws = 300;
+  statistics.lodReducedDraws = 120;
+  statistics.lodBaseTriangles = 3700000;
+  statistics.lodSelectedTriangles = 1200000;
+  fixture.session.setSceneStatistics(statistics);
+  fixture.session.update();
+  const auto &shown = fixture.session.screen().sceneStatistics;
+  AE_EXPECT_TRUE(shown.drawCalls == 412 && shown.lodReducedDraws == 120 && shown.lodSelectedTriangles == 1200000,
+                 "o relatório do renderer chega ao overlay");
+  tapWidget(fixture, widgetId(EditorWidget::QualitySceneStatistics));
+  AE_EXPECT_TRUE(!fixture.session.screen().sceneStatisticsVisible, "e desliga");
+}
+
 AE_TEST(the_quality_panel_edits_a_draft_and_applies_it_on_request) {
   Fixture fixture;
   renderer::ProjectRenderingSettings project;

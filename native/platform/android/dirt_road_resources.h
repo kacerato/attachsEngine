@@ -3,6 +3,7 @@
 #include "platform/free_camera_controller.h"
 #include "renderer/authoring_texture.h"
 #include "renderer/authoring_library_plan.h"
+#include "renderer/mesh_lod.h"
 #include "renderer/map_package.h"
 #include "renderer/environment_map.h"
 #include "renderer/environment_lighting.h"
@@ -52,7 +53,15 @@ public:
                                std::span<const u8> extraVertices, std::span<const u32> extraIndices,
                                std::span<const renderer::MapDrawRecord> extraDraws,
                                std::span<const renderer::MapMaterialRecord> extraMaterials,
-                               std::span<const renderer::SharedAuthoringTexture> extraTextures = {});
+                               std::span<const renderer::SharedAuthoringTexture> extraTextures = {},
+                               std::span<const renderer::MeshLodLevel> extraLods = {});
+  // S3: níveis de detalhe de um desenho da BIBLIOTECA (índice como em
+  // `draws()` logo depois da publicação), com a faixa já no buffer publicado.
+  std::span<const renderer::MeshLodLevel> meshLodsOf(u32 libraryDraw) const {
+    if(libraryDraw+1>=libraryLodBegin_.size()) return {};
+    return std::span<const renderer::MeshLodLevel>(authoringLods_).subspan(
+        libraryLodBegin_[libraryDraw],libraryLodBegin_[libraryDraw+1]-libraryLodBegin_[libraryDraw]);
+  }
   void shutdown();
 
   std::span<const u8> pickingVertices() const { return pickingVertices_; }
@@ -183,6 +192,8 @@ private:
   std::vector<rhi::VulkanImage> authoringImages_;
   std::vector<rhi::VulkanSampler> authoringSamplers_;
   std::vector<AuthoringResidency> authoringResidency_;
+  std::vector<renderer::MeshLodLevel> authoringLods_;
+  std::vector<u32> libraryLodBegin_; // prefixo por desenho da biblioteca (+1)
   u32 textureStreamingInitialMip_ = 0;
   bool createAuthoringSampler(rhi::VulkanDevice &device, const renderer::AuthoringTexture &texture,
                               u32 residentLevels, rhi::VulkanSampler &out) const;

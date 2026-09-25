@@ -2,6 +2,7 @@
 #include "resources/json_reader.h"
 #include "resources/gltf_codecs.h"
 #include "resources/texture_compression.h"
+#include "resources/mesh_lod_build.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2386,6 +2387,32 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   for(const auto &key:result.keys) ++keyCounts[key];
   for(usize i=0;i<result.keys.size();++i) if(keyCounts[result.keys[i]]>1)
     result.keys[i]+="@node:"+std::to_string(result.drawNodes[i]);
+  // S3: ordem de índices e LOD na própria malha, depois de toda a geometria
+  // (normais, tangentes, espelhamento) estar pronta.
+  if (limits.generateLods || limits.optimizePolygonOrder) {
+    importer.report(.99f, "Gerando níveis de detalhe");
+    std::vector<u8> deformed(result.draws.size(), 0);
+    for (usize d = 0; d < deformed.size(); ++d)
+      deformed[d] = (d < result.drawSkins.size() && result.drawSkins[d] >= 0) ||
+                    (d < result.drawMorphs.size() && result.drawMorphs[d] >= 0);
+    MeshLodSettings lod;
+    lod.generate = limits.generateLods;
+    lod.optimizeOrder = limits.optimizePolygonOrder;
+    lod.maximumLevels = limits.maximumLodLevels;
+    lod.maximumAddedIndices = limits.maximumIndices;
+    MeshLodReport lodReport;
+    std::string lodDiagnostic;
+    if (!buildMeshLods(result.vertices, result.indices, result.draws, deformed, lod, result.meshLods, lodReport,
+                       lodDiagnostic))
+      return giveUp(lodDiagnostic.c_str());
+    result.lodDraws = lodReport.drawsWithLods;result.lodLevels = lodReport.levels;
+    result.lodSkippedSmall = lodReport.skippedSmall;result.lodSkippedDeformed = lodReport.skippedDeformed;
+    result.lodSourceTriangles = lodReport.sourceTriangles;result.lodTriangles = lodReport.lodTriangles;
+    result.lodBudgetReached = lodReport.budgetReached;
+    result.acmrBefore = lodReport.acmrBefore;result.acmrAfter = lodReport.acmrAfter;
+    if (lodReport.budgetReached)
+      result.notes.emplace_back("Níveis de detalhe parados no teto de índices do arquivo; os desenhos restantes ficam só com o nível 0.");
+  }
   importer.report(1.f, "Concluído");
   out = std::move(result);
   return true;

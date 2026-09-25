@@ -446,6 +446,8 @@ public:
     // a vértice) e, por desenho recebido, início em floats e número de alvos.
     std::span<const float> morphDeltas;
     std::span<const u32> drawMorphOffsets,drawMorphTargets;
+    // S3: níveis de detalhe dos desenhos recebidos, na ordem desenho → nível.
+    std::span<const renderer::MeshLodLevel> meshLods;
   };
   const SkinningPublication &skinningPublication() const noexcept { return skinningPublication_; }
   // Republica a geometria importada para um consumidor gráfico NOVO.
@@ -638,6 +640,8 @@ public:
     draft.importCameras=state_.importCameras;draft.importLights=state_.importLights;
     draft.textureCompression=state_.importTextureCompression;
     draft.textureStreaming=state_.importTextureStreaming;
+    draft.generateLods=state_.importGenerateLods;draft.maximumLodLevels=state_.importLodLevels;
+    draft.optimizePolygonOrder=state_.importOptimizeOrder;
     draft.textureStreamingPriority=state_.importTextureStreamingPriority;
     draft.excludedNodes=state_.importExcludedNodes;
     return draft;
@@ -652,6 +656,8 @@ public:
     prepared.smoothingAngle=state_.importPreparedSmoothingAngle;prepared.tangents=state_.importPreparedTangents;
     prepared.importCameras=state_.importPreparedCameras;prepared.importLights=state_.importPreparedLights;
     prepared.textureCompression=state_.importPreparedTextureCompression;
+    prepared.generateLods=state_.importPreparedGenerateLods;prepared.maximumLodLevels=state_.importPreparedLodLevels;
+    prepared.optimizePolygonOrder=state_.importPreparedOptimizeOrder;
     return prepared;
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
@@ -1073,6 +1079,11 @@ public:
   // Prioridade no toque: 0, 1, 2, 3, -3, -2, -1 e volta; valor de script fora
   // dessa faixa volta a 0. A faixa gravada é a da Unity (-128..127).
   static i32 nextStreamingPriority(i32 value) {return value>=3?-3:value< -3?0:value+1;}
+  // S5: estatísticas do quadro relatadas pelo renderer (overlay e Graphics.State).
+  void setSceneStatistics(const renderer::SceneStatistics &statistics) {
+    state_.sceneStatistics=statistics;
+    playScene_.setScriptSceneStatistics(statistics);
+  }
   // S2: relatório do streaming de mipmaps do renderer, a cada quadro.
   void setTextureStreamingStatus(const renderer::TextureStreamingStats &stats) {
     state_.qualityTextureStreaming=stats;
@@ -1175,6 +1186,8 @@ private:
     // Blend shapes por primitiva e o conjunto de cada desenho da fonte (-1 sem).
     std::vector<resources::MorphTargetSet> morphs;
     std::vector<i32> drawMorphs;
+    // S3: níveis de detalhe dos desenhos da fonte (faixas extras de `indices`).
+    std::vector<renderer::MeshLodLevel> meshLods;
     // Faixa que veio da fonte. Recursos derivados compartilham os vértices e
     // entram depois dela; regenerar começa sempre daqui.
     usize sourceIndexCount = 0;
@@ -1202,6 +1215,8 @@ private:
     // floats) e o número de alvos; `~0u` e zero num desenho sem eles.
     std::vector<float> morphDeltas;
     std::vector<u32> drawMorphOffsets,drawMorphTargets;
+    // S3: níveis de detalhe com desenho e faixa já na numeração da biblioteca.
+    std::vector<renderer::MeshLodLevel> meshLods;
     std::vector<std::shared_ptr<const EditorMapScene::DrawDeformation>> deformations;
     std::vector<std::shared_ptr<const runtime::SourceAnimations>> animations;
   };

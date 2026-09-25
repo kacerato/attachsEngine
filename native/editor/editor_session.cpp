@@ -1382,6 +1382,10 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.importTextureCompression=value==6?4:value==4?8:value==8?0:6;
     }
     else if(is(EditorWidget::ImportTextureStreamingToggle)) state_.importTextureStreaming=!state_.importTextureStreaming;
+    else if(is(EditorWidget::ImportGenerateLodsToggle)) state_.importGenerateLods=!state_.importGenerateLods;
+    else if(is(EditorWidget::ImportLodLevelsCycle) && state_.importGenerateLods)
+      state_.importLodLevels=static_cast<u8>(state_.importLodLevels>=4?2:state_.importLodLevels+1);
+    else if(is(EditorWidget::ImportOptimizeOrderToggle)) state_.importOptimizeOrder=!state_.importOptimizeOrder;
     else if(is(EditorWidget::ImportTextureStreamingPriorityCycle))
       state_.importTextureStreamingPriority=nextStreamingPriority(state_.importTextureStreamingPriority);
     // Passos de 15°: o controle deslizante da Unity em toque, sem arrasto fino.
@@ -2590,6 +2594,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::QualityTabLighting)) {state_.qualityTab=2;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabPerformance)) {state_.qualityTab=3;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabTextures)) {state_.qualityTab=4;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualitySceneStatistics)) {
+      state_.sceneStatisticsVisible=!state_.sceneStatisticsVisible;return true;
+    }
     else if(is(EditorWidget::QualityStreamingDebugView)) {
       state_.qualityTextureStreamingDebug=!state_.qualityTextureStreamingDebug;return true;
     }
@@ -3161,10 +3168,16 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     }
     library.textures.insert(library.textures.end(),source.textures.begin(),source.textures.end());
     library.textureSources.insert(library.textureSources.end(),source.textures.size(),source.guid);
+    const auto drawBase=static_cast<u32>(library.draws.size());
     for(const auto &draw:source.draws) {
       auto moved=draw;
       moved.firstIndex+=indexBase;moved.vertexOffset+=vertexBase;moved.materialIndex+=materialBase;
       library.draws.push_back(moved);
+    }
+    for(auto lod:source.meshLods) {
+      if(lod.draw>=source.draws.size()) continue;
+      lod.draw+=drawBase;lod.firstIndex+=indexBase;
+      library.meshLods.push_back(lod);
     }
     library.identities.insert(library.identities.end(),source.identities.begin(),source.identities.end());
     library.names.insert(library.names.end(),source.names.begin(),source.names.end());
@@ -3279,7 +3292,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
       }
   }
   skinningPublication_={library.skinInfluences,library.drawJoints,library.morphDeltas,library.drawMorphOffsets,
-                        library.drawMorphTargets};
+                        library.drawMorphTargets,library.meshLods};
   const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published);
   if(accepted) {
     textureStreamingParameters_=std::move(streaming);++textureStreamingRevision_;
@@ -3863,6 +3876,7 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.animations=model.animations;
   block.morphs=model.morphs;
   block.drawMorphs=model.drawMorphs;
+  block.meshLods=model.meshLods;
   block.sourceIndexCount=block.indices.size();
   block.sourceDrawCount=block.draws.size();
   auto profile=importProfileFor(source);
@@ -4333,6 +4347,8 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importPreparedTangents=prepared.tangents;state_.importPreparedCameras=prepared.importCameras;
   state_.importPreparedLights=prepared.importLights;
   state_.importPreparedTextureCompression=prepared.textureCompression;
+  state_.importPreparedGenerateLods=prepared.generateLods;state_.importPreparedLodLevels=prepared.maximumLodLevels;
+  state_.importPreparedOptimizeOrder=prepared.optimizePolygonOrder;
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
   {
@@ -4471,6 +4487,16 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
       " na importação (perfil)"+(model.compressionFailures?"; "+std::to_string(model.compressionFailures)+
       " ficaram em RGBA8 porque o encoder recusou (motivo nas notas).":std::string("."));
   }
+  // S3: o que a geração de LOD e a ordem de índices fizeram, medido na importação.
+  if(model.lodLevels)
+    state_.importSummary+="\nLOD: "+std::to_string(model.lodDraws)+" desenho(s) com "+std::to_string(model.lodLevels)+
+      " nível(is) extra; "+std::to_string(model.lodTriangles)+" triângulos nos níveis sobre "+
+      std::to_string(model.lodSourceTriangles)+" da fonte"+
+      (model.lodSkippedSmall?"; "+std::to_string(model.lodSkippedSmall)+" com menos de 256 triângulos":std::string())+
+      (model.lodSkippedDeformed?"; "+std::to_string(model.lodSkippedDeformed)+" com skin ou blend shapes sem LOD":std::string())+".";
+  if(model.acmrBefore>0 && model.acmrAfter>0 && model.acmrAfter<model.acmrBefore)
+    state_.importSummary+="\nOrdem dos polígonos: "+decimalText(model.acmrBefore,2)+" → "+decimalText(model.acmrAfter,2)+
+      " vértices processados por triângulo (cache de 16).";
   if(model.astcTextures)
     state_.importSummary+="\nTexturas KTX2 em ASTC 4x4 na GPU: "+std::to_string(model.astcTextures)+
       " (o aparelho amostra ASTC; sem RGBA intermediário).";
@@ -6335,6 +6361,9 @@ resources::ImportProfile EditorSession::newSourceImportProfile() const {
   if(readProjectImportProfile(files_.rootPath(),resources::ImportProfileDefaultPath,profile)) return profile;
   profile={};
   profile.textureCompression=static_cast<u8>(resources::TextureCompression::Astc6x6);
+  // S3: como a Godot (LOD na importação por padrão) e o Optimize Mesh da Unity.
+  profile.generateLods=true;
+  profile.optimizePolygonOrder=true;
   return profile;
 }
 
@@ -6363,6 +6392,9 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importCameras=state_.importPreparedCameras=profile.importCameras;
   state_.importLights=state_.importPreparedLights=profile.importLights;
   state_.importTextureCompression=state_.importPreparedTextureCompression=profile.textureCompression;
+  state_.importGenerateLods=state_.importPreparedGenerateLods=profile.generateLods;
+  state_.importLodLevels=state_.importPreparedLodLevels=profile.maximumLodLevels;
+  state_.importOptimizeOrder=state_.importPreparedOptimizeOrder=profile.optimizePolygonOrder;
   state_.importTextureStreaming=profile.textureStreaming;
   state_.importTextureStreamingPriority=profile.textureStreamingPriority;
   state_.importAstcSupported=importLimits_.astc4x4;

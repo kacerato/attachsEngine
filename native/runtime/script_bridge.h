@@ -59,6 +59,8 @@ public:
   }
   // S2: Graphics.State.TextureStreaming.
   void setTextureStreaming(const renderer::TextureStreamingStats &stats) { rendering_.setTextureStreaming(stats); }
+  // S5: Graphics.State.Frame.
+  void setSceneStatistics(const renderer::SceneStatistics &stats) { rendering_.setSceneStatistics(stats); }
   bool completeRenderingRequest(u64 requestId, bool success,
                                 const renderer::ResolvedRenderingPolicy &effective,
                                 bool effectiveAvailable=true) {

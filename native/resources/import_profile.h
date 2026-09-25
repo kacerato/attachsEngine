@@ -25,7 +25,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 10; // 10: streaming de mips das texturas (S2)
+inline constexpr u32 ImportProfileSchema = 11; // 11: LOD na própria malha e ordem de polígonos (S3)
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -63,6 +63,14 @@ struct ImportProfile {
   // `sameImportPreparation`, e valem na publicação.
   bool textureStreaming = true;
   i32 textureStreamingPriority = 0;
+  // S3: "Generate LODs" + "Maximum Levels" (Mesh LOD da Unity 6.2, contando o
+  // nível 0, 2..4) e "Optimize Mesh > Polygon Order". Mudam a saída do
+  // importador: entram nos limites, na chave do cache e no preparo. O valor
+  // embutido é desligado (a saída que as fontes publicadas já têm); fonte nova
+  // recebe o preset em `EditorSession`.
+  bool generateLods = false;
+  u8 maximumLodLevels = 4;
+  bool optimizePolygonOrder = false;
   // Nós da fonte que NÃO vêm para a cena, por identidade do mapa de nós. A
   // exclusão vale para a subárvore. Identidade, e não nome nem caminho: o nó
   // renomeado no editor 3D continua excluído, porque o mapa o reconhece como o

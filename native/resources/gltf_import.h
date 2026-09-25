@@ -2,6 +2,7 @@
 #include "core/base.h"
 #include "renderer/authoring_texture.h"
 #include "renderer/map_package.h"
+#include "renderer/mesh_lod.h"
 #include "resources/image_decode.h"
 #include "resources/skeletal_animation.h"
 #include <span>
@@ -112,6 +113,11 @@ struct GltfImportLimits {
   // "Import Lights" do Model Import Settings. Segue a mesma política das
   // câmeras: desligado preserva o comportamento dos perfis existentes.
   bool importLights = false;
+  // S3: Mesh LOD (Generate LODs + Maximum Levels) e Optimize Mesh > Polygon
+  // Order da Unity. Desligados reproduzem a saída anterior, byte a byte.
+  bool generateLods = false;
+  bool optimizePolygonOrder = false;
+  u32 maximumLodLevels = 4;
   ImageDecodeLimits image{};
 };
 
@@ -272,6 +278,15 @@ struct GltfImport {
   u32 dracoPrimitives = 0, meshoptViews = 0, ktx2Images = 0;
   // Texturas KTX2 que subiram como ASTC 4x4 em vez de RGBA8.
   u32 astcTextures = 0;
+  // S3: níveis de detalhe de cada desenho, faixas extras de `indices` sobre os
+  // mesmos vértices (`renderer/mesh_lod.h`), em ordem de desenho e de nível.
+  std::vector<renderer::MeshLodLevel> meshLods;
+  // O que a geração fez: desenhos com LOD, níveis, triângulos da fonte e dos
+  // níveis extras, e o ACMR medido antes e depois da ordem de índices.
+  u32 lodDraws = 0, lodLevels = 0, lodSkippedSmall = 0, lodSkippedDeformed = 0;
+  u64 lodSourceTriangles = 0, lodTriangles = 0;
+  bool lodBudgetReached = false;
+  float acmrBefore = 0, acmrAfter = 0;
   // Nós cuja transformação de mundo tem reflexão (escala negativa). A pose local
   // sai com escala positiva e a geometria desses nós sai espelhada — o resultado
   // no mundo é o mesmo do arquivo, sem aproximação.

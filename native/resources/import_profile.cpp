@@ -45,7 +45,8 @@ bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept 
          a.normalWeighting == b.normalWeighting && a.smoothingAngle == b.smoothingAngle && a.tangents == b.tangents &&
          a.importCameras == b.importCameras && a.importLights == b.importLights &&
          a.textureCompression == b.textureCompression && a.textureStreaming == b.textureStreaming &&
-         a.textureStreamingPriority == b.textureStreamingPriority &&
+         a.textureStreamingPriority == b.textureStreamingPriority && a.generateLods == b.generateLods &&
+         a.maximumLodLevels == b.maximumLodLevels && a.optimizePolygonOrder == b.optimizePolygonOrder &&
          sameExcludedNodes(a, b) && sameCollisionMeshes(a, b);
 }
 
@@ -74,6 +75,7 @@ bool validImportProfile(const ImportProfile &profile) noexcept {
          profile.smoothingAngle <= 180 &&
          profile.tangents <= GltfTangentsCalculate && validTextureCompression(profile.textureCompression) &&
          profile.textureStreamingPriority >= -128 && profile.textureStreamingPriority <= 127 &&
+         profile.maximumLodLevels >= 2 && profile.maximumLodLevels <= 4 &&
          profile.excludedNodes.size() <= 65536 &&
          profile.collisionMeshes.size() <= 65536 && collisionRecipesValid;
 }
@@ -91,7 +93,10 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"importLights\":" + (profile.importLights ? "true" : "false") +
          ",\"textureCompression\":" + std::to_string(profile.textureCompression) +
          ",\"textureStreaming\":" + (profile.textureStreaming ? "true" : "false") +
-         ",\"textureStreamingPriority\":" + std::to_string(profile.textureStreamingPriority) + ",\"excludedNodes\":[" + [&] {
+         ",\"textureStreamingPriority\":" + std::to_string(profile.textureStreamingPriority) +
+         ",\"generateLods\":" + (profile.generateLods ? "true" : "false") +
+         ",\"maximumLodLevels\":" + std::to_string(profile.maximumLodLevels) +
+         ",\"optimizePolygonOrder\":" + (profile.optimizePolygonOrder ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
            std::string list;
            for (const auto &node : profile.excludedNodes) {
              if (!list.empty()) list += ',';
@@ -173,6 +178,16 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     parsed.textureStreaming = streaming->boolean;
     parsed.textureStreamingPriority = static_cast<i32>(priority);
   }
+  if (schema >= 11) {
+    const auto *lods = document.member(root, "generateLods");
+    const auto *order = document.member(root, "optimizePolygonOrder");
+    const auto levels = document.index(root, "maximumLodLevels");
+    if (!lods || lods->kind != JsonDocument::Kind::Boolean || !order || order->kind != JsonDocument::Kind::Boolean ||
+        levels < 2 || levels > 4) return false;
+    parsed.generateLods = lods->boolean;
+    parsed.optimizePolygonOrder = order->boolean;
+    parsed.maximumLodLevels = static_cast<u8>(levels);
+  }
   if (schema >= 4) {
     const auto *excluded = document.member(root, "excludedNodes");
     if (!excluded || excluded->kind != JsonDocument::Kind::Array || excluded->childCount > 65536) return false;
@@ -225,6 +240,9 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
 GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile &profile) {
   if (!validImportProfile(profile)) return limits;
   limits.rootScale = profile.scale;
+  limits.generateLods = profile.generateLods;
+  limits.optimizePolygonOrder = profile.optimizePolygonOrder;
+  limits.maximumLodLevels = profile.maximumLodLevels;
   limits.normals = profile.normals;
   limits.normalWeighting = profile.normalWeighting;
   limits.smoothingAngle = static_cast<float>(profile.smoothingAngle);

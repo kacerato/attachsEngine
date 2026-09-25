@@ -270,6 +270,31 @@ Cena de aceite escolhida pelo usuário: **Sponza Base Scene** do [Intel GPU Rese
 
 Estado: S0, S1 e S2 implementados (seção de execução). S1 preparado mas ainda não publicado no aparelho; S2 validado no aparelho sobre a publicação de 512 px. Falta ao S2 a API C# por textura (nível pedido por script) e a leitura dos mips do disco. S3–S6 pendentes.
 
+### 8.3 Recapitulação em blocos combinados (24/09/2026)
+
+Os planos em curso se cruzam: este plano (S0–S6, lacunas da seção 9.1), o roadmap de
+ampliação (`ampliacao-2026-09-23/ROADMAP.md`, P00–P20, com P01a em execução por outra
+frente: coleções com identidade de elemento e painel de diagnóstico) e o plano mestre
+(importação estrutural, layout, console). Para não editar a mesma área em paralelo, a
+trilha de renderização/recursos/desempenho avança em blocos que juntam dado, componente,
+UI, API e otimização medida, e toca `components.h`/ABI de scripts só quando a outra
+frente fechar a versão em curso.
+
+| Bloco | Junta | Referências | Aceite |
+|---|---|---|---|
+| A · desempenho de cena | S3 (LOD na própria malha, gerado na importação com meshoptimizer: cada nível ~metade dos índices, mesmo buffer de vértices, erro por nível), seleção no renderer pela seleção por erro em pixels que o pacote de mapa já usa (`selectLodLevel`, orçamento e histerese do painel Qualidade), ordem de índices para o cache de vértices com ACMR medido na importação, S5 (triângulos/desenhos/texturas/tempo por quadro no viewport e `Graphics.State`), viés de LOD por objeto | [Unity Mesh LOD](https://docs.unity3d.com/6000.3/Documentation/Manual/lod/mesh-lod-introduction.html), [gerador](https://docs.unity3d.com/6000.3/Documentation/Manual/lod/mesh-lod-generator.html), [Godot Mesh LOD](https://docs.godotengine.org/en/stable/tutorials/3d/mesh_lod.html), [meshoptimizer](https://github.com/zeux/meshoptimizer) | triângulos enviados caem com a distância sem trocar a malha autoral; números do painel batem com o `FrameProfile` |
+| B · luz e ambiente da fonte | S4 (relatório de luzes/câmeras importadas, intensidade zero e alvo, correção pelo Inspector), `dirt_decal` BLEND, HDRI do pacote, P08c (ordenação de transparentes/decals) | Unity Light Explorer, KHR_lights_punctual | nenhuma luz some em silêncio; decal translúcido correto |
+| C · texturas completas | publicar o preparo ASTC no aparelho, mips lidos do derivado em disco por nível, API C# por textura (nível pedido) depois da ABI em curso | Unity Mipmap Streaming, `Texture2D.requestedMipmapLevel` | detalhe 4K perto dentro do orçamento; RAM também cai |
+| D · aceite S6 | passeio com as câmeras do arquivo, medição comparável (CPU/GPU/memória/temperatura) e captura | — | evidência registrada no aparelho |
+
+Ordem: A → B → C → D. Cada bloco fecha com testes de host, build Android e, quando houver
+aparelho, a observação correspondente.
+
+Estado do bloco A (25/09): S3 (LOD na própria malha e ordem de índices, importação → cache →
+biblioteca → renderer) e S5 (overlay e `Graphics.State.Frame`) implementados e testados no host,
+build Android compilado; observação no aparelho e reimportação do Sponza com LOD pendentes.
+Viés de LOD por objeto fica para quando a outra frente fechar `components.h`.
+
 ## 9. Gates de qualidade de um mundo realista
 
 Escolher um **interior** (muitos materiais e luzes locais), um **exterior** (vegetação, distância e sol) e um **misto interativo** (portas/objetos manipuláveis, colisão, animação/áudio). Usar fontes com PBR e geometria suficiente, manter metadados de proveniência e licença, e guardar referência visual com câmera, horário, exposição e resolução fixos. A matriz de avaliação deve cobrir:

@@ -8,6 +8,9 @@
 namespace ae::resources {
 namespace {
 constexpr char kMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'C', '1'};
+// S3: seção opcional de LOD/ordem de índices antes do terminador. Só existe
+// quando a importação gerou algo; derivados anteriores continuam válidos.
+constexpr char kLodMagic[8]{'A', 'S', 'T', 'R', 'A', 'L', 'O', 'D'};
 constexpr u32 kCounterCount = 22;
 
 struct Writer {
@@ -123,7 +126,12 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                      "|lights=" + number(limits.importLights ? 1 : 0) +
                      "|imageDimension=" + number(limits.image.maximumDimension) +
                      "|imagePixels=" + number(limits.image.maximumPixels) +
-                     "|imageEncoded=" + number(limits.image.maximumEncodedBytes);
+                     "|imageEncoded=" + number(limits.image.maximumEncodedBytes) +
+                     // Só entra na chave ligado: perfis sem LOD mantêm os derivados já gravados.
+                     (limits.generateLods || limits.optimizePolygonOrder
+                          ? "|lods=" + number(limits.generateLods ? 1 : 0) + "," + number(limits.optimizePolygonOrder ? 1 : 0) +
+                                "," + number(limits.maximumLodLevels) + "|meshlod=1"
+                          : std::string());
   return Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(text.data()), text.size()));
 }
 
@@ -225,6 +233,15 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     writer.texts(set.names);
   }
   writer.pods(model.drawMorphs);
+  if (!model.meshLods.empty() || model.lodSourceTriangles) {
+    writer.raw(kLodMagic, sizeof kLodMagic);
+    writer.pods(model.meshLods);
+    writer.u32v(model.lodDraws);writer.u32v(model.lodLevels);
+    writer.u32v(model.lodSkippedSmall);writer.u32v(model.lodSkippedDeformed);
+    writer.u64v(model.lodSourceTriangles);writer.u64v(model.lodTriangles);
+    writer.u32v(model.lodBudgetReached ? 1 : 0);
+    writer.raw(&model.acmrBefore, sizeof model.acmrBefore);writer.raw(&model.acmrAfter, sizeof model.acmrAfter);
+  }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
   return true;
@@ -356,6 +373,17 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     if (!reader.ok || !validMorphTargetSet(set)) return refuse();
   }
   model.drawMorphs = reader.pods<i32>();
+  if (reader.ok && bytes.size() - reader.at >= sizeof kLodMagic &&
+      std::memcmp(bytes.data() + reader.at, kLodMagic, sizeof kLodMagic) == 0) {
+    reader.at += sizeof kLodMagic;
+    model.meshLods = reader.pods<renderer::MeshLodLevel>();
+    model.lodDraws = reader.u32v();model.lodLevels = reader.u32v();
+    model.lodSkippedSmall = reader.u32v();model.lodSkippedDeformed = reader.u32v();
+    model.lodSourceTriangles = reader.u64v();model.lodTriangles = reader.u64v();
+    model.lodBudgetReached = reader.u32v() != 0;
+    reader.raw(&model.acmrBefore, sizeof model.acmrBefore);reader.raw(&model.acmrAfter, sizeof model.acmrAfter);
+    if (!reader.ok) return refuse();
+  }
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||
       reader.at != bytes.size())
@@ -366,6 +394,19 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     return refuse();
   for (const auto node : model.drawNodes)
     if (node >= model.nodes.size()) return refuse();
+  // Cada nível aponta para um desenho e uma faixa existentes, em ordem e com
+  // erro não decrescente: é o que a seleção pressupõe sem conferir por quadro.
+  for (usize i = 0; i < model.meshLods.size(); ++i) {
+    const auto &lod = model.meshLods[i];
+    if (lod.draw >= model.draws.size() || lod.level < 1 || lod.level >= renderer::MeshLodMaximumLevels ||
+        lod.indexCount < 3 || u64(lod.firstIndex) + lod.indexCount > model.indices.size() ||
+        !std::isfinite(lod.geometricError) || lod.geometricError < 0)
+      return refuse();
+    if (i && model.meshLods[i - 1].draw == lod.draw &&
+        (model.meshLods[i - 1].level + 1 != lod.level || model.meshLods[i - 1].geometricError > lod.geometricError))
+      return refuse();
+    if (i && model.meshLods[i - 1].draw > lod.draw) return refuse();
+  }
   // Skin e animação do cache endereçam a árvore e os vértices: qualquer índice
   // fora dela é arquivo corrompido, e a reimportação é o caminho seguro.
   if (model.drawSkins.size() != model.draws.size() || model.drawMorphs.size() != model.draws.size()) return refuse();

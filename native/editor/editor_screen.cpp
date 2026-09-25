@@ -2365,7 +2365,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                             state.importTangents==state.importPreparedTangents &&
                             state.importCameras==state.importPreparedCameras &&
                             state.importLights==state.importPreparedLights &&
-                            state.importTextureCompression==state.importPreparedTextureCompression;
+                            state.importTextureCompression==state.importPreparedTextureCompression &&
+                            state.importGenerateLods==state.importPreparedGenerateLods &&
+                            state.importLodLevels==state.importPreparedLodLevels &&
+                            state.importOptimizeOrder==state.importPreparedOptimizeOrder;
 
   // Rodapé: cancelar sempre; publicar só com prévia pronta, perfil aplicado e
   // ambiguidades decididas. Apagado e sem toque até lá.
@@ -2576,7 +2579,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
     enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Streaming,StreamingPriority,Normals,Weighting,Smoothing,
-                             Tangents,Cameras,Lights,ProfileRowCount};
+                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
@@ -2658,6 +2661,13 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
         break;
       }
       case Tangents:cycle(row,"Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);break;
+      // Mesh LOD da Unity 6.2 / LOD de importação da Godot: níveis na própria
+      // malha, escolhidos pelo erro em pixels do painel Qualidade.
+      case Lods:cycle(row,"Níveis de detalhe (LOD)",state.importGenerateLods?"Gerar":"Não gerar",EditorWidget::ImportGenerateLodsToggle);break;
+      case LodLevels:cycle(row,"Máximo de níveis",state.importGenerateLods?std::to_string(state.importLodLevels).c_str():"—",
+                           EditorWidget::ImportLodLevelsCycle);break;
+      case PolygonOrder:cycle(row,"Otimizar ordem dos polígonos",state.importOptimizeOrder?"Sim":"Não",
+                              EditorWidget::ImportOptimizeOrderToggle);break;
       case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
       case Lights:cycle(row,"Importar luzes",state.importLights?"Sim":"Não",EditorWidget::ImportLightsToggle);break;
       case ProfileRowCount:break;
@@ -3474,7 +3484,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?8u:6u;
+  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?8u:7u;
   const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
   const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
   const u32 page=std::min(state.qualityPage,pageCount-1u);
@@ -3617,6 +3627,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     stepper("Erro de LOD",measure(draft.lodPixelErrorBudget,0.0f," px",2),EditorWidget::QualityLodErrorDown,EditorWidget::QualityLodErrorUp);
     stepper("Histerese de LOD",percent(draft.lodHysteresisBandRatio,0.0f),EditorWidget::QualityLodHysteresisDown,EditorWidget::QualityLodHysteresisUp);
     row("Variantes de material",renderer::featureOverrideLabel(draft.materialShaderVariants),EditorWidget::QualityMaterialVariants);
+    row("Estatísticas no viewport",state.sceneStatisticsVisible?"Visíveis":"Ocultas",EditorWidget::QualitySceneStatistics);
   }
   // Aplicar reconstrói o renderer: é explícito, como o Apply do Import
   // Settings, porque troca alvos de renderização e leva um instante.
@@ -4029,6 +4040,31 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     builder.label(previous,"Anterior",theme.color.text,theme.type.body,UiAlign::Center);
     builder.label(footer,"Proxima",theme.color.text,theme.type.body,UiAlign::Center);
     router.addRegion(previous,widgetId(EditorWidget::AssetsPrevious));router.addRegion(footer,widgetId(EditorWidget::AssetsNext));
+  }
+  // S5: estatísticas do quadro, como a janela Statistics do Game View da Unity.
+  // Só leitura e sem região de toque: gestos da cena passam por baixo.
+  if(state.sceneStatisticsVisible && state.workspace==EditorWorkspace::Scene && !layout.viewport.isEmpty()) {
+    const auto &s=state.sceneStatistics;
+    const auto millions=[](u64 value) {
+      return value>=1000000?decimalText(static_cast<double>(value)/1e6,2)+" M":
+             value>=1000?decimalText(static_cast<double>(value)/1e3,1)+" mil":std::to_string(value);
+    };
+    std::array<std::string,4> lines;
+    lines[0]="Quadro "+(s.frameIntervalMs>0?decimalText(s.frameIntervalMs,1)+" ms · "+
+                         std::to_string(static_cast<u32>(1000.0f/s.frameIntervalMs+.5f))+" fps":std::string("—"))+
+             " · GPU "+(s.gpuFrameMs>0?decimalText(s.gpuFrameMs,1)+" ms":std::string("não medida"));
+    lines[1]=std::to_string(s.renderWidth)+"×"+std::to_string(s.renderHeight)+" · "+std::to_string(s.drawCalls)+
+             " desenhos · "+millions(s.triangles)+" triângulos";
+    lines[2]=s.lodDraws?"LOD "+std::to_string(s.lodReducedDraws)+"/"+std::to_string(s.lodDraws)+" reduzidos · "+
+             millions(s.lodBaseTriangles)+" → "+millions(s.lodSelectedTriangles):std::string("LOD: sem níveis na cena");
+    const auto &t=state.qualityTextureStreaming;
+    lines[3]=std::string("Texturas ")+decimalText(static_cast<double>(t.currentBytes)/1048576.0,0)+" MB"+
+             (t.active?" de "+decimalText(static_cast<double>(t.budgetBytes)/1048576.0,0)+" MB":std::string(" · sem streaming"));
+    const float width=std::min(330.0f,layout.viewport.width-16.0f);
+    const UiRect panel{layout.viewport.right()-width-8.0f,layout.viewport.y+56.0f,width,8.0f+lines.size()*19.0f};
+    builder.list.addRect(panel,theme.color.surface,theme.radius.control);
+    UiRect text=deflate(panel,UiInsets::all(4));
+    for(const auto &line:lines) builder.label(takeTop(text,19),line,theme.color.text,theme.type.caption);
   }
   // Painel global de gráficos fica acima de todas as ferramentas do viewport.
   // O roteador resolve da última região para a primeira, então a mesma ordem

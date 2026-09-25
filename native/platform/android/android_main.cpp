@@ -241,6 +241,8 @@ struct AndroidShell final {
 
   std::optional<ae::platform::android::EditorLanguageQuery> languageNext,languageActive;
   std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
+  // S5: quadro anterior apresentado, para o intervalo das estatísticas.
+  std::chrono::steady_clock::time_point statisticsFrameTime{};
   double pocAMaxFillMicroseconds = 0.0;
   ae::platform::FreeCameraController cameraController;
   ae::platform::FirstPersonController firstPersonController;
@@ -1171,7 +1173,8 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
           // O skin da biblioteca viaja na mesma publicação (G6-B).
           const auto &skin=shell.editorSession.skinningPublication();
           if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures,
-                  {skin.influences,skin.drawJoints,skin.morphDeltas,skin.drawMorphOffsets,skin.drawMorphTargets})) return false;
+                  {skin.influences,skin.drawJoints,skin.morphDeltas,skin.drawMorphOffsets,skin.drawMorphTargets,
+                   skin.meshLods})) return false;
           shell.editorSession.cameraPreview().invalidateTarget();
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};
@@ -2538,7 +2541,8 @@ void android_main(android_app *app) {
           }
           // Rodapé do painel: o que o renderer faz AGORA. A GPU só é medida
           // enquanto o painel está aberto; fora dele o custo da medição some.
-          const bool measuring=shell.editorSession.screen().qualityPanel;
+          // A GPU é medida com o painel ou as estatísticas abertos; fora deles o custo some.
+          const bool measuring=shell.editorSession.screen().qualityPanel || shell.editorSession.screen().sceneStatisticsVisible;
           if(shell.instancedRendererReady) shell.instancedRenderer.setEditorGpuTiming(measuring);
           if(measuring && shell.instancedRendererReady) {
             const auto profile=shell.renderingPolicy.effectiveProfile;
@@ -2560,6 +2564,23 @@ void android_main(android_app *app) {
               shell.renderingCapabilities.fsr2,shell.instancedRenderer.executedUpscaler(),
               shell.instancedRenderer.executedUpscalerStatus(),shell.instancedRenderer.nativeTaaExecuted());
         if(shell.instancedRendererReady) {
+          // S5: o que o renderer fez no último quadro (overlay e Graphics.State.Frame).
+          {
+            const auto now=std::chrono::steady_clock::now();
+            ae::renderer::SceneStatistics statistics;
+            if(shell.statisticsFrameTime.time_since_epoch().count())
+              statistics.frameIntervalMs=std::chrono::duration<float,std::milli>(now-shell.statisticsFrameTime).count();
+            shell.statisticsFrameTime=now;
+            statistics.gpuFrameMs=static_cast<float>(shell.instancedRenderer.lastFrameTimings().gpuFrameMs);
+            statistics.renderWidth=shell.instancedRenderer.sceneRenderWidth();
+            statistics.renderHeight=shell.instancedRenderer.sceneRenderHeight();
+            statistics.drawCalls=shell.instancedRenderer.submittedDrawCalls();
+            statistics.triangles=shell.instancedRenderer.submittedTriangles();
+            const auto &lod=shell.instancedRenderer.meshLodStats();
+            statistics.lodDraws=lod.drawsWithLods;statistics.lodReducedDraws=lod.reducedDraws;
+            statistics.lodBaseTriangles=lod.baseTriangles;statistics.lodSelectedTriangles=lod.selectedTriangles;
+            shell.editorSession.setSceneStatistics(statistics);
+          }
           shell.editorSession.setTextureStreamingStatus(shell.instancedRenderer.textureStreamingStats());
           // Parâmetros por textura só quando uma publicação os trocou.
           if(shell.textureStreamingRevision!=shell.editorSession.textureStreamingRevision()) {

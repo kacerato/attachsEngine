@@ -22,6 +22,7 @@
 
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
+#include "renderer/scene_statistics.h"
 #include "resources/environment_map_asset.h"
 #include "resources/texture_profile.h"
 #include "core/base.h"
@@ -236,6 +237,8 @@ enum class EditorWidget : u32 {
   QualityTabTextures, QualityTextureStreaming, QualityStreamingBudgetDown, QualityStreamingBudgetUp,
   QualityStreamingReductionDown, QualityStreamingReductionUp, QualityStreamingUploadDown, QualityStreamingUploadUp,
   QualityStreamingDebugView,
+  // S5: estatísticas do quadro no viewport (Statistics do Game View).
+  QualitySceneStatistics,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   EnvironmentPanoramaDown, EnvironmentPanoramaUp,
   EnvironmentSpecularDown, EnvironmentSpecularUp,
@@ -251,6 +254,8 @@ enum class EditorWidget : u32 {
   ImportTextureCompressionCycle,
   // S2: Stream Mipmap Levels e Priority das texturas da fonte.
   ImportTextureStreamingToggle, ImportTextureStreamingPriorityCycle,
+  // S3: Generate LODs, Maximum Levels e Optimize Mesh > Polygon Order.
+  ImportGenerateLodsToggle, ImportLodLevelsCycle, ImportOptimizeOrderToggle,
   ImportSmoothingDown, ImportSmoothingUp,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
@@ -520,6 +525,9 @@ struct EditorScreenState final {
   renderer::TextureStreamingStats qualityTextureStreaming{};
   // Vista de depuração do streaming na Scene View; ferramenta, fora do Undo.
   bool qualityTextureStreamingDebug=false;
+  // S5: overlay de estatísticas no viewport e o que o renderer relatou.
+  bool sceneStatisticsVisible=false;
+  renderer::SceneStatistics sceneStatistics{};
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;
@@ -678,6 +686,10 @@ struct EditorScreenState final {
   // S1: compressão das texturas no aparelho (0 RGBA8, 4/6/8 ASTC NxN) e se o
   // aparelho amostra ASTC — sem isso a escolha fica salva e o painel diz que não vale aqui.
   u8 importTextureCompression=0,importPreparedTextureCompression=0;
+  // S3: LOD na própria malha e ordem de índices; pedem nova preparação.
+  bool importGenerateLods=false,importPreparedGenerateLods=false;
+  bool importOptimizeOrder=false,importPreparedOptimizeOrder=false;
+  u8 importLodLevels=4,importPreparedLodLevels=4;
   // S2: streaming das texturas desta fonte; não pede nova preparação.
   bool importTextureStreaming=true;
   i32 importTextureStreamingPriority=0;

@@ -486,6 +486,11 @@ void ScriptBridge::installAccess() {
     ts.streamingTextures=streaming.streamingTextures;ts.pendingLoads=streaming.pendingLoads;
     ts.budgetReducedTextures=streaming.budgetReducedTextures;ts.uploadsLastFrame=streaming.uploadsLastFrame;
     ts.failedUploads=streaming.failedUploads;
+    const auto &frame=s.rendering_.sceneStatistics();auto &fs=out->frame;
+    fs.frameIntervalMs=frame.frameIntervalMs;fs.gpuFrameMs=frame.gpuFrameMs;fs.renderWidth=frame.renderWidth;
+    fs.renderHeight=frame.renderHeight;fs.drawCalls=frame.drawCalls;fs.lodDraws=frame.lodDraws;
+    fs.lodReducedDraws=frame.lodReducedDraws;fs.triangles=frame.triangles;fs.lodBaseTriangles=frame.lodBaseTriangles;
+    fs.lodSelectedTriangles=frame.lodSelectedTriangles;
     s.lastStatus_=WorldStatus::Ok;return 1;
   };
   access_.setRenderingSettings = [](void *c,u32 expectedWorld,const scene::ScriptRenderingSettings *value,u64 *request)->int {

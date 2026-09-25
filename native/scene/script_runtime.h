@@ -118,6 +118,13 @@ struct ScriptResolvedRenderingPolicy {
   u32 textureStreamingUploadKilobytesPerFrame=0;
 };
 
+// S5: estatísticas do último quadro da cena (zero na GPU = não medida).
+struct ScriptSceneStatistics {
+  float frameIntervalMs=0,gpuFrameMs=0;
+  u32 renderWidth=0,renderHeight=0,drawCalls=0,lodDraws=0,lodReducedDraws=0,reserved=0;
+  u64 triangles=0,lodBaseTriangles=0,lodSelectedTriangles=0;
+};
+
 // S2: Texture.*TextureMemory e contagens do streaming no último quadro.
 struct ScriptTextureStreamingStats {
   u64 budgetBytes=0,totalBytes=0,desiredBytes=0,targetBytes=0,currentBytes=0,nonStreamingBytes=0;
@@ -142,6 +149,7 @@ struct ScriptRenderingState {
   // requested temporal upscaler did not run (TemporalUpscalerAvailability).
   u32 executedUpscaler=0,executedStatus=0;
   ScriptTextureStreamingStats textureStreaming{};
+  ScriptSceneStatistics frame{};
 };
 
 struct ScriptSceneAccess {
@@ -244,7 +252,7 @@ static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.
 static_assert(sizeof(ScriptRenderingSettings)==224 && sizeof(ScriptResolvedRenderingPolicy)==272 &&
               sizeof(ScriptRenderingCapabilities)==44 && sizeof(ScriptTextureStreamingStats)==88 &&
-              sizeof(ScriptRenderingState)==672);
+              sizeof(ScriptSceneStatistics)==56 && sizeof(ScriptRenderingState)==728);
 struct ScriptRuntimeApi {
   int (*start)(const u8 *,int,const u8 *,int,const ScriptSceneAccess *)=nullptr;
   int (*update)(float)=nullptr;

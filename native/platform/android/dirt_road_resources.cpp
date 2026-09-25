@@ -348,7 +348,8 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
                                                std::span<const u8> extraVertices, std::span<const u32> extraIndices,
                                                std::span<const renderer::MapDrawRecord> extraDraws,
                                                std::span<const renderer::MapMaterialRecord> extraMaterials,
-                                               std::span<const renderer::SharedAuthoringTexture> extraTextures) {
+                                               std::span<const renderer::SharedAuthoringTexture> extraTextures,
+                                               std::span<const renderer::MeshLodLevel> extraLods) {
   if(extraVertices.size()%renderer::MapVertexStride) return false;
   // As primitivas internas vêm primeiro e mantêm seus índices: o catálogo de
   // criação ("Cubo", "Chão") aponta para elas, e reordená-las trocaria o que
@@ -389,6 +390,25 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   for(const auto &draw:draws)
     for(u32 i=0;i<draw.indexCount;++i)
       if(u64(draw.vertexOffset)+indices[draw.firstIndex+i]>=vertexCount) return false;
+  // S3: cada nível de detalhe é outra faixa do mesmo buffer sobre os vértices do
+  // desenho dono; a mesma conferência vale para ela. Ordem: desenho, depois nível.
+  const auto primitiveDraws=static_cast<u32>(draws.size()-extraDraws.size());
+  std::vector<renderer::MeshLodLevel> lods;lods.reserve(extraLods.size());
+  std::vector<u32> lodBegin(draws.size()+1,0);
+  for(usize i=0;i<extraLods.size();++i) {
+    auto lod=extraLods[i];
+    if(lod.draw>=extraDraws.size() || lod.level<1 || lod.level>=renderer::MeshLodMaximumLevels || lod.indexCount<3 ||
+       u64(lod.firstIndex)+lod.indexCount>extraIndices.size() || !std::isfinite(lod.geometricError) ||
+       (i && (extraLods[i-1].draw>lod.draw || (extraLods[i-1].draw==lod.draw && extraLods[i-1].level+1!=lod.level))))
+      return false;
+    const auto &owner=draws[primitiveDraws+lod.draw];
+    lod.draw+=primitiveDraws;lod.firstIndex+=indexBase;
+    for(u32 k=0;k<lod.indexCount;++k)
+      if(u64(owner.vertexOffset)+indices[lod.firstIndex+k]>=vertexCount) return false;
+    ++lodBegin[lod.draw+1];
+    lods.push_back(lod);
+  }
+  for(usize d=1;d<lodBegin.size();++d) lodBegin[d]+=lodBegin[d-1];
 
   auto &allocator=device.memoryAllocator();
   // R2/R4: geometria com os mesmos bytes da publicada mantém os buffers da GPU.
@@ -509,6 +529,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   if(!sameGeometry) {vertices_=std::move(nextVertices);indices_=std::move(nextIndices);}
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
   authoringResidency_=std::move(nextResidency);
+  authoringLods_=std::move(lods);libraryLodBegin_=std::move(lodBegin);
   authoringTextureSources_.assign(extraTextures.begin(),extraTextures.end());
   authoringAnisotropy_=samplerAnisotropy_;
   authoringMipLodBias_=samplerMipLodBias_;

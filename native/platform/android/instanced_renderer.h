@@ -223,6 +223,9 @@ public:
     std::span<const u32> drawJoints;
     std::span<const float> morphDeltas;
     std::span<const u32> drawMorphOffsets, drawMorphTargets;
+    // S3: níveis de detalhe dos desenhos recebidos (índices de desenho e de
+    // faixa relativos a esta publicação), na ordem desenho → nível.
+    std::span<const renderer::MeshLodLevel> meshLods;
   };
   bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                 std::span<const renderer::MapDrawRecord> draws,
@@ -403,6 +406,13 @@ public:
   const renderer::ResolvedRenderingPolicy &activeRenderingPolicy() const noexcept {
     return renderingPolicy_;
   }
+  // S3/S5: LOD na própria malha no último quadro: desenhos com níveis, quantos
+  // estão num nível reduzido e os triângulos do nível 0 contra os escolhidos.
+  struct MeshLodStats {u32 drawsWithLods=0,reducedDraws=0;u64 baseTriangles=0,selectedTriangles=0;};
+  const MeshLodStats &meshLodStats() const noexcept { return meshLodStats_; }
+  // Desenhos e triângulos realmente enviados no último quadro da cena (S5).
+  u32 submittedDrawCalls() const noexcept { return visibilityTelemetry_.submittedDrawCalls; }
+  u64 submittedTriangles() const noexcept { return visibilityTelemetry_.submittedTriangles; }
   // S2: estado do streaming de mipmaps no último quadro (Quality, Inspector, API).
   const renderer::TextureStreamingStats &textureStreamingStats() const noexcept { return textureStreamingStats_; }
   // Por textura de autoria, na ordem da publicação: mip pela tela e carregado.
@@ -1139,6 +1149,16 @@ private:
   // do quadro anterior (um único quadro em voo), único ponto em que trocar a
   // imagem de um slot bindless não alcança um comando ainda na GPU.
   void updateTextureStreaming(const platform::FreeCameraState &camera);
+  // S3: nível de detalhe de cada desenho autoral, escolhido uma vez por quadro
+  // pela mesma regra do pacote (`selectLodLevel`, orçamento em pixels da tela
+  // final e histerese do painel Qualidade). `drawIndexRange` é a faixa que as
+  // passagens emitem — cena, indireta e sombra usam a mesma escolha.
+  void updateAuthoredMeshLods(const platform::FreeCameraState &camera);
+  struct IndexRange {u32 firstIndex=0,indexCount=0;};
+  IndexRange drawIndexRange(u32 drawIndex) const;
+  std::vector<u8> authoredLodLevel_;
+  std::vector<renderer::LodHysteresisState> authoredLodState_;
+  MeshLodStats meshLodStats_{};
   renderer::TextureStreamingStats textureStreamingStats_{};
   renderer::TextureStreamingPlan streamingPlan_{};
   std::vector<renderer::TextureStreamingTexture> streamingTextures_;

@@ -102,6 +102,8 @@ add_library(aether_codecs STATIC
   third_party/meshoptimizer/indexcodec.cpp
   third_party/meshoptimizer/vertexfilter.cpp
   third_party/meshoptimizer/simplifier.cpp
+  third_party/meshoptimizer/vcacheoptimizer.cpp
+  third_party/meshoptimizer/indexanalyzer.cpp
   third_party/basis_universal/transcoder/basisu_transcoder.cpp
   third_party/basis_universal/zstd/zstddeclib.c
   ${AETHER_DRACO_SOURCE}/attributes/attribute_octahedron_transform.cc
@@ -412,6 +414,7 @@ add_library(aether_assets STATIC
   resources/texture_budget.cpp
   resources/import_profile.cpp
   resources/mesh_derived.cpp
+  resources/mesh_lod_build.cpp
   resources/texture_profile.cpp
   resources/texture_asset.cpp
   resources/glb_images.cpp
@@ -676,6 +679,7 @@ if(NOT ANDROID)
     ../tests/native/test_scene_views.cpp
     ../tests/native/test_mesh_report.cpp
     ../tests/native/test_texture_streaming.cpp
+    ../tests/native/test_mesh_lod.cpp
     ../tests/native/test_shadow_atlas.cpp
     ../tests/native/test_rendering_settings_file.cpp
     ../tests/native/test_runtime_input.cpp
