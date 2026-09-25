@@ -1,5 +1,7 @@
 # Layout aprovado — editor Astra
 
+**Direção revisada (24/09/2026):** [política de abas, listas, popups e doca de diagnósticos](../planos/ampliacao-2026-09-23/UI.md). A ampliação usa o visual Astra atual. A prancha conceitual de 23/09 foi rejeitada como direção visual; consulte a seção inicial do plano para distinguir referência histórica e implementação.
+
 O usuário escolheu em 09/09/2026:
 
 - Cena e Arquivos à esquerda, viewport central e Inspector à direita.

@@ -1,5 +1,7 @@
 # Plano mestre de reconstrução da Astra
 
+**Continuação de escopo — 23/09/2026:** o [plano de ampliação de API, componentes e UI](ampliacao-2026-09-23/README.md) organiza a expansão Unity + Godot em 21 pacotes, com fontes, propriedades, dependências e design. Revalida a base atual e complementa este histórico; não marca os recursos futuros como implementados.
+
 **Editor, código, componentes, importação estrutural e runtime mobile**
 
 Base: `codex/gameplay-runtime` · `c321b01f6a4b` · 11 de setembro de 2026

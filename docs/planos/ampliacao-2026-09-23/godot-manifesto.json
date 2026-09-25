@@ -1,0 +1,28 @@
+{
+  "researchDate": "2026-09-23",
+  "version": "4.5-stable",
+  "revision": "876b290332ec6f2e6d173d08162a02aa7e6ca46d",
+  "archive": "https://codeload.github.com/godotengine/godot/tar.gz/876b290332ec6f2e6d173d08162a02aa7e6ca46d",
+  "scope": "Todos os XMLs de doc/classes e modules/*/doc_classes do commit fixado; metadados, sem prosa ou código runtime.",
+  "counts": {
+    "types": 1006,
+    "categories": {
+      "Service / support": 321,
+      "Node": 271,
+      "Resource": 414
+    },
+    "declaredProperties": 5721,
+    "themeProperties": 593,
+    "methods": 10106,
+    "signals": 486
+  },
+  "unresolvedBases": [],
+  "limits": [
+    "Node não implica classe concreta anexável.",
+    "Inclui tipos de editor, módulos e plataformas opcionais.",
+    "Relação de tipo de propriedade não é RequireComponent nem requisito pai/filho.",
+    "XML não fornece todas as faixas, unidades, restrições de backend ou campos serializados.",
+    "Ausência de default/setter não autoriza inferir valor zero ou somente leitura.",
+    "Sem plugins de terceiros e sem alegação de equivalência Astra."
+  ]
+}

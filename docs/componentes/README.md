@@ -1,5 +1,7 @@
 # Componentes de referência e execução do plano Astra
 
+**Ampliação planejada em 23/09/2026:** [roadmap de API, componentes/nodes e UI](../planos/ampliacao-2026-09-23/README.md), com atlas Unity + Godot, dependências, propriedades, proposta visual e ícones. É planejamento sobre checkout revalidado; não altera o estado de implementação das capacidades abaixo.
+
 Atualização: 10/09/2026. Integra `PROMPT_REFUNDACAO_ASTRA_V2.md`, `ASTRA_COMPONENTES_CODIGO_EDITOR.md` e o histórico de `docs/REFUNDACAO-ASTRA.md`. Mantida a cadência pedida: implementar blocos amplos; testar somente após autorização explícita. O usuário autorizou a rodada atual; [resultados host/Android e falhas corrigidas](../validacao/2026-09-10-componentes-codigo.md).
 
 Estado mais recente: [câmera/malha/inspetor](../adr/ADR-REFUNDACAO-CAMERA-MESH-INSPECTOR.md) e [composição física/juntas/referências](../adr/ADR-REFUNDACAO-COMPOSICAO-FISICA.md), compilados e exercitados na rodada autorizada. O catálogo externo continua sendo roteiro de implementação; não representa 270 componentes entregues.

@@ -1,0 +1,207 @@
+{
+  "status": "Proposta, fora do atlas de runtime",
+  "grid": 32,
+  "stroke": 1.75,
+  "icons": {
+    "proposal/component-stack": {
+      "source": "component-stack.svg",
+      "raster": "component-stack.png",
+      "dark_ui_ready": true
+    },
+    "proposal/dependency": {
+      "source": "dependency.svg",
+      "raster": "dependency.png",
+      "dark_ui_ready": true
+    },
+    "proposal/prefab": {
+      "source": "prefab.svg",
+      "raster": "prefab.png",
+      "dark_ui_ready": true
+    },
+    "proposal/variant": {
+      "source": "variant.svg",
+      "raster": "variant.png",
+      "dark_ui_ready": true
+    },
+    "proposal/resource": {
+      "source": "resource.svg",
+      "raster": "resource.png",
+      "dark_ui_ready": true
+    },
+    "proposal/override": {
+      "source": "override.svg",
+      "raster": "override.png",
+      "dark_ui_ready": true
+    },
+    "proposal/link": {
+      "source": "link.svg",
+      "raster": "link.png",
+      "dark_ui_ready": true
+    },
+    "proposal/broken-link": {
+      "source": "broken-link.svg",
+      "raster": "broken-link.png",
+      "dark_ui_ready": true
+    },
+    "proposal/rigidbody": {
+      "source": "rigidbody.svg",
+      "raster": "rigidbody.png",
+      "dark_ui_ready": true
+    },
+    "proposal/collider": {
+      "source": "collider.svg",
+      "raster": "collider.png",
+      "dark_ui_ready": true
+    },
+    "proposal/sensor": {
+      "source": "sensor.svg",
+      "raster": "sensor.png",
+      "dark_ui_ready": true
+    },
+    "proposal/joint": {
+      "source": "joint.svg",
+      "raster": "joint.png",
+      "dark_ui_ready": true
+    },
+    "proposal/character": {
+      "source": "character.svg",
+      "raster": "character.png",
+      "dark_ui_ready": true
+    },
+    "proposal/input-action": {
+      "source": "input-action.svg",
+      "raster": "input-action.png",
+      "dark_ui_ready": true
+    },
+    "proposal/signal": {
+      "source": "signal.svg",
+      "raster": "signal.png",
+      "dark_ui_ready": true
+    },
+    "proposal/timer": {
+      "source": "timer.svg",
+      "raster": "timer.png",
+      "dark_ui_ready": true
+    },
+    "proposal/material": {
+      "source": "material.svg",
+      "raster": "material.png",
+      "dark_ui_ready": true
+    },
+    "proposal/shader": {
+      "source": "shader.svg",
+      "raster": "shader.png",
+      "dark_ui_ready": true
+    },
+    "proposal/skeleton": {
+      "source": "skeleton.svg",
+      "raster": "skeleton.png",
+      "dark_ui_ready": true
+    },
+    "proposal/animation": {
+      "source": "animation.svg",
+      "raster": "animation.png",
+      "dark_ui_ready": true
+    },
+    "proposal/timeline": {
+      "source": "timeline.svg",
+      "raster": "timeline.png",
+      "dark_ui_ready": true
+    },
+    "proposal/particles": {
+      "source": "particles.svg",
+      "raster": "particles.png",
+      "dark_ui_ready": true
+    },
+    "proposal/terrain": {
+      "source": "terrain.svg",
+      "raster": "terrain.png",
+      "dark_ui_ready": true
+    },
+    "proposal/spline": {
+      "source": "spline.svg",
+      "raster": "spline.png",
+      "dark_ui_ready": true
+    },
+    "proposal/navigation": {
+      "source": "navigation.svg",
+      "raster": "navigation.png",
+      "dark_ui_ready": true
+    },
+    "proposal/sprite": {
+      "source": "sprite.svg",
+      "raster": "sprite.png",
+      "dark_ui_ready": true
+    },
+    "proposal/tilemap": {
+      "source": "tilemap.svg",
+      "raster": "tilemap.png",
+      "dark_ui_ready": true
+    },
+    "proposal/canvas": {
+      "source": "canvas.svg",
+      "raster": "canvas.png",
+      "dark_ui_ready": true
+    },
+    "proposal/text": {
+      "source": "text.svg",
+      "raster": "text.png",
+      "dark_ui_ready": true
+    },
+    "proposal/audio-source": {
+      "source": "audio-source.svg",
+      "raster": "audio-source.png",
+      "dark_ui_ready": true
+    },
+    "proposal/audio-mixer": {
+      "source": "audio-mixer.svg",
+      "raster": "audio-mixer.png",
+      "dark_ui_ready": true
+    },
+    "proposal/localization": {
+      "source": "localization.svg",
+      "raster": "localization.png",
+      "dark_ui_ready": true
+    },
+    "proposal/network": {
+      "source": "network.svg",
+      "raster": "network.png",
+      "dark_ui_ready": true
+    },
+    "proposal/xr": {
+      "source": "xr.svg",
+      "raster": "xr.png",
+      "dark_ui_ready": true
+    },
+    "proposal/documentation": {
+      "source": "documentation.svg",
+      "raster": "documentation.png",
+      "dark_ui_ready": true
+    },
+    "proposal/search-all": {
+      "source": "search-all.svg",
+      "raster": "search-all.png",
+      "dark_ui_ready": true
+    },
+    "proposal/dock": {
+      "source": "dock.svg",
+      "raster": "dock.png",
+      "dark_ui_ready": true
+    },
+    "proposal/pin": {
+      "source": "pin.svg",
+      "raster": "pin.png",
+      "dark_ui_ready": true
+    },
+    "proposal/layers": {
+      "source": "layers.svg",
+      "raster": "layers.png",
+      "dark_ui_ready": true
+    },
+    "proposal/export-game": {
+      "source": "export-game.svg",
+      "raster": "export-game.png",
+      "dark_ui_ready": true
+    }
+  }
+}
