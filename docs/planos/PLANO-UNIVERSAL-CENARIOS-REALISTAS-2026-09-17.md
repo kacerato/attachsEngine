@@ -312,6 +312,18 @@ de uma textura parcial devolve a cadeia inteira. Testado no host; RAM no aparelh
 Pendentes: E/S assíncrona, liberar a cadeia logo após uma importação nova e publicar o preparo
 ASTC do Sponza.
 
+Bloco F (25/09): texturas das fontes visíveis e gerenciáveis (referências: miniaturas do Project
+e prévia do Inspector da Unity, doca Import do Godot, Detalhes do editor de textura da Unreal).
+O importador guarda a imagem de origem de cada textura (seção `ASTRAIMG` do derivado; derivado
+antigo com texturas e sem a seção é recusado e refeito uma vez). Tocar numa imagem da fonte em
+Arquivos abre no Inspector a prévia do que foi preparado (ASTC decodificado para RGBA8, só o
+nível que cabe), com canal, mip, zoom e fundo, a ficha (tamanho, níveis, formato, cor/dados,
+memória na RAM e no disco, nível na GPU e o pedido pela tela, imagem e fonte) e os objetos que
+a usam. O gerenciador de texturas ganhou "Do projeto / Das fontes", com miniaturas em grade.
+No aparelho, Sponza: 72 texturas em 8 páginas, prévia e 16 usuários de
+`arch_stone_wall_01_BaseColor`; a reimportação por falta da seção levou 91 s e a reabertura
+seguinte reaproveitou o derivado (7,8 s). Perfil, compressão e streaming seguem por fonte.
+
 ## 9. Gates de qualidade de um mundo realista
 
 Escolher um **interior** (muitos materiais e luzes locais), um **exterior** (vegetação, distância e sol) e um **misto interativo** (portas/objetos manipuláveis, colisão, animação/áudio). Usar fontes com PBR e geometria suficiente, manter metadados de proveniência e licença, e guardar referência visual com câmera, horário, exposição e resolução fixos. A matriz de avaliação deve cobrir:

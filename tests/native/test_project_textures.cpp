@@ -1205,3 +1205,38 @@ AE_TEST(r4_texture_manager_filters_searches_and_the_inspector_lists_users) {
   session.update();
   AE_EXPECT_TRUE(!session.screen().textureInspector, "mudar a seleção devolve Propriedades ao objeto");
 }
+
+// Bloco F: as texturas de um modelo importado aparecem no gerenciador e abrem
+// no Inspector com prévia do que foi preparado, ficha e quem as usa.
+AE_TEST(f_source_textures_are_listed_previewed_and_lead_back_to_their_source) {
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(8, 8, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.textureImages.size() == model.textures.size() && !model.textureImages.empty(),
+                 "o importador guarda a imagem de origem de cada textura");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  session.openTextureManager();
+  session.setTextureManagerSources(true);
+  session.update();
+  const auto &state = session.screen();
+  AE_EXPECT_TRUE(state.textureManagerSources && state.textureManagerRows.size() == 1 && state.sourceTextureNames.size() == 1,
+                 "a textura do modelo aparece na lista das fontes");
+  AE_EXPECT_TRUE(session.openSourceTextureInspector(0), state.textureViewerInfo.c_str());
+  session.update();
+  AE_EXPECT_TRUE(state.textureInspector && state.textureViewer && state.textureViewerSource, "abre no Inspector");
+  AE_EXPECT_TRUE(!state.textureViewerImage.isEmpty() && state.textureViewerLevels >= 1, "com a prévia do que foi preparado");
+  AE_EXPECT_TRUE(state.sourceTextureFacts.size() >= 4 && state.sourceTextureFacts[0].find("8×8") != std::string::npos,
+                 "e a ficha com tamanho, formato e memória");
+  AE_EXPECT_TRUE(state.textureUserEntities.size() == 1 && state.textureUserEntities[0] == object, "o objeto que usa a textura");
+  session.cycleTextureViewerChannel();
+  AE_EXPECT_EQ(state.textureViewerChannel, 1u, "os controles do visualizador valem para a textura da fonte");
+  AE_EXPECT_TRUE(state.textureViewerSource && !state.textureViewerImage.isEmpty(), "e continuam na mesma textura");
+}

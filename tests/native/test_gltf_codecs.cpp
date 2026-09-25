@@ -8,6 +8,7 @@
 #include "resources/gltf_import.h"
 #include "resources/image_decode.h"
 #include "resources/import_cache.h"
+#include "resources/texture_compression.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -617,6 +618,31 @@ AE_TEST(r2_import_cache_round_trips_the_prepared_model_and_refuses_stale_or_corr
   AE_EXPECT_TRUE(restored.textures.size() == 1 && restored.textures.front()->format == renderer::AuthoringTextureAstc4x4 &&
                      restored.textures.front()->mipChain == textured.textures.front()->mipChain && restored.astcTextures == 1,
                  "textura ASTC com a cadeia inteira e os contadores da prévia");
+  AE_EXPECT_TRUE(textured.textureImages.size() == 1 && restored.textureImages == textured.textureImages,
+                 "a imagem de origem de cada textura volta do cache");
+  {
+    // Derivado gravado antes da seção de imagens: recusado para ser refeito.
+    const std::string_view magic = "ASTRAIMG";
+    const auto at = std::search(bytes.begin(), bytes.end(), magic.begin(), magic.end());
+    AE_EXPECT_TRUE(at != bytes.end(), "seção de imagens presente");
+    std::vector<u8> legacy(bytes.begin(), at);
+    legacy.insert(legacy.end(), bytes.end() - 8, bytes.end());
+    resources::GltfImport stale;
+    AE_EXPECT_TRUE(!resources::readImportCache(legacy, key, stale), "derivado com texturas e sem imagens é recusado");
+  }
+  // Bloco F: a prévia do Inspector decodifica o ASTC preparado para RGBA8.
+  renderer::AuthoringTexture preview;
+  u32 previewFirst = 0;
+  std::string previewDiagnostic;
+  const auto &prepared = *restored.textures.front();
+  AE_EXPECT_TRUE(resources::previewTexture(prepared, prepared.width, preview, previewFirst, previewDiagnostic),
+                 previewDiagnostic.c_str());
+  AE_EXPECT_TRUE(preview.format == renderer::AuthoringTextureRgba8 && previewFirst == 0 && preview.width == prepared.width &&
+                     preview.levels == prepared.levels && preview.valid(),
+                 "prévia RGBA8 com todos os níveis a partir do nível pedido");
+  AE_EXPECT_TRUE(resources::previewTexture(prepared, std::max(1u, prepared.width / 2), preview, previewFirst, previewDiagnostic) &&
+                     previewFirst == 1 && preview.levels == prepared.levels - 1,
+                 "teto menor começa no primeiro nível que cabe");
 
   // Modelo com hierarquia e nós espelhados.
   const auto mirrored = buildGlb(mirrorJson(R"({"name":"Espelho","mesh":0,"translation":[5,0,0],"scale":[-1,1,1],"children":[1]},)"

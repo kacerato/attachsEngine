@@ -2,6 +2,8 @@
 
 #include <astcenc.h>
 
+#include <algorithm>
+
 namespace ae::resources {
 bool compressTexture(const renderer::AuthoringTexture &rgba, TextureCompression compression,
                      renderer::AuthoringTexture &out, std::string &diagnostic) {
@@ -68,6 +70,65 @@ bool compressTexture(const renderer::AuthoringTexture &rgba, TextureCompression 
     return false;
   }
   out = std::move(made);
+  return true;
+}
+
+bool previewTexture(const renderer::AuthoringTexture &texture, u32 maximumDimension, renderer::AuthoringTexture &out,
+                    u32 &firstLevel, std::string &diagnostic) {
+  out = {};
+  firstLevel = 0;
+  diagnostic.clear();
+  if (!texture.valid()) {diagnostic = "Textura inválida.";return false;}
+  u32 first = 0, width = texture.width, height = texture.height;
+  while (first + 1 < texture.levels && std::max(width, height) > maximumDimension) {
+    ++first;width = width > 1 ? width / 2 : 1;height = height > 1 ? height / 2 : 1;
+  }
+  std::vector<u8> scratch;
+  std::span<const u8> levels;
+  if (!renderer::readAuthoringTextureLevels(texture, first, scratch, levels)) {
+    diagnostic = "Níveis da textura indisponíveis (derivado em disco ausente).";
+    return false;
+  }
+  renderer::AuthoringTexture made;
+  made.width = width;made.height = height;made.levels = texture.levels - first;
+  made.srgb = texture.srgb;made.samplerFlags = texture.samplerFlags;made.format = renderer::AuthoringTextureRgba8;
+  if (texture.format == renderer::AuthoringTextureRgba8) {
+    made.mipChain.assign(levels.begin(), levels.end());
+  } else {
+    const u32 block = renderer::authoringTextureBlock(texture.format);
+    astcenc_config config{};
+    if (!block || astcenc_config_init(texture.srgb ? ASTCENC_PRF_LDR_SRGB : ASTCENC_PRF_LDR, block, block, 1,
+                                      ASTCENC_PRE_FASTEST, ASTCENC_FLG_DECOMPRESS_ONLY, &config) != ASTCENC_SUCCESS) {
+      diagnostic = "Formato ASTC da textura não reconhecido.";
+      return false;
+    }
+    astcenc_context *context = nullptr;
+    if (astcenc_context_alloc(&config, 1, &context, nullptr) != ASTCENC_SUCCESS || !context) {
+      diagnostic = "Não foi possível criar o decodificador ASTC.";
+      return false;
+    }
+    const astcenc_swizzle swizzle{ASTCENC_SWZ_R, ASTCENC_SWZ_G, ASTCENC_SWZ_B, ASTCENC_SWZ_A};
+    made.mipChain.resize(static_cast<usize>(made.expectedBytes()));
+    usize source = 0, target = 0;
+    bool ok = true;
+    for (u32 level = 0, w = width, h = height; ok && level < made.levels; ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) {
+      void *slice = made.mipChain.data() + target;
+      astcenc_image image{};
+      image.dim_x = w;image.dim_y = h;image.dim_z = 1;
+      image.data_type = ASTCENC_TYPE_U8;image.data = &slice;
+      const auto bytes = static_cast<usize>(renderer::authoringTextureLevelBytes(texture.format, w, h));
+      ok = source + bytes <= levels.size() &&
+           astcenc_decompress_image(context, levels.data() + source, bytes, &image, &swizzle, 0) == ASTCENC_SUCCESS &&
+           astcenc_decompress_reset(context) == ASTCENC_SUCCESS;
+      source += bytes;
+      target += static_cast<usize>(w) * h * 4;
+    }
+    astcenc_context_free(context);
+    if (!ok) {diagnostic = "O decodificador ASTC falhou em um nível da textura.";return false;}
+  }
+  if (!made.valid()) {diagnostic = "Prévia fora do layout esperado.";return false;}
+  out = std::move(made);
+  firstLevel = first;
   return true;
 }
 } // namespace ae::resources

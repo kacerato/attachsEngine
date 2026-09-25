@@ -14,6 +14,7 @@
 #include "resources/import_report.h"
 #include "editor/editor_import_transaction.h"
 #include "resources/texture_compression.h"
+#include "resources/gltf_package.h"
 #include "scene/import_link.h"
 #include "core/sha256.h"
 #include "editor/editor_script_templates.h"
@@ -1665,6 +1666,31 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       }
       if(key==widgetId(EditorWidget::TextureManagerPrevious)) {if(state_.textureManagerPage) --state_.textureManagerPage;return true;}
       if(key==widgetId(EditorWidget::TextureManagerNext)) {++state_.textureManagerPage;return true;}
+      // Bloco F: texturas das fontes no mesmo gerenciador.
+      if(key==widgetId(EditorWidget::TextureManagerShowProject) || key==widgetId(EditorWidget::TextureManagerShowSources)) {
+        state_.textureManagerSources=key==widgetId(EditorWidget::TextureManagerShowSources);
+        state_.textureManagerPage=0;return true;
+      }
+      if(key>=widgetId(EditorWidget::TextureManagerRowBase)+detail::TextureManagerSourceRowOffset &&
+         key-widgetId(EditorWidget::TextureManagerRowBase)-detail::TextureManagerSourceRowOffset<sourceTextures_.size()) {
+        if(!openSourceTextureInspector(key-widgetId(EditorWidget::TextureManagerRowBase)-detail::TextureManagerSourceRowOffset))
+          state_.status=state_.textureViewerInfo;
+        return true;
+      }
+      if(key==widgetId(EditorWidget::TextureSourceShowOrigin) && state_.textureViewerSource &&
+         state_.textureViewerSourceIndex<sourceTextures_.size()) {
+        // A fonte é onde ficam perfil (compressão, LOD, streaming) e Reimportar.
+        const auto path=sourceTextures_[state_.textureViewerSourceIndex].sourcePath;
+        closeTextureViewer();state_.textureInspector=false;state_.textureManager=false;
+        state_.selectedFile=path;
+        state_.status="Fonte selecionada em Arquivos · Reimportar abre o perfil de importação";
+        return true;
+      }
+      if(key==widgetId(EditorWidget::TextureSourceShowAll)) {
+        openTextureManager();
+        state_.textureManagerSources=true;
+        return true;
+      }
       if(key>=widgetId(EditorWidget::TextureManagerRowBase) && key-widgetId(EditorWidget::TextureManagerRowBase)<textures_.size()) {
         openTextureInspector(key-widgetId(EditorWidget::TextureManagerRowBase));return true;
       }
@@ -2443,6 +2469,10 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         state_.status=std::string("Textura do projeto")+
             (texture && texture->width?" · "+std::to_string(texture->width)+"×"+std::to_string(texture->height):std::string())+
             " · "+std::to_string(users)+(users==1?" uso":" usos");
+      }
+      else if(const i32 source=sourceTextureForFile(entry.relativePath);source>=0) {
+        // Bloco F: a imagem de uma fonte abre a textura que o modelo usa dela.
+        openSourceTextureInspector(static_cast<u32>(source));
       }
       else {
         const auto *selectedAsset=assets_.findByPath(entry.relativePath);
@@ -3404,6 +3434,145 @@ bool readProjectImage(const std::string &root,const std::string &relative,const 
 }
 } // namespace
 
+void EditorSession::collectSourceTextures() {
+  sourceTextures_.clear();
+  u32 library=0;
+  for(const auto &source:importedSources_) {
+    const auto *record=assets_.find(source.guid);
+    for(u32 t=0;t<source.textures.size();++t,++library) {
+      SourceTexture entry;
+      entry.library=library;entry.source=source.guid;entry.texture=source.textures[t];
+      entry.sourcePath=record?record->path:std::string();
+      entry.image=t<source.textureImages.size()?source.textureImages[t]:std::string();
+      const auto slash=entry.image.find_last_of('/');
+      entry.name=entry.image.empty()?"Textura "+std::to_string(t+1):entry.image.substr(slash==std::string::npos?0:slash+1);
+      // Quem usa: as malhas da fonte cujo material amostra esta textura.
+      for(usize d=0;d<source.draws.size() && d<source.identities.size() && d<source.sourceDrawCount;++d) {
+        const auto material=source.draws[d].materialIndex;
+        if(material>=source.materials.size()) continue;
+        const auto &indices=source.materials[material].textureIndices;
+        if(std::find(std::begin(indices),std::end(indices),t)!=std::end(indices)) entry.meshes.push_back(source.identities[d]);
+      }
+      sourceTextures_.push_back(std::move(entry));
+    }
+  }
+}
+
+i32 EditorSession::sourceTextureForFile(std::string_view relativePath) {
+  collectSourceTextures();
+  for(usize i=0;i<sourceTextures_.size();++i) {
+    const auto &entry=sourceTextures_[i];
+    if(entry.image.empty() || entry.sourcePath.empty()) continue;
+    // A URI do glTF é relativa à pasta do arquivo principal da fonte.
+    const auto slash=entry.sourcePath.find_last_of('/');
+    const std::string folder=slash==std::string::npos?std::string():entry.sourcePath.substr(0,slash+1);
+    std::string relative,refusal;
+    if(resources::gltfRelativeUri(entry.image,relative,refusal) && folder+relative==relativePath) return static_cast<i32>(i);
+  }
+  return -1;
+}
+
+bool EditorSession::openSourceTextureInspector(u32 row) {
+  if(row>=sourceTextures_.size()) collectSourceTextures();
+  if(row>=sourceTextures_.size()) return false;
+  textureInspectorFromManager_=state_.textureManager;
+  state_.textureManager=false;state_.textureInspector=true;state_.textureViewer=true;
+  state_.textureViewerSource=true;state_.textureViewerSourceIndex=row;
+  state_.textureViewerLevel=0;state_.textureViewerChannel=0;state_.textureViewerZoom=0;
+  texturePanelSelection_=state_.selection;
+  // Usuários: objetos cuja malha (por slot) é uma das malhas que usam a textura.
+  state_.textureUserLabels.clear();state_.textureUserEntities.clear();
+  const auto &meshes=sourceTextures_[row].meshes;
+  std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) {
+    const auto *entity=document_.find(id);
+    const auto *render=entity?meshRenderer(*entity):nullptr;
+    if(!render) continue;
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      if(std::find(meshes.begin(),meshes.end(),render->slotAsset(slot))!=meshes.end()) {
+        state_.textureUserLabels.push_back(std::string("Objeto: ")+entity->name);state_.textureUserEntities.push_back(id);break;
+      }
+  }
+  state_.status="Textura da fonte · "+std::to_string(state_.textureUserLabels.size())+" objeto(s) usam";
+  return refreshSourceTextureViewer();
+}
+
+bool EditorSession::refreshSourceTextureViewer() {
+  const u32 row=state_.textureViewerSourceIndex;
+  if(row>=sourceTextures_.size() || !sourceTextures_[row].texture) return false;
+  const auto &entry=sourceTextures_[row];
+  const auto &texture=*entry.texture;
+  state_.textureViewerTitle=entry.name;
+  std::string diagnostic;
+  if(sourceViewer_.texture!=entry.texture.get()) {
+    sourceViewer_={};
+    // A prévia é do que foi preparado (ASTC decodificado), limitada ao visualizador.
+    if(!resources::previewTexture(texture,TextureViewerSize*2,sourceViewer_.rgba,sourceViewer_.firstLevel,diagnostic)) {
+      state_.textureViewerImage={};state_.textureViewerLevels=0;state_.textureViewerInfo=diagnostic;
+      state_.sourceTextureFacts={diagnostic};
+      return false;
+    }
+    sourceViewer_.texture=entry.texture.get();
+  }
+  const auto &image=sourceViewer_.rgba;
+  state_.textureViewerLevels=image.levels;
+  state_.textureViewerLevel=std::min(state_.textureViewerLevel,image.levels-1);
+  usize offset=0;u32 width=image.width,height=image.height;
+  for(u32 level=0;level<state_.textureViewerLevel;++level) {
+    offset+=static_cast<usize>(width)*height*4;
+    width=std::max<u32>(1,width/2);height=std::max<u32>(1,height/2);
+  }
+  const auto channel=static_cast<TexturePreviewChannel>(state_.textureViewerChannel);
+  const auto background=static_cast<TexturePreviewBackground>(state_.textureViewerBackground);
+  state_.textureViewerImage=preview_.writeViewer(std::span<const u8>(image.mipChain).subspan(offset,static_cast<usize>(width)*height*4),
+                                                 width,height,channel,state_.textureViewerZoom,background);
+  state_.textureViewerZoomLabel=std::to_string(1u<<state_.textureViewerZoom)+"× no centro";
+  state_.textureViewerBackgroundLabel=texturePreviewBackgroundName(background);
+  state_.textureViewerChannelLabel=texturePreviewChannelName(channel);
+  // O nível mostrado é contado na textura inteira, não na prévia.
+  const u32 level=sourceViewer_.firstLevel+state_.textureViewerLevel;
+  state_.textureViewerLevelLabel="Nível "+std::to_string(level)+" de "+std::to_string(texture.levels-1)+" · "+
+                                 std::to_string(width)+"×"+std::to_string(height);
+  const auto megabytes=[](u64 bytes) {return decimalText(static_cast<double>(bytes)/1048576.0,bytes<(10ull<<20)?1:0)+" MB";};
+  const char *format=texture.format==renderer::AuthoringTextureAstc4x4?"ASTC 4×4":texture.format==renderer::AuthoringTextureAstc6x6?"ASTC 6×6":
+                     texture.format==renderer::AuthoringTextureAstc8x8?"ASTC 8×8":"RGBA8";
+  auto &facts=state_.sourceTextureFacts;
+  facts.clear();
+  facts.push_back("Preparada: "+std::to_string(texture.width)+"×"+std::to_string(texture.height)+" · "+
+                  std::to_string(texture.levels)+" níveis · "+format+(texture.srgb?" · cor (sRGB)":" · dados (linear)"));
+  facts.push_back("Memória: "+megabytes(texture.expectedBytes())+
+                  (texture.partial()?" · na RAM "+megabytes(texture.mipChain.size())+", o resto no disco":std::string(" · inteira na RAM")));
+  if(entry.library<textureStreamingLoaded_.size() && entry.library<textureStreamingDesired_.size()) {
+    const u32 loaded=textureStreamingLoaded_[entry.library],desired=textureStreamingDesired_[entry.library];
+    facts.push_back("Na GPU: nível "+std::to_string(loaded)+" ("+std::to_string(std::max(1u,texture.width>>std::min(loaded,31u)))+
+                    " px) · a tela pede o "+std::to_string(desired));
+  } else facts.push_back("Na GPU: sem relatório do renderer neste aparelho");
+  facts.push_back("Imagem: "+(entry.image.empty()?std::string("embutida no modelo"):entry.image));
+  const auto sourceSlash=entry.sourcePath.find_last_of('/');
+  facts.push_back("Fonte: "+entry.sourcePath.substr(sourceSlash==std::string::npos?0:sourceSlash+1));
+  state_.textureViewerInfo=std::to_string(state_.textureUserLabels.size())+" objeto(s) usam esta textura";
+  state_.textureResidencyLabel.clear();
+  return true;
+}
+
+bool EditorSession::generatePendingSourceThumbnail() {
+  for(const u32 row:layout_.visibleSourceTextureRows) {
+    if(row>=sourceTextures_.size() || !sourceTextures_[row].texture) continue;
+    const u32 cell=row%TextureThumbnailCapacity;
+    if(sourceThumbCells_[cell]==sourceTextures_[row].texture.get()) continue;
+    renderer::AuthoringTexture preview;u32 first=0;std::string diagnostic;
+    sourceThumbCells_[cell]=sourceTextures_[row].texture.get();
+    sourceThumbContent_[cell]={};
+    // A miniatura é o nível que cabe na célula: decodificação pequena, uma por quadro.
+    if(resources::previewTexture(*sourceTextures_[row].texture,TextureThumbnailSize,preview,first,diagnostic))
+      sourceThumbContent_[cell]=preview_.writeThumbnail(cell,preview.mipChain,preview.width,preview.height);
+    // A célula agora é desta textura: a miniatura do projeto que estava ali é refeita quando voltar.
+    if(cell<thumbnails_.size()) thumbnails_[cell]={};
+    return true;
+  }
+  return false;
+}
+
 bool EditorSession::generatePendingTextureThumbnail() {
   const u32 count=std::min<u32>(static_cast<u32>(textures_.size()),TextureThumbnailCapacity);
   if(thumbnails_.size()>count) thumbnails_.resize(count);
@@ -3422,6 +3591,8 @@ bool EditorSession::generatePendingTextureThumbnail() {
     }
     if(index<thumbnails_.size()) thumbnails_[index]=std::move(thumbnail);
     else thumbnails_.push_back(std::move(thumbnail));
+    // Bloco F: a célula volta a ser do projeto.
+    sourceThumbCells_[index]=nullptr;
     return true;
   }
   return false;
@@ -3465,6 +3636,7 @@ bool EditorSession::cycleTextureViewerChannel() {
 }
 
 bool EditorSession::refreshTextureViewerImage() {
+  if(state_.textureViewer && state_.textureViewerSource) return refreshSourceTextureViewer();
   if(!state_.textureViewer || state_.textureViewerIndex>=textures_.size()) return false;
   const auto &texture=textures_[state_.textureViewerIndex];
   const auto *record=assets_.find(texture.guid);
@@ -3918,6 +4090,7 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.map=std::move(nodeMap);
   block.materialNames=model.materialNames;
   block.textures=model.textures;
+  block.textureImages=model.textureImages;
   block.skins=model.skins;
   block.drawSkins=model.drawSkins;
   block.skinInfluences=model.skinInfluences;
@@ -5073,7 +5246,8 @@ void EditorSession::update() {
   state_.cameraPreviewFrequency=cameraPreview_.frequency();
   refreshImportLinkView();
   // R4: miniaturas nascem uma por atualização enquanto o seletor está aberto.
-  if(state_.texturePicker || state_.textureManager) generatePendingTextureThumbnail();
+  if(state_.texturePicker || (state_.textureManager && !state_.textureManagerSources)) generatePendingTextureThumbnail();
+  if(state_.textureManager && state_.textureManagerSources) generatePendingSourceThumbnail();
   refreshMaterialSlotView();
   refreshLodStatus();
   refreshSkinningStatus();
@@ -5401,6 +5575,21 @@ void EditorSession::refreshTexturePanels() {
       default: break;
       }
       if(pass) state_.textureManagerRows.push_back(index);
+    }
+    // Bloco F: a lista das fontes, com a mesma busca por nome.
+    if(state_.textureManagerSources) {
+      collectSourceTextures();
+      state_.textureManagerRows.clear();
+      state_.sourceTextureNames.assign(sourceTextures_.size(),std::string());
+      state_.sourceTextureThumbs.assign(sourceTextures_.size(),ui::UiRect{});
+      for(u32 row=0;row<sourceTextures_.size();++row) {
+        const auto &entry=sourceTextures_[row];
+        state_.sourceTextureNames[row]=entry.name;
+        const u32 cell=row%TextureThumbnailCapacity;
+        if(sourceThumbCells_[cell]==entry.texture.get()) state_.sourceTextureThumbs[row]=sourceThumbContent_[cell];
+        if(query.empty() || lower(entry.image+" "+entry.sourcePath).find(query)!=std::string::npos)
+          state_.textureManagerRows.push_back(row);
+      }
     }
   }
 }

@@ -38,4 +38,12 @@ inline constexpr bool validTextureCompression(u32 value) {
 // Falha fechada com o motivo em `diagnostic`; `out` fica vazio.
 bool compressTexture(const renderer::AuthoringTexture &rgba, TextureCompression compression,
                      renderer::AuthoringTexture &out, std::string &diagnostic);
+
+// Bloco F: prévia do que vai para a GPU. Cadeia RGBA8 a partir do primeiro
+// nível com o maior lado até `maximumDimension`, decodificando ASTC quando for o
+// caso (em sRGB para texturas de cor) e lendo do derivado em disco os níveis
+// que não estão na memória. `firstLevel` diz qual nível da textura virou o 0 da
+// prévia. Falha fechada com o motivo em `diagnostic`.
+bool previewTexture(const renderer::AuthoringTexture &texture, u32 maximumDimension, renderer::AuthoringTexture &out,
+                    u32 &firstLevel, std::string &diagnostic);
 } // namespace ae::resources

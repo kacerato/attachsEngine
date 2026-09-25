@@ -723,6 +723,8 @@ public:
   // 0 todas, 1 não usadas, 2 ausentes, 3 alteradas, 4 sem alfa, 5 acima do teto.
   static constexpr u8 TextureFilterCount=6;
   void setTextureFilter(u8 filter) {state_.textureFilter=filter<TextureFilterCount?filter:0;state_.textureManagerPage=0;}
+  // Bloco F: lista do gerenciador — texturas do projeto ou das fontes importadas.
+  void setTextureManagerSources(bool sources) {state_.textureManagerSources=sources;state_.textureManagerPage=0;}
   void setTextureQuery(std::string query) {state_.textureQuery=std::move(query);state_.textureManagerPage=0;}
   // R4: perfil de uma textura do projeto (interpretação, tamanho, mips, bordas,
   // anisotropia). Aplicar grava o arquivo e republica as texturas.
@@ -744,7 +746,7 @@ public:
   // atualização); o visualizador escreve o nível e o canal escolhidos no atlas.
   bool generatePendingTextureThumbnail();
   bool openTextureViewer(u32 projectTextureIndex);
-  void closeTextureViewer() {state_.textureViewer=false;state_.textureProfileDirty=false;}
+  void closeTextureViewer() {state_.textureViewer=false;state_.textureViewerSource=false;state_.textureProfileDirty=false;}
   bool stepTextureViewerLevel(int delta);
   bool cycleTextureViewerChannel();
   bool cycleTextureViewerZoom();
@@ -1191,6 +1193,8 @@ private:
     // Blend shapes por primitiva e o conjunto de cada desenho da fonte (-1 sem).
     std::vector<resources::MorphTargetSet> morphs;
     std::vector<i32> drawMorphs;
+    // Bloco F: imagem de origem de cada textura (paralela a `textures`).
+    std::vector<std::string> textureImages;
     // S3: níveis de detalhe dos desenhos da fonte (faixas extras de `indices`).
     std::vector<renderer::MeshLodLevel> meshLods;
     // Faixa que veio da fonte. Recursos derivados compartilham os vértices e
@@ -1316,6 +1320,31 @@ private:
     bool opaque=false; // nenhum texel com alfa abaixo de 255
   };
   std::vector<TextureThumbnail> thumbnails_; // na ordem das texturas do projeto
+  // Bloco F: texturas das fontes importadas, na ordem da biblioteca publicada
+  // (a mesma do renderer), com a imagem de origem e a fonte dona.
+  struct SourceTexture {
+    u32 library=0;
+    resources::AssetGuid source;
+    std::string image,name,sourcePath;
+    renderer::SharedAuthoringTexture texture;
+    std::vector<resources::AssetGuid> meshes; // malhas da fonte cujo material a usa
+  };
+  std::vector<SourceTexture> sourceTextures_;
+  // Célula do atlas de miniaturas ocupada por uma textura de fonte (a mesma
+  // grade das do projeto: quem escreve numa célula invalida o outro dono).
+  std::array<const renderer::AuthoringTexture *,TextureThumbnailCapacity> sourceThumbCells_{};
+  std::array<ui::UiRect,TextureThumbnailCapacity> sourceThumbContent_{};
+  // Prévia RGBA8 da textura de fonte aberta no Inspector.
+  struct {const renderer::AuthoringTexture *texture=nullptr;renderer::AuthoringTexture rgba;u32 firstLevel=0;} sourceViewer_;
+  void collectSourceTextures();
+  bool generatePendingSourceThumbnail();
+  bool refreshSourceTextureViewer();
+public:
+  // Abre no Inspector a textura de fonte `row` (índice na lista das fontes).
+  bool openSourceTextureInspector(u32 row);
+  // Textura de fonte cuja imagem é o arquivo `relativePath` do projeto; -1 sem.
+  i32 sourceTextureForFile(std::string_view relativePath);
+private:
   struct ViewerChain {
     resources::AssetGuid guid;
     std::string contentHash, recipe;

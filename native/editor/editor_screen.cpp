@@ -112,6 +112,8 @@ struct ScreenBuilder final {
   UiDrawList &list;
   UiInputRouter &router;
   u32 componentPage=0;
+  // Bloco F: o gerenciador anota as linhas de textura das fontes que desenhou.
+  std::vector<u32> *visibleSourceTextureRows=nullptr;
 
   bool isPressed(u32 widget) const { return state.pressedWidget == widget && widget != 0; }
 
@@ -1111,6 +1113,31 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   builder.list.addRect(backgroundBox,theme.color.raised,theme.radius.control);
   builder.label(backgroundBox,"Fundo "+state.textureViewerBackgroundLabel,rgba?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
   if(rgba) builder.router.addRegion(backgroundBox,widgetId(EditorWidget::TextureViewerBackground));
+  // Bloco F: textura de uma fonte. O perfil é da fonte inteira; aqui fica a
+  // ficha do que foi preparado para a GPU (como os Detalhes do editor de textura
+  // da Unreal) e o caminho até a fonte, onde ficam perfil e Reimportar.
+  if(state.textureViewerSource) {
+    for(const auto &fact:state.sourceTextureFacts) {
+      if(controls.height<22) break;
+      auto line=takeTop(controls,22);
+      builder.list.pushClip(line);
+      builder.label(line,fact,theme.color.textDim,theme.type.caption);
+      builder.list.popClip();
+    }
+    // A fonte (perfil e Reimportar) e a lista de todas as texturas das fontes.
+    if(controls.height>=40) {
+      auto row=takeTop(controls,40);
+      const auto origin=deflate(takeLeft(row,row.width*.5f),UiInsets::all(2));
+      const auto all=deflate(row,UiInsets::all(2));
+      builder.list.addRect(origin,theme.color.raised,theme.radius.control);
+      builder.label(origin,"Abrir a fonte",theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(origin,widgetId(EditorWidget::TextureSourceShowOrigin));
+      builder.list.addRect(all,theme.color.raised,theme.radius.control);
+      builder.label(all,"Todas as texturas",theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(all,widgetId(EditorWidget::TextureSourceShowAll));
+    }
+    return;
+  }
   // O perfil tem duas páginas curtas para manter Aplicar/Reverter alcançáveis
   // também no painel estreito do aparelho.
   if(controls.height>=36+26+30*2) {
@@ -2721,8 +2748,20 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
   builder.list.addRect(deflate(import,UiInsets::all(2)),theme.color.raised,theme.radius.control);
   builder.label(import,"+ Importar",theme.color.text,theme.type.caption,UiAlign::Center);
   builder.router.addRegion(import,widgetId(EditorWidget::ImportTexture));
-  builder.label(title,(state.textureFolder.empty()?std::string("Texturas do projeto"):state.textureFolder)+" · "+
+  builder.label(title,(state.textureManagerSources?std::string("Texturas das fontes"):
+                       state.textureFolder.empty()?std::string("Texturas do projeto"):state.textureFolder)+" · "+
                 std::to_string(state.textureManagerRows.size()),theme.color.text,theme.type.caption);
+  // Bloco F: as imagens dos modelos importados ficam ao lado das do projeto.
+  {
+    auto scope=takeTop(content,32);
+    const auto project=deflate(takeLeft(scope,scope.width*.5f),UiInsets::all(2)),sources=deflate(scope,UiInsets::all(2));
+    for(const auto &[box,label,on,widget]:{std::tuple{project,"Do projeto",!state.textureManagerSources,EditorWidget::TextureManagerShowProject},
+                                           std::tuple{sources,"Das fontes",state.textureManagerSources,EditorWidget::TextureManagerShowSources}}) {
+      builder.list.addRect(box,on?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(box,label,on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(box,widgetId(widget));
+    }
+  }
   auto search=deflate(takeTop(content,36),UiInsets::all(2));
   builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(deflate(search,UiInsets::symmetric(8,0)),
@@ -2730,7 +2769,8 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
                 state.textureQuery.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::TextureSearch));
   static constexpr const char *filters[]{"Todas","Não usadas","Ausentes","Alteradas","Sem alfa","Acima do teto"};
-  for(u32 line=0;line<2;++line) {
+  // Os filtros falam de arquivos do projeto; nas fontes a lista é a do modelo.
+  for(u32 line=0;line<(state.textureManagerSources?0u:2u);++line) {
     auto row=takeTop(content,32);
     const float third=row.width/3;
     for(u32 column=0;column<3;++column) {
@@ -2744,7 +2784,9 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
   }
   const u32 rows=static_cast<u32>(state.textureManagerRows.size());
   if(!rows) {
-    builder.label(takeTop(content,40),"Nenhuma textura neste filtro",theme.color.textMuted,theme.type.caption);
+    builder.label(takeTop(content,40),state.textureManagerSources
+                  ?"Nenhum modelo importado com texturas. Importe um GLB ou uma pasta em Arquivos."
+                  :"Nenhuma textura neste filtro",theme.color.textMuted,theme.type.caption);
     return;
   }
   auto footer=takeBottom(content,32);
@@ -2760,8 +2802,10 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
     const auto inner=deflate(box,UiInsets::all(3));
     builder.list.addRect(inner,theme.color.raised,theme.radius.control);
     const auto thumb=deflate(UiRect{inner.x,inner.y,inner.width,inner.height-caption},UiInsets::all(4));
-    if(index<state.projectTextureThumbs.size() && !state.projectTextureThumbs[index].isEmpty()) {
-      const auto &texels=state.projectTextureThumbs[index];
+    const auto &thumbs=state.textureManagerSources?state.sourceTextureThumbs:state.projectTextureThumbs;
+    if(state.textureManagerSources && builder.visibleSourceTextureRows) builder.visibleSourceTextureRows->push_back(index);
+    if(index<thumbs.size() && !thumbs[index].isEmpty()) {
+      const auto &texels=thumbs[index];
       const float fit=std::min(thumb.width/texels.width,thumb.height/texels.height);
       builder.list.addPreviewImage({thumb.x+(thumb.width-texels.width*fit)*.5f,thumb.y+(thumb.height-texels.height*fit)*.5f,
                                     texels.width*fit,texels.height*fit},texels);
@@ -2770,9 +2814,11 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
     }
     const UiRect name{inner.x+4,inner.bottom()-caption,inner.width-8,caption-2};
     builder.list.pushClip(name);
-    builder.label(name,index<state.projectTextureNames.size()?state.projectTextureNames[index]:std::string(),theme.color.text,theme.type.caption);
+    const auto &names=state.textureManagerSources?state.sourceTextureNames:state.projectTextureNames;
+    builder.label(name,index<names.size()?names[index]:std::string(),theme.color.text,theme.type.caption);
     builder.list.popClip();
-    builder.router.addRegion(inner,widgetId(EditorWidget::TextureManagerRowBase)+index);
+    builder.router.addRegion(inner,widgetId(EditorWidget::TextureManagerRowBase)+
+                                   (state.textureManagerSources?detail::TextureManagerSourceRowOffset:0u)+index);
   }
   if(pages>1) {
     const auto previous=takeLeft(footer,36),next=takeRight(footer,36);
@@ -3833,6 +3879,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if (state.document == nullptr || state.surface.isEmpty()) return layout;
 
   ScreenBuilder builder{state, theme, list, router};
+  builder.visibleSourceTextureRows=&layout.visibleSourceTextureRows;
   UiRect remaining = deflate(state.surface, state.safeArea);
   layout.topBar = takeTop(remaining, kTopBarHeight);
   if(state.workspace==EditorWorkspace::Code) {

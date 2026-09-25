@@ -184,6 +184,22 @@ struct Importer {
 
   // Imagem de uma textura: `source` quando existe (PNG/JPEG), senão a imagem de
   // KHR_texture_basisu (KTX2).
+  // Bloco F: de que imagem veio cada textura, para o editor mostrar e achar o
+  // arquivo — a URI relativa numa fonte em pasta, o nome da imagem, ou a posição.
+  std::string imageLabel(const Node &root, i64 imageIndex) const {
+    const auto *images = array(root, "images");
+    if (images && imageIndex >= 0 && imageIndex < images->childCount) {
+      const auto &image = *json->child(*images, static_cast<u32>(imageIndex));
+      if (image.kind == Kind::Object) {
+        const auto uri = json->string(image, "uri");
+        if (!uri.empty() && !uri.starts_with("data:")) return std::string(uri.substr(0, 512));
+        const auto name = json->string(image, "name");
+        if (!name.empty()) return std::string(name.substr(0, 512));
+      }
+    }
+    return "imagem " + std::to_string(imageIndex);
+  }
+
   i64 textureSource(const Node &texture) const {
     if (texture.kind != Kind::Object) return -1;
     if (const auto source = json->index(texture, "source"); source >= 0) return source;
@@ -734,6 +750,7 @@ struct Importer {
     out->textureBytes += made.mipChain.size();
     result = static_cast<u32>(out->textures.size());
     out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(made)));
+    out->textureImages.push_back(imageLabel(root, source));
     return true;
   }
 
@@ -769,6 +786,7 @@ struct Importer {
           out->textureBytes += job.made.mipChain.size();
           result = static_cast<u32>(out->textures.size());
           out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(job.made)));
+          out->textureImages.push_back(imageLabel(root, source));
         } else {
           noteTexture("Não foi possível gerar os mipmaps de uma textura.");
         }
@@ -825,6 +843,7 @@ struct Importer {
             out->textureBytes += made.mipChain.size();
             result = static_cast<u32>(out->textures.size());
             out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(made)));
+            out->textureImages.push_back(imageLabel(root, source));
           } else {
             noteTexture("Não foi possível gerar os mipmaps de uma textura.");
           }

@@ -245,6 +245,9 @@ enum class EditorWidget : u32 {
   LightExplorerIntensityDown, LightExplorerIntensityUp, LightExplorerApply,
   LightExplorerRow0, LightExplorerRowLast = LightExplorerRow0 + 7,
   LightExplorerToggle0, LightExplorerToggleLast = LightExplorerToggle0 + 7,
+  // Bloco F: gerenciador alterna entre texturas do projeto e das fontes; a
+  // textura de uma fonte leva à própria fonte em Arquivos (perfil, Reimportar).
+  TextureManagerShowProject, TextureManagerShowSources, TextureSourceShowOrigin, TextureSourceShowAll,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   EnvironmentPanoramaDown, EnvironmentPanoramaUp,
   EnvironmentSpecularDown, EnvironmentSpecularUp,
@@ -363,6 +366,8 @@ inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast
 namespace detail {
 struct WidgetRange {EditorWidget base;u32 span;};
 inline constexpr u32 kWideRange=0x1000'0000u,kRange=0x0100'0000u;
+// Bloco F: linhas de textura das fontes na mesma faixa do gerenciador.
+inline constexpr u32 TextureManagerSourceRowOffset=0x0080'0000u;
 inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::HierarchyRowBase,kWideRange},{EditorWidget::HierarchyEyeBase,kWideRange},
   {EditorWidget::TransformFieldBase,kWideRange},{EditorWidget::GizmoAxisBase,kWideRange},
@@ -543,6 +548,15 @@ struct EditorScreenState final {
   u32 lightExplorerPage=0,lightExplorerTotal=0,lightExplorerDark=0,lightExplorerFiltered=0;
   float lightExplorerIntensity=1000;
   std::vector<LightExplorerRow> lightExplorerRows;
+  // Bloco F: texturas das fontes importadas (as imagens de um modelo) no mesmo
+  // gerenciador e Inspector das texturas do projeto. A linha i da lista usa a
+  // célula i % 50 do atlas de miniaturas; o Inspector troca o perfil (que é da
+  // fonte) pela ficha do que foi preparado para a GPU.
+  bool textureManagerSources=false,textureViewerSource=false;
+  u32 textureViewerSourceIndex=0; // posição na lista de texturas das fontes
+  std::vector<std::string> sourceTextureNames;
+  std::vector<ui::UiRect> sourceTextureThumbs;
+  std::vector<std::string> sourceTextureFacts;
   // S5: overlay de estatísticas no viewport e o que o renderer relatou.
   bool sceneStatisticsVisible=false;
   renderer::SceneStatistics sceneStatistics{};
@@ -827,6 +841,10 @@ struct EditorScreenLayout final {
   ui::UiRect hierarchyPanel{};
   ui::UiRect filesPanel{};
   ui::UiRect inspectorPanel{};
+  ui::UiRect diagnosticDock{};
+  // Bloco F: linhas da lista de texturas das fontes desenhadas neste quadro;
+  // só elas geram miniatura.
+  std::vector<u32> visibleSourceTextureRows;
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
   // a partir desta contagem.

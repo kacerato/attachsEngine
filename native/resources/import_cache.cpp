@@ -12,6 +12,8 @@ constexpr char kMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'C', '1'};
 // S3: seção opcional de LOD/ordem de índices antes do terminador. Só existe
 // quando a importação gerou algo; derivados anteriores continuam válidos.
 constexpr char kLodMagic[8]{'A', 'S', 'T', 'R', 'A', 'L', 'O', 'D'};
+// Bloco F: seção opcional com a imagem de origem de cada textura.
+constexpr char kImageMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'M', 'G'};
 constexpr u32 kCounterCount = 22;
 
 struct Writer {
@@ -254,6 +256,14 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     writer.u32v(model.lodBudgetReached ? 1 : 0);
     writer.raw(&model.acmrBefore, sizeof model.acmrBefore);writer.raw(&model.acmrAfter, sizeof model.acmrAfter);
   }
+  // Bloco F: com texturas, a seção de imagens sempre vai (vazia por textura
+  // quando quem montou o modelo não sabe a origem).
+  if (!model.textures.empty()) {
+    auto images = model.textureImages;
+    images.resize(model.textures.size());
+    writer.raw(kImageMagic, sizeof kImageMagic);
+    writer.texts(images);
+  }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
   return true;
@@ -439,6 +449,16 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     model.lodBudgetReached = reader.u32v() != 0;
     reader.raw(&model.acmrBefore, sizeof model.acmrBefore);reader.raw(&model.acmrAfter, sizeof model.acmrAfter);
     if (!reader.ok) return refuse();
+  }
+  if (reader.ok && bytes.size() - reader.at >= sizeof kImageMagic &&
+      std::memcmp(bytes.data() + reader.at, kImageMagic, sizeof kImageMagic) == 0) {
+    reader.at += sizeof kImageMagic;
+    model.textureImages = reader.texts();
+    if (!reader.ok || model.textureImages.size() != model.textures.size()) return refuse();
+  } else if (reader.ok && !model.textures.empty()) {
+    // Derivado de antes da seção de imagens: sem ela o editor não liga textura
+    // e arquivo. Recusado para o importador refazer e regravar no mesmo lugar.
+    return refuse();
   }
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||

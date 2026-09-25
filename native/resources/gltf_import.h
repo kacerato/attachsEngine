@@ -252,6 +252,9 @@ struct GltfImport {
   // `MapMaterialRecord::textureIndices`. Uma mesma imagem usada como cor (sRGB)
   // e como dado (linear) vira duas texturas: o espaço de cor é da textura.
   std::vector<renderer::SharedAuthoringTexture> textures;
+  // Bloco F: imagem de origem de cada textura acima (URI relativa, nome ou
+  // "imagem N"), paralela a `textures`. Vazia em derivados antigos.
+  std::vector<std::string> textureImages;
   u64 textureBytes = 0;
   // O que o arquivo trazia e esta importação deliberadamente não trouxe. Quem
   // chama publica isso: o usuário precisa saber que a animação ficou para trás.
