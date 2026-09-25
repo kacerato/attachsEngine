@@ -2407,6 +2407,8 @@ AE_TEST(the_quality_textures_tab_edits_mipmap_streaming_and_shows_what_the_gpu_h
   AE_EXPECT_EQ(draft.textureStreaming, renderer::FeatureOverride::Enabled, "streaming ligado no rascunho");
   tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetUp));
   tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetUp));
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetUp));
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetUp));
   AE_EXPECT_EQ(draft.textureStreamingBudgetMegabytes, 256u, "orçamento sobe pelos degraus do Memory Budget");
   tapWidget(fixture, widgetId(EditorWidget::QualityStreamingBudgetDown));
   AE_EXPECT_EQ(draft.textureStreamingBudgetMegabytes, 128u, "e desce");

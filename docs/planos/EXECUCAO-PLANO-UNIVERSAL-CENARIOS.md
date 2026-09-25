@@ -966,3 +966,19 @@ sem ANR. Achados abertos: o material `dirt_decal` (BLEND, alfa 0,35 × textura)
 aparece branco e opaco; durante a preparação o processo chegou a 1,3 GB PSS
 (547 MB em swap) e o sistema encerrou outros apps; as luzes do arquivo têm
 intensidade 0 e não entram sem "Importar luzes" no perfil. S1–S6 pendentes.
+
+Em 24/09, S1 (compressão) e S2 (streaming de mipmaps). S1: o perfil de importação
+ganhou "Compressão das texturas" (ASTC 4×4/6×6/8×8 ou RGBA8, astc-encoder 5.7.0),
+com 6×6 como padrão de fonte nova; no Xiaomi o Sponza foi preparado em ASTC 6×6 em
+510 s (72 texturas, 172 MB, até 2048 px). A publicação desse preparo no aparelho não
+foi feita: o projeto continua com a publicação RGBA8/512 px do S0. S2: o streaming
+roda sobre as texturas de autoria publicadas (aba Texturas do painel Qualidade, perfil
+de textura e de importação, `Astra.Graphics`), descrito no ADR-014. No aparelho, sobre
+essa publicação de 512 px: desligado, 96 MB na GPU; ligado com o orçamento de Ultra
+(768 MB), as texturas entraram pelo fim da faixa (9,7 MB) e subiram até 93 MB sem
+pendências, com a vista de depuração toda verde; com orçamento de 32 MB, "32 MB de
+32 MB, 64 reduzidas pelo orçamento", com a vista vermelha; desligar devolveu 96 MB.
+Sem ANR nem erro no log nessas trocas. Não medido: tempo de quadro com e sem streaming
+e o ganho com texturas de 2048/4096 px, que dependem de publicar o preparo S1.
+Adaptação explícita: os mips vêm da cadeia em memória, não do disco — o streaming
+economiza GPU, não RAM.

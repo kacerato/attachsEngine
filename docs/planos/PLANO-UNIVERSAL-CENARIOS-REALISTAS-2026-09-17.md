@@ -268,7 +268,7 @@ Cena de aceite escolhida pelo usuário: **Sponza Base Scene** do [Intel GPU Rese
 | S5 · estatísticas | janela Stats / Rendering Statistics | painel no viewport com CPU/GPU ms, desenhos, triângulos, texturas residentes × orçamento, geometria; API `Astra.Rendering.Stats` | números do painel batem com o FrameProfile |
 | S6 · aceite no aparelho | — | passeio com câmeras do arquivo, medição comparável e captura | evidência visual e métrica registrada |
 
-Estado: S0 implementado (seção de execução). S1–S6 pendentes, nesta ordem, porque cada um depende do anterior (sem S1 o S2 só distribui memória de RGBA8).
+Estado: S0, S1 e S2 implementados (seção de execução). S1 preparado mas ainda não publicado no aparelho; S2 validado no aparelho sobre a publicação de 512 px. Falta ao S2 a API C# por textura (nível pedido por script) e a leitura dos mips do disco. S3–S6 pendentes.
 
 ## 9. Gates de qualidade de um mundo realista
 

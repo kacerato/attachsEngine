@@ -2698,7 +2698,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       draft.textureStreaming=cycleOverride(draft.textureStreaming);
     } else if(is(EditorWidget::QualityStreamingBudgetDown)||is(EditorWidget::QualityStreamingBudgetUp)) {
       // Passos do Memory Budget; abaixo do menor volta a "Do nível".
-      static constexpr u32 steps[]{0,128,256,384,512,768,1024,1536,2048,3072,4096};
+      static constexpr u32 steps[]{0,32,64,128,256,384,512,768,1024,1536,2048,3072,4096};
       draft.textureStreamingBudgetMegabytes=stepList(steps,draft.textureStreamingBudgetMegabytes,is(EditorWidget::QualityStreamingBudgetUp));
     } else if(is(EditorWidget::QualityStreamingReductionDown)||is(EditorWidget::QualityStreamingReductionUp)) {
       static constexpr u32 steps[]{0,1,2,3,4,5,6,7};
