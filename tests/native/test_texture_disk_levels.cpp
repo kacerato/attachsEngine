@@ -108,6 +108,18 @@ AE_TEST(c_import_cache_reads_textures_partially_and_writes_them_back_whole) {
   resources::GltfImport whole;
   AE_EXPECT_TRUE(resources::readImportCache(bytes, "k", whole) && !whole.textures.at(0)->partial(),
                  "sem o modo parcial, a leitura de antes");
+  // Logo depois de gravar (importação nova): as texturas do próprio modelo
+  // viram parciais pelos deslocamentos que a escrita devolveu, sem reler.
+  std::vector<u64> offsets;
+  AE_EXPECT_TRUE(resources::writeImportCache(model, "k", bytes, &offsets) && offsets.size() == 1, "deslocamentos devolvidos");
+  auto fresh = model;
+  AE_EXPECT_TRUE(resources::makeTexturesPartial(fresh, offsets, path.string(), 64), "texturas convertidas");
+  const auto &converted = *fresh.textures.at(0);
+  AE_EXPECT_TRUE(converted.firstLevel == 3 && converted.mipChain.size() == full->chainBytesFrom(3), "só a cauda fica");
+  AE_EXPECT_TRUE(readAuthoringTextureLevels(converted, 0, scratch, levels) &&
+                 std::equal(levels.begin(), levels.end(), full->mipChain.begin(), full->mipChain.end()),
+                 "o topo vem do derivado gravado");
+  AE_EXPECT_TRUE(!resources::makeTexturesPartial(fresh, {}, path.string()), "listas que não casam recusam");
 }
 
 AE_TEST(c_texture_budget_drops_levels_of_a_partial_texture_without_losing_content) {

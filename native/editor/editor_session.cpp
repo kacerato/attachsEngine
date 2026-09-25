@@ -4438,7 +4438,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
       EditorScreenState::ImportTextureRow row;
       if(const auto &texture=model.textures[t]) {
         row.width=texture->width;row.height=texture->height;row.levels=texture->levels;row.srgb=texture->srgb;
-        row.format=texture->format;row.bytes=texture->mipChain.size();
+        row.format=texture->format;row.bytes=texture->expectedBytes();
       }
       for(const auto &material:model.materials)
         for(const auto index:material.textureIndices) if(index==t) ++row.uses;

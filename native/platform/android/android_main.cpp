@@ -83,6 +83,11 @@ ae::u64 currentMonotonicNanoseconds() {
          static_cast<ae::u64>(value.tv_nsec);
 }
 
+// Bloco C: as texturas preparadas nos trabalhadores de importação guardam só a
+// cauda quando o streaming de mipmaps está ativo. Escrita na resolução da
+// política; lida pelos trabalhadores.
+std::atomic<bool> partialImportTextures{false};
+
 struct AndroidShell final {
   struct AdpfFrameSample final {
     ae::u64 workStartNs = 0;
@@ -179,6 +184,23 @@ struct AndroidShell final {
     ae::resources::ImportSourceReport sourceReport;
     bool sourceReportReady=false;
     void measure() {if(accepted) sourceReportReady=ae::resources::buildImportSourceReport(model,1.0f,sourceReport);}
+    // Bloco C: o derivado é gravado já no preparo — a primeira reabertura acha o
+    // cache em vez de reimportar — e, com streaming de mipmaps, as texturas
+    // passam a guardar só a cauda, com o topo no arquivo recém-gravado. Falha em
+    // gravar não recusa nada: o derivado é regenerável e a reabertura o refaz.
+    void storeDerived(const ae::resources::GltfImportLimits &limits,bool partialTextures) {
+      if(!accepted || contentHash.empty() || root.empty()) return;
+      using Transaction=ae::editor::EditorImportTransaction;
+      const auto key=ae::resources::importCacheKey(contentHash,limits);
+      const std::string relative=ae::resources::importCacheRelativePath(key);
+      std::vector<ae::u8> derived;std::vector<ae::u64> offsets;
+      if(!ae::resources::writeImportCache(model,key,derived,&offsets)) return;
+      const auto path=Transaction::fromUtf8(root+"/"+relative);
+      std::error_code error;
+      std::filesystem::create_directories(path.parent_path(),error);
+      if(error || !Transaction::write(path,derived)) return;
+      if(partialTextures) ae::resources::makeTexturesPartial(model,offsets,root+"/"+relative);
+    }
     bool folderSource=false; // `contentHash` é o da pasta inteira (principal + manifesto)
     std::filesystem::path folderDirectory; // de onde o importador lê: preparo, ou a pasta publicada
   };
@@ -918,11 +940,14 @@ bool startProjectReopen(AndroidShell &shell) {
         }
         stage(source,"gravando derivado");
         const double writeStarted=ae::platform::android::lifecycleUptimeMs();
-        std::vector<ae::u8> derived;
+        std::vector<ae::u8> derived;std::vector<ae::u64> offsets;
         std::error_code error;
         std::filesystem::create_directories(cachePath.parent_path(),error);
-        if(error || !ae::resources::writeImportCache(reopened.model,key,derived) || !Transaction::write(cachePath,derived))
+        if(error || !ae::resources::writeImportCache(reopened.model,key,derived,&offsets) || !Transaction::write(cachePath,derived))
           __android_log_print(ANDROID_LOG_WARN,LogTag,"[Cache] derivado de %s não gravado; a próxima abertura importa de novo.",source.c_str());
+        // Bloco C: com o derivado no disco, a cadeia grande sai da RAM já nesta abertura.
+        else if(partialTextures)
+          ae::resources::makeTexturesPartial(reopened.model,offsets,root+"/"+ae::resources::importCacheRelativePath(key));
         writeMs=ae::platform::android::lifecycleUptimeMs()-writeStarted;
       } else {
         ++result.cacheHits;
@@ -1347,6 +1372,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   shell.renderingPolicy = ae::renderer::resolveRenderingPolicy(
       shell.activeRenderingSettings, capabilities, ae::renderer::ThermalPressure::None);
   shell.activeRenderingPolicy = shell.renderingPolicy;
+  partialImportTextures.store(shell.renderingPolicy.textures.streaming);
   shell.thermalPolicyApplied = false;
   // VisibilityBudget also carries HZB knobs that are not part of the rendering
   // policy yet. Synchronize only the resolved LOD axes so diagnostics and the
@@ -2705,6 +2731,7 @@ void android_main(android_app *app) {
                     ae::resources::GltfFolderMaximumFileBytes,limits,progress,result.model,packed);
                 result.measure();
                 if(result.accepted) result.contentHash=ae::resources::gltfFolderContentHash(result.bytes,result.manifest);
+                result.storeDerived(limits,partialImportTextures.load());
                 result.diagnostic=result.model.diagnostic;
                 return result;
               }
@@ -2729,6 +2756,7 @@ void android_main(android_app *app) {
               // Hash no worker: a revisão compara com o mapa publicado sem
               // percorrer dezenas de MiB na thread do editor.
               if(result.accepted) result.contentHash=ae::Sha256::hex(result.bytes);
+              result.storeDerived(limits,partialImportTextures.load());
               result.diagnostic=result.model.diagnostic;
             }
             return result;
@@ -2832,6 +2860,7 @@ void android_main(android_app *app) {
               result.manifest=ae::resources::serializeGltfFolderManifest(picked.displayName,result.bytes,records);
               result.contentHash=ae::resources::gltfFolderContentHash(result.bytes,result.manifest);
               result.dependencies=static_cast<ae::u32>(records.size());
+              result.storeDerived(limits,partialImportTextures.load());
             }
             return result;
           });
@@ -3044,6 +3073,7 @@ void android_main(android_app *app) {
               result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
               result.sourceReportReady=false;result.sourceReport={};
               result.measure();
+              result.storeDerived(limits,partialImportTextures.load());
               result.diagnostic=result.model.diagnostic;
               return result;
             });

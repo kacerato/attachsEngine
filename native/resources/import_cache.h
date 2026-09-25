@@ -34,7 +34,10 @@ inline constexpr u32 ImportCacheImporterRevision = 7;
 std::string importCacheKey(std::string_view sourceContentHash, const GltfImportLimits &limits);
 // Caminho relativo à raiz do projeto.
 std::string importCacheRelativePath(std::string_view key);
-bool writeImportCache(const GltfImport &model, std::string_view key, std::vector<u8> &out);
+// `textureOffsets`, quando pedido, recebe onde a cadeia de cada textura começa em
+// `out` (bloco C: com o arquivo gravado, `makeTexturesPartial` usa isso).
+bool writeImportCache(const GltfImport &model, std::string_view key, std::vector<u8> &out,
+                      std::vector<u64> *textureOffsets = nullptr);
 // Bloco C (S2): leitura parcial. As texturas guardam na memória só os níveis
 // com o maior lado até `keepDimension`; os de cima ficam no arquivo `path`
 // (o mesmo que forneceu `bytes`) e são lidos sob demanda pelo streaming.
@@ -42,6 +45,11 @@ struct ImportCachePartialTextures {
   std::string path;
   u32 keepDimension = 256;
 };
+// Troca, no lugar, as texturas de `model` por parciais apontando para o
+// derivado já gravado em `path` (deslocamentos de `writeImportCache`). Falso
+// sem mudar nada quando as listas não casam.
+bool makeTexturesPartial(GltfImport &model, std::span<const u64> textureOffsets, const std::string &path,
+                         u32 keepDimension = 256);
 // Falha fechada: em qualquer inconsistência `out` volta vazio.
 bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport &out,
                      const ImportCachePartialTextures *partial = nullptr);

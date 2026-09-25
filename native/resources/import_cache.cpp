@@ -140,7 +140,9 @@ std::string importCacheRelativePath(std::string_view key) {
   return ".astra/cache/imports/" + std::string(key) + ".aic";
 }
 
-bool writeImportCache(const GltfImport &model, std::string_view key, std::vector<u8> &out) {
+bool writeImportCache(const GltfImport &model, std::string_view key, std::vector<u8> &out,
+                      std::vector<u64> *textureOffsets) {
+  if (textureOffsets) textureOffsets->clear();
   out.clear();
   if (key.empty() || model.draws.empty() || model.nodes.empty()) return false;
   Writer writer{out};
@@ -186,6 +188,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
       return false;
     }
     writer.u64v(chain.size());
+    if (textureOffsets) textureOffsets->push_back(out.size());
     writer.raw(chain.data(), chain.size());
   }
   writer.u64v(model.textureBytes);
@@ -253,6 +256,32 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
+  return true;
+}
+
+bool makeTexturesPartial(GltfImport &model, std::span<const u64> textureOffsets, const std::string &path,
+                         u32 keepDimension) {
+  if (textureOffsets.size() != model.textures.size()) return false;
+  std::vector<renderer::SharedAuthoringTexture> next;
+  next.reserve(model.textures.size());
+  for (usize i = 0; i < model.textures.size(); ++i) {
+    const auto &texture = model.textures[i];
+    if (!texture || !texture->valid()) return false;
+    u32 first = 0;
+    for (u32 w = texture->width, h = texture->height; first + 1 < texture->levels && std::max(w, h) > keepDimension;
+         ++first, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) {}
+    if (!first || texture->partial()) {next.push_back(texture); continue;}
+    auto partial = std::make_shared<renderer::AuthoringTexture>();
+    partial->width = texture->width;partial->height = texture->height;partial->levels = texture->levels;
+    partial->srgb = texture->srgb;partial->samplerFlags = texture->samplerFlags;partial->format = texture->format;
+    partial->firstLevel = first;
+    partial->file = std::make_shared<renderer::AuthoringTextureFile>(renderer::AuthoringTextureFile{path, textureOffsets[i]});
+    const u64 skip = texture->expectedBytes() - texture->chainBytesFrom(first);
+    partial->mipChain.assign(texture->mipChain.begin() + static_cast<std::ptrdiff_t>(skip), texture->mipChain.end());
+    if (!partial->valid()) return false;
+    next.push_back(std::move(partial));
+  }
+  model.textures = std::move(next);
   return true;
 }
 
