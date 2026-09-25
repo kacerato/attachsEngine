@@ -2433,6 +2433,16 @@ AE_TEST(the_quality_textures_tab_edits_mipmap_streaming_and_shows_what_the_gpu_h
   fixture.session.update();
   AE_EXPECT_TRUE(fixture.session.screen().qualityTextureStreaming.streamingTextures == 72 &&
                  fixture.session.screen().qualityTextureStreaming.pendingLoads == 5, "estado do renderer chega à tela");
+  // A vista de depuração é ferramenta do editor: não suja o rascunho nem o projeto.
+  const bool dirtyBefore = fixture.session.screen().qualityDirty;
+  // Numa tela baixa a aba pagina; a linha fica na página seguinte.
+  for (u32 page = 0; page < 4 && locateWidget(fixture.session, widgetId(EditorWidget::QualityStreamingDebugView)).x < 0; ++page)
+    tapWidget(fixture, widgetId(EditorWidget::QualityPageNext));
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingDebugView));
+  AE_EXPECT_TRUE(fixture.session.screen().qualityTextureStreamingDebug &&
+                 fixture.session.screen().qualityDirty == dirtyBefore, "vista de depuração liga sem mudar o rascunho");
+  tapWidget(fixture, widgetId(EditorWidget::QualityStreamingDebugView));
+  AE_EXPECT_TRUE(!fixture.session.screen().qualityTextureStreamingDebug, "e desliga");
 }
 
 AE_TEST(the_quality_panel_edits_a_draft_and_applies_it_on_request) {

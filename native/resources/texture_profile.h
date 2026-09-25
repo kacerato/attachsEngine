@@ -19,7 +19,10 @@ namespace ae::resources {
 //
 // Texturas embutidas nas fontes seguem o perfil de importação da fonte (R3); para
 // escolher por textura, extraia a imagem para o projeto.
-inline constexpr u32 TextureProfileSchema = 3;
+// 4 (S2): streaming de mipmaps e prioridade, do Texture Importer da Unity.
+inline constexpr u32 TextureProfileSchema = 4;
+// Faixa da prioridade de streaming da Unity (Texture Importer > Priority).
+inline constexpr i32 TextureStreamingPriorityMinimum = -128, TextureStreamingPriorityMaximum = 127;
 // Interpretação: pelo uso (cor base e emissão em sRGB, os demais lineares), cor
 // (sRGB sempre) ou dado (linear sempre).
 inline constexpr u8 TextureInterpretationUse = 0, TextureInterpretationColor = 1,
@@ -43,7 +46,13 @@ struct TextureProfile {
   // Desligado preserva exatamente o comportamento anterior.
   bool preserveAlphaCoverage = false;
   float alphaCoverageCutoff = 0.5f;
+  // "Stream Mipmap Levels" e "Priority" (S2). Não mudam os bytes preparados:
+  // valem na próxima publicação, sem repreparar a imagem.
+  bool streamingMipmaps = true;
+  i32 streamingPriority = 0;
 };
+// Igualdade só do que muda os bytes preparados (o streaming fica de fora).
+bool sameTexturePreparation(const TextureProfile &a, const TextureProfile &b) noexcept;
 bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexcept;
 bool validTextureProfile(const TextureProfile &profile) noexcept;
 std::string serializeTextureProfile(const TextureProfile &profile);

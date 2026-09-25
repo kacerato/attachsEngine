@@ -238,6 +238,17 @@ faixa e sobe conforme a tela pede. `Graphics.State` expõe
 `ResolvedGraphicsSettings` ganham os quatro campos no fim. O tamanho das estruturas
 é travado dos dois lados (static_assert e teste gerenciado).
 
+Por textura, como no Texture Importer da Unity: "Stream Mipmap Levels" e "Priority"
+(-128..127) vivem no perfil da textura do projeto (schema 4) e, para as texturas de
+uma fonte importada, no perfil de importação dela (schema 10). Nenhum dos dois muda
+os bytes preparados: ficam fora da chave do cache e das comparações de preparo e
+valem na publicação, que entrega ao renderer um parâmetro por textura na mesma ordem.
+O Inspector de textura mostra o mip carregado e o que a tela pede, relatados pelo
+renderer; no host, sem GPU, ele diz que não há renderer. A aba Texturas tem a vista de
+depuração da Scene View (só no editor, fora do Play): a cor base do desenho é tingida
+pelo estado da textura de cor dele — verde no nível pedido, vermelho abaixo (orçamento
+ou pendente), azul acima, cinza fora do streaming.
+
 A separação segue a diferença da Unity 6 entre a intenção alterada via `QualitySettings`
 e o pipeline atual consultável. Na Astra, o acknowledge assíncrono é explícito porque
 alguns eixos exigem reconstrução Vulkan; portanto um setter aceito não é apresentado

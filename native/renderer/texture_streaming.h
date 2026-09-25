@@ -33,6 +33,14 @@ struct TextureStreamingTexture {
   u32 requestedMip = TextureStreamingNoRequest;
 };
 
+// Escolhas autorais por textura publicada (Texture Importer da Unity): vêm do
+// perfil da textura do projeto ou do perfil de importação da fonte.
+struct TextureStreamingParameters {
+  bool streamable = true;
+  i32 priority = 0;
+  u32 requestedMip = TextureStreamingNoRequest;
+};
+
 // Um desenho que amostra a textura: esfera no mundo e a escala da UV nele.
 struct TextureStreamingUse {
   u32 texture = 0;

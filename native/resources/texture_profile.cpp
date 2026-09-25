@@ -5,15 +5,22 @@
 #include <cmath>
 
 namespace ae::resources {
-bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexcept {
+bool sameTexturePreparation(const TextureProfile &a, const TextureProfile &b) noexcept {
   return a.interpretation == b.interpretation && a.maximumDimension == b.maximumDimension && a.mipmaps == b.mipmaps &&
          a.dilateEdges == b.dilateEdges && a.anisotropy == b.anisotropy &&
          a.invertNormalGreen == b.invertNormalGreen && a.preserveAlphaCoverage == b.preserveAlphaCoverage &&
          std::fabs(a.alphaCoverageCutoff-b.alphaCoverageCutoff)<.0005f;
 }
 
+bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexcept {
+  return sameTexturePreparation(a, b) && a.streamingMipmaps == b.streamingMipmaps &&
+         a.streamingPriority == b.streamingPriority;
+}
+
 bool validTextureProfile(const TextureProfile &profile) noexcept {
   return profile.interpretation <= TextureInterpretationNormal &&
+         profile.streamingPriority >= TextureStreamingPriorityMinimum &&
+         profile.streamingPriority <= TextureStreamingPriorityMaximum &&
          std::isfinite(profile.alphaCoverageCutoff) && profile.alphaCoverageCutoff >= 0 && profile.alphaCoverageCutoff <= 1 &&
          std::find(TextureDimensionSteps.begin(), TextureDimensionSteps.end(), profile.maximumDimension) != TextureDimensionSteps.end();
 }
@@ -24,7 +31,9 @@ std::string serializeTextureProfile(const TextureProfile &profile) {
          ",\"dilateEdges\":" + (profile.dilateEdges ? "1" : "0") + ",\"anisotropy\":" + (profile.anisotropy ? "1" : "0") +
          ",\"invertNormalGreen\":" + (profile.invertNormalGreen ? "1" : "0") +
          ",\"preserveAlphaCoverage\":" + (profile.preserveAlphaCoverage ? "1" : "0") +
-         ",\"alphaCoverageCutoff\":" + std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*1000.0f))) + "}\n";
+         ",\"alphaCoverageCutoff\":" + std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*1000.0f))) +
+         ",\"streamingMipmaps\":" + (profile.streamingMipmaps ? "1" : "0") +
+         ",\"streamingPriority\":" + std::to_string(profile.streamingPriority) + "}\n";
 }
 
 bool parseTextureProfile(std::string_view text, TextureProfile &out) {
@@ -43,6 +52,12 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
   const auto invertNormalGreen = schema >= 2 ? document.index(root, "invertNormalGreen") : 0;
   const auto preserveAlphaCoverage = schema >= 3 ? document.index(root, "preserveAlphaCoverage") : 0;
   const auto alphaCoverageCutoff = schema >= 3 ? document.index(root, "alphaCoverageCutoff") : 500;
+  // Perfis anteriores ao schema 4 entram no streaming com prioridade 0, como
+  // uma textura nova do importador da Unity.
+  const auto streamingMipmaps = schema >= 4 ? document.index(root, "streamingMipmaps") : 1;
+  // `index` só aceita não negativos; a prioridade vai de -128 a 127.
+  const double priorityValue = schema >= 4 ? document.number(root, "streamingPriority", 1e9) : 0.0;
+  const auto streamingPriority = std::floor(priorityValue) == priorityValue ? static_cast<i64>(priorityValue) : i64{1} << 40;
   const auto flag = [](i64 value) { return value == 0 || value == 1; };
   // O valor 3 só passou a significar mapa normal no schema 2. Aceitá-lo em um
   // perfil v1 mudaria o sentido de dados antigos/corrompidos durante a migração.
@@ -50,7 +65,8 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
       (schema == 1 && interpretation > TextureInterpretationData) || dimension < 0 ||
       !flag(mipmaps) || !flag(edges) ||
       !flag(anisotropy) || !flag(invertNormalGreen) || !flag(preserveAlphaCoverage) ||
-      alphaCoverageCutoff < 0 || alphaCoverageCutoff > 1000) return false;
+      alphaCoverageCutoff < 0 || alphaCoverageCutoff > 1000 || !flag(streamingMipmaps) ||
+      streamingPriority < TextureStreamingPriorityMinimum || streamingPriority > TextureStreamingPriorityMaximum) return false;
   TextureProfile parsed;
   parsed.interpretation = static_cast<u8>(interpretation);
   parsed.maximumDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
@@ -60,6 +76,8 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
   parsed.invertNormalGreen = invertNormalGreen == 1;
   parsed.preserveAlphaCoverage = preserveAlphaCoverage == 1;
   parsed.alphaCoverageCutoff = static_cast<float>(alphaCoverageCutoff)/1000.0f;
+  parsed.streamingMipmaps = streamingMipmaps == 1;
+  parsed.streamingPriority = static_cast<i32>(streamingPriority);
   if (!validTextureProfile(parsed)) return false;
   out = parsed;
   return true;

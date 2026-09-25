@@ -1097,6 +1097,27 @@ AE_TEST(r4_texture_profile_changes_interpretation_mips_anisotropy_and_is_read_ba
   AE_EXPECT_TRUE(!residency.empty() && residency.front().levels == 1 && residency.front().width == 4 && !residency.front().srgb &&
                      residency.front().bytes == 16 * 4,
                  "residência consultável por textura");
+  // S2: Stream Mipmap Levels e Priority chegam ao consumidor na posição da textura.
+  const auto revision = session.textureStreamingRevision();
+  profile.streamingMipmaps = false;
+  profile.streamingPriority = 7;
+  AE_EXPECT_TRUE(session.setTextureProfile(texture, profile, diagnostic), diagnostic.c_str());
+  index = effectiveTexture(session, object, 0);
+  const auto streaming = session.textureStreamingParameters();
+  AE_EXPECT_TRUE(session.textureStreamingRevision() > revision && streaming.size() == publisher.published.size() &&
+                     index < streaming.size() && !streaming[index].streamable && streaming[index].priority == 7,
+                 "parâmetros por textura publicados com a revisão nova");
+  AE_EXPECT_TRUE(streaming.size() > 0 && streaming[0].streamable && streaming[0].priority == 0,
+                 "textura da fonte segue o perfil de importação (padrão: streaming, prioridade 0)");
+  AE_EXPECT_TRUE(!session.textureStreamingLevelsOf(texture).known, "sem relatório do renderer, nível desconhecido");
+  std::vector<u32> desired(publisher.published.size(), 0), loaded(publisher.published.size(), 0);
+  loaded[index] = 1;
+  session.setTextureStreamingLevels(desired, loaded);
+  const auto levels = session.textureStreamingLevelsOf(texture);
+  AE_EXPECT_TRUE(levels.known && levels.loaded == 1 && levels.loadedWidth == 2, "nível carregado e largura dele");
+  profile.streamingMipmaps = true;
+  profile.streamingPriority = 0;
+  AE_EXPECT_TRUE(session.setTextureProfile(texture, profile, diagnostic), diagnostic.c_str());
   AE_EXPECT_TRUE(std::filesystem::exists(project.root / resources::textureProfilePath(texture)), "perfil gravado no projeto");
   resources::TextureProfile invalid;
   invalid.maximumDimension = 300;

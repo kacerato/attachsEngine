@@ -100,6 +100,9 @@ struct AndroidShell final {
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
+  // S2: última revisão dos parâmetros de streaming entregue ao renderer (o
+  // objeto do renderer sobrevive às reconstruções, e os parâmetros com ele).
+  ae::u64 textureStreamingRevision = ~ae::u64{0};
   bool forceDescriptorFallback = false;
   // Public Android frame pacing is the production default. Diagnostics can
   // explicitly disable it to retain a reproducible FIFO/Choreographer control.
@@ -2556,8 +2559,20 @@ void android_main(android_app *app) {
           shell.editorSession.setTemporalUpscalerStatus(shell.renderingCapabilities.armAsr,
               shell.renderingCapabilities.fsr2,shell.instancedRenderer.executedUpscaler(),
               shell.instancedRenderer.executedUpscalerStatus(),shell.instancedRenderer.nativeTaaExecuted());
-        if(shell.instancedRendererReady)
+        if(shell.instancedRendererReady) {
           shell.editorSession.setTextureStreamingStatus(shell.instancedRenderer.textureStreamingStats());
+          // Parâmetros por textura só quando uma publicação os trocou.
+          if(shell.textureStreamingRevision!=shell.editorSession.textureStreamingRevision()) {
+            shell.instancedRenderer.setTextureStreamingParameters(shell.editorSession.textureStreamingParameters());
+            shell.textureStreamingRevision=shell.editorSession.textureStreamingRevision();
+          }
+          shell.editorSession.setTextureStreamingLevels(shell.instancedRenderer.textureStreamingDesiredMips(),
+                                                        shell.instancedRenderer.textureStreamingLoadedMips());
+          // Como o diagnóstico temporal: só na Scene View do editor, nunca no Play.
+          shell.instancedRenderer.setTextureStreamingDebugView(!editorPlaying &&
+              shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene &&
+              shell.editorSession.screen().qualityTextureStreamingDebug);
+        }
         shell.instancedRenderer.setTemporalDebugView(static_cast<ae::platform::android::TemporalDebugView>(
             !editorPlaying && shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene
                 ? std::min(shell.editorSession.screen().qualityTemporalDebug,6u) : 0u));
@@ -3096,7 +3111,7 @@ void android_main(android_app *app) {
           if(shell.importCancellation->load()||prepared.root!=session.codeProjectRoot()||
              prepared.epoch!=session.sceneVersion().epoch) {
             session.closeImportPreview();session.setImportStatus("Preparação de textura descartada; projeto preservado.");
-          } else if(!ae::resources::sameTextureProfile(prepared.settings,session.textureImportSettings())) {
+          } else if(!ae::resources::sameTexturePreparation(prepared.settings,session.textureImportSettings())) {
             session.takeTextureImportReprepare(textureSettings);
             session.setImportStatus("Repreparando textura com as últimas opções…");
             reprepareTexture(std::move(prepared),session.textureImportSettings());
@@ -3119,8 +3134,12 @@ void android_main(android_app *app) {
           shell.textureImportPreview.reset();std::string diagnostic;
           if(prepared.root!=session.codeProjectRoot()||prepared.epoch!=session.sceneVersion().epoch)
             session.setImportStatus("Publicação descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
-          else if(!session.commitTextureImport(prepared.path,prepared.bytes,prepared.expectedHash,prepared.asset,
-                                                prepared.settings,diagnostic)) session.showImportFailure(diagnostic);
+          else if(auto settings=prepared.settings;
+                  // S2: streaming e prioridade não repreparam; vêm do painel como estão.
+                  settings.streamingMipmaps=session.textureImportSettings().streamingMipmaps,
+                  settings.streamingPriority=session.textureImportSettings().streamingPriority,
+                  !session.commitTextureImport(prepared.path,prepared.bytes,prepared.expectedHash,prepared.asset,
+                                                settings,diagnostic)) session.showImportFailure(diagnostic);
           else {
             shell.editorPublishedRevision=~ae::u64{0};
             session.setImportStatus("Textura importada; configure seus usos nos materiais.");

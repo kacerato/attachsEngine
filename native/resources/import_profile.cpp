@@ -44,7 +44,8 @@ bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept 
          a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
          a.normalWeighting == b.normalWeighting && a.smoothingAngle == b.smoothingAngle && a.tangents == b.tangents &&
          a.importCameras == b.importCameras && a.importLights == b.importLights &&
-         a.textureCompression == b.textureCompression &&
+         a.textureCompression == b.textureCompression && a.textureStreaming == b.textureStreaming &&
+         a.textureStreamingPriority == b.textureStreamingPriority &&
          sameExcludedNodes(a, b) && sameCollisionMeshes(a, b);
 }
 
@@ -54,6 +55,8 @@ bool sameImportPreparation(const ImportProfile &a, const ImportProfile &b) noexc
   right.excludedNodes.clear();
   left.collisionMeshes.clear();
   right.collisionMeshes.clear();
+  right.textureStreaming = left.textureStreaming;
+  right.textureStreamingPriority = left.textureStreamingPriority;
   return sameImportProfile(left, right);
 }
 
@@ -70,6 +73,7 @@ bool validImportProfile(const ImportProfile &profile) noexcept {
          profile.normals <= GltfNormalsCalculate && profile.normalWeighting <= GltfNormalWeightAngle &&
          profile.smoothingAngle <= 180 &&
          profile.tangents <= GltfTangentsCalculate && validTextureCompression(profile.textureCompression) &&
+         profile.textureStreamingPriority >= -128 && profile.textureStreamingPriority <= 127 &&
          profile.excludedNodes.size() <= 65536 &&
          profile.collisionMeshes.size() <= 65536 && collisionRecipesValid;
 }
@@ -85,7 +89,9 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"tangents\":" + std::to_string(profile.tangents) +
          ",\"importCameras\":" + (profile.importCameras ? "true" : "false") +
          ",\"importLights\":" + (profile.importLights ? "true" : "false") +
-         ",\"textureCompression\":" + std::to_string(profile.textureCompression) + ",\"excludedNodes\":[" + [&] {
+         ",\"textureCompression\":" + std::to_string(profile.textureCompression) +
+         ",\"textureStreaming\":" + (profile.textureStreaming ? "true" : "false") +
+         ",\"textureStreamingPriority\":" + std::to_string(profile.textureStreamingPriority) + ",\"excludedNodes\":[" + [&] {
            std::string list;
            for (const auto &node : profile.excludedNodes) {
              if (!list.empty()) list += ',';
@@ -158,6 +164,14 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     const auto compression = document.index(root, "textureCompression");
     if (compression < 0) return false;
     parsed.textureCompression = static_cast<u8>(std::min<i64>(compression, 255));
+  }
+  if (schema >= 10) {
+    const auto *streaming = document.member(root, "textureStreaming");
+    const double priority = document.number(root, "textureStreamingPriority", 1e9);
+    if (!streaming || streaming->kind != JsonDocument::Kind::Boolean || std::floor(priority) != priority ||
+        priority < -128 || priority > 127) return false;
+    parsed.textureStreaming = streaming->boolean;
+    parsed.textureStreamingPriority = static_cast<i32>(priority);
   }
   if (schema >= 4) {
     const auto *excluded = document.member(root, "excludedNodes");

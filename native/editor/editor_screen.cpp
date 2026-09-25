@@ -1120,19 +1120,28 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
       builder.label(box,text,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(box,widget);
     };
+    const u32 profilePage=std::min(state.textureProfilePage,2u);
+    // Índices 0..9 são campos do perfil; 10 e 11 são leitura do streaming.
+    constexpr u32 editableProfileFields=10;
     for(u32 line=0;line<2;++line) {
       auto row=takeTop(controls,30);
-      const u32 first=std::min(state.textureProfilePage,1u)*4+line*2;
-      profileButton(takeLeft(row,row.width*.5f),state.textureProfileLabels[first],widgetId(EditorWidget::TextureProfileInterpretation)+first);
-      profileButton(row,state.textureProfileLabels[first+1],widgetId(EditorWidget::TextureProfileInterpretation)+first+1);
+      const u32 first=profilePage*4+line*2;
+      for(u32 cell=0;cell<2;++cell) {
+        const u32 index=first+cell;
+        auto box=cell?row:takeLeft(row,row.width*.5f);
+        if(index<editableProfileFields)
+          profileButton(box,state.textureProfileLabels[index],widgetId(EditorWidget::TextureProfileInterpretation)+index);
+        else builder.label(deflate(box,UiInsets::all(2)),state.textureProfileLabels[index],theme.color.textDim,
+                           theme.type.caption,UiAlign::Center);
+      }
     }
     auto pager=takeTop(controls,26);
     const auto previous=takeLeft(pager,65),next=takeRight(pager,65);
-    builder.label(previous,"‹ Perfil",state.textureProfilePage?theme.color.text:theme.color.textMuted,theme.type.caption);
-    builder.label(next,"Perfil ›",state.textureProfilePage?theme.color.textMuted:theme.color.text,theme.type.caption,UiAlign::End);
-    builder.label(pager,std::to_string(std::min(state.textureProfilePage,1u)+1)+" / 2",theme.color.textDim,theme.type.caption,UiAlign::Center);
-    if(state.textureProfilePage) builder.router.addRegion(previous,widgetId(EditorWidget::TextureProfilePrevious));
-    else builder.router.addRegion(next,widgetId(EditorWidget::TextureProfileNext));
+    builder.label(previous,"‹ Perfil",profilePage?theme.color.text:theme.color.textMuted,theme.type.caption);
+    builder.label(next,"Perfil ›",profilePage<2?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::End);
+    builder.label(pager,std::to_string(profilePage+1)+" / 3",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(profilePage) builder.router.addRegion(previous,widgetId(EditorWidget::TextureProfilePrevious));
+    if(profilePage<2) builder.router.addRegion(next,widgetId(EditorWidget::TextureProfileNext));
   }
   if(controls.height>=36) {
     auto row=takeTop(controls,36);
@@ -2225,7 +2234,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
 
   if(state.importTexture) {
     auto actions=takeBottom(content,40);
-    const bool recipeReady=resources::sameTextureProfile(state.textureImportSettings,state.textureImportPreparedSettings);
+    const bool recipeReady=resources::sameTexturePreparation(state.textureImportSettings,state.textureImportPreparedSettings);
     const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.36f:actions.width),UiInsets::all(2));
     list.addRect(cancel,theme.color.raised,theme.radius.control);
     builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
@@ -2247,7 +2256,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     takeTop(content,5);
     const auto &profile=state.textureImportSettings;
     static constexpr const char *types[]{"Pelo uso","Cor (sRGB)","Dados (linear)","Mapa normal"};
-    const std::array<std::pair<std::string,EditorWidget>,8> settings{{
+    const std::array<std::pair<std::string,EditorWidget>,10> settings{{
       {std::string("Interpretação · ")+types[std::min<u32>(profile.interpretation,3u)],EditorWidget::TextureProfileInterpretation},
       {profile.maximumDimension?"Tamanho máx. · "+std::to_string(profile.maximumDimension)+" px":std::string("Tamanho máx. · projeto"),EditorWidget::TextureProfileDimension},
       {profile.mipmaps?"Mipmaps · gerar":"Mipmaps · desligados",EditorWidget::TextureProfileMipmaps},
@@ -2255,9 +2264,11 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       {profile.anisotropy?"Anisotropia · permitir":"Anisotropia · desligar",EditorWidget::TextureProfileAnisotropy},
       {profile.invertNormalGreen?"Normal Y · inverter (DX)":"Normal Y · manter (GL)",EditorWidget::TextureProfileNormalGreen},
       {profile.preserveAlphaCoverage?"Cobertura alfa · preservar":"Cobertura alfa · desligada",EditorWidget::TextureProfileCoverage},
-      {"Corte cobertura · "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%",EditorWidget::TextureProfileCoverageCutoff}}};
+      {"Corte cobertura · "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%",EditorWidget::TextureProfileCoverageCutoff},
+      {profile.streamingMipmaps?"Streaming de mips · sim":"Streaming de mips · não",EditorWidget::TextureProfileStreaming},
+      {"Prioridade de streaming · "+std::to_string(profile.streamingPriority),EditorWidget::TextureProfileStreamingPriority}}};
     auto pager=takeBottom(content,26);
-    const u32 settingsPage=std::min(state.importPage,2u);
+    const u32 settingsPage=std::min(state.importPage,3u);
     const u32 firstSetting=settingsPage*3,lastSetting=std::min<u32>(firstSetting+3,settings.size());
     for(u32 index=firstSetting;index<lastSetting;++index) {
       const auto &[label,widget]=settings[index];
@@ -2271,10 +2282,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     }
     const auto previous=takeLeft(pager,56),next=takeRight(pager,56);
     builder.label(previous,"‹ Opções",settingsPage?theme.color.text:theme.color.textMuted,theme.type.caption);
-    builder.label(next,"Opções ›",settingsPage<2?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::End);
-    builder.label(pager,std::to_string(settingsPage+1)+" / 3",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(next,"Opções ›",settingsPage<3?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::End);
+    builder.label(pager,std::to_string(settingsPage+1)+" / 4",theme.color.textDim,theme.type.caption,UiAlign::Center);
     if(settingsPage) router.addRegion(previous,widgetId(EditorWidget::ImportPreviousPage));
-    if(settingsPage<2) router.addRegion(next,widgetId(EditorWidget::ImportNextPage));
+    if(settingsPage<3) router.addRegion(next,widgetId(EditorWidget::ImportNextPage));
     takeTop(content,4);
     const auto alpha=state.textureImportSourceHasAlpha?"alfa":"opaca";
     builder.label(takeTop(content,22),std::to_string(state.textureImportSourceWidth)+"×"+
@@ -2564,7 +2575,8 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // Oito linhas de controle, paginadas como as outras abas: numa tela baixa
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
-    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Normals,Weighting,Smoothing,Tangents,Cameras,Lights,ProfileRowCount};
+    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Streaming,StreamingPriority,Normals,Weighting,Smoothing,
+                             Tangents,Cameras,Lights,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
@@ -2620,6 +2632,12 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
         cycle(row,"Compressão das texturas",text.c_str(),EditorWidget::ImportTextureCompressionCycle);
         break;
       }
+      // Stream Mipmap Levels e Priority do Texture Importer (S2), para todas as
+      // texturas da fonte. Valem ao publicar; não repreparam nada.
+      case Streaming:cycle(row,"Streaming de mips",state.importTextureStreaming?"Sim":"Não",
+                           EditorWidget::ImportTextureStreamingToggle);break;
+      case StreamingPriority:cycle(row,"Prioridade de streaming",std::to_string(state.importTextureStreamingPriority).c_str(),
+                                   EditorWidget::ImportTextureStreamingPriorityCycle);break;
       // Geometria derivada (G2). Os rótulos seguem o Model Import Settings da
       // Unity — Normals / Normals Mode / Tangents — porque é o vocabulário que o
       // autor já traz de fora.
@@ -3456,7 +3474,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?7u:6u;
+  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?8u:6u;
   const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
   const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
   const u32 page=std::min(state.qualityPage,pageCount-1u);
@@ -3589,6 +3607,9 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Trocas",!streaming.active?std::string("—"):std::to_string(streaming.streamingTextures)+" texturas · "+
         std::to_string(streaming.pendingLoads)+" pendentes · "+std::to_string(streaming.budgetReducedTextures)+" reduzidas pelo orçamento",
         EditorWidget::QualityTextureStreaming,false);
+    row("Vista de depuração",state.qualityTextureStreamingDebug
+        ?std::string("Verde no nível · vermelho abaixo · azul acima · cinza fora"):std::string("Desligada"),
+        EditorWidget::QualityStreamingDebugView);
   } else {
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
     stepper("Escala dinâmica mínima",percent(draft.dynamicResolutionMinimumScale,0.0f),EditorWidget::QualityDynamicMinimumDown,EditorWidget::QualityDynamicMinimumUp);

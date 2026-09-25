@@ -57,6 +57,22 @@ AE_TEST(import_profile_before_schema_5_keeps_every_normal_smooth) {
   AE_EXPECT_EQ(applyImportProfile({}, sharp).smoothingAngle, 30.0f, "e chega ao importador");
 }
 
+AE_TEST(import_profile_schema_10_streaming_round_trips_without_repreparing) {
+  ImportProfile profile;
+  profile.textureStreaming = false;
+  profile.textureStreamingPriority = -3;
+  ImportProfile read;
+  AE_EXPECT_TRUE(parseImportProfile(serializeImportProfile(profile), read) && !read.textureStreaming &&
+                 read.textureStreamingPriority == -3, "streaming da fonte volta");
+  AE_EXPECT_TRUE(sameImportPreparation(profile, ImportProfile{}) && !sameImportProfile(profile, ImportProfile{}),
+                 "streaming não pede nova preparação, mas é outro perfil");
+  AE_EXPECT_TRUE(parseImportProfile(R"({"schema":9,"scale":1,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"smoothingAngle":60,"tangents":0,"importCameras":false,"importLights":false,"textureCompression":0,"excludedNodes":[],"collisionMeshes":[]})", read) &&
+                 read.textureStreaming && read.textureStreamingPriority == 0, "schema 9 entra no streaming");
+  auto text = serializeImportProfile(profile);
+  text.replace(text.find("\"textureStreamingPriority\":-3"), 29, "\"textureStreamingPriority\":999");
+  AE_EXPECT_TRUE(!parseImportProfile(text, read), "prioridade fora da faixa recusa o arquivo");
+}
+
 AE_TEST(import_profile_refuses_a_future_schema_and_a_truncated_current_one) {
   ImportProfile parsed;
   AE_EXPECT_TRUE(!parseImportProfile(R"({"schema":99,"scale":1,"maximumTextureDimension":512})", parsed),

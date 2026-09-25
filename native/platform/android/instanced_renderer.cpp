@@ -4647,6 +4647,11 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
     if(source) {entry.width=source->width;entry.height=source->height;entry.levels=source->levels;entry.format=source->format;}
     // Cadeia gerada na publicação (perfil sem mip) tem um nível só na GPU.
     entry.streamable=!residency[t].generated && entry.levels>1;
+    if(streamingParameters_.size()==count) {
+      entry.streamable=entry.streamable && streamingParameters_[t].streamable;
+      entry.priority=streamingParameters_[t].priority;
+      entry.requestedMip=streamingParameters_[t].requestedMip;
+    }
     if(residency[t].generated) entry.levels=1;
     streamingLoaded_[t]=residency[t].generated?0u:residency[t].baseMip;
   }
@@ -4719,6 +4724,21 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
   stats.uploadsLastFrame=applied;stats.uploadedBytesLastFrame=uploaded;stats.failedUploads=failures+static_cast<u32>(failed);
   stats.currentBytes=0;
   for(usize t=0;t<count;++t) stats.currentBytes+=renderer::textureStreamingChainBytes(streamingTextures_[t],streamingLoaded_[t]);
+}
+
+bool InstancedRenderer::textureStreamingDebugTint(u32 texture,float tint[3]) const {
+  const u32 package=dirtRoadResources_.packageTextureCount();
+  // Cinza: sem textura de autoria ou fora do streaming (como a Unity mostra
+  // texturas que não fazem streaming).
+  const auto set=[tint](float r,float g,float b) {tint[0]=r;tint[1]=g;tint[2]=b;return true;};
+  if(texture==renderer::InvalidMapTexture || texture<package) return set(.55f,.55f,.55f);
+  const u32 index=texture-package;
+  if(index>=streamingLoaded_.size() || index>=streamingPlan_.calculatedMip.size() || index>=streamingTextures_.size() ||
+     !streamingTextures_[index].streamable) return set(.55f,.55f,.55f);
+  const u32 loaded=streamingLoaded_[index],desired=streamingPlan_.calculatedMip[index];
+  if(loaded>desired) return set(1.0f,.25f,.25f);  // menos detalhe do que a tela pede (orçamento ou pendente)
+  if(loaded<desired) return set(.35f,.55f,1.0f);  // mais detalhe do que o necessário
+  return set(.35f,1.0f,.35f);                      // no nível pedido
 }
 
 void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
@@ -5803,6 +5823,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       std::memcpy(push.baseColorFactor, material.baseColorFactor, sizeof(push.baseColorFactor));
       std::memcpy(push.emissiveFactorAndStrength, material.emissiveFactorAndStrength,
                   sizeof(push.emissiveFactorAndStrength));
+      if(textureStreamingDebugView_) {
+        float tint[3];
+        if(textureStreamingDebugTint(material.textureIndices[0],tint))
+          for(u32 channel=0;channel<3;++channel) push.baseColorFactor[channel]*=tint[channel];
+      }
       if((material.flags & renderer::WaterAuthoringResource) && (material.flags & renderer::MapMaterialWater) && drawIndex<authoredWaterLayers_.size()) {
         std::copy(authoredWaterLayers_[drawIndex].begin(),authoredWaterLayers_[drawIndex].end(),push.emissiveFactorAndStrength);
         std::copy(authoredWaterFlowDepth_[drawIndex].begin(),authoredWaterFlowDepth_[drawIndex].end(),push.baseColorFactor);

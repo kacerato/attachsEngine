@@ -637,6 +637,8 @@ public:
     draft.smoothingAngle=state_.importSmoothingAngle;draft.tangents=state_.importTangents;
     draft.importCameras=state_.importCameras;draft.importLights=state_.importLights;
     draft.textureCompression=state_.importTextureCompression;
+    draft.textureStreaming=state_.importTextureStreaming;
+    draft.textureStreamingPriority=state_.importTextureStreamingPriority;
     draft.excludedNodes=state_.importExcludedNodes;
     return draft;
   }
@@ -1057,6 +1059,20 @@ public:
     state_.qualityTemporalAaExecuted=nativeTaa;
     playScene_.setScriptRenderingExecution(executed,status);
   }
+  // S2: Stream Mipmap Levels e Priority de cada textura publicada, na ordem que
+  // o consumidor gráfico recebeu. A revisão sobe a cada publicação: o shell
+  // repassa ao renderer só quando ela muda.
+  std::span<const renderer::TextureStreamingParameters> textureStreamingParameters() const {
+    return textureStreamingParameters_;
+  }
+  u64 textureStreamingRevision() const {return textureStreamingRevision_;}
+  // Níveis que o renderer relata por textura publicada: pedido pela tela e carregado.
+  void setTextureStreamingLevels(std::span<const u32> desired,std::span<const u32> loaded);
+  struct TextureStreamingLevels {bool known=false;u32 loaded=0,desired=0,loadedWidth=0;};
+  TextureStreamingLevels textureStreamingLevelsOf(const resources::AssetGuid &texture) const;
+  // Prioridade no toque: 0, 1, 2, 3, -3, -2, -1 e volta; valor de script fora
+  // dessa faixa volta a 0. A faixa gravada é a da Unity (-128..127).
+  static i32 nextStreamingPriority(i32 value) {return value>=3?-3:value< -3?0:value+1;}
   // S2: relatório do streaming de mipmaps do renderer, a cada quadro.
   void setTextureStreamingStatus(const renderer::TextureStreamingStats &stats) {
     state_.qualityTextureStreaming=stats;
@@ -1173,6 +1189,8 @@ private:
     std::vector<std::string> names;
     // Texturas de todas as fontes, com os índices dos materiais já deslocados.
     std::vector<renderer::SharedAuthoringTexture> textures;
+    // Fonte de cada textura acima: o perfil dela decide o streaming (S2).
+    std::vector<resources::AssetGuid> textureSources;
     // Pivô por desenho, em espaço do mesh. Geometria importada gira em torno da
     // origem do NÓ; ver `EditorMapScene::adoptPackage`.
     std::vector<float> pivots;
@@ -1262,6 +1280,9 @@ private:
   std::vector<UsedTexture> runtimeTextures_;
   std::vector<std::pair<resources::AssetGuid,resources::TextureProfile>> textureProfiles_;
   std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedTextures_;
+  std::vector<renderer::TextureStreamingParameters> textureStreamingParameters_;
+  u64 textureStreamingRevision_=0;
+  std::vector<u32> textureStreamingDesired_,textureStreamingLoaded_;
   // Seleção da cena quando a textura/gerenciador abriu: mudar a seleção devolve
   // Propriedades ao objeto.
   EditorEntityId texturePanelSelection_=kInvalidEntity;

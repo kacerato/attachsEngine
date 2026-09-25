@@ -8,6 +8,27 @@
 using namespace ae;
 using namespace ae::resources;
 
+AE_TEST(s2_texture_profile_streaming_round_trips_migrates_and_does_not_reprepare) {
+  TextureProfile profile;
+  profile.streamingMipmaps = false;
+  profile.streamingPriority = -5;
+  TextureProfile back;
+  AE_EXPECT_TRUE(parseTextureProfile(serializeTextureProfile(profile), back) && !back.streamingMipmaps &&
+                 back.streamingPriority == -5, "streaming desligado e prioridade negativa voltam");
+  // Um perfil gravado antes do schema 4 entra no streaming com prioridade 0.
+  AE_EXPECT_TRUE(parseTextureProfile("{\"schema\":3,\"interpretation\":0,\"maximumDimension\":0,\"mipmaps\":1,"
+                                     "\"dilateEdges\":0,\"anisotropy\":1,\"invertNormalGreen\":0,"
+                                     "\"preserveAlphaCoverage\":0,\"alphaCoverageCutoff\":500}", back) &&
+                 back.streamingMipmaps && back.streamingPriority == 0, "schema 3 migra para o padrão");
+  auto text = serializeTextureProfile(profile);
+  text.replace(text.find("-5"), 2, "200");
+  AE_EXPECT_TRUE(!parseTextureProfile(text, back), "prioridade fora de -128..127 recusada");
+  TextureProfile other = profile;
+  other.streamingPriority = 9;
+  AE_EXPECT_TRUE(sameTexturePreparation(profile, other) && !sameTextureProfile(profile, other),
+                 "prioridade muda o perfil, não a preparação");
+}
+
 AE_TEST(r4_texture_profile_round_trips_fails_closed_and_dilates_edges) {
   TextureProfile profile;
   profile.interpretation = TextureInterpretationData;

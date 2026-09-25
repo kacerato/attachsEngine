@@ -25,7 +25,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 9; // 9: compressão das texturas no aparelho (S1)
+inline constexpr u32 ImportProfileSchema = 10; // 10: streaming de mips das texturas (S2)
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -58,6 +58,11 @@ struct ImportProfile {
   // importação (ASTC 6x6, o padrão da Unity no Android) em `EditorSession`.
   // Aparelho sem ASTC recebe RGBA8 pelos limites, sem mudar a escolha salva.
   u8 textureCompression = 0;
+  // "Stream Mipmap Levels" e "Priority" (S2) para as texturas desta fonte. Não
+  // mudam a saída do importador: ficam fora dos limites, da chave do cache e de
+  // `sameImportPreparation`, e valem na publicação.
+  bool textureStreaming = true;
+  i32 textureStreamingPriority = 0;
   // Nós da fonte que NÃO vêm para a cena, por identidade do mapa de nós. A
   // exclusão vale para a subárvore. Identidade, e não nome nem caminho: o nó
   // renomeado no editor 3D continua excluído, porque o mapa o reconhece como o

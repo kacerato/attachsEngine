@@ -408,6 +408,14 @@ public:
   // Por textura de autoria, na ordem da publicação: mip pela tela e carregado.
   std::span<const u32> textureStreamingDesiredMips() const noexcept { return streamingPlan_.calculatedMip; }
   std::span<const u32> textureStreamingLoadedMips() const noexcept { return streamingLoaded_; }
+  // Escolhas autorais por textura de autoria (perfil da fonte ou da textura),
+  // na ordem da publicação. Tamanho diferente do publicado é ignorado.
+  void setTextureStreamingParameters(std::span<const renderer::TextureStreamingParameters> parameters) {
+    streamingParameters_.assign(parameters.begin(), parameters.end());
+  }
+  // Vista de depuração do streaming (a de Mipmap Streaming da Unity): tinge a
+  // cor base de cada desenho pelo estado da textura de cor dele.
+  void setTextureStreamingDebugView(bool enabled) { textureStreamingDebugView_ = enabled; }
   // Scene/transform systems call this when any static caster, material alpha or
   // sun configuration changes. A câmera não precisa invalidar manualmente: o
   // renderer testa contenção de cada cascata antes de reutilizá-la.
@@ -1136,6 +1144,10 @@ private:
   std::vector<renderer::TextureStreamingTexture> streamingTextures_;
   std::vector<renderer::TextureStreamingUse> streamingUses_;
   std::vector<u32> streamingLoaded_;
+  std::vector<renderer::TextureStreamingParameters> streamingParameters_;
+  bool textureStreamingDebugView_ = false;
+  // Tinta da vista de depuração para a textura de autoria `authoring`, ou nada.
+  bool textureStreamingDebugTint(u32 texture, float tint[3]) const;
   // Métrica de UV por desenho da biblioteca (`sourceMapDraws_`), medida uma vez
   // por publicação e só dos desenhos que usam textura de autoria. Negativo = a medir.
   std::vector<float> sourceDrawUvMetric_;

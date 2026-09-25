@@ -235,6 +235,7 @@ enum class EditorWidget : u32 {
   // S2: aba Texturas do painel Qualidade (Mipmap Streaming da Unity).
   QualityTabTextures, QualityTextureStreaming, QualityStreamingBudgetDown, QualityStreamingBudgetUp,
   QualityStreamingReductionDown, QualityStreamingReductionUp, QualityStreamingUploadDown, QualityStreamingUploadUp,
+  QualityStreamingDebugView,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   EnvironmentPanoramaDown, EnvironmentPanoramaUp,
   EnvironmentSpecularDown, EnvironmentSpecularUp,
@@ -248,6 +249,8 @@ enum class EditorWidget : u32 {
   // G2: geometria derivada no perfil — normais, ponderação e tangentes.
   ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle, ImportCamerasToggle, ImportLightsToggle,
   ImportTextureCompressionCycle,
+  // S2: Stream Mipmap Levels e Priority das texturas da fonte.
+  ImportTextureStreamingToggle, ImportTextureStreamingPriorityCycle,
   ImportSmoothingDown, ImportSmoothingUp,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
@@ -258,7 +261,9 @@ enum class EditorWidget : u32 {
   TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
   TextureViewerZoom, TextureViewerBackground,
   TextureProfileInterpretation, TextureProfileDimension, TextureProfileMipmaps, TextureProfileEdges, TextureProfileAnisotropy,
-  TextureProfileNormalGreen, TextureProfileCoverage, TextureProfileCoverageCutoff, TextureProfileApply, TextureProfileRevert,
+  TextureProfileNormalGreen, TextureProfileCoverage, TextureProfileCoverageCutoff,
+  // S2: Stream Mipmap Levels e Priority, na mesma sequência (índice + página).
+  TextureProfileStreaming, TextureProfileStreamingPriority, TextureProfileApply, TextureProfileRevert,
   TextureProfilePrevious, TextureProfileNext,
   TextureManagerClose, TextureSearch, TextureManagerPrevious, TextureManagerNext,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
@@ -513,6 +518,8 @@ struct EditorScreenState final {
   bool qualityTemporalAaExecuted=false;
   // S2: o que o streaming de mipmaps fez no último quadro do aparelho.
   renderer::TextureStreamingStats qualityTextureStreaming{};
+  // Vista de depuração do streaming na Scene View; ferramenta, fora do Undo.
+  bool qualityTextureStreamingDebug=false;
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;
@@ -671,6 +678,9 @@ struct EditorScreenState final {
   // S1: compressão das texturas no aparelho (0 RGBA8, 4/6/8 ASTC NxN) e se o
   // aparelho amostra ASTC — sem isso a escolha fica salva e o painel diz que não vale aqui.
   u8 importTextureCompression=0,importPreparedTextureCompression=0;
+  // S2: streaming das texturas desta fonte; não pede nova preparação.
+  bool importTextureStreaming=true;
+  i32 importTextureStreamingPriority=0;
   bool importAstcSupported=false;
   // Nós que o autor tirou da importação. Não pede nova preparação: a saída do
   // importador é a mesma; muda o que a reconciliação instancia.
@@ -737,7 +747,9 @@ struct EditorScreenState final {
   std::string textureViewerTitle,textureViewerLevelLabel,textureViewerChannelLabel,textureViewerInfo;
   std::string textureViewerZoomLabel,textureViewerBackgroundLabel;
   // R4: perfil da textura (interpretação, tamanho, mips, bordas, anisotropia) e residência.
-  std::string textureProfileLabels[8],textureResidencyLabel;
+  // Três páginas de quatro: as duas últimas da terceira são leitura do
+  // streaming (mip carregado e o que a tela pede), sem toque.
+  std::string textureProfileLabels[12],textureResidencyLabel;
   resources::TextureProfile textureProfileDraft{},textureProfileSaved{};
   bool textureProfileDirty=false;
   u32 textureProfilePage=0;

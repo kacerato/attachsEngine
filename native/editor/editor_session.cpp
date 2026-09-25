@@ -1269,9 +1269,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(state_.importTexture) {
       if(is(EditorWidget::ImportCancel)) {state_.importCancel=true;closeImportPreview();}
       else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
-      else if(is(EditorWidget::ImportNextPage)) state_.importPage=std::min(2u,state_.importPage+1);
+      else if(is(EditorWidget::ImportNextPage)) state_.importPage=std::min(3u,state_.importPage+1);
       else if(is(EditorWidget::ImportAccept) && state_.importReady &&
-              resources::sameTextureProfile(state_.textureImportSettings,state_.textureImportPreparedSettings)) {
+              resources::sameTexturePreparation(state_.textureImportSettings,state_.textureImportPreparedSettings)) {
         state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando textura…";
       } else {
         auto &profile=state_.textureImportSettings;
@@ -1289,6 +1289,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         else if(is(EditorWidget::TextureProfileCoverageCutoff)) {
           profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
           if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
+        }
+        // Streaming não muda os bytes preparados: vale na publicação, sem repreparar.
+        else if(is(EditorWidget::TextureProfileStreaming)) {profile.streamingMipmaps=!profile.streamingMipmaps;changed=false;}
+        else if(is(EditorWidget::TextureProfileStreamingPriority)) {
+          profile.streamingPriority=nextStreamingPriority(profile.streamingPriority);changed=false;
         }
         else changed=false;
         if(changed) {
@@ -1376,6 +1381,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const u8 value=state_.importTextureCompression;
       state_.importTextureCompression=value==6?4:value==4?8:value==8?0:6;
     }
+    else if(is(EditorWidget::ImportTextureStreamingToggle)) state_.importTextureStreaming=!state_.importTextureStreaming;
+    else if(is(EditorWidget::ImportTextureStreamingPriorityCycle))
+      state_.importTextureStreamingPriority=nextStreamingPriority(state_.importTextureStreamingPriority);
     // Passos de 15°: o controle deslizante da Unity em toque, sem arrasto fino.
     else if(is(EditorWidget::ImportSmoothingDown)) state_.importSmoothingAngle=state_.importSmoothingAngle>=15?state_.importSmoothingAngle-15:0;
     else if(is(EditorWidget::ImportSmoothingUp)) state_.importSmoothingAngle=std::min(180u,state_.importSmoothingAngle+15);
@@ -1934,11 +1942,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::TextureProfileNext)) {
-      state_.textureProfilePage=std::min(1u,state_.textureProfilePage+1);
+      state_.textureProfilePage=std::min(2u,state_.textureProfilePage+1);
       return true;
     }
     // R4: perfil da textura aberta no visualizador.
-    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileCoverageCutoff) &&
+    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileStreamingPriority) &&
        state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
       auto &profile=state_.textureProfileDraft;
       if(key==widgetId(EditorWidget::TextureProfileInterpretation)) profile.interpretation=static_cast<u8>((profile.interpretation+1u)%4u);
@@ -1952,6 +1960,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       else if(key==widgetId(EditorWidget::TextureProfileAnisotropy)) profile.anisotropy=!profile.anisotropy;
       else if(key==widgetId(EditorWidget::TextureProfileNormalGreen)) profile.invertNormalGreen=!profile.invertNormalGreen;
       else if(key==widgetId(EditorWidget::TextureProfileCoverage)) profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;
+      else if(key==widgetId(EditorWidget::TextureProfileStreaming)) profile.streamingMipmaps=!profile.streamingMipmaps;
+      else if(key==widgetId(EditorWidget::TextureProfileStreamingPriority))
+        profile.streamingPriority=nextStreamingPriority(profile.streamingPriority);
       else {
         profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
         if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
@@ -2579,6 +2590,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::QualityTabLighting)) {state_.qualityTab=2;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabPerformance)) {state_.qualityTab=3;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabTextures)) {state_.qualityTab=4;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualityStreamingDebugView)) {
+      state_.qualityTextureStreamingDebug=!state_.qualityTextureStreamingDebug;return true;
+    }
     else if(is(EditorWidget::QualityPagePrevious)) {if(state_.qualityPage) --state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityPageNext)) {++state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityTemporalDebug)) {
@@ -3146,6 +3160,7 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
       library.materials.push_back(material);
     }
     library.textures.insert(library.textures.end(),source.textures.begin(),source.textures.end());
+    library.textureSources.insert(library.textureSources.end(),source.textures.size(),source.guid);
     for(const auto &draw:source.draws) {
       auto moved=draw;
       moved.firstIndex+=indexBase;moved.vertexOffset+=vertexBase;moved.materialIndex+=materialBase;
@@ -3246,9 +3261,30 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
       const auto &texture=*textures[binding.index];
       publishedResidency.push_back({binding,{texture.width,texture.height,texture.levels,texture.expectedBytes(),texture.srgb,texture.samplerFlags}});
     }
+  // S2: o que cada textura publicada pede ao streaming, pela mesma origem que
+  // decidiu os bytes: o perfil de importação da fonte ou o perfil da textura.
+  std::vector<renderer::TextureStreamingParameters> streaming(textures.size());
+  {
+    resources::AssetGuid lastSource{};resources::ImportProfile sourceProfile{};bool haveSource=false;
+    for(usize i=0;i<library.textureSources.size() && i<streaming.size();++i) {
+      if(!haveSource || !(library.textureSources[i]==lastSource)) {
+        lastSource=library.textureSources[i];sourceProfile=importProfileFor(lastSource);haveSource=true;
+      }
+      streaming[i].streamable=sourceProfile.textureStreaming;streaming[i].priority=sourceProfile.textureStreamingPriority;
+    }
+    for(const auto &binding:bindings)
+      if(binding.index<streaming.size()) {
+        const auto profile=textureProfileFor(binding.guid);
+        streaming[binding.index].streamable=profile.streamingMipmaps;streaming[binding.index].priority=profile.streamingPriority;
+      }
+  }
   skinningPublication_={library.skinInfluences,library.drawJoints,library.morphDeltas,library.drawMorphOffsets,
                         library.drawMorphTargets};
   const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published);
+  if(accepted) {
+    textureStreamingParameters_=std::move(streaming);++textureStreamingRevision_;
+    textureStreamingDesired_.clear();textureStreamingLoaded_.clear();
+  }
   skinningPublication_={};
   if(!accepted) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
@@ -3416,6 +3452,17 @@ bool EditorSession::refreshTextureViewerImage() {
     state_.textureProfileLabels[5]=profile.invertNormalGreen?"Normal Y: inverter (DX)":"Normal Y: manter (GL)";
     state_.textureProfileLabels[6]=profile.preserveAlphaCoverage?"Cobertura alfa: preservar":"Cobertura alfa: desligada";
     state_.textureProfileLabels[7]="Corte da cobertura: "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%";
+    state_.textureProfileLabels[8]=profile.streamingMipmaps?"Streaming de mips: sim":"Streaming de mips: não";
+    state_.textureProfileLabels[9]="Prioridade: "+std::to_string(profile.streamingPriority);
+    // O que o renderer do aparelho tem desta textura agora (S2); no host, sem GPU, diz isso.
+    const auto streaming=textureStreamingLevelsOf(texture.guid);
+    if(!streaming.known) {
+      state_.textureProfileLabels[10]="Carregado: sem renderer";
+      state_.textureProfileLabels[11]="Tela pede: —";
+    } else {
+      state_.textureProfileLabels[10]="Carregado: mip "+std::to_string(streaming.loaded)+" · "+std::to_string(streaming.loadedWidth)+" px";
+      state_.textureProfileLabels[11]="Tela pede: mip "+std::to_string(streaming.desired);
+    }
     const auto residency=textureResidencyOf(texture.guid);
     if(residency.empty()) state_.textureResidencyLabel="Na GPU: não usada";
     else {
@@ -5270,6 +5317,35 @@ void EditorSession::refreshTexturePanels() {
   }
 }
 
+void EditorSession::setTextureStreamingLevels(std::span<const u32> desired,std::span<const u32> loaded) {
+  if(std::equal(desired.begin(),desired.end(),textureStreamingDesired_.begin(),textureStreamingDesired_.end()) &&
+     std::equal(loaded.begin(),loaded.end(),textureStreamingLoaded_.begin(),textureStreamingLoaded_.end())) return;
+  textureStreamingDesired_.assign(desired.begin(),desired.end());
+  textureStreamingLoaded_.assign(loaded.begin(),loaded.end());
+  // Só as duas linhas de leitura mudam; o resto do visualizador fica como está.
+  if(state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
+    const auto levels=textureStreamingLevelsOf(textures_[state_.textureViewerIndex].guid);
+    if(levels.known) {
+      state_.textureProfileLabels[10]="Carregado: mip "+std::to_string(levels.loaded)+" · "+std::to_string(levels.loadedWidth)+" px";
+      state_.textureProfileLabels[11]="Tela pede: mip "+std::to_string(levels.desired);
+    }
+  }
+}
+
+EditorSession::TextureStreamingLevels EditorSession::textureStreamingLevelsOf(const resources::AssetGuid &texture) const {
+  TextureStreamingLevels levels;
+  for(const auto &[binding,residency]:publishedTextures_) {
+    if(!(binding.guid==texture) || binding.index>=textureStreamingLoaded_.size() ||
+       binding.index>=textureStreamingDesired_.size()) continue;
+    levels.known=true;
+    levels.loaded=textureStreamingLoaded_[binding.index];
+    levels.desired=textureStreamingDesired_[binding.index];
+    levels.loadedWidth=std::max(1u,residency.width>>std::min(levels.loaded,31u));
+    break;
+  }
+  return levels;
+}
+
 resources::TextureProfile EditorSession::textureProfileFor(const resources::AssetGuid &texture) const {
   for(const auto &[guid,profile]:textureProfiles_) if(guid==texture) return profile;
   return {};
@@ -6287,6 +6363,8 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importCameras=state_.importPreparedCameras=profile.importCameras;
   state_.importLights=state_.importPreparedLights=profile.importLights;
   state_.importTextureCompression=state_.importPreparedTextureCompression=profile.textureCompression;
+  state_.importTextureStreaming=profile.textureStreaming;
+  state_.importTextureStreamingPriority=profile.textureStreamingPriority;
   state_.importAstcSupported=importLimits_.astc4x4;
   state_.importExcludedNodes=profile.excludedNodes;state_.importImpact.clear();
   // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
