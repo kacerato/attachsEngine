@@ -78,7 +78,7 @@ enum class EditorWidget : u32 {
   TabAssets,
   TabLighting,
   TabPlay,
-  TabSettings,
+  TabProject,
 
   HierarchyAdd,
   HierarchyMenu,
@@ -375,21 +375,16 @@ enum class EditorWidget : u32 {
   // + índice da receita em editorCreationCatalog: cria aquela composição.
   // Faixa fixa para que acrescentar receitas não renumere controles existentes.
   CreationRecipeBase=0x0800'0000u,
-  TabTimers=0x0810'0000u,
-  TimerHorizon,
-  TimerPrevious,
-  TimerNext,
-  TimerRowBase=0x0811'0000u,
-  TabPhysics=0x0820'0000u,
-  PhysicsLayerPrevious,
+  // + EditorProjectSection: seção da workspace Projeto.
+  ProjectSectionBase=0x0810'0000u,
+  PhysicsLayerPrevious=0x0820'0000u,
   PhysicsLayerNext,
   PhysicsLayerAdd,
   PhysicsLayerRename,
   PhysicsMatrixPrevious,
   PhysicsMatrixNext,
   PhysicsInteractionBase=0x0821'0000u,
-  TabInput=0x0830'0000u,
-  InputActionPrevious,InputActionNext,InputActionAdd,InputActionRename,InputActionRemove,
+  InputActionPrevious=0x0830'0000u,InputActionNext,InputActionAdd,InputActionRename,InputActionRemove,
   InputTabAction,InputTabBinding,InputActionKind,InputActionContext,
   InputRoleMove,InputRoleLook,InputRoleJump,InputDeadzone,InputSensitivity,
   InputBindingPrevious,InputBindingNext,InputBindingAdd,InputBindingRemove,
@@ -474,7 +469,11 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 
 // O que o viewport está mostrando. É a aba do topo, e trocá-la troca o contexto
 // inteiro — não é um botão que dispara algo.
-enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Settings, Code, Timers, Physics, Input };
+// Seis contextos fixos. Configuração de projeto (camadas, entrada, água) é UMA
+// workspace com seções; um tipo de componente ou uma lista de ajustes nunca
+// vira workspace própria — ver docs/planos/EXPANSAO-OBJETOS-COMPONENTES-API.
+enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code };
+enum class EditorProjectSection : u8 { Layers, Input, Water };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
 
@@ -531,7 +530,7 @@ struct EditorScreenState final {
   u32 pressedWidget = 0;
   EditorGizmoMode tool = EditorGizmoMode::Translate;
   EditorWorkspace workspace = EditorWorkspace::Scene;
-  u32 timerPage=0,timerHorizon=1;
+  EditorProjectSection projectSection=EditorProjectSection::Layers;
   u32 physicsLayer=0,physicsMatrixPage=0;
   bool editingPhysicsLayerName=false;
   u32 inputActionIndex=0,inputBindingIndex=0,inputTab=0,inputEditField=0;

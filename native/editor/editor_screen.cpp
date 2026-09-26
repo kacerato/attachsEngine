@@ -271,11 +271,8 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
     takeLeft(content,theme.spacing.small);
   }
   const char *context=builder.state.workspace==EditorWorkspace::Play ? (builder.state.playPaused?"Pausado":"Em execução") :
-      builder.state.workspace==EditorWorkspace::Timers ? "Timers da cena" :
-      builder.state.workspace==EditorWorkspace::Physics ? "Camadas físicas" :
-      builder.state.workspace==EditorWorkspace::Input ? "Mapa de entrada" :
       builder.state.workspace==EditorWorkspace::Lighting ? "Ambiente da cena" :
-      builder.state.workspace==EditorWorkspace::Settings ? "Água da cena" :
+      builder.state.workspace==EditorWorkspace::Project ? "Configurações do projeto" :
       builder.state.workspace==EditorWorkspace::Assets ? "Recursos importados" : "Edição";
   if(content.width>80) builder.label(content,context,theme.color.textDim,theme.type.caption);
 
@@ -3839,11 +3836,6 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     buildObjectActions(builder,content,*entity);
     return;
   }
-  if(builder.state.workspace==EditorWorkspace::Settings) {
-    builder.label(takeTop(content,38),"Água",theme.color.text,theme.type.body);
-    buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Water);
-    return;
-  }
   if(builder.state.workspace==EditorWorkspace::Lighting) {
     builder.label(takeTop(content,38),"Ambiente",theme.color.text,theme.type.body);
     buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Environment);
@@ -4951,82 +4943,6 @@ void buildDiagnosticDetail(ScreenBuilder &builder) {
   list.popClip();
 }
 
-struct TimerTimelineEntry {EditorEntityId object;u64 instance;std::string name;float interval;bool repeat,enabled;};
-std::vector<TimerTimelineEntry> collectTimerTimeline(const EditorDocument &document) {
-  std::vector<EditorEntityId> objects;document.collectSubtree(document.root(),objects);
-  std::vector<TimerTimelineEntry> entries;
-  for(const auto id:objects) {
-    const auto *object=document.find(id);if(!object) continue;
-    for(usize i=0;i<object->components.size();++i) {
-      const auto *value=object->components.at(i);
-      if(&value->type()!=&scene::Timer::descriptor) continue;
-      const auto &timer=static_cast<const scene::Timer &>(*value);
-      entries.push_back({id,timer.instanceId(),object->name,timer.intervalSeconds,timer.repeat,timer.enabled});
-    }
-  }
-  return entries;
-}
-u32 timerTimelinePageSize(float height) {
-  return std::max(1u,static_cast<u32>(std::max(0.0f,height-190.0f)/54.0f));
-}
-void buildTimerTimeline(ScreenBuilder &builder,UiRect area) {
-  const auto &state=builder.state;const auto &theme=builder.theme;
-  auto &list=builder.list;auto &router=builder.router;
-  list.addRect(area,theme.color.surface);
-  auto content=deflate(area,UiInsets::all(12));
-  auto header=takeTop(content,48),horizon=takeRight(header,104);
-  builder.label(header,"Agenda de timers",theme.color.text,theme.type.cardName);
-  constexpr float horizons[]{2.0f,10.0f,60.0f};
-  const float seconds=horizons[state.timerHorizon%3];
-  list.addRect(horizon,theme.color.raised,theme.radius.control);
-  builder.label(horizon,(std::to_string(static_cast<u32>(seconds))+" s  ›").c_str(),theme.color.accent,theme.type.caption,UiAlign::Center);
-  router.addRegion(horizon,widgetId(EditorWidget::TimerHorizon));
-  auto ruler=takeTop(content,42);const float labelWidth=std::min(150.0f,ruler.width*.38f);
-  builder.label(takeLeft(ruler,labelWidth),"OBJETO / COMPONENTE",theme.color.textDim,theme.type.caption);
-  list.addRect({ruler.x,ruler.bottom()-2,ruler.width,1},theme.color.line);
-  for(u32 i=0;i<=4;++i) {
-    const float x=ruler.x+ruler.width*float(i)/4.0f;
-    const std::string label=std::to_string(static_cast<u32>(seconds*float(i)/4.0f))+"s";
-    builder.label({x-12,ruler.y,34,24},label.c_str(),theme.color.textMuted,theme.type.caption);
-  }
-  const auto entries=collectTimerTimeline(*state.document);
-  const u32 perPage=timerTimelinePageSize(state.surface.height);
-  const u32 pages=std::max(1u,(static_cast<u32>(entries.size())+perPage-1)/perPage);
-  const u32 page=std::min(state.timerPage,pages-1);
-  if(entries.empty()) {
-    builder.label(content,"Nenhum Timer na cena. Crie em Hierarquia + ou adicione ao objeto no Inspector.",theme.color.textDim,theme.type.body);
-  }
-  for(u32 i=page*perPage;i<std::min(static_cast<u32>(entries.size()),(page+1)*perPage);++i) {
-    auto row=takeTop(content,54);if(row.height<50) break;
-    const auto &timer=entries[i];const bool selected=state.selection==timer.object&&state.expandedNative==timer.instance;
-    list.addRect(row,selected?theme.color.raised:theme.color.silhouette,2);
-    if(selected) list.addRect({row.x,row.y,3,row.height},theme.color.accent);
-    auto label=takeLeft(row,labelWidth);
-    builder.label(takeTop(label,26),timer.name.c_str(),timer.enabled?theme.color.text:theme.color.textMuted,theme.type.body);
-    char detail[48];std::snprintf(detail,sizeof(detail),"#%llu · %.3g s · %s",
-      static_cast<unsigned long long>(timer.instance),static_cast<double>(timer.interval),timer.repeat?"repetir":"único");
-    builder.label(label,detail,theme.color.textDim,theme.type.caption);
-    if(timer.enabled) {
-      const u32 count=timer.repeat?std::min(128u,static_cast<u32>(seconds/timer.interval)):1u;
-      const u32 stride=std::max(1u,(count+31u)/32u);
-      for(u32 n=1;n<=count;n+=stride) {
-        const float t=timer.interval*float(n);if(t>seconds) break;
-        const float x=row.x+row.width*t/seconds;
-        list.addRect({x-2,row.y+10,4,row.height-20},selected?theme.color.accent:theme.color.textDim,1);
-      }
-    }
-    router.addRegion({content.x,row.y,content.width,row.height},widgetId(EditorWidget::TimerRowBase)+i-page*perPage,theme.touch.minimumTarget);
-  }
-  if(pages>1) {
-    auto footer=takeBottom(content,36),previous=takeLeft(footer,72),next=takeRight(footer,72);
-    builder.label(previous,"< Anterior",page?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
-    builder.label(next,"Próxima >",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
-    if(page) router.addRegion(previous,widgetId(EditorWidget::TimerPrevious));
-    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::TimerNext));
-    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
-  }
-}
-
 std::vector<u32> namedPhysicsLayers(const runtime::GameplayLayers &layers) {
   std::vector<u32> ids;
   for(u32 i=0;i<runtime::GameplayLayers::kCount;++i) if(layers.named(i)) ids.push_back(i);
@@ -5360,6 +5276,57 @@ void buildInputWorkspaceFocused(ScreenBuilder &builder,UiRect area) {
   if(!action.bindings.empty()) button(removal,"Remover vínculo",EditorWidget::InputBindingRemove);
 }
 
+// Configurações do projeto: uma workspace, seções à esquerda.
+//
+// Camadas de colisão, mapa de entrada e água da cena são dados do PROJETO, não
+// de um objeto nem de um componente — como Project Settings na Unity. Antes cada
+// um tinha a própria workspace no menu Cena; agora são seções da mesma tela,
+// com resumo do que contêm, e novas configurações (tempo, áudio, idiomas)
+// entram como seção, nunca como workspace nova.
+void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  auto &list=builder.list;auto &router=builder.router;
+  list.addRect(area,theme.color.canvas);
+  auto content=deflate(area,UiInsets::all(10));
+  // Rótulos no trilho só quando sobra: no telefone cada dp vai para a seção.
+  const bool wide=content.width>=1000;
+  auto rail=takeLeft(content,wide?210.f:52.f);takeLeft(content,10);
+  struct Section {EditorProjectSection id;UiIcon icon;const char *name;std::string summary;};
+  u32 layers=0;for(u32 i=0;i<runtime::GameplayLayers::kCount;++i) layers+=state.document->layers().named(i)?1u:0u;
+  std::vector<Section> sections{
+    {EditorProjectSection::Layers,UiIcon::SceneLayers,"Camadas e colisão",std::to_string(layers)+" camada(s)"},
+    {EditorProjectSection::Input,UiIcon::InputAction,"Entrada",std::to_string(state.document->inputActions().actions().size())+" ação(ões)"}};
+  if(waterCreationAvailable(state)) sections.push_back({EditorProjectSection::Water,UiIcon::NatureWater,"Água da cena","Superfícies e ondas"});
+  if(wide) builder.label(takeTop(rail,30),"PROJETO",theme.color.textMuted,theme.type.label);
+  for(const auto &section:sections) {
+    if(rail.height<48) break;
+    const auto cell=deflate(takeTop(rail,wide?58.f:50.f),UiInsets{0,2,0,2});
+    const bool on=state.projectSection==section.id;
+    list.addRect(cell,on?theme.color.raised:theme.color.surface,theme.radius.control);
+    if(on) list.addRect({cell.x,cell.y+8,3,cell.height-16},theme.color.accent,1.5f);
+    auto text=cell;
+    auto icon=takeLeft(text,wide?44.f:text.width);
+    list.addImage(centred(icon,22,22),static_cast<UiImageId>(section.icon),on?theme.color.accent:theme.color.textDim);
+    if(wide) {
+      builder.label(takeTop(text,text.height*.52f),section.name,on?theme.color.text:theme.color.textDim,theme.type.body);
+      builder.label(text,section.summary,theme.color.textMuted,theme.type.caption);
+    }
+    router.addRegion(cell,widgetId(EditorWidget::ProjectSectionBase)+static_cast<u32>(section.id));
+  }
+  switch(state.projectSection) {
+    case EditorProjectSection::Layers: buildPhysicsLayers(builder,content);break;
+    case EditorProjectSection::Input: buildInputWorkspaceFocused(builder,content);break;
+    case EditorProjectSection::Water: {
+      list.addRect(content,theme.color.surface,theme.radius.card);
+      auto page=deflate(content,UiInsets::all(10));
+      builder.label(takeTop(page,36),"Água da cena",theme.color.text,theme.type.cardName);
+      buildPropertyPage(builder,page,*state.document->find(state.document->root()),EditorPropertyGroup::Water);
+      break;
+    }
+  }
+}
+
+
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
                                      UiDrawList &list, UiInputRouter &router) {
   EditorScreenLayout layout{};
@@ -5388,20 +5355,20 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   const bool compact = available < compactPanelWidth * 2 + kViewportMinimum + kSplitterWidth * 2;
 
   float hierarchyWidth = state.hierarchyVisible && state.workspace != EditorWorkspace::Play &&
-      state.workspace != EditorWorkspace::Input
+      state.workspace != EditorWorkspace::Project
       ? (state.hierarchyWidth > 0.0f ? state.hierarchyWidth : available * 0.24f)
       : 0.0f;
   float inspectorWidth = state.inspectorVisible && state.workspace != EditorWorkspace::Play &&
-      state.workspace != EditorWorkspace::Input
+      state.workspace != EditorWorkspace::Project
       ? (state.inspectorWidth > 0.0f ? state.inspectorWidth : available * 0.27f)
       : 0.0f;
   if (hierarchyWidth > 0.0f) hierarchyWidth = std::max(hierarchyWidth, kPanelMinimum);
   if (inspectorWidth > 0.0f) inspectorWidth = std::max(inspectorWidth, kPanelMinimum);
   if (compact) {
-    hierarchyWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Input &&
+    hierarchyWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Project &&
         (state.compactPanel == EditorScreenState::CompactPanel::Hierarchy || state.compactPanel == EditorScreenState::CompactPanel::Files)
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
-    inspectorWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Input &&
+    inspectorWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Project &&
         state.compactPanel == EditorScreenState::CompactPanel::Inspector
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
   }
@@ -5778,29 +5745,20 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     buildDiagnosticDock(builder,layout.diagnosticDock);
     buildDiagnosticDetail(builder);
   }
-  if(state.workspace==EditorWorkspace::Timers && !layout.viewport.isEmpty()) {
+  if(state.workspace==EditorWorkspace::Project && !layout.viewport.isEmpty()) {
     router.addBlocker(layout.viewport);
-    buildTimerTimeline(builder,layout.viewport);
-  }
-  if(state.workspace==EditorWorkspace::Physics && !layout.viewport.isEmpty()) {
-    router.addBlocker(layout.viewport);
-    buildPhysicsLayers(builder,layout.viewport);
-  }
-  if(state.workspace==EditorWorkspace::Input && !layout.viewport.isEmpty()) {
-    router.addBlocker(layout.viewport);
-    buildInputWorkspaceFocused(builder,layout.viewport);
+    buildProjectSettings(builder,layout.viewport);
   }
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const u32 menuRows=6+(state.assetCount?1:0)+(waterCreationAvailable(state)?1:0);
+    const u32 menuRows=4+(state.assetCount?1:0);
     const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 48.0f+44.0f*menuRows);
     list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Água da cena","Agenda de timers","Camadas físicas","Mapa de entrada","Fechar"};
-    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabSettings,EditorWidget::TabTimers,EditorWidget::TabPhysics,EditorWidget::TabInput,EditorWidget::WorkspaceMenuClose};
+    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Configurações do projeto","Fechar"};
+    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::WorkspaceMenuClose};
     builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
-    for(u32 i=0;i<8;++i) {
+    for(u32 i=0;i<std::size(actions);++i) {
       if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
-      if(actions[i]==EditorWidget::TabSettings && !waterCreationAvailable(state)) continue;
       auto row=takeTop(content,44);builder.label(row,names[i],theme.color.text,theme.type.body);router.addRegion(row,widgetId(actions[i]));
     }
   }
@@ -5971,16 +5929,11 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   // e desliza para fora desistiu dele.
   if (!routing.tapped) return outcome;
 
-  if(widget==widgetId(EditorWidget::TimerHorizon)) {state.timerHorizon=(state.timerHorizon+1)%3;return outcome;}
-  if(widget==widgetId(EditorWidget::TimerPrevious)) {if(state.timerPage) --state.timerPage;return outcome;}
-  if(widget==widgetId(EditorWidget::TimerNext)) {++state.timerPage;return outcome;}
-  if(widget>=widgetId(EditorWidget::TimerRowBase) && widget<widgetId(EditorWidget::TimerRowBase)+256) {
-    const auto entries=collectTimerTimeline(document);
-    const u32 index=state.timerPage*timerTimelinePageSize(state.surface.height)+widget-widgetId(EditorWidget::TimerRowBase);
-    if(index<entries.size()) {
-      state.selection=entries[index].object;state.expandedNative=entries[index].instance;
-      state.componentSelection=entries[index].object;state.propertyPage=0;
-    }
+  if(widget>=widgetId(EditorWidget::ProjectSectionBase) && widget<=widgetId(EditorWidget::ProjectSectionBase)+2) {
+    state.projectSection=static_cast<EditorProjectSection>(widget-widgetId(EditorWidget::ProjectSectionBase));
+    state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;state.propertyPage=0;
+    // As propriedades de água moram no objeto raiz, como antes na aba avulsa.
+    if(state.projectSection==EditorProjectSection::Water) state.selection=document.root();
     return outcome;
   }
   if(widget==widgetId(EditorWidget::PhysicsLayerPrevious) || widget==widgetId(EditorWidget::PhysicsLayerNext)) {
@@ -6404,12 +6357,12 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabScene: state.workspaceMenu=false; state.workspace = EditorWorkspace::Scene; break;
     case EditorWidget::TabAssets: if(state.assetCount) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Assets;} break;
     case EditorWidget::TabLighting: state.workspaceMenu=false; state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
-    case EditorWidget::TabTimers: state.workspaceMenu=false; state.workspace=EditorWorkspace::Timers; state.timerPage=0; break;
-    case EditorWidget::TabPhysics: state.workspaceMenu=false; state.workspace=EditorWorkspace::Physics; state.physicsMatrixPage=0; break;
-    case EditorWidget::TabInput: state.workspaceMenu=false; state.workspace=EditorWorkspace::Input;
-      state.inputActionIndex=0;state.inputBindingIndex=0;state.inputActionPage=0;state.inputBindingPage=0;
-      state.inputTab=0;break;
-    case EditorWidget::TabSettings: if(waterCreationAvailable(state)) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Settings; state.selection=document.root();state.propertyPage=0;} break;
+    case EditorWidget::TabProject:
+      state.workspaceMenu=false;state.workspace=EditorWorkspace::Project;state.propertyPage=0;
+      state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;
+      if(state.projectSection==EditorProjectSection::Water && !waterCreationAvailable(state)) state.projectSection=EditorProjectSection::Layers;
+      if(state.projectSection==EditorProjectSection::Water) state.selection=document.root();
+      break;
     case EditorWidget::InspectorTabTransform: state.tab = EditorInspectorTab::Transform; break;
     case EditorWidget::InspectorTabMaterial:
       if (const auto *selected=document.find(state.selection); selected && meshAsset(*selected)) {

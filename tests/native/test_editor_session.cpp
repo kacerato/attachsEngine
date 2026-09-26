@@ -711,7 +711,7 @@ u32 recipeWidget(std::string_view id) {
   return creationWidget(index);
 }
 void tapWidget(Fixture &fixture,u32 widget) {
-  if((widget==widgetId(EditorWidget::TabAssets) || widget==widgetId(EditorWidget::TabSettings) || widget==widgetId(EditorWidget::TabLighting)) && !fixture.session.screen().workspaceMenu)
+  if((widget==widgetId(EditorWidget::TabAssets) || widget==widgetId(EditorWidget::TabProject) || widget==widgetId(EditorWidget::TabLighting)) && !fixture.session.screen().workspaceMenu)
     tapWidget(fixture,widgetId(EditorWidget::ProjectMenu));
   if(fixture.session.screen().creationMenu) for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==creationWidget(i)) {
     tapWidget(fixture,widgetId(EditorWidget::CreationCategoryBase)+editorCreationCatalog[i].category);
@@ -762,6 +762,13 @@ void revealAddEntry(Fixture &fixture,u32 widget) {
     fixture.up(78,{row.x,row.y-60.0f});fixture.session.update();
     if(fixture.session.screen().addScroll==before) return;
   }
+}
+// Abre Configurações do projeto pelo menu Cena e escolhe a seção.
+void openProjectSection(Fixture &fixture,EditorProjectSection section) {
+  tapWidget(fixture,widgetId(EditorWidget::TabProject));
+  tapWidget(fixture,widgetId(EditorWidget::ProjectSectionBase)+static_cast<u32>(section));
+  AE_EXPECT_TRUE(fixture.session.screen().workspace==EditorWorkspace::Project,"projeto aberto");
+  AE_EXPECT_TRUE(fixture.session.screen().projectSection==section,"seção escolhida");
 }
 void revealProperty(Fixture &fixture,u32 widget) {
   // Teto de segurança: a aba Material tem 25 linhas e a superfície de teste é baixa.
@@ -1416,7 +1423,7 @@ AE_TEST(session_rotation_ring_applies_angle_and_undo) {
 
 AE_TEST(session_water_properties_persist_and_undo) {
   Fixture f;importWaterResources(f);f.session.history().clear();
-  tapWidget(f,widgetId(EditorWidget::TabSettings));
+  openProjectSection(f,EditorProjectSection::Water);
   tapWidget(f,widgetId(EditorWidget::TransformFieldBase)+24);
   tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+1);
   tapWidget(f,widgetId(EditorWidget::NumericApply));
@@ -1436,13 +1443,14 @@ AE_TEST(session_empty_source_hides_legacy_resource_menus_and_clears_stale_contex
   Fixture f;AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"independent source");
   f.session.update();tapWidget(f,widgetId(EditorWidget::ProjectMenu));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TabAssets)).x<0,"no resource browser without resources");
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TabSettings)).x<0,"no water menu without water resources");
-  tapWidget(f,widgetId(EditorWidget::WorkspaceMenuClose));
+  tapWidget(f,widgetId(EditorWidget::TabProject));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ProjectSectionBase)+
+                 static_cast<u32>(EditorProjectSection::Water)).x<0,"no water section without water resources");
   importWaterResources(f);
-  tapWidget(f,widgetId(EditorWidget::TabSettings));
-  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Settings,"water library enables existing inspector");
+  tapWidget(f,widgetId(EditorWidget::ProjectSectionBase)+static_cast<u32>(EditorProjectSection::Water));
+  AE_EXPECT_TRUE(f.session.screen().projectSection==EditorProjectSection::Water,"water library enables the water section");
   AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"replace library");f.session.update();
-  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Scene,"removed capability cannot leave stale water context");
+  AE_EXPECT_TRUE(f.session.screen().projectSection==EditorProjectSection::Layers,"removed capability cannot leave stale water context");
 }
 
 AE_TEST(session_missing_mesh_does_not_create_an_invisible_pick_target) {
@@ -1528,7 +1536,7 @@ AE_TEST(session_hierarchy_horizontal_drag_reparents_with_world_transform_and_und
 
 AE_TEST(session_spectrum_property_is_reachable_through_touch_pages) {
   Fixture f;importWaterResources(f);f.session.history().clear();
-  tapWidget(f,widgetId(EditorWidget::TabSettings));
+  openProjectSection(f,EditorProjectSection::Water);
   const u32 windWidget=widgetId(EditorWidget::TransformFieldBase)+37;
   for(u32 page=0;page<34 && locateWidget(f.session,windWidget).x<0;++page)
     tapWidget(f,widgetId(EditorWidget::PropertyNext));
@@ -1835,22 +1843,14 @@ AE_TEST(session_timer_creation_is_one_undoable_object_with_real_component) {
   AE_EXPECT_TRUE(object && object->components.find(scene::Timer::descriptor),"Timer criado na hierarquia");
   AE_EXPECT_TRUE(f.session.history().undo(doc) && !doc.exists(id),"Undo remove objeto e componente");
   AE_EXPECT_TRUE(f.session.history().redo(doc) && doc.find(id)->components.find(scene::Timer::descriptor),"Redo restaura timer");
+  // O Timer é editado no Inspector; não há workspace própria por tipo de componente.
   f.session.setSelection(doc.root());f.session.update();
   tapWidget(f,widgetId(EditorWidget::ProjectMenu));
-  tapWidget(f,widgetId(EditorWidget::TabTimers));
-  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Timers,"agenda abre como workspace próprio");
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TimerRowBase)).x>=0,"timer aparece na agenda");
-  tapWidget(f,widgetId(EditorWidget::TimerRowBase));
-  AE_EXPECT_EQ(f.session.selection(),id,"linha navega para o objeto autorado");
-  AE_EXPECT_TRUE(f.session.screen().expandedNative!=0,"Inspector recebe a instância correta");
-  f.session.setSurface({0,0,400,740},{});f.session.update();
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TimerRowBase)).x>=0,"agenda continua navegável em tela estreita");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TabProject)).x>=0,"menu leva às configurações do projeto");
 }
 AE_TEST(physics_workspace_edits_solver_matrix_with_undo_and_archive) {
   Fixture f;auto &doc=f.session.document();
-  tapWidget(f,widgetId(EditorWidget::ProjectMenu));
-  tapWidget(f,widgetId(EditorWidget::TabPhysics));
-  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Physics,"workspace física abre");
+  openProjectSection(f,EditorProjectSection::Layers);
   tapWidget(f,widgetId(EditorWidget::PhysicsLayerAdd));
   AE_EXPECT_TRUE(doc.layers().named(1),"camada criada");
   tapWidget(f,widgetId(EditorWidget::PhysicsLayerRename));
@@ -1872,9 +1872,7 @@ AE_TEST(physics_workspace_edits_solver_matrix_with_undo_and_archive) {
 }
 AE_TEST(input_workspace_authors_runtime_action_with_history_and_archive) {
   Fixture f;auto &doc=f.session.document();
-  tapWidget(f,widgetId(EditorWidget::ProjectMenu));
-  tapWidget(f,widgetId(EditorWidget::TabInput));
-  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Input,"mapa abre como workspace");
+  openProjectSection(f,EditorProjectSection::Input);
   tapWidget(f,widgetId(EditorWidget::InputActionAdd));
   AE_EXPECT_EQ(doc.inputActions().actions().size(),4u,"ação é criada no dado autorado");
   tapWidget(f,widgetId(EditorWidget::InputActionRowBase));

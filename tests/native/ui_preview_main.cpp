@@ -128,6 +128,10 @@ int main(int argc, char **argv) {
     }
   }
   if(argc>4 && std::string(argv[4]).starts_with("create")) state.creationAvailable=editor::creationAlwaysAvailable();
+  if(argc>4 && std::string(argv[4]).starts_with("project")) {
+    state.workspace=editor::EditorWorkspace::Project;
+    state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;
+  }
   if(argc>4 && std::string(argv[4])=="create-physics") {
     state.creationMenu=true;state.creationCategory=3;
     editor::findCreationRecipe("physics.dynamic_sphere",&state.creationSelection);

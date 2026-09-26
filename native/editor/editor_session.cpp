@@ -5244,9 +5244,10 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
       enableCreation(state_,(flags & renderer::MapMaterialWaterCameraGrid)?
                             EditorWidget::CreateOceanWater:EditorWidget::CreateFiniteWater);
   }
-  if((state_.workspace==EditorWorkspace::Assets && !mapScene_.assetCount()) ||
-     (state_.workspace==EditorWorkspace::Settings && !waterCreationAvailable(state_)))
-    state_.workspace=EditorWorkspace::Scene;
+  if(state_.workspace==EditorWorkspace::Assets && !mapScene_.assetCount()) state_.workspace=EditorWorkspace::Scene;
+  // Sem água na cena, a seção de água some; o projeto continua na primeira seção.
+  if(state_.projectSection==EditorProjectSection::Water && !waterCreationAvailable(state_))
+    state_.projectSection=EditorProjectSection::Layers;
   state_.creationCategory=0;state_.creationSelection=0;state_.creationScroll=0;
 
   sceneEpoch_=nextSceneEpoch();cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
