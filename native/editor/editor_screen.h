@@ -344,6 +344,17 @@ enum class EditorWidget : u32 {
   ComponentAddBase=0x67000000u,
   // + 0 = todas as famílias, + 1 + família = aquela família (scene::ComponentFamily).
   ComponentFamilyBase=0xB5000000u,
+  // + posição do componente no objeto. Menu comum a nativos e comportamentos
+  // (Unity 6000.0, Manual/UsingComponents: Move Up/Down, Paste Component As
+  // New, ícone de ajuda) e interruptor de ativo no cabeçalho.
+  ComponentMoveUpBase=0xB6000000u,
+  ComponentMoveDownBase=0xB7000000u,
+  ComponentPasteNewBase=0xB8000000u,
+  ComponentHelpBase=0xB9000000u,
+  ComponentEnableBase=0xBA000000u,
+  // + índice da opção na lista aberta pelo campo de enumeração.
+  ComponentEnumOptionBase=0xBB000000u,
+  ComponentEnumPickerClose=0xBC000000u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -443,7 +454,11 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentClipMoveUpBase,kRange},{EditorWidget::ComponentClipMoveDownBase,kRange},
   {EditorWidget::ComponentClipRemoveBase,kRange},
   {EditorWidget::InputActionRowBase,64},{EditorWidget::InputBindingRowBase,16},
-  {EditorWidget::CreationRecipeBase,0x0010'0000u},{EditorWidget::ComponentFamilyBase,kRange}};
+  {EditorWidget::CreationRecipeBase,0x0010'0000u},{EditorWidget::ComponentFamilyBase,kRange},
+  {EditorWidget::ComponentMoveUpBase,kRange},{EditorWidget::ComponentMoveDownBase,kRange},
+  {EditorWidget::ComponentPasteNewBase,kRange},{EditorWidget::ComponentHelpBase,kRange},
+  {EditorWidget::ComponentEnableBase,kRange},{EditorWidget::ComponentEnumOptionBase,kRange},
+  {EditorWidget::ComponentEnumPickerClose,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -583,6 +598,12 @@ struct EditorScreenState final {
   EditorEntityId editingScriptEntity=0;
   std::string editingScriptProperty,editingScriptType;
   std::shared_ptr<const EditorComponentValue> componentClipboard;
+  // Link externo pedido pela interface (ajuda do componente); o shell do
+  // Android abre no navegador e limpa. Só https.
+  std::string externalLink;
+  // Lista de opções aberta por um campo de enumeração: o id do campo
+  // (ComponentEnumBase + componente + campo<<8), ou zero fechada.
+  u32 enumPicker=0;
   bool presetPanel=false,presetNaming=false,presetRenaming=false,presetDeleteConfirm=false;
   // Vistas salvas da cena: painel aberto, linha escolhida e o fluxo de nome
   // (salvar uma nova ou renomear a escolhida).

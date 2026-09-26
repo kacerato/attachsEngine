@@ -65,7 +65,12 @@ struct UiPointerRouting final {
   bool tapped = false;
   // Verdadeiro no `Up`/`Cancel` que encerra a captura, com ou sem arraste.
   bool released = false;
+  // Segundos entre o `Down` e este evento, pelo relógio do próprio evento. Um
+  // toque sem arraste que durou mais que o limiar é o "clique direito" do toque.
+  double heldSeconds = 0.0;
 };
+// Duração a partir da qual um toque parado é toque longo (menu de contexto).
+inline constexpr double kUiLongPressSeconds = 0.45;
 
 class UiInputRouter final {
 public:
@@ -122,6 +127,7 @@ private:
     u32 widgetId = 0;
     UiPoint start{};
     UiPoint previous{};
+    double startTime = 0.0;
     bool dragging = false;
   };
 

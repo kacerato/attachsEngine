@@ -1776,9 +1776,14 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
       const char *label="Valor inválido";
       for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
-      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
-      builder.label(slot,label,theme.color.text,theme.type.caption,UiAlign::Center);
-      if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+      // Aparência de lista suspensa: o toque abre as opções, não cicla às cegas.
+      const bool editable=property.presentation.isEditable(*component);
+      auto box=deflate(slot,UiInsets::all(2));
+      builder.list.addRect(box,theme.color.raised,theme.radius.control);
+      auto chevron=takeRight(box,24);
+      if(editable) builder.list.addImage(centred(chevron,10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
+      builder.label(deflate(box,UiInsets{8,0,0,0}),label,editable?theme.color.text:theme.color.textMuted,theme.type.caption);
+      if(editable) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
     } else if(f.kind==4) {
       const auto &property=entry.type->references[f.index];const auto target=property.read(*component);
       builder.label(takeTop(slot,17),property.name,theme.color.textMuted,theme.type.caption);
@@ -2759,6 +2764,94 @@ void buildScriptPreview(ScreenBuilder &builder,UiRect content,const EditorEntity
       !draft.valid()?"Tipo ou fonte inválidos":"Limite de componentes atingido",theme.color.warning,theme.type.caption);
 }
 
+// Menu do componente (⋮ ou toque longo no cabeçalho): as ações da Unity em
+// Manual/UsingComponents, em grade de duas colunas com ícone. Ação que não
+// pode ser feita agora aparece esmaecida, sem região de toque.
+void buildComponentMenu(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,u32 index,bool native) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const auto *component=entity.components.at(index);
+  if(!component) return;
+  const auto *script=scene::scriptBehavior(component);
+  const auto visible=[&](usize i) {
+    const auto *other=entity.components.at(i);
+    return findEditorComponent(other->type().id)||scene::scriptBehavior(other)||other->unresolved();
+  };
+  bool above=false,below=false;
+  for(usize i=0;i<index;++i) above|=visible(i);
+  for(usize i=index+1;i<entity.components.size();++i) below|=visible(i);
+  const auto &clip=state.componentClipboard;
+  const bool pasteValues=clip && (script?scene::scriptBehavior(clip.get()) && scene::scriptBehavior(clip.get())->scriptType==script->scriptType:
+                                          &clip->type()==&component->type());
+  const bool pasteNew=clip && scene::planComponentAddition(entity.components,clip->type().id,false,false).ready;
+  const auto *schema=scene::findComponentSchema(component->type().id);
+  struct Action {UiIcon icon;const char *label;u32 widget;bool enabled;bool danger=false;};
+  std::vector<Action> actions{
+    {UiIcon::UiChevronUp,"Subir",widgetId(EditorWidget::ComponentMoveUpBase)+index,above},
+    {UiIcon::UiChevronDown,"Descer",widgetId(EditorWidget::ComponentMoveDownBase)+index,below},
+    {UiIcon::AssetsCopy,"Copiar",widgetId(EditorWidget::ComponentCopyBase)+index,true},
+    {UiIcon::UiAdd,"Colar novo",widgetId(EditorWidget::ComponentPasteNewBase)+index,pasteNew},
+    {UiIcon::AssetsImport,"Colar valores",widgetId(EditorWidget::ComponentPasteBase)+index,pasteValues},
+    {UiIcon::EditorAuthorUndo,"Redefinir",widgetId(EditorWidget::ComponentResetBase)+index,true}};
+  if(native) {
+    actions.push_back({UiIcon::AssetsLibrary,"Presets",widgetId(EditorWidget::PresetOpen),true});
+    actions.push_back({UiIcon::ScriptingNodes,"Impacto",widgetId(EditorWidget::ImpactOpenBase)+index,true});
+    actions.push_back({UiIcon::UiHelp,"Referência",widgetId(EditorWidget::ComponentHelpBase)+index,
+                       schema && schema->reference.starts_with("https://")});
+  } else if(script) actions.push_back({UiIcon::IdeCode,"Abrir código",widgetId(EditorWidget::ScriptSourceBase)+index,true});
+  actions.push_back({UiIcon::UiRemove,"Remover",widgetId(native?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase)+index,true,true});
+  const float cell=32,gap=4;
+  const float half=(content.width-gap)*.5f;
+  for(usize i=0;i<actions.size();i+=2) {
+    if(content.height<cell) break;
+    auto line=takeTop(content,cell+gap);line.height=cell;
+    for(usize j=i;j<std::min(actions.size(),i+2);++j) {
+      const auto &action=actions[j];
+      const UiRect rect{line.x+(j-i)*(half+gap),line.y,half,cell};
+      builder.list.addRect(rect,action.danger&&action.enabled?withAlpha(theme.color.danger,.14f):theme.color.silhouette,theme.radius.control);
+      auto inner=deflate(rect,UiInsets::symmetric(8,0));
+      const auto tint=!action.enabled?theme.color.textFaint:action.danger?theme.color.danger:theme.color.textDim;
+      builder.list.addImage(centred(takeLeft(inner,22),16,16),static_cast<UiImageId>(action.icon),tint);
+      builder.label(deflate(inner,UiInsets{6,0,0,0}),action.label,!action.enabled?theme.color.textFaint:
+                    action.danger?theme.color.danger:theme.color.text,theme.type.caption);
+      if(action.enabled) builder.router.addRegion(rect,action.widget);
+    }
+  }
+}
+
+// Lista de opções de um campo de enumeração, aberta sobre a tela. A opção
+// atual vem marcada; tocar fora fecha sem mudar nada.
+void buildEnumPicker(ScreenBuilder &builder) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const u32 index=state.enumPicker&0xffu,field=(state.enumPicker>>8)&0xffffu;
+  const auto *entity=state.document->find(state.selection);
+  const auto *component=entity&&index<entity->components.size()?entity->components.at(index):nullptr;
+  if(!component || field>=component->type().enums.size()) return;
+  const auto &property=component->type().enums[field];
+  const auto current=property.read(*component);
+  builder.list.addRect(state.surface,withAlpha(theme.color.voidBlack,.5f));
+  builder.router.addBlocker(state.surface);
+  builder.router.addRegion(state.surface,widgetId(EditorWidget::ComponentEnumPickerClose));
+  const float rows=static_cast<float>(property.options.size());
+  const float height=std::min(state.surface.height-24,52+rows*44);
+  const UiRect sheet=centred(state.surface,std::min(360.f,state.surface.width-24),height);
+  builder.list.addRect(sheet,theme.color.surface,theme.radius.card);
+  builder.list.addBorder(sheet,theme.color.line,1,theme.radius.card);
+  builder.router.addBlocker(sheet);
+  auto content=deflate(sheet,UiInsets::all(8));
+  builder.label(takeTop(content,36),property.name,theme.color.text,theme.type.cardName);
+  builder.list.pushClip(content);
+  for(u32 i=0;i<property.options.size() && content.height>=40;++i) {
+    auto row=deflate(takeTop(content,44),UiInsets{0,2,0,2});
+    const bool on=property.options[i].value==current;
+    builder.list.addRect(row,on?theme.color.raised:theme.color.silhouette,theme.radius.control);
+    auto mark=takeLeft(row,32);
+    if(on) builder.list.addImage(centred(mark,14,14),static_cast<UiImageId>(UiIcon::UiCheck),theme.color.accent);
+    builder.label(row,property.options[i].name,on?theme.color.text:theme.color.textDim,theme.type.body);
+    builder.router.addRegion(row,widgetId(EditorWidget::ComponentEnumOptionBase)+i);
+  }
+  builder.list.popClip();
+}
+
 void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity) {
   if(builder.state.presetPanel && builder.state.presetEntity==entity.id) {
     const auto &state=builder.state;const auto &theme=builder.theme;
@@ -2977,6 +3070,13 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
     builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
     auto more=takeRight(row,item.object?0:32);
+    // Interruptor de ativo no cabeçalho, como a caixa de Behaviour.enabled da
+    // Unity: só onde existe `enabled` com consumidor, ou no comportamento C#.
+    if(item.value && !item.object && !item.transform) {
+      bool has=script!=nullptr,on=script?script->enabled:false;
+      if(item.native) for(const auto &p:item.native->type->booleans) if(p.id=="enabled") {has=true;on=p.read(*item.value);}
+      if(has) builder.toggle(takeRight(row,48),on,widgetId(EditorWidget::ComponentEnableBase)+item.index);
+    }
     builder.label(row,title.c_str(),theme.color.text,theme.type.body);
     if(item.object||item.transform||item.native||script) {
       builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:32),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
@@ -2997,19 +3097,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
           if(action.enabled) builder.router.addRegion(line,widgetId(action.widget));
         }
       } else if(menu) {
-        if(item.native) {
-          const auto impact=takeTop(content,34);builder.label(impact,"Dependências",theme.color.text,theme.type.caption);
-          builder.router.addRegion(impact,widgetId(EditorWidget::ImpactOpenBase)+item.index);
-          const auto presets=takeTop(content,34);builder.label(presets,"Presets",theme.color.text,theme.type.caption);
-          builder.router.addRegion(presets,widgetId(EditorWidget::PresetOpen));
-          const EditorWidget actions[]{EditorWidget::ComponentCopyBase,EditorWidget::ComponentPasteBase,EditorWidget::ComponentResetBase};
-          const char *labels[]{"Copiar valores","Colar valores","Restaurar padrão"};
-          for(u32 i=0;i<3;++i) {auto action=takeTop(content,34);builder.label(action,labels[i],theme.color.text,theme.type.caption);
-            if(i!=1||(state.componentClipboard && &state.componentClipboard->type()==item.native->type)) builder.router.addRegion(action,widgetId(actions[i])+item.index);}
-        }
-        auto remove=takeTop(content,34);
-        builder.label(remove,"Revisar remoção",theme.color.text,theme.type.caption);
-        builder.router.addRegion(remove,widgetId(item.native?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase)+item.index);
+        buildComponentMenu(builder,content,entity,item.index,item.native!=nullptr);
       }
       if(open) {
         auto fields=takeTop(content,std::max(0.0f,content.height-(end-card-1)*48.0f-4));
@@ -5786,6 +5874,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.addingComponent && state.componentSelection==state.selection && !state.editingComponentSearch)
     if(const auto *entity=state.document->find(state.selection)) buildComponentSheet(builder,*entity);
   if(state.creationMenu && !state.editingCreationSearch) buildCreationSheet(builder,layout);
+  if(state.enumPicker) buildEnumPicker(builder);
   if (!state.platformTextInput && state.numericField != 0) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
@@ -6168,6 +6257,99 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     return outcome;
   }
 
+  if(state.enumPicker && (widget==widgetId(EditorWidget::ComponentEnumPickerClose) ||
+     (widget>=widgetId(EditorWidget::ComponentEnumOptionBase) && widget<widgetId(EditorWidget::ComponentEnumOptionBase)+detail::kRange))) {
+    const u32 field=state.enumPicker,index=field&0xffu,enumIndex=(field>>8)&0xffffu;
+    state.enumPicker=0;
+    if(widget==widgetId(EditorWidget::ComponentEnumPickerClose)) return outcome;
+    const auto *entity=document.find(state.selection);
+    const auto *component=entity&&index<entity->components.size()?entity->components.at(index):nullptr;
+    const u32 option=widget-widgetId(EditorWidget::ComponentEnumOptionBase);
+    if(!component || enumIndex>=component->type().enums.size() || history.isOpen()) return outcome;
+    const auto &property=component->type().enums[enumIndex];
+    if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
+    auto value=*entity;
+    if(scene::setComponentProperty(value.components,component->type().id,property.id,property.options[option].value,
+                                   component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
+      state.status="Esta opção não é aceita com os valores atuais";return outcome;
+    }
+    outcome.documentChanged=history.applyValues(document,entity->id,value);
+    return outcome;
+  }
+  // Menu comum a componentes nativos e comportamentos C#. O índice é a
+  // posição do componente no objeto, a mesma que o Inspector usa nos cartões.
+  {
+    const u32 operation=widget&0xff000000u,index=widget&0x00ffffffu;
+    const auto is=[&](EditorWidget base){return operation==widgetId(base);};
+    const auto *entity=document.find(state.selection);
+    const auto *component=entity&&index<entity->components.size()?entity->components.at(index):nullptr;
+    const auto *script=scene::scriptBehavior(component);
+    const bool generic=is(EditorWidget::ComponentMoveUpBase)||is(EditorWidget::ComponentMoveDownBase)||
+        is(EditorWidget::ComponentPasteNewBase)||is(EditorWidget::ComponentHelpBase)||is(EditorWidget::ComponentEnableBase)||
+        (script&&(is(EditorWidget::ComponentCopyBase)||is(EditorWidget::ComponentPasteBase)||is(EditorWidget::ComponentResetBase)));
+    if(generic) {
+      if(!component || state.workspace!=EditorWorkspace::Scene || history.isOpen()) return outcome;
+      // Como o menu de contexto da Unity, escolher uma ação fecha o menu.
+      state.nativeMenu=0;state.scriptMenu=0;
+      auto value=*entity;
+      if(is(EditorWidget::ComponentHelpBase)) {
+        const auto *schema=scene::findComponentSchema(component->type().id);
+        if(schema && schema->reference.starts_with("https://")) {
+          state.externalLink=std::string(schema->reference);
+          state.status=std::string("Referência de ")+schema->name+" aberta no navegador";
+        } else state.status="Este componente não tem página de referência";
+        return outcome;
+      }
+      if(is(EditorWidget::ComponentCopyBase)) {
+        state.componentClipboard=component->clone();state.status="Componente copiado";return outcome;
+      }
+      if(is(EditorWidget::ComponentMoveUpBase)||is(EditorWidget::ComponentMoveDownBase)) {
+        // O vizinho é o próximo cartão visível: vínculos de importação e outros
+        // dados sem cartão não contam como posição.
+        const bool up=is(EditorWidget::ComponentMoveUpBase);
+        const auto visible=[&](usize i) {
+          const auto *other=entity->components.at(i);
+          return findEditorComponent(other->type().id)||scene::scriptBehavior(other)||other->unresolved();
+        };
+        usize target=index;bool found=false;
+        if(up) {for(usize i=index;i>0;--i) if(visible(i-1)) {target=i-1;found=true;break;}}
+        else for(usize i=index+1;i<entity->components.size();++i) if(visible(i)) {target=i;found=true;break;}
+        if(!found || !value.components.moveInstance(component->instanceId(),target)) return outcome;
+        state.status=up?"Componente movido para cima":"Componente movido para baixo";
+      } else if(is(EditorWidget::ComponentPasteNewBase)) {
+        const auto &clip=state.componentClipboard;
+        if(!clip) {state.status="Copie um componente antes";return outcome;}
+        auto plan=scene::planComponentAddition(value.components,clip->type().id);
+        if(!plan.ready) {state.status=plan.error?plan.error:"Não foi possível colar como novo";return outcome;}
+        if(!plan.candidate.replaceInstance(plan.requestedInstance,*clip) ||
+           !editorReferencesAccept(document,entity->id,*clip)) {state.status="Valores ou referências incompatíveis";return outcome;}
+        value.components=std::move(plan.candidate);state.status="Componente colado como novo";
+      } else if(is(EditorWidget::ComponentPasteBase)) {
+        const auto *copied=scene::scriptBehavior(state.componentClipboard.get());
+        if(!copied || copied->scriptType!=script->scriptType ||
+           !value.components.replaceInstance(component->instanceId(),*copied)) {state.status="Copie um comportamento do mesmo tipo";return outcome;}
+        state.status="Valores do comportamento colados";
+      } else if(is(EditorWidget::ComponentResetBase)) {
+        // Sem valores autorados, o comportamento volta aos padrões do código.
+        auto replacement=*script;replacement.properties.clear();
+        if(!value.components.replaceInstance(component->instanceId(),replacement)) return outcome;
+        state.status="Comportamento redefinido para os padrões do código";
+      } else if(is(EditorWidget::ComponentEnableBase)) {
+        if(script) {
+          auto replacement=*script;replacement.enabled=!replacement.enabled;
+          if(!value.components.replaceInstance(component->instanceId(),replacement)) return outcome;
+        } else {
+          const scene::ComponentBoolean *enabled=nullptr;
+          for(const auto &p:component->type().booleans) if(p.id=="enabled") enabled=&p;
+          if(!enabled || scene::setComponentProperty(value.components,component->type().id,"enabled",!enabled->read(*component),
+                                                     component->instanceId())!=scene::ComponentPropertyStatus::Applied) return outcome;
+        }
+      }
+      outcome.documentChanged=history.applyValues(document,entity->id,value);
+      return outcome;
+    }
+  }
+
   if(widget>=widgetId(EditorWidget::ComponentAddBase) && widget<widgetId(EditorWidget::ComponentEnumBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);
     if(!entity || state.workspace!=EditorWorkspace::Scene) return outcome;
@@ -6187,7 +6369,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     } else if(operation==widgetId(EditorWidget::ComponentFoldBase)) {
       state.expandedNative=state.expandedNative==instance?0:instance;state.expandedComponent.clear();state.expandedScript=0;state.nativeMenu=0;state.scriptMenu=0;state.meshPicker=false;state.propertyQuery.clear();state.propertyPage=0;
     } else if(operation==widgetId(EditorWidget::ComponentCopyBase)) {
-      state.componentClipboard=component->clone();state.status="Valores do componente copiados";
+      state.componentClipboard=component->clone();state.status="Componente copiado";state.nativeMenu=0;
     } else {
       auto value=*entity;
       if(adding) {
@@ -6202,18 +6384,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         if(scene::setComponentProperty(value.components,entry.type->id,property.id,!property.read(*component),instance)!=scene::ComponentPropertyStatus::Applied) return outcome;
       } else if(operation==widgetId(EditorWidget::ComponentEnumBase)) {
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->enums.size()) return outcome;
-        const auto &property=entry.type->enums[field];const auto current=property.read(*component);
-        bool applied=false;
-        for(u32 i=0;i<property.options.size();++i) if(property.options[i].value==current) {
-          const auto next=property.options[(i+1)%property.options.size()].value;
-          applied=scene::setComponentProperty(value.components,entry.type->id,property.id,next,instance)==scene::ComponentPropertyStatus::Applied;break;
-        }
-        if(!applied) {state.status="Ajuste os limites ou o motor antes de trocar o tipo";return outcome;}
+        state.enumPicker=widget;return outcome;
       } else if(operation==widgetId(EditorWidget::ComponentPasteBase)) {
+        state.nativeMenu=0;
         if(!state.componentClipboard||&state.componentClipboard->type()!=entry.type||
            !editorReferencesAccept(document,entity->id,*state.componentClipboard)||
            !value.components.replaceInstance(instance,*state.componentClipboard)) {state.status="Valores ou referências incompatíveis";return outcome;}
       } else if(operation==widgetId(EditorWidget::ComponentResetBase)) {
+        state.nativeMenu=0;
         const auto defaults=entry.type->create();if(!defaults||!value.components.replaceInstance(instance,*defaults)) return outcome;
       } else return outcome;
       outcome.documentChanged=history.applyValues(document,state.selection,value);

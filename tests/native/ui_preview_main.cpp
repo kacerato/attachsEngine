@@ -128,6 +128,17 @@ int main(int argc, char **argv) {
     }
   }
   if(argc>4 && std::string(argv[4]).starts_with("create")) state.creationAvailable=editor::creationAlwaysAvailable();
+  // Menu do componente e lista de opções de enumeração sobre um colisor.
+  if(argc>4 && (std::string(argv[4])=="menu" || std::string(argv[4])=="enum")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Porta");
+    auto value=*document.find(selection);
+    value.components.add(scene::PhysicsBody::descriptor);
+    const auto *collider=value.components.add(scene::Collider::descriptor);
+    document.applyEntityValues(selection,value);
+    state.componentSelection=selection;
+    if(std::string(argv[4])=="menu") state.nativeMenu=collider->instanceId();
+    else state.enumPicker=editor::widgetId(editor::EditorWidget::ComponentEnumBase)+1;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

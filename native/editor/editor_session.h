@@ -820,6 +820,8 @@ public:
   const resources::AssetRegistry &assets() const { return assets_; }
   // Pedido de importação levantado pela interface, consumido pelo shell. O
   // editor não abre o seletor: ele não conhece Android.
+  // Link externo pedido pela interface (ajuda do componente), só https.
+  std::string consumeExternalLink() {std::string link;link.swap(state_.externalLink);return link;}
   bool consumeModelImportRequest() {
     const bool requested=state_.modelImportRequested;
     state_.modelImportRequested=false;

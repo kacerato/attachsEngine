@@ -1269,7 +1269,14 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) playTouches_.cancel();
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) return true;
-  const UiPointerRouting routing = router_.route(event);
+  UiPointerRouting routing = router_.route(event);
+  // Toque longo no cabeçalho de um componente abre o menu dele, como o clique
+  // direito da Unity (Manual/UsingComponents).
+  if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds) {
+    const u32 operation=routing.widgetId&0xff000000u,index=routing.widgetId&0x00ffffffu;
+    if(operation==widgetId(EditorWidget::ComponentFoldBase)) routing.widgetId=widgetId(EditorWidget::ComponentMenuBase)+index;
+    else if(operation==widgetId(EditorWidget::ScriptFoldBase)) routing.widgetId=widgetId(EditorWidget::ScriptMenuBase)+index;
+  }
   const u32 lensHandleBase=widgetId(EditorWidget::CameraHandleBase);
   if(lensDragOpen_ || (routing.widgetId>=lensHandleBase && routing.widgetId<lensHandleBase+3)) {
     if(!lensDragOpen_ && event.phase==UiPointerPhase::Down && !isPlaying() &&

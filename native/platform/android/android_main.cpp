@@ -10,6 +10,7 @@
 #include "platform/android/android_paths.h"
 #include "platform/android/android_launch_options.h"
 #include "platform/android/android_model_picker.h"
+#include "platform/android/android_external_links.h"
 #include "platform/android/android_game_input.h"
 #include "platform/android/android_runtime_controls.h"
 #include "platform/android/astc_encode_probe.h"
@@ -1825,6 +1826,8 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
         (AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
         AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
     bool consumed = false;
+    // Relógio do próprio evento (ns): é o que mede o toque longo do menu de contexto.
+    const double eventTime = static_cast<double>(AMotionEvent_getEventTime(event)) * 1e-9;
     if (editorAction == AMOTION_EVENT_ACTION_CANCEL) {
       shell.editorSession.cancelPointers();
       consumed = true;
@@ -1834,17 +1837,17 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
       for (size_t index = 0; index < pointerCount; ++index)
         consumed |= shell.editorSession.handlePointer(
             {static_cast<ae::u32>(AMotionEvent_getPointerId(event, index)),
-             ae::ui::UiPointerPhase::Move, toLogical(index), 0.0});
+             ae::ui::UiPointerPhase::Move, toLogical(index), eventTime});
     } else if (editorAction == AMOTION_EVENT_ACTION_DOWN ||
                editorAction == AMOTION_EVENT_ACTION_POINTER_DOWN) {
       consumed = shell.editorSession.handlePointer(
           {static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex)),
-           ae::ui::UiPointerPhase::Down, toLogical(editorIndex), 0.0});
+           ae::ui::UiPointerPhase::Down, toLogical(editorIndex), eventTime});
     } else if (editorAction == AMOTION_EVENT_ACTION_UP ||
                editorAction == AMOTION_EVENT_ACTION_POINTER_UP) {
       consumed = shell.editorSession.handlePointer(
           {static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex)),
-           ae::ui::UiPointerPhase::Up, toLogical(editorIndex), 0.0});
+           ae::ui::UiPointerPhase::Up, toLogical(editorIndex), eventTime});
     }
     if (consumed) {
       // Preserve editor capture through Down -> Move -> Up; runtime loses ownership.
@@ -2945,6 +2948,7 @@ void android_main(android_app *app) {
                  !shell.importWork.valid()&&!shell.environmentImportWork.valid()&&!shell.textureImportWork.valid()&&
                  !shell.importPreview&&!shell.environmentImportPreview&&!shell.textureImportPreview;
         };
+        if(auto link=session.consumeExternalLink();!link.empty()) ae::platform::android::requestExternalLink(std::move(link));
         bool importRequestTaken=false;
         if(importSlotAvailable()&&session.consumeModelImportRequest()) {
           importRequestTaken=true;

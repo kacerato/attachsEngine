@@ -11,6 +11,7 @@ public final class AetherActivity extends NativeActivity {
     static { System.loadLibrary("aether_android"); }
     private EditorTextInput editorTextInput;
     private ModelPicker modelPicker;
+    private ExternalLinks externalLinks;
 
     @Override protected void onCreate(Bundle state) {
         // NativeActivity starts native code in super.onCreate: establish the dry
@@ -32,11 +33,14 @@ public final class AetherActivity extends NativeActivity {
         editorTextInput.start();
         if (modelPicker == null) modelPicker = new ModelPicker(this);
         modelPicker.start();
+        if (externalLinks == null) externalLinks = new ExternalLinks(this);
+        externalLinks.start();
     }
 
     @Override protected void onPause() {
         if (editorTextInput != null) editorTextInput.stop();
         if (modelPicker != null) modelPicker.stop();
+        if (externalLinks != null) externalLinks.stop();
         super.onPause();
     }
 

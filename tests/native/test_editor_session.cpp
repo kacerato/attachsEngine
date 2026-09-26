@@ -1074,6 +1074,75 @@ AE_TEST(session_inspector_exposes_only_consumed_resource_controls) {
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ToggleStatic)).x<0,"unconsumed static flag is absent");
 }
 
+// Menu do componente como em Unity 6000.0 Manual/UsingComponents: Move Up/Down,
+// Copy Component, Paste Component As New/Values, Reset, ajuda, interruptor no
+// cabeçalho e toque longo como clique direito — pelos toques reais da tela.
+AE_TEST(component_menu_moves_copies_pastes_as_new_resets_and_opens_reference) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  auto value=*doc.find(f.cube);
+  value.components.add(scene::PhysicsBody::descriptor);
+  auto *collider=static_cast<scene::Collider *>(value.components.add(scene::Collider::descriptor));
+  collider->halfX=2.5f;
+  auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Mover";script->source="Mover.cs";script->setProperty("speed","float","4");
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"objeto com malha, corpo, colisor e script");
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  const auto indexOf=[&](std::string_view type,u32 ordinal=0) {
+    const auto *entity=doc.find(f.cube);
+    for(u32 i=0;i<entity->components.size();++i) if(entity->components.at(i)->type().id==type && !ordinal--) return i;
+    return ~0u;
+  };
+  const u32 colliderIndex=indexOf("astra.physics.collider");
+  const u64 colliderInstance=doc.find(f.cube)->components.at(colliderIndex)->instanceId();
+
+  // Os cartões do Inspector paginam no telefone: avança até o do colisor.
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+colliderIndex).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  // Toque longo no cabeçalho abre o menu (clique direito da Unity).
+  const auto header=locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+colliderIndex);
+  AE_EXPECT_TRUE(header.x>=0,"cabeçalho do colisor visível");
+  f.session.handlePointer({81,UiPointerPhase::Down,header,10.0});
+  f.session.handlePointer({81,UiPointerPhase::Up,header,10.0+ui::kUiLongPressSeconds+.05});
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().nativeMenu,colliderInstance,"toque longo abre o menu do componente");
+
+  tapWidget(f,widgetId(EditorWidget::ComponentMoveUpBase)+colliderIndex);
+  AE_EXPECT_EQ(indexOf("astra.physics.collider"),colliderIndex-1,"Mover para cima troca com o cartão anterior");
+  AE_EXPECT_EQ(doc.find(f.cube)->components.at(colliderIndex-1)->instanceId(),colliderInstance,"identidade preservada");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"reordenar é um comando");
+  AE_EXPECT_TRUE(history.undo(doc) && indexOf("astra.physics.collider")==colliderIndex,"Undo restaura a ordem");
+
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase)+colliderIndex);
+  tapWidget(f,widgetId(EditorWidget::ComponentCopyBase)+colliderIndex);
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase)+colliderIndex);
+  tapWidget(f,widgetId(EditorWidget::ComponentPasteNewBase)+colliderIndex);
+  const u32 copyIndex=indexOf("astra.physics.collider",1);
+  AE_EXPECT_TRUE(copyIndex!=~0u,"Colar como novo cria outra instância");
+  const auto *pasted=static_cast<const scene::Collider *>(doc.find(f.cube)->components.at(copyIndex));
+  AE_EXPECT_EQ(pasted->halfX,2.5f,"a instância nova recebe os valores copiados");
+  AE_EXPECT_TRUE(pasted->instanceId()!=colliderInstance,"com identidade própria");
+
+  // Interruptor de ativo no cabeçalho.
+  tapWidget(f,widgetId(EditorWidget::ComponentEnableBase)+colliderIndex);
+  AE_EXPECT_TRUE(!static_cast<const scene::Collider *>(doc.find(f.cube)->components.findInstance(colliderInstance))->enabled,
+                 "cabeçalho desliga o componente");
+
+  // Referência oficial pelo menu.
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase)+colliderIndex);
+  tapWidget(f,widgetId(EditorWidget::ComponentHelpBase)+colliderIndex);
+  AE_EXPECT_TRUE(f.session.consumeExternalLink().starts_with("https://docs.unity3d.com/6000.0/"),"ajuda abre a referência versionada");
+
+  // Comportamento C#: redefinir volta aos padrões do código.
+  const u32 scriptIndex=indexOf("astra.script.behavior");
+  tapWidget(f,widgetId(EditorWidget::ScriptMenuBase)+scriptIndex);
+  tapWidget(f,widgetId(EditorWidget::ComponentResetBase)+scriptIndex);
+  AE_EXPECT_TRUE(scene::scriptBehavior(doc.find(f.cube)->components.at(scriptIndex))->properties.empty(),
+                 "Redefinir limpa os valores autorados do script");
+  AE_EXPECT_TRUE(history.undo(doc) && !scene::scriptBehavior(doc.find(f.cube)->components.at(scriptIndex))->properties.empty(),
+                 "Undo devolve os valores");
+}
+
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
@@ -1097,9 +1166,14 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   const u32 motion=widgetId(EditorWidget::ComponentEnumBase)+1;
   revealProperty(f,motion);
   tapWidget(f,motion);
+  AE_EXPECT_EQ(f.session.screen().enumPicker,motion,"campo de enumeração abre a lista de opções");
+  AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion!=scene::BodyMotion::Kinematic,"abrir a lista não muda o valor");
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+1);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Kinematic,"kinematic option");
+  AE_EXPECT_EQ(f.session.screen().enumPicker,0u,"escolher fecha a lista");
   revealProperty(f,motion);
   tapWidget(f,motion);
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+2);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"motion enum remains an editable value");
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
@@ -1187,6 +1261,8 @@ AE_TEST(session_component_clipboard_and_reset_preserve_ownership_and_history) {
   const auto revision=f.session.document().revision();
   tapWidget(f,widgetId(EditorWidget::ComponentCopyBase)+1);
   AE_EXPECT_EQ(f.session.document().revision(),revision,"copy does not dirty document");
+  AE_EXPECT_EQ(f.session.screen().nativeMenu,0u,"escolher uma ação fecha o menu, como na Unity");
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase)+1);
   tapWidget(f,widgetId(EditorWidget::ComponentResetBase)+1);
   AE_EXPECT_EQ(physicsBody(*f.session.document().find(f.cube))->mass,1.0f,"reset uses type defaults");
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Static,"motion reset too");
@@ -2119,8 +2195,10 @@ AE_TEST(p03_orthographic_camera_migration_archive_zoom_and_play_pose) {
   f.session.reportProblem(EditorConsoleSeverity::Info,"Project loaded");
   f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
   tapWidget(f,widgetId(EditorWidget::ComponentEnumBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+0);
   AE_EXPECT_TRUE(cameraComponent(*d.find(id))->projection==scene::CameraProjection::Perspective,"inspector switches projection");
   tapWidget(f,widgetId(EditorWidget::ComponentEnumBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+1);
   AE_EXPECT_TRUE(cameraComponent(*d.find(id))->projection==scene::CameraProjection::Orthographic,"inspector switches back");
   tapWidget(f,widgetId(EditorWidget::CameraPilot));
   AE_EXPECT_TRUE(renderer::isOrthographic(f.session.view().frustum),"lens reaches editor view");

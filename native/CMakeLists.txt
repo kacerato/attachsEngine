@@ -546,6 +546,7 @@ if(ANDROID)
     platform/android/android_runtime_controls.cpp
     platform/android/android_editor_text_input.cpp
     platform/android/android_model_picker.cpp
+    platform/android/android_external_links.cpp
     platform/android/android_texture_loader.cpp
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp

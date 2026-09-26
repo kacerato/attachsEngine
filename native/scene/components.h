@@ -298,6 +298,18 @@ public:
     value->instanceId_=nextIdentity();if(!value->instanceId_) return nullptr;
     auto *result=value.get();values_.push_back(std::move(value));return result;
   }
+  // Reordena sem trocar identidade: a ordem é autoral (Move Up/Down no
+  // Inspector) e é a ordem em que o arquivo grava e o Inspector mostra.
+  bool moveInstance(u64 id,usize target) {
+    if(target>=values_.size()) return false;
+    for(usize i=0;i<values_.size();++i) if(values_[i]->instanceId_==id) {
+      if(i==target) return true;
+      auto moving=std::move(values_[i]);values_.erase(values_.begin()+static_cast<std::ptrdiff_t>(i));
+      values_.insert(values_.begin()+static_cast<std::ptrdiff_t>(target),std::move(moving));
+      return true;
+    }
+    return false;
+  }
   bool removeInstance(u64 id) {
     for(auto i=values_.begin();i!=values_.end();++i) if((*i)->instanceId_==id) {
       values_.erase(i);return true;

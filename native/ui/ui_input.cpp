@@ -99,6 +99,7 @@ UiPointerRouting UiInputRouter::route(const UiPointerEvent &event) noexcept {
     pointer.pointerId = event.pointerId;
     pointer.start = event.position;
     pointer.previous = event.position;
+    pointer.startTime = event.timeSeconds;
     const auto hit=hitTest(event.position);
     pointer.target=hit.target;pointer.widgetId=hit.widgetId;
 
@@ -125,6 +126,7 @@ UiPointerRouting UiInputRouter::route(const UiPointerEvent &event) noexcept {
   routing.totalDelta = {event.position.x - pointer->start.x, event.position.y - pointer->start.y};
   routing.stepDelta = {event.position.x - pointer->previous.x,
                        event.position.y - pointer->previous.y};
+  routing.heldSeconds = event.timeSeconds > pointer->startTime ? event.timeSeconds - pointer->startTime : 0.0;
   pointer->previous = event.position;
 
   if (!pointer->dragging &&
