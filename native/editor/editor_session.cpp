@@ -1182,7 +1182,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::PropertySearch ||
      edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch) {
     if(text.size()>63 || text.find('\0')!=std::string_view::npos) return false;
-    if(edit.purpose==EditorTextPurpose::ComponentSearch) {state_.componentQuery=text;state_.componentPage=0;}
+    if(edit.purpose==EditorTextPurpose::ComponentSearch) {state_.componentQuery=text;state_.componentPage=0;state_.addScroll=0;}
     else if(edit.purpose==EditorTextPurpose::PropertySearch) {state_.propertyQuery=text;state_.propertyPage=0;}
     else if(edit.purpose==EditorTextPurpose::ReferenceSearch) {state_.referenceQuery=text;state_.referencePage=0;}
     else {state_.meshQuery=text;state_.meshPage=0;}
@@ -1259,7 +1259,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     state_.hierarchyScroll=0;
   } else {
     std::snprintf(state_.creationSearch,sizeof(state_.creationSearch),"%s",value.c_str());
-    state_.creationPage=0;const auto query=editorSearchKey(value);
+    state_.creationScroll=0;const auto query=editorSearchKey(value);
     for(u32 i=0;i<editorCreationCatalog.size();++i)
       if(creationAvailable(state_,i) && creationListed(editorCreationCatalog[i],query,state_.creationCategory)) {state_.creationSelection=i;break;}
   }
@@ -1641,7 +1641,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   }
   if(routing.tapped && !isPlaying()) {
     const auto presetKey=routing.widgetId;
-    if(presetKey==widgetId(EditorWidget::PresetOpen)) {openComponentPresets(state_.selection,state_.addingComponent?0:state_.nativeMenu);return true;}
+    if(presetKey==widgetId(EditorWidget::PresetOpen)) {
+      // Vindo da folha do Add, o painel de presets toma o lugar dela.
+      const bool fromAdd=state_.addingComponent;
+      if(openComponentPresets(state_.selection,fromAdd?0:state_.nativeMenu) && fromAdd) state_.addingComponent=false;
+      return true;
+    }
     if(state_.presetPanel && ((presetKey>=widgetId(EditorWidget::PresetClose)&&presetKey<=widgetId(EditorWidget::PresetSaveRecipe)) ||
         (presetKey>=widgetId(EditorWidget::PresetChoiceBase)&&presetKey<widgetId(EditorWidget::PresetChoiceBase)+256) ||
         (presetKey>=widgetId(EditorWidget::PresetFieldBase)&&presetKey<widgetId(EditorWidget::PresetFieldBase)+4096))) {
@@ -2107,8 +2112,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const auto &query=state_.editingComponentSearch?state_.componentQuery:state_.meshQuery;
       std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",query.c_str());return true;
     }
-    if(key==widgetId(EditorWidget::ComponentSearchClear)) {state_.componentQuery.clear();state_.componentPage=0;return true;}
-    if(key==widgetId(EditorWidget::ComponentCategory)) {state_.componentCategory=(state_.componentCategory+1)%6;state_.componentPage=0;return true;}
+    if(key==widgetId(EditorWidget::ComponentSearchClear)) {state_.componentQuery.clear();state_.componentPage=0;state_.addScroll=0;return true;}
+    if(key>=widgetId(EditorWidget::ComponentFamilyBase) &&
+       key<=widgetId(EditorWidget::ComponentFamilyBase)+static_cast<u32>(scene::ComponentFamily::Count)) {
+      state_.componentCategory=key-widgetId(EditorWidget::ComponentFamilyBase);state_.addScroll=0;return true;
+    }
     if(key==widgetId(EditorWidget::ObjectFold)) {
       state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.object"?"":"astra.object";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;
@@ -2449,6 +2457,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
             if(const auto *component=entity->components.at(i-1);component && &component->type()==entry.type) {
               state_.expandedNative=component->instanceId();break;
             }
+        // Recentes: o tipo sobe para o topo, sem repetição, e a lista fica curta.
+        auto &recent=state_.recentComponents;
+        recent.erase(std::remove(recent.begin(),recent.end(),entry.type->id),recent.end());
+        recent.insert(recent.begin(),std::string(entry.type->id));
+        if(recent.size()>4) recent.resize(4);
         state_.addingComponent=false;state_.componentPreview=0;state_.componentPage=0;state_.componentGroup.clear();state_.propertyPage=0;
         state_.nativeMenu=0;state_.scriptMenu=0;
         state_.status="Componente adicionado";
@@ -2768,7 +2781,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(routing.tapped && state_.creationMenu) {
     const auto key=routing.widgetId;
     if(key>=widgetId(EditorWidget::CreationCategoryBase)&&key<widgetId(EditorWidget::CreationCategoryBase)+std::size(creationCategories)) {
-      state_.creationCategory=key-widgetId(EditorWidget::CreationCategoryBase);state_.creationPage=0;state_.creationSearch[0]=0;
+      state_.creationCategory=key-widgetId(EditorWidget::CreationCategoryBase);state_.creationScroll=0;state_.creationSearch[0]=0;
       for(u32 i=0;i<editorCreationCatalog.size();++i) if(creationAvailable(state_,i) && editorCreationCatalog[i].category==state_.creationCategory) {state_.creationSelection=i;break;}
       return true;
     }
@@ -5234,7 +5247,7 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
   if((state_.workspace==EditorWorkspace::Assets && !mapScene_.assetCount()) ||
      (state_.workspace==EditorWorkspace::Settings && !waterCreationAvailable(state_)))
     state_.workspace=EditorWorkspace::Scene;
-  state_.creationCategory=0;state_.creationSelection=0;state_.creationPage=0;
+  state_.creationCategory=0;state_.creationSelection=0;state_.creationScroll=0;
 
   sceneEpoch_=nextSceneEpoch();cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
   history_.clear();

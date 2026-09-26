@@ -9,6 +9,7 @@
 #include "core/engine_capability.h"
 #include "renderer/punctual_lights.h"
 #include "scene/component_reflection.h"
+#include "editor/editor_component_catalog.h"
 
 #include <algorithm>
 
@@ -125,4 +126,28 @@ int writePropertyMatrix(const char *path) {
   std::fclose(file);
   if (!ok) std::fprintf(stderr, "escrita incompleta em %s\n", path);
   return ok ? 0 : 1;
+}
+
+// Registro por família: cada tipo entra uma vez, com família, ícone que existe
+// no atlas e referência oficial com versão. É isso que permite o Add, o
+// Inspector e a API crescerem lendo só o schema.
+AE_TEST(every_registered_component_has_family_icon_and_versioned_reference) {
+  AE_EXPECT_TRUE(scene::componentSchemaIdsUnique(), "nenhum id de componente registrado duas vezes");
+  for (const auto &schema : scene::componentSchemas) {
+    AE_EXPECT_TRUE(schema.type != nullptr, "entrada do registro tem descritor");
+    AE_EXPECT_TRUE(schema.family < scene::ComponentFamily::Count, "família declarada");
+    AE_EXPECT_TRUE(*scene::componentFamilyName(schema.family) != 0, "família tem nome");
+    AE_EXPECT_TRUE(!schema.subfamily.empty(), "subfamília declarada");
+    AE_EXPECT_TRUE(editor::editorIconByName(schema.icon) != ui::UiIcon::None, "ícone existe no atlas");
+    const bool unity = schema.reference.find("docs.unity3d.com/6000.0/") != std::string_view::npos ||
+                       schema.reference.find("docs.unity3d.com/Packages/") != std::string_view::npos;
+    const bool godot = schema.reference.find("docs.godotengine.org/en/4.5/") != std::string_view::npos;
+    AE_EXPECT_TRUE(unity || godot, "referência oficial com versão fixada");
+  }
+  // Ícones do Add distinguem os tipos: dois tipos com o mesmo desenho deixam a
+  // lista ilegível quando ela cresce.
+  for (usize i = 0; i < editor::editorComponentCatalog.size(); ++i)
+    for (usize j = 0; j < i; ++j)
+      AE_EXPECT_TRUE(editor::editorComponentCatalog[i].icon != editor::editorComponentCatalog[j].icon,
+                     "ícone exclusivo por tipo anexável");
 }

@@ -37,11 +37,6 @@
 
 namespace ae::editor {
 namespace {
-u32 creationPageSize(float surfaceHeight) {
-  const float height=std::min(350.0f,surfaceHeight-24.0f);
-  const float reserved=height<330.0f?164.0f:208.0f;
-  return static_cast<u32>(std::clamp(std::floor((height-reserved)/40.0f),1.0f,3.0f));
-}
 
 using namespace ae::ui;
 
@@ -118,7 +113,7 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(runtime::lightComponent(entity)) return UiIcon::EditorAuthorSun;
   if(runtime::characterComponent(entity)) return UiIcon::ComponentCharacter;
   if(runtime::physicsBody(entity)) return UiIcon::ComponentPhysics;
-  if(entity.components.find(scene::Timer::descriptor)) return UiIcon::ScriptingCode;
+  if(entity.components.find(scene::Timer::descriptor)) return UiIcon::ComponentTimer;
   return iconForKind(entity.kind);
 }
 
@@ -2181,6 +2176,592 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
 }
 
 void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity);
+// Catálogo do Add: busca, trilho de famílias e lista rolável agrupada.
+//
+// Substitui cartões grandes paginados de cinco em cinco, que com 15 tipos já
+// exigiam três páginas e com 200 exigiriam quarenta. O trilho mostra as
+// famílias por ícone (a largura do Inspector no telefone é de ~230 dp); a lista
+// agrupa por subfamília e rola pelo arraste, como a Hierarquia. Sem busca e em
+// "Todos", abrem a lista o que o objeto sugere (tipos cujas exigências ele já
+// cumpre) e o que foi adicionado por último nesta sessão.
+struct CatalogRow {
+  enum Kind : u8 {Header,Native,Script} kind=Header;
+  std::string title;
+  u32 index=0;
+  // Sugeridos e Recentes repetem tipos que aparecem de novo na família.
+  bool repeat=false;
+};
+std::vector<CatalogRow> componentCatalogRows(const EditorScreenState &state,const EditorEntity &entity,
+                                             std::string_view query,u32 family) {
+  std::vector<CatalogRow> rows;
+  const auto native=[&](u32 index,bool repeat=false){rows.push_back({CatalogRow::Native,{},index,repeat});};
+  const auto header=[&](std::string title){rows.push_back({CatalogRow::Header,std::move(title),0});};
+  const auto scripts=[&](bool filtered) {
+    if(!state.code) return;
+    bool first=true;
+    for(u32 i=0;i<state.code->scriptTypes().size();++i) {
+      const auto &type=state.code->scriptTypes()[i];
+      if(filtered && editorSearchKey(type.name+" "+type.id).find(query)==std::string::npos) continue;
+      if(first && !filtered) header("Scripts do projeto");
+      first=false;rows.push_back({CatalogRow::Script,{},i});
+    }
+  };
+  if(!query.empty()) {
+    for(u32 i=0;i<editorComponentCatalog.size();++i) {
+      const auto &entry=editorComponentCatalog[i];
+      if(editorSearchKey(std::string(entry.name)+" "+entry.description+" "+std::string(entry.type->id)+" "+
+                         std::string(entry.searchTerms)).find(query)!=std::string::npos) native(i);
+    }
+    scripts(true);
+    return rows;
+  }
+  if(!family) {
+    // Sugestões vêm das exigências do schema: um tipo que precisa de algo que o
+    // objeto já tem (Olhar com Câmera, Junta com Corpo) é o próximo passo natural.
+    bool first=true;
+    for(u32 i=0;i<editorComponentCatalog.size();++i) {
+      const auto &entry=editorComponentCatalog[i];
+      if(entry.schema->requirements.empty() || entry.unavailable(entity)) continue;
+      bool satisfied=true;
+      for(const auto &rule:entry.schema->requirements) satisfied&=entity.components.find(rule.typeId)!=nullptr;
+      if(!satisfied) continue;
+      if(first) header("Sugeridos para este objeto");
+      first=false;native(i,true);
+    }
+    first=true;
+    for(const auto &id:state.recentComponents) {
+      const u32 index=editorComponentIndex(id);
+      if(index>=editorComponentCatalog.size()) continue;
+      if(first) header("Recentes");
+      first=false;native(index,true);
+    }
+  }
+  for(u32 f=0;f<static_cast<u32>(scene::ComponentFamily::Count);++f) {
+    if(family && family-1!=f) continue;
+    std::string_view group;bool any=false;
+    for(u32 i=0;i<editorComponentCatalog.size();++i) {
+      const auto &entry=editorComponentCatalog[i];
+      if(static_cast<u32>(entry.family)!=f) continue;
+      // Em "Todos" o grupo é a família; dentro de uma família, a subfamília.
+      const std::string_view title=family?entry.schema->subfamily:
+                                   std::string_view(scene::componentFamilyName(entry.family));
+      if(!any || (family && title!=group)) header(std::string(title));
+      group=title;any=true;native(i);
+    }
+    if(f==static_cast<u32>(scene::ComponentFamily::Logic) && family) scripts(false);
+  }
+  return rows;
+}
+
+void buildComponentPreview(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,bool compact);
+void buildScriptPreview(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,bool compact);
+
+// Trilho de famílias do Add e de categorias da criação usam a mesma célula:
+// ícone numa pastilha, marca lima à esquerda quando escolhida.
+void railCell(ScreenBuilder &builder,UiRect cell,UiIcon icon,const char *caption,bool on,u32 widget) {
+  const auto &theme=builder.theme;
+  cell=deflate(cell,UiInsets{0,2,0,2});
+  builder.list.addRect(cell,on?theme.color.accentWash:theme.color.silhouette,theme.radius.control);
+  if(on) builder.list.addRect({cell.x,cell.y+8,3,cell.height-16},theme.color.accent,1.5f);
+  if(caption && cell.width>=96) {
+    auto text=cell;
+    builder.list.addImage(centred(takeLeft(text,40),20,20),static_cast<UiImageId>(icon),on?theme.color.accent:theme.color.textDim);
+    builder.label(text,caption,on?theme.color.text:theme.color.textDim,theme.type.caption);
+  } else builder.list.addImage(centred(cell,22,22),static_cast<UiImageId>(icon),on?theme.color.accent:theme.color.textDim);
+  builder.router.addRegion(cell,widget);
+}
+
+// A lista rolável do Add: título com contagem, cabeçalhos de grupo e linhas.
+void buildComponentList(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,const std::string &query,u32 family) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const auto rows=componentCatalogRows(state,entity,query,family);
+  u32 types=0;for(const auto &row:rows) types+=row.kind!=CatalogRow::Header && !row.repeat;
+  auto title=takeTop(content,28);
+  const std::string scope=!query.empty()?"Resultados":family?
+      scene::componentFamilyName(static_cast<scene::ComponentFamily>(family-1)):"Todos os componentes";
+  builder.label(takeRight(title,40),std::to_string(types),theme.color.textMuted,theme.type.caption,UiAlign::End);
+  builder.label(title,scope,theme.color.text,theme.type.cardName);
+  if(rows.empty()) {
+    builder.label(takeTop(content,40),"Nenhum componente encontrado",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    return;
+  }
+  // Rolagem por linha: o topo é `addScroll`, o que sobra abaixo fica para o arraste.
+  const float headerHeight=24,rowHeight=52;
+  const u32 first=std::min(state.addScroll,static_cast<u32>(rows.size()-1));
+  builder.list.pushClip(content);
+  u32 drawn=0;
+  auto list=deflate(content,UiInsets{0,0,6,0});
+  for(u32 r=first;r<rows.size();++r) {
+    const auto &row=rows[r];
+    const float height=row.kind==CatalogRow::Header?headerHeight:rowHeight;
+    if(list.height<height) break;
+    auto cell=takeTop(list,height);++drawn;
+    if(row.kind==CatalogRow::Header) {
+      builder.label(deflate(cell,UiInsets{2,6,0,0}),row.title,theme.color.textMuted,theme.type.label);
+      continue;
+    }
+    cell=deflate(cell,UiInsets{0,2,0,2});
+    const auto hit=cell;
+    const EditorComponentEntry *entry=row.kind==CatalogRow::Native?&editorComponentCatalog[row.index]:nullptr;
+    const EditorScriptType *script=row.kind==CatalogRow::Script?&state.code->scriptTypes()[row.index]:nullptr;
+    const bool chosen=entry?state.componentPreview==row.index+1:state.scriptPreviewType==script->id;
+    const char *reason=entry?(!entry->type->allowMultiple&&entity.components.find(*entry->type)?"Já adicionado":entry->unavailable(entity)):
+        entity.components.size()>=scene::Components::MaximumCount?"Limite de componentes atingido":nullptr;
+    builder.list.addRect(cell,chosen?theme.color.line:theme.color.raised,theme.radius.control);
+    if(chosen) builder.list.addRect({cell.x,cell.y+6,3,cell.height-12},theme.color.accent,1.5f);
+    auto tile=takeLeft(cell,48);tile=centred(tile,38,38);
+    builder.list.addRect(tile,theme.color.silhouette,theme.radius.control);
+    builder.list.addImage(centred(tile,26,26),static_cast<UiImageId>(entry?entry->icon:UiIcon::ScriptingCode),
+                          reason?withAlpha(0xffffffff,.45f):0xffffffff);
+    auto chevron=takeRight(cell,22);
+    builder.list.addImage(centred(chevron,12,12),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textFaint);
+    cell=deflate(cell,UiInsets{4,6,0,6});
+    builder.label(takeTop(cell,cell.height*.5f),entry?entry->name:script->name,reason?theme.color.textMuted:theme.color.text,theme.type.body);
+    // Segunda linha: o motivo do bloqueio vence; depois a dependência que vem
+    // junto; depois o termo de outra engine que casou a busca; senão a função.
+    std::string detail;UiColor detailColour=theme.color.textMuted;
+    if(reason) {detail=reason;detailColour=theme.color.warning;}
+    else if(entry) {
+      const auto plan=scene::planComponentAddition(entity.components,entry->type->id,false,false);
+      if(plan.ready && plan.addedTypes.size()>1) {
+        detail="Inclui ";
+        for(usize i=0;i+1<plan.addedTypes.size();++i) {
+          if(i) detail+=" · ";
+          detail+=scene::findComponentSchema(plan.addedTypes[i])->name;
+        }
+        detailColour=theme.color.accent;
+      } else if(!query.empty() &&
+                editorSearchKey(std::string(entry->name)+" "+entry->description).find(query)==std::string::npos) {
+        std::istringstream aliases{std::string(entry->searchTerms)};std::string alias;
+        while(aliases>>alias) if(editorSearchKey(alias).find(query)!=std::string::npos) {detail="Equivale a "+alias;break;}
+      }
+      if(detail.empty()) detail=entry->description;
+    } else detail="Comportamento C# · "+script->file;
+    builder.label(cell,detail,detailColour,theme.type.caption);
+    builder.router.addRegion(hit,widgetId(entry?EditorWidget::ComponentAddBase:EditorWidget::ScriptAddBase)+row.index);
+  }
+  builder.list.popClip();
+  // Indicador de rolagem: posição e proporção do que está visível.
+  if(first>0 || first+drawn<rows.size()) {
+    const float track=content.height,thumb=std::max(24.f,track*static_cast<float>(drawn)/static_cast<float>(rows.size()));
+    const float offset=(track-thumb)*static_cast<float>(first)/static_cast<float>(std::max<usize>(1,rows.size()-drawn));
+    builder.list.addRect({content.right()-3,content.y+std::min(offset,track-thumb),3,thumb},withAlpha(theme.color.textFaint,.6f),1.5f);
+  }
+  if(builder.layout) {builder.layout->addRowCount=static_cast<u32>(rows.size());builder.layout->addVisibleRows=drawn;}
+}
+
+// Folha do Add: sobre o viewport, não espremida no Inspector.
+//
+// No telefone em paisagem (853×394 dp) o Inspector tem ~230 dp de largura e o
+// catálogo dentro dele mostrava três famílias e um item por vez. A folha usa a
+// largura da tela: trilho de famílias | lista agrupada | detalhe do tipo
+// escolhido com composição, valores iniciais e o botão Adicionar. Em telas
+// estreitas o detalhe substitui a lista, com "Voltar".
+void buildComponentSheet(ScreenBuilder &builder,const EditorEntity &entity) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const auto surface=deflate(state.surface,state.safeArea);
+  builder.list.addRect(state.surface,withAlpha(theme.color.voidBlack,.55f));
+  builder.router.addBlocker(state.surface);
+  builder.router.addRegion(state.surface,widgetId(EditorWidget::AddComponentMenu));
+  const float width=std::min(1040.f,surface.width-16),height=std::max(0.f,surface.height-kTopBarHeight-12);
+  const UiRect sheet{surface.x+(surface.width-width)*.5f,surface.y+kTopBarHeight+6,width,height};
+  builder.list.addRect(sheet,theme.color.surface,theme.radius.card);
+  builder.list.addBorder(sheet,theme.color.line,1,theme.radius.card);
+  builder.router.addBlocker(sheet);
+  auto content=deflate(sheet,UiInsets::all(10));
+  const auto query=editorSearchKey(state.componentQuery);
+  const u32 familyCount=static_cast<u32>(scene::ComponentFamily::Count);
+  const u32 family=state.componentCategory%(familyCount+1);
+
+  // Cabeçalho: o que está sendo feito e em qual objeto, a busca e o fechar.
+  auto header=takeTop(content,40);takeTop(content,8);
+  auto close=takeRight(header,40);
+  builder.list.addRect(deflate(close,UiInsets::all(4)),theme.color.raised,theme.radius.control);
+  builder.list.addImage(centred(close,14,14),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+  builder.router.addRegion(close,widgetId(EditorWidget::AddComponentMenu),theme.touch.minimumTarget);
+  takeRight(header,6);
+  // Presets do projeto: aplicar uma configuração salva em vez de um tipo vazio.
+  auto presets=takeRight(header,40);
+  builder.list.addRect(deflate(presets,UiInsets::all(4)),theme.color.raised,theme.radius.control);
+  builder.list.addImage(centred(presets,18,18),static_cast<UiImageId>(UiIcon::AssetsLibrary),theme.color.textDim);
+  builder.router.addRegion(presets,widgetId(EditorWidget::PresetOpen),theme.touch.minimumTarget);
+  takeRight(header,8);
+  auto titleArea=takeLeft(header,std::min(260.f,header.width*.36f));
+  builder.list.addImage(centred(takeLeft(titleArea,34),24,24),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
+  builder.label(takeTop(titleArea,22),"Adicionar componente",theme.color.text,theme.type.cardName);
+  builder.label(titleArea,std::string("em ")+entity.name,theme.color.textMuted,theme.type.caption);
+  auto search=header;
+  builder.list.addRect(search,theme.color.silhouette,theme.radius.control);
+  builder.list.addBorder(search,state.editingComponentSearch?theme.color.accent:theme.color.line,1,theme.radius.control);
+  auto field=deflate(search,UiInsets::symmetric(10,0));
+  builder.list.addImage(centred(takeLeft(field,22),15,15),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+  if(!state.componentQuery.empty()) {
+    auto clear=takeRight(field,30);
+    builder.list.addImage(centred(clear,12,12),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+    builder.router.addRegion(clear,widgetId(EditorWidget::ComponentSearchClear),theme.touch.minimumTarget);
+  }
+  builder.label(deflate(field,UiInsets{6,0,0,0}),state.componentQuery.empty()?"Buscar por nome, função ou termo de outra engine":
+                state.componentQuery,state.componentQuery.empty()?theme.color.textFaint:theme.color.text,theme.type.body);
+  builder.router.addRegion(field,widgetId(EditorWidget::ComponentSearch));
+
+  // Trilho: famílias com pelo menos um tipo. Com rótulo quando a folha é
+  // larga; só ícone no telefone. Rola pelo arraste quando não cabe — o plano
+  // leva a 18 famílias, que nenhuma altura de telefone mostra de uma vez.
+  const bool wide=width>=900;
+  auto rail=takeLeft(content,wide?150.f:48.f);takeLeft(content,10);
+  if(query.empty()) {
+    struct RailItem {u32 value;UiIcon icon;const char *caption;};
+    std::vector<RailItem> items{{0,UiIcon::AssetsGrid,"Todos"}};
+    for(u32 f=0;f<familyCount;++f) {
+      bool present=false;
+      for(const auto &entry:editorComponentCatalog) present|=static_cast<u32>(entry.family)==f;
+      if(f==static_cast<u32>(scene::ComponentFamily::Logic) && state.code) present|=!state.code->scriptTypes().empty();
+      const auto value=static_cast<scene::ComponentFamily>(f);
+      if(present) items.push_back({f+1,editorIconByName(scene::componentFamilyIcon(value)),scene::componentFamilyName(value)});
+    }
+    constexpr float kRailCell=44;
+    const u32 fits=std::max(1u,static_cast<u32>(rail.height/kRailCell));
+    const u32 first=std::min(state.addRailScroll,static_cast<u32>(items.size()>fits?items.size()-fits:0));
+    const auto area=rail;
+    for(u32 i=first;i<items.size() && rail.height>=kRailCell;++i)
+      railCell(builder,takeTop(rail,kRailCell),items[i].icon,items[i].caption,family==items[i].value,
+               widgetId(EditorWidget::ComponentFamilyBase)+items[i].value);
+    // Setas sobre o trilho quando há famílias acima ou abaixo do visível.
+    const auto more=[&](float y,UiIcon icon) {
+      const UiRect badge{area.x+area.width*.5f-10,y,20,14};
+      builder.list.addRect(badge,theme.color.line,7);
+      builder.list.addImage(centred(badge,10,10),static_cast<UiImageId>(icon),theme.color.text);
+    };
+    if(first>0) more(area.y-2,UiIcon::UiChevronUp);
+    if(first+fits<items.size()) more(area.y+fits*kRailCell-10,UiIcon::UiChevronDown);
+    if(builder.layout) {builder.layout->addRailCount=static_cast<u32>(items.size());builder.layout->addRailVisible=fits;}
+  }
+
+  // Detalhe ao lado da lista quando cabe; senão ele ocupa o lugar da lista.
+  const bool previewing=state.componentPreview || !state.scriptPreviewType.empty();
+  const bool split=content.width>=560;
+  if(split || previewing) {
+    UiRect detail=split?takeRight(content,std::max(260.f,content.width*.44f)):content;
+    if(split) {takeRight(content,10);builder.list.addRect(detail,theme.color.silhouette,theme.radius.card);detail=deflate(detail,UiInsets::all(10));}
+    if(state.componentPreview) buildComponentPreview(builder,detail,entity,!split);
+    else if(!state.scriptPreviewType.empty()) buildScriptPreview(builder,detail,entity,!split);
+    else {
+      auto hint=centred(detail,detail.width,96);
+      builder.list.addImage(centred(takeTop(hint,40),28,28),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textFaint);
+      builder.label(takeTop(hint,24),"Escolha um componente",theme.color.textDim,theme.type.body,UiAlign::Center);
+      builder.label(hint,"Composição e valores iniciais aparecem aqui",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    }
+    if(!split) return;
+  }
+  buildComponentList(builder,content,entity,query,family);
+}
+
+// Folha de criação: a mesma linguagem do Add, para objetos.
+//
+// Antes era um diálogo de 520×350 com lista de texto paginada de três em três
+// e ícones de 16 dp. Aqui: trilho de categorias, grade de cartões com o ícone
+// grande (a pessoa escolhe O QUE colocar na cena, e a forma reconhece mais
+// rápido que o nome) e detalhe com a composição real da receita, o destino na
+// hierarquia e o botão Criar. A grade rola pelo arraste.
+struct CreationGrid {u32 columns=1;float cellWidth=0,cellHeight=0;};
+CreationGrid creationGrid(float width) {
+  CreationGrid grid;
+  grid.columns=std::max(1u,static_cast<u32>((width+8)/(118+8)));
+  grid.cellWidth=(width-8.0f*static_cast<float>(grid.columns-1))/static_cast<float>(grid.columns);
+  grid.cellHeight=92;
+  return grid;
+}
+void buildCreationSheet(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  const auto &theme=builder.theme;const auto &state=builder.state;auto &list=builder.list;auto &router=builder.router;
+  const auto surface=deflate(state.surface,state.safeArea);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.55f));router.addBlocker(state.surface);
+  router.addRegion(state.surface,widgetId(EditorWidget::CreateMenuClose));
+  const float width=std::min(1040.f,surface.width-16),height=std::max(0.f,surface.height-kTopBarHeight-12);
+  const UiRect sheet{surface.x+(surface.width-width)*.5f,surface.y+kTopBarHeight+6,width,height};
+  list.addRect(sheet,theme.color.surface,theme.radius.card);
+  list.addBorder(sheet,theme.color.line,1,theme.radius.card);
+  router.addBlocker(sheet);
+  auto content=deflate(sheet,UiInsets::all(10));
+  const auto *parent=state.document->find(state.selection);
+  const bool canCreateChild=parent && parent->id!=state.document->root();
+  const bool asChild=state.creationAsChild && canCreateChild;
+
+  // Cabeçalho: ação, destino atual, busca e fechar.
+  auto header=takeTop(content,40);takeTop(content,8);
+  auto close=takeRight(header,40);
+  list.addRect(deflate(close,UiInsets::all(4)),theme.color.raised,theme.radius.control);
+  list.addImage(centred(close,14,14),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+  router.addRegion(close,widgetId(EditorWidget::CreateMenuClose),theme.touch.minimumTarget);
+  takeRight(header,8);
+  auto titleArea=takeLeft(header,std::min(260.f,header.width*.36f));
+  list.addImage(centred(takeLeft(titleArea,34),24,24),static_cast<UiImageId>(UiIcon::SceneObjectAdd),0xffffffff);
+  builder.label(takeTop(titleArea,22),"Criar objeto",theme.color.text,theme.type.cardName);
+  builder.label(titleArea,asChild?std::string("como filho de ")+parent->name:std::string("na raiz da cena"),theme.color.textMuted,theme.type.caption);
+  list.addRect(header,theme.color.silhouette,theme.radius.control);
+  list.addBorder(header,theme.color.line,1,theme.radius.control);
+  auto field=deflate(header,UiInsets::symmetric(10,0));
+  list.addImage(centred(takeLeft(field,22),15,15),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+  if(state.creationSearch[0]) {
+    auto clear=takeRight(field,30);
+    list.addImage(centred(clear,12,12),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+    router.addRegion(clear,widgetId(EditorWidget::CreationClearSearch),theme.touch.minimumTarget);
+  }
+  builder.label(deflate(field,UiInsets{6,0,0,0}),state.creationSearch[0]?state.creationSearch:"Buscar objeto por nome ou termo de outra engine",
+                state.creationSearch[0]?theme.color.text:theme.color.textFaint,theme.type.body);
+  router.addRegion(field,widgetId(EditorWidget::CreationSearch));
+
+  const auto query=editorSearchKey(state.creationSearch);
+  const bool wide=width>=900;
+  auto rail=takeLeft(content,wide?150.f:48.f);takeLeft(content,10);
+  if(query.empty())
+    for(u32 i=0;i<std::size(creationCategories) && rail.height>=44;++i) {
+      bool available=false;
+      for(u32 j=0;j<editorCreationCatalog.size();++j) available|=creationAvailable(state,j) && editorCreationCatalog[j].category==i;
+      if(!available) continue;
+      railCell(builder,takeTop(rail,44),editorIconByName(creationCategoryIcons[i]),creationCategories[i],
+               state.creationCategory==i,widgetId(EditorWidget::CreationCategoryBase)+i);
+    }
+
+  std::vector<u32> entries;
+  for(u32 i=0;i<editorCreationCatalog.size();++i)
+    if(creationAvailable(state,i) && creationListed(editorCreationCatalog[i],query,state.creationCategory)) entries.push_back(i);
+  const bool selectedListed=std::find(entries.begin(),entries.end(),state.creationSelection)!=entries.end();
+
+  // Detalhe à direita quando cabe; no telefone estreito vira uma faixa inferior.
+  const bool split=content.width>=560;
+  UiRect detail=split?takeRight(content,std::max(250.f,content.width*.36f)):takeBottom(content,selectedListed?96.f:0.f);
+  if(split) takeRight(content,10);
+  if(selectedListed && detail.height>0) {
+    const auto &selected=editorCreationCatalog[state.creationSelection];
+    list.addRect(detail,theme.color.silhouette,theme.radius.card);
+    auto body=deflate(detail,UiInsets::all(10));
+    auto create=takeBottom(body,44);
+    list.addRect(create,theme.color.accent,theme.radius.control);
+    builder.label(create,"Criar",theme.color.accentInk,theme.type.body,UiAlign::Center);
+    router.addRegion(create,creationWidget(state.creationSelection));
+    if(split) {
+      takeBottom(body,8);
+      // Destino na hierarquia como controle segmentado, logo acima do Criar.
+      auto destination=takeBottom(body,34);takeBottom(body,8);
+      list.addRect(destination,theme.color.canvas,theme.radius.control);
+      auto root=takeLeft(destination,destination.width*.42f);
+      const auto segment=[&](UiRect rect,const std::string &text,bool on,bool enabled,EditorWidget widget) {
+        const auto pill=deflate(rect,UiInsets::all(3));
+        if(on) list.addRect(pill,theme.color.raised,theme.radius.control);
+        builder.label(deflate(pill,UiInsets::symmetric(6,0)),text,on?theme.color.text:enabled?theme.color.textMuted:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+        if(enabled) router.addRegion(rect,widgetId(widget));
+      };
+      segment(root,"Na raiz",!asChild,true,EditorWidget::CreationAtRoot);
+      segment(destination,canCreateChild?std::string("Filho de ")+parent->name:std::string("Sem pai selecionado"),asChild,canCreateChild,EditorWidget::CreationAsChild);
+      auto title=takeTop(body,48);
+      auto tile=centred(takeLeft(title,52),46,46);
+      list.addRect(tile,theme.color.raised,theme.radius.control);
+      list.addImage(centred(tile,32,32),static_cast<UiImageId>(selected.icon),0xffffffff);
+      takeLeft(title,6);
+      builder.label(takeTop(title,26),selected.name,theme.color.text,theme.type.cardName);
+      builder.label(title,creationCategories[selected.category],theme.color.textMuted,theme.type.caption);
+      builder.label(takeTop(body,34),selected.description,theme.color.textDim,theme.type.caption);
+      // A composição é o contrato da receita: exatamente o que entra no objeto,
+      // em chips que quebram linha — cabem duas ou três no telefone.
+      if(!selected.components.empty()) {
+        builder.label(takeTop(body,20),"COMPONENTES",theme.color.textMuted,theme.type.label);
+        float x=body.x,y=body.y;
+        for(const auto &part:selected.components) {
+          const auto *schema=scene::findComponentSchema(part.type);
+          if(!schema) continue;
+          const float chip=std::min(body.width,list.measure(schema->name,theme.type.caption)+40);
+          if(x+chip>body.right()) {x=body.x;y+=32;}
+          if(y+28>body.bottom()) break;
+          const UiRect rect{x,y,chip,28};
+          list.addRect(rect,theme.color.raised,14);
+          auto inner=deflate(rect,UiInsets{8,0,10,0});
+          list.addImage(centred(takeLeft(inner,20),16,16),static_cast<UiImageId>(editorIconByName(schema->icon)),0xffffffff);
+          builder.label(inner,schema->name,theme.color.text,theme.type.caption);
+          x+=chip+6;
+        }
+      }
+    } else {
+      auto text=deflate(takeLeft(body,body.width),UiInsets{0,0,0,6});
+      builder.label(takeTop(text,20),selected.name,theme.color.text,theme.type.body);
+      builder.label(text,selected.description,theme.color.textMuted,theme.type.caption);
+    }
+  }
+
+  // Grade de cartões com rolagem por linha.
+  auto titleRow=takeTop(content,28);
+  builder.label(takeRight(titleRow,40),std::to_string(entries.size()),theme.color.textMuted,theme.type.caption,UiAlign::End);
+  builder.label(titleRow,query.empty()?creationCategories[std::min<u32>(state.creationCategory,std::size(creationCategories)-1)]:"Resultados",
+                theme.color.text,theme.type.cardName);
+  if(entries.empty()) {builder.label(takeTop(content,40),"Nenhum objeto encontrado",theme.color.textMuted,theme.type.caption,UiAlign::Center);return;}
+  const auto grid=creationGrid(content.width-6);
+  const u32 rows=(static_cast<u32>(entries.size())+grid.columns-1)/grid.columns;
+  const u32 fits=std::max(1u,static_cast<u32>((content.height+8)/(grid.cellHeight+8)));
+  const u32 first=std::min(state.creationScroll,rows>fits?rows-fits:0u);
+  list.pushClip(content);
+  for(u32 r=first;r<rows && r<first+fits;++r)
+    for(u32 c=0;c<grid.columns;++c) {
+      const u32 slot=r*grid.columns+c;if(slot>=entries.size()) break;
+      const u32 index=entries[slot];const auto &entry=editorCreationCatalog[index];
+      const UiRect card{content.x+static_cast<float>(c)*(grid.cellWidth+8),content.y+static_cast<float>(r-first)*(grid.cellHeight+8),grid.cellWidth,grid.cellHeight};
+      const bool selected=state.creationSelection==index;
+      list.addRect(card,selected?theme.color.line:theme.color.raised,theme.radius.card);
+      if(selected) list.addBorder(card,theme.color.accent,1.5f,theme.radius.card);
+      auto inner=deflate(card,UiInsets::all(8));
+      auto icon=takeTop(inner,48);
+      list.addImage(centred(icon,36,36),static_cast<UiImageId>(entry.icon),0xffffffff);
+      builder.label(inner,entry.name,theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(card,widgetId(EditorWidget::CreationRowBase)+index);
+    }
+  list.popClip();
+  if(first>0 || first+fits<rows) {
+    const float track=content.height,thumb=std::max(24.f,track*static_cast<float>(fits)/static_cast<float>(rows));
+    const float offset=(track-thumb)*static_cast<float>(first)/static_cast<float>(std::max(1u,rows-fits));
+    list.addRect({content.right()-3,content.y+offset,3,thumb},withAlpha(theme.color.textFaint,.6f),1.5f);
+  }
+  layout.creationRowCount=rows;layout.creationVisibleRows=fits;
+}
+
+// Prévia de um tipo antes de anexar: composição que entra no mesmo Undo e os
+// valores iniciais declarados no contrato. Nada é escrito no documento aqui.
+void buildComponentPreview(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,bool compact) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  if(!state.componentPreview || state.componentPreview>editorComponentCatalog.size()) return;
+  const auto &entry=editorComponentCatalog[state.componentPreview-1];
+  const auto plan=scene::planComponentAddition(entity.components,entry.type->id,false,false);
+
+  // Rodapé: ação primária larga; "Voltar" só quando o detalhe cobre a lista.
+  auto footer=takeBottom(content,44);takeBottom(content,8);
+  if(compact) {
+    auto back=takeLeft(footer,96);builder.list.addRect(deflate(back,UiInsets{0,0,8,0}),theme.color.raised,theme.radius.control);
+    builder.label(deflate(back,UiInsets{0,0,8,0}),"‹ Voltar",theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(back,widgetId(EditorWidget::ComponentPreviewBack));
+  }
+  builder.list.addRect(footer,plan.ready?theme.color.accent:theme.color.raised,theme.radius.control);
+  builder.label(footer,plan.ready?"Adicionar ao objeto":"Indisponível",plan.ready?theme.color.accentInk:theme.color.textMuted,theme.type.body,UiAlign::Center);
+  if(plan.ready) builder.router.addRegion(footer,widgetId(EditorWidget::ComponentPreviewConfirm));
+
+  // Identidade do tipo: ícone, nome, família e função.
+  auto title=takeTop(content,44);
+  if(!compact) {
+    // Ao lado da lista, o detalhe se fecha pelo próprio cabeçalho.
+    auto dismiss=takeRight(title,36);
+    builder.list.addImage(centred(dismiss,12,12),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textMuted);
+    builder.router.addRegion(dismiss,widgetId(EditorWidget::ComponentPreviewBack),theme.touch.minimumTarget);
+  }
+  auto tile=centred(takeLeft(title,48),42,42);
+  builder.list.addRect(tile,theme.color.raised,theme.radius.control);
+  builder.list.addImage(centred(tile,28,28),static_cast<UiImageId>(entry.icon),0xffffffff);
+  takeLeft(title,6);
+  builder.label(takeTop(title,24),entry.name,theme.color.text,theme.type.cardName);
+  builder.label(title,std::string(scene::componentFamilyName(entry.family))+" · "+std::string(entry.schema->subfamily),
+                theme.color.textMuted,theme.type.caption);
+  builder.label(takeTop(content,28),entry.description,theme.color.textDim,theme.type.caption);
+  takeTop(content,4);
+
+  // Controle segmentado: Composição | Valores iniciais.
+  auto tabs=takeTop(content,32);takeTop(content,8);
+  builder.list.addRect(tabs,theme.color.canvas,theme.radius.control);
+  auto composition=takeLeft(tabs,tabs.width*.5f);
+  const auto segment=[&](UiRect rect,const char *text,bool on,EditorWidget widget) {
+    const auto pill=deflate(rect,UiInsets::all(3));
+    if(on) builder.list.addRect(pill,theme.color.raised,theme.radius.control);
+    builder.label(pill,text,on?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(rect,widgetId(widget));
+  };
+  segment(composition,"Composição",!state.componentPreviewValues,EditorWidget::ComponentPreviewComposition);
+  segment(tabs,"Valores iniciais",state.componentPreviewValues,EditorWidget::ComponentPreviewValues);
+
+  if(!state.componentPreviewValues) {
+    // O que o objeto passa a ter, na ordem do fecho de dependências, e o que
+    // ele já tinha e o tipo exige.
+    const auto line=[&](const scene::ComponentSchema &schema,const char *status,UiColor statusColour) {
+      if(content.height<36) return;
+      auto row=deflate(takeTop(content,38),UiInsets{0,2,0,2});
+      builder.list.addRect(row,theme.color.raised,theme.radius.control);
+      builder.list.addImage(centred(takeLeft(row,36),20,20),static_cast<UiImageId>(editorIconByName(schema.icon)),0xffffffff);
+      builder.label(takeRight(row,96),status,statusColour,theme.type.caption,UiAlign::End);
+      builder.label(row,schema.name,theme.color.text,theme.type.caption);
+    };
+    for(const auto &rule:entry.schema->requirements)
+      if(entity.components.find(rule.typeId))
+        if(const auto *present=scene::findComponentSchema(rule.typeId)) line(*present,"já presente",theme.color.textMuted);
+    if(plan.ready) for(const auto id:plan.addedTypes)
+      if(const auto *added=scene::findComponentSchema(id)) line(*added,id==entry.type->id?"novo":"novo · exigido",theme.color.accent);
+    if(!plan.ready) builder.label(takeTop(content,40),plan.error?plan.error:"Composição indisponível",theme.color.warning,theme.type.caption);
+    else builder.label(takeTop(content,28),std::to_string(plan.addedTypes.size())+" componente(s) em um único Undo",theme.color.textMuted,theme.type.caption);
+  } else {
+    const auto contracts=scene::componentContracts(*entry.schema);
+    std::vector<const scene::PropertyContract *> rows;
+    for(const auto &row:contracts) if(!row.defaultValue.empty()) rows.push_back(&row);
+    if(rows.empty()) builder.label(content,"Sem valores iniciais no contrato",theme.color.textDim,theme.type.caption);
+    else {
+      // Grade rótulo | valor, 30 dp por linha: cabe o dobro da lista anterior.
+      const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height-30)/30));
+      const u32 pages=(static_cast<u32>(rows.size())+perPage-1)/perPage;
+      const u32 page=std::min(state.componentPreviewPage,pages-1);
+      auto pager=pages>1?takeBottom(content,30):UiRect{};
+      for(u32 i=page*perPage;i<rows.size()&&i<(page+1)*perPage;++i) {
+        const auto &property=*rows[i];auto row=takeTop(content,30);
+        if(i%2==0) builder.list.addRect(row,theme.color.canvas,theme.radius.control);
+        row=deflate(row,UiInsets::symmetric(8,0));
+        auto value=takeRight(row,row.width*.45f);
+        builder.label(row,std::string(property.label)+(property.conditional?" · conforme modo":""),theme.color.textDim,theme.type.caption);
+        builder.label(value,property.defaultValue+std::string(property.unit.empty()?"":" ")+std::string(property.unit)+(property.perSlot?" /slot":""),
+                      theme.color.text,theme.type.caption,UiAlign::End);
+      }
+      if(pages>1) {
+        auto previous=takeLeft(pager,40),next=takeRight(pager,40);
+        builder.list.addImage(centred(previous,12,12),static_cast<UiImageId>(UiIcon::UiChevronLeft),page?theme.color.textDim:theme.color.textFaint);
+        builder.list.addImage(centred(next,12,12),static_cast<UiImageId>(UiIcon::UiChevronRight),page+1<pages?theme.color.textDim:theme.color.textFaint);
+        if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ComponentPreviewPrevious));
+        if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ComponentPreviewNext));
+        builder.label(pager,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      }
+    }
+  }
+}
+void buildScriptPreview(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,bool compact) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const EditorScriptType *type=nullptr;
+  if(state.code) for(const auto &candidate:state.code->scriptTypes())
+    if(candidate.id==state.scriptPreviewType) {type=&candidate;break;}
+  scene::ScriptBehavior draft;
+  if(type) {draft.scriptType=type->id;draft.source=type->file;}
+  const bool published=type && state.code->publishedGeneration()==state.scriptPreviewGeneration;
+  const bool ready=published && draft.valid() && entity.components.size()<scene::Components::MaximumCount;
+  auto footer=takeBottom(content,44);
+  if(compact) {
+    auto back=takeLeft(footer,88);builder.label(back,"‹ Voltar",theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(back,widgetId(EditorWidget::ComponentPreviewBack));
+  }
+  auto add=takeRight(footer,104);
+  builder.list.addRect(add,ready?theme.color.accent:theme.color.raised,theme.radius.control);
+  builder.label(add,"Adicionar",ready?theme.color.accentInk:theme.color.textMuted,theme.type.body,UiAlign::Center);
+  if(ready) builder.router.addRegion(add,widgetId(EditorWidget::ComponentPreviewConfirm));
+  auto title=takeTop(content,40);
+  if(!compact) {
+    auto dismiss=takeRight(title,36);
+    builder.list.addImage(centred(dismiss,12,12),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textMuted);
+    builder.router.addRegion(dismiss,widgetId(EditorWidget::ComponentPreviewBack),theme.touch.minimumTarget);
+  }
+  builder.list.addImage(centred(takeLeft(title,36),28,28),static_cast<UiImageId>(UiIcon::ScriptingCode),0xffffffff);
+  builder.label(title,type?type->name:"Tipo indisponível",theme.color.text,theme.type.cardName);
+  builder.label(takeTop(content,30),std::string("Em ")+entity.name,theme.color.textMuted,theme.type.caption);
+  if(type) {
+    builder.label(takeTop(content,30),type->file,theme.color.textDim,theme.type.caption);
+    builder.label(takeTop(content,32),std::to_string(type->properties.size())+" campo(s) exposto(s)",theme.color.accent,theme.type.body);
+    for(const auto &property:type->properties) {
+      if(content.height<58) break;
+      auto row=takeTop(content,30);
+      builder.list.addRect(row,theme.color.raised,theme.radius.control);
+      builder.label(deflate(row,UiInsets::symmetric(8,0)),property.name+" · "+property.valueType,theme.color.text,theme.type.caption);
+    }
+    if(ready) builder.label(takeTop(content,30),"Valores iniciais definidos pelo código publicado",theme.color.textDim,theme.type.caption);
+  }
+  if(!ready) builder.label(takeTop(content,40),!published?"Catálogo alterado; volte e escolha novamente":
+      !draft.valid()?"Tipo ou fonte inválidos":"Limite de componentes atingido",theme.color.warning,theme.type.caption);
+}
+
 void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity) {
   if(builder.state.presetPanel && builder.state.presetEntity==entity.id) {
     const auto &state=builder.state;const auto &theme=builder.theme;
@@ -2336,143 +2917,21 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   }
 
   const auto &theme=builder.theme;const auto &state=builder.state;
-  const bool same=state.componentSelection==entity.id,adding=same&&state.addingComponent;
-  const auto query=editorSearchKey(state.componentQuery);
+  const bool same=state.componentSelection==entity.id;
   if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
   const bool resourcePicker=state.resourceInstance&&entity.components.findInstance(state.resourceInstance);
   if(same && state.meshPicker && (meshRenderer(entity)||resourcePicker)) {buildMeshPicker(builder,content,entity);return;}
   if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
   if(same && state.textureViewer && meshRenderer(entity)) {buildTextureViewer(builder,content);return;}
   if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
-  if(adding && state.componentPreview && state.componentPreview<=editorComponentCatalog.size()) {
-    const auto &entry=editorComponentCatalog[state.componentPreview-1];
-    const auto plan=scene::planComponentAddition(entity.components,entry.type->id,false,false);
-    auto footer=takeBottom(content,44);
-    auto back=takeLeft(footer,88);builder.label(back,"‹ Voltar",theme.color.textDim,theme.type.body,UiAlign::Center);
-    builder.router.addRegion(back,widgetId(EditorWidget::ComponentPreviewBack));
-    auto add=takeRight(footer,104);
-    builder.list.addRect(add,plan.ready?theme.color.accent:theme.color.raised,theme.radius.control);
-    builder.label(add,"Adicionar",plan.ready?theme.color.accentInk:theme.color.textMuted,theme.type.body,UiAlign::Center);
-    if(plan.ready) builder.router.addRegion(add,widgetId(EditorWidget::ComponentPreviewConfirm));
-    auto title=takeTop(content,40);
-    builder.list.addImage(centred(takeLeft(title,36),28,28),static_cast<UiImageId>(entry.icon),0xffffffff);
-    builder.label(title,entry.name,theme.color.text,theme.type.cardName);
-    builder.label(takeTop(content,30),entry.description,theme.color.textDim,theme.type.caption);
-    builder.label(takeTop(content,32),std::string("Em ")+entity.name,theme.color.textMuted,theme.type.caption);
-    auto tabs=takeTop(content,34),composition=takeLeft(tabs,tabs.width*.5f);
-    builder.label(composition,"Composição",state.componentPreviewValues?theme.color.textDim:theme.color.accent,theme.type.caption,UiAlign::Center);
-    builder.label(tabs,"Valores iniciais",state.componentPreviewValues?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(composition,widgetId(EditorWidget::ComponentPreviewComposition));
-    builder.router.addRegion(tabs,widgetId(EditorWidget::ComponentPreviewValues));
-    if(!state.componentPreviewValues) {
-      if(entry.schema->requirements.empty())
-        builder.label(takeTop(content,30),"Sem requisitos adicionais",theme.color.textDim,theme.type.caption);
-      for(const auto &rule:entry.schema->requirements) {
-        const auto *required=scene::findComponentSchema(rule.typeId);
-        if(!required || content.height<32) break;
-        auto row=takeTop(content,32);
-        builder.list.addRect(row,theme.color.raised,theme.radius.control);
-        const bool present=entity.components.find(rule.typeId)!=nullptr;
-        builder.label(deflate(row,UiInsets::symmetric(8,0)),std::string(required->name)+(present?" · já presente":plan.ready?" · será adicionado":" · necessário"),
-                      present?theme.color.textDim:theme.color.text,theme.type.caption);
-      }
-      if(!plan.ready) builder.label(takeTop(content,40),plan.error?plan.error:"Composição indisponível",theme.color.warning,theme.type.caption);
-      else builder.label(takeTop(content,32),std::to_string(plan.addedTypes.size())+" componente(s) em um Undo",theme.color.textDim,theme.type.caption);
-    } else {
-      const auto contracts=scene::componentContracts(*entry.schema);
-      std::vector<const scene::PropertyContract *> rows;
-      for(const auto &row:contracts) if(!row.defaultValue.empty()) rows.push_back(&row);
-      if(rows.empty()) builder.label(content,"Sem valores iniciais no contrato",theme.color.textDim,theme.type.caption);
-      else {
-        const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height-30)/46));
-        const u32 pages=(static_cast<u32>(rows.size())+perPage-1)/perPage;
-        const u32 page=std::min(state.componentPreviewPage,pages-1);
-        auto pager=pages>1?takeBottom(content,30):UiRect{};
-        for(u32 i=page*perPage;i<rows.size()&&i<(page+1)*perPage;++i) {
-          const auto &property=*rows[i];auto row=takeTop(content,46);
-          builder.list.addRect(deflate(row,UiInsets{0,2,0,2}),theme.color.raised,theme.radius.control);
-          builder.list.pushClip(row);row=deflate(row,UiInsets::symmetric(8,0));
-          builder.label(takeTop(row,23),std::string(property.label)+(property.conditional?" · conforme modo":""),theme.color.text,theme.type.caption);
-          builder.label(row,property.defaultValue+std::string(property.unit.empty()?"":" ")+std::string(property.unit)+(property.perSlot?" · por slot":""),theme.color.textDim,theme.type.caption);
-          builder.list.popClip();
-        }
-        if(pages>1) {
-          auto previous=takeLeft(pager,40),next=takeRight(pager,40);
-          builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
-          builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
-          if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ComponentPreviewPrevious));
-          if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ComponentPreviewNext));
-          builder.label(pager,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
-        }
-      }
-    }
-    return;
-  }
-  if(adding && !state.scriptPreviewType.empty()) {
-    const EditorScriptType *type=nullptr;
-    if(state.code) for(const auto &candidate:state.code->scriptTypes())
-      if(candidate.id==state.scriptPreviewType) {type=&candidate;break;}
-    scene::ScriptBehavior draft;
-    if(type) {draft.scriptType=type->id;draft.source=type->file;}
-    const bool published=type && state.code->publishedGeneration()==state.scriptPreviewGeneration;
-    const bool ready=published && draft.valid() && entity.components.size()<scene::Components::MaximumCount;
-    auto footer=takeBottom(content,44);
-    auto back=takeLeft(footer,88);builder.label(back,"‹ Voltar",theme.color.textDim,theme.type.body,UiAlign::Center);
-    builder.router.addRegion(back,widgetId(EditorWidget::ComponentPreviewBack));
-    auto add=takeRight(footer,104);
-    builder.list.addRect(add,ready?theme.color.accent:theme.color.raised,theme.radius.control);
-    builder.label(add,"Adicionar",ready?theme.color.accentInk:theme.color.textMuted,theme.type.body,UiAlign::Center);
-    if(ready) builder.router.addRegion(add,widgetId(EditorWidget::ComponentPreviewConfirm));
-    auto title=takeTop(content,40);
-    builder.list.addImage(centred(takeLeft(title,36),28,28),static_cast<UiImageId>(UiIcon::ScriptingCode),0xffffffff);
-    builder.label(title,type?type->name:"Tipo indisponível",theme.color.text,theme.type.cardName);
-    builder.label(takeTop(content,30),std::string("Em ")+entity.name,theme.color.textMuted,theme.type.caption);
-    if(type) {
-      builder.label(takeTop(content,30),type->file,theme.color.textDim,theme.type.caption);
-      builder.label(takeTop(content,32),std::to_string(type->properties.size())+" campo(s) exposto(s)",theme.color.accent,theme.type.body);
-      for(const auto &property:type->properties) {
-        if(content.height<58) break;
-        auto row=takeTop(content,30);
-        builder.list.addRect(row,theme.color.raised,theme.radius.control);
-        builder.label(deflate(row,UiInsets::symmetric(8,0)),property.name+" · "+property.valueType,theme.color.text,theme.type.caption);
-      }
-      if(ready) builder.label(takeTop(content,30),"Valores iniciais definidos pelo código publicado",theme.color.textDim,theme.type.caption);
-    }
-    if(!ready) builder.label(takeTop(content,40),!published?"Catálogo alterado; volte e escolha novamente":
-        !draft.valid()?"Tipo ou fonte inválidos":"Limite de componentes atingido",theme.color.warning,theme.type.caption);
-    return;
-  }
   auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
   builder.list.addRect(button,theme.color.raised,theme.radius.control);
   builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
   builder.list.addImage(centred(takeLeft(button,40),28,28),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
-  builder.label(button,adding?"Add · fechar":"Add",theme.color.text,theme.type.body);
+  builder.label(button,"Adicionar componente",theme.color.text,theme.type.body);
   struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;bool object=false;};
   std::vector<Card> cards;
-  if(adding) {
-    const auto presets=takeTop(content,34);builder.label(presets,"Presets do projeto  ›",theme.color.accent,theme.type.caption);
-    builder.router.addRegion(presets,widgetId(EditorWidget::PresetOpen));
-    auto search=takeTop(content,34),clear=takeRight(search,32);builder.list.addRect(search,theme.color.raised,theme.radius.control);
-    builder.label(search,state.componentQuery.empty()?"Buscar componente":state.componentQuery.c_str(),theme.color.textDim,theme.type.caption);
-    builder.router.addRegion(search,widgetId(EditorWidget::ComponentSearch));
-    if(!state.componentQuery.empty()) {builder.label(clear,"x",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(clear,widgetId(EditorWidget::ComponentSearchClear));}
-    const char *categories[]{"Todos","Câmera","Visual","Física","Código","Gameplay"};
-    auto category=takeTop(content,32);builder.label(category,state.componentQuery.empty()?categories[state.componentCategory%6]:"Resultados",theme.color.accent,theme.type.caption);
-    if(state.componentQuery.empty()) {
-      builder.label(takeRight(category,24),">",theme.color.textDim,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(category,widgetId(EditorWidget::ComponentCategory));
-    }
-    for(u32 i=0;i<editorComponentCatalog.size();++i) {
-      const auto &entry=editorComponentCatalog[i];const u32 category=static_cast<u32>(entry.category);
-      if(query.empty() && state.componentCategory && state.componentCategory!=category) continue;
-      if(!query.empty() && editorSearchKey(std::string(entry.name)+" "+entry.description+" "+std::string(entry.type->id)+" "+entry.searchTerms).find(query)==std::string::npos) continue;
-      cards.push_back({&entry,nullptr,i});
-    }
-    if(state.code && (!query.empty()||!state.componentCategory||state.componentCategory==4)) for(u32 i=0;i<state.code->scriptTypes().size();++i) {
-      const auto &type=state.code->scriptTypes()[i];
-      if(query.empty()||editorSearchKey(type.name+" "+type.id).find(query)!=std::string::npos) cards.push_back({nullptr,nullptr,i});
-    }
-  } else {
+  {
     // Transformação continua o primeiro card (é o componente de todo objeto);
     // as configurações universais do objeto vêm logo depois, antes dos componentes.
     cards.push_back({nullptr,nullptr,0,true});
@@ -2485,7 +2944,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       if(!known && (scene::scriptBehavior(v)||v->unresolved())) cards.push_back({nullptr,v,i});
     }
   }
-  if(!adding && same) {
+  if(same) {
     const auto focused=std::find_if(cards.begin(),cards.end(),[&](const Card &item) {
       if(item.object) return state.expandedComponent=="astra.object";
       if(item.transform) return state.expandedComponent=="astra.transform" || state.transformMenu;
@@ -2495,7 +2954,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     });
     if(focused!=cards.end()) {const auto selected=*focused;cards.assign(1,selected);}
   }
-  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/(adding?58:48)));
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/48));
   const u32 pages=std::max(1u,(static_cast<u32>(cards.size())+perPage-1)/perPage);
   const u32 page=same?std::min(state.componentPage,pages-1):0;
   builder.componentPage=page;
@@ -2512,44 +2971,17 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     const auto &item=cards[card];const auto *script=scene::scriptBehavior(item.value);const auto *schema=script?scriptSchema(state,script->scriptType):nullptr;
     const bool open=same&&(item.object?state.expandedComponent=="astra.object":item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
     const bool menu=same&&!item.object&&(item.transform?state.transformMenu:item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
-    const EditorScriptType *newType=adding&&!item.native?&state.code->scriptTypes()[item.index]:nullptr;
-    std::string title=item.object?"Objeto":item.transform?"Transformação":item.native?item.native->name:newType?newType->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
+    std::string title=item.object?"Objeto":item.transform?"Transformação":item.native?item.native->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
     if(item.value && item.native && item.native->type->allowMultiple) title+=" · "+std::to_string(item.value->instanceId());
     const auto icon=item.object?UiIcon::EditorAuthorObject:item.transform?UiIcon::EditorAuthorMove:item.native?item.native->icon:UiIcon::ScriptingCode;
-    const char *reason=adding?(item.native?(!item.native->type->allowMultiple&&entity.components.find(*item.native->type)?"Já adicionado":item.native->unavailable(entity)):
-        entity.components.size()>=scene::Components::MaximumCount?"Limite de componentes atingido":nullptr):nullptr;
-    auto row=takeTop(content,adding?54.0f:44.0f);const auto hit=row;
+    auto row=takeTop(content,44.0f);const auto hit=row;
     builder.list.addRect(row,theme.color.raised,theme.radius.control);
     if(open) builder.list.addRect({row.x,row.y+4,3,row.height-8},theme.color.accent,1);
-    if(!adding) builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
     builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
-    auto more=takeRight(row,adding?24:(item.object?0:32));
-    builder.label(adding?takeTop(row,27):row,title.c_str(),reason?theme.color.textMuted:theme.color.text,theme.type.body);
-    if(adding) {
-      builder.label(more,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
-      std::string detail=reason?reason:item.native?item.native->description:"Comportamento C#";
-      if(!reason && item.native && !query.empty() &&
-         editorSearchKey(std::string(item.native->name)+" "+item.native->description+" "+std::string(item.native->type->id)).find(query)==std::string::npos) {
-        std::istringstream aliases(item.native->searchTerms);std::string alias;
-        while(aliases>>alias) if(editorSearchKey(alias).find(query)!=std::string::npos) {
-          detail="Busca: "+alias;break;
-        }
-      }
-      if(!reason && item.native) {
-        const auto plan=scene::planComponentAddition(entity.components,item.native->type->id,false,false);
-        if(plan.ready && plan.addedTypes.size()>1) {
-          detail="Inclui ";
-          for(usize i=0;i+1<plan.addedTypes.size();++i) {
-            if(i) detail+=" · ";
-            detail+=scene::findComponentSchema(plan.addedTypes[i])->name;
-          }
-        }
-      }
-      builder.label(row,detail,theme.color.textMuted,theme.type.caption);
-    }
-    if(adding) {
-      builder.router.addRegion(hit,widgetId(item.native?EditorWidget::ComponentAddBase:EditorWidget::ScriptAddBase)+item.index);
-    } else if(item.object||item.transform||item.native||script) {
+    auto more=takeRight(row,item.object?0:32);
+    builder.label(row,title.c_str(),theme.color.text,theme.type.body);
+    if(item.object||item.transform||item.native||script) {
       builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:32),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
       if(!item.object) {
         builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
@@ -5393,70 +5825,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widgetId(actions[i]));
     }
   }
-  if(state.creationMenu && !state.editingCreationSearch) {
-    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.60f));router.addBlocker(state.surface);
-    const UiRect modal=centred(state.surface,std::min(520.0f,state.surface.width-24),std::min(350.0f,state.surface.height-24));
-    const bool compact=modal.height<330.0f;
-    list.addRect(modal,theme.color.surface,5);auto content=deflate(modal,UiInsets::all(compact?8:12));
-    auto title=takeTop(content,compact?26:30);
-    builder.label(title,"Adicionar objeto",theme.color.text,theme.type.cardName);
-    auto close=takeRight(title,36);builder.label(close,"X",theme.color.textDim,theme.type.body,UiAlign::Center);router.addRegion(close,widgetId(EditorWidget::CreateMenuClose));
-    auto search=takeTop(content,compact?30:36);list.addRect(search,theme.color.silhouette,3);
-    auto clear=takeRight(search,36);builder.label(clear,"X",theme.color.textDim,theme.type.caption,UiAlign::Center);router.addRegion(clear,widgetId(EditorWidget::CreationClearSearch));
-    builder.label(deflate(search,UiInsets::all(8)),state.creationSearch[0]?state.creationSearch:"Pesquisar tipo...",theme.color.textDim,theme.type.caption);
-    router.addRegion(search,widgetId(EditorWidget::CreationSearch));takeTop(content,compact?4:8);
-    const auto destination=takeTop(content,compact?30:36);
-    const auto rootChoice=UiRect{destination.x,destination.y,destination.width*.32f,destination.height};
-    const auto childChoice=UiRect{rootChoice.right()+6,destination.y,destination.width-rootChoice.width-6,destination.height};
-    const auto *creationParent=state.document->find(state.selection);
-    const bool canCreateChild=creationParent && creationParent->id!=state.document->root();
-    list.addRect(rootChoice,state.creationAsChild?theme.color.silhouette:theme.color.raised,3);
-    builder.label(rootChoice,"Na raiz",state.creationAsChild?theme.color.textDim:theme.color.accent,theme.type.caption,UiAlign::Center);
-    router.addRegion(rootChoice,widgetId(EditorWidget::CreationAtRoot));
-    list.addRect(childChoice,state.creationAsChild?theme.color.raised:theme.color.silhouette,3);
-    const std::string childLabel=canCreateChild?std::string("Filho de ")+creationParent->name:"Selecione um pai na Hierarquia";
-    builder.label(deflate(childChoice,UiInsets::symmetric(8,0)),childLabel,canCreateChild?(state.creationAsChild?theme.color.accent:theme.color.textDim):theme.color.textDim,theme.type.caption);
-    if(canCreateChild) router.addRegion(childChoice,widgetId(EditorWidget::CreationAsChild));
-    takeTop(content,compact?4:8);
-    UiRect footer{content.x,content.bottom()-(compact?34:38),content.width,compact?34.0f:38.0f};
-    UiRect description{content.x,footer.y-(compact?20:28),content.width,compact?20.0f:28.0f};content.height=std::max(0.0f,description.y-content.y);
-    auto categories=takeLeft(content,112);takeLeft(content,12);
-    const float categoryHeight=std::min(36.0f,categories.height/static_cast<float>(std::size(creationCategories)));
-    for(u32 i=0;i<std::size(creationCategories);++i) {
-      bool available=false;
-      for(u32 j=0;j<editorCreationCatalog.size();++j)
-        available |= creationAvailable(state,j) && editorCreationCatalog[j].category==i;
-      if(!available) continue;
-      auto row=takeTop(categories,categoryHeight);
-      if(state.creationCategory==i&&!state.creationSearch[0]) list.addRect(row,theme.color.raised,2);
-      builder.label(deflate(row,UiInsets::symmetric(8,0)),creationCategories[i],state.creationCategory==i?theme.color.accent:theme.color.textDim,theme.type.body);
-      router.addRegion(row,widgetId(EditorWidget::CreationCategoryBase)+i);
-    }
-    const auto query=editorSearchKey(state.creationSearch);
-    u32 count=0;bool selectedVisible=false;
-    for(u32 i=0;i<editorCreationCatalog.size();++i) {
-      if(!creationAvailable(state,i)) continue;
-      const auto &entry=editorCreationCatalog[i];
-      if(!creationListed(entry,query,state.creationCategory)) continue;
-      const auto ordinal=count++;if(ordinal/creationPageSize(state.surface.height)!=state.creationPage) continue;
-      auto row=takeTop(content,40);const bool selected=state.creationSelection==i;
-      if(selected) {list.addRect(row,theme.color.raised,2);list.addRect({row.x,row.y,2,row.height},theme.color.accent);selectedVisible=true;}
-      auto label=deflate(row,UiInsets::symmetric(8,0));list.addImage(centred(takeLeft(label,26),16,16),static_cast<UiImageId>(entry.icon),selected?theme.color.accent:theme.color.textDim);
-      builder.label(label,entry.name,theme.color.text,theme.type.body);
-      router.addRegion(row,widgetId(EditorWidget::CreationRowBase)+i);
-    }
-    if(!count) builder.label(content,"Nenhum tipo encontrado",theme.color.textDim,theme.type.caption);
-    if(selectedVisible) {
-      const auto &selected=editorCreationCatalog[state.creationSelection];
-      builder.label(description,selected.description,theme.color.textDim,theme.type.caption);
-      auto create=takeRight(footer,96);list.addRect(create,theme.color.accent,3);builder.label(create,"Criar",theme.color.accentInk,theme.type.body,UiAlign::Center);router.addRegion(create,creationWidget(state.creationSelection));
-    }
-    auto cancel=takeRight(footer,90);builder.label(cancel,"Cancelar",theme.color.textDim,theme.type.body,UiAlign::Center);router.addRegion(cancel,widgetId(EditorWidget::CreateMenuClose));
-    if(count>creationPageSize(state.surface.height)) {
-      auto previous=takeLeft(footer,36);builder.label(previous,"<",theme.color.text,theme.type.body,UiAlign::Center);router.addRegion(previous,widgetId(EditorWidget::CreationPrevious));
-      auto next=takeLeft(footer,36);builder.label(next,">",theme.color.text,theme.type.body,UiAlign::Center);router.addRegion(next,widgetId(EditorWidget::CreationNext));
-    }
-  }
+  if(state.addingComponent && state.componentSelection==state.selection && !state.editingComponentSearch)
+    if(const auto *entity=state.document->find(state.selection)) buildComponentSheet(builder,*entity);
+  if(state.creationMenu && !state.editingCreationSearch) buildCreationSheet(builder,layout);
   if (!state.platformTextInput && state.numericField != 0) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
@@ -5559,6 +5930,40 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     state.hierarchyScrollRemainder-=static_cast<float>(lines)*kRowHeight;
     const int maximum=std::max(0,static_cast<int>(layout.hierarchyRowCount)-static_cast<int>(layout.hierarchyVisibleRows));
     state.hierarchyScroll=static_cast<u32>(std::clamp(static_cast<int>(state.hierarchyScroll)+lines,0,maximum));
+    return outcome;
+  }
+
+  // A lista do Add rola pelo arraste sobre as linhas, como a Hierarquia; o
+  // toque que não virou arraste continua abrindo a prévia do tipo.
+  if(state.addingComponent && routing.dragging &&
+     ((widget>=widgetId(EditorWidget::ComponentAddBase) && widget<widgetId(EditorWidget::ComponentAddBase)+detail::kRange) ||
+      (widget>=widgetId(EditorWidget::ScriptAddBase) && widget<widgetId(EditorWidget::ScriptAddBase)+detail::kRange))) {
+    constexpr float kCatalogRowHeight=52.0f;
+    state.addScrollRemainder-=routing.stepDelta.y;
+    const int lines=static_cast<int>(state.addScrollRemainder/kCatalogRowHeight);
+    state.addScrollRemainder-=static_cast<float>(lines)*kCatalogRowHeight;
+    const int maximum=std::max(0,static_cast<int>(layout.addRowCount)-static_cast<int>(layout.addVisibleRows));
+    state.addScroll=static_cast<u32>(std::clamp(static_cast<int>(state.addScroll)+lines,0,maximum));
+    return outcome;
+  }
+  if(state.creationMenu && routing.dragging && widget>=widgetId(EditorWidget::CreationRowBase) &&
+     widget<widgetId(EditorWidget::CreationRowBase)+detail::kRange) {
+    constexpr float kCardPitch=100.0f;
+    state.addScrollRemainder-=routing.stepDelta.y;
+    const int rows=static_cast<int>(state.addScrollRemainder/kCardPitch);
+    state.addScrollRemainder-=static_cast<float>(rows)*kCardPitch;
+    const int maximum=std::max(0,static_cast<int>(layout.creationRowCount)-static_cast<int>(layout.creationVisibleRows));
+    state.creationScroll=static_cast<u32>(std::clamp(static_cast<int>(state.creationScroll)+rows,0,maximum));
+    return outcome;
+  }
+  if(state.addingComponent && routing.dragging && widget>=widgetId(EditorWidget::ComponentFamilyBase) &&
+     widget<widgetId(EditorWidget::ComponentFamilyBase)+detail::kRange) {
+    constexpr float kRailCell=44.0f;
+    state.addScrollRemainder-=routing.stepDelta.y;
+    const int cells=static_cast<int>(state.addScrollRemainder/kRailCell);
+    state.addScrollRemainder-=static_cast<float>(cells)*kRailCell;
+    const int maximum=std::max(0,static_cast<int>(layout.addRailCount)-static_cast<int>(layout.addRailVisible));
+    state.addRailScroll=static_cast<u32>(std::clamp(static_cast<int>(state.addRailScroll)+cells,0,maximum));
     return outcome;
   }
 
@@ -5907,7 +6312,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   switch (static_cast<EditorWidget>(widget)) {
     case EditorWidget::AddComponentMenu:
       if(state.componentSelection!=state.selection) {state.componentSelection=state.selection;state.expandedComponent.clear();state.expandedNative=0;state.expandedScript=0;state.componentPage=0;state.addingComponent=false;}
-      state.addingComponent=!state.addingComponent;state.componentPreview=0;state.componentPreviewValues=false;state.componentPreviewPage=0;state.scriptPreviewType.clear();state.meshPicker=false;state.propertyPage=0;state.componentPage=0;break;
+      state.addingComponent=!state.addingComponent;state.addScroll=0;state.componentPreview=0;state.componentPreviewValues=false;state.componentPreviewPage=0;state.scriptPreviewType.clear();state.meshPicker=false;state.propertyPage=0;state.componentPage=0;break;
     case EditorWidget::ComponentPreviewBack: state.componentPreview=0;state.componentPreviewValues=false;state.componentPreviewPage=0;state.scriptPreviewType.clear();break;
     case EditorWidget::ComponentPreviewComposition: state.componentPreviewValues=false;state.componentPreviewPage=0;break;
     case EditorWidget::ComponentPreviewValues: state.componentPreviewValues=true;state.componentPreviewPage=0;break;
@@ -5950,17 +6355,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::NavigationPan: state.navigation=EditorNavigationMode::Pan;break;
     case EditorWidget::NavigationZoom: state.navigation=EditorNavigationMode::Zoom;break;
     case EditorWidget::CreationSearch: state.editingCreationSearch=true;std::copy(std::begin(state.creationSearch),std::end(state.creationSearch),state.renameText);break;
-    case EditorWidget::CreationClearSearch: state.creationSearch[0]=0;state.creationPage=0;break;
-    case EditorWidget::CreationPrevious: if(state.creationPage) --state.creationPage;break;
-    case EditorWidget::CreationNext: {
-      const auto query=editorSearchKey(state.creationSearch);u32 count=0;
-      for(u32 i=0;i<editorCreationCatalog.size();++i) {
-        const auto &entry=editorCreationCatalog[i];
-        if(creationAvailable(state,i) && creationListed(entry,query,state.creationCategory)) ++count;
-      }
-      const auto pageSize=creationPageSize(state.surface.height);
-      state.creationPage=(state.creationPage+1)%std::max(1u,(count+pageSize-1)/pageSize);break;
-    }
+    case EditorWidget::CreationClearSearch: state.creationSearch[0]=0;state.creationScroll=0;break;
     case EditorWidget::HierarchySearch:
       state.editingHierarchySearch=true;std::copy(std::begin(state.hierarchySearch),std::end(state.hierarchySearch),state.renameText);break;
     case EditorWidget::HierarchyClearSearch: state.hierarchySearch[0]=0;state.hierarchyScroll=0;break;

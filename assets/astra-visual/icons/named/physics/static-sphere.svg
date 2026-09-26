@@ -2,6 +2,6 @@
 <circle cx="64" cy="59" r="24" stroke="#e8f0ed" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M42 49c12 7 32 7 44 0M42 69c12-7 32-7 44 0" stroke="#e8f0ed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
 <path d="M64 35c-10 12-10 36 0 48M64 35c10 12 10 36 0 48" stroke="#e8f0ed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
-<path d="M17 48h19M12 61h20M20 74h16" stroke="#c6ef62" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M94 59h18m-8-8 8 8-8 8" stroke="#c6ef62" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 102h84" stroke="#c6ef62" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M30 114l10-10M50 114l10-10M70 114l10-10M90 114l10-10" stroke="#c6ef62" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

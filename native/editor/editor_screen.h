@@ -166,8 +166,6 @@ enum class EditorWidget : u32 {
   CreationAsChild,
   CreationSearch,
   CreationClearSearch,
-  CreationPrevious,
-  CreationNext,
   CreateGround,
   CreateCube,
   WorkspaceMenuClose,
@@ -200,7 +198,7 @@ enum class EditorWidget : u32 {
   CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
   ColliderFit, LodGroupFit, LodGroupStatus, SkinnedMeshStatus, AnimationStatus, ComponentClipAdd, ComponentPrevious,
   ViewsOpen, ViewsClose, ViewSave, ViewUpdate, ViewRename, ViewDelete, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
-  TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
+  TransformFold, ComponentSearch, ComponentSearchClear,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext,
   MeshGenerateCollision, MeshCollisionQualityDown, MeshCollisionQualityUp,
   MeshCollisionErrorDown, MeshCollisionErrorUp, MaterialRestore,
@@ -344,6 +342,8 @@ enum class EditorWidget : u32 {
   CodeBody=0x61000000u, CodeTabBase=0x61010000u,
 
   ComponentAddBase=0x67000000u,
+  // + 0 = todas as famílias, + 1 + família = aquela família (scene::ComponentFamily).
+  ComponentFamilyBase=0xB5000000u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -448,7 +448,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentClipMoveUpBase,kRange},{EditorWidget::ComponentClipMoveDownBase,kRange},
   {EditorWidget::ComponentClipRemoveBase,kRange},
   {EditorWidget::InputActionRowBase,64},{EditorWidget::InputBindingRowBase,16},
-  {EditorWidget::CreationRecipeBase,0x0010'0000u}};
+  {EditorWidget::CreationRecipeBase,0x0010'0000u},{EditorWidget::ComponentFamilyBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -574,6 +574,11 @@ struct EditorScreenState final {
   bool editingPropertySearch=false;
   std::string propertyQuery;
   u32 componentCategory=0,meshPage=0,meshTab=0;
+  // Catálogo do Add: linha do topo da lista rolável e os tipos adicionados por
+  // último nesta sessão (ids de schema), mais recente primeiro.
+  u32 addScroll=0,addRailScroll=0;
+  float addScrollRemainder=0;
+  std::vector<std::string> recentComponents;
   u32 componentPage=0,scriptPropertyPage=0;
   u64 expandedScript=0,scriptMenu=0,editingScriptInstance=0;
   EditorEntityId editingScriptEntity=0;
@@ -739,7 +744,7 @@ struct EditorScreenState final {
   bool creationMenu=false;
   bool creationAsChild=false;
   bool workspaceMenu=false;
-  unsigned creationCategory=0,creationSelection=0,creationPage=0;
+  unsigned creationCategory=0,creationSelection=0,creationScroll=0;
   std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
   bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false,folderImportRequested=false;
@@ -948,6 +953,9 @@ struct EditorScreenLayout final {
   float codeLineHeight = 24.0f;
   u32 hierarchyRowCount = 0;
   u32 componentPage=0;
+  // Linhas do catálogo do Add e quantas couberam; a sessão limita a rolagem.
+  u32 addRowCount=0,addVisibleRows=0,addRailCount=0,addRailVisible=0;
+  u32 creationRowCount=0,creationVisibleRows=0;
   // Quantas linhas caberiam. Menor que o total significa que há rolagem.
   u32 hierarchyVisibleRows = 0;
 };

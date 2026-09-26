@@ -29,13 +29,12 @@ int readBytes(void *context, void *buffer, size_t capacity) {
 }
 EditorComponentRegistry defaultEditorComponentRegistry() {
   static const auto types=[] {
-    std::array<const EditorComponentType*,editorComponentCatalog.size()+5> result{};
-    result[0]=&EditorRouteComponent::descriptor;result[1]=&EditorWaterBodyComponent::descriptor;
-    for(usize i=0;i<editorComponentCatalog.size();++i) result[i+2]=editorComponentCatalog[i].type;
-    // Vínculo com a fonte importada: dado autoral, sem card no catálogo.
-    result[result.size()-3]=&scene::ImportLink::descriptor;
-    result[result.size()-2]=&scene::ScriptBehavior::descriptor;
-    result.back()=&LegacyWaterSettings::descriptor;
+    // Todo tipo do registro de schemas é persistível; os demais são dados do
+    // editor sem card no catálogo (água legada, rota, vínculo de importação).
+    std::vector<const EditorComponentType*> result{&EditorRouteComponent::descriptor,&EditorWaterBodyComponent::descriptor};
+    for(const auto &schema:scene::componentSchemas) result.push_back(schema.type);
+    result.push_back(&scene::ImportLink::descriptor);
+    result.push_back(&LegacyWaterSettings::descriptor);
     return result;
   }();
   return types;

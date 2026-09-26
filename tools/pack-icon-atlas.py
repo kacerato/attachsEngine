@@ -216,7 +216,17 @@ def main() -> None:
         names = names + [name for name, _, _ in BRAND]
 
     arguments.output.mkdir(parents=True, exist_ok=True)
-    atlas.save(arguments.output / f"{arguments.name}.png")
+    # O PNG é só a cópia legível do atlas (nenhum código o lê). No Windows, um
+    # processo que o mantém mapeado (miniatura do Explorer, visualizador) faz a
+    # gravação falhar com EINVAL; isso não pode impedir o binário e o enum,
+    # que são o contrato da engine. Grava por arquivo temporário e avisa.
+    preview = arguments.output / f"{arguments.name}.png"
+    staged = preview.with_suffix(".tmp.png")
+    atlas.save(staged)
+    try:
+        staged.replace(preview)
+    except OSError as error:
+        print(f"AVISO: {preview} em uso ({error}); cópia nova ficou em {staged}")
     binary_size = write_icons(
         arguments.output / f"{arguments.name}.aeui",
         (ATLAS_WIDTH, atlas.height),

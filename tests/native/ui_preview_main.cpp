@@ -14,6 +14,8 @@
 #include "editor/editor_history.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
+#include "editor/editor_component_catalog.h"
+#include "editor/editor_creation_catalog.h"
 #include "renderer/water_authoring_geometry.h"
 #include "ui_software_raster.h"
 
@@ -113,6 +115,23 @@ int main(int argc, char **argv) {
     state.waterTab=std::string(argv[4])=="river-physics"?2:std::string(argv[4])=="river-effects"?3:1;
   }
   if(argc>4 && std::string(argv[4])=="create") state.creationMenu=true;
+  // Add Component aberto sobre um objeto vazio: o painel inteiro do catálogo.
+  if(argc>4 && std::string(argv[4]).starts_with("add")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Objeto vazio");
+    state.componentSelection=selection;state.addingComponent=true;
+    if(std::string(argv[4])=="add-search") state.componentQuery="cam";
+    // Objeto com Câmera: o catálogo sugere Olhar e Acompanhar alvo, e a prévia
+    // de Olhar mostra a composição no painel de detalhe.
+    if(std::string(argv[4])=="add-preview") {
+      auto value=*document.find(selection);editCamera(value);document.applyEntityValues(selection,value);
+      state.componentPreview=editor::editorComponentIndex("astra.camera.look")+1;
+    }
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("create")) state.creationAvailable=editor::creationAlwaysAvailable();
+  if(argc>4 && std::string(argv[4])=="create-physics") {
+    state.creationMenu=true;state.creationCategory=3;
+    editor::findCreationRecipe("physics.dynamic_sphere",&state.creationSelection);
+  }
   if(argc>4 && std::string(argv[4])=="river-diagnostics") {
     state.diagnosticDockOpen=true;state.console=&console;
   }

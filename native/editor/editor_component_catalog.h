@@ -2,69 +2,70 @@
 #include "editor/editor_properties.h"
 #include "scene/component_schema.h"
 #include "ui/ui_icon_id.h"
-#include "scene/joint.h"
+
+#include <string_view>
+#include <vector>
 
 namespace ae::editor {
-// O catálogo anexável do inspetor.
+// O catálogo anexável do inspetor é uma VISTA do registro de schemas.
 //
-// **Nome, descrição, categoria, exigências e incompatibilidades vêm do schema**
-// (scene/component_schema.h), que também alimenta o mundo de execução e, por
-// ele, a API em C#. Aqui ficam só as decisões que são de interface: qual ícone
-// e qual grupo de propriedades desenhar. Antes desta separação existiam duas
-// listas com as mesmas regras escritas à mão, e uma regra acrescentada em uma
-// delas fazia a API aceitar o que a interface recusava.
-using EditorComponentCategory = scene::ComponentCategory;
-
+// Nome, descrição, família, ícone, termos de busca, exigências e
+// incompatibilidades vêm de `scene::componentSchemas`, que também alimenta o
+// mundo de execução, o arquivo e, pelo mundo, a API em C#. Antes existia aqui
+// uma segunda lista, com ícone e grupo de propriedades por tipo, e cada tipo
+// novo precisava ser lembrado nas duas — a mesma divergência que o schema
+// comum veio eliminar. O que a UI acrescenta é só a resolução do nome do ícone
+// para o índice do atlas, feita uma vez.
 struct EditorComponentEntry {
   const scene::ComponentSchema *schema;
   const EditorComponentType *type;
   const char *name;
   const char *description;
-  EditorComponentCategory category;
-  EditorPropertyGroup properties;
+  scene::ComponentFamily family;
   ui::UiIcon icon;
   // Termos de descoberta de outras engines; não alteram o TypeId nem prometem
   // equivalência de API. A composição continua vindo do schema Astra.
-  const char *searchTerms;
+  std::string_view searchTerms;
   // Motivo pelo qual o tipo não pode ser anexado a esta entidade, ou nullptr.
   const char *unavailable(const EditorEntity &entity) const {
     return scene::componentAdditionBlockedReason(*schema, entity.components);
   }
 };
 
+// Índice do atlas para o nome do catálogo de ícones, ou None quando o nome não
+// existe. Chamado só ao montar o catálogo; um teste exige que todo schema
+// resolva, então um nome errado falha no build de testes e não no aparelho.
+inline ui::UiIcon editorIconByName(std::string_view name) {
+  if(name.empty()) return ui::UiIcon::None;
+  for(u32 index=1;index<=ui::kUiIconCount;++index)
+    if(name==ui::uiIconName(static_cast<ui::UiIcon>(index))) return static_cast<ui::UiIcon>(index);
+  return ui::UiIcon::None;
+}
+
 namespace detail {
-inline EditorComponentEntry catalogEntry(std::string_view id, EditorPropertyGroup properties, ui::UiIcon icon,
-                                         const char *searchTerms) {
-  const auto *schema = scene::findComponentSchema(id);
-  // Uma entrada de catálogo sem schema seria um componente sem contrato: sem
-  // cardinalidade, sem exigências e invisível para a API. Não existe.
-  return schema ? EditorComponentEntry{schema, schema->type, schema->name, schema->description,
-                                       schema->category, properties, icon, searchTerms}
-                : EditorComponentEntry{nullptr, nullptr, "", "", EditorComponentCategory::Physics, properties, icon, searchTerms};
+inline std::vector<EditorComponentEntry> buildEditorComponentCatalog() {
+  std::vector<EditorComponentEntry> entries;
+  entries.reserve(scene::componentSchemas.size());
+  for(const auto &schema:scene::componentSchemas) {
+    if(!schema.listedInAdd) continue;
+    entries.push_back({&schema,schema.type,schema.name,schema.description,schema.family,
+                       editorIconByName(schema.icon),schema.searchTerms});
+  }
+  return entries;
 }
 } // namespace detail
 
-// Os tipos com consumidor implementado. Comportamento C# é anexado pela
-// área de código, não por esta lista, e por isso não aparece aqui.
-inline const std::array<EditorComponentEntry, 14> editorComponentCatalog{{
-  detail::catalogEntry("astra.physics.body", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentPhysics, "Rigidbody RigidBody3D"),
-  detail::catalogEntry("astra.physics.character", EditorPropertyGroup::Character, ui::UiIcon::ComponentCharacter, "CharacterController CharacterBody3D"),
-  detail::catalogEntry("astra.camera.look", EditorPropertyGroup::CameraLook, ui::UiIcon::ComponentLook, "MouseLook CameraController"),
-  detail::catalogEntry("astra.camera.follow", EditorPropertyGroup::CameraLook, ui::UiIcon::EditorAuthorCamera, "Follow Camera Tracking Damping"),
-  detail::catalogEntry("astra.physics.collider", EditorPropertyGroup::Collider, ui::UiIcon::ComponentCollider, "BoxCollider SphereCollider CapsuleCollider CollisionShape3D"),
-  detail::catalogEntry("astra.physics.joint", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentJoint, "HingeJoint Joint3D"),
-  detail::catalogEntry("astra.camera", EditorPropertyGroup::CameraLook, ui::UiIcon::EditorAuthorCamera, "Camera3D"),
-  detail::catalogEntry("astra.render.mesh", EditorPropertyGroup::Material, ui::UiIcon::EditorAuthorObject, "MeshFilter MeshRenderer MeshInstance3D"),
-  detail::catalogEntry("astra.render.light", EditorPropertyGroup::Material, ui::UiIcon::LightingSun, "DirectionalLight3D OmniLight3D SpotLight3D"),
-  detail::catalogEntry("astra.render.environment", EditorPropertyGroup::Material, ui::UiIcon::LightingSun, "WorldEnvironment Volume"),
-  detail::catalogEntry("astra.render.lod_group", EditorPropertyGroup::Material, ui::UiIcon::SceneLayers, "LODGroup VisibilityRange"),
-  detail::catalogEntry("astra.render.skinned_mesh", EditorPropertyGroup::Material, ui::UiIcon::ComponentJoint, "SkinnedMeshRenderer Skeleton3D"),
-  detail::catalogEntry("astra.animation", EditorPropertyGroup::Material, ui::UiIcon::AssetsAnimation, "AnimationPlayer"),
-  detail::catalogEntry("astra.time.timer", EditorPropertyGroup::Material, ui::UiIcon::ScriptingCode, "Timer Countdown Interval")
-}};
+// Os tipos com consumidor implementado, na ordem das famílias. Comportamento
+// C# é anexado pela área de código, com o script escolhido, e por isso não
+// aparece aqui (continua registrado e persistido pelo schema).
+inline const std::vector<EditorComponentEntry> editorComponentCatalog=detail::buildEditorComponentCatalog();
 
 inline const EditorComponentEntry *findEditorComponent(std::string_view id) {
   for(const auto &entry:editorComponentCatalog) if(entry.type && entry.type->id==id) return &entry;
   return nullptr;
+}
+inline u32 editorComponentIndex(std::string_view id) {
+  for(u32 i=0;i<editorComponentCatalog.size();++i) if(editorComponentCatalog[i].type->id==id) return i;
+  return static_cast<u32>(editorComponentCatalog.size());
 }
 } // namespace ae::editor

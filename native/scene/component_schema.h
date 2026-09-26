@@ -2,7 +2,7 @@
 //
 // O descritor (`ComponentType`) diz o que um componente É — id persistente,
 // versão, propriedades reflexivas, migração. O schema diz o que o EDITOR e o
-// RUNTIME podem fazer com ele: em que categoria aparece, o que exige, com o que
+// RUNTIME podem fazer com ele: em que família aparece, o que exige, com o que
 // é incompatível, e o que pode mudar com o Play rodando.
 //
 // Essa separação existe porque a alternativa já esteve no repositório: uma
@@ -10,32 +10,56 @@
 // Duas listas independentes divergem — um componente ganha uma regra em uma
 // delas e a API em C# continua aceitando o que a interface recusa.
 //
-// Quem consome este arquivo: o catálogo do inspetor (ícone e grupo de
-// propriedades continuam sendo decisão da UI), o mundo de execução
-// (runtime/game_world.cpp) e, por ele, a API de componentes em C#.
+// **Registro por família.** Cada família declara a sua tabela em
+// `scene/schemas/<família>.h`; `componentSchemas` é a concatenação delas, feita
+// em tempo de compilação. Acrescentar um tipo é escrever o descritor e uma linha
+// na tabela da família — o Add, o Inspector, o arquivo, o mundo de execução e a
+// API em C# leem daqui. Não existe segunda lista para manter.
+//
+// Quem consome este arquivo: o catálogo do inspetor, o mundo de execução
+// (runtime/game_world.cpp), o arquivo de cena e, pelo mundo, a API em C#.
 #pragma once
 #include "scene/components.h"
-#include "scene/physics_body.h"
-#include "scene/collider.h"
-#include "scene/character.h"
-#include "scene/camera.h"
-#include "scene/camera_look.h"
-#include "scene/camera_follow.h"
-#include "scene/mesh_renderer.h"
-#include "scene/joint.h"
-#include "scene/light.h"
-#include "scene/environment.h"
-#include "scene/lod_group.h"
-#include "scene/script_behavior.h"
-#include "scene/skinned_mesh.h"
-#include "scene/animation.h"
-#include "scene/timer.h"
 
+#include <algorithm>
 #include <array>
+#include <string_view>
+#include <vector>
 
 namespace ae::scene {
 
-enum class ComponentCategory : u32 { Camera = 1, Visual = 2, Physics = 3, Script = 4, Gameplay = 5 };
+// Famílias do catálogo, na ordem em que o Add as apresenta. Os valores são
+// estáveis porque a UI guarda a família escolhida; família sem tipo registrado
+// simplesmente não aparece.
+enum class ComponentFamily : u32 {
+  Logic, Rendering, Lighting, Camera, Physics3D, Animation, Count
+};
+inline constexpr const char *componentFamilyName(ComponentFamily family) {
+  switch (family) {
+  case ComponentFamily::Logic: return "Lógica";
+  case ComponentFamily::Rendering: return "Renderização";
+  case ComponentFamily::Lighting: return "Luz";
+  case ComponentFamily::Camera: return "Câmera";
+  case ComponentFamily::Physics3D: return "Física 3D";
+  case ComponentFamily::Animation: return "Animação";
+  case ComponentFamily::Count: break;
+  }
+  return "";
+}
+// Ícone da família no trilho do Add, pelo nome do catálogo do atlas. Diferente
+// dos ícones dos tipos: o trilho nomeia a CATEGORIA, não um componente dela.
+inline constexpr std::string_view componentFamilyIcon(ComponentFamily family) {
+  switch (family) {
+  case ComponentFamily::Logic: return "scripting/nodes";
+  case ComponentFamily::Rendering: return "primitive/cube";
+  case ComponentFamily::Lighting: return "lighting/scene-lighting";
+  case ComponentFamily::Camera: return "runtime/camera";
+  case ComponentFamily::Physics3D: return "physics/dynamic-sphere";
+  case ComponentFamily::Animation: return "runtime/play";
+  case ComponentFamily::Count: break;
+  }
+  return "";
+}
 
 // Quando uma alteração pode ser aceita com o Play rodando. `SafePoint` significa
 // que ela entra na fila do mundo de execução e é aplicada entre passos, nunca
@@ -48,10 +72,10 @@ struct ComponentRule {
 };
 
 struct ComponentSchema {
-  const ComponentType *type;
-  const char *name;
-  const char *description;
-  ComponentCategory category;
+  const ComponentType *type=nullptr;
+  const char *name="";
+  const char *description="";
+  ComponentFamily family=ComponentFamily::Logic;
   // Tipos que precisam estar no MESMO objeto para este componente existir.
   std::span<const ComponentRule> requirements{};
   // Tipos que não podem coexistir com este no mesmo objeto.
@@ -66,91 +90,52 @@ struct ComponentSchema {
   std::string_view consumer{};
   std::string_view capability{};
   u32 invalidates = 0;
+  // Apresentação e descoberta. O ícone é o nome no catálogo do atlas
+  // (`assets/astra-visual/icons/named/catalog.json`); o editor o resolve uma
+  // vez e um teste exige que todo nome exista. Os termos de busca trazem nomes
+  // de outras engines para a descoberta e não prometem equivalência de API.
+  std::string_view subfamily{};
+  std::string_view icon{};
+  std::string_view searchTerms{};
+  // Referência oficial estudada (Unity 6000.0 ou Godot 4.5), com versão no link.
+  std::string_view reference{};
+  // Falso para tipos anexados por outro fluxo (comportamento C# vem da área de
+  // código, com o script escolhido); continuam no registro e no arquivo.
+  bool listedInAdd = true;
   bool allowMultiple() const noexcept { return type->allowMultiple; }
 };
+} // namespace ae::scene
 
-inline constexpr std::array<ComponentRule, 1> bodyConflicts{{
-  {"astra.physics.character", "Incompatível com personagem cápsula"}
-}};
-// As duas direções do MESMO conflito precisam de frases diferentes.
-//
-// A mensagem é lida por quem tentou anexar o componente que está sendo
-// recusado, e descreve o que fazer. Uma frase só, reusada nos dois sentidos,
-// fala do objeto errado: num objeto sem personagem, recusar `Personagem` com
-// "o personagem já possui cápsula própria" explica uma situação que não existe.
-inline constexpr std::array<ComponentRule, 2> characterConflicts{{
-  {"astra.physics.body", "Incompatível com corpo físico"},
-  {"astra.physics.collider", "O personagem traz a própria cápsula; remova o Colisor 3D"}
-}};
-inline constexpr std::array<ComponentRule, 1> colliderConflicts{{
-  {"astra.physics.character", "O personagem já possui cápsula própria"}
-}};
-inline constexpr std::array<ComponentRule, 1> lookRequirements{{
-  {"astra.camera", "Adicione Câmera a este objeto"}
-}};
-inline constexpr std::array<ComponentRule,1> followRequirements{{
-  {"astra.camera","Adicione Câmera a este objeto"}
-}};
-inline constexpr std::array<ComponentRule,2> followConflicts{{
-  {"astra.physics.body","A câmera seguidora não pode receber pose do corpo físico"},
-  {"astra.physics.character","A câmera seguidora não pode receber pose do personagem"}
-}};
-inline constexpr std::array<ComponentRule, 1> jointRequirements{{
-  {"astra.physics.body", "Adicione Corpo físico a este objeto"}
-}};
-inline constexpr std::array<ComponentRule, 1> skinnedMeshRequirements{{
-  {"astra.render.mesh", "Adicione Malha a este objeto"}
-}};
+#include "scene/schemas/logic.h"
+#include "scene/schemas/rendering.h"
+#include "scene/schemas/lighting.h"
+#include "scene/schemas/camera.h"
+#include "scene/schemas/physics3d.h"
+#include "scene/schemas/animation.h"
 
-inline const std::array<ComponentSchema, 15> componentSchemas{{
-  {&PhysicsBody::descriptor, "Corpo físico", "Massa e resposta física", ComponentCategory::Physics,
-    {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint,
-    "runtime/scene_physics.cpp → Jolt", {}, Invalidate::PhysicsBody},
-  {&Character::descriptor, "Personagem", "Locomoção com cápsula", ComponentCategory::Physics,
-    {}, characterConflicts, PlayMutability::Never, PlayMutability::SafePoint,
-    "runtime/scene_physics.cpp → CharacterVirtual", {}, Invalidate::PhysicsBody|Invalidate::PhysicsShape},
-  {&CameraLook::descriptor, "Olhar", "Rotação local da câmera por entrada ou script", ComponentCategory::Camera,
-    lookRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/game_world.cpp → pose da câmera", {}, Invalidate::Input},
-  {&CameraFollow::descriptor, "Acompanhar alvo", "Posiciona a câmera após física e animação", ComponentCategory::Camera,
-    followRequirements, followConflicts, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/scene_camera_follow.h → pose de Play da câmera", {}, Invalidate::Transform},
-  {&Collider::descriptor, "Colisor 3D", "Volume de contato", ComponentCategory::Physics,
-    {}, colliderConflicts, PlayMutability::Never, PlayMutability::SafePoint,
-    "runtime/scene_physics.cpp → forma do Jolt", {}, Invalidate::PhysicsShape},
-  {&Joint::descriptor, "Junta", "Conexão, limites e motor entre corpos", ComponentCategory::Physics,
-    jointRequirements, {}, PlayMutability::Never, PlayMutability::SafePoint,
-    "runtime/scene_physics.cpp → constraint do Jolt", {}, Invalidate::PhysicsBody},
-  {&Camera::descriptor, "Câmera", "Projeção e enquadramento", ComponentCategory::Camera,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "renderer/render_view.h → matriz de projeção e culling", {}, Invalidate::Draw},
-  {&MeshRenderer::descriptor, "Malha", "Geometria e material", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "renderer/map_draw_update.h → instância e material efetivo", "render.material.pbr",
-    Invalidate::Draw|Invalidate::MaterialDescriptor},
-  {&Light::descriptor, "Luz", "Direcional, pontual ou spot", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/scene_lights.cpp → renderer/punctual_lights.h", {}, Invalidate::LightCluster},
-  {&Environment::descriptor, "Ambiente", "Céu, atmosfera, neblina e pós globais ou por volume", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/scene_environment.cpp → renderer e pós", {}, Invalidate::Draw|Invalidate::Policy},
-  {&LodGroup::descriptor, "LOD Group", "Nível de detalhe pela altura na tela", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/lod_groups.h → visibilidade do desenho por vista", "render.lod.group", Invalidate::Draw},
-  {&SkinnedMesh::descriptor, "Malha deformável", "Esqueleto e blend shapes da Malha", ComponentCategory::Visual,
-    skinnedMeshRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute", "render.skinning",
-    Invalidate::Draw|Invalidate::ShadowMap},
-  {&Animation::descriptor, "Animação", "Clipes tocados e misturados no Play", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/scene_animation.cpp → pose local dos nós da instância", "animation.clip", Invalidate::Transform},
-  {&Timer::descriptor, "Timer", "Dispara eventos temporizados para comportamentos", ComponentCategory::Gameplay,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
-    "runtime/scene_timers.h → ScriptBridge → Behavior.TimerElapsed"},
-  {&ScriptBehavior::descriptor, "Comportamento", "Código C# do projeto", ComponentCategory::Script,
-    {}, {}, PlayMutability::Never, PlayMutability::Never,
-    "runtime/script_bridge.cpp → runtime .NET", {}, Invalidate::Script}
-}};
+namespace ae::scene {
+namespace detail {
+template <usize... Sizes>
+constexpr auto joinComponentSchemas(const std::array<ComponentSchema, Sizes> &...families) {
+  std::array<ComponentSchema, (Sizes + ... + 0)> joined{};
+  usize cursor = 0;
+  ((std::copy(families.begin(), families.end(), joined.begin() + cursor), cursor += Sizes), ...);
+  return joined;
+}
+} // namespace detail
+
+inline constexpr auto componentSchemas = detail::joinComponentSchemas(
+    logicSchemas, renderingSchemas, lightingSchemas, cameraSchemas, physics3dSchemas, animationSchemas);
+
+// Identidade é o contrato do arquivo: dois registros com o mesmo id tornariam a
+// leitura ambígua, e a leitura recusa ambiguidade em vez de escolher pela ordem.
+// Os descritores não são constexpr, então a verificação roda nos testes.
+inline bool componentSchemaIdsUnique() {
+  for (usize i = 0; i < componentSchemas.size(); ++i)
+    for (usize j = 0; j < i; ++j)
+      if (componentSchemas[i].type->id == componentSchemas[j].type->id) return false;
+  return true;
+}
 
 inline const ComponentSchema *findComponentSchema(std::string_view id) {
   for (const auto &schema : componentSchemas) if (schema.type->id == id) return &schema;

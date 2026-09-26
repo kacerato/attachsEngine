@@ -348,12 +348,42 @@
       "label": "D24",
       "name": "character"
     },
-    "physics/dynamic-capsule": {"category": "physics", "name": "dynamic-capsule", "dark_ui_ready": true},
-    "physics/dynamic-sphere": {"category": "physics", "name": "dynamic-sphere", "dark_ui_ready": true},
-    "physics/kinematic-box": {"category": "physics", "name": "kinematic-box", "dark_ui_ready": true},
-    "physics/kinematic-sphere": {"category": "physics", "name": "kinematic-sphere", "dark_ui_ready": true},
-    "physics/sensor-capsule": {"category": "physics", "name": "sensor-capsule", "dark_ui_ready": true},
-    "physics/sensor-sphere": {"category": "physics", "name": "sensor-sphere", "dark_ui_ready": true},
+    "physics/dynamic-capsule": {
+      "category": "physics",
+      "name": "dynamic-capsule",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/dynamic-sphere": {
+      "category": "physics",
+      "name": "dynamic-sphere",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/kinematic-box": {
+      "category": "physics",
+      "name": "kinematic-box",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/kinematic-sphere": {
+      "category": "physics",
+      "name": "kinematic-sphere",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/sensor-capsule": {
+      "category": "physics",
+      "name": "sensor-capsule",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/sensor-sphere": {
+      "category": "physics",
+      "name": "sensor-sphere",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
     "primitive/capsule": {
       "category": "primitive",
       "label": "D17",
@@ -1045,6 +1075,78 @@
       "raster": "../viewport-v1/post-processing.png",
       "dark_ui_ready": true,
       "generation": "viewport-v1"
+    },
+    "component/timer": {
+      "category": "component",
+      "name": "timer",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/lod-group": {
+      "category": "component",
+      "name": "lod-group",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/skinned-mesh": {
+      "category": "component",
+      "name": "skinned-mesh",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/camera-follow": {
+      "category": "component",
+      "name": "camera-follow",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/dynamic-box": {
+      "category": "physics",
+      "name": "dynamic-box",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/sensor-box": {
+      "category": "physics",
+      "name": "sensor-box",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/static-box": {
+      "category": "physics",
+      "name": "static-box",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/static-sphere": {
+      "category": "physics",
+      "name": "static-sphere",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/static-capsule": {
+      "category": "physics",
+      "name": "static-capsule",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "light/directional": {
+      "category": "light",
+      "name": "directional",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "light/point": {
+      "category": "light",
+      "name": "point",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "light/spot": {
+      "category": "light",
+      "name": "spot",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

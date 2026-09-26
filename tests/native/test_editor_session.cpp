@@ -4,6 +4,7 @@
 #include "renderer/rendering_settings_file.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
+#include "editor/editor_component_catalog.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_session.h"
 #include "editor/editor_scene_template.h"
@@ -714,15 +715,53 @@ void tapWidget(Fixture &fixture,u32 widget) {
     tapWidget(fixture,widgetId(EditorWidget::ProjectMenu));
   if(fixture.session.screen().creationMenu) for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==creationWidget(i)) {
     tapWidget(fixture,widgetId(EditorWidget::CreationCategoryBase)+editorCreationCatalog[i].category);
-    for(u32 page=0;page<editorCreationCatalog.size() &&
-        locateWidget(fixture.session,widgetId(EditorWidget::CreationRowBase)+i).x<0;++page)
-      tapWidget(fixture,widgetId(EditorWidget::CreationNext));
+    // A grade rola pelo arraste: arrasta um cartão visível até o pedido aparecer.
+    for(u32 attempt=0;attempt<16 && locateWidget(fixture.session,widgetId(EditorWidget::CreationRowBase)+i).x<0;++attempt) {
+      UiPoint card{-1,-1};
+      for(u32 j=0;j<editorCreationCatalog.size() && card.x<0;++j)
+        card=locateWidget(fixture.session,widgetId(EditorWidget::CreationRowBase)+j);
+      if(card.x<0) break;
+      fixture.down(80,card);
+      for(u32 step=1;step<=4;++step) fixture.move(80,{card.x,card.y-28.0f*static_cast<float>(step)});
+      fixture.up(80,{card.x,card.y-112.0f});fixture.session.update();
+    }
     tapWidget(fixture,widgetId(EditorWidget::CreationRowBase)+i);break;
   }
   const auto at=locateWidget(fixture.session,widget);
   if(at.x<0) std::fprintf(stderr,"unreachable test widget: %08x\n",widget);
   AE_EXPECT_TRUE(at.x>=0,"requested widget must exist before touching it");
   fixture.down(77,at);fixture.up(77,at);fixture.session.update();
+}
+// Escolhe a família no trilho do Add (0 é "Todos", 1..N as famílias).
+void selectComponentFamily(Fixture &fixture,scene::ComponentFamily family) {
+  const u32 wanted=static_cast<u32>(family)+1;
+  // No telefone o trilho não mostra todas as famílias: arrasta como a pessoa faz.
+  for(u32 attempt=0;attempt<8 && locateWidget(fixture.session,widgetId(EditorWidget::ComponentFamilyBase)+wanted).x<0;++attempt) {
+    UiPoint cell{-1,-1};
+    for(u32 value=0;value<=static_cast<u32>(scene::ComponentFamily::Count) && cell.x<0;++value)
+      cell=locateWidget(fixture.session,widgetId(EditorWidget::ComponentFamilyBase)+value);
+    if(cell.x<0) break;
+    fixture.down(79,cell);
+    for(u32 step=1;step<=4;++step) fixture.move(79,{cell.x,cell.y-12.0f*static_cast<float>(step)});
+    fixture.up(79,{cell.x,cell.y-48.0f});fixture.session.update();
+  }
+  tapWidget(fixture,widgetId(EditorWidget::ComponentFamilyBase)+wanted);
+  AE_EXPECT_EQ(fixture.session.screen().componentCategory,wanted,"família do Add selecionada");
+}
+// Rola a lista do Add pelo arraste, como a pessoa faz, até o item aparecer.
+void revealAddEntry(Fixture &fixture,u32 widget) {
+  for(u32 attempt=0;attempt<32 && locateWidget(fixture.session,widget).x<0;++attempt) {
+    UiPoint row{-1,-1};
+    for(u32 i=0;i<editorComponentCatalog.size() && row.x<0;++i)
+      row=locateWidget(fixture.session,widgetId(EditorWidget::ComponentAddBase)+i);
+    if(row.x<0) row=locateWidget(fixture.session,widgetId(EditorWidget::ScriptAddBase));
+    if(row.x<0) return;
+    const auto before=fixture.session.screen().addScroll;
+    fixture.down(78,row);
+    for(u32 step=1;step<=4;++step) fixture.move(78,{row.x,row.y-15.0f*static_cast<float>(step)});
+    fixture.up(78,{row.x,row.y-60.0f});fixture.session.update();
+    if(fixture.session.screen().addScroll==before) return;
+  }
 }
 void revealProperty(Fixture &fixture,u32 widget) {
   // Teto de segurança: a aba Material tem 25 linhas e a superfície de teste é baixa.
@@ -1031,11 +1070,11 @@ AE_TEST(session_inspector_exposes_only_consumed_resource_controls) {
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
-  tapWidget(f,widgetId(EditorWidget::ComponentCategory));
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+2).x>=0,"look resolves its camera dependency");
-  for(u32 category=0;category<8 && f.session.screen().componentCategory!=0;++category)
-    tapWidget(f,widgetId(EditorWidget::ComponentCategory));
-  tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
+  selectComponentFamily(f,scene::ComponentFamily::Camera);
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look"));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look")).x>=0,"look resolves its camera dependency");
+  selectComponentFamily(f,scene::ComponentFamily::Physics3D);
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"prévia não adiciona o corpo");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))!=nullptr,"body added by catalog");
@@ -1056,12 +1095,12 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   tapWidget(f,motion);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"motion enum remains an editable value");
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
-  tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"duplicate has no confirmation");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
-  for(u32 page=0;page<12 && locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+1).x<0;++page)
+  for(u32 page=0;page<12 && locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.character")).x<0;++page)
     tapWidget(f,widgetId(EditorWidget::ComponentNext));
-  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+1);
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.character"));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"incompatible character has no confirmation");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
@@ -1095,7 +1134,8 @@ AE_TEST(session_script_catalog_previews_addition_and_removal_with_undo) {
   const auto id=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Actor");
   f.session.setSelection(id);f.session.update();history.clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
-  for(u32 i=0;i<4;++i) tapWidget(f,widgetId(EditorWidget::ComponentCategory));
+  selectComponentFamily(f,scene::ComponentFamily::Logic);
+  revealAddEntry(f,widgetId(EditorWidget::ScriptAddBase));
   tapWidget(f,widgetId(EditorWidget::ScriptAddBase));
   AE_EXPECT_EQ(f.session.screen().scriptPreviewType,std::string("project.Mover"),"preview pins published type");
   AE_EXPECT_EQ(document.find(id)->components.size(),0u,"preview does not attach behavior");
@@ -1994,16 +2034,18 @@ AE_TEST(session_component_add_previews_dependencies_before_one_undo) {
   const auto target=history.createEntity(doc,doc.root(),EditorEntityKind::Folder,"Óptica");
   f.session.setSelection(target);f.session.update();history.clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
-  tapWidget(f,widgetId(EditorWidget::ComponentCategory));
-  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+2);
-  AE_EXPECT_EQ(f.session.screen().componentPreview,3u,"Olhar abre plano de composição");
+  selectComponentFamily(f,scene::ComponentFamily::Camera);
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look"));
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look"));
+  AE_EXPECT_EQ(f.session.screen().componentPreview,editorComponentIndex("astra.camera.look")+1,"Olhar abre plano de composição");
   AE_EXPECT_EQ(doc.find(target)->components.size(),0u,"prévia não altera o documento");
   AE_EXPECT_EQ(history.undoDepth(),0u,"prévia não cria Undo");
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x>=0,"confirmação acessível por toque");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
   AE_EXPECT_EQ(f.session.screen().componentPreview,0u,"voltar conserva a busca");
   AE_EXPECT_EQ(doc.find(target)->components.size(),0u,"cancelamento sem efeito");
-  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+2);
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look"));
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look"));
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
   AE_EXPECT_TRUE(cameraComponent(*doc.find(target)) && cameraLook(*doc.find(target)),"Câmera e Olhar publicados juntos");
   AE_EXPECT_EQ(history.undoDepth(),1u,"composição inteira em um Undo");
@@ -3247,4 +3289,18 @@ AE_TEST(session_start_play_matches_the_play_button_and_is_idempotent) {
   tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
   AE_EXPECT_TRUE(!f.session.isPlaying(),"o botão para");
   AE_EXPECT_TRUE(locateWidget(f.session,hierarchyRowWidget(f.cube)).x>=0,"hierarquia volta");
+}
+
+// Cada receita tem ícone próprio: na grade da folha de criação o desenho é a
+// primeira coisa que a pessoa lê, e dois cartões iguais obrigam a ler o nome.
+AE_TEST(every_creation_recipe_has_its_own_icon_and_id) {
+  for(u32 i=0;i<editorCreationCatalog.size();++i) {
+    AE_EXPECT_TRUE(editorCreationCatalog[i].icon!=ui::UiIcon::None,"receita com ícone");
+    AE_EXPECT_TRUE(!editorCreationCatalog[i].id.empty(),"receita com id persistente");
+    for(u32 j=0;j<i;++j) {
+      AE_EXPECT_TRUE(editorCreationCatalog[i].icon!=editorCreationCatalog[j].icon,"ícone exclusivo por receita");
+      AE_EXPECT_TRUE(editorCreationCatalog[i].id!=editorCreationCatalog[j].id,"id exclusivo por receita");
+    }
+  }
+  for(const auto name:creationCategoryIcons) AE_EXPECT_TRUE(editorIconByName(name)!=ui::UiIcon::None,"ícone de categoria existe");
 }

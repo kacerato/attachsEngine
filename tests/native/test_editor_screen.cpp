@@ -1,6 +1,7 @@
 #include "editor/editor_history.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
+#include "editor/editor_component_catalog.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
 #include "ui_software_raster.h"
@@ -296,22 +297,22 @@ AE_TEST(component_search_finds_other_categories) {
   auto state=waterLabState(lab);
   state.componentSelection=lab.block;
   state.addingComponent=true;
-  state.componentCategory=static_cast<u32>(scene::ComponentCategory::Physics);
+  state.componentCategory=static_cast<u32>(scene::ComponentFamily::Physics3D)+1;
   state.componentQuery="camera";
   composeFrame(frame,state);
   UiPoint point{};
-  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+5,
-                            frame.layout.inspectorPanel,point),
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera"),
+                            state.surface,point),
                  "busca encontra Camera mesmo com filtro Física selecionado");
   state.componentQuery="RigidBody3D";
   composeFrame(frame,state);
-  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase),
-                            frame.layout.inspectorPanel,point),
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"),
+                            state.surface,point),
                  "termo de Godot encontra o corpo físico Astra");
   state.componentQuery="Camera3D";
   composeFrame(frame,state);
-  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+5,
-                            frame.layout.inspectorPanel,point),
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera"),
+                            state.surface,point),
                  "termo de Godot encontra a câmera Astra");
 }
 
@@ -321,11 +322,11 @@ AE_TEST(component_preview_shows_schema_defaults_without_editing_document) {
   auto state=waterLabState(lab);
   state.componentSelection=lab.block;
   state.addingComponent=true;
-  state.componentPreview=6; // Câmera
+  state.componentPreview=editorComponentIndex("astra.camera")+1;
   composeFrame(frame,state);
   UiPoint point{};
   AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewValues),
-                            frame.layout.inspectorPanel,point),"aba de valores acessível por toque");
+                            state.surface,point),"aba de valores acessível por toque");
   const auto before=lab.history.undoDepth();
   tap(frame,state,lab,point);
   AE_EXPECT_TRUE(state.componentPreviewValues,"toque abre os defaults");
@@ -339,7 +340,7 @@ AE_TEST(component_preview_shows_schema_defaults_without_editing_document) {
   }
   AE_EXPECT_TRUE(field&&value,"a prévia mostra o FOV inicial declarado pelo componente");
   AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewComposition),
-                            frame.layout.inspectorPanel,point),"composição continua acessível");
+                            state.surface,point),"composição continua acessível");
   tap(frame,state,lab,point);
   AE_EXPECT_TRUE(!state.componentPreviewValues,"retorno à composição não altera o plano");
   AE_EXPECT_EQ(lab.history.undoDepth(),before,"prévia não cria Undo");
@@ -349,12 +350,12 @@ AE_TEST(component_preview_shows_schema_defaults_without_editing_document) {
   state.componentPreviewValues=true;
   composeFrame(frame,state);
   AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewNext),
-                            frame.layout.inspectorPanel,point),"valores longos paginam em tela baixa");
+                            state.surface,point),"valores longos paginam em tela baixa");
   tap(frame,state,lab,point);
   AE_EXPECT_EQ(state.componentPreviewPage,1u,"próxima página responde ao toque");
   composeFrame(frame,state);
   AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewPrevious),
-                            frame.layout.inspectorPanel,point),"página anterior permanece acessível");
+                            state.surface,point),"página anterior permanece acessível");
 }
 
 AE_TEST(component_property_search_crosses_groups_and_keeps_conditional_fields) {
