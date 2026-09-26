@@ -1111,6 +1111,10 @@ public:
     return 0;
   }
   EditorEntityId createWaterSurface(bool cameraRelative, EditorEntityId parent=kInvalidEntity);
+  // Cria a receita composta `index` de editorCreationCatalog como UM comando de
+  // histórico. Recusa sem efeito quando a composição, um valor inicial ou a
+  // hierarquia física não são válidos; o motivo vai para o status.
+  EditorEntityId createRecipe(u32 index, EditorEntityId parent);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
   }

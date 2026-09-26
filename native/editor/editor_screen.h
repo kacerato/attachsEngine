@@ -168,7 +168,6 @@ enum class EditorWidget : u32 {
   CreationClearSearch,
   CreationPrevious,
   CreationNext,
-  CreateCamera,
   CreateGround,
   CreateCube,
   WorkspaceMenuClose,
@@ -373,25 +372,9 @@ enum class EditorWidget : u32 {
   ComponentPropertySearch=0x9b00'0000u,
   ComponentPropertySearchClear,
   ComponentFieldResetBase=0xa000'0000u,
-  // Built-in object recipes have fixed IDs so adding them cannot renumber
-  // controls already used by the editor.
-  CreateDirectionalLight=0x0800'0000u,
-  CreatePointLight,
-  CreateSpotLight,
-  CreateStaticBox,
-  CreateStaticSphere,
-  CreateStaticCapsule,
-  CreateDynamicBox,
-  CreateTriggerBox,
-  CreateCharacter,
-  CreateTimer,
-  CreateFollowCamera,
-  CreateDynamicSphere,
-  CreateDynamicCapsule,
-  CreateTriggerSphere,
-  CreateTriggerCapsule,
-  CreateKinematicBox,
-  CreateKinematicSphere,
+  // + índice da receita em editorCreationCatalog: cria aquela composição.
+  // Faixa fixa para que acrescentar receitas não renumere controles existentes.
+  CreationRecipeBase=0x0800'0000u,
   TabTimers=0x0810'0000u,
   TimerHorizon,
   TimerPrevious,
@@ -464,7 +447,8 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::SceneTemplateRowBase,kRange},{EditorWidget::ComponentSlotNumberBase,kRange},
   {EditorWidget::ComponentClipMoveUpBase,kRange},{EditorWidget::ComponentClipMoveDownBase,kRange},
   {EditorWidget::ComponentClipRemoveBase,kRange},
-  {EditorWidget::InputActionRowBase,64},{EditorWidget::InputBindingRowBase,16}};
+  {EditorWidget::InputActionRowBase,64},{EditorWidget::InputBindingRowBase,16},
+  {EditorWidget::CreationRecipeBase,0x0010'0000u}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;

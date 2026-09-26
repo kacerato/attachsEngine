@@ -5436,8 +5436,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     u32 count=0;bool selectedVisible=false;
     for(u32 i=0;i<editorCreationCatalog.size();++i) {
       if(!creationAvailable(state,i)) continue;
-      const auto &entry=editorCreationCatalog[i];const auto name=editorSearchKey(entry.name);
-      if(query.empty()?entry.category!=state.creationCategory:name.find(query)==std::string::npos) continue;
+      const auto &entry=editorCreationCatalog[i];
+      if(!creationListed(entry,query,state.creationCategory)) continue;
       const auto ordinal=count++;if(ordinal/creationPageSize(state.surface.height)!=state.creationPage) continue;
       auto row=takeTop(content,40);const bool selected=state.creationSelection==i;
       if(selected) {list.addRect(row,theme.color.raised,2);list.addRect({row.x,row.y,2,row.height},theme.color.accent);selectedVisible=true;}
@@ -5449,7 +5449,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     if(selectedVisible) {
       const auto &selected=editorCreationCatalog[state.creationSelection];
       builder.label(description,selected.description,theme.color.textDim,theme.type.caption);
-      auto create=takeRight(footer,96);list.addRect(create,theme.color.accent,3);builder.label(create,"Criar",theme.color.accentInk,theme.type.body,UiAlign::Center);router.addRegion(create,widgetId(selected.action));
+      auto create=takeRight(footer,96);list.addRect(create,theme.color.accent,3);builder.label(create,"Criar",theme.color.accentInk,theme.type.body,UiAlign::Center);router.addRegion(create,creationWidget(state.creationSelection));
     }
     auto cancel=takeRight(footer,90);builder.label(cancel,"Cancelar",theme.color.textDim,theme.type.body,UiAlign::Center);router.addRegion(cancel,widgetId(EditorWidget::CreateMenuClose));
     if(count>creationPageSize(state.surface.height)) {
@@ -5956,7 +5956,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       const auto query=editorSearchKey(state.creationSearch);u32 count=0;
       for(u32 i=0;i<editorCreationCatalog.size();++i) {
         const auto &entry=editorCreationCatalog[i];
-        if(creationAvailable(state,i) && (query.empty()?entry.category==state.creationCategory:editorSearchKey(entry.name).find(query)!=std::string::npos)) ++count;
+        if(creationAvailable(state,i) && creationListed(entry,query,state.creationCategory)) ++count;
       }
       const auto pageSize=creationPageSize(state.surface.height);
       state.creationPage=(state.creationPage+1)%std::max(1u,(count+pageSize-1)/pageSize);break;

@@ -701,10 +701,18 @@ void importWaterResources(Fixture &fixture) {
   AE_EXPECT_TRUE(fixture.session.importMap(draws,materials,false),"resource source");
   fixture.session.update();
 }
+u32 recipeWidget(std::string_view id) {
+  u32 index=0;
+  if(!findCreationRecipe(id,&index)) {
+    std::fprintf(stderr,"receita não registrada: %.*s\n",static_cast<int>(id.size()),id.data());
+    return 0;
+  }
+  return creationWidget(index);
+}
 void tapWidget(Fixture &fixture,u32 widget) {
   if((widget==widgetId(EditorWidget::TabAssets) || widget==widgetId(EditorWidget::TabSettings) || widget==widgetId(EditorWidget::TabLighting)) && !fixture.session.screen().workspaceMenu)
     tapWidget(fixture,widgetId(EditorWidget::ProjectMenu));
-  if(fixture.session.screen().creationMenu) for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==widgetId(editorCreationCatalog[i].action)) {
+  if(fixture.session.screen().creationMenu) for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==creationWidget(i)) {
     tapWidget(fixture,widgetId(EditorWidget::CreationCategoryBase)+editorCreationCatalog[i].category);
     for(u32 page=0;page<editorCreationCatalog.size() &&
         locateWidget(fixture.session,widgetId(EditorWidget::CreationRowBase)+i).x<0;++page)
@@ -1588,7 +1596,7 @@ AE_TEST(session_stop_button_returns_to_edit_and_preserves_document) {
 AE_TEST(session_explicit_camera_creation_is_undoable) {
   Fixture f;AE_EXPECT_EQ(resolveSceneCamera(f.session.document()).entity,0u,"sem câmera automática");
   tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
-  tapWidget(f,widgetId(EditorWidget::CreateCamera));
+  tapWidget(f,recipeWidget("basic.camera"));
   const auto pose=resolveSceneCamera(f.session.document());
   AE_EXPECT_TRUE(pose.entity!=0,"câmera criada na cena");
   float position[3];editorCameraPosition(f.session.camera(),position);
@@ -1607,7 +1615,7 @@ AE_TEST(session_creation_menu_places_objects_under_selected_parent_or_root) {
   AE_EXPECT_TRUE(f.session.screen().creationAsChild,"seleção define filho como destino inicial");
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::CreationAtRoot)).x>=0,"destino raiz visível");
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::CreationAsChild)).x>=0,"destino filho visível");
-  tapWidget(f,widgetId(EditorWidget::CreateCamera));
+  tapWidget(f,recipeWidget("basic.camera"));
   const auto camera=f.session.selection();
   AE_EXPECT_EQ(doc.find(camera)->parent,parent,"câmera anexada ao pai escolhido");
   float world[16],eye[3];AE_EXPECT_TRUE(editorWorldMatrix(doc,camera,world),"pose mundial da câmera");
@@ -1657,18 +1665,18 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"scene without imported geometry");
   f.session.update();
   auto &doc=f.session.document();auto &history=f.session.history();
-  const EditorWidget actions[]{EditorWidget::CreateDirectionalLight,EditorWidget::CreatePointLight,
-    EditorWidget::CreateSpotLight,EditorWidget::CreateStaticBox,EditorWidget::CreateStaticSphere,
-    EditorWidget::CreateStaticCapsule,EditorWidget::CreateDynamicBox,EditorWidget::CreateTriggerBox,
-    EditorWidget::CreateDynamicSphere,EditorWidget::CreateDynamicCapsule,
-    EditorWidget::CreateTriggerSphere,EditorWidget::CreateTriggerCapsule,
-    EditorWidget::CreateKinematicBox,EditorWidget::CreateKinematicSphere,
-    EditorWidget::CreateCharacter};
+  const std::string_view actions[]{"light.directional","light.point",
+    "light.spot","physics.static_box","physics.static_sphere",
+    "physics.static_capsule","physics.dynamic_box","physics.trigger_box",
+    "physics.dynamic_sphere","physics.dynamic_capsule",
+    "physics.trigger_sphere","physics.trigger_capsule",
+    "physics.kinematic_box","physics.kinematic_sphere",
+    "physics.character"};
   EditorEntityId createdIds[std::size(actions)]{};
   for(u32 index=0;index<std::size(actions);++index) {
     f.session.setSelection(doc.root());f.session.update();
     tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
-    tapWidget(f,widgetId(actions[index]));
+    tapWidget(f,recipeWidget(actions[index]));
     const auto id=f.session.selection();const auto *object=doc.find(id);
     createdIds[index]=id;
     AE_EXPECT_TRUE(object && id!=doc.root(),"created object has identity");
@@ -1682,19 +1690,19 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
       const auto *body=runtime::physicsBody(*object);
       const auto *collider=runtime::colliderComponent(*object);
       AE_EXPECT_TRUE(body && collider,"physical body has a real shape");
-      const auto sphere=actions[index]==EditorWidget::CreateStaticSphere ||
-        actions[index]==EditorWidget::CreateDynamicSphere || actions[index]==EditorWidget::CreateTriggerSphere ||
-        actions[index]==EditorWidget::CreateKinematicSphere;
-      const auto capsule=actions[index]==EditorWidget::CreateStaticCapsule ||
-        actions[index]==EditorWidget::CreateDynamicCapsule || actions[index]==EditorWidget::CreateTriggerCapsule;
+      const auto sphere=actions[index]=="physics.static_sphere" ||
+        actions[index]=="physics.dynamic_sphere" || actions[index]=="physics.trigger_sphere" ||
+        actions[index]=="physics.kinematic_sphere";
+      const auto capsule=actions[index]=="physics.static_capsule" ||
+        actions[index]=="physics.dynamic_capsule" || actions[index]=="physics.trigger_capsule";
       AE_EXPECT_EQ(collider->shape,sphere?scene::ColliderShape::Sphere:
         capsule?scene::ColliderShape::Capsule:scene::ColliderShape::Box,"correct shape");
-      const auto sensor=actions[index]==EditorWidget::CreateTriggerBox ||
-        actions[index]==EditorWidget::CreateTriggerSphere || actions[index]==EditorWidget::CreateTriggerCapsule;
-      const auto dynamic=actions[index]==EditorWidget::CreateDynamicBox ||
-        actions[index]==EditorWidget::CreateDynamicSphere || actions[index]==EditorWidget::CreateDynamicCapsule;
-      const auto kinematic=actions[index]==EditorWidget::CreateKinematicBox ||
-        actions[index]==EditorWidget::CreateKinematicSphere;
+      const auto sensor=actions[index]=="physics.trigger_box" ||
+        actions[index]=="physics.trigger_sphere" || actions[index]=="physics.trigger_capsule";
+      const auto dynamic=actions[index]=="physics.dynamic_box" ||
+        actions[index]=="physics.dynamic_sphere" || actions[index]=="physics.dynamic_capsule";
+      const auto kinematic=actions[index]=="physics.kinematic_box" ||
+        actions[index]=="physics.kinematic_sphere";
       AE_EXPECT_EQ(body->sensor,sensor,"sensor intent reaches body");
       AE_EXPECT_EQ(body->motion,dynamic?scene::BodyMotion::Dynamic:
         kinematic?scene::BodyMotion::Kinematic:scene::BodyMotion::Static,"motion intent reaches body");
@@ -1708,7 +1716,7 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   AE_EXPECT_EQ(doc.entityCount(),16u,"fifteen distinct creations survive");
   f.session.setSelection(createdIds[6]);f.session.update();
   tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
-  tapWidget(f,widgetId(EditorWidget::CreateStaticSphere));
+  tapWidget(f,recipeWidget("physics.static_sphere"));
   AE_EXPECT_EQ(doc.entityCount(),16u,"invalid physics ancestry creates no partial object");
   AE_EXPECT_EQ(history.undoDepth(),15u,"rejected creation records no undo command");
   tapWidget(f,widgetId(EditorWidget::CreateMenuClose));
@@ -1737,12 +1745,52 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   for(u32 index=0;index<lights.size();++index)
     AE_EXPECT_EQ(static_cast<u32>(lights[index].modality),index,"light modality survives archive and Play");
 }
+// Toda receita composta do catálogo é executada pelo mesmo caminho: um objeto,
+// todos os tipos declarados, valores iniciais aplicados e um único Undo. Uma
+// receita nova entra aqui sem teste próprio para existir.
+AE_TEST(every_composed_recipe_creates_its_declared_composition_in_one_command) {
+  Fixture f;
+  AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"cena sem recursos importados");
+  auto &doc=f.session.document();auto &history=f.session.history();
+  u32 composed=0;
+  for(u32 index=0;index<editorCreationCatalog.size();++index) {
+    const auto &recipe=editorCreationCatalog[index];
+    if(!recipe.composed()) continue;
+    ++composed;
+    f.session.setSelection(doc.root());history.clear();
+    const auto id=f.session.createRecipe(index,doc.root());
+    const auto *object=doc.find(id);
+    AE_EXPECT_TRUE(object!=nullptr,"receita cria objeto");
+    if(!object) continue;
+    AE_EXPECT_TRUE(object->kind==recipe.kind,"tipo de objeto declarado");
+    for(const auto &part:recipe.components)
+      AE_EXPECT_TRUE(object->components.find(part.type)!=nullptr,"componente declarado presente");
+    for(const auto &part:recipe.components) for(const auto &initial:part.values) {
+      const auto *component=object->components.find(initial.component);
+      AE_EXPECT_TRUE(component!=nullptr,"valor inicial tem dono");
+      if(!component) continue;
+      if(const auto *number=std::get_if<float>(&initial.value)) {
+        for(const auto &p:component->type().numbers) if(p.id==initial.property)
+          AE_EXPECT_EQ(p.read(*component),*number,"número inicial aplicado");
+      } else if(const auto *option=std::get_if<u32>(&initial.value)) {
+        for(const auto &p:component->type().enums) if(p.id==initial.property)
+          AE_EXPECT_EQ(p.read(*component),*option,"enumeração inicial aplicada");
+      } else if(const auto *flag=std::get_if<bool>(&initial.value)) {
+        for(const auto &p:component->type().booleans) if(p.id==initial.property)
+          AE_EXPECT_EQ(p.read(*component),*flag,"booleano inicial aplicado");
+      }
+    }
+    AE_EXPECT_EQ(history.undoDepth(),1u,"receita é um único comando");
+    AE_EXPECT_TRUE(history.undo(doc) && !doc.exists(id),"Undo remove a composição inteira");
+  }
+  AE_EXPECT_TRUE(composed>=18u,"receitas compostas descritas como dados");
+}
 AE_TEST(session_timer_creation_is_one_undoable_object_with_real_component) {
   Fixture f;
   AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"cena sem recursos importados");
   auto &doc=f.session.document();f.session.setSelection(doc.root());f.session.update();
   tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
-  tapWidget(f,widgetId(EditorWidget::CreateTimer));
+  tapWidget(f,recipeWidget("gameplay.timer"));
   const auto id=f.session.selection();const auto *object=doc.find(id);
   AE_EXPECT_TRUE(object && object->components.find(scene::Timer::descriptor),"Timer criado na hierarquia");
   AE_EXPECT_TRUE(f.session.history().undo(doc) && !doc.exists(id),"Undo remove objeto e componente");
@@ -1829,7 +1877,7 @@ AE_TEST(session_follow_camera_creation_links_selected_target) {
   Fixture f;auto &doc=f.session.document();
   f.session.setSelection(f.cube);f.session.update();
   tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
-  tapWidget(f,widgetId(EditorWidget::CreateFollowCamera));
+  tapWidget(f,recipeWidget("basic.follow_camera"));
   const auto id=f.session.selection();const auto *camera=doc.find(id);
   AE_EXPECT_TRUE(camera && camera->parent==doc.root(),"câmera criada fora da hierarquia do alvo");
   const auto *follow=camera?static_cast<const scene::CameraFollow *>(camera->components.find(scene::CameraFollow::descriptor)):nullptr;

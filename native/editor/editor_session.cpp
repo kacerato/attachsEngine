@@ -1261,8 +1261,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     std::snprintf(state_.creationSearch,sizeof(state_.creationSearch),"%s",value.c_str());
     state_.creationPage=0;const auto query=editorSearchKey(value);
     for(u32 i=0;i<editorCreationCatalog.size();++i)
-      if(creationAvailable(state_,i) && (query.empty()?editorCreationCatalog[i].category==state_.creationCategory:
-         editorSearchKey(editorCreationCatalog[i].name).find(query)!=std::string::npos)) {state_.creationSelection=i;break;}
+      if(creationAvailable(state_,i) && creationListed(editorCreationCatalog[i],query,state_.creationCategory)) {state_.creationSelection=i;break;}
   }
   close();return true;
 }
@@ -2765,7 +2764,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     return true;
   }
   if(routing.tapped) for(u32 i=0;i<editorCreationCatalog.size();++i)
-    if(routing.widgetId==widgetId(editorCreationCatalog[i].action) && !creationAvailable(state_,i)) return true;
+    if(routing.widgetId==creationWidget(i) && !creationAvailable(state_,i)) return true;
   if(routing.tapped && state_.creationMenu) {
     const auto key=routing.widgetId;
     if(key>=widgetId(EditorWidget::CreationCategoryBase)&&key<widgetId(EditorWidget::CreationCategoryBase)+std::size(creationCategories)) {
@@ -3105,138 +3104,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     state_.status="Escolha um arquivo .glb";
     return true;
   }
-  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateCamera)) {
-    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
-    EditorEntity value;assignEntityName(value,"Câmera");editCamera(value);
-    editorCameraPosition(camera_,value.transform.position);
-    value.transform.rotationDegrees[0]=camera_.pitch*57.2957795f;
-    value.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
-    float parentWorld[16],cameraWorld[16];editorTransformMatrix(value.transform,cameraWorld);
-    if(!editorWorldMatrix(document_,parent,parentWorld) || !editorLocalTransformForWorld(cameraWorld,parentWorld,value.transform)) {
-      state_.status="Não foi possível criar câmera neste pai";return true;
-    }
-    if(!history_.begin("Criar câmera")) return true;
-    const auto id=history_.createEntity(document_,parent,EditorEntityKind::Camera,"Câmera");
-    if(!id || !history_.applyValues(document_,id,value)) {
-      history_.cancel(document_);state_.status="Não foi possível criar câmera";return true;
-    }
-    history_.end();setSelection(id);state_.creationMenu=false;return true;
-  }
-  if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreateDirectionalLight) &&
-     routing.widgetId<=widgetId(EditorWidget::CreateKinematicSphere)) {
-    const auto action=static_cast<EditorWidget>(routing.widgetId);
-    const auto parent=action==EditorWidget::CreateFollowCamera?document_.root():
-        state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
+  if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreationRecipeBase) &&
+     routing.widgetId<widgetId(EditorWidget::CreationRecipeBase)+editorCreationCatalog.size()) {
+    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
         state_.selection!=document_.root()?state_.selection:document_.root();
-    const char *name=nullptr;
-    EditorEntityKind kind=EditorEntityKind::Folder;
-    EditorEntity values;
-    values.transform.position[0]=camera_.target[0];
-    values.transform.position[2]=camera_.target[2];
-    switch(action) {
-      case EditorWidget::CreateDirectionalLight:
-      case EditorWidget::CreatePointLight:
-      case EditorWidget::CreateSpotLight: {
-        kind=EditorEntityKind::Light;
-        name=action==EditorWidget::CreateDirectionalLight?"Luz direcional":
-             action==EditorWidget::CreatePointLight?"Luz pontual":"Luz spot";
-        auto *light=runtime::editLight(values);
-        if(!light) {name=nullptr;break;}
-        light->kind=action==EditorWidget::CreateDirectionalLight?scene::LightKind::Directional:
-                    action==EditorWidget::CreatePointLight?scene::LightKind::Point:scene::LightKind::Spot;
-        light->intensity=light->kind==scene::LightKind::Directional?10000.f:1000.f;
-        values.transform.position[1]=light->kind==scene::LightKind::Directional?0.f:2.f;
-        if(light->kind!=scene::LightKind::Point) {
-          values.transform.rotationDegrees[0]=light->kind==scene::LightKind::Directional?45.f:camera_.pitch*57.2957795f;
-          values.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
-        }
-        break;
-      }
-      case EditorWidget::CreateCharacter:
-        name="Personagem";values.transform.position[1]=1.f;
-        if(!runtime::editCharacter(values)) name=nullptr;
-        break;
-      case EditorWidget::CreateTimer:
-        name="Timer";
-        if(!values.components.add(scene::Timer::descriptor)) name=nullptr;
-        break;
-      case EditorWidget::CreateFollowCamera: {
-        name="Câmera seguidora";kind=EditorEntityKind::Camera;
-        auto *camera=editCamera(values);
-        auto *follow=static_cast<scene::CameraFollow *>(values.components.add(scene::CameraFollow::descriptor));
-        if(!camera||!follow) {name=nullptr;break;}
-        values.transform.rotationDegrees[0]=camera_.pitch*57.2957795f;
-        values.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
-        const auto selected=state_.selection;
-        if(selected!=document_.root() && document_.exists(selected)) {
-          follow->target=selected;
-          float targetWorld[16];
-          if(!editorWorldMatrix(document_,selected,targetWorld)) {name=nullptr;break;}
-          for(u32 axis=0;axis<3;++axis) values.transform.position[axis]=targetWorld[12+axis]+follow->offset[axis];
-        } else editorCameraPosition(camera_,values.transform.position);
-        break;
-      }
-      case EditorWidget::CreateStaticBox:
-      case EditorWidget::CreateStaticSphere:
-      case EditorWidget::CreateStaticCapsule:
-      case EditorWidget::CreateDynamicBox:
-      case EditorWidget::CreateDynamicSphere:
-      case EditorWidget::CreateDynamicCapsule:
-      case EditorWidget::CreateTriggerBox:
-      case EditorWidget::CreateTriggerSphere:
-      case EditorWidget::CreateTriggerCapsule:
-      case EditorWidget::CreateKinematicBox:
-      case EditorWidget::CreateKinematicSphere: {
-        name=action==EditorWidget::CreateStaticBox?"Caixa de colisão":
-             action==EditorWidget::CreateStaticSphere?"Esfera de colisão":
-             action==EditorWidget::CreateStaticCapsule?"Cápsula de colisão":
-             action==EditorWidget::CreateDynamicBox?"Caixa dinâmica":
-             action==EditorWidget::CreateDynamicSphere?"Esfera dinâmica":
-             action==EditorWidget::CreateDynamicCapsule?"Cápsula dinâmica":
-             action==EditorWidget::CreateTriggerBox?"Sensor de caixa":
-             action==EditorWidget::CreateTriggerSphere?"Sensor esférico":
-             action==EditorWidget::CreateTriggerCapsule?"Sensor de cápsula":
-             action==EditorWidget::CreateKinematicBox?"Caixa cinemática":"Esfera cinemática";
-        auto *body=runtime::editPhysicsBody(values);
-        auto *collider=runtime::editCollider(values);
-        if(!body || !collider) {name=nullptr;break;}
-        collider->shape=(action==EditorWidget::CreateStaticSphere || action==EditorWidget::CreateDynamicSphere ||
-                         action==EditorWidget::CreateTriggerSphere || action==EditorWidget::CreateKinematicSphere)?scene::ColliderShape::Sphere:
-                        (action==EditorWidget::CreateStaticCapsule || action==EditorWidget::CreateDynamicCapsule ||
-                         action==EditorWidget::CreateTriggerCapsule)?scene::ColliderShape::Capsule:scene::ColliderShape::Box;
-        body->motion=(action==EditorWidget::CreateDynamicBox || action==EditorWidget::CreateDynamicSphere ||
-                      action==EditorWidget::CreateDynamicCapsule)?scene::BodyMotion::Dynamic:
-                     (action==EditorWidget::CreateKinematicBox || action==EditorWidget::CreateKinematicSphere)?scene::BodyMotion::Kinematic:
-                     scene::BodyMotion::Static;
-        body->sensor=action==EditorWidget::CreateTriggerBox || action==EditorWidget::CreateTriggerSphere ||
-                     action==EditorWidget::CreateTriggerCapsule;
-        values.transform.position[1]=body->motion==scene::BodyMotion::Dynamic?2.f:0.f;
-        break;
-      }
-      default:return true;
-    }
-    if(!name) {state_.status="Não foi possível preparar o objeto";return true;}
-    if(runtime::physicsBody(values) || runtime::characterComponent(values)) {
-      for(auto ancestor=document_.find(parent);ancestor;ancestor=document_.find(ancestor->parent)) {
-        const auto *body=runtime::physicsBody(*ancestor);
-        if(runtime::characterComponent(*ancestor) || (body && body->motion!=scene::BodyMotion::Static)) {
-          state_.status="Corpo ou personagem não pode herdar pose de corpo móvel ou personagem";
-          return true;
-        }
-      }
-    }
-    assignEntityName(values,name);
-    float parentWorld[16],objectWorld[16];editorTransformMatrix(values.transform,objectWorld);
-    if(!editorWorldMatrix(document_,parent,parentWorld) ||
-       !editorLocalTransformForWorld(objectWorld,parentWorld,values.transform)) {
-      state_.status="Não foi possível criar objeto neste pai";return true;
-    }
-    if(!history_.begin(name)) {state_.status="Finalize a edição atual antes de criar";return true;}
-    const auto id=history_.createEntity(document_,parent,kind,name);
-    if(!id || !history_.applyValues(document_,id,values)) {
-      history_.cancel(document_);state_.status="Não foi possível criar objeto";return true;
-    }
-    history_.end();setSelection(id);state_.creationMenu=false;state_.status=std::string("Objeto criado: ")+name;
+    if(createRecipe(routing.widgetId-widgetId(EditorWidget::CreationRecipeBase),parent)!=kInvalidEntity)
+      state_.creationMenu=false;
     return true;
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateFiniteWater) ||
@@ -5538,6 +5411,82 @@ bool EditorSession::createSceneTemplate(u32 index) {
       if(document_.views().at(v)->name==model.views.front().name) {applySceneView(v);break;}
   state_.status=std::string(model.name)+" montado com "+std::to_string(model.views.size())+" vistas salvas";
   return true;
+}
+
+EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
+  if(index>=editorCreationCatalog.size() || !editorCreationCatalog[index].composed()) return kInvalidEntity;
+  const auto &recipe=editorCreationCatalog[index];
+  const auto refuse=[&](const std::string &reason) {state_.status=reason;return kInvalidEntity;};
+  const auto selected=state_.selection!=document_.root() && document_.exists(state_.selection)?state_.selection:kInvalidEntity;
+  // A pose "atrás da seleção" é relativa ao alvo: nascer como filho dele faria
+  // a câmera herdar o movimento que ela mesma deve acompanhar.
+  if(recipe.pose==CreationPose::BehindSelection || !document_.exists(parent)) parent=document_.root();
+
+  EditorEntity values;
+  for(const auto &part:recipe.components) {
+    auto plan=scene::planComponentAddition(values.components,part.type);
+    if(!plan.ready) return refuse(std::string(recipe.name)+": "+(plan.error?plan.error:"composição inválida"));
+    values.components=std::move(plan.candidate);
+  }
+  for(const auto &part:recipe.components) for(const auto &initial:part.values)
+    if(scene::setComponentProperty(values.components,initial.component,initial.property,initial.value)!=
+       scene::ComponentPropertyStatus::Applied)
+      return refuse(std::string(recipe.name)+": valor inicial recusado ("+std::string(initial.property)+")");
+  if(!recipe.selectionComponent.empty() && selected!=kInvalidEntity &&
+     scene::setComponentProperty(values.components,recipe.selectionComponent,recipe.selectionProperty,
+                                 scene::ObjectReference{selected})!=scene::ComponentPropertyStatus::Applied)
+    return refuse(std::string(recipe.name)+": o objeto selecionado não é um alvo aceito");
+
+  constexpr float degrees=57.2957795f;
+  auto &transform=values.transform;
+  transform.position[0]=camera_.target[0];transform.position[1]=recipe.height;transform.position[2]=camera_.target[2];
+  switch(recipe.pose) {
+    case CreationPose::ViewTarget: break;
+    case CreationPose::ViewTargetFacing:
+      transform.rotationDegrees[0]=camera_.pitch*degrees;transform.rotationDegrees[1]=camera_.yaw*degrees;break;
+    case CreationPose::ViewTargetTilted:
+      transform.rotationDegrees[0]=45.f;transform.rotationDegrees[1]=camera_.yaw*degrees;break;
+    case CreationPose::EditorCamera:
+      editorCameraPosition(camera_,transform.position);
+      transform.rotationDegrees[0]=camera_.pitch*degrees;transform.rotationDegrees[1]=camera_.yaw*degrees;break;
+    case CreationPose::BehindSelection: {
+      transform.rotationDegrees[0]=camera_.pitch*degrees;transform.rotationDegrees[1]=camera_.yaw*degrees;
+      float targetWorld[16];
+      if(selected==kInvalidEntity || !editorWorldMatrix(document_,selected,targetWorld)) {
+        editorCameraPosition(camera_,transform.position);break;
+      }
+      // O deslocamento é o da própria referência, lido pelo contrato: a câmera
+      // nasce onde o componente vai colocá-la no primeiro quadro de Play.
+      float offset[3]{};
+      if(const auto *source=values.components.find(recipe.selectionComponent))
+        for(const auto &triple:source->type().triples) if(triple.id=="offset")
+          for(u32 axis=0;axis<3;++axis) for(const auto &number:source->type().numbers)
+            if(number.id==triple.channels[axis]) offset[axis]=number.read(*source);
+      for(u32 axis=0;axis<3;++axis) transform.position[axis]=targetWorld[12+axis]+offset[axis];
+      break;
+    }
+  }
+  // Um corpo não pode herdar pose de corpo móvel ou de personagem: o solver
+  // escreveria a pose do filho duas vezes.
+  if(runtime::physicsBody(values) || runtime::characterComponent(values))
+    for(auto ancestor=document_.find(parent);ancestor;ancestor=document_.find(ancestor->parent)) {
+      const auto *body=runtime::physicsBody(*ancestor);
+      if(runtime::characterComponent(*ancestor) || (body && body->motion!=scene::BodyMotion::Static))
+        return refuse("Corpo ou personagem não pode herdar pose de corpo móvel ou personagem");
+    }
+  assignEntityName(values,recipe.name);
+  float parentWorld[16],objectWorld[16];editorTransformMatrix(values.transform,objectWorld);
+  if(!editorWorldMatrix(document_,parent,parentWorld) ||
+     !editorLocalTransformForWorld(objectWorld,parentWorld,values.transform))
+    return refuse("Não foi possível criar objeto neste pai");
+  if(!history_.begin(recipe.name)) return refuse("Finalize a edição atual antes de criar");
+  const auto id=history_.createEntity(document_,parent,recipe.kind,recipe.name);
+  if(!id || !history_.applyValues(document_,id,values)) {
+    history_.cancel(document_);return refuse("Não foi possível criar objeto");
+  }
+  history_.end();setSelection(id);
+  state_.status=std::string("Objeto criado: ")+recipe.name;
+  return id;
 }
 
 EditorEntityId EditorSession::createWaterSurface(bool cameraRelative, EditorEntityId parent) {
