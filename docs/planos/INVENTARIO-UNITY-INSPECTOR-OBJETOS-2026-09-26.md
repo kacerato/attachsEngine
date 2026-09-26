@@ -16,32 +16,32 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 4 | Buscar por nome | ✔ | busca com termos de outras engines | — |
 | 5 | Scripts do projeto no navegador; não compilados ficam fora | ✔ | "Scripts do projeto" na família Lógica | — |
 | 6 | Qualquer número/combinação de componentes | ◐ | limite 64 por objeto; tipos singulares recusam duplicata com motivo | I1 |
-| 7 | Ícone de ajuda (?) no cabeçalho abre a referência | ✗ | link está no schema; falta botão e abrir URL no Android | I1 |
+| 7 | Ícone de ajuda (?) no cabeçalho abre a referência | ✔ | Referência no menu abre o link https do schema (`ExternalLinks` no Android) · `e9c51e8d` | I1 |
 | 8 | Valores padrão ao anexar | ✔ | descritores | — |
 | 9 | Editar valor: texto | ◐ | só nome do objeto e campos de script; falta string em componente (§4.2) | I2 |
 | 10 | Editar valor: interruptor | ✔ | booleanos | — |
-| 11 | Editar valor: lista suspensa (enum) | ◐ | hoje cicla ao tocar; falta lista de opções | I1 |
-| 12 | Referência: arrastar do Project | ✗ | só seletor | I1 |
+| 11 | Editar valor: lista suspensa (enum) | ✔ | lista de opções com a atual marcada · `e9c51e8d` | I1 |
+| 12 | Referência: arrastar do Project | ✔ | recurso arrastado da aba Recursos para o campo · `b96c358a` | I1 |
 | 13 | Referência: Object Picker (⊙) | ✔ | `buildReferencePicker`, seletor de malha/material/textura | — |
 | 14 | Referência a componente, objeto ou recurso | ◐ | objeto e recurso; falta referência a componente | I1 |
-| 15 | Menu de contexto no cabeçalho (clique direito → toque longo) | ✗ | só pelo ⋮ | I1 |
+| 15 | Menu de contexto no cabeçalho (clique direito → toque longo) | ✔ | toque longo 0,45 s · `e9c51e8d` | I1 |
 | 16 | Menu ⋮ no cabeçalho | ✔ | `ComponentMenuBase` | — |
-| 17 | Reset | ✔ | restaura padrão do descritor; falta em comportamento C# | I1 |
+| 17 | Reset | ✔ | nativos e comportamentos C# · `e9c51e8d` | I1 |
 | 18 | Remove Component com aviso de dependentes | ✔ | "Revisar remoção" + `componentRemovalBlockedBy` | — |
-| 19 | Move Up | ✗ | | I1 |
+| 19 | Move Up | ✔ | `Components::moveInstance`, com Undo · `e9c51e8d` | I1 |
 | 20 | Arrastar componente para reordenar | ✗ | | I1 |
-| 21 | Move Down | ✗ | | I1 |
-| 22 | Copy Component | ◐ | só nativos | I1 |
-| 23 | Paste Component As New | ✗ | | I1 |
-| 24 | Paste Component Values | ◐ | só nativos | I1 |
-| 25 | Editar propriedades no Play | ✗ | Inspector oculto e `dispatch` recusa em Play | I1 |
-| 26 | Voltar aos valores de antes ao sair do Play | ◐ | documento não muda no Play; falta a edição acontecer | I1 |
+| 21 | Move Down | ✔ | idem · `e9c51e8d` | I1 |
+| 22 | Copy Component | ✔ | nativos e C# · `e9c51e8d` | I1 |
+| 23 | Paste Component As New | ✔ | `e9c51e8d` | I1 |
+| 24 | Paste Component Values | ✔ | nativos e C# · `e9c51e8d` | I1 |
+| 25 | Editar propriedades no Play | ✔ | "Inspecionar" no Play; espelho → `applyPlayEdits` → API do `GameWorld`; física remontada no ponto seguro; campos C# por `edit` da ABI; recusas nomeadas (Estático, reordenar, trocar script) · `f10bead6` | I1 |
+| 26 | Voltar aos valores de antes ao sair do Play | ✔ | documento autoral não muda de revisão; parar descarta o espelho · `f10bead6` | I1 |
 
 ## 2. Manage components and their values — `InspectorManageComponents.html`
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 27 | Adicionar, remover, reordenar e editar valores | ◐ | reordenar falta (19–21) | I1 |
+| 27 | Adicionar, remover, reordenar e editar valores | ◐ | reordenar pelo menu entregue (19, 21); falta arrastar (20) | I1 |
 | 28 | D · Advanced Object Picker (filtro de tipo editável, busca) | ✗ | seletor tem busca; falta filtro visível/editável | I2 |
 | 29 | D · Expressões em campo numérico (`2*3`, `+=5`, `L(a,b)`, `R(a,b)`) | ✗ | teclado numérico só aceita número | I2 |
 | 30 | D · Curvas | ✗ | ver §6 | I2 |
@@ -63,8 +63,8 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 |---|---|---|---|---|
 | 37 | Referências padrão ao criar (Cubo com malha e material) | ✔ | cubo da biblioteca | — |
 | 38 | Objeto vazio + Malha fica sem referência até atribuir | ✔ | | — |
-| 39 | Arrastar da Hierarchy para o campo | ✗ | | I1 |
-| 40 | Arrastar do Project para o campo | ✗ | | I1 |
+| 39 | Arrastar da Hierarchy para o campo | ✔ | validação do seletor; recusa não reparenteia · `b96c358a` | I1 |
+| 40 | Arrastar do Project para o campo | ✔ | recurso da aba Recursos no campo de recurso · `b96c358a` | I1 |
 | 41 | Object Picker filtra pelo tipo do campo | ✔ | `requiredType`, tipo de recurso | — |
 | 42 | Picker clássico × avançado (alternar) | ✗ | | I2 |
 | 43 | Atribuir objeto a campo de componente usa o primeiro componente do tipo | ✗ | depende de referência a componente (14) | I1 |
@@ -196,7 +196,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 124 | Chamar métodos (ex. `AddForce`) | ✔ | `Physics` | — |
 | 125 | `GetComponent` de script pelo tipo da classe | ◐ | `FindBehavior<T>` protegido; falta em `GameObject` | O1 |
 | 126 | `GetComponent` devolve nulo quando ausente | ✔ | | — |
-| 127 | Campo público de objeto no Inspector + arrastar | ◐ | seletor sim, arrastar não | I1 |
+| 127 | Campo público de objeto no Inspector + arrastar | ✔ | campo `object` de script aceita objeto arrastado · `b96c358a` | I1 |
 | 128 | Campo de tipo componente (arrastar objeto que o tem) | ✗ | | I1 |
 | 129 | Array de referências | ✗ | | I2 |
 | 130 | Filhos pelo Transform (`childCount`, enumerar) | ✔ | `Children()`, `ChildAt` | — |
