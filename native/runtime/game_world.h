@@ -117,6 +117,11 @@ public:
   // Quantos objetos foram destruídos desde o load. Consumidores (física,
   // renderização) usam a revisão estrutural para saber que precisam reconstruir.
   u64 structuralRevision() const noexcept { return structuralRevision_; }
+  // Invalidações (scene::Invalidate) acumuladas pelas mudanças aceitas desde a
+  // última consulta: o dono do mundo as consome no ponto seguro e reconstrói o
+  // que o contrato do componente declara (corpo e forma física, por exemplo).
+  u32 pendingInvalidation() const noexcept { return invalidated_; }
+  u32 consumeInvalidation() noexcept { const u32 value = invalidated_; invalidated_ = 0; return value; }
 
   const SceneGraph &graph() const noexcept { return graph_; }
   // Acesso direto para o adaptador de física publicar poses. Não é a API de
@@ -138,6 +143,10 @@ public:
   WorldStatus setName(const ObjectHandle &handle, std::string_view name);
   bool activeInHierarchy(const ObjectHandle &handle) const noexcept;
   WorldStatus setActive(const ObjectHandle &handle, bool active);
+  // Camada de gameplay (filtro de física e consultas) e flags de desenho do
+  // objeto. A camada recria o corpo; as flags o renderer lê a cada quadro.
+  WorldStatus setLayer(const ObjectHandle &handle, u32 layer);
+  WorldStatus setRenderFlags(const ObjectHandle &handle, bool visible, bool castShadow, bool receiveShadow);
 
   // --- ciclo de vida ------------------------------------------------------
   // Criação imediata: o handle devolvido já resolve, aceita componentes e pode
@@ -195,6 +204,11 @@ public:
   // --- transform ----------------------------------------------------------
   WorldStatus localTransform(const ObjectHandle &handle, Transform &out) const;
   WorldStatus setLocalTransform(const ObjectHandle &handle, const Transform &value);
+  // Edição do editor com o Play rodando (Unity: mexer no Transform de um
+  // Rigidbody pelo Inspector). Grava a pose mesmo quando a física a publica e
+  // pede a recriação do corpo no ponto seguro, que o monta na pose nova.
+  // Scripts continuam com `setLocalTransform` e a recusa dele.
+  WorldStatus placeLocalTransform(const ObjectHandle &handle, const Transform &value);
   WorldStatus worldTransform(const ObjectHandle &handle, Transform &out) const;
   WorldStatus setWorldTransform(const ObjectHandle &handle, const Transform &value);
   // Aplica o mesmo delta local normalizado usado pelo controle de toque,
@@ -225,6 +239,10 @@ private:
   bool queue(PendingCommand command, u64 *operationId);
   void finishOperation(u64 operationId, WorldStatus result);
   void markSubtreeStale(ObjectId id);
+  // União das invalidações declaradas pelos componentes da subárvore: ativar,
+  // reparentear ou mover um objeto afeta tudo o que está pendurado nele.
+  u32 subtreeInvalidation(ObjectId id);
+  void invalidateType(std::string_view typeId);
 
   SceneGraph graph_;
   std::vector<Slot> slots_;
@@ -236,6 +254,7 @@ private:
   std::vector<ObjectId> scratch_;
   u32 worldId_ = 0;
   u64 structuralRevision_ = 0;
+  u32 invalidated_ = 0;
   double elapsed_ = 0;
 };
 

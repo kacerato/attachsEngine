@@ -196,15 +196,17 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
 
 
   if(builder.state.workspace==EditorWorkspace::Play && !waterCreationAvailable(builder.state)) {
-    const auto control=[&](const char *label,EditorWidget id,bool enabled) {
-      const auto rect=takeRight(content,76);
-      builder.list.addRect(rect,theme.color.raised,theme.radius.control);
-      builder.label(rect,label,enabled?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    const auto control=[&](const char *label,EditorWidget id,bool enabled,bool active=false) {
+      const auto rect=takeRight(content,active||id==EditorWidget::PlayInspect?92:76);
+      builder.list.addRect(rect,active?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(rect,label,active?theme.color.accentInk:enabled?theme.color.text:theme.color.textFaint,
+                    theme.type.caption,UiAlign::Center);
       if(enabled) builder.router.addRegion(rect,widgetId(id),theme.touch.minimumTarget);
       takeRight(content,theme.spacing.small);
     };
     control("Passo",EditorWidget::StepPlay,builder.state.playPaused);
     control(builder.state.playPaused?"Retomar":"Pausar",EditorWidget::PausePlay,true);
+    control("Inspecionar",EditorWidget::PlayInspect,true,builder.state.playInspect);
   } else {
     action(UiIcon::EditorAuthorRedo, EditorWidget::Redo, builder.state.canRedo);
     action(UiIcon::EditorAuthorUndo, EditorWidget::Undo, builder.state.canUndo);
@@ -607,7 +609,7 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
 
 u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleRows) {
   const UiTheme &theme = builder.theme;
-  const EditorDocument &document = *builder.state.document;
+  const auto &document = *builder.state.document;
   builder.list.addRect(panel, theme.color.surface);
   builder.router.addBlocker(panel);
 
@@ -5442,21 +5444,22 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   constexpr float compactPanelWidth = 240.0f;
   const bool compact = available < compactPanelWidth * 2 + kViewportMinimum + kSplitterWidth * 2;
 
-  float hierarchyWidth = state.hierarchyVisible && state.workspace != EditorWorkspace::Play &&
-      state.workspace != EditorWorkspace::Project
+  // No Play os painéis só existem quando o usuário pede para inspecionar.
+  const bool panelsAllowed = state.workspace != EditorWorkspace::Project &&
+      (state.workspace != EditorWorkspace::Play || state.playInspect);
+  float hierarchyWidth = state.hierarchyVisible && panelsAllowed
       ? (state.hierarchyWidth > 0.0f ? state.hierarchyWidth : available * 0.24f)
       : 0.0f;
-  float inspectorWidth = state.inspectorVisible && state.workspace != EditorWorkspace::Play &&
-      state.workspace != EditorWorkspace::Project
+  float inspectorWidth = state.inspectorVisible && panelsAllowed
       ? (state.inspectorWidth > 0.0f ? state.inspectorWidth : available * 0.27f)
       : 0.0f;
   if (hierarchyWidth > 0.0f) hierarchyWidth = std::max(hierarchyWidth, kPanelMinimum);
   if (inspectorWidth > 0.0f) inspectorWidth = std::max(inspectorWidth, kPanelMinimum);
   if (compact) {
-    hierarchyWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Project &&
+    hierarchyWidth = panelsAllowed &&
         (state.compactPanel == EditorScreenState::CompactPanel::Hierarchy || state.compactPanel == EditorScreenState::CompactPanel::Files)
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
-    inspectorWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Project &&
+    inspectorWidth = panelsAllowed &&
         state.compactPanel == EditorScreenState::CompactPanel::Inspector
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
   }
@@ -5543,9 +5546,29 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       list.addRect(status,withAlpha(theme.color.surface,.92f),theme.radius.control);
       builder.label(deflate(status,UiInsets::symmetric(8,4)),state.playHudMessage,theme.color.text,theme.type.caption);
     }
-    return layout;
+    if(!state.playInspect) return layout;
   }
-  buildViewportOverlay(builder, layout.viewport);
+  const bool playing=state.workspace==EditorWorkspace::Play;
+  if(!playing) buildViewportOverlay(builder, layout.viewport);
+  // Tinta de Play (Unity: Play Mode tint): os painéis mostram o mundo vivo, e
+  // isso fica visível sem ler nada. A faixa do Inspector diz o que acontece
+  // com a edição e, quando o mundo recusa, o motivo.
+  if(playing) {
+    if(!layout.hierarchyPanel.isEmpty())
+      list.addRect({layout.hierarchyPanel.x,layout.hierarchyPanel.y,layout.hierarchyPanel.width,2},theme.color.accent);
+    if(!layout.inspectorPanel.isEmpty()) {
+      const UiRect banner=takeTop(layout.inspectorPanel,34);
+      const UiColor tone=state.playEditRefused?theme.color.warning:theme.color.accent;
+      list.addRect(banner,withAlpha(tone,.16f));
+      list.addRect({banner.x,banner.y,banner.width,2},tone);
+      UiRect content=deflate(banner,UiInsets{8,2,8,0});
+      list.addImage(centred(takeLeft(content,20),14,14),static_cast<UiImageId>(UiIcon::EditorAuthorPlay),tone);
+      takeLeft(content,6);
+      builder.label(content,state.playEditNote.empty()?"Em execução · edições voltam ao parar":state.playEditNote,
+                    state.playEditRefused?theme.color.warning:theme.color.text,theme.type.caption);
+      router.addBlocker(banner);
+    }
+  }
   if (state.workspace == EditorWorkspace::Scene) buildToolRail(builder, layout.viewport, compact);
   if (!layout.hierarchyPanel.isEmpty())
     layout.hierarchyRowCount =
@@ -5565,6 +5588,18 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   const UiRect corner{layout.viewport.right() - kCornerButton - theme.spacing.small,
                       layout.viewport.bottom() - kCornerButton - theme.spacing.small,
                       kCornerButton, kCornerButton};
+  // Inspecionando o Play: o viewport é do jogo (toques, botões de ação). Os
+  // controles de câmera do editor e as vistas salvas ficam de fora; a barra de
+  // estado vai para a faixa de Play no topo do Inspector.
+  if(playing) {
+    if(compact) {
+      const UiRect button{layout.viewport.x+8,layout.viewport.y+42,100,36};
+      list.addRect(button,theme.color.raised,theme.radius.control);
+      builder.label(button,"Painéis",theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(button,widgetId(EditorWidget::CompactPanelMenu));
+    }
+  }
+  if(!playing) {
   if (!compact && !state.status.empty())
     builder.label({layout.viewport.x+8,layout.viewport.bottom()-26,layout.viewport.width-160,24},
                   state.status.c_str(),theme.color.text,theme.type.caption);
@@ -5589,6 +5624,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     list.addRect(button,theme.color.raised,theme.radius.control);
     builder.label(button,"Painéis",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(button,widgetId(EditorWidget::CompactPanelMenu));
+  }
   }
   if(state.workspace==EditorWorkspace::Scene) {
     // Unity 6 agrupa Lighting e Effects no topo do Scene View. Aqui a mesma
@@ -6654,6 +6690,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       break;
     case EditorWidget::StepPlay:
       if(state.workspace==EditorWorkspace::Play && state.playPaused && !waterCreationAvailable(state)) state.playStepRequested=true;
+      break;
+    case EditorWidget::PlayInspect:
+      if(state.workspace==EditorWorkspace::Play) {
+        state.playInspect=!state.playInspect;
+        // Numa tela estreita só cabe um painel: abrir já no Inspector.
+        if(state.playInspect && state.compactPanel==EditorScreenState::CompactPanel::Viewport)
+          state.compactPanel=EditorScreenState::CompactPanel::Inspector;
+      }
       break;
     }
     case EditorWidget::ToggleCharacter: {

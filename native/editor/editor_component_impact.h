@@ -12,7 +12,7 @@ struct ComponentImpactEntry {
   bool invalid=false;
   resources::AssetGuid asset{};
 };
-inline std::vector<ComponentImpactEntry> physicsComponentImpact(const EditorDocument &document,
+inline std::vector<ComponentImpactEntry> physicsComponentImpact(const runtime::SceneGraph &document,
     EditorEntityId id,const scene::ComponentValue &value) {
   std::vector<ComponentImpactEntry> rows;
   if(!document.activeInHierarchy(id)) return rows;
@@ -101,7 +101,7 @@ inline std::vector<ComponentResourceUse> componentResources(const scene::Compone
   }
   return result;
 }
-inline std::vector<ComponentImpactEntry> componentImpact(const EditorDocument &document,EditorEntityId id,u64 instance,
+inline std::vector<ComponentImpactEntry> componentImpact(const runtime::SceneGraph &document,EditorEntityId id,u64 instance,
     const resources::AssetRegistry *registry=nullptr,const EditorMapScene *library=nullptr) {
   std::vector<ComponentImpactEntry> result;
   const auto typeName=[](std::string_view type) {
@@ -189,7 +189,7 @@ inline std::vector<ComponentImpactEntry> componentImpact(const EditorDocument &d
 }
 // Registry edges and scene consumers are deliberately separate: neither proves
 // file existence or GPU residency. Querying never changes the authored scene.
-inline std::vector<ComponentImpactEntry> resourceImpact(const EditorDocument &document,resources::AssetGuid guid,
+inline std::vector<ComponentImpactEntry> resourceImpact(const runtime::SceneGraph &document,resources::AssetGuid guid,
     const resources::AssetRegistry *registry,const EditorMapScene *library) {
   std::vector<ComponentImpactEntry> rows;
   const auto *record=registry?registry->find(guid):nullptr;
@@ -294,7 +294,7 @@ inline resources::AssetGuid repairMaterialContext(const std::vector<std::pair<re
   const auto bindings=sharedTextureBindings(material,library);
   return localResourceUses(&bindings,texture).empty()?resources::AssetGuid{}:material;
 }
-inline std::vector<ComponentImpactEntry> sharedTextureImpact(const EditorDocument &document,resources::AssetGuid material,
+inline std::vector<ComponentImpactEntry> sharedTextureImpact(const runtime::SceneGraph &document,resources::AssetGuid material,
     resources::AssetGuid texture,const EditorMapScene *library) {
   std::vector<ComponentImpactEntry> rows;
   const auto bindings=sharedTextureBindings(material,library);
@@ -317,7 +317,7 @@ inline std::vector<ComponentImpactEntry> sharedTextureImpact(const EditorDocumen
   }
   return rows;
 }
-inline std::vector<ComponentImpactEntry> sceneResourceRepairImpact(const EditorDocument &document,resources::AssetGuid resource) {
+inline std::vector<ComponentImpactEntry> sceneResourceRepairImpact(const runtime::SceneGraph &document,resources::AssetGuid resource) {
   std::vector<ComponentImpactEntry> rows;std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
     const auto *object=document.find(id);

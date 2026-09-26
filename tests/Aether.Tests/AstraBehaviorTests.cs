@@ -95,6 +95,22 @@ public static class AstraBehaviorTests
         world.Start(compiled, scene, [Attach(1, 10, "test.force")]);
         Assert.Equal(0, world.Failures.Count, "new Play resets runtime failure state");
     }
+    // Inspector em Play: o campo e o Enabled chegam à instância viva, sem reiniciar.
+    [Test]
+    public static void PlayModeEdit_ChangesFieldAndEnabledOfTheLiveInstance()
+    {
+        using var project = new Project(Source); var compiled = project.Compile(); var scene = new Scene();
+        using var world = new BehaviorWorld();
+        world.Start(compiled, scene, [Attach(1, 10, "test.force", 3)]);
+        world.FixedUpdate(1f / 60); Assert.Close(3, scene.Force.X);
+        Assert.True(world.Edit(1, 10, new BehaviorEdit(true, new Dictionary<string, JsonElement>
+            { ["strength"] = JsonSerializer.SerializeToElement(5f) })), "campo aceito");
+        world.FixedUpdate(1f / 60); Assert.Close(8, scene.Force.X, what: "o valor novo vale no passo seguinte");
+        Assert.Equal(1, scene.Events.Count(e => e.Contains("start:")), "editar não reinicia a instância");
+        Assert.True(world.Edit(1, 10, new BehaviorEdit(false, null)), "desligar aceito");
+        world.FixedUpdate(1f / 60); Assert.Close(8, scene.Force.X, what: "desligada pelo Inspector não recebe FixedUpdate");
+        Assert.False(world.Edit(1, 99, new BehaviorEdit(true, null)), "instância inexistente é recusada");
+    }
     private const string LifecycleSource = """
         using Astra;
         [ComponentId("test.life")]

@@ -289,6 +289,11 @@ struct ScriptRuntimeApi {
   int (*lateUpdate)(float)=nullptr;
   // Evento do aplicativo (ScriptLifecycleEvent) com valor 0/1.
   int (*lifecycle)(u32,u32)=nullptr;
+  // Inspector com o Play rodando: objeto, instância e JSON UTF-8
+  // {"Enabled":bool,"Properties":{id:valor}} no mesmo formato dos anexos do
+  // Start. Opcional: um runtime sem ela recusa a edição ao vivo pelo nome, e o
+  // resto do Play segue igual.
+  int (*edit)(u64,u64,const u8 *,int)=nullptr;
   bool available() const {
     return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact&&timer&&lateUpdate&&lifecycle;
   }

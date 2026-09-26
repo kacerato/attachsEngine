@@ -327,8 +327,13 @@ bool EditorSession::setProjectDirectory(const char *path) {
 
 void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
   playScene_.setScriptRuntime(api,files_.rootPath());
-  playScene_.setScriptResourceAvailability(
-      [this](resources::AssetGuid guid,resources::AssetType type,std::string_view propertyId,u32 slot,
+  playScene_.setScriptResourceAvailability(runtimeResourceResolver());
+}
+
+// Quem publica sob demanda um recurso trocado com o Play rodando: o mesmo
+// caminho para a API de scripts e para o Inspector em Play.
+runtime::ComponentResourceResolver EditorSession::runtimeResourceResolver() {
+  return [this](resources::AssetGuid guid,resources::AssetType type,std::string_view propertyId,u32 slot,
              scene::ComponentValue &candidate) {
     // Clipe: vale se a fonte dele está carregada nesta sessão.
     if(type==resources::AssetType::AnimationClip) {
@@ -452,7 +457,7 @@ void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
     const auto sampling=mapScene_.slotSampling(*render,slot,binding);
     const UsedTexture required{guid,EditorMapScene::bindingIsSrgb(binding),binding==1,EditorMapScene::samplerFlags(sampling)};
     return ensure({required});
-  });
+  };
 }
 
 EditorSession::ViewportPointer *EditorSession::findViewportPointer(u32 id) noexcept {
@@ -714,7 +719,11 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   EditorTextEdit edit;edit.version=sceneVersion();
   // The Play HUD hides authoring fields. Returning no request also closes the
   // platform IME and rejects late replies instead of editing an invisible draft.
-  if(isPlaying()) return edit;
+  // Inspecionando o Play, o campo aberto é o do espelho, com a época dele.
+  if(isPlaying() && !playMirrorOpen_) {
+    if(!playInspecting() || !playMirrorValid_) return edit;
+    return const_cast<EditorSession *>(this)->inPlayMirror([this] {return pendingTextEdit();});
+  }
   if(state_.presetNaming) {
     edit.purpose=EditorTextPurpose::ComponentPresetName;edit.entity=state_.presetEntity;
     edit.componentInstance=state_.presetInstance;edit.text=state_.presetName;return edit;
@@ -794,6 +803,12 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
 }
 
 bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view text,u32 caret) {
+  if(playInspecting() && playMirrorValid_ && !playMirrorOpen_ && edit.version.epoch==playMirrorEpoch_)
+    return inPlayMirror([&] {return updateTextDraftNow(edit,text,caret);});
+  return updateTextDraftNow(edit,text,caret);
+}
+
+bool EditorSession::updateTextDraftNow(const EditorTextEdit &edit,std::string_view text,u32 caret) {
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
      current.entity!=edit.entity || current.componentInstance!=edit.componentInstance ||
@@ -989,6 +1004,12 @@ std::string_view trimmedName(std::string_view text) {
 } // namespace
 
 bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view text,bool accept) {
+  if(playInspecting() && playMirrorValid_ && !playMirrorOpen_ && edit.version.epoch==playMirrorEpoch_)
+    return inPlayMirror([&] {return completeTextEditNow(edit,text,accept);});
+  return completeTextEditNow(edit,text,accept);
+}
+
+bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_view text,bool accept) {
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
      current.entity!=edit.entity || current.field!=edit.field || edit.version.epoch!=sceneEpoch_) return false;
@@ -1266,7 +1287,95 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   close();return true;
 }
 
+void EditorSession::refreshPlayMirror() {
+  static_cast<runtime::SceneGraph &>(playMirror_)=playScene_.document();
+  playMirrorBase_=playScene_.document();
+  playHistory_.clear();
+  playMirrorEpoch_=nextSceneEpoch();
+  playMirrorValid_=true;playMirrorBusy_=false;
+}
+
+void EditorSession::enterPlayMirror() {
+  std::swap(document_,playMirror_);std::swap(history_,playHistory_);std::swap(sceneEpoch_,playMirrorEpoch_);
+  playMirrorWorkspace_=state_.workspace;
+  state_.workspace=EditorWorkspace::Scene;state_.document=&document_;
+  playMirrorRevision_=document_.revision();playMirrorOpen_=true;
+}
+
+void EditorSession::leavePlayMirror() {
+  const bool changed=document_.revision()!=playMirrorRevision_;
+  playMirrorBusy_=history_.isOpen()||componentDragOpen_||lensDragOpen_||fieldWidget_!=0||gizmoTransactionOpen_||
+                  state_.draggingEntity!=kInvalidEntity||state_.draggingAsset||
+                  pendingTextEdit().purpose!=EditorTextPurpose::None;
+  const auto requested=state_.workspace;
+  std::swap(document_,playMirror_);std::swap(history_,playHistory_);std::swap(sceneEpoch_,playMirrorEpoch_);
+  playMirrorOpen_=false;
+  // Trocar de área (código, recursos) no meio do Play encerraria a execução
+  // sem o usuário pedir; o botão de parar continua sendo o único caminho.
+  state_.workspace=playMirrorWorkspace_;
+  if(requested!=EditorWorkspace::Scene && requested!=EditorWorkspace::Play)
+    state_.status="Pare o Play para trocar de área";
+  if(changed) {
+    const PlayEditContext context{playScene_,assets_,environmentProfiles_,runtimeResourceResolver()};
+    const auto result=applyPlayEdits(playMirrorBase_,playMirror_,context);
+    playMirrorBase_=playMirror_;
+    // Um objeto criado recebe o id do mundo; o espelho é refeito no próximo
+    // toque livre e a seleção já aponta para o objeto real.
+    for(const auto &[mirror,world]:result.created) {
+      if(state_.selection==mirror) state_.selection=world;
+      if(state_.renameEntity==mirror) state_.renameEntity=world;
+      if(mirror!=world) playMirrorValid_=false;
+    }
+    state_.status=result.refused.empty()?"Alterado em Play · volta ao parar":"Não aplicado em Play: "+result.refused;
+    state_.playEditRefused=!result.refused.empty();
+    state_.playEditNote=result.refused.empty()?state_.status:"Recusado em Play · "+result.refusedField+" · ver console";
+    if(!result.refused.empty()) reportProblem(EditorConsoleSeverity::Warning,state_.status);
+  }
+  state_.document=playInspecting()?&playScene_.document():&document_;
+}
+
+bool EditorSession::routeToPlayMirror(const UiPointerEvent &event) {
+  if(!playInspecting()) {playEditPointers_.clear();return false;}
+  const auto found=std::find(playEditPointers_.begin(),playEditPointers_.end(),event.pointerId);
+  if(event.phase==UiPointerPhase::Down) {
+    // O viewport, os botões do jogo e a barra superior continuam do Play.
+    const auto hit=router_.hitTest(event.position);
+    const bool game=hit.target==UiPointerTarget::Viewport || layout_.topBar.contains(event.position) ||
+        (hit.target==UiPointerTarget::Widget && (hit.widgetId==widgetId(EditorWidget::JumpCharacter) ||
+                                                 hit.widgetId==widgetId(EditorWidget::PlaySecondaryAction)));
+    if(game) return false;
+    if(found==playEditPointers_.end()) playEditPointers_.push_back(event.pointerId);
+    if(!playMirrorValid_ || !playMirrorBusy_) refreshPlayMirror();
+    return true;
+  }
+  if(found==playEditPointers_.end()) return false;
+  if(event.phase==UiPointerPhase::Up || event.phase==UiPointerPhase::Cancel) playEditPointers_.erase(found);
+  return true;
+}
+
+// Sair do Play (ou fechar a inspeção) descarta o espelho inteiro. O documento
+// autoral nunca recebeu nada, então não há o que desfazer nele.
+void EditorSession::endPlayInspect() {
+  if(playMirrorValid_) {
+    inPlayMirror([this] {
+      const auto edit=pendingTextEdit();
+      if(edit.purpose!=EditorTextPurpose::None) completeTextEditNow(edit,{},false);
+      cancelPointers();
+    });
+  }
+  playMirror_=EditorDocument{};playMirrorBase_=runtime::SceneGraph{};playHistory_.clear();
+  playMirrorValid_=false;playMirrorBusy_=false;playEditPointers_.clear();
+  state_.playEditRefused=false;state_.playEditNote.clear();
+  state_.document=&document_;
+  if(!document_.exists(state_.selection)) state_.selection=kInvalidEntity;
+}
+
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
+  if(routeToPlayMirror(event)) return inPlayMirror([&] {return handlePointerNow(event);});
+  return handlePointerNow(event);
+}
+
+bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) playTouches_.cancel();
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) return true;
   UiPointerRouting routing = router_.route(event);
@@ -3443,7 +3552,8 @@ void EditorSession::cancelPointers() {
 }
 
 void EditorSession::advanceClock(float wallSeconds) noexcept {
-  if(!isPlaying() && playScene_.active()) {playScene_.stop();runtimeTextures_.clear();}
+  if(!isPlaying() && playScene_.active()) {endPlayInspect();playScene_.stop();runtimeTextures_.clear();}
+  else if(isPlaying() && !state_.playInspect && playMirrorValid_) endPlayInspect();
   if (!std::isfinite(wallSeconds)) return;
   if (!clockPrimed_) {
     lastWallSeconds_ = wallSeconds;
@@ -5715,6 +5825,7 @@ void EditorSession::refreshSkinningStatus() {
   }
 }
 void EditorSession::update() {
+  state_.document=playInspecting()?&playScene_.document():&document_;
   state_.cameraPreviewEntity=cameraPreview_.camera();
   state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion());
   state_.cameraPreviewFailed=cameraPreview_.failed();

@@ -163,7 +163,8 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     if(!AetherPhysics_SetBodyGameplayLayerV1(world_,handle,entity.layer%GameplayLayers::kCount))
       return fail(entity,"camada de gameplay inválida");
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
-                         body->motion!=scene::BodyMotion::Static,std::move(instances)});
+                         body->motion!=scene::BodyMotion::Static,std::move(instances),
+                         {body->velocityX,body->velocityY,body->velocityZ}});
   }
   // All bodies exist now, including static anchors and forward references.
   for(auto id:ids) {
@@ -213,6 +214,29 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     characters_.push_back(std::move(binding));
   }
   error_.clear();return true;
+}
+bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geometry) {
+  struct Motion {ObjectId id;AetherVec3 linear,angular;float authored[3];};
+  std::vector<Motion> motions;motions.reserve(bindings_.size());
+  for(const auto &binding:bindings_) {
+    if(!binding.moving) continue;
+    Motion motion{binding.id,{},{},{binding.authoredVelocity[0],binding.authoredVelocity[1],binding.authoredVelocity[2]}};
+    if(!AetherPhysics_TryGetBodyVelocityV1(world_,binding.body,&motion.linear)) continue;
+    AetherPhysics_TryGetBodyAngularVelocityV1(world_,binding.body,&motion.angular);
+    motions.push_back(motion);
+  }
+  const double accumulated=accumulated_;
+  if(!start(world,geometry)) return false;
+  accumulated_=accumulated;
+  for(const auto &motion:motions) for(const auto &binding:bindings_) {
+    if(binding.id!=motion.id||!binding.moving) continue;
+    if(binding.authoredVelocity[0]!=motion.authored[0]||binding.authoredVelocity[1]!=motion.authored[1]||
+       binding.authoredVelocity[2]!=motion.authored[2]) break;
+    AetherPhysics_SetLinearVelocity(world_,binding.body,motion.linear);
+    AetherPhysics_SetBodyAngularVelocityV1(world_,binding.body,motion.angular);
+    break;
+  }
+  return true;
 }
 void ScenePhysics::releaseObject(ObjectId id) {
   for(auto i=bindings_.begin();i!=bindings_.end();++i) if(i->id==id) {

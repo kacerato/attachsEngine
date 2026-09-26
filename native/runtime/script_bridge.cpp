@@ -104,6 +104,25 @@ bool ScriptBridge::hasScripts(const SceneGraph &graph) {
   return false;
 }
 
+namespace {
+// Um valor autoral de campo no JSON que o BehaviorWorld converte para o tipo do
+// membro C#. Compartilhado pelos anexos do Start e pela edição ao vivo.
+void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
+  if (p.valueType == "string") jsonString(out, p.value);
+  else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
+  else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }
+  else if (p.valueType == "vector3") {
+    std::istringstream in(p.value);
+    in.imbue(std::locale::classic());
+    float x = 0, y = 0, z = 0;
+    in >> x >> y >> z;
+    out << "{\"X\":" << x << ",\"Y\":" << y << ",\"Z\":" << z << '}';
+  } else if (p.valueType == "float") { std::istringstream in(p.value); in.imbue(std::locale::classic()); float v = 0; in >> v; out << v; }
+  else if (p.valueType == "int32" || p.valueType == "enum") { std::istringstream in(p.value); i32 v = 0; in >> v; out << v; }
+  else out << p.value;
+}
+}
+
 std::string ScriptBridge::attachments(const SceneGraph &graph) {
   std::ostringstream out;
   out.imbue(std::locale::classic());
@@ -126,18 +145,7 @@ std::string ScriptBridge::attachments(const SceneGraph &graph) {
         fieldFirst = false;
         jsonString(out, p.id);
         out << ':';
-        if (p.valueType == "string") jsonString(out, p.value);
-        else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
-        else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }
-        else if (p.valueType == "vector3") {
-          std::istringstream in(p.value);
-          in.imbue(std::locale::classic());
-          float x = 0, y = 0, z = 0;
-          in >> x >> y >> z;
-          out << "{\"X\":" << x << ",\"Y\":" << y << ",\"Z\":" << z << '}';
-        } else if (p.valueType == "float") { std::istringstream in(p.value); in.imbue(std::locale::classic()); float v = 0; in >> v; out << v; }
-        else if (p.valueType == "int32" || p.valueType == "enum") { std::istringstream in(p.value); i32 v = 0; in >> v; out << v; }
-        else out << p.value;
+        writeScriptValue(out, p);
       }
       out << "},\"PropertyTypes\":{";
       fieldFirst = true;
@@ -817,6 +825,29 @@ bool ScriptBridge::lateUpdate(float elapsed) {
 bool ScriptBridge::lifecycle(scene::ScriptLifecycleEvent event, bool value) {
   if (!running_) return true;
   const bool ok = api_.lifecycle(static_cast<u32>(event), value ? 1u : 0u) == 0;
+  collectDiagnostics();
+  return ok;
+}
+
+bool ScriptBridge::editBehavior(ObjectId object, u64 instance, bool enabled,
+                                std::span<const scene::ScriptPropertyValue> changed) {
+  if (!running_) { diagnostics_ = "Play parado: não há instância para editar"; return false; }
+  if (!api_.edit) { diagnostics_ = "O runtime C# carregado não aceita edição de campos em Play"; return false; }
+  std::ostringstream out;
+  out.imbue(std::locale::classic());
+  out << std::setprecision(std::numeric_limits<float>::max_digits10)
+      << "{\"Enabled\":" << (enabled ? "true" : "false") << ",\"Properties\":{";
+  bool first = true;
+  for (const auto &p : changed) {
+    if (!first) out << ',';
+    first = false;
+    jsonString(out, p.id);
+    out << ':';
+    writeScriptValue(out, p);
+  }
+  out << "}}";
+  const std::string json = out.str();
+  const bool ok = api_.edit(object, instance, reinterpret_cast<const u8 *>(json.data()), static_cast<int>(json.size())) == 0;
   collectDiagnostics();
   return ok;
 }

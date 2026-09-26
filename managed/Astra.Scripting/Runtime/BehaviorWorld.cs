@@ -9,6 +9,8 @@ namespace Astra.Runtime;
 public sealed record BehaviorAttachment(ulong ObjectId, ulong InstanceId, string TypeId,
     bool Enabled, IReadOnlyDictionary<string, JsonElement> Properties, IReadOnlyDictionary<string, string>? PropertyTypes = null);
 public sealed record BehaviorFailure(ulong ObjectId, ulong InstanceId, string Phase, string Message);
+/// <summary>Edição do Inspector com o Play rodando: estado e campos alterados de uma instância.</summary>
+public sealed record BehaviorEdit(bool Enabled, IReadOnlyDictionary<string, JsonElement>? Properties);
 
 /// <summary>Owns one isolated script assembly and its instances for a Play session.</summary>
 public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
@@ -192,6 +194,23 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             if (_failures.Count < 1024) _failures.Add(new(entry.Instance.ObjectId, entry.Instance.InstanceId,
                 phase, error.ToString()));
         }
+    }
+    /// <summary>
+    /// Inspector em Play (Unity: mudar um campo do script com o jogo rodando).
+    /// Os campos são convertidos como no Start; Enabled segue pela mesma
+    /// transição que o próprio script usaria, então Enable/Disable acontecem no
+    /// próximo quadro. Falso quando a instância não existe nesta sessão.
+    /// </summary>
+    public bool Edit(ulong objectId, ulong instanceId, BehaviorEdit edit)
+    {
+        if (!Running) return false;
+        var entry = _entries.FirstOrDefault(e => e.Instance.ObjectId == objectId && e.Instance.InstanceId == instanceId);
+        if (entry is null) return false;
+        if (edit.Properties is { Count: > 0 } properties) ApplyProperties(entry.Instance, entry.Schema, properties);
+        // Uma instância que falhou continua desligada: religá-la pelo Inspector
+        // repetiria a exceção a cada quadro sem o usuário ter mudado o código.
+        if (!entry.Failed) entry.Instance.Enabled = edit.Enabled;
+        return true;
     }
     private static void ApplyProperties(Behavior behavior, ScriptTypeSchema schema,
         IReadOnlyDictionary<string, JsonElement> values)

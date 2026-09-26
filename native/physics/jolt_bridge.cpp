@@ -1231,6 +1231,20 @@ ae::i32 AetherPhysics_TryGetBodyVelocityV1(AetherPhysicsWorld *world,AetherBodyH
   if(!lock.Succeeded()) return 0;
   *out=FromJolt(lock.GetBody().GetLinearVelocity());return 1;
 }
+ae::i32 AetherPhysics_TryGetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *out) {
+  if(!world||handle==AetherBodyHandle_Invalid||!out) return 0;
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(),JPH::BodyID(handle));
+  if(!lock.Succeeded()) return 0;
+  *out=FromJolt(lock.GetBody().GetAngularVelocity());return 1;
+}
+ae::i32 AetherPhysics_SetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 value) {
+  if(!world||handle==AetherBodyHandle_Invalid||!std::isfinite(value.x)||!std::isfinite(value.y)||!std::isfinite(value.z)) return 0;
+  {
+    JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(),JPH::BodyID(handle));
+    if(!lock.Succeeded()||lock.GetBody().IsStatic()) return 0;
+  }
+  world->physicsSystem.GetBodyInterface().SetAngularVelocity(JPH::BodyID(handle),ToJolt(value));return 1;
+}
 
 ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass) {
   if(!world || handle==AetherBodyHandle_Invalid || !std::isfinite(mass) || mass<=0 || mass>1e6f) return 0;

@@ -175,7 +175,7 @@ inline const std::array<ComponentVisualProvider,4> componentVisualProviders{{
   {&scene::Collider::descriptor,ui::UiIcon::ComponentCollider,false,visual_detail::collider},
   {&scene::Environment::descriptor,ui::UiIcon::EditorAuthorObject,false,visual_detail::environment}
 }};
-inline std::vector<ComponentVisual> collectComponentVisuals(const EditorDocument &document,
+inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::SceneGraph &document,
     EditorEntityId selected,float aspect,const EditorMapScene *resources=nullptr) {
   std::vector<ComponentVisual> result;std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {

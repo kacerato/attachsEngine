@@ -139,6 +139,23 @@ int main(int argc, char **argv) {
     if(std::string(argv[4])=="menu") state.nativeMenu=collider->instanceId();
     else state.enumPicker=editor::widgetId(editor::EditorWidget::ComponentEnumBase)+1;
   }
+  // Play com Hierarquia e Inspector abertos sobre o mundo em execução.
+  if(argc>4 && std::string(argv[4]).starts_with("play-inspect")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Poste");
+    auto value=*document.find(selection);
+    value.components.add(scene::Light::descriptor);
+    value.components.add(scene::PhysicsBody::descriptor);
+    value.components.add(scene::Collider::descriptor);
+    document.applyEntityValues(selection,value);
+    document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Chão");
+    state.componentSelection=selection;
+    state.workspace=editor::EditorWorkspace::Play;state.playInspect=true;
+    state.playEditNote="Alterado em Play · volta ao parar";
+    if(std::string(argv[4])=="play-inspect-refused") {
+      state.playEditNote="Recusado em Play · Estático · ver console";
+      state.playEditRefused=true;
+    }
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

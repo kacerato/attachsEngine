@@ -17,6 +17,7 @@
 #include "resources/environment_profile.h"
 
 #include <functional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -79,6 +80,10 @@ public:
   // recebendo o outro. A normal acompanha só Enter/Stay.
   bool contact(const ContactEvent &event);
   bool timer(ObjectId object,u64 instance,u32 count);
+  // Inspector em Play (Unity: mudar um campo do script com o jogo rodando): o
+  // estado e os campos em `changed` chegam à instância viva. Falso, com o motivo
+  // em `diagnostics()`, quando o runtime não tem a função ou recusou o valor.
+  bool editBehavior(ObjectId object,u64 instance,bool enabled,std::span<const scene::ScriptPropertyValue> changed);
   void stop();
   const std::string &diagnostics() const { return diagnostics_; }
   static bool hasScripts(const SceneGraph &graph);

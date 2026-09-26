@@ -364,6 +364,11 @@ void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle
 enum class AetherBodyForceKind : ae::u32 { Force=0, Impulse=1, Torque=2, AngularImpulse=3 };
 ae::i32 AetherPhysics_ApplyBodyForceV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 value,AetherBodyForceKind kind);
 ae::i32 AetherPhysics_TryGetBodyVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *out);
+// Velocidade angular em rad/s, espaço do mundo. Leitura sob o lock do corpo;
+// a escrita recusa corpo estático e valor não finito. Usadas para recriar um
+// corpo no solver sem parar o que ele estava fazendo.
+ae::i32 AetherPhysics_TryGetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *out);
+ae::i32 AetherPhysics_SetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 value);
 ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass);
 // Body-origin pose (not centre of mass). A stale/destroyed handle returns zero
 // and leaves outputs untouched; read under one body lock.

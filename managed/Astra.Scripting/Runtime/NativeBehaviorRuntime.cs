@@ -652,6 +652,24 @@ public static unsafe class NativeBehaviorRuntime
         }
         catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
     }
+    /// <summary>Inspector em Play: JSON {"Enabled":bool,"Properties":{id:valor}} de uma instância viva.</summary>
+    [UnmanagedCallersOnly]
+    public static int Edit(ulong objectId, ulong instanceId, byte* json, int jsonLength)
+    {
+        try
+        {
+            if (_world is null || json == null || jsonLength <= 0 || jsonLength > 1024 * 1024) return 1;
+            var edit = JsonSerializer.Deserialize<BehaviorEdit>(new ReadOnlySpan<byte>(json, jsonLength))
+                ?? throw new InvalidDataException("Behavior edit is empty.");
+            if (!_world.Edit(objectId, instanceId, edit))
+            {
+                _diagnostics = Encoding.UTF8.GetBytes($"{objectId}/{instanceId} Edit: instância inexistente nesta sessão de Play");
+                return 1;
+            }
+            RefreshDiagnostics(); return 0;
+        }
+        catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
+    }
     [UnmanagedCallersOnly]
     public static int FixedUpdate(float deltaTime)
     {

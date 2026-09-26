@@ -8,7 +8,7 @@ inline const scene::ComponentObjectReference *editorReferenceProperty(const Edit
   return nullptr;
 }
 inline const scene::ComponentObjectReference editorAnyObjectReference{"object","Objeto","",scene::ObjectReferenceScope::Any,"Nenhum"};
-inline std::vector<EditorEntityId> editorReferenceChoices(const EditorDocument &document,EditorEntityId source,
+inline std::vector<EditorEntityId> editorReferenceChoices(const runtime::SceneGraph &document,EditorEntityId source,
     const scene::ComponentObjectReference &property,std::string_view search) {
   std::vector<EditorEntityId> ids,result;document.collectSubtree(document.root(),ids);const auto query=editorSearchKey(search);
   for(auto id:ids) if(editorReferenceAccepts(document,source,property,id,true)) {

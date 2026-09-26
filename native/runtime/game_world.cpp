@@ -60,7 +60,23 @@ void GameWorld::clear() {
   scratch_.clear();
   worldId_ = 0;
   structuralRevision_ = 0;
+  invalidated_ = 0;
   elapsed_ = 0;
+}
+
+u32 GameWorld::subtreeInvalidation(ObjectId id) {
+  u32 mask = 0;
+  graph_.collectSubtree(id, scratch_);
+  for (const ObjectId member : scratch_)
+    if (const auto *object = graph_.find(member))
+      for (usize i = 0; i < object->components.size(); ++i)
+        if (const auto *schema = scene::findComponentSchema(object->components.at(i)->type().id))
+          mask |= schema->invalidates;
+  return mask;
+}
+
+void GameWorld::invalidateType(std::string_view typeId) {
+  if (const auto *schema = scene::findComponentSchema(typeId)) invalidated_ |= schema->invalidates;
 }
 
 bool GameWorld::load(const SceneGraph &source) {
@@ -167,8 +183,38 @@ bool GameWorld::activeInHierarchy(const ObjectHandle &h) const noexcept {
 WorldStatus GameWorld::setActive(const ObjectHandle &h, bool active) {
   const auto status = validate(h);
   if (status != WorldStatus::Ok) return status;
+  const bool changed = graph_.find(h.id) && graph_.find(h.id)->active != active;
   if (!graph_.setActive(h.id, active)) return WorldStatus::Rejected;
   ++structuralRevision_;
+  if (changed) invalidated_ |= subtreeInvalidation(h.id);
+  return WorldStatus::Ok;
+}
+
+WorldStatus GameWorld::setLayer(const ObjectHandle &h, u32 layer) {
+  const SceneObject *object = nullptr;
+  const auto status = resolve(h, object);
+  if (status != WorldStatus::Ok) return status;
+  if (layer >= GameplayLayers::kCount) return WorldStatus::InvalidArgument;
+  if (object->layer == layer) return WorldStatus::Ok;
+  auto values = *object;
+  values.layer = layer;
+  if (!graph_.applyEntityValues(h.id, values)) return WorldStatus::Rejected;
+  invalidated_ |= subtreeInvalidation(h.id);
+  return WorldStatus::Ok;
+}
+
+WorldStatus GameWorld::setRenderFlags(const ObjectHandle &h, bool visible, bool castShadow, bool receiveShadow) {
+  const SceneObject *object = nullptr;
+  const auto status = resolve(h, object);
+  if (status != WorldStatus::Ok) return status;
+  if (object->visible == visible && object->castShadow == castShadow && object->receiveShadow == receiveShadow)
+    return WorldStatus::Ok;
+  auto values = *object;
+  values.visible = visible;
+  values.castShadow = castShadow;
+  values.receiveShadow = receiveShadow;
+  if (!graph_.applyEntityValues(h.id, values)) return WorldStatus::Rejected;
+  invalidated_ |= scene::Invalidate::Draw | scene::Invalidate::ShadowMap;
   return WorldStatus::Ok;
 }
 
@@ -303,6 +349,7 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
         } else if (graph_.reparent(command.object, command.parent, command.childIndex)) {
           ++applied; outcome = WorldStatus::Ok;
         }
+        if (outcome == WorldStatus::Ok) invalidated_ |= subtreeInvalidation(command.object);
         break;
       case PendingCommand::Kind::RemoveComponent:
         // A callback may have added a dependent after removal was queued.
@@ -316,7 +363,11 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
           outcome = WorldStatus::StaleHandle; break;
         }
         if (auto *components = editComponents(command.object)) {
-          if (components->removeInstance(command.instance)) { ++applied; outcome = WorldStatus::Ok; }
+          const auto *removed = components->findInstance(command.instance);
+          const std::string typeId = removed ? std::string(removed->type().id) : std::string();
+          if (components->removeInstance(command.instance)) {
+            ++applied; outcome = WorldStatus::Ok; invalidateType(typeId);
+          }
           else outcome = WorldStatus::ComponentMissing;
         }
         break;
@@ -382,6 +433,7 @@ ComponentHandle GameWorld::addComponent(const ObjectHandle &h, std::string_view 
   const auto createdInstance=plan.requestedInstance;
   *components=std::move(plan.candidate);
   ++structuralRevision_;
+  invalidated_ |= schema->invalidates;
   status = WorldStatus::Ok;
   return {h, createdInstance};
 }
@@ -452,7 +504,7 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
   auto *components = editComponents(component.object.id);
   if (!components) return WorldStatus::StaleHandle;
   switch (scene::setComponentProperty(*components, typeId, propertyId, value, component.instance)) {
-    case scene::ComponentPropertyStatus::Applied: return WorldStatus::Ok;
+    case scene::ComponentPropertyStatus::Applied: invalidated_ |= schema->invalidates; return WorldStatus::Ok;
     case scene::ComponentPropertyStatus::MissingComponent: return WorldStatus::ComponentMissing;
     case scene::ComponentPropertyStatus::UnknownProperty:
     case scene::ComponentPropertyStatus::AmbiguousProperty:
@@ -515,7 +567,9 @@ WorldStatus GameWorld::setSlotProperty(const ComponentHandle &component,std::str
      (!resolveResource||!resolveResource({},resources::AssetType::Texture,propertyId,slot,*candidate)))
     return WorldStatus::ComponentUnavailable;
   auto *components=editComponents(component.object.id);
-  return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;
+  if(!components||!components->replaceInstance(component.instance,*candidate)) return WorldStatus::StaleHandle;
+  invalidated_|=schema->invalidates;
+  return WorldStatus::Ok;
 }
 
 WorldStatus GameWorld::getResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
@@ -615,7 +669,11 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
     return WorldStatus::ComponentUnavailable;
   if(!candidate->valid()) return WorldStatus::Rejected;
   auto *components=editComponents(component.object.id);
-  return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;
+  if(!components||!components->replaceInstance(component.instance,*candidate)) return WorldStatus::StaleHandle;
+  // A malha de um MeshRenderer é também a forma de um colisor Malha sem
+  // malha própria (Invalidate::MeshDerived inclui a colisão).
+  invalidated_|=schema->invalidates|(match->kind==resources::AssetType::Mesh?scene::Invalidate::MeshDerived:0u);
+  return WorldStatus::Ok;
 }
 
 WorldStatus GameWorld::setResourceByElementId(const ComponentHandle &component,std::string_view propertyId,u64 elementId,
@@ -740,6 +798,21 @@ WorldStatus GameWorld::setLocalTransform(const ObjectHandle &h, const Transform 
     if (member < authorities_.size() && authorities_[member] != TransformAuthority::Free)
       return WorldStatus::TransformOwnedByPhysics;
   return graph_.setTransform(h.id, value) ? WorldStatus::Ok : WorldStatus::Rejected;
+}
+
+WorldStatus GameWorld::placeLocalTransform(const ObjectHandle &h, const Transform &value) {
+  const auto status = validate(h);
+  if (status != WorldStatus::Ok) return status;
+  if (!isTransformValid(value)) return WorldStatus::InvalidArgument;
+  bool simulated = false;
+  graph_.collectSubtree(h.id, scratch_);
+  for (const ObjectId member : scratch_)
+    simulated = simulated || (member < authorities_.size() && authorities_[member] != TransformAuthority::Free);
+  if (!graph_.setTransform(h.id, value)) return WorldStatus::Rejected;
+  // A forma de um composto depende da pose das partes; recriar vale também
+  // para um colisor filho que não é dono de corpo.
+  if (simulated) invalidated_ |= scene::Invalidate::PhysicsBody | scene::Invalidate::PhysicsShape;
+  return WorldStatus::Ok;
 }
 
 WorldStatus GameWorld::worldTransform(const ObjectHandle &h, Transform &out) const {

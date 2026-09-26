@@ -10,7 +10,7 @@ struct EditorCameraHandle {
   float point[3]{}, axis[3]{};
   float depth=1;
 };
-inline bool cameraHandleGeometry(const EditorDocument &document,EditorEntityId id,
+inline bool cameraHandleGeometry(const runtime::SceneGraph &document,EditorEntityId id,
                                  u32 kind,EditorCameraHandle &out) {
   const auto *entity=document.find(id);const auto *camera=entity?cameraComponent(*entity):nullptr;
   float world[16],pose[16];

@@ -1210,6 +1210,70 @@ AE_TEST(dragging_asset_onto_resource_field_assigns_it) {
   AE_EXPECT_EQ(history.undoDepth(),1u,"atribuição é um comando");
 }
 
+// Unity Manual (Play mode): com o jogo rodando o Inspector continua editável,
+// a mudança vale na hora e é descartada ao sair do Play. Aqui a edição passa
+// pelos mesmos controles da autoria, chega ao mundo de execução e ao renderer,
+// e o documento autoral nem muda de revisão.
+AE_TEST(inspector_in_play_edits_the_running_world_and_stop_discards_it) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  auto value=*doc.find(f.cube);
+  value.components.add(scene::Light::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com luz");
+  u32 lightIndex=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i)
+    if(&doc.find(f.cube)->components.at(i)->type()==&scene::Light::descriptor) lightIndex=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  const u64 revision=doc.revision();
+  AE_EXPECT_TRUE(f.session.startPlay(),"Play");
+  std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"mundo de execução iniciado");
+  std::vector<renderer::SceneLight> lights;
+  AE_EXPECT_TRUE(f.session.extractLights(lights) && lights.size()==1u,"a luz roda no Play");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+lightIndex).x<0,
+                 "sem pedir, o Play não abre painéis sobre o jogo");
+
+  tapWidget(f,widgetId(EditorWidget::PlayInspect));
+  const auto *world=f.session.screen().document;
+  AE_EXPECT_TRUE(world && world!=&doc,"o Inspector mostra o mundo de execução, não o documento");
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentEnableBase)+lightIndex).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentEnableBase)+lightIndex);
+  world=f.session.screen().document;
+  const auto *running=static_cast<const scene::Light *>(world->find(f.cube)->components.find(scene::Light::descriptor));
+  AE_EXPECT_TRUE(running && !running->enabled,"desligar no Inspector desliga a luz em execução");
+  lights.clear();
+  AE_EXPECT_TRUE(f.session.extractLights(lights) && lights.empty(),"o renderer deixa de receber a luz no mesmo quadro");
+  AE_EXPECT_TRUE(static_cast<const scene::Light *>(doc.find(f.cube)->components.find(scene::Light::descriptor))->enabled,
+                 "o documento autoral continua com a luz ligada");
+
+  // Texto: o nome abre sobre o espelho, com a época dele, e o commit vai ao mundo.
+  f.session.usePlatformTextInput(true);
+  // Tela estreita: um painel por vez, escolhido em "Painéis".
+  if(locateWidget(f.session,widgetId(EditorWidget::HierarchyMenu)).x<0) {
+    tapWidget(f,widgetId(EditorWidget::CompactPanelMenu));
+    tapWidget(f,widgetId(EditorWidget::HierarchyToggle));
+  }
+  tapWidget(f,widgetId(EditorWidget::HierarchyMenu));
+  tapWidget(f,widgetId(EditorWidget::RenameSelection));
+  const auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose!=EditorTextPurpose::None,"renomear abre o campo durante o Play");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"Em jogo",true),"nome aceito");
+  world=f.session.screen().document;
+  AE_EXPECT_TRUE(std::string(world->find(f.cube)->name)=="Em jogo","o objeto em execução ganhou o nome");
+  AE_EXPECT_TRUE(std::string(doc.find(f.cube)->name)=="Cube","o nome autoral não mudou");
+  AE_EXPECT_EQ(doc.revision(),revision,"nenhuma escrita no documento durante o Play");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"edição de Play não entra no Desfazer autoral");
+
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
+  f.session.advanceClock(1.0f);f.session.update();
+  AE_EXPECT_TRUE(!f.session.isPlaying(),"Play parado");
+  AE_EXPECT_TRUE(f.session.screen().document==&doc,"de volta ao documento autoral");
+  AE_EXPECT_TRUE(static_cast<const scene::Light *>(doc.find(f.cube)->components.find(scene::Light::descriptor))->enabled &&
+                 std::string(doc.find(f.cube)->name)=="Cube","parar descarta tudo o que foi feito em Play");
+  AE_EXPECT_EQ(doc.revision(),revision,"documento idêntico ao de antes do Play");
+}
+
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
@@ -2503,6 +2567,7 @@ AE_TEST(p01_triple_editor_single_undo_invalid_input_and_cancel) {
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Light");
   auto value=*d.find(id);value.components.add(scene::Light::descriptor);d.applyEntityValues(id,value);
   f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));f.session.update();h.clear();
+  revealProperty(f,widgetId(EditorWidget::ComponentTripleBase));
   tapWidget(f,widgetId(EditorWidget::ComponentTripleBase));auto edit=f.session.pendingTextEdit();
   AE_EXPECT_TRUE(edit.propertyType=="triple","composite editor request");
   AE_EXPECT_TRUE(!f.session.completeTextEdit(edit,"0.2 2 0.4",true),"invalid channel rejects entire tuple");
@@ -2521,6 +2586,7 @@ AE_TEST(p01_color_picker_stages_and_commits_one_history_entry) {
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Light");
   auto entity=*d.find(id);entity.components.add(scene::Light::descriptor);d.applyEntityValues(id,entity);
   f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));f.session.update();h.clear();
+  revealProperty(f,widgetId(EditorWidget::ComponentColorBase));
   tapWidget(f,widgetId(EditorWidget::ComponentColorBase));
   AE_EXPECT_TRUE(f.session.screen().colorField!=0,"swatch opens picker");
   tapWidget(f,widgetId(EditorWidget::ColorHueBase)+8);tapWidget(f,widgetId(EditorWidget::ColorSvBase)+10);

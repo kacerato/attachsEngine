@@ -116,6 +116,13 @@ public:
   bool setBodyVelocity(ObjectId id, const float *velocity);
   bool moveKinematic(ObjectId id, const float *pose);
   void stop();
+  // Contrato Invalidate::PhysicsBody/PhysicsShape: uma propriedade de corpo,
+  // colisor, junta ou personagem mudou em execução, então o solver é montado de
+  // novo a partir do grafo atual (pose publicada, valores novos). Corpos móveis
+  // continuam com a velocidade linear e angular que tinham, exceto quando a
+  // própria velocidade inicial autorada mudou — aí vale o valor pedido. O
+  // personagem recomeça parado na pose atual.
+  bool rebuild(GameWorld &world, const CollisionGeometrySource *geometry);
   bool setCharacterMove(ObjectId id, float right, float forward, float yaw);
   // Novo quadro de scripts: descarta comando anterior. Um comando emitido em
   // Update vale para todos os subpassos físicos desse quadro; FixedUpdate pode
@@ -144,6 +151,9 @@ private:
     // Instâncias de Colisor na MESMA ordem das partes do composto: é o que
     // transforma "subforma 2" de volta em "o segundo colisor deste objeto".
     std::vector<u64> colliderInstances;
+    // Velocidade inicial autorada quando o corpo foi criado; `rebuild` compara
+    // com a atual para saber se o pedido foi mudar a velocidade.
+    float authoredVelocity[3]{};
   };
   QueryHit describeHit(AetherBodyHandle body, u32 subShapeId) const;
   AetherPhysicsWorld *world_ = nullptr;

@@ -186,6 +186,7 @@ enum class EditorWidget : u32 {
   ToggleDynamicBody,
   PausePlay,
   StepPlay,
+  PlayInspect,
   ToggleCharacter,
   JumpCharacter,
   PlaySecondaryAction,
@@ -497,7 +498,10 @@ struct EditorScreenState final {
   // recorte da câmera. As áreas seguras entram por `safeArea`.
   ui::UiRect surface{};
   ui::UiInsets safeArea{};
-  const EditorDocument *document = nullptr;
+  // O que a Hierarquia e o Inspector mostram: o documento autoral, ou o grafo
+  // do mundo de execução quando o Play é inspecionado. Os dois são
+  // runtime::SceneGraph; a escrita autoral continua indo ao EditorDocument.
+  const runtime::SceneGraph *document = nullptr;
   const EditorFileSystem *files=nullptr;
   const EditorCodeWorkspace *code=nullptr;
   const EditorMapScene *resources=nullptr;
@@ -557,6 +561,14 @@ struct EditorScreenState final {
   std::string playSecondaryActionLabel,playHudMessage;
   bool playPaused=false;
   bool playStepRequested=false;
+  // Hierarquia e Inspector abertos com o Play rodando (Unity: o Inspector
+  // continua editável em Play e tudo volta ao sair). Mostram o mundo de
+  // execução; a escrita vai ao mundo, nunca ao documento autoral.
+  bool playInspect=false;
+  // Resultado da última edição feita em Play, na faixa do Inspector. Recusada
+  // pelo mundo, a faixa passa à cor de aviso com o motivo.
+  std::string playEditNote;
+  bool playEditRefused=false;
   EditorInspectorTab tab = EditorInspectorTab::Transform;
   // Diagnósticos da sessão são ferramentas editoriais, fora da cena e do Undo.
   bool diagnosticDockOpen=false;

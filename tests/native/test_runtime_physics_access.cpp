@@ -57,6 +57,37 @@ EditorEntityId fallingBallOverFloor(EditorDocument &doc, bool separate) {
 }
 } // namespace
 
+// Contrato Invalidate::PhysicsBody: mudar uma propriedade do corpo com o jogo
+// rodando (script ou Inspector em Play) recria o corpo no solver com o valor
+// novo, sem zerar o movimento que ele já tinha.
+AE_TEST(runtime_body_property_change_rebuilds_the_body_and_keeps_its_motion) {
+  EditorDocument doc;
+  const auto ball = solid(doc, "Bola", 0, 10, 0, scene::BodyMotion::Dynamic);
+  auto values = *doc.find(ball);
+  editPhysicsBody(values)->velocityX = 3;
+  AE_EXPECT_TRUE(doc.applyEntityValues(ball, values), "bola sem gravidade, andando em X");
+  Fixture fx;
+  AE_EXPECT_TRUE(fx.start(doc), fx.physics.error().c_str());
+  for (int step = 0; step < 30; ++step) AE_EXPECT_TRUE(fx.physics.advance(1. / 60, fx.world), "passo");
+  const float heightBefore = fx.world.graph().find(ball)->transform.position[1];
+  AE_EXPECT_TRUE(std::abs(heightBefore - 10.f) < 1e-3f, "sem gravidade a altura não muda");
+  float velocity[3]{};
+  AE_EXPECT_TRUE(fx.physics.getBodyVelocity(ball, velocity) && velocity[0] > 2.5f, "velocidade inicial em curso");
+  const float speed = velocity[0];
+
+  const auto body = fx.world.findComponent(fx.world.handle(ball), scene::PhysicsBody::descriptor.id);
+  AE_EXPECT_TRUE(fx.world.consumeInvalidation() == 0u, "nada pendente antes da mudança");
+  AE_EXPECT_TRUE(fx.world.setProperty(body, "gravity_factor", 1.0f) == runtime::WorldStatus::Ok, "gravidade ligada");
+  AE_EXPECT_TRUE((fx.world.consumeInvalidation() & scene::Invalidate::PhysicsBody) != 0u,
+                 "a mudança declara o corpo inválido");
+  AE_EXPECT_TRUE(fx.physics.rebuild(fx.world, nullptr), fx.physics.error().c_str());
+  AE_EXPECT_TRUE(fx.physics.getBodyVelocity(ball, velocity) && std::abs(velocity[0] - speed) < 1e-3f,
+                 "o corpo recriado continua com a velocidade que tinha, não a autorada");
+  for (int step = 0; step < 30; ++step) AE_EXPECT_TRUE(fx.physics.advance(1. / 60, fx.world), "passo");
+  AE_EXPECT_TRUE(fx.world.graph().find(ball)->transform.position[1] < heightBefore - .5f,
+                 "a gravidade nova age no solver");
+}
+
 AE_TEST(runtime_raycast_reports_object_collider_point_and_real_surface_normal) {
   EditorDocument doc;
   const auto target = solid(doc, "Alvo", 5, 0, 0, scene::BodyMotion::Static, 1);

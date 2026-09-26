@@ -2,6 +2,7 @@
 #include "editor/editor_document.h"
 #include "editor/editor_physics_body.h"
 #include "editor/editor_play_scene.h"
+#include "editor/editor_play_edit.h"
 #include "editor/editor_archive.h"
 #include "runtime/scene_environment.h"
 #include "scene/camera.h"
@@ -32,6 +33,8 @@ struct FakeRuntime {
   static u32 lateUpdates, lifecycleEvents, lastLifecycle;
   static u32 triggers, contacts;
   static u32 timers, timerExpirations;
+  static u32 edits;
+  static std::string lastEdit;
   static u64 lastTimerObject, lastTimerInstance;
   static u64 lastContactFirst, lastContactSecond;
   static u32 lastContactPhase;
@@ -43,6 +46,7 @@ struct FakeRuntime {
   static void reset() {
     starts = updates = fixedUpdates = stops = triggers = contacts = timers = timerExpirations = 0;
     lateUpdates = lifecycleEvents = 0; lastLifecycle = 99;
+    edits = 0; lastEdit.clear();
     lastTimerObject = lastTimerInstance = 0;
     lastContactFirst = lastContactSecond = 0;
     lastContactPhase = 99;
@@ -74,6 +78,9 @@ struct FakeRuntime {
     lastContactHadNormal = normal != nullptr;
     return 0;
   }
+  static int edit(u64,u64,const u8 *json,int length) {
+    ++edits;lastEdit.assign(reinterpret_cast<const char *>(json),static_cast<usize>(length));return 0;
+  }
   static int timer(u64 object,u64 instance,u32 count) {
     ++timers;timerExpirations+=count;lastTimerObject=object;lastTimerInstance=instance;return 0;
   }
@@ -89,6 +96,7 @@ struct FakeRuntime {
     value.timer = &timer;
     value.lateUpdate = &lateUpdate;
     value.lifecycle = &lifecycle;
+    value.edit = &edit;
     return value;
   }
 };
@@ -96,6 +104,8 @@ u32 FakeRuntime::starts = 0, FakeRuntime::updates = 0, FakeRuntime::fixedUpdates
 u32 FakeRuntime::lateUpdates = 0, FakeRuntime::lifecycleEvents = 0, FakeRuntime::lastLifecycle = 99;
 u32 FakeRuntime::triggers = 0, FakeRuntime::contacts = 0;
 u32 FakeRuntime::timers = 0, FakeRuntime::timerExpirations = 0;
+u32 FakeRuntime::edits = 0;
+std::string FakeRuntime::lastEdit;
 u64 FakeRuntime::lastTimerObject = 0, FakeRuntime::lastTimerInstance = 0;
 u64 FakeRuntime::lastContactFirst = 0, FakeRuntime::lastContactSecond = 0;
 u32 FakeRuntime::lastContactPhase = 99;
@@ -124,6 +134,63 @@ void attachScript(EditorDocument &doc, EditorEntityId id, const char *type) {
   doc.applyEntityValues(id, values);
 }
 } // namespace
+
+// Inspector em Play (editor/editor_play_edit.h): a diferença entre duas fotos do
+// espelho chega ao mundo pela API pública dele — o campo do script pela ABI, a
+// propriedade do corpo com o corpo recriado no solver, o objeto novo criado — e
+// o que o mundo não aceita em execução volta com o nome do campo.
+AE_TEST(play_edit_applies_mirror_differences_through_the_world_api) {
+  EditorDocument doc;
+  physical(doc, "Chão", 0, scene::BodyMotion::Static, .5f);
+  const auto box = physical(doc, "Caixa", 3, scene::BodyMotion::Dynamic, .5f);
+  attachScript(doc, box, "project.Mover");
+  auto authored = *doc.find(box);
+  for (usize i = 0; i < authored.components.size(); ++i)
+    if (auto *script = const_cast<scene::ScriptBehavior *>(scene::scriptBehavior(authored.components.at(i))))
+      script->setProperty("speed", "float", "2");
+  AE_EXPECT_TRUE(doc.applyEntityValues(box, authored), "script com campo autorado");
+
+  FakeRuntime::reset();EditorMapScene resources;EditorPlayScene play;
+  play.setScriptRuntime(FakeRuntime::api(), "/projeto");
+  AE_EXPECT_TRUE(play.start(doc, resources), "Play inicia");
+  const resources::AssetRegistry assets;
+  const PlayEditContext context{play, assets};
+  const runtime::SceneGraph before = play.document();
+  EditorDocument after;
+  static_cast<runtime::SceneGraph &>(after) = play.document();
+  auto values = *after.find(box);
+  editPhysicsBody(values)->gravityFactor = 0;
+  values.isStatic = true;
+  for (usize i = 0; i < values.components.size(); ++i)
+    if (auto *script = const_cast<scene::ScriptBehavior *>(scene::scriptBehavior(values.components.at(i))))
+      script->setProperty("speed", "float", "5");
+  AE_EXPECT_TRUE(after.applyEntityValues(box, values), "espelho editado");
+  after.createEntity(after.root(), EditorEntityKind::Folder, "Marcador");
+
+  const auto result = applyPlayEdits(before, after, context);
+  AE_EXPECT_EQ(FakeRuntime::edits, 1u, "o campo do script vai à instância viva");
+  AE_EXPECT_TRUE(FakeRuntime::lastEdit.find("\"speed\":5") != std::string::npos, FakeRuntime::lastEdit.c_str());
+  const auto *running = play.document().find(box);
+  const auto *script = [&]() -> const scene::ScriptBehavior * {
+    for (usize i = 0; i < running->components.size(); ++i)
+      if (const auto *value = scene::scriptBehavior(running->components.at(i))) return value;
+    return nullptr;
+  }();
+  AE_EXPECT_TRUE(script && script->properties.size() == 1 && script->properties[0].value == "5",
+                 "o mundo mostra o valor que a instância aceitou");
+  AE_EXPECT_EQ(runtime::physicsBody(*running)->gravityFactor, 0.f, "propriedade do corpo aplicada no mundo");
+  AE_EXPECT_TRUE(!running->isStatic && result.refusedField == "Estático",
+                 "Estático não muda em execução e a recusa diz qual campo");
+  AE_EXPECT_EQ(result.created.size(), 1u, "objeto criado no espelho");
+  const auto *marker = result.created.empty() ? nullptr : play.document().find(result.created[0].second);
+  AE_EXPECT_TRUE(marker && std::string(marker->name) == "Marcador", "o mundo ganhou o objeto novo");
+  for (int frame = 0; frame < 30; ++frame) AE_EXPECT_TRUE(play.advance(1.0 / 60), "quadro");
+  AE_EXPECT_TRUE(std::abs(play.document().find(box)->transform.position[1] - 3.f) < 1e-3f,
+                 "o corpo recriado sem gravidade não cai");
+  AE_EXPECT_EQ(std::string(doc.find(box)->name), std::string("Caixa"), "documento autoral intocado");
+  AE_EXPECT_EQ(runtime::physicsBody(*doc.find(box))->gravityFactor, 1.f, "gravidade autoral intocada");
+  play.stop();
+}
 
 AE_TEST(play_timer_multiple_instances_pause_edit_and_roundtrip) {
   EditorDocument doc;

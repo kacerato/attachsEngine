@@ -730,6 +730,7 @@ void updateEditorCodeCompiler(AndroidShell &shell) {
     api.fixedUpdate=reinterpret_cast<decltype(api.fixedUpdate)>(shell.dotNetHost.getManagedFunctionPointer(type,"FixedUpdate"));
     api.lateUpdate=reinterpret_cast<decltype(api.lateUpdate)>(shell.dotNetHost.getManagedFunctionPointer(type,"LateUpdate"));
     api.lifecycle=reinterpret_cast<decltype(api.lifecycle)>(shell.dotNetHost.getManagedFunctionPointer(type,"Lifecycle"));
+    api.edit=reinterpret_cast<decltype(api.edit)>(shell.dotNetHost.getManagedFunctionPointer(type,"Edit"));
     api.trigger=reinterpret_cast<decltype(api.trigger)>(shell.dotNetHost.getManagedFunctionPointer(type,"Trigger"));
     api.contact=reinterpret_cast<decltype(api.contact)>(shell.dotNetHost.getManagedFunctionPointer(type,"Contact"));
     api.timer=reinterpret_cast<decltype(api.timer)>(shell.dotNetHost.getManagedFunctionPointer(type,"Timer"));

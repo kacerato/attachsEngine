@@ -7,6 +7,9 @@
 #include "runtime/scene_animation.h"
 #include "runtime/scene_timers.h"
 #include "runtime/scene_camera_follow.h"
+#include "scene/script_behavior.h"
+
+#include <span>
 
 namespace ae::editor {
 // Adaptador do editor para o mundo de execução.
@@ -107,6 +110,9 @@ public:
     cameraFollow_.reset();
     scripts_.setAnimator(&animator_);
     if(!scripts_.start(world_,physics_,input_)) {animator_.reset();physics_.stop();world_.clear();return false;}
+    // O que o Start dos scripts mudou já está na física montada acima.
+    world_.consumeInvalidation();
+    resources_=&resources;
     active_=true;
     paused_=false;
     return true;
@@ -127,11 +133,24 @@ public:
     animator_.reset();
     timers_.reset();
     cameraFollow_.reset();
+    resources_=nullptr;
     active_=false;
     paused_=false;
   }
+  // Edição do Inspector com o Play rodando: aplica a fila estrutural e
+  // reconstrói o que as mudanças invalidaram, mesmo com o Play pausado.
+  bool commitEdits() {return active_ && drainCommands() && reconcilePhysics();}
+  // Campo ou estado de um comportamento vivo; o grafo do mundo passa a mostrar
+  // o valor novo só depois que a instância C# o aceitou.
+  bool editBehavior(runtime::ObjectId id,const scene::ScriptBehavior &after,
+                    std::span<const scene::ScriptPropertyValue> changed) {
+    if(!active_ || !world_.alive(world_.handle(id))) return false;
+    if(!scripts_.editBehavior(id,after.instanceId(),after.enabled,changed)) return false;
+    auto *components=world_.poseGraph().editComponents(id);
+    return components && components->replaceInstance(after.instanceId(),after);
+  }
   void pause(bool value) {if(active_) paused_=value;}
-  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && advanceTimers(1.0/60.0) && animate(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() && cameraFollow_.advance(world_,1.0/60.0);}
+  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && advanceTimers(1.0/60.0) && animate(1.0f/60.0f) && reconcilePhysics() && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() && reconcilePhysics() && cameraFollow_.advance(world_,1.0/60.0);}
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
@@ -142,9 +161,11 @@ public:
     world_.advanceClock(std::min(elapsed,.25));
     // Ordem do quadro: Update → timers → animação → física (FixedUpdate e
     // contatos) → LateUpdate → acompanhamento de câmera, que lê a pose final.
+    // A física é remontada fora do passo dela: uma mudança pedida dentro de
+    // FixedUpdate ou de um contato espera o próximo ponto seguro de quadro.
     return runScripts(static_cast<float>(std::min(elapsed,.25))) && advanceTimers(std::min(elapsed,.25)) && animate(static_cast<float>(std::min(elapsed,.25))) &&
-           physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
-           scripts_.lateUpdate(static_cast<float>(std::min(elapsed,.25))) && drainCommands() &&
+           reconcilePhysics() && physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
+           scripts_.lateUpdate(static_cast<float>(std::min(elapsed,.25))) && drainCommands() && reconcilePhysics() &&
            cameraFollow_.advance(world_,std::min(elapsed,.25));
   }
   // Pausa/foco do aplicativo; vale também com o Play pausado pelo editor.
@@ -164,6 +185,15 @@ private:
     return true;
   }
   bool runScripts(float elapsed) {return scripts_.update(elapsed) && drainCommands();}
+  // Contrato das propriedades físicas (scene::Invalidate): corpo, forma ou a
+  // malha que serve de forma mudaram, então o solver é remontado do grafo.
+  bool reconcilePhysics() {
+    constexpr u32 physical=scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape|scene::Invalidate::MeshDerived;
+    if(!(world_.consumeInvalidation()&physical)) return true;
+    if(!resources_) return false;
+    const CollisionGeometry geometry(*resources_);
+    return physics_.rebuild(world_,&geometry);
+  }
   bool advanceTimers(double elapsed) {
     return timers_.advance(world_,elapsed,[this](runtime::ObjectId object,u64 instance,u32 count) {
       return scripts_.timer(object,instance,count) && drainCommands();
@@ -197,6 +227,7 @@ private:
   runtime::SceneAnimator animator_;
   runtime::SceneTimers timers_;
   runtime::SceneCameraFollow cameraFollow_;
+  const EditorMapScene *resources_=nullptr;
   bool active_=false;
   bool paused_=false;
 };

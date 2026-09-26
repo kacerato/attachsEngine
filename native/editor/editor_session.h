@@ -18,6 +18,7 @@
 
 #include "core/base.h"
 #include "editor/editor_play_scene.h"
+#include "editor/editor_play_edit.h"
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
@@ -398,6 +399,8 @@ public:
   // física não integra enquanto alguém posiciona um objeto — senão o que se vê
   // não é um editor, é um vídeo com painéis por cima. A aba Play é o que solta.
   bool isPlaying() const noexcept { return state_.workspace == EditorWorkspace::Play; }
+  // Hierarquia e Inspector abertos sobre o mundo em execução.
+  bool playInspecting() const noexcept { return isPlaying() && playScene_.active() && state_.playInspect; }
   bool gameplayInputFocused() const noexcept {
     // Play hides authoring panels and their text fields. platformTextInput
     // advertises IME support for the whole Android session, not active focus.
@@ -1406,6 +1409,25 @@ private:
   void buildPickCandidates();
   void frameSubtree(EditorEntityId root);
   bool handleViewportPointer(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
+  bool handlePointerNow(const ui::UiPointerEvent &event);
+  bool completeTextEditNow(const EditorTextEdit &edit, std::string_view text, bool accept);
+  bool updateTextDraftNow(const EditorTextEdit &edit, std::string_view text, u32 caret);
+  runtime::ComponentResourceResolver runtimeResourceResolver();
+  // Inspector em Play (editor/editor_play_edit.h). Os controles são os mesmos
+  // da edição autoral; durante a chamada eles enxergam o ESPELHO do mundo no
+  // lugar do documento, com histórico e época próprios, e o que mudou nele vai
+  // ao mundo pela API pública. O documento autoral não é tocado, então parar o
+  // Play é o próprio "reverter".
+  template<class F> auto inPlayMirror(F &&body) {
+    enterPlayMirror();
+    if constexpr(std::is_void_v<std::invoke_result_t<F>>) {body();leavePlayMirror();}
+    else {auto result=body();leavePlayMirror();return result;}
+  }
+  void enterPlayMirror();
+  void leavePlayMirror();
+  bool routeToPlayMirror(const ui::UiPointerEvent &event);
+  void refreshPlayMirror();
+  void endPlayInspect();
   void handleGizmoPointer(const ui::UiPointerRouting &routing, u32 axis);
   ViewportPointer *findViewportPointer(u32 id) noexcept;
 
@@ -1424,6 +1446,16 @@ private:
   double playLastSeconds_=0;
   platform::FirstPersonTouchControls playTouches_;
   EditorHistory history_;
+  EditorDocument playMirror_;
+  runtime::SceneGraph playMirrorBase_;
+  EditorHistory playHistory_;
+  u64 playMirrorEpoch_=0;
+  u64 playMirrorRevision_=0;
+  EditorWorkspace playMirrorWorkspace_=EditorWorkspace::Play;
+  // Válido: há um espelho tirado nesta sessão de Play. Ocupado: um gesto,
+  // transação ou texto dele segue aberto e o espelho não pode ser trocado.
+  bool playMirrorValid_=false,playMirrorBusy_=false,playMirrorOpen_=false;
+  std::vector<u32> playEditPointers_;
   renderer::ProjectRenderingSettings renderingSettings_{};
   renderer::ProjectRenderingSettings requestedRenderingSettings_{};
   renderer::ProjectRenderingSettings scriptRenderingRequest_{};

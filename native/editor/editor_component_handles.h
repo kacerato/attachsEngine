@@ -32,7 +32,7 @@ inline std::string_view componentHandleProperty(EditorComponentHandleKind kind) 
   }
 }
 
-inline bool componentHandleGeometry(const EditorDocument &document,EditorEntityId id,u64 instance,
+inline bool componentHandleGeometry(const runtime::SceneGraph &document,EditorEntityId id,u64 instance,
                                     EditorComponentHandleKind kind,EditorComponentHandle &out) {
   const auto *entity=document.find(id);
   const auto *component=entity?entity->components.findInstance(instance):nullptr;
