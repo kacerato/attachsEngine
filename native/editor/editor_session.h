@@ -109,6 +109,10 @@ public:
   bool openComponentPresets(EditorEntityId entity,u64 instance);
   bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
   void setScriptRuntime(scene::ScriptRuntimeApi api);
+  // Pausa e foco do aplicativo, repassados aos comportamentos quando há Play.
+  void applicationEvent(scene::ScriptLifecycleEvent event,bool value) {
+    if(isPlaying()) playScene_.applicationEvent(event,value);
+  }
   void configureScriptRendering(const renderer::ProjectRenderingSettings &authored,
                                 const renderer::RenderingCapabilities &capabilities,
                                 renderer::ThermalPressure thermal,

@@ -71,6 +71,8 @@ public:
   // NotRunning em vez de fingir que tocaram.
   void setAnimator(SceneAnimator *animator) noexcept { animator_ = animator; }
   bool update(float elapsed);
+  bool lateUpdate(float elapsed);
+  bool lifecycle(scene::ScriptLifecycleEvent event, bool value);
   bool fixedUpdate(float elapsed);
   bool trigger(ObjectId sensor, ObjectId other, u32 phase);
   // Contato sólido: o mesmo evento chega aos DOIS objetos do par, cada um

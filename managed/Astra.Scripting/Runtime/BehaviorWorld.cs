@@ -23,7 +23,14 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         public Behavior Instance { get; } = instance;
         public ScriptTypeSchema Schema { get; } = schema;
         public bool Started { get; set; }
+        // Último estado entregue por Enable/Disable; a transição é detectada
+        // quando o próprio script (ou outro) muda Enabled.
+        public bool Active { get; set; }
+        // Desativada por exceção: não recebe Disable, que poderia falhar de novo.
+        public bool Failed { get; set; }
     }
+    /// <summary>Eventos do aplicativo repassados aos comportamentos.</summary>
+    public enum ApplicationEvent : uint { Pause = 0, Focus = 1 }
     private ProjectLoadContext? _context;
     private ISceneAccess? _scene;
     private readonly List<Entry> _entries = [];
@@ -63,6 +70,9 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                 ApplyProperties(instance, schema, attachment.Properties);
             }
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
+            // Awake de todas antes de qualquer Enable/Start: uma pode procurar a
+            // outra com FindBehavior sem depender da ordem da cena.
+            foreach (var entry in _entries) Invoke(entry, "Awake", static b => b.Awake());
             foreach (var entry in _entries) EnsureStarted(entry);
         }
         catch
@@ -76,6 +86,23 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
         foreach (var entry in _entries) if (EnsureStarted(entry))
             Invoke(entry, "Update", behavior => behavior.Update(deltaTime));
+    }
+    public void LateUpdate(float deltaTime)
+    {
+        if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
+        foreach (var entry in _entries) if (EnsureStarted(entry))
+            Invoke(entry, "LateUpdate", behavior => behavior.LateUpdate(deltaTime));
+    }
+    /// <summary>Pausa ou foco do aplicativo, entregue a toda instância ativa.</summary>
+    public void Application(ApplicationEvent kind, bool value)
+    {
+        if (!Running) return;
+        foreach (var entry in _entries) if (EnsureStarted(entry))
+            Invoke(entry, kind == ApplicationEvent.Pause ? "ApplicationPause" : "ApplicationFocus", behavior =>
+            {
+                if (kind == ApplicationEvent.Pause) behavior.ApplicationPause(value);
+                else behavior.ApplicationFocus(value);
+            });
     }
     public void FixedUpdate(float fixedDeltaTime)
     {
@@ -140,7 +167,18 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
 
     private bool EnsureStarted(Entry entry)
     {
-        if (!entry.Instance.Enabled) return false;
+        if (!entry.Instance.Enabled)
+        {
+            if (entry.Active && !entry.Failed) { entry.Active = false; Invoke(entry, "Disable", static b => b.Disable()); }
+            entry.Active = false;
+            return false;
+        }
+        if (!entry.Active)
+        {
+            entry.Active = true;
+            Invoke(entry, "Enable", static b => b.Enable());
+            if (!entry.Instance.Enabled) return false;
+        }
         if (!entry.Started) { entry.Started = true; Invoke(entry, "Start", static b => b.Start()); }
         return entry.Instance.Enabled;
     }
@@ -150,6 +188,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         catch (Exception error)
         {
             entry.Instance.Enabled = false;
+            entry.Failed = true;
             if (_failures.Count < 1024) _failures.Add(new(entry.Instance.ObjectId, entry.Instance.InstanceId,
                 phase, error.ToString()));
         }
@@ -178,6 +217,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         if (_context is null) return;
         for (var i = _entries.Count - 1; i >= 0; --i)
         {
+            if (_entries[i].Active && !_entries[i].Failed) Invoke(_entries[i], "Disable", static behavior => behavior.Disable());
             if (_entries[i].Started) Invoke(_entries[i], "Stop", static behavior => behavior.Stop());
             _entries[i].Instance.Detach();
         }

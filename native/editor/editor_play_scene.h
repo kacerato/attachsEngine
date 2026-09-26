@@ -140,9 +140,16 @@ public:
     if(!active_) return false;
     if(paused_) return true;
     world_.advanceClock(std::min(elapsed,.25));
+    // Ordem do quadro: Update → timers → animação → física (FixedUpdate e
+    // contatos) → LateUpdate → acompanhamento de câmera, que lê a pose final.
     return runScripts(static_cast<float>(std::min(elapsed,.25))) && advanceTimers(std::min(elapsed,.25)) && animate(static_cast<float>(std::min(elapsed,.25))) &&
            physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
+           scripts_.lateUpdate(static_cast<float>(std::min(elapsed,.25))) && drainCommands() &&
            cameraFollow_.advance(world_,std::min(elapsed,.25));
+  }
+  // Pausa/foco do aplicativo; vale também com o Play pausado pelo editor.
+  bool applicationEvent(scene::ScriptLifecycleEvent event,bool value) {
+    return !active_ || (scripts_.lifecycle(event,value) && drainCommands());
   }
   const runtime::SceneAnimator &animator() const noexcept {return animator_;}
   const runtime::SceneTimers &timers() const noexcept {return timers_;}

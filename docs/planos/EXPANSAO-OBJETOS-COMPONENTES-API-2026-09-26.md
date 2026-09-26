@@ -386,3 +386,24 @@ Partículas (Emit, Play/Stop, `ParticleCollision`/`ParticleTrigger`), navegaçã
 | Texto de runtime (Onda 2) | FreeType + HarfBuzz com atlas SDF, ou ampliar o `ui_text` do editor se já fizer shaping | Precisa de IME, RTL e fallback; decidir após medir o `ui_text` existente |
 | Vídeo (Onda 2) | `AMediaCodec` do NDK | Nativo, sem dependência |
 | Onda 6 (rede, XR) | Fora da meta até as Ondas 1–5 fecharem | Não é pré-requisito dos outros pacotes |
+
+---
+
+## 10. Execução
+
+### Onda 0 — 26/09/2026
+
+| Item | Estado | Commit | Evidência |
+|---|---|---|---|
+| §4.3 Receitas como dados | **feito** | `c4c2b4e3` | teste host `every_composed_recipe_creates_its_declared_composition_in_one_command` |
+| §4.1 Registro por família | **feito** | `e2c8bd18` | `native/scene/schemas/*.h`; teste `every_registered_component_has_family_icon_and_versioned_reference` |
+| §4.4 Add e menu de criação | **feito** (folhas sobre o viewport, sem paginação) | `e2c8bd18` | capturas host 853×394 e 1280×800 (`aether_ui_preview add/add-preview/create/create-physics`) |
+| §6.5 Ícones exclusivos | **feito** para os 14 tipos e 27 receitas; gerador único `tools/generate-component-icons.py` | `e2c8bd18` | teste `every_creation_recipe_has_its_own_icon_and_id` |
+| §4.7 / §2.3 Configurações do projeto | **feito**: Timers, Physics, Input e Settings viraram seções de `Project` | `9fdc7583` | testes de camadas, entrada e água abrem a seção |
+| §4.5 Fachada C# gerada | **feito** | `747f3758` | teste `generated_csharp_component_api_matches_the_schema_registry`; suíte gerenciada |
+| §4.6 Ciclo de vida | **feito**: Awake, Enable, Disable, LateUpdate, ApplicationPause/Focus | — | teste C# `Lifecycle_AwakeEnableStartUpdateLateDisableStop_InUnityOrder`; teste host de LateUpdate e eventos do aplicativo |
+| §4.2 Tipos de propriedade | **pendente** | — | entra com o primeiro consumidor (Linha, Rastro e UI na Onda 1–2); criar os tipos sem componente que os use seria contrato sem consumidor |
+
+Contagem após a Onda 0: 15 schemas (14 no Add), 27 receitas (25 criam objeto), 6 workspaces de topo.
+
+Não feito nesta rodada: captura no aparelho (só prévia no host), redesenho visual das seções Camadas e Entrada (as telas vieram da rodada anterior; só mudaram de lugar), `Destroy` por instância ao destruir o objeto em Play.

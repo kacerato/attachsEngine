@@ -285,6 +285,15 @@ struct ScriptRuntimeApi {
   // Um evento agregado por timer e quadro; count preserva disparos perdidos
   // quando um quadro demora mais que o intervalo configurado.
   int (*timer)(u64,u64,u32)=nullptr;
-  bool available() const {return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact&&timer;}
+  // Depois de animação e física, antes do acompanhamento de câmera.
+  int (*lateUpdate)(float)=nullptr;
+  // Evento do aplicativo (ScriptLifecycleEvent) com valor 0/1.
+  int (*lifecycle)(u32,u32)=nullptr;
+  bool available() const {
+    return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact&&timer&&lateUpdate&&lifecycle;
+  }
 };
+// Eventos do aplicativo entregues aos comportamentos (Behavior.ApplicationPause
+// e ApplicationFocus). Os valores atravessam a fronteira: não renumerar.
+enum class ScriptLifecycleEvent : u32 { ApplicationPause=0, ApplicationFocus=1 };
 }

@@ -807,6 +807,20 @@ bool ScriptBridge::update(float elapsed) {
   return ok;
 }
 
+bool ScriptBridge::lateUpdate(float elapsed) {
+  if (!running_) return true;
+  const bool ok = api_.lateUpdate(elapsed) == 0;
+  collectDiagnostics();
+  return ok;
+}
+
+bool ScriptBridge::lifecycle(scene::ScriptLifecycleEvent event, bool value) {
+  if (!running_) return true;
+  const bool ok = api_.lifecycle(static_cast<u32>(event), value ? 1u : 0u) == 0;
+  collectDiagnostics();
+  return ok;
+}
+
 bool ScriptBridge::fixedUpdate(float elapsed) {
   if (!running_) return true;
   const bool ok = api_.fixedUpdate(elapsed) == 0;

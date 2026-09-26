@@ -58,6 +58,23 @@ alvo.Destroy();                            // alvo.IsAlive já é falso
 // o armazenamento sai no próximo ponto seguro do mundo
 ```
 
+### Ciclo de vida do comportamento (26/09/2026)
+
+Ordem em uma sessão de Play, comparada com a [ordem de execução da Unity 6000.0](https://docs.unity3d.com/6000.0/Documentation/Manual/execution-order.html):
+
+| Momento | Callback | Observação |
+|---|---|---|
+| início do Play | `Awake` | todas as instâncias, depois de criadas e hidratadas; roda mesmo com `Enabled=false` |
+| ativa pela primeira vez ou religada | `Enable` → `Start` | `Start` só uma vez, antes do primeiro quadro ativo |
+| cada quadro | `Update` → timers → animação → física (`FixedUpdate`, contatos) → `LateUpdate` → acompanhamento de câmera | `LateUpdate` vê a pose final; o acompanhamento de câmera lê depois dele |
+| `Enabled=false` | `Disable` | no mesmo quadro, no primeiro ponto em que o mundo percorre as instâncias |
+| aplicativo em segundo plano/foco | `ApplicationPause(bool)`, `ApplicationFocus(bool)` | vindos de `APP_CMD_PAUSE/RESUME/GAINED_FOCUS/LOST_FOCUS` |
+| fim do Play | `Disable` das ativas → `Stop` de quem começou | |
+
+Exceção em qualquer callback desativa só aquela instância, sem `Disable`. Diferença
+declarada: não há `Destroy` por instância quando o objeto é destruído no meio do
+Play; `Stop` continua sendo o fim da sessão.
+
 ## 4. Componentes
 
 O schema (`scene/component_schema.h`) é a única lista de regras. O que ele diz:
@@ -76,6 +93,20 @@ O schema (`scene/component_schema.h`) é a única lista de regras. O que ele diz
 
 "Anexável em Play" é sobre estrutura; escrever **propriedades** é permitido em
 todos, exceto no comportamento de script (cujos campos são hidratados no start).
+
+Cada tipo tem uma fachada C# **gerada do schema** em
+`managed/Astra.Scripting/Generated/Components.g.cs` (`Astra.Components.*`), com
+propriedades tipadas, enums e triplas como `Vector3`:
+
+```csharp
+using Astra.Components;
+var corpo = Object.AddComponent<PhysicsBody>();
+corpo.Motion = PhysicsBody.MotionOption.Dinamico;
+if (Object.GetComponent<CameraFollow>() is { } follow) follow.Offset = new Vector3(0, 2, -5);
+```
+
+Um teste nativo falha quando o arquivo gerado não corresponde ao schema;
+regenerar com `aether_tests --write-component-api managed/Astra.Scripting/Generated/Components.g.cs`.
 
 Componentes repetíveis (colisor, junta, comportamento) são endereçados por
 instância, em C# e na ABI:

@@ -251,9 +251,28 @@ public abstract class Behavior
         _scene = scene; ObjectId = objectId; InstanceId = instanceId; _registry = registry;
     }
     internal void Detach() { _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
+    // Ordem de uma sessão de Play (comparável a Unity 6000.0, Manual/execution-order):
+    //   Awake  → uma vez por instância, depois que TODAS foram criadas e receberam
+    //            as propriedades autoradas; roda mesmo desativada.
+    //   Enable → quando passa a ativa (logo após Awake, ou ao religar Enabled).
+    //   Start  → antes do primeiro quadro em que está ativa.
+    //   quadro → Update, depois animação e física (FixedUpdate e contatos),
+    //            depois LateUpdate, depois o acompanhamento de câmera.
+    //   Disable → ao desligar Enabled e no fim do Play; Stop por último.
+    // Exceção em qualquer callback desativa só aquela instância, sem Disable.
+    public virtual void Awake() { }
+    public virtual void Enable() { }
+    public virtual void Disable() { }
     public virtual void Start() { }
     public virtual void Update(float deltaTime) { }
+    /// <summary>Depois de animação e física no mesmo quadro: pose final dos
+    /// objetos para câmeras e ajustes que dependem dela.</summary>
+    public virtual void LateUpdate(float deltaTime) { }
     public virtual void FixedUpdate(float deltaTime) { }
+    /// <summary>O aplicativo foi para segundo plano (true) ou voltou (false).</summary>
+    public virtual void ApplicationPause(bool paused) { }
+    /// <summary>A janela do aplicativo ganhou (true) ou perdeu (false) o foco.</summary>
+    public virtual void ApplicationFocus(bool focused) { }
     /// <summary>Called when a Timer on this object expires. Multiple expirations
     /// in one frame are delivered together. The ID distinguishes Timer instances.</summary>
     public virtual void TimerElapsed(ulong timerInstanceId, uint count) { }

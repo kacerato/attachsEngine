@@ -29,6 +29,7 @@ using namespace ae::editor;
 namespace {
 struct FakeRuntime {
   static u32 starts, updates, fixedUpdates, stops;
+  static u32 lateUpdates, lifecycleEvents, lastLifecycle;
   static u32 triggers, contacts;
   static u32 timers, timerExpirations;
   static u64 lastTimerObject, lastTimerInstance;
@@ -41,6 +42,7 @@ struct FakeRuntime {
 
   static void reset() {
     starts = updates = fixedUpdates = stops = triggers = contacts = timers = timerExpirations = 0;
+    lateUpdates = lifecycleEvents = 0; lastLifecycle = 99;
     lastTimerObject = lastTimerInstance = 0;
     lastContactFirst = lastContactSecond = 0;
     lastContactPhase = 99;
@@ -59,6 +61,8 @@ struct FakeRuntime {
   }
   static int update(float) { ++updates; if(onUpdate) onUpdate(); return 0; }
   static int fixedUpdate(float) { ++fixedUpdates; return 0; }
+  static int lateUpdate(float) { ++lateUpdates; return 0; }
+  static int lifecycle(u32 kind,u32 value) { ++lifecycleEvents; lastLifecycle=kind*2+value; return 0; }
   static void stop() { ++stops; }
   static int copyDiagnostics(u8 *, int) { return 0; }
   static int trigger(u64, u64, u32) { ++triggers; return 0; }
@@ -83,10 +87,13 @@ struct FakeRuntime {
     value.trigger = &trigger;
     value.contact = &contact;
     value.timer = &timer;
+    value.lateUpdate = &lateUpdate;
+    value.lifecycle = &lifecycle;
     return value;
   }
 };
 u32 FakeRuntime::starts = 0, FakeRuntime::updates = 0, FakeRuntime::fixedUpdates = 0, FakeRuntime::stops = 0;
+u32 FakeRuntime::lateUpdates = 0, FakeRuntime::lifecycleEvents = 0, FakeRuntime::lastLifecycle = 99;
 u32 FakeRuntime::triggers = 0, FakeRuntime::contacts = 0;
 u32 FakeRuntime::timers = 0, FakeRuntime::timerExpirations = 0;
 u64 FakeRuntime::lastTimerObject = 0, FakeRuntime::lastTimerInstance = 0;
@@ -249,6 +256,7 @@ AE_TEST(play_scene_delivers_solid_contacts_to_the_script_runtime) {
   for (int step = 0; step < 180; ++step) AE_EXPECT_TRUE(play.advance(1. / 60), "quadro de Play");
 
   AE_EXPECT_TRUE(FakeRuntime::updates > 0 && FakeRuntime::fixedUpdates > 0, "callbacks de quadro e de passo fixo");
+  AE_EXPECT_EQ(FakeRuntime::lateUpdates, FakeRuntime::updates, "LateUpdate uma vez por quadro, depois da física");
   // A caixa cai sobre o piso: o contato sólido precisa atravessar
   // EditorPlayScene -> ScriptBridge -> ABI.
   AE_EXPECT_TRUE(FakeRuntime::contacts > 0, "contato sólido entregue ao runtime");
@@ -257,8 +265,16 @@ AE_TEST(play_scene_delivers_solid_contacts_to_the_script_runtime) {
                  "o par entregue é piso/caixa");
   AE_EXPECT_TRUE(play.document().find(box)->transform.position[1] < 3.f, "a caixa caiu");
 
+  // Pausa e foco do aplicativo atravessam EditorPlayScene -> ScriptBridge -> ABI.
+  AE_EXPECT_TRUE(play.applicationEvent(scene::ScriptLifecycleEvent::ApplicationPause,true),"pausa entregue");
+  AE_EXPECT_EQ(FakeRuntime::lastLifecycle,1u,"evento de pausa com valor verdadeiro");
+  AE_EXPECT_TRUE(play.applicationEvent(scene::ScriptLifecycleEvent::ApplicationFocus,false),"perda de foco entregue");
+  AE_EXPECT_EQ(FakeRuntime::lastLifecycle,2u,"evento de foco com valor falso");
+  AE_EXPECT_EQ(FakeRuntime::lifecycleEvents,2u,"dois eventos do aplicativo");
   play.stop();
   AE_EXPECT_EQ(FakeRuntime::stops, 1u, "Stop encerra o runtime");
+  AE_EXPECT_TRUE(play.applicationEvent(scene::ScriptLifecycleEvent::ApplicationPause,true),"sem Play, evento é ignorado");
+  AE_EXPECT_EQ(FakeRuntime::lifecycleEvents,2u,"nada chega ao runtime parado");
 }
 
 AE_TEST(play_script_character_commands_cover_all_substeps_and_preserve_authorship) {

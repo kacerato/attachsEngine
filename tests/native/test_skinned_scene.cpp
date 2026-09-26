@@ -524,10 +524,13 @@ struct AnimationRuntime {
   static int trigger(u64, u64, u32) { return 0; }
   static int contact(u64, u64, u32, const float *) { return 0; }
   static int timer(u64, u64, u32) { return 0; }
+  static int lateUpdate(float) { return 0; }
+  static int lifecycle(u32, u32) { return 0; }
   static scene::ScriptRuntimeApi api() {
     scene::ScriptRuntimeApi value{};
     value.start = &start; value.update = &update; value.fixedUpdate = &fixedUpdate; value.stop = &stop;
     value.copyDiagnostics = &copyDiagnostics; value.trigger = &trigger; value.contact = &contact; value.timer = &timer;
+    value.lateUpdate = &lateUpdate; value.lifecycle = &lifecycle;
     return value;
   }
 };

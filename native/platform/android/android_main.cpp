@@ -727,6 +727,8 @@ void updateEditorCodeCompiler(AndroidShell &shell) {
     api.start=reinterpret_cast<decltype(api.start)>(shell.dotNetHost.getManagedFunctionPointer(type,"Start"));
     api.update=reinterpret_cast<decltype(api.update)>(shell.dotNetHost.getManagedFunctionPointer(type,"Update"));
     api.fixedUpdate=reinterpret_cast<decltype(api.fixedUpdate)>(shell.dotNetHost.getManagedFunctionPointer(type,"FixedUpdate"));
+    api.lateUpdate=reinterpret_cast<decltype(api.lateUpdate)>(shell.dotNetHost.getManagedFunctionPointer(type,"LateUpdate"));
+    api.lifecycle=reinterpret_cast<decltype(api.lifecycle)>(shell.dotNetHost.getManagedFunctionPointer(type,"Lifecycle"));
     api.trigger=reinterpret_cast<decltype(api.trigger)>(shell.dotNetHost.getManagedFunctionPointer(type,"Trigger"));
     api.contact=reinterpret_cast<decltype(api.contact)>(shell.dotNetHost.getManagedFunctionPointer(type,"Contact"));
     api.timer=reinterpret_cast<decltype(api.timer)>(shell.dotNetHost.getManagedFunctionPointer(type,"Timer"));
@@ -1620,16 +1622,19 @@ void handleCommand(android_app *app, int32_t command) {
     break;
   case APP_CMD_RESUME:
     applyEvent(shell, ae::platform::AppEvent::Resume);
+    shell.editorSession.applicationEvent(ae::scene::ScriptLifecycleEvent::ApplicationPause,false);
     break;
   case APP_CMD_PAUSE:
     shell.editorSession.cancelPointers();
     if(!shell.editorSavePath.empty() && !shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
       __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao salvar ao pausar.");
+    shell.editorSession.applicationEvent(ae::scene::ScriptLifecycleEvent::ApplicationPause,true);
     applyEvent(shell, ae::platform::AppEvent::Pause);
     break;
   case APP_CMD_GAINED_FOCUS:
     ae::platform::android::applyImmersiveLandscapeWindow(app->activity);
     applyEvent(shell, ae::platform::AppEvent::GainFocus);
+    shell.editorSession.applicationEvent(ae::scene::ScriptLifecycleEvent::ApplicationFocus,true);
     break;
   case APP_CMD_LOST_FOCUS:
     shell.editorSession.cancelPointers();
@@ -1637,8 +1642,10 @@ void handleCommand(android_app *app, int32_t command) {
     // The attached code panel owns keyboard focus while the same Activity
     // remains resumed. Keep draining its revision queue and drawing native
     // tabs/console. APP_CMD_PAUSE still suspends the whole editor normally.
-    if (!ae::platform::android::editorCodePanelVisible())
+    if (!ae::platform::android::editorCodePanelVisible()) {
+      shell.editorSession.applicationEvent(ae::scene::ScriptLifecycleEvent::ApplicationFocus,false);
       applyEvent(shell, ae::platform::AppEvent::LoseFocus);
+    }
     break;
   case APP_CMD_WINDOW_RESIZED:
     // CONFIG_CHANGED can precede the actual buffer resize. On Adreno the

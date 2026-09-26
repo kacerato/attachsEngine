@@ -636,6 +636,23 @@ public static unsafe class NativeBehaviorRuntime
         catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
     }
     [UnmanagedCallersOnly]
+    public static int LateUpdate(float deltaTime)
+    {
+        try { _world?.LateUpdate(deltaTime); RefreshDiagnostics(); return 0; }
+        catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
+    }
+    /// <summary>Evento do aplicativo (scene::ScriptLifecycleEvent): 0 pausa, 1 foco; `value` 0 ou 1.</summary>
+    [UnmanagedCallersOnly]
+    public static int Lifecycle(uint kind, uint value)
+    {
+        try
+        {
+            if (kind > 1 || value > 1) return 1;
+            _world?.Application((BehaviorWorld.ApplicationEvent)kind, value != 0); RefreshDiagnostics(); return 0;
+        }
+        catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
+    }
+    [UnmanagedCallersOnly]
     public static int FixedUpdate(float deltaTime)
     {
         try { _world?.FixedUpdate(deltaTime); RefreshDiagnostics(); return 0; }

@@ -95,6 +95,54 @@ public static class AstraBehaviorTests
         world.Start(compiled, scene, [Attach(1, 10, "test.force")]);
         Assert.Equal(0, world.Failures.Count, "new Play resets runtime failure state");
     }
+    private const string LifecycleSource = """
+        using Astra;
+        [ComponentId("test.life")]
+        public sealed class LifeBehavior : Behavior
+        {
+            public override void Awake() => Scene.Log(ObjectId, "awake:" + InstanceId);
+            public override void Enable() => Scene.Log(ObjectId, "enable:" + InstanceId);
+            public override void Start() => Scene.Log(ObjectId, "start:" + InstanceId);
+            public override void Update(float dt)
+            {
+                Scene.Log(ObjectId, "update:" + InstanceId);
+                // A instância 21 se desliga no primeiro quadro: Disable vem no seguinte.
+                if (InstanceId == 21) Enabled = false;
+            }
+            public override void LateUpdate(float dt) => Scene.Log(ObjectId, "late:" + InstanceId);
+            public override void ApplicationPause(bool paused) => Scene.Log(ObjectId, "pause:" + paused);
+            public override void ApplicationFocus(bool focused) => Scene.Log(ObjectId, "focus:" + focused);
+            public override void Disable() => Scene.Log(ObjectId, "disable:" + InstanceId);
+            public override void Stop() => Scene.Log(ObjectId, "stop:" + InstanceId);
+        }
+        """;
+    private static BehaviorAttachment Life(ulong instance, bool enabled = true) =>
+        new(1, instance, "test.life", enabled, new Dictionary<string, JsonElement>());
+
+    [Test]
+    public static void Lifecycle_AwakeEnableStartUpdateLateDisableStop_InUnityOrder()
+    {
+        using var project = new Project(LifecycleSource); var compiled = project.Compile(); var scene = new Scene();
+        using var world = new BehaviorWorld();
+        world.Start(compiled, scene, [Life(20), Life(21), Life(22, enabled: false)]);
+        // Awake de todas (até a desativada) antes do primeiro Enable/Start.
+        Assert.Equal("1:awake:20 1:awake:21 1:awake:22 1:enable:20 1:start:20 1:enable:21 1:start:21",
+                     string.Join(' ', scene.Events));
+        scene.Events.Clear();
+        world.Update(1f / 60); world.LateUpdate(1f / 60);
+        // Enabled=false no Update: o Disable sai no mesmo quadro, no primeiro ponto
+        // em que o mundo percorre as instâncias (aqui, a fase LateUpdate).
+        Assert.Equal("1:update:20 1:update:21 1:late:20 1:disable:21", string.Join(' ', scene.Events),
+                     "LateUpdate depois de todos os Update, só para quem continua ativo");
+        scene.Events.Clear();
+        world.Application(BehaviorWorld.ApplicationEvent.Pause, true);
+        Assert.Equal("1:pause:True", string.Join(' ', scene.Events), "Disable não se repete; pausa só às ativas");
+        scene.Events.Clear();
+        world.Dispose();
+        Assert.Equal("1:stop:21 1:disable:20 1:stop:20", string.Join(' ', scene.Events),
+                     "fim do Play: Disable das ativas e Stop de quem começou");
+    }
+
     [Test]
     public static void SchemaTypeChangeAndDuplicateIdentity_RejectBeforeStartingWorld()
     {
