@@ -1121,6 +1121,12 @@ public:
   // histórico. Recusa sem efeito quando a composição, um valor inicial ou a
   // hierarquia física não são válidos; o motivo vai para o status.
   EditorEntityId createRecipe(u32 index, EditorEntityId parent);
+  // Soltar um objeto da Hierarquia ou um recurso sobre um campo do Inspector
+  // (Unity: arrastar para o campo de referência). `field` é o id do widget do
+  // campo sob o dedo; a validação é a mesma do seletor. Falso quando o widget
+  // não é um campo compatível ou a referência foi recusada.
+  bool dropObjectOnField(u32 field, EditorEntityId dropped);
+  bool dropAssetOnField(u32 field, u32 assetIndex);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
   }

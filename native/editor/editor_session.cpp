@@ -3222,6 +3222,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       if(event.phase==UiPointerPhase::Up && !history_.isOpen()) {
         const auto target=router_.hitTest(event.position);
         const u32 rows=widgetId(EditorWidget::HierarchyRowBase);
+        if(target.target==UiPointerTarget::Widget && dropAssetOnField(target.widgetId,index)) {
+          state_.status="Recurso atribuído pelo arraste";return true;
+        }
         if(target.target==UiPointerTarget::Widget && target.widgetId>=rows &&
            target.widgetId<rows+EditorDocument::kMaximumEntities) {
           const auto parent=target.widgetId-rows;
@@ -3350,6 +3353,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         bool accepted=false;
         if(event.phase==UiPointerPhase::Up) {
           const auto target=router_.hitTest(event.position);
+          if(target.target==UiPointerTarget::Widget && dropObjectOnField(target.widgetId,entity)) {
+            state_.status="Referência atribuída pelo arraste";return true;
+          }
           if(target.target==UiPointerTarget::Widget && target.widgetId>=hierarchyRows &&
              target.widgetId<hierarchyRows+EditorDocument::kMaximumEntities)
             accepted=history_.reparentKeepingWorld(document_,entity,target.widgetId-hierarchyRows);
@@ -5432,6 +5438,56 @@ bool EditorSession::createSceneTemplate(u32 index) {
       if(document_.views().at(v)->name==model.views.front().name) {applySceneView(v);break;}
   state_.status=std::string(model.name)+" montado com "+std::to_string(model.views.size())+" vistas salvas";
   return true;
+}
+
+bool EditorSession::dropObjectOnField(u32 field, EditorEntityId dropped) {
+  const u32 operation=field&0xff000000u,index=field&0xffu,property=(field>>8)&0xffffu;
+  const auto *entity=document_.find(state_.selection);
+  if(!entity || !document_.exists(dropped) || index>=entity->components.size()) return false;
+  const auto *component=entity->components.at(index);
+  EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;
+  request.componentInstance=component->instanceId();
+  if(operation==widgetId(EditorWidget::ComponentReferenceBase)) {
+    if(property>=component->type().references.size()) return false;
+    request.action=EditorAction::ComponentProperty;request.componentType=component->type().id;
+    request.componentProperty=component->type().references[property].id;
+    request.componentValue=scene::ObjectReference{dropped};
+  } else if(operation==widgetId(EditorWidget::ScriptFieldBase)) {
+    const auto *script=scene::scriptBehavior(component);
+    if(!script) return false;
+    const EditorScriptType *type=nullptr;
+    for(const auto &candidate:code_.scriptTypes()) if(candidate.id==script->scriptType) type=&candidate;
+    if(!type || property>=type->properties.size() || type->properties[property].valueType!="object") return false;
+    request.action=EditorAction::ScriptProperty;request.componentProperty=type->properties[property].id;
+    request.scriptPropertyType="object";request.scriptPropertyValue=std::to_string(dropped);
+  } else return false;
+  if(dispatch(request).status==EditorActionStatus::Applied) return true;
+  state_.status="O objeto solto não é compatível com este campo";
+  return false;
+}
+
+bool EditorSession::dropAssetOnField(u32 field, u32 assetIndex) {
+  // O botão de malha do componente Malha é o mesmo destino do seletor de malha.
+  if(field==widgetId(EditorWidget::MeshChoose)) {
+    if(assetIndex>=mapScene_.assetCount() || !document_.exists(state_.selection)) return false;
+    EditorActionRequest request;request.version=sceneVersion();request.entity=state_.selection;
+    request.action=EditorAction::AssignMesh;request.property=assetIndex+1;
+    if(dispatch(request).status==EditorActionStatus::Applied) return true;
+    state_.status="A malha solta não é compatível com este objeto";return false;
+  }
+  if((field&0xff000000u)!=widgetId(EditorWidget::ComponentResourceBase)) return false;
+  const u32 index=field&0xffu,bindingIndex=(field>>8)&0xffu,slot=(field>>16)&0xffu;
+  const auto *entity=document_.find(state_.selection);
+  if(!entity || index>=entity->components.size() || assetIndex>=mapScene_.assetCount()) return false;
+  const auto *component=entity->components.at(index);
+  if(bindingIndex>=component->type().resourceBindings.size()) return false;
+  EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;
+  request.action=EditorAction::ComponentResource;request.componentInstance=component->instanceId();
+  request.componentProperty=component->type().resourceBindings[bindingIndex].id;request.componentResourceSlot=slot;
+  request.componentResource=mapScene_.assetGuid(assetIndex);
+  if(dispatch(request).status==EditorActionStatus::Applied) return true;
+  state_.status="O recurso solto não é do tipo deste campo";
+  return false;
 }
 
 EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {

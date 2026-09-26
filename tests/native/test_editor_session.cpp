@@ -1143,6 +1143,73 @@ AE_TEST(component_menu_moves_copies_pastes_as_new_resets_and_opens_reference) {
                  "Undo devolve os valores");
 }
 
+// Unity Manual/InspectorReferences: arrastar da Hierarchy para o campo. O
+// arraste começa na linha do objeto e termina sobre o campo de referência do
+// Inspector; a validação é a do seletor, e recusa não reparenteia nada.
+AE_TEST(dragging_hierarchy_object_onto_reference_field_assigns_it) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto camera=doc.createEntity(doc.root(),EditorEntityKind::Camera,"Câmera");
+  auto value=*doc.find(camera);
+  value.components.add(scene::Camera::descriptor);
+  value.components.add(scene::CameraFollow::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(camera,value),"câmera com acompanhamento");
+  u32 followIndex=0;
+  for(u32 i=0;i<doc.find(camera)->components.size();++i)
+    if(&doc.find(camera)->components.at(i)->type()==&scene::CameraFollow::descriptor) followIndex=i;
+  f.session.setSelection(camera);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+followIndex).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+followIndex);
+  const u32 field=widgetId(EditorWidget::ComponentReferenceBase)+followIndex;
+  revealProperty(f,field);
+  const auto target=locateWidget(f.session,field);
+  const auto row=locateWidget(f.session,hierarchyRowWidget(f.cube));
+  AE_EXPECT_TRUE(target.x>=0 && row.x>=0,"linha do cubo e campo Alvo visíveis juntos");
+  const u64 parentBefore=doc.find(f.cube)->parent;
+  f.down(82,row);
+  f.move(82,{row.x+40,row.y});
+  f.move(82,{(row.x+target.x)*.5f,(row.y+target.y)*.5f});
+  f.move(82,target);
+  f.up(82,target);f.session.update();
+  const auto *follow=static_cast<const scene::CameraFollow *>(doc.find(camera)->components.find(scene::CameraFollow::descriptor));
+  AE_EXPECT_EQ(follow->target,static_cast<u64>(f.cube),"soltar sobre o campo atribui a referência");
+  AE_EXPECT_EQ(doc.find(f.cube)->parent,parentBefore,"o objeto arrastado não muda de pai");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"atribuição é um comando");
+  AE_EXPECT_TRUE(history.undo(doc),"Undo desfaz a atribuição");
+  follow=static_cast<const scene::CameraFollow *>(doc.find(camera)->components.find(scene::CameraFollow::descriptor));
+  AE_EXPECT_EQ(follow->target,0ull,"referência volta a vazia");
+}
+
+// Unity Manual/UsingComponents: arrastar um arquivo do Project para o campo de
+// referência. Aqui o recurso vem da aba Recursos e cai no campo Malha.
+AE_TEST(dragging_asset_onto_resource_field_assigns_it) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto holder=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Suporte");
+  auto value=*doc.find(holder);value.components.add(scene::MeshRenderer::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(holder,value),"malha vazia, sem referência");
+  f.session.setSelection(holder);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  const u32 field=widgetId(EditorWidget::MeshChoose);
+  revealProperty(f,field);
+  const auto target=locateWidget(f.session,field);
+  AE_EXPECT_TRUE(target.x>=0,"campo Malha visível");
+  tapWidget(f,widgetId(EditorWidget::TabAssets));
+  const auto row=locateWidget(f.session,widgetId(EditorWidget::AssetRowBase));
+  AE_EXPECT_TRUE(row.x>=0,"recurso de malha listado");
+  const auto entitiesBefore=doc.entityCount();
+  f.down(83,row);
+  f.move(83,{row.x+40,row.y});f.session.update();
+  f.move(83,target);f.session.update();
+  f.up(83,target);f.session.update();
+  AE_EXPECT_EQ(meshAsset(*doc.find(holder)),1u,"soltar a malha no campo atribui o recurso");
+  AE_EXPECT_EQ(doc.entityCount(),entitiesBefore,"nenhum objeto novo instanciado pelo arraste");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"atribuição é um comando");
+}
+
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
