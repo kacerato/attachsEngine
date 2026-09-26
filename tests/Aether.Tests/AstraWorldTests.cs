@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using Astra;
+using Astra.Components;
 
 namespace Aether.Tests;
 
@@ -475,5 +476,26 @@ public static class AstraWorldTests
         Assert.Close(3, mover.Position.Z, 1e-6f);
         mover.WorldTransform = new TransformValue(new Vector3(4, 0, 0), Quaternion.Identity, Vector3.One);
         Assert.Close(4, mover.WorldTransform.Position.X, 1e-6f);
+    }
+    [Test]
+    public static void FachadaGeradaUsaOsIdsETiposDoSchema()
+    {
+        var world = new FakeWorld(9);
+        var target = world.RootObject.CreateChild("Câmera");
+        // A fachada é gerada do registro nativo: o id e o tipo de cada campo vêm
+        // de lá, e o acesso tipado passa pelo mesmo Get/Set genérico da ABI.
+        var camera = target.AddComponent<Astra.Components.Camera>();
+        Assert.Equal("astra.camera", Astra.Components.Camera.TypeId);
+        Assert.True(target.HasComponent<Astra.Components.Camera>(), "tipo anexado reconhecido");
+        var collider = target.AddComponent<Collider>();
+        collider.Shape = Collider.ShapeOption.Esfera;
+        Assert.Equal(Collider.ShapeOption.Esfera, collider.Shape);
+        Assert.Equal(1u, collider.Component.GetEnum("shape"), "enumeração grava o valor do schema");
+        collider.Enabled = false;
+        Assert.False(target.GetComponent<Collider>()!.Value.Enabled, "leitura pela fachada recuperada do objeto");
+        var follow = target.AddComponent<CameraFollow>();
+        follow.Offset = new Vector3(1, 2, 3);
+        Assert.Close(2, follow.Component.GetFloat("offset_y"), 1e-6f, "tripla vira Vector3 sobre os canais");
+        Assert.Throws<WorldException>(() => _ = new GameTimer(camera.Component), "fachada recusa tipo diferente");
     }
 }

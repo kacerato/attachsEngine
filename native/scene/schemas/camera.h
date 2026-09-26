@@ -21,17 +21,20 @@ inline constexpr std::array<ComponentSchema, 3> cameraSchemas{{
    .family=ComponentFamily::Camera, .structuralInPlay=PlayMutability::SafePoint,
    .consumer="renderer/render_view.h → matriz de projeção e culling", .invalidates=Invalidate::Draw,
    .subfamily="Projeção", .icon="editor/author-camera", .searchTerms="Camera Camera3D Perspectiva Ortografica",
-   .reference="https://docs.unity3d.com/6000.0/Documentation/Manual/class-Camera.html"},
+   .reference="https://docs.unity3d.com/6000.0/Documentation/Manual/class-Camera.html",
+   .apiName="Camera"},
   {.type=&CameraLook::descriptor, .name="Olhar", .description="Rotação local da câmera por entrada ou script",
    .family=ComponentFamily::Camera, .requirements=lookRequirements, .structuralInPlay=PlayMutability::SafePoint,
    .consumer="runtime/game_world.cpp → pose da câmera", .invalidates=Invalidate::Input,
    .subfamily="Controle", .icon="component/look", .searchTerms="MouseLook CameraController PanTilt InputAxisController",
-   .reference="https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachinePanTilt.html"},
+   .reference="https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachinePanTilt.html",
+   .apiName="CameraLook"},
   {.type=&CameraFollow::descriptor, .name="Acompanhar alvo", .description="Posiciona a câmera após física e animação",
    .family=ComponentFamily::Camera, .requirements=followRequirements, .conflicts=followConflicts,
    .structuralInPlay=PlayMutability::SafePoint,
    .consumer="runtime/scene_camera_follow.h → pose de Play da câmera", .invalidates=Invalidate::Transform,
    .subfamily="Controle", .icon="component/camera-follow", .searchTerms="Follow Camera Tracking Damping CinemachineFollow",
-   .reference="https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineFollow.html"}
+   .reference="https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineFollow.html",
+   .apiName="CameraFollow"}
 }};
 } // namespace ae::scene

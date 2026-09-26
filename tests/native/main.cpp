@@ -10,6 +10,7 @@ int probePackGltf(int count, char **paths);
 int probeImportGltfFolder(const char *mainPath, unsigned compression, bool lods);
 int probeFolderPublish(const char *mainPath);
 int writePropertyMatrix(const char *path);
+int writeComponentApi(const char *path);
 int printSourceReport(const char *path);
 
 int main(int argc,char **argv) {
@@ -28,6 +29,8 @@ int main(int argc,char **argv) {
   if(argc==3 && std::strcmp(argv[1],"--publish-gltf-folder")==0) return probeFolderPublish(argv[2]);
   // Regenera a matriz de propriedades a partir dos descritores de componente.
   if(argc==3 && std::strcmp(argv[1],"--write-property-matrix")==0) return writePropertyMatrix(argv[2]);
+  // Regenera a fachada C# tipada (managed/Astra.Scripting/Generated/Components.g.cs).
+  if(argc==3 && std::strcmp(argv[1],"--write-component-api")==0) return writeComponentApi(argv[2]);
   // Relatorio da fonte (G6-A) no terminal: os mesmos numeros que a aba Malhas
   // mostra no aparelho, para conferir um arquivo sem abrir o editor.
   if(argc==3 && std::strcmp(argv[1],"--source-report")==0) return printSourceReport(argv[2]);

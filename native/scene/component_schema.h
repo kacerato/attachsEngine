@@ -102,6 +102,9 @@ struct ComponentSchema {
   // Falso para tipos anexados por outro fluxo (comportamento C# vem da área de
   // código, com o script escolhido); continuam no registro e no arquivo.
   bool listedInAdd = true;
+  // Nome da fachada C# gerada (`Astra.Components.<apiName>`); vazio quando o
+  // tipo tem API própria (Comportamento é a classe Behavior).
+  std::string_view apiName{};
   bool allowMultiple() const noexcept { return type->allowMultiple; }
 };
 } // namespace ae::scene

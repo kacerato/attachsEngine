@@ -9,6 +9,7 @@ inline constexpr std::array<ComponentSchema, 1> animationSchemas{{
    .consumer="runtime/scene_animation.cpp → pose local dos nós da instância", .capability="animation.clip",
    .invalidates=Invalidate::Transform,
    .subfamily="Clipes", .icon="assets/animation", .searchTerms="Animation AnimationPlayer Clip",
-   .reference="https://docs.unity3d.com/6000.0/Documentation/Manual/class-Animation.html"}
+   .reference="https://docs.unity3d.com/6000.0/Documentation/Manual/class-Animation.html",
+   .apiName="Animation"}
 }};
 } // namespace ae::scene

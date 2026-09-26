@@ -10,6 +10,10 @@
 #include "renderer/punctual_lights.h"
 #include "scene/component_reflection.h"
 #include "editor/editor_component_catalog.h"
+#include "scene/component_api_csharp.h"
+
+#include <fstream>
+#include <sstream>
 
 #include <algorithm>
 
@@ -150,4 +154,36 @@ AE_TEST(every_registered_component_has_family_icon_and_versioned_reference) {
     for (usize j = 0; j < i; ++j)
       AE_EXPECT_TRUE(editor::editorComponentCatalog[i].icon != editor::editorComponentCatalog[j].icon,
                      "ícone exclusivo por tipo anexável");
+}
+
+// Fachada C# gerada do schema:
+//
+//   aether_tests --write-component-api managed/Astra.Scripting/Generated/Components.g.cs
+int writeComponentApi(const char *path) {
+  const auto text = scene::componentCSharpApi();
+  std::FILE *file = std::fopen(path, "wb");
+  if (!file) {
+    std::fprintf(stderr, "não foi possível escrever %s\n", path);
+    return 1;
+  }
+  const bool ok = std::fwrite(text.data(), 1, text.size(), file) == text.size();
+  std::fclose(file);
+  return ok ? 0 : 1;
+}
+
+// O arquivo no repositório é a geração publicada: um id de propriedade que
+// muda no C++ sem regenerar falharia só no aparelho, com o C# ainda compilando.
+AE_TEST(generated_csharp_component_api_matches_the_schema_registry) {
+  std::ifstream file(std::string(AETHER_REPOSITORY_ROOT) + "/managed/Astra.Scripting/Generated/Components.g.cs",
+                     std::ios::binary);
+  AE_EXPECT_TRUE(file.good(), "fachada gerada existe no repositório");
+  std::stringstream content;content << file.rdbuf();
+  std::string committed = content.str(), normalized;
+  for (const char c : committed) if (c != '\r') normalized.push_back(c);
+  AE_EXPECT_TRUE(normalized == scene::componentCSharpApi(),
+                 "Components.g.cs em dia com o schema; rode aether_tests --write-component-api");
+  u32 facades = 0;
+  for (const auto &schema : scene::componentSchemas) facades += schema.apiName.empty() ? 0u : 1u;
+  AE_EXPECT_EQ(facades, static_cast<u32>(scene::componentSchemas.size()) - 1u,
+               "todo tipo anexável tem fachada; só Comportamento usa a classe Behavior");
 }

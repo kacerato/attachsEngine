@@ -468,10 +468,11 @@ public readonly struct Component
         if(TypeId!=ComponentIds.MeshRenderer) throw new WorldException(WorldStatus.InvalidArgument,"acessar material");
         return new MaterialSlot(this,slot);
     }
-    public GameTimer Timer()
+    /// <summary>Fachada gerada do schema (`Astra.Components.GameTimer`).</summary>
+    public Astra.Components.GameTimer Timer()
     {
         if (TypeId != ComponentIds.Timer) throw new WorldException(WorldStatus.InvalidArgument, "acessar timer");
-        return new GameTimer(this);
+        return new Astra.Components.GameTimer(this);
     }
     public CameraFollowRig CameraFollow()
     {
