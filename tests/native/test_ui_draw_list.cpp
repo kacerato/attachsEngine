@@ -19,6 +19,21 @@ UiDrawList beginList() {
 
 } // namespace
 
+// A fonte da interface cobre U+0020–U+00FF. Pontuação tipográfica fora disso
+// ("‹ Voltar", "Compilando…") media e desenhava um espaço vazio; agora mede
+// como o equivalente Latin-1, e o corte segue a mesma medida.
+AE_TEST(typographic_punctuation_measures_as_its_latin1_fallback) {
+  const auto &metrics = fallbackFontMetrics();
+  UiTypeStyle style{};
+  style.size = 10;
+  AE_EXPECT_EQ(measureTextWidth("…", metrics, style), measureTextWidth("...", metrics, style), "reticências como três pontos");
+  AE_EXPECT_EQ(measureTextWidth("‹ Voltar", metrics, style), measureTextWidth("< Voltar", metrics, style), "‹ como <");
+  AE_EXPECT_EQ(measureTextWidth("a → b", metrics, style), measureTextWidth("a -> b", metrics, style), "seta como ->");
+  AE_EXPECT_EQ(truncateToWidth("……", metrics, style, 15.5f), 3u, "o corte não parte o substituto no meio do caractere");
+  u32 out[3];
+  AE_EXPECT_EQ(uiLatinFallback(0x4E2D, out), 0u, "sem equivalente continua sem desenho");
+}
+
 AE_TEST(draw_list_records_commands_in_submission_order) {
   // A ordem é a profundidade: o painel é desenhado antes do rótulo que vive
   // dentro dele, e o consumidor não reordena nada.

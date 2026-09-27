@@ -1510,9 +1510,69 @@ void EditorSession::endPlayInspect() {
   if(!document_.exists(state_.selection)) state_.selection=kInvalidEntity;
 }
 
+bool EditorSession::inspectorModalOpen() const noexcept {
+  return state_.enumPicker || state_.addingComponent || state_.referenceInstance || state_.numericField || state_.colorField ||
+         state_.gradientField || state_.curveField || state_.editingScriptInstance;
+}
+
+EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
+  auto found=std::find_if(inspectorPointers_.begin(),inspectorPointers_.end(),[&](const auto &p){return p.first==event.pointerId;});
+  if(event.phase==UiPointerPhase::Down) {
+    EditorEntityId target=0;
+    if(inspectorModalOpen()) target=state_.inspectorTarget;
+    else if(state_.inspectorLocked && layout_.inspectorPanel.contains(event.position)) target=state_.inspectorLocked;
+    if(found!=inspectorPointers_.end()) found->second=target;
+    else inspectorPointers_.push_back({event.pointerId,target});
+    return target;
+  }
+  if(found==inspectorPointers_.end()) return 0;
+  const auto target=found->second;
+  if(event.phase==UiPointerPhase::Up || event.phase==UiPointerPhase::Cancel) inspectorPointers_.erase(found);
+  return target;
+}
+
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
-  if(routeToPlayMirror(event)) return inPlayMirror([&] {return handlePointerNow(event);});
-  return handlePointerNow(event);
+  const auto target=inspectorScopeFor(event);
+  const auto run=[&] {
+    const bool consumed=inInspectorScope(target,[&] {return handlePointerNow(event);});
+    // O modal que ficou aberto pertence ao Inspector que o abriu.
+    if(!inspectorModalOpen()) state_.inspectorTarget=0;
+    else if(target) state_.inspectorTarget=target;
+    else if(!state_.inspectorTarget) state_.inspectorTarget=state_.inspectorLocked?state_.inspectorLocked:state_.selection;
+    return consumed;
+  };
+  if(routeToPlayMirror(event)) return inPlayMirror(run);
+  return run();
+}
+
+void EditorSession::pingEntity(EditorEntityId id) {
+  const auto *entity=document_.find(id);
+  if(!entity || id==document_.root()) return;
+  auto &collapsed=state_.collapsedEntities;
+  for(const auto *up=document_.find(entity->parent);up;up=document_.find(up->parent))
+    collapsed.erase(std::remove(collapsed.begin(),collapsed.end(),up->id),collapsed.end());
+  // A busca da Hierarquia esconderia o objeto: sai dela.
+  if(state_.hierarchySearch[0] && editorSearchKey(entity->name).find(editorSearchKey(state_.hierarchySearch))==std::string::npos)
+    state_.hierarchySearch[0]=0;
+  // Posição na mesma travessia que desenha a Hierarquia.
+  u32 row=0,found=0;bool located=false;
+  std::vector<EditorEntityId> stack;
+  const auto roots=document_.childrenOf(document_.root());
+  for(usize i=roots.size();i>0;--i) stack.push_back(roots[i-1]);
+  while(!stack.empty() && !located) {
+    const auto current=stack.back();stack.pop_back();
+    if(current==id) {found=row;located=true;break;}
+    ++row;
+    if(std::find(collapsed.begin(),collapsed.end(),current)!=collapsed.end()) continue;
+    const auto children=document_.childrenOf(current);
+    for(usize i=children.size();i>0;--i) stack.push_back(children[i-1]);
+  }
+  const u32 visible=std::max(1u,layout_.hierarchyVisibleRows);
+  state_.hierarchyScroll=found>visible/2?found-visible/2:0;
+  state_.pingEntity=id;state_.pingUntil=state_.uiTime+1.6;
+  if(state_.compactPanel!=EditorScreenState::CompactPanel::Hierarchy &&
+     layout_.hierarchyPanel.isEmpty()) state_.compactPanel=EditorScreenState::CompactPanel::Hierarchy;
+  state_.status=std::string("Ping: ")+entity->name;
 }
 
 bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
@@ -3714,6 +3774,18 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
 
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::InspectorLock)) {
+    // Dentro do escopo a "seleção" é o alvo do Inspector: travar prende nele.
+    state_.inspectorLocked=state_.inspectorLocked?0:state_.selection;
+    state_.status=state_.inspectorLocked?"Inspector travado neste objeto":"Inspector segue a seleção";
+    return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::InspectorDebugToggle)) {
+    state_.inspectorDebug=!state_.inspectorDebug;state_.inspectorMenu=false;state_.propertyPage=0;return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::InspectorPing)) {
+    state_.inspectorMenu=false;pingEntity(state_.selection);return true;
+  }
   if(handleComponentReorder(event,routing)) return true;
   if(handleScriptArrayDrag(event,routing)) return true;
   if(handleLodBar(event,routing)) return true;
@@ -6840,6 +6912,9 @@ void EditorSession::refreshSkinningStatus() {
 }
 void EditorSession::update() {
   state_.document=playInspecting()?&playScene_.document():&document_;
+  state_.uiTime=clockPrimed_?lastWallSeconds_:0;
+  // Travado num objeto que deixou de existir (apagado, outra cena): volta a seguir a seleção.
+  if(state_.inspectorLocked && !state_.document->exists(state_.inspectorLocked)) state_.inspectorLocked=0;
   // O campo acabou de abrir: o texto é o valor atual formatado, a base do
   // `+=` e da prévia. Fechar e abrir outro recomeça no teclado numérico.
   if(state_.numericField!=numericFieldSeen_) {
@@ -6855,13 +6930,18 @@ void EditorSession::update() {
   state_.cameraPreviewDiagnostic=cameraPreview_.diagnostic();
   state_.cameraPreviewWidth=cameraPreview_.width();state_.cameraPreviewHeight=cameraPreview_.height();
   state_.cameraPreviewFrequency=cameraPreview_.frequency();
-  refreshImportLinkView();
+  // As leituras que o Inspector mostra vêm do objeto que ELE mostra (travado
+  // ou a seleção), não necessariamente do que está selecionado na cena.
+  inInspectorScope(state_.inspectorLocked,[&] {
+    refreshImportLinkView();
+    refreshMaterialSlotView();
+    refreshLodStatus();
+    refreshSkinningStatus();
+    return true;
+  });
   // R4: miniaturas nascem uma por atualização enquanto o seletor está aberto.
   if(state_.texturePicker || (state_.textureManager && !state_.textureManagerSources)) generatePendingTextureThumbnail();
   if(state_.textureManager && state_.textureManagerSources) generatePendingSourceThumbnail();
-  refreshMaterialSlotView();
-  refreshLodStatus();
-  refreshSkinningStatus();
   // S4: contagem para a linha do painel Qualidade e a página do explorador.
   if(state_.qualityPanel || state_.lightExplorer) refreshLightExplorer();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;

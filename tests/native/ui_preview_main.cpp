@@ -314,6 +314,17 @@ int main(int argc, char **argv) {
     if(std::string(argv[4])=="picker-table") {state.pickerView=2;state.referenceTypeFilter=false;}
     if(std::string(argv[4])=="picker") state.referenceHighlight=2;
   }
+  // Inspector travado num objeto e em modo Debug, com outro objeto selecionado.
+  if(argc>4 && std::string(argv[4]).starts_with("inspector-debug")) {
+    const auto locked=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Lanterna");
+    auto value=*document.find(locked);value.components.add(scene::Light::descriptor);value.components.add(scene::PhysicsBody::descriptor);
+    value.components.add(scene::Collider::descriptor);
+    document.applyEntityValues(locked,value);
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Outro objeto");
+    state.inspectorLocked=locked;state.componentSelection=locked;
+    state.inspectorDebug=std::string(argv[4])=="inspector-debug";
+    state.pingEntity=locked;state.pingUntil=1;state.uiTime=0;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

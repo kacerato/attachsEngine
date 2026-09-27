@@ -184,9 +184,21 @@ float UiFont::layoutLine(std::string_view text, UiFontWeight weight, const UiTyp
 
   const float tracking = style.tracking * style.size;
   float pen = penBaseline.x;
-  for (usize cursor=0;cursor<text.size();) {
-    u32 codepoint = nextUiCodepoint(text,cursor);
-    if (style.uppercase) codepoint = toUpperAscii(codepoint);
+  u32 pending[3];
+  u32 pendingCount = 0, pendingAt = 0;
+  for (usize cursor=0;cursor<text.size() || pendingAt<pendingCount;) {
+    u32 codepoint;
+    if (pendingAt < pendingCount) codepoint = pending[pendingAt++];
+    else {
+      codepoint = nextUiCodepoint(text,cursor);
+      if (style.uppercase) codepoint = toUpperAscii(codepoint);
+      // Pontuação fora do atlas: desenha o equivalente (ui_text.h), igual à medida.
+      if (codepoint > kUiLastGlyph && (pendingCount = uiLatinFallback(codepoint, pending)) != 0) {
+        codepoint = pending[0];
+        pendingAt = 1;
+      } else pendingCount = pendingAt = 0;
+    }
+    if (pendingAt >= pendingCount) pendingCount = pendingAt = 0;
     const UiGlyph *entry = glyph(weight, codepoint);
     if (entry == nullptr) {
       // Fora da tabela: avança como um espaço e não desenha. É o mesmo que

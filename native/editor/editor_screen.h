@@ -390,6 +390,9 @@ enum class EditorWidget : u32 {
   // tipo, escolher o destacado e os resultados.
   ReferenceModeToggle=0xC5000000u, ReferenceTypeFilter, ReferenceAssign, ReferenceViewBase=0xC5000010u,
   ReferenceResultBase=0xC5010000u,
+  // Gestão do Inspector (Unity Manual/InspectorOptions e InspectorFocused):
+  // cadeado, modo Debug e Ping.
+  InspectorLock=0xC6000000u, InspectorDebugToggle, InspectorPing,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -496,7 +499,8 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentEnumPickerClose,kRange},{EditorWidget::ScriptArraySizeBase,kRange},
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
-  {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange}};
+  {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
+  {EditorWidget::InspectorLock,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -623,6 +627,15 @@ struct EditorScreenState final {
   // Seletor avançado (preferência do projeto), visão 0 lista/1 grade/2 tabela,
   // filtro de tipo ligado e o resultado destacado (painel de inspeção).
   bool pickerAdvanced=false,referenceTypeFilter=true;
+  // Inspector travado num objeto (Unity: cadeado); 0 segue a seleção. O alvo
+  // de quem abriu o modal aberto (seletor, lista de enumeração, Add) — o
+  // Inspector travado, um focado ou a seleção.
+  EditorEntityId inspectorLocked=0,inspectorTarget=0;
+  // Modo Debug do Inspector (Unity ⋮ > Debug): valores crus, só leitura.
+  bool inspectorDebug=false;
+  // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
+  EditorEntityId pingEntity=0;
+  double pingUntil=0,uiTime=0;
   u8 pickerView=0;
   u64 referenceHighlight=0;
   // Tipo declarado do campo de script aberto no seletor: "object" ou

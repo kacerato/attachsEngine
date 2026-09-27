@@ -3223,6 +3223,60 @@ AE_TEST(advanced_object_picker_filters_highlights_and_refuses_incompatible) {
   AE_EXPECT_EQ(editorAdvancedReferenceResults(doc,f.cube,property,"t:corpo port",false).size(),1u,"palavras filtram por nome");
 }
 
+// Unity Manual/InspectorOptions: o cadeado prende o Inspector no objeto e a
+// seleção segue livre; a edição feita nele vai ao objeto travado. ⋮ > Debug
+// mostra os valores crus e ⋮ > Ping revela o objeto na Hierarquia.
+AE_TEST(inspector_lock_debug_mode_and_ping) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto post=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Poste");
+  auto value=*doc.find(post);value.components.add(scene::Light::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(post,value),"poste com luz");
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::InspectorLock));
+  AE_EXPECT_EQ(f.session.screen().inspectorLocked,f.cube,"cadeado prende no cubo");
+  tapWidget(f,hierarchyRowWidget(post));
+  AE_EXPECT_EQ(f.session.screen().selection,post,"a seleção segue livre");
+  // O interruptor do primeiro cartão é o da Malha do cubo, não o da Luz.
+  const auto *mesh=f.session.document().find(f.cube)->components.at(0);
+  const bool before=meshRenderer(*doc.find(f.cube))->enabled;
+  tapWidget(f,widgetId(EditorWidget::ComponentEnableBase));
+  AE_EXPECT_EQ(meshRenderer(*doc.find(f.cube))->enabled,!before,"a edição vai ao objeto travado");
+  AE_EXPECT_TRUE(static_cast<const scene::Light *>(doc.find(post)->components.find(scene::Light::descriptor))->enabled,
+                 "o objeto selecionado não muda");
+  AE_EXPECT_EQ(f.session.screen().selection,post,"editar no travado não rouba a seleção");
+  (void)mesh;
+  // Modo Debug.
+  tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  revealProperty(f,widgetId(EditorWidget::InspectorDebugToggle));
+  tapWidget(f,widgetId(EditorWidget::InspectorDebugToggle));
+  AE_EXPECT_TRUE(f.session.screen().inspectorDebug,"modo Debug ligado");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::PropertyNext)).x>=0,"os valores crus paginam");
+  tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  revealProperty(f,widgetId(EditorWidget::InspectorDebugToggle));
+  tapWidget(f,widgetId(EditorWidget::InspectorDebugToggle));
+  AE_EXPECT_TRUE(!f.session.screen().inspectorDebug,"modo Normal");
+  // Ping com o pai recolhido.
+  const auto parent=doc.find(f.cube)->parent;
+  auto &state=const_cast<EditorScreenState &>(f.session.screen());
+  state.collapsedEntities.push_back(parent);
+  tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  revealProperty(f,widgetId(EditorWidget::InspectorPing));
+  tapWidget(f,widgetId(EditorWidget::InspectorPing));
+  AE_EXPECT_EQ(f.session.screen().pingEntity,f.cube,"ping no objeto do Inspector");
+  AE_EXPECT_TRUE(std::find(f.session.screen().collapsedEntities.begin(),f.session.screen().collapsedEntities.end(),parent)==
+                 f.session.screen().collapsedEntities.end(),"o pai recolhido abre");
+  AE_EXPECT_TRUE(locateWidget(f.session,hierarchyRowWidget(f.cube)).x>=0,"a linha fica visível");
+  // Soltar o cadeado volta a seguir a seleção; apagar o travado também solta.
+  tapWidget(f,widgetId(EditorWidget::InspectorLock));
+  AE_EXPECT_EQ(f.session.screen().inspectorLocked,0u,"cadeado aberto");
+  f.session.setSelection(post);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::InspectorLock));
+  AE_EXPECT_EQ(f.session.screen().inspectorLocked,post,"travado no poste");
+  AE_EXPECT_TRUE(history.destroyEntity(doc,post),"poste apagado");
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().inspectorLocked,0u,"objeto apagado solta o cadeado");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

@@ -1573,6 +1573,25 @@ private:
   // hoje, o seletor de objeto Clássico ou Avançado (Unity: Preferences > Search).
   void loadEditorPreferences();
   void saveEditorPreferences();
+  // Inspector com alvo próprio (travado; focados no bloco seguinte): os toques
+  // dentro dele, e nos modais que ele abriu, rodam com a seleção trocada pelo
+  // alvo — os tratadores continuam lendo "a seleção" — e ela volta depois,
+  // salvo quando o próprio tratador escolheu outro objeto de propósito.
+  std::vector<std::pair<u32,EditorEntityId>> inspectorPointers_;
+  EditorEntityId inspectorScopeFor(const ui::UiPointerEvent &event);
+  bool inspectorModalOpen() const noexcept;
+  template<class F> auto inInspectorScope(EditorEntityId target,F &&body) {
+    if(!target || target==state_.selection || !document_.exists(target)) return body();
+    const auto saved=state_.selection;
+    state_.selection=target;
+    auto result=body();
+    if(state_.selection==target) state_.selection=saved;
+    return result;
+  }
+public:
+  // Ping (Unity): abre os pais, rola a Hierarquia até o objeto e pisca a linha.
+  void pingEntity(EditorEntityId id);
+private:
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;

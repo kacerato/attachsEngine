@@ -29,6 +29,12 @@ float measureTextWidth(std::string_view text, const UiFontMetrics &metrics,
   usize count=0;
   for (usize cursor=0;cursor<text.size();++count) {
     const u32 codepoint = nextUiCodepoint(text,cursor);
+    u32 substitutes[3];
+    if (const u32 n = codepoint > kUiLastGlyph ? uiLatinFallback(codepoint, substitutes) : 0u) {
+      for (u32 i = 0; i < n; ++i) width += metrics.advanceOf(substitutes[i]);
+      count += n - 1;
+      continue;
+    }
     width += metrics.advanceOf(style.uppercase ? toUpperAscii(codepoint) : codepoint);
   }
   const float trackingPixels = style.tracking * style.size * static_cast<float>(count);
@@ -59,9 +65,11 @@ usize truncateToWidth(std::string_view text, const UiFontMetrics &metrics,
   for (usize cursor=0;cursor<text.size();) {
     const usize index=cursor;
     const u32 codepoint=nextUiCodepoint(text,cursor);
-    const float advance =
-        metrics.advanceOf(style.uppercase ? toUpperAscii(codepoint) : codepoint) * style.size +
-        tracking;
+    u32 substitutes[3];
+    const u32 n = codepoint > kUiLastGlyph ? uiLatinFallback(codepoint, substitutes) : 0u;
+    float advance = 0;
+    if (n) for (u32 i = 0; i < n; ++i) advance += metrics.advanceOf(substitutes[i]) * style.size + tracking;
+    else advance = metrics.advanceOf(style.uppercase ? toUpperAscii(codepoint) : codepoint) * style.size + tracking;
     if (width + advance > maximumWidth) return index;
     width += advance;
   }

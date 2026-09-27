@@ -39,6 +39,31 @@ inline u32 nextUiCodepoint(std::string_view text, usize &cursor) noexcept {
   if(value<(count==1?0x80u:count==2?0x800u:0x10000u) || value>0x10ffff || (value>=0xd800&&value<=0xdfff)) return 0xfffd;
   cursor+=count;return value;
 }
+// Pontuação tipográfica fora do atlas (a fonte da interface cobre só
+// U+0020–U+00FF): medida, corte e desenho usam o equivalente Latin-1 mais
+// próximo em vez de um espaço vazio. "‹ Voltar" vira "< Voltar", "…" vira
+// "...". Devolve quantos substitutos escreveu (0 = sem equivalente).
+inline u32 uiLatinFallback(u32 codepoint, u32 (&out)[3]) noexcept {
+  switch (codepoint) {
+    case 0x2039: out[0] = '<'; return 1;                          // ‹
+    case 0x203A: out[0] = '>'; return 1;                          // ›
+    case 0x2026: out[0] = out[1] = out[2] = '.'; return 3;        // …
+    case 0x2013: case 0x2014: case 0x2212: out[0] = '-'; return 1; // – — −
+    case 0x2190: out[0] = '<'; out[1] = '-'; return 2;            // ←
+    case 0x2192: out[0] = '-'; out[1] = '>'; return 2;            // →
+    case 0x2191: out[0] = '^'; return 1;                          // ↑
+    case 0x2193: out[0] = 'v'; return 1;                          // ↓
+    case 0x2022: out[0] = 0xB7; return 1;                         // • → ·
+    case 0x22EE: out[0] = ':'; return 1;                          // ⋮
+    case 0x2018: case 0x2019: out[0] = '\''; return 1;             // ‘ ’
+    case 0x201C: case 0x201D: out[0] = '"'; return 1;             // “ ”
+    case 0x2264: out[0] = '<'; out[1] = '='; return 2;            // ≤
+    case 0x2265: out[0] = '>'; out[1] = '='; return 2;            // ≥
+    case 0x03C0: out[0] = 'p'; out[1] = 'i'; return 2;            // π
+    case 0x2715: case 0x2716: out[0] = 0xD7; return 1;            // ✕ → ×
+    default: return 0;
+  }
+}
 inline u32 uiUppercase(u32 value) noexcept {
   return (value>='a'&&value<='z') || (value>=0xe0&&value<=0xfe&&value!=0xf7) ? value-32:value;
 }

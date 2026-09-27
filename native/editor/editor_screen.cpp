@@ -1243,6 +1243,12 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     if (selected) builder.list.addRect(row, theme.color.accent, theme.radius.thumb);
     else if (builder.isPressed(hierarchyRowWidget(frame.entity)))
       builder.list.addRect(row, theme.color.raised, theme.radius.thumb);
+    // Ping (Unity): a linha pisca em amarelo enquanto dura.
+    if (builder.state.pingEntity == frame.entity && builder.state.uiTime < builder.state.pingUntil) {
+      const float phase = static_cast<float>(builder.state.pingUntil - builder.state.uiTime);
+      const float alpha = .35f + .35f * std::abs(std::sin(phase * 6.f));
+      builder.list.addRect(deflate(row, UiInsets::all(-1)), withAlpha(theme.color.warning, alpha), theme.radius.thumb);
+    }
 
     UiRect rowContent = deflate(row, UiInsets::symmetric(theme.spacing.tiny, 0.0f));
     takeLeft(rowContent, std::min(static_cast<float>(frame.depth) * 14.0f, std::max(0.0f,rowContent.width-110.0f)));
@@ -1261,6 +1267,10 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
         static_cast<UiImageId>(entity->visible ? UiIcon::EditorAuthorEye
                                                : UiIcon::EditorAuthorEyeOff),
         selected ? theme.color.accentInk : theme.color.textDim);
+    // O objeto em que o Inspector está travado leva o cadeado na linha.
+    if (builder.state.inspectorLocked == frame.entity)
+      builder.list.addImage(centred(takeRight(rowContent, 20.0f), 13.0f, 13.0f), static_cast<UiImageId>(UiIcon::SceneLock),
+                            selected ? theme.color.accentInk : theme.color.accent);
     builder.label(rowContent, entity->name, ink, theme.type.body);
 
     // A linha PRIMEIRO, o olho DEPOIS: o roteador testa da última região para a
@@ -2974,7 +2984,7 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
 // atribuem. Incompatíveis aparecem apagados, com o motivo.
 void buildAdvancedReferencePicker(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
-  const auto *entity=state.document?state.document->find(state.selection):nullptr;
+  const auto *entity=state.document?state.document->find(state.inspectorTarget?state.inspectorTarget:state.selection):nullptr;
   if(!entity) return;
   const auto scriptReference=editorScriptReference(state.referenceScriptType);
   const auto *propertyPointer=state.referenceScript?&scriptReference:editorReferenceProperty(*entity,state.referenceInstance,state.referenceProperty);
@@ -3762,7 +3772,7 @@ void buildComponentMenu(ScreenBuilder &builder,UiRect &content,const EditorEntit
 void buildEnumPicker(ScreenBuilder &builder) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   const u32 index=state.enumPicker&0xffu,field=(state.enumPicker>>8)&0xffffu;
-  const auto *entity=state.document->find(state.selection);
+  const auto *entity=state.document->find(state.inspectorTarget?state.inspectorTarget:state.selection);
   const auto *component=entity&&index<entity->components.size()?entity->components.at(index):nullptr;
   if(!component || field>=component->type().enums.size()) return;
   const auto &property=component->type().enums[field];
@@ -4183,6 +4193,91 @@ void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity 
 
 // Ações do objeto no ⋮ do cabeçalho do inspetor: o que se faz COM o objeto
 // selecionado, no painel dele. O menu da hierarquia continua existindo.
+// Modo Debug do Inspector (Unity 6000.0 Manual/InspectorOptions: ⋮ > Debug).
+// Tudo o que o objeto guarda, pelo nome persistente: ids, flags, pose crua,
+// cada propriedade de cada componente pelo id do arquivo, o payload
+// serializado, e nos comportamentos todos os campos autorados — inclusive os
+// ocultos ([HideInInspector]) e os que o código já não declara. Só leitura:
+// editar continua no modo Normal, com validação e Desfazer.
+void buildInspectorDebug(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  struct Row {std::string key,value;bool heading=false;};
+  std::vector<Row> rows;
+  const auto number=[](double v){char text[32];std::snprintf(text,sizeof(text),"%.7g",v);return std::string(text);};
+  rows.push_back({"Objeto","",true});
+  rows.push_back({"id",std::to_string(entity.id)});
+  rows.push_back({"pai",std::to_string(entity.parent)});
+  rows.push_back({"tipo",std::to_string(static_cast<u32>(entity.kind))});
+  rows.push_back({"camada",std::to_string(entity.layer)});
+  rows.push_back({"ativo",entity.active?"true":"false"});
+  rows.push_back({"visível",entity.visible?"true":"false"});
+  rows.push_back({"estático",entity.isStatic?"true":"false"});
+  rows.push_back({"projeta sombra",entity.castShadow?"true":"false"});
+  rows.push_back({"recebe sombra",entity.receiveShadow?"true":"false"});
+  const auto &t=entity.transform;
+  rows.push_back({"posição",number(t.position[0])+" "+number(t.position[1])+" "+number(t.position[2])});
+  rows.push_back({"rotação (graus)",number(t.rotationDegrees[0])+" "+number(t.rotationDegrees[1])+" "+number(t.rotationDegrees[2])});
+  rows.push_back({"escala",number(t.scale[0])+" "+number(t.scale[1])+" "+number(t.scale[2])});
+  for(usize c=0;c<entity.components.size();++c) {
+    const auto &value=*entity.components.at(c);
+    const auto &type=value.type();
+    rows.push_back({std::string(type.id)+" v"+std::to_string(type.version),"#"+std::to_string(value.instanceId()),true});
+    if(const auto *script=scene::scriptBehavior(&value)) {
+      rows.push_back({"script",script->scriptType});
+      rows.push_back({"fonte",script->source});
+      rows.push_back({"enabled",script->enabled?"true":"false"});
+      const auto *schema=scriptSchema(state,script->scriptType);
+      for(const auto &p:script->properties) {
+        std::string note;
+        const EditorScriptProperty *declared=nullptr;
+        if(schema) for(const auto &candidate:schema->properties) if(candidate.id==p.id) declared=&candidate;
+        if(!declared) note=" · fora do código";
+        else if(declared->hidden) note=" · oculto";
+        else if(declared->valueType!=p.valueType) note=" · tipo alterado";
+        rows.push_back({p.id+" ("+p.valueType+")"+note,p.value});
+      }
+      continue;
+    }
+    for(const auto &p:type.numbers) if(p.read) rows.push_back({std::string(p.id),number(p.read(value))});
+    for(const auto &p:type.booleans) if(p.read) rows.push_back({std::string(p.id),p.read(value)?"true":"false"});
+    for(const auto &p:type.enums) if(p.read) rows.push_back({std::string(p.id),std::to_string(p.read(value))});
+    for(const auto &p:type.references) if(p.read) rows.push_back({std::string(p.id),std::to_string(p.read(value))});
+    for(const auto &p:type.slotNumbers) if(p.read)
+      for(u32 slot=0;slot<p.slotCount(value);++slot) rows.push_back({std::string(p.id)+"["+std::to_string(slot)+"]",number(p.read(value,slot))});
+    for(const auto &p:type.resourceBindings) if(p.read)
+      for(u32 slot=0;slot<p.slotCount(value);++slot) rows.push_back({std::string(p.id)+"["+std::to_string(slot)+"]",p.read(value,slot).text()});
+    std::ostringstream payload;payload.imbue(std::locale::classic());value.write(payload);
+    rows.push_back({"payload",payload.str()});
+  }
+  auto banner=takeTop(content,26);
+  builder.list.addRect(banner,withAlpha(theme.color.warning,.16f),theme.radius.control);
+  builder.label(deflate(banner,UiInsets{8,0,8,0}),"Modo Debug · só leitura · menu volta ao Normal",theme.color.warning,theme.type.caption);
+  takeTop(content,4);
+  constexpr float rowHeight=30;
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height-30)/rowHeight));
+  const u32 pages=std::max(1u,(static_cast<u32>(rows.size())+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
+  auto footer=takeBottom(content,30);
+  for(u32 i=page*perPage;i<rows.size() && i<(page+1)*perPage;++i) {
+    auto row=takeTop(content,rowHeight);
+    if(rows[i].heading) {
+      builder.list.addRect(deflate(row,UiInsets{0,2,0,2}),theme.color.silhouette,theme.radius.control);
+      builder.label(deflate(row,UiInsets{8,0,8,0}),rows[i].key,theme.color.accent,theme.type.caption);
+      builder.label(deflate(row,UiInsets{8,0,8,0}),rows[i].value,theme.color.textMuted,theme.type.caption,UiAlign::End);
+      continue;
+    }
+    builder.label(takeLeft(row,row.width*.46f),rows[i].key,theme.color.textDim,theme.type.caption);
+    builder.list.pushClip(row);
+    builder.label(row,rows[i].value,theme.color.text,theme.type.caption);
+    builder.list.popClip();
+  }
+  const auto back=takeLeft(footer,36),forward=takeRight(footer,36);
+  builder.label(back,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  builder.label(forward,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(page) builder.router.addRegion(back,widgetId(EditorWidget::PropertyPrevious));
+  if(page+1<pages) builder.router.addRegion(forward,widgetId(EditorWidget::PropertyNext));
+  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
 void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   auto title=takeTop(content,36),close=takeRight(title,36);
@@ -4202,7 +4297,9 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
       {"Mover para a raiz",EditorWidget::MoveToRoot,!root && entity.parent!=state.document->root()},
       {"Copiar transformação",EditorWidget::TransformCopy,!root},
       {"Colar transformação",EditorWidget::TransformPaste,!root && state.hasTransformClipboard},
-      {"Redefinir transformação",EditorWidget::TransformReset,!root}};
+      {"Redefinir transformação",EditorWidget::TransformReset,!root},
+      {state.inspectorDebug?"Modo Normal":"Modo Debug",EditorWidget::InspectorDebugToggle,true},
+      {"Ping na Hierarquia",EditorWidget::InspectorPing,!root}};
   const u32 count=static_cast<u32>(std::size(actions));
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/38));
   const u32 pages=(count+perPage-1)/perPage,page=std::min(state.propertyPage,pages-1);
@@ -4842,7 +4939,10 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     return;
   }
   const UiTheme &theme = builder.theme;
-  const EditorEntity *entity = builder.state.document->find(builder.state.selection);
+  // O cadeado prende o Inspector num objeto; a seleção segue livre na
+  // Hierarquia e na cena (Unity Manual/InspectorOptions).
+  const EditorEntityId target = builder.state.inspectorLocked ? builder.state.inspectorLocked : builder.state.selection;
+  const EditorEntity *entity = builder.state.document->find(target);
   builder.list.addRect(panel, theme.color.surface);
   builder.router.addBlocker(panel);
   UiRect content = deflate(panel, UiInsets::all(theme.spacing.small));
@@ -4858,6 +4958,9 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
                         static_cast<UiImageId>(iconForEntity(*entity)), theme.color.text);
   builder.iconButton(takeRight(header, 28.0f), UiIcon::EditorAuthorMore,
                      widgetId(EditorWidget::InspectorMenu));
+  builder.iconButton(takeRight(header, 28.0f), UiIcon::SceneLock, widgetId(EditorWidget::InspectorLock),
+                     builder.state.inspectorLocked != 0,
+                     builder.state.inspectorLocked ? theme.color.accentInk : theme.color.textDim);
   takeRight(header, theme.spacing.tiny);
   builder.toggle(takeRight(header, kToggleWidth + 4.0f), entity->active,
                  widgetId(EditorWidget::InspectorActive));
@@ -4876,6 +4979,10 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
                   near?theme.color.warning:theme.color.textDim, theme.type.label);
   }
 
+  if(builder.state.inspectorDebug && !builder.state.inspectorMenu) {
+    buildInspectorDebug(builder,content,*entity);
+    return;
+  }
   if(builder.state.inspectorMenu && builder.state.workspace==EditorWorkspace::Scene) {
     buildObjectActions(builder,content,*entity);
     return;
@@ -6905,8 +7012,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widgetId(actions[i]));
     }
   }
-  if(state.addingComponent && state.componentSelection==state.selection && !state.editingComponentSearch)
-    if(const auto *entity=state.document->find(state.selection)) buildComponentSheet(builder,*entity);
+  // Os modais do Inspector pertencem ao alvo de quem os abriu (travado,
+  // focado ou a seleção), não necessariamente à seleção atual.
+  const EditorEntityId modalTarget=state.inspectorTarget?state.inspectorTarget:state.selection;
+  if(state.addingComponent && state.componentSelection==modalTarget && !state.editingComponentSearch)
+    if(const auto *entity=state.document->find(modalTarget)) buildComponentSheet(builder,*entity);
   if(state.creationMenu && !state.editingCreationSearch) buildCreationSheet(builder,layout);
   if(state.enumPicker) buildEnumPicker(builder);
   // O editor de curvas abre o teclado numérico para tempo e valor da chave:
