@@ -43,9 +43,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 |---|---|---|---|---|
 | 27 | Adicionar, remover, reordenar e editar valores | ✔ | reordenar pelo menu (19, 21) e pelo arraste (20) · `32e4738b` | I1 |
 | 28 | D · Advanced Object Picker (filtro de tipo editável, busca) | ✗ | seletor tem busca; falta filtro visível/editável | I2 |
-| 29 | D · Expressões em campo numérico (`2*3`, `+=5`, `L(a,b)`, `R(a,b)`) | ✗ | teclado numérico só aceita número | I2 |
+| 29 | D · Expressões em campo numérico (`2*3`, `+=5`, `L(a,b)`, `R(a,b)`) | ✔ | avaliador `+ - * / % ^`, funções, pi, relativos, L/R; teclado com operadores e prévia; "Expressão" no teclado do sistema · `88cced9c` | I2 |
 | 30 | D · Curvas | ✗ | ver §6 | I2 |
-| 31 | D · Arrays | ◐ | só lista de clipes da Animação | I2 |
+| 31 | D · Arrays | ✔ | `T[]`/`List<T>` em campos de script; nativos seguem por slot (materiais) e lista de clipes · `1e634f23` | I2 |
 | 32 | D · Bar slider (dividir um todo em partes, ex. LOD) | ◐ | LOD Group tem transições numéricas, sem barra | I2 |
 | 33 | D · Cores e gradientes | ◐ | ver §9 | I2 |
 
@@ -74,12 +74,12 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 45 | Lista de valores ou referências do mesmo tipo | ◐ | tipo de propriedade lista não existe (§4.2) | I2 |
-| 46 | Botão + | ◐ | só clipes | I2 |
-| 47 | Botão − | ◐ | só clipes | I2 |
-| 48 | Campo Size (vários de uma vez) | ✗ | | I2 |
-| 49 | Novo elemento copia o anterior | ✗ | | I2 |
-| 50 | Reordenar arrastando o cabeçalho do elemento | ◐ | clipes sobem/descem por botão | I2 |
+| 45 | Lista de valores ou referências do mesmo tipo | ✔ | "array:<tipo>" para todos os tipos de campo · `1e634f23` | I2 |
+| 46 | Botão + | ✔ | `1e634f23` | I2 |
+| 47 | Botão − | ✔ | remove o escolhido ou o último · `1e634f23` | I2 |
+| 48 | Campo Size (vários de uma vez) | ✔ | crescer repete o último, diminuir corta · `1e634f23` | I2 |
+| 49 | Novo elemento copia o anterior | ✔ | `1e634f23` | I2 |
+| 50 | Reordenar arrastando o cabeçalho do elemento | ✔ | alça do elemento, vira página pela seta; clipes seguem por botão · `1e634f23` | I2 |
 
 ## 6. Use curves — `InspectorCurves.html` (+ D Edit Animation curves)
 
@@ -142,7 +142,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 85 | Vários prefabs (sem Select/Revert/Apply) | ✗ | | P |
 | 86 | Recurso único: importação e propriedades | ◐ | textura e modelo; falta material, áudio etc. | I3 |
 | 87 | Vários recursos: comuns e "—" | ✗ | | I4 |
-| 88 | Script: campos públicos/[SerializeField]; HideInInspector | ◐ | campos expostos por atributo; falta ocultar | I2 |
+| 88 | Script: campos públicos/[SerializeField]; HideInInspector | ✔ | `[SerializeField]` expõe privado, `[HideInInspector]` guarda sem mostrar · `1e634f23` | I2 |
 | 89 | Ping pelo ⋮ | ✗ | | I3 |
 
 ## 11. Unity's interface — `2022.3/UsingTheEditor.html`
@@ -198,7 +198,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 126 | `GetComponent` devolve nulo quando ausente | ✔ | | — |
 | 127 | Campo público de objeto no Inspector + arrastar | ✔ | campo `object` de script aceita objeto arrastado · `b96c358a` | I1 |
 | 128 | Campo de tipo componente (arrastar objeto que o tem) | ✔ | objeto sem o tipo é recusado com o motivo; instância removida aparece "ausente" · `253e3990` | I1 |
-| 129 | Array de referências | ✗ | | I2 |
+| 129 | Array de referências | ✔ | objeto e componente por elemento, seletor por elemento · `1e634f23` | I2 |
 | 130 | Filhos pelo Transform (`childCount`, enumerar) | ✔ | `Children()`, `ChildAt` | — |
 | 131 | `Transform.Find` | ✔ | `GameObject.Find(name)` | — |
 | 132 | `BroadcastMessage` | ✗ | | O1 |
