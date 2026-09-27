@@ -579,6 +579,9 @@ struct EditorScreenState final {
   u64 referenceInstance=0;
   std::string referenceProperty,referenceQuery;
   bool referenceScript=false,editingReferenceSearch=false;
+  // Tipo declarado do campo de script aberto no seletor: "object" ou
+  // "component:<id>" (referência a componente).
+  std::string referenceScriptType;
   u32 referencePage=0;
   // Destino do seletor de recurso. Instância zero mantém o seletor de malha
   // visual existente; valor não zero endereça um binding refletido.

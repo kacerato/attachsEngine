@@ -2128,13 +2128,34 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
     const char *value="Padrão do código";
     for(const auto &p:script.properties) if(p.id==property.id) value=p.valueType==property.valueType?p.value.c_str():"Tipo alterado";
     std::string referenceName;
+    const auto componentType=scene::scriptComponentTypeId(property.valueType);
+    const auto *componentSchema=componentType.empty()?nullptr:scene::findComponentSchema(componentType);
+    bool missing=false;
     if(property.valueType=="object") {
       u64 target=0;for(const auto &p:script.properties) if(p.id==property.id&&p.valueType=="object") {std::istringstream in(p.value);in>>target;}
       const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
       referenceName=!target?"Escolher objeto":object?object->name:"Objeto ausente";value=referenceName.c_str();
+      missing=target&&!object;
+    } else if(!componentType.empty()) {
+      // Referência a componente: "Objeto · Tipo"; a instância que sumiu fica
+      // marcada como ausente, sem cair em outro componente do mesmo objeto.
+      const char *typeName=componentSchema?componentSchema->name:"Componente";
+      u64 target=0,instance=0;
+      for(const auto &p:script.properties) if(p.id==property.id&&p.valueType==property.valueType)
+        scene::parseScriptComponentValue(p.value,target,instance);
+      const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
+      const bool present=object&&object->components.findInstance(instance)&&
+                         object->components.findInstance(instance)->type().id==componentType;
+      referenceName=!target?std::string("Escolher ")+typeName:present?std::string(object->name)+" · "+typeName:
+                    std::string(typeName)+" ausente";
+      value=referenceName.c_str();missing=target&&!present;
     }
     builder.list.addRect(row,theme.color.raised,theme.radius.control);
-    builder.label(row,value,theme.color.text,theme.type.caption);
+    if(componentSchema) {
+      builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(editorIconByName(componentSchema->icon)),
+                            missing?theme.color.warning:theme.color.accent);
+    }
+    builder.label(row,value,missing?theme.color.warning:theme.color.text,theme.type.caption);
     builder.router.addRegion(hit,widgetId(EditorWidget::ScriptFieldBase)+index+(field<<8));
   }
   if(pages>1) {
@@ -2149,10 +2170,16 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
 }
 void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &state=builder.state;const auto &theme=builder.theme;
-  const auto *property=state.referenceScript?&editorAnyObjectReference:editorReferenceProperty(entity,state.referenceInstance,state.referenceProperty);
+  const auto scriptReference=editorScriptReference(state.referenceScriptType);
+  const auto *property=state.referenceScript?&scriptReference:editorReferenceProperty(entity,state.referenceInstance,state.referenceProperty);
+  const auto *requiredSchema=property&&!property->requiredType.empty()?scene::findComponentSchema(property->requiredType):nullptr;
   auto header=takeTop(content,36),back=takeLeft(header,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);builder.router.addRegion(back,widgetId(EditorWidget::ReferenceClose));
-  builder.label(header,property?property->name:"Referência ausente",theme.color.text,theme.type.body);
+  // Campo de componente: o cabeçalho diz qual tipo o objeto precisa ter.
+  if(requiredSchema && state.referenceScript) {
+    builder.list.addImage(centred(takeLeft(header,28),18,18),static_cast<UiImageId>(editorIconByName(requiredSchema->icon)),theme.color.accent);
+    builder.label(header,(std::string("Componente · ")+requiredSchema->name).c_str(),theme.color.text,theme.type.body);
+  } else builder.label(header,property?property->name:"Referência ausente",theme.color.text,theme.type.body);
   if(!property) return;
   auto search=deflate(takeTop(content,38),UiInsets::all(2));builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.referenceQuery.empty()?"Buscar objeto":state.referenceQuery.c_str(),theme.color.textDim,theme.type.caption);
@@ -2168,7 +2195,12 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
     builder.list.addImage(centred(takeLeft(row,36),24,24),static_cast<UiImageId>(UiIcon::EditorAuthorObject),0xffffffff);
     builder.label(takeTop(row,25),object->name,theme.color.text,theme.type.body);
     const auto *parent=state.document->find(object->parent);
-    const auto detail=std::string(parent?parent->name:"Cena")+" · "+std::to_string(object->id)+(object->active?"":" · inativo");
+    auto detail=std::string(parent?parent->name:"Cena")+" · "+std::to_string(object->id)+(object->active?"":" · inativo");
+    // Vários do mesmo tipo: a Unity atribui o primeiro, e o seletor avisa.
+    if(requiredSchema && state.referenceScript) {
+      u32 count=0;for(usize c=0;c<object->components.size();++c) count+=object->components.at(c)->type().id==property->requiredType;
+      if(count>1) detail+=" · "+std::to_string(count)+" deste tipo, usa o 1º";
+    }
     builder.label(row,detail.c_str(),theme.color.textMuted,theme.type.caption);
     builder.router.addRegion(hit,widgetId(EditorWidget::ReferenceChoiceBase)+i);
   }

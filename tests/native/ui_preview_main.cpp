@@ -12,6 +12,8 @@
 // Uso:
 //   aether_ui_preview [saida.ppm] [largura] [altura]
 #include "editor/editor_history.h"
+#include "editor/editor_code_workspace.h"
+#include "scene/script_behavior.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
 #include "editor/editor_component_catalog.h"
@@ -105,6 +107,7 @@ int main(int argc, char **argv) {
 
   editor::EditorScreenState state{};
   editor::EditorConsole console;
+  editor::EditorCodeWorkspace code;
   if(argc>4 && std::string(argv[4]).starts_with("river")) {
     std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
     if(!renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials) || !map.import(document,draws,materials,false)) return 1;
@@ -154,6 +157,42 @@ int main(int argc, char **argv) {
     if(std::string(argv[4])=="play-inspect-refused") {
       state.playEditNote="Recusado em Play · Estático · ver console";
       state.playEditRefused=true;
+    }
+  }
+  // Comportamento com campos de componente (Unity: `public Rigidbody alvo;`):
+  // um atribuído, um cuja instância sumiu e um número, e o seletor filtrado.
+  if(argc>4 && std::string(argv[4]).starts_with("script-component")) {
+    code.applyBuildReport("ASTRA_CODE 1 1 0 1 \"project.Seguidor\" \"Seguidor\" \"Scripts/Seguidor.cs\" 3 "
+                          "\"alvo\" \"Alvo\" \"component:astra.physics.body\" "
+                          "\"camera\" \"Câmera\" \"component:astra.camera\" "
+                          "\"velocidade\" \"Velocidade\" \"float\"",code.generation());
+    code.publishBuild();
+    state.code=&code;
+    const auto crate=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Caixa");
+    auto crateValue=*document.find(crate);
+    const u64 body=crateValue.components.add(scene::PhysicsBody::descriptor)->instanceId();
+    crateValue.components.add(scene::Collider::descriptor);
+    document.applyEntityValues(crate,crateValue);
+    const auto barrel=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Barril");
+    auto barrelValue=*document.find(barrel);
+    barrelValue.components.add(scene::PhysicsBody::descriptor);
+    barrelValue.components.add(scene::Collider::descriptor);
+    barrelValue.components.add(scene::Collider::descriptor);
+    document.applyEntityValues(barrel,barrelValue);
+    document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Luz do poste");
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Jogador");
+    auto value=*document.find(selection);
+    auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+    script->scriptType="project.Seguidor";script->source="Scripts/Seguidor.cs";
+    script->setProperty("alvo","component:astra.physics.body",scene::scriptComponentValue(crate,body));
+    script->setProperty("camera","component:astra.camera",scene::scriptComponentValue(crate,77));
+    script->setProperty("velocidade","float","4.5");
+    const u64 instance=script->instanceId();
+    document.applyEntityValues(selection,value);
+    state.componentSelection=selection;state.expandedScript=instance;
+    if(std::string(argv[4])=="script-component-picker") {
+      state.referenceInstance=instance;state.referenceProperty="alvo";state.referenceScript=true;
+      state.referenceScriptType="component:astra.physics.body";
     }
   }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {

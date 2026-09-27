@@ -111,7 +111,11 @@ void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
   if (p.valueType == "string") jsonString(out, p.value);
   else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
   else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }
-  else if (p.valueType == "vector3") {
+  else if (!scene::scriptComponentTypeId(p.valueType).empty()) {
+    u64 object = 0, instance = 0;
+    scene::parseScriptComponentValue(p.value, object, instance);
+    out << "{\"ObjectId\":" << object << ",\"InstanceId\":" << instance << '}';
+  } else if (p.valueType == "vector3") {
     std::istringstream in(p.value);
     in.imbue(std::locale::classic());
     float x = 0, y = 0, z = 0;

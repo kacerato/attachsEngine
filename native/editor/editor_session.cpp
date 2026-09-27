@@ -2063,7 +2063,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::ReferenceClear)||(key>=widgetId(EditorWidget::ReferenceChoiceBase)&&key<widgetId(EditorWidget::ReferenceChoiceBase)+0x01000000u)) {
       const auto *entity=document_.find(state_.selection);if(!entity||!state_.referenceInstance) return true;
-      const auto *property=state_.referenceScript?&editorAnyObjectReference:editorReferenceProperty(*entity,state_.referenceInstance,state_.referenceProperty);
+      const auto scriptReference=editorScriptReference(state_.referenceScriptType);
+      const auto *property=state_.referenceScript?&scriptReference:editorReferenceProperty(*entity,state_.referenceInstance,state_.referenceProperty);
       if(!property) {state_.referenceInstance=0;return true;}
       u64 target=0;
       if(key!=widgetId(EditorWidget::ReferenceClear)) {
@@ -2089,7 +2090,10 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         }
       }
       EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;request.componentInstance=state_.referenceInstance;request.componentProperty=state_.referenceProperty;
-      if(state_.referenceScript) {request.action=EditorAction::ScriptProperty;request.scriptPropertyType="object";request.scriptPropertyValue=std::to_string(target);}
+      if(state_.referenceScript) {
+        request.action=EditorAction::ScriptProperty;request.scriptPropertyType=state_.referenceScriptType;
+        request.scriptPropertyValue=editorScriptReferenceValue(document_,state_.referenceScriptType,target);
+      }
       else {request.action=EditorAction::ComponentProperty;request.componentType=entity->components.findInstance(state_.referenceInstance)->type().id;request.componentValue=scene::ObjectReference{target};}
       if(dispatch(request).status==EditorActionStatus::Applied) {state_.referenceInstance=0;state_.status="Referência atualizada";}
       else state_.status="A referência não é compatível com este campo";
@@ -2660,8 +2664,9 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         const u32 field=(key&0x00ffffffu)>>8;
         for(const auto &type:code_.scriptTypes()) if(type.id==script->scriptType && field<type.properties.size()) {
           const auto &property=type.properties[field];
-          if(property.valueType=="object") {
+          if(property.valueType=="object" || !scene::scriptComponentTypeId(property.valueType).empty()) {
             state_.referenceInstance=script->instanceId();state_.referenceProperty=property.id;state_.referenceScript=true;
+            state_.referenceScriptType=property.valueType;
             state_.referenceQuery.clear();state_.referencePage=0;return true;
           }
           state_.editingScriptInstance=script->instanceId();state_.editingScriptEntity=entity->id;
@@ -3462,8 +3467,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         bool accepted=false;
         if(event.phase==UiPointerPhase::Up) {
           const auto target=router_.hitTest(event.position);
-          if(target.target==UiPointerTarget::Widget && dropObjectOnField(target.widgetId,entity)) {
-            state_.status="Referência atribuída pelo arraste";return true;
+          // Sobre um campo de referência o gesto é atribuir, nunca reparentear:
+          // a recusa fica com o motivo do campo.
+          const u32 operation=target.widgetId&0xff000000u;
+          if(target.target==UiPointerTarget::Widget && (operation==widgetId(EditorWidget::ComponentReferenceBase) ||
+                                                        operation==widgetId(EditorWidget::ScriptFieldBase))) {
+            if(dropObjectOnField(target.widgetId,entity)) state_.status="Referência atribuída pelo arraste";
+            return true;
           }
           if(target.target==UiPointerTarget::Widget && target.widgetId>=hierarchyRows &&
              target.widgetId<hierarchyRows+EditorDocument::kMaximumEntities)
@@ -5567,9 +5577,18 @@ bool EditorSession::dropObjectOnField(u32 field, EditorEntityId dropped) {
     if(!script) return false;
     const EditorScriptType *type=nullptr;
     for(const auto &candidate:code_.scriptTypes()) if(candidate.id==script->scriptType) type=&candidate;
-    if(!type || property>=type->properties.size() || type->properties[property].valueType!="object") return false;
+    if(!type || property>=type->properties.size()) return false;
+    const auto &declared=type->properties[property].valueType;
+    if(declared!="object" && scene::scriptComponentTypeId(declared).empty()) {
+      state_.status="Este campo não recebe objetos";return false;
+    }
     request.action=EditorAction::ScriptProperty;request.componentProperty=type->properties[property].id;
-    request.scriptPropertyType="object";request.scriptPropertyValue=std::to_string(dropped);
+    request.scriptPropertyType=declared;request.scriptPropertyValue=editorScriptReferenceValue(document_,declared,dropped);
+    if(request.scriptPropertyValue.empty()) {
+      const auto *schema=scene::findComponentSchema(scene::scriptComponentTypeId(declared));
+      state_.status=std::string("O objeto solto não tem ")+(schema?schema->name:"o componente pedido");
+      return false;
+    }
   } else return false;
   if(dispatch(request).status==EditorActionStatus::Applied) return true;
   state_.status="O objeto solto não é compatível com este campo";

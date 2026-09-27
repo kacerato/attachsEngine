@@ -69,7 +69,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                     foreach (var field in schema.Properties)
                         if (authoredTypes.TryGetValue(field.Id, out var kind) && kind != field.ValueType)
                             throw new InvalidDataException("Property type changed; migrate its authored value: " + schema.Name + "." + field.Id);
-                ApplyProperties(instance, schema, attachment.Properties);
+                ApplyProperties(instance, schema, attachment.Properties, scene);
             }
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
             // Awake de todas antes de qualquer Enable/Start: uma pode procurar a
@@ -206,14 +206,14 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         if (!Running) return false;
         var entry = _entries.FirstOrDefault(e => e.Instance.ObjectId == objectId && e.Instance.InstanceId == instanceId);
         if (entry is null) return false;
-        if (edit.Properties is { Count: > 0 } properties) ApplyProperties(entry.Instance, entry.Schema, properties);
+        if (edit.Properties is { Count: > 0 } properties) ApplyProperties(entry.Instance, entry.Schema, properties, _scene!);
         // Uma instância que falhou continua desligada: religá-la pelo Inspector
         // repetiria a exceção a cada quadro sem o usuário ter mudado o código.
         if (!entry.Failed) entry.Instance.Enabled = edit.Enabled;
         return true;
     }
     private static void ApplyProperties(Behavior behavior, ScriptTypeSchema schema,
-        IReadOnlyDictionary<string, JsonElement> values)
+        IReadOnlyDictionary<string, JsonElement> values, ISceneAccess scene)
     {
         var type = behavior.GetType();
         var options = new JsonSerializerOptions { IncludeFields = true };
@@ -224,12 +224,33 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             var member = type.GetProperty(property.Name, BindingFlags.Instance | BindingFlags.Public);
             var memberType = field?.FieldType ?? member?.PropertyType
                 ?? throw new InvalidOperationException("Compiled schema no longer matches its member.");
-            var converted = JsonSerializer.Deserialize(value.GetRawText(), memberType, options);
+            var converted = property.ValueType.StartsWith("component:", StringComparison.Ordinal)
+                ? ComponentValue(scene, value, memberType, property.ValueType["component:".Length..])
+                : JsonSerializer.Deserialize(value.GetRawText(), memberType, options);
             if (field is not null) field.SetValue(behavior, converted);
             else member!.SetValue(behavior, converted);
         }
         // Unknown properties remain in authoring storage; they are not silently
         // written into unrelated fields after a script renames its schema.
+    }
+    /// <summary>
+    /// Campo de componente: {"ObjectId","InstanceId"} vira a fachada tipada. A
+    /// instância removida depois da autoria deixa o campo vazio (o "Missing" da
+    /// Unity) em vez de apontar para outro componente do mesmo objeto.
+    /// </summary>
+    private static object? ComponentValue(ISceneAccess scene, JsonElement value, Type memberType, string typeId)
+    {
+        var facade = Nullable.GetUnderlyingType(memberType) ?? memberType;
+        object? empty = memberType.IsValueType ? Activator.CreateInstance(memberType) : null;
+        var objectId = value.GetProperty("ObjectId").GetUInt64();
+        var instanceId = value.GetProperty("InstanceId").GetUInt64();
+        if (objectId == 0 || instanceId == 0 || !scene.Exists(objectId)) return empty;
+        Component? found = null;
+        foreach (var component in GameObject.Resolve(scene, objectId).Components())
+            if (component.InstanceId == instanceId && component.TypeId == typeId) { found = component; break; }
+        if (found is not { } resolved) return empty;
+        return facade.GetMethod("Wrap", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, [resolved])
+            ?? throw new InvalidOperationException("Component facade has no Wrap: " + facade.FullName);
     }
     public void Dispose()
     {

@@ -87,10 +87,8 @@ bool referenced(const EditorDocument &document, EditorEntityId target) {
         if (property.read && property.read(*component) == target) return true;
       if (const auto *script = scene::scriptBehavior(component))
         for (const auto &property : script->properties) {
-          if (property.valueType != "object") continue;
-          std::istringstream in(property.value);
           u64 value = 0;
-          if (in >> value && value == target) return true;
+          if (scene::scriptPropertyObject(property, value) && value == target) return true;
         }
     }
   }

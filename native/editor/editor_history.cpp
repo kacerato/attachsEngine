@@ -134,9 +134,9 @@ EditorEntityId EditorHistory::duplicateEntity(EditorDocument &document, EditorEn
     auto value=values[i];
     for(usize c=0;c<value.components.size();++c) if(const auto *script=scene::scriptBehavior(value.components.at(c))) {
       auto replacement=*script;
-      for(auto &p:replacement.properties) if(p.valueType=="object") {
-        std::istringstream in(p.value);u64 target=0;in>>target;
-        for(usize j=0;j<ids.size();++j) if(target==ids[j]) {p.value=std::to_string(created[j]);break;}
+      for(auto &p:replacement.properties) {
+        u64 target=0;if(!scene::scriptPropertyObject(p,target)) continue;
+        for(usize j=0;j<ids.size();++j) if(target==ids[j]) {scene::retargetScriptPropertyObject(p,created[j]);break;}
       }
       if(!value.components.replaceInstance(script->instanceId(),replacement)) {end();undo(document);return kInvalidEntity;}
     }

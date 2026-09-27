@@ -2,6 +2,7 @@
 #include "scene/components.h"
 #include <array>
 #include <cstdint>
+#include <string>
 
 namespace ae::scene {
 // Property identity and declared type survive source changes. Unmentioned
@@ -9,8 +10,58 @@ namespace ae::scene {
 struct ScriptPropertyValue {
   std::string id,valueType,value;
 };
+// Campo que referencia um COMPONENTE (Unity: `public Rigidbody body;`). O tipo
+// declarado é "component:<id do tipo>" e o valor "<objeto>:<instância>", com
+// "0:0" para vazio. A instância é a identidade estável do componente dentro do
+// objeto: dois colisores no mesmo objeto são dois valores diferentes.
+inline std::string_view scriptComponentTypeId(std::string_view type) {
+  constexpr std::string_view prefix="component:";
+  return type.starts_with(prefix)?type.substr(prefix.size()):std::string_view{};
+}
+inline bool parseScriptComponentValue(std::string_view text,u64 &object,u64 &instance) {
+  const auto colon=text.find(':');
+  if(colon==std::string_view::npos || colon==0 || colon+1>=text.size()) return false;
+  const auto number=[](std::string_view digits,u64 &out) {
+    if(digits.empty() || digits.size()>20) return false;
+    out=0;
+    for(const char c:digits) {
+      if(c<'0'||c>'9') return false;
+      const u64 digit=static_cast<u64>(c-'0');
+      if(out>(~0ull-digit)/10) return false;
+      out=out*10+digit;
+    }
+    return true;
+  };
+  return number(text.substr(0,colon),object) && number(text.substr(colon+1),instance) && ((object==0)==(instance==0));
+}
+inline std::string scriptComponentValue(u64 object,u64 instance) {
+  return std::to_string(object)+":"+std::to_string(instance);
+}
+// Objeto apontado por um campo "object" ou "component:…"; falso para os demais
+// tipos. Duplicar, reimportar e editar em Play remapeiam por aqui.
+inline bool scriptPropertyObject(const ScriptPropertyValue &p,u64 &object) {
+  u64 instance=0;
+  if(!scriptComponentTypeId(p.valueType).empty()) return parseScriptComponentValue(p.value,object,instance);
+  if(p.valueType!="object") return false;
+  object=0;
+  for(const char c:p.value) {if(c<'0'||c>'9') return false;object=object*10+static_cast<u64>(c-'0');}
+  return !p.value.empty();
+}
+inline void retargetScriptPropertyObject(ScriptPropertyValue &p,u64 object) {
+  u64 previous=0,instance=0;
+  if(!scriptComponentTypeId(p.valueType).empty()) {
+    if(parseScriptComponentValue(p.value,previous,instance)) p.value=scriptComponentValue(object,object?instance:0);
+  } else if(p.valueType=="object") p.value=std::to_string(object);
+}
 inline bool validScriptPropertyValue(std::string_view type,std::string_view text) {
   if(text.size()>4096 || text.find('\0')!=std::string_view::npos) return false;
+  if(const auto component=scriptComponentTypeId(type);!component.empty()) {
+    if(component.size()>256) return false;
+    for(const char c:component)
+      if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-'||c=='/')) return false;
+    u64 object=0,instance=0;
+    return parseScriptComponentValue(text,object,instance);
+  }
   if(type=="string" || type=="asset") return true;
   if(type=="bool") return text=="true" || text=="false";
   std::istringstream in{std::string(text)};in.imbue(std::locale::classic());

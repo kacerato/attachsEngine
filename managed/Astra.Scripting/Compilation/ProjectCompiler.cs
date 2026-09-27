@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -190,7 +191,21 @@ public sealed class ProjectCompiler
         _ = root;
         return types.OrderBy(t => t.Id, StringComparer.Ordinal).ToArray();
     }
-    private static string PropertyKind(ITypeSymbol type) => type.TypeKind == TypeKind.Enum ? "enum" :
+    // Campo de componente (Unity: `public Rigidbody body;`): a fachada gerada em
+    // Astra.Components, direta ou anulável. O id do tipo vem da própria fachada,
+    // que mora neste assembly, então não há segunda tabela de nomes.
+    private static string? FacadeTypeId(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+            type = nullable.TypeArguments[0];
+        if (type.TypeKind != TypeKind.Struct || type.ContainingNamespace?.ToDisplayString() != "Astra.Components") return null;
+        var facade = typeof(Behavior).Assembly.GetType(type.ToDisplayString());
+        if (facade is null || !facade.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(Astra.Components.IComponentFacade<>)))
+            return null;
+        return facade.GetProperty("TypeId", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) as string;
+    }
+    private static string PropertyKind(ITypeSymbol type) => FacadeTypeId(type) is { } component ? "component:" + component :
+        type.TypeKind == TypeKind.Enum ? "enum" :
         type.SpecialType switch
         {
             SpecialType.System_Boolean => "bool", SpecialType.System_Int32 => "int32",
@@ -203,7 +218,8 @@ public sealed class ProjectCompiler
         };
     private static bool Supported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
         type.SpecialType is SpecialType.System_Boolean or SpecialType.System_Int32 or SpecialType.System_Single or SpecialType.System_String ||
-        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference";
+        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" ||
+        FacadeTypeId(type) is not null;
     private static string? AttributeId(ISymbol symbol, string attribute) => symbol.GetAttributes()
         .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attribute)?.ConstructorArguments.FirstOrDefault().Value as string;
     private static bool ValidId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 256 &&

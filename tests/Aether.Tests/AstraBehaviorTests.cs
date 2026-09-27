@@ -111,6 +111,59 @@ public static class AstraBehaviorTests
         world.FixedUpdate(1f / 60); Assert.Close(8, scene.Force.X, what: "desligada pelo Inspector não recebe FixedUpdate");
         Assert.False(world.Edit(1, 99, new BehaviorEdit(true, null)), "instância inexistente é recusada");
     }
+    private sealed class ComponentScene : ISceneAccess
+    {
+        public bool Exists(ulong id) => id is 1 or 2;
+        public uint WorldId => 7;
+        public uint GenerationOf(ulong id) => Exists(id) ? 1u : 0u;
+        public WorldStatus LastStatus => WorldStatus.Ok;
+        public TransformValue GetTransform(ulong id) => new(Vector3.Zero, Quaternion.Identity, Vector3.One);
+        public bool SetTransform(ulong id, TransformValue value) => Exists(id);
+        public bool SetBodyVelocity(ulong id, Vector3 velocity) => Exists(id);
+        public bool MoveKinematic(ulong id, Vector3 position, Quaternion rotation) => Exists(id);
+        public bool AddForce(ulong id, Vector3 value) => Exists(id);
+        public bool AddImpulse(ulong id, Vector3 value) => Exists(id);
+        public bool AddTorque(ulong id, Vector3 value) => Exists(id);
+        public bool AddAngularImpulse(ulong id, Vector3 value) => Exists(id);
+        public Vector3 GetBodyVelocity(ulong id) => Vector3.Zero;
+        public readonly List<string> Events = [];
+        public void Log(ulong id, string message) => Events.Add(message);
+        // O objeto 2 tem dois componentes: um colisor (40) e um corpo físico (41).
+        public int ComponentCount(ulong objectId) => objectId == 2 ? 2 : 0;
+        public (ulong Instance, string TypeId) ComponentAt(ulong objectId, uint index) =>
+            index == 0 ? (40ul, "astra.physics.collider") : (41ul, "astra.physics.body");
+    }
+    private const string ComponentFieldSource = """
+        using Astra;
+        using Astra.Components;
+        [ComponentId("test.follow")]
+        public sealed class Follow : Behavior
+        {
+            [PropertyId("body")] public PhysicsBody? Body;
+            [PropertyId("wrong")] public PhysicsBody? Wrong;
+            public override void Start() => Scene.Log(ObjectId, "body:" + (Body?.InstanceId ?? 0) + " wrong:" + (Wrong?.InstanceId ?? 0));
+        }
+        """;
+
+    // Unity: campo `public Rigidbody body;`. O compilador publica o tipo exigido e
+    // o mundo entrega a fachada daquela instância; instância de outro tipo ou
+    // inexistente deixa o campo vazio (o "Missing" da Unity).
+    [Test]
+    public static void ComponentField_ResolvesTheAuthoredInstanceToItsFacade()
+    {
+        using var project = new Project(ComponentFieldSource); var compiled = project.Compile();
+        var schema = compiled.Types.Single();
+        Assert.Equal("component:astra.physics.body", schema.Properties.Single(p => p.Id == "body").ValueType);
+        using var world = new BehaviorWorld(); var scene = new ComponentScene();
+        world.Start(compiled, scene, [new(1, 10, "test.follow", true, new Dictionary<string, JsonElement>
+        {
+            ["body"] = JsonSerializer.SerializeToElement(new { ObjectId = 2ul, InstanceId = 41ul }),
+            ["wrong"] = JsonSerializer.SerializeToElement(new { ObjectId = 2ul, InstanceId = 40ul })
+        })]);
+        Assert.Equal("body:41 wrong:0", string.Join(' ', scene.Events),
+                     "instância do tipo certo vira fachada; a de outro tipo fica vazia");
+        Assert.Equal(0, world.Failures.Count, "campo de componente aceito no Start");
+    }
     private const string LifecycleSource = """
         using Astra;
         [ComponentId("test.life")]

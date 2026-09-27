@@ -167,13 +167,10 @@ private:
                                       [&](const auto &p) { return p.id == property.id; });
       if (match == old.properties.end() || match->value != property.value || match->valueType != property.valueType) {
         changed.push_back(property);
-        if (property.valueType == "object") {
-          // Objeto criado no espelho durante o Play: o script recebe o id do mundo.
-          std::istringstream in(property.value);
-          u64 target = 0;
-          in >> target;
-          changed.back().value = std::to_string(mapped(static_cast<ObjectId>(target)));
-        }
+        // Objeto criado no espelho durante o Play: o script recebe o id do mundo.
+        u64 target = 0;
+        if (scene::scriptPropertyObject(property, target) && target)
+          scene::retargetScriptPropertyObject(changed.back(), mapped(static_cast<ObjectId>(target)));
       }
     }
     auto applied = next;

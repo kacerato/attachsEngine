@@ -1274,6 +1274,75 @@ AE_TEST(inspector_in_play_edits_the_running_world_and_stop_discards_it) {
   AE_EXPECT_EQ(doc.revision(),revision,"documento idêntico ao de antes do Play");
 }
 
+// Unity Manual/InspectorReferences: um campo cujo tipo é um componente aceita
+// o objeto que o tem e guarda o PRIMEIRO componente daquele tipo; o seletor só
+// lista objetos compatíveis e o arraste de um objeto sem o tipo é recusado.
+AE_TEST(script_component_field_picks_and_drops_objects_that_have_the_component) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  // O ciclo do hospedeiro: projeto aberto, compilação automática pedida,
+  // relatório do compilador e confirmação de que o assembly carregou.
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("aether-campo-componente-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.setCodeCompilerAvailable(true);
+  f.session.pumpCodeAutoBuild(0.0);f.session.pumpCodeAutoBuild(10.0);
+  AE_EXPECT_TRUE(!f.session.takeCodeBuildRequest().empty(),"compilação pedida");
+  AE_EXPECT_TRUE(f.session.completeCodeBuild(
+      "ASTRA_CODE 1 1 0 1 \"project.Seguidor\" \"Seguidor\" \"Scripts/Seguidor.cs\" 1 "
+      "\"alvo\" \"Alvo\" \"component:astra.physics.body\""),"catálogo com campo de componente");
+  f.session.reportCodeCommit(true);
+  // Com o projeto aberto a aba Arquivos divide o painel: o objeto do arraste
+  // vem primeiro para a linha dele caber na Hierarquia.
+  const auto empty=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Vazio");
+  const auto crate=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Caixa");
+  auto crateValue=*doc.find(crate);
+  const u64 body=crateValue.components.add(scene::PhysicsBody::descriptor)->instanceId();
+  crateValue.components.add(scene::Collider::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(crate,crateValue),"objeto com corpo físico");
+  auto value=*doc.find(f.cube);
+  auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Seguidor";script->source="Scripts/Seguidor.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com o comportamento");
+  u32 scriptIndex=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i)
+    if(scene::scriptBehavior(doc.find(f.cube)->components.at(i))) scriptIndex=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ScriptFoldBase)+scriptIndex).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ScriptFoldBase)+scriptIndex);
+  const u32 field=widgetId(EditorWidget::ScriptFieldBase)+scriptIndex;
+  revealProperty(f,field);
+  tapWidget(f,field);
+  AE_EXPECT_EQ(f.session.screen().referenceScriptType,std::string("component:astra.physics.body"),"seletor aberto pelo tipo do campo");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ReferenceChoiceBase)).x>=0 &&
+                 locateWidget(f.session,widgetId(EditorWidget::ReferenceChoiceBase)+1).x<0,
+                 "só o objeto com corpo físico aparece");
+  tapWidget(f,widgetId(EditorWidget::ReferenceChoiceBase));
+  const auto stored=[&] {
+    const auto *current=scene::scriptBehavior(doc.find(f.cube)->components.at(scriptIndex));
+    return current&&!current->properties.empty()?current->properties[0].value:std::string();
+  };
+  AE_EXPECT_EQ(stored(),scene::scriptComponentValue(crate,body),"o campo guarda objeto e instância do componente");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"atribuição é um comando");
+  const auto json=runtime::ScriptBridge::attachments(doc);
+  AE_EXPECT_TRUE(json.find("\"InstanceId\":"+std::to_string(body))!=std::string::npos,"o Play recebe a instância");
+
+  const auto target=locateWidget(f.session,field);
+  const auto row=locateWidget(f.session,hierarchyRowWidget(empty));
+  AE_EXPECT_TRUE(target.x>=0,"campo visível depois de escolher");
+  AE_EXPECT_TRUE(row.x>=0,"linha do objeto vazio visível");
+  f.down(84,row);f.move(84,{row.x+40,row.y});f.move(84,{(row.x+target.x)*.5f,(row.y+target.y)*.5f});
+  f.move(84,target);f.up(84,target);f.session.update();
+  AE_EXPECT_EQ(stored(),scene::scriptComponentValue(crate,body),"objeto sem o componente é recusado");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"a recusa não grava nada");
+  AE_EXPECT_TRUE(f.session.screen().status.find("Corpo")!=std::string::npos ||
+                 f.session.screen().status.find("corpo")!=std::string::npos,f.session.screen().status.c_str());
+}
+
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
