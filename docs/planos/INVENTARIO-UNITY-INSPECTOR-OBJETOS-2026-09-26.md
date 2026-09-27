@@ -96,24 +96,24 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 57 | Abrir Inspector como janela ou aba | A | painel fixo; ver focado (62–69) | I3 |
-| 58 | Vários Inspectors | ✗ | | I3 |
+| 57 | Abrir Inspector como janela ou aba | ✔ | A: painel fixo + janela focada com abas sobre o viewport (uma tela no telefone) · `cba8cc82` | I3 |
+| 58 | Vários Inspectors | ✔ | até 8 abas focadas, cada uma presa ao seu alvo · `cba8cc82` | I3 |
 | 59 | Mostra o que foi escolhido na Hierarchy, Scene ou Project | ◐ | recursos só textura/modelo | I3 |
-| 60 | Modo Debug (campos privados e estado de execução) | ✗ | | I3 |
-| 61 | Voltar ao modo Normal | ✗ | | I3 |
+| 60 | Modo Debug (campos privados e estado de execução) | ✔ | valores crus do esquema e campos de script ocultos · `902b804f` | I3 |
+| 61 | Voltar ao modo Normal | ✔ | ⋮ › Modo Normal · `902b804f` | I3 |
 
 ## 8. Focused Inspectors — `InspectorFocused.html`
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 62 | Travar o Inspector na seleção atual | ✗ | | I3 |
-| 63 | Inspector focado de objeto ou recurso | ✗ | | I3 |
-| 64 | Inspector focado de componente ou referência (Properties) | ✗ | | I3 |
-| 65 | Abrir por ⋮ › Properties | ✗ | | I3 |
-| 66 | Restaurar os focados ao reabrir o projeto | ✗ | | I3 |
-| 67 | Ping (localizar na Hierarchy) | ✗ | | I3 |
-| 68 | Caminho completo do item | ✗ | | I3 |
-| 69 | Abrir focado do item sob o ponteiro | A | toque longo na linha da Hierarchy | I3 |
+| 62 | Travar o Inspector na seleção atual | ✔ | cadeado no cabeçalho; edição vai ao travado · `902b804f` | I3 |
+| 63 | Inspector focado de objeto ou recurso | ◐ | objeto de cena; recurso fica com o bloco de assets (86) · `cba8cc82` | I3 |
+| 64 | Inspector focado de componente ou referência (Properties) | ✔ | aba presa à instância do componente, só aquele cartão · `cba8cc82` | I3 |
+| 65 | Abrir por ⋮ › Properties | ✔ | ⋮ do cartão, ⋮ do Inspector e menu da Hierarquia · `cba8cc82` | I3 |
+| 66 | Restaurar os focados ao reabrir o projeto | ✔ | `.astra/editor-preferences.astra`; volta só se o id ainda é o mesmo objeto · `cba8cc82` | I3 |
+| 67 | Ping (localizar na Hierarchy) | ✔ | abre os pais, rola e pisca a linha · `902b804f` | I3 |
+| 68 | Caminho completo do item | ✔ | linha "Cena / pai / item" na janela focada · `cba8cc82` | I3 |
+| 69 | Abrir focado do item sob o ponteiro | ✔ | A: toque longo na linha da Hierarchy, sem trocar a seleção · `cba8cc82` | I3 |
 
 ## 9. Assign icons — `InspectorAssignIcons.html`
 
@@ -143,7 +143,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 86 | Recurso único: importação e propriedades | ◐ | textura e modelo; falta material, áudio etc. | I3 |
 | 87 | Vários recursos: comuns e "—" | ✗ | | I4 |
 | 88 | Script: campos públicos/[SerializeField]; HideInInspector | ✔ | `[SerializeField]` expõe privado, `[HideInInspector]` guarda sem mostrar · `1e634f23` | I2 |
-| 89 | Ping pelo ⋮ | ✗ | | I3 |
+| 89 | Ping pelo ⋮ | ✔ | ⋮ do Inspector e ⋮ da janela focada · `902b804f` | I3 |
 
 ## 11. Unity's interface — `2022.3/UsingTheEditor.html`
 
