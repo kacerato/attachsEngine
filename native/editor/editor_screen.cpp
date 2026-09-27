@@ -2109,55 +2109,147 @@ const EditorScriptType *scriptSchema(const EditorScreenState &state,std::string_
 }
 void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::ScriptBehavior &script,u32 index) {
   const auto &theme=builder.theme;
-  auto enabled=takeTop(content,38);builder.label(enabled,"Ativo",theme.color.textDim,theme.type.caption);
-  builder.toggle(takeRight(enabled,44),script.enabled,widgetId(EditorWidget::ScriptEnabledBase)+index);
-  auto source=takeTop(content,38);builder.label(source,"Abrir código",theme.color.text,theme.type.caption);
-  builder.router.addRegion(source,widgetId(EditorWidget::ScriptSourceBase)+index);
+  // Ativo mora no interruptor do cabeçalho e "Abrir código" no menu ⋮: repetir
+  // as duas aqui roubava duas das poucas linhas que o telefone tem para campos.
   const auto *schema=scriptSchema(builder.state,script.scriptType);
   if(!schema) {builder.label(content,"Tipo não resolvido; dados preservados",theme.color.textMuted,theme.type.caption);return;}
   usize orphaned=0;
   for(const auto &value:script.properties) if(std::none_of(schema->properties.begin(),schema->properties.end(),[&](const auto &property){return property.id==value.id;})) ++orphaned;
   if(orphaned) builder.label(takeTop(content,30),(std::to_string(orphaned)+" campos preservados fora do schema").c_str(),theme.color.warning,theme.type.caption);
-  const u32 visible=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/40));
-  const u32 pages=std::max(1u,(static_cast<u32>(schema->properties.size())+visible-1)/visible);
-  const u32 page=std::min(builder.state.scriptPropertyPage,pages-1);
-  auto footer=takeBottom(content,32);
-  for(u32 field=page*visible;field<schema->properties.size() && field<(page+1)*visible;++field) {
+  // Uma linha por campo; a lista aberta desdobra Tamanho, elementos e + / −
+  // logo abaixo do próprio campo (Unity Manual/InspectorArray). Campos com
+  // [HideInInspector] ficam fora da tela e continuam no arquivo e no Play.
+  struct Row {enum Kind {Field,Size,Element,Footer} kind;u32 field;u32 element;};
+  std::vector<Row> rows;
+  std::vector<std::vector<std::string>> arrays(schema->properties.size());
+  const auto authored=[&](const EditorScriptProperty &property)->const scene::ScriptPropertyValue * {
+    for(const auto &p:script.properties) if(p.id==property.id && p.valueType==property.valueType) return &p;
+    return nullptr;
+  };
+  for(u32 field=0;field<schema->properties.size();++field) {
     const auto &property=schema->properties[field];
-    auto row=takeTop(content,40);const auto hit=row;
-    builder.label(takeLeft(row,row.width*.43f),property.name.c_str(),theme.color.textDim,theme.type.caption);
-    const char *value="Padrão do código";
-    for(const auto &p:script.properties) if(p.id==property.id) value=p.valueType==property.valueType?p.value.c_str():"Tipo alterado";
-    std::string referenceName;
-    const auto componentType=scene::scriptComponentTypeId(property.valueType);
-    const auto *componentSchema=componentType.empty()?nullptr:scene::findComponentSchema(componentType);
+    if(property.hidden) continue;
+    rows.push_back({Row::Field,field,0});
+    if(scene::scriptArrayElementType(property.valueType).empty() || builder.state.expandedScriptArray!=property.id) continue;
+    if(const auto *value=authored(property)) scene::parseScriptArray(value->value,arrays[field]);
+    rows.push_back({Row::Size,field,0});
+    for(u32 element=0;element<arrays[field].size();++element) rows.push_back({Row::Element,field,element});
+    rows.push_back({Row::Footer,field,0});
+  }
+  // Valor de um campo simples ou de um elemento: referências mostram o nome,
+  // componentes o ícone do tipo e a ausência em cor de aviso.
+  const auto drawValue=[&](UiRect row,std::string_view type,const std::string *text,bool compact=false) {
+    std::string shown=text?*text:std::string("Padrão do código");
     bool missing=false;
-    if(property.valueType=="object") {
-      u64 target=0;for(const auto &p:script.properties) if(p.id==property.id&&p.valueType=="object") {std::istringstream in(p.value);in>>target;}
+    const auto componentType=scene::scriptComponentTypeId(type);
+    const auto *componentSchema=componentType.empty()?nullptr:scene::findComponentSchema(componentType);
+    if(type=="object") {
+      u64 target=0;if(text) {std::istringstream in(*text);in>>target;}
       const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
-      referenceName=!target?"Escolher objeto":object?object->name:"Objeto ausente";value=referenceName.c_str();
-      missing=target&&!object;
+      shown=!target?"Escolher objeto":object?object->name:"Objeto ausente";missing=target&&!object;
     } else if(!componentType.empty()) {
-      // Referência a componente: "Objeto · Tipo"; a instância que sumiu fica
-      // marcada como ausente, sem cair em outro componente do mesmo objeto.
       const char *typeName=componentSchema?componentSchema->name:"Componente";
-      u64 target=0,instance=0;
-      for(const auto &p:script.properties) if(p.id==property.id&&p.valueType==property.valueType)
-        scene::parseScriptComponentValue(p.value,target,instance);
+      u64 target=0,instance=0;if(text) scene::parseScriptComponentValue(*text,target,instance);
       const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
       const bool present=object&&object->components.findInstance(instance)&&
                          object->components.findInstance(instance)->type().id==componentType;
-      referenceName=!target?std::string("Escolher ")+typeName:present?std::string(object->name)+" · "+typeName:
-                    std::string(typeName)+" ausente";
-      value=referenceName.c_str();missing=target&&!present;
-    }
+      // No elemento de lista o tipo já está no cabeçalho e no ícone.
+      shown=!target?std::string("Escolher ")+typeName:present?(compact?std::string(object->name):std::string(object->name)+" · "+typeName):
+            std::string(typeName)+" ausente";
+      missing=target&&!present;
+    } else if(type=="string" && text && text->empty()) shown="(vazio)";
     builder.list.addRect(row,theme.color.raised,theme.radius.control);
-    if(componentSchema) {
+    if(componentSchema)
       builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(editorIconByName(componentSchema->icon)),
                             missing?theme.color.warning:theme.color.accent);
+    else takeLeft(row,6);
+    builder.label(row,shown,missing?theme.color.warning:text?theme.color.text:theme.color.textMuted,theme.type.caption);
+  };
+  const u32 visible=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/40));
+  const u32 pages=std::max(1u,(static_cast<u32>(rows.size())+visible-1)/visible);
+  const u32 page=std::min(builder.state.scriptPropertyPage,pages-1);
+  auto footer=takeBottom(content,32);
+  for(u32 at=page*visible;at<rows.size() && at<(page+1)*visible;++at) {
+    const auto &item=rows[at];
+    const auto &property=schema->properties[item.field];
+    const auto element=scene::scriptArrayElementType(property.valueType);
+    auto row=takeTop(content,40);const auto hit=deflate(row,UiInsets{0,2,0,2});
+    if(item.kind==Row::Field) {
+      builder.label(takeLeft(row,row.width*.43f),property.name.c_str(),theme.color.textDim,theme.type.caption);
+      const auto *value=authored(property);
+      bool changedType=false;
+      for(const auto &p:script.properties) if(p.id==property.id && p.valueType!=property.valueType) changedType=true;
+      auto box=deflate(row,UiInsets{0,2,0,2});
+      if(!element.empty()) {
+        // Cabeçalho da lista: seta, contagem e o tipo dos elementos.
+        std::vector<std::string> items;if(value) scene::parseScriptArray(value->value,items);
+        const bool open=builder.state.expandedScriptArray==property.id;
+        builder.list.addRect(box,open?theme.color.line:theme.color.raised,theme.radius.control);
+        auto inner=box;
+        builder.label(takeLeft(inner,20),open?"v":">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+        const std::string summary=changedType?"Tipo alterado":!value?"Padrão do código":
+            std::to_string(items.size())+(items.size()==1?" elemento":" elementos");
+        builder.label(inner,summary,value?theme.color.text:theme.color.textMuted,theme.type.caption);
+      } else if(changedType) {
+        builder.list.addRect(box,theme.color.raised,theme.radius.control);
+        builder.label(deflate(box,UiInsets{6,0,6,0}),"Tipo alterado",theme.color.warning,theme.type.caption);
+      } else if(property.valueType=="bool") {
+        builder.toggle(takeRight(box,48),value&&value->value=="true",widgetId(EditorWidget::ScriptFieldBase)+index+(item.field<<8));
+        builder.label(box,value?"":"Padrão do código",theme.color.textMuted,theme.type.caption);
+      } else drawValue(box,property.valueType,value?&value->value:nullptr);
+      builder.router.addRegion(hit,widgetId(EditorWidget::ScriptFieldBase)+index+(item.field<<8));
+      continue;
     }
-    builder.label(row,value,missing?theme.color.warning:theme.color.text,theme.type.caption);
-    builder.router.addRegion(hit,widgetId(EditorWidget::ScriptFieldBase)+index+(field<<8));
+    // Linhas da lista aberta, recuadas sob o cabeçalho.
+    takeLeft(row,14);
+    builder.list.addRect({row.x-8,row.y,2,row.height},theme.color.line);
+    if(item.kind==Row::Size) {
+      builder.label(takeLeft(row,row.width*.40f),"Tamanho",theme.color.textDim,theme.type.caption);
+      const auto box=deflate(row,UiInsets{0,2,0,2});
+      builder.list.addRect(box,theme.color.raised,theme.radius.control);
+      builder.label(deflate(box,UiInsets{6,0,6,0}),std::to_string(arrays[item.field].size()).c_str(),theme.color.text,theme.type.caption);
+      builder.router.addRegion(box,widgetId(EditorWidget::ScriptArraySizeBase)+index);
+    } else if(item.kind==Row::Element) {
+      const bool selected=builder.state.scriptArraySelected==item.element+1;
+      const bool lifted=builder.state.scriptArrayDrag==item.element+1;
+      const bool target=builder.state.scriptArrayDrag && builder.state.scriptArrayDragTarget==item.element+1 && !lifted;
+      // Alça: arrastar pela alça reordena, como o ≡ da Unity.
+      const auto handle=takeLeft(row,28);
+      for(u32 line=0;line<3;++line)
+        builder.list.addRect({handle.x+8,handle.y+14+line*5.f,12,2},selected?theme.color.accent:theme.color.textMuted,1);
+      builder.router.addRegion(handle,widgetId(EditorWidget::ScriptArrayHandleBase)+index+(item.element<<8));
+      // Índice num selo curto: "Elemento 12" não cabe ao lado do valor no telefone.
+      const auto badge=centred(takeLeft(row,34),28,24);
+      builder.list.addRect(badge,selected?theme.color.accent:theme.color.silhouette,theme.radius.control);
+      builder.label(badge,std::to_string(item.element).c_str(),selected?theme.color.accentInk:theme.color.textDim,
+                    theme.type.caption,UiAlign::Center);
+      takeLeft(row,4);
+      const auto box=deflate(row,UiInsets{0,2,0,2});
+      if(element=="bool") {
+        builder.list.addRect(box,theme.color.raised,theme.radius.control);
+        auto inner=deflate(box,UiInsets{0,4,4,4});
+        builder.toggle(takeRight(inner,48),arrays[item.field][item.element]=="true",
+                       widgetId(EditorWidget::ScriptArrayElementBase)+index+(item.element<<8));
+      } else drawValue(box,element,&arrays[item.field][item.element],true);
+      if(selected) builder.list.addRect({box.x,box.bottom()-2,box.width,2},theme.color.accent,1);
+      if(lifted) builder.list.addRect(hit,withAlpha(theme.color.voidBlack,.45f),theme.radius.control);
+      if(target) {
+        const float y=builder.state.scriptArrayDragTarget<builder.state.scriptArrayDrag?hit.y-2:hit.bottom()-1;
+        builder.list.addRect({hit.x,y,hit.width,3},theme.color.accent,1);
+      }
+      builder.router.addRegion(box,widgetId(EditorWidget::ScriptArrayElementBase)+index+(item.element<<8));
+    } else {
+      // + copia o último elemento (Unity); − remove o escolhido ou o último.
+      const auto add=takeLeft(row,row.width*.5f-2);takeLeft(row,4);
+      builder.list.addRect(deflate(add,UiInsets{0,3,0,3}),withAlpha(theme.color.accent,.16f),theme.radius.control);
+      builder.label(add,"+ Adicionar",theme.color.accent,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(add,widgetId(EditorWidget::ScriptArrayAddBase)+index);
+      const bool any=!arrays[item.field].empty();
+      builder.list.addRect(deflate(row,UiInsets{0,3,0,3}),theme.color.raised,theme.radius.control);
+      builder.label(row,builder.state.scriptArraySelected&&any?("- Remover "+std::to_string(builder.state.scriptArraySelected-1)).c_str():"- Remover último",
+                    any?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+      if(any) builder.router.addRegion(row,widgetId(EditorWidget::ScriptArrayRemoveBase)+index);
+    }
   }
   if(pages>1) {
     auto previous=takeLeft(footer,40),next=takeRight(footer,40);

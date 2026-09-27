@@ -134,10 +134,10 @@ EditorEntityId EditorHistory::duplicateEntity(EditorDocument &document, EditorEn
     auto value=values[i];
     for(usize c=0;c<value.components.size();++c) if(const auto *script=scene::scriptBehavior(value.components.at(c))) {
       auto replacement=*script;
-      for(auto &p:replacement.properties) {
-        u64 target=0;if(!scene::scriptPropertyObject(p,target)) continue;
-        for(usize j=0;j<ids.size();++j) if(target==ids[j]) {scene::retargetScriptPropertyObject(p,created[j]);break;}
-      }
+      for(auto &p:replacement.properties) scene::remapScriptPropertyObjects(p,[&](u64 target) {
+        for(usize j=0;j<ids.size();++j) if(target==ids[j]) return static_cast<u64>(created[j]);
+        return target;
+      });
       if(!value.components.replaceInstance(script->instanceId(),replacement)) {end();undo(document);return kInvalidEntity;}
     }
     for(usize c=0;c<value.components.size();++c) {

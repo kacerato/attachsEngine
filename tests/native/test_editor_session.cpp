@@ -1438,6 +1438,117 @@ AE_TEST(dragging_component_header_reorders_components_with_undo) {
   AE_EXPECT_EQ(f.session.screen().expandedNative,lightInstance,"toque abre o cartão");
 }
 
+// Unity Manual/InspectorArray: lista em campo de script com Tamanho, + que
+// copia o anterior, − que remove o escolhido, edição por elemento, reordenar
+// pela alça e lista de referências; [HideInInspector] fica fora da tela.
+AE_TEST(script_array_fields_resize_add_remove_edit_reorder_and_hide) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("aether-lista-script-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.setCodeCompilerAvailable(true);
+  f.session.pumpCodeAutoBuild(0.0);f.session.pumpCodeAutoBuild(10.0);
+  AE_EXPECT_TRUE(!f.session.takeCodeBuildRequest().empty(),"compilação pedida");
+  AE_EXPECT_TRUE(f.session.completeCodeBuild(
+      "ASTRA_CODE 3 1 0 1 \"project.Patrulha\" \"Patrulha\" \"Scripts/Patrulha.cs\" 3 "
+      "\"esperas\" \"Esperas\" \"array:float\" 0 "
+      "\"pontos\" \"Pontos\" \"array:component:astra.physics.body\" 0 "
+      "\"semente\" \"Semente\" \"int32\" 1"),"catálogo com listas e campo oculto");
+  f.session.reportCodeCommit(true);
+  const auto post=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Poste");
+  auto postValue=*doc.find(post);
+  const u64 body=postValue.components.add(scene::PhysicsBody::descriptor)->instanceId();
+  postValue.components.add(scene::Collider::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(post,postValue),"alvo com corpo físico");
+  auto value=*doc.find(f.cube);
+  auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Patrulha";script->source="Scripts/Patrulha.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com o comportamento");
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i) if(scene::scriptBehavior(doc.find(f.cube)->components.at(i))) index=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ScriptFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ScriptFoldBase)+index);
+  const auto field=[&](u32 n) {return widgetId(EditorWidget::ScriptFieldBase)+index+(n<<8);};
+  AE_EXPECT_TRUE(locateWidget(f.session,field(2)).x<0,"[HideInInspector] não aparece");
+  const auto stored=[&](const char *id) {
+    const auto *current=scene::scriptBehavior(doc.find(f.cube)->components.at(index));
+    for(const auto &p:current->properties) if(p.id==id) return p.value;
+    return std::string();
+  };
+  // Os campos do script paginam pelas próprias setas: volta ao começo e avança.
+  const auto tap=[&](u32 widget) {
+    for(u32 i=0;i<16 && locateWidget(f.session,widget).x<0 &&
+        locateWidget(f.session,widgetId(EditorWidget::ScriptFieldsPrevious)).x>=0;++i)
+      tapWidget(f,widgetId(EditorWidget::ScriptFieldsPrevious));
+    for(u32 i=0;i<16 && locateWidget(f.session,widget).x<0 &&
+        locateWidget(f.session,widgetId(EditorWidget::ScriptFieldsNext)).x>=0;++i)
+      tapWidget(f,widgetId(EditorWidget::ScriptFieldsNext));
+    tapWidget(f,widget);
+  };
+  const auto element=[&](u32 n) {return widgetId(EditorWidget::ScriptArrayElementBase)+index+(n<<8);};
+
+  tap(field(0));
+  AE_EXPECT_EQ(f.session.screen().expandedScriptArray,std::string("esperas"),"o toque abre a lista");
+  tap(widgetId(EditorWidget::ScriptArrayAddBase)+index);
+  tap(widgetId(EditorWidget::ScriptArrayAddBase)+index);
+  AE_EXPECT_TRUE(stored("esperas")==scene::scriptArrayValue({"0","0"}),(stored("esperas")+" | "+f.session.screen().status).c_str());
+  tap(element(0));
+  auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::ScriptProperty && edit.propertyType=="float" && edit.text=="0",
+                 "o elemento abre o próprio valor com o tipo do elemento");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"1.5",true),"elemento aceito");
+  AE_EXPECT_EQ(stored("esperas"),scene::scriptArrayValue({"1.5","0"}),"só o elemento muda");
+  AE_EXPECT_TRUE(!f.session.completeTextEdit(edit,"abc",true),"resposta tardia não reabre");
+  tap(widgetId(EditorWidget::ScriptArraySizeBase)+index);
+  edit=f.session.pendingTextEdit();
+  AE_EXPECT_EQ(edit.text,std::string("2"),"Tamanho mostra a contagem");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"4",true),"Tamanho aceito");
+  AE_EXPECT_EQ(stored("esperas"),scene::scriptArrayValue({"1.5","0","0","0"}),"crescer repete o último");
+  tap(element(0));
+  f.session.completeTextEdit(f.session.pendingTextEdit(),{},false);
+  tap(widgetId(EditorWidget::ScriptArrayRemoveBase)+index);
+  AE_EXPECT_EQ(stored("esperas"),scene::scriptArrayValue({"0","0","0"}),"− remove o escolhido");
+  tap(element(1));f.session.completeTextEdit(f.session.pendingTextEdit(),"7",true);
+  // A alça do elemento 1 e o elemento 2 podem cair em páginas diferentes no
+  // telefone: o arraste passa pela seta, a página vira e o dedo solta no destino.
+  const u32 lifted=widgetId(EditorWidget::ScriptArrayHandleBase)+index+(1<<8);
+  for(u32 i=0;i<16 && locateWidget(f.session,lifted).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ScriptFieldsPrevious)).x>=0;++i)
+    tapWidget(f,widgetId(EditorWidget::ScriptFieldsPrevious));
+  const auto from=locateWidget(f.session,lifted);
+  AE_EXPECT_TRUE(from.x>=0,"alça visível");
+  f.down(87,from);f.move(87,{from.x,from.y+16});f.session.update();
+  if(locateWidget(f.session,element(2)).x<0) {
+    const auto next=locateWidget(f.session,widgetId(EditorWidget::ScriptFieldsNext));
+    f.move(87,next);f.session.update();
+  }
+  const auto to=locateWidget(f.session,element(2));
+  AE_EXPECT_TRUE(to.x>=0,"destino visível durante o arraste");
+  f.move(87,to);f.up(87,to);f.session.update();
+  AE_EXPECT_EQ(stored("esperas"),scene::scriptArrayValue({"0","0","7"}),"a alça leva o elemento ao destino");
+  const u32 depth=history.undoDepth();
+  AE_EXPECT_TRUE(depth>=6u,"cada mudança da lista é um passo");
+  AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"esperas\":[0,0,7]")!=std::string::npos,
+                 "o Play recebe a lista como vetor");
+
+  tap(field(1));
+  AE_EXPECT_EQ(f.session.screen().expandedScriptArray,std::string("pontos"),"outra lista abre no lugar");
+  tap(widgetId(EditorWidget::ScriptArrayAddBase)+index);
+  tap(element(0));
+  AE_EXPECT_EQ(f.session.screen().referenceScriptElement,1u,"elemento de referência abre o seletor");
+  tapWidget(f,widgetId(EditorWidget::ReferenceChoiceBase));
+  AE_EXPECT_EQ(stored("pontos"),scene::scriptArrayValue({scene::scriptComponentValue(post,body)}),
+               "o elemento guarda objeto e instância do componente");
+  AE_EXPECT_TRUE(history.undo(doc),"Desfazer volta a escolha");
+  AE_EXPECT_EQ(stored("pontos"),scene::scriptArrayValue({"0:0"}),"elemento vazio de novo");
+}
+
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));

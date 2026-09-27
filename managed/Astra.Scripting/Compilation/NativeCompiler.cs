@@ -61,7 +61,8 @@ public static class NativeCompiler
     private static string Quote(string text) => "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     private static string SerializeReport(ScriptBuildResult result)
     {
-        var output = new StringBuilder("ASTRA_CODE 2 ");
+        // Versão 3: cada campo leva também as marcas (1 = oculto no Inspector).
+        var output = new StringBuilder("ASTRA_CODE 3 ");
         output.Append(result.Success ? "1 " : "0 ").Append(result.Diagnostics.Length).Append(' ');
         foreach (var diagnostic in result.Diagnostics)
             output.Append(Quote(diagnostic.File)).Append(' ').Append(diagnostic.Line).Append(' ')
@@ -76,7 +77,7 @@ public static class NativeCompiler
                 .Append(Quote(type.File)).Append(' ').Append(type.Properties.Length).Append(' ');
             foreach (var property in type.Properties)
                 output.Append(Quote(property.Id)).Append(' ').Append(Quote(property.Name)).Append(' ')
-                    .Append(Quote(property.ValueType)).Append(' ');
+                    .Append(Quote(property.ValueType)).Append(' ').Append(property.Hidden ? 1 : 0).Append(' ');
         }
         return output.ToString();
     }

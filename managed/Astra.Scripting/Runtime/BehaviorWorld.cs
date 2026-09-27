@@ -220,13 +220,16 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         foreach (var property in schema.Properties)
         {
             if (!values.TryGetValue(property.Id, out var value)) continue;
-            var field = type.GetField(property.Name, BindingFlags.Instance | BindingFlags.Public);
+            // Não públicos só com [SerializeField]; o compilador já recusou o resto.
+            var field = type.GetField(property.Name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             var member = type.GetProperty(property.Name, BindingFlags.Instance | BindingFlags.Public);
             var memberType = field?.FieldType ?? member?.PropertyType
                 ?? throw new InvalidOperationException("Compiled schema no longer matches its member.");
             var converted = property.ValueType.StartsWith("component:", StringComparison.Ordinal)
                 ? ComponentValue(scene, value, memberType, property.ValueType["component:".Length..])
-                : JsonSerializer.Deserialize(value.GetRawText(), memberType, options);
+                : property.ValueType.StartsWith("array:component:", StringComparison.Ordinal)
+                    ? ComponentList(scene, value, memberType, property.ValueType["array:component:".Length..])
+                    : JsonSerializer.Deserialize(value.GetRawText(), memberType, options);
             if (field is not null) field.SetValue(behavior, converted);
             else member!.SetValue(behavior, converted);
         }
@@ -238,6 +241,15 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     /// instância removida depois da autoria deixa o campo vazio (o "Missing" da
     /// Unity) em vez de apontar para outro componente do mesmo objeto.
     /// </summary>
+    /// <summary>Lista de componentes: cada elemento resolvido como o campo único.</summary>
+    private static object ComponentList(ISceneAccess scene, JsonElement value, Type memberType, string typeId)
+    {
+        var element = memberType.IsArray ? memberType.GetElementType()! : memberType.GetGenericArguments()[0];
+        var items = value.EnumerateArray().Select(item => ComponentValue(scene, item, element, typeId)).ToArray();
+        var array = Array.CreateInstance(element, items.Length);
+        for (var i = 0; i < items.Length; ++i) array.SetValue(items[i], i);
+        return memberType.IsArray ? array : Activator.CreateInstance(memberType, array)!;
+    }
     private static object? ComponentValue(ISceneAccess scene, JsonElement value, Type memberType, string typeId)
     {
         var facade = Nullable.GetUnderlyingType(memberType) ?? memberType;

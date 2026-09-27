@@ -87,8 +87,9 @@ bool referenced(const EditorDocument &document, EditorEntityId target) {
         if (property.read && property.read(*component) == target) return true;
       if (const auto *script = scene::scriptBehavior(component))
         for (const auto &property : script->properties) {
-          u64 value = 0;
-          if (scene::scriptPropertyObject(property, value) && value == target) return true;
+          bool mentioned = false;
+          scene::forEachScriptPropertyObject(property, [&](u64 value) { mentioned = mentioned || value == target; });
+          if (mentioned) return true;
         }
     }
   }

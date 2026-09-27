@@ -357,6 +357,13 @@ enum class EditorWidget : u32 {
   // + índice da opção na lista aberta pelo campo de enumeração.
   ComponentEnumOptionBase=0xBB000000u,
   ComponentEnumPickerClose=0xBC000000u,
+  // Lista em campo de script (Unity Manual/InspectorArray): + índice do
+  // componente; elemento e alça levam também o elemento << 8.
+  ScriptArraySizeBase=0xBD000000u,
+  ScriptArrayElementBase=0xBE000000u,
+  ScriptArrayHandleBase=0xBF000000u,
+  ScriptArrayAddBase=0xC0000000u,
+  ScriptArrayRemoveBase=0xC1000000u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -460,7 +467,9 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentMoveUpBase,kRange},{EditorWidget::ComponentMoveDownBase,kRange},
   {EditorWidget::ComponentPasteNewBase,kRange},{EditorWidget::ComponentHelpBase,kRange},
   {EditorWidget::ComponentEnableBase,kRange},{EditorWidget::ComponentEnumOptionBase,kRange},
-  {EditorWidget::ComponentEnumPickerClose,kRange}};
+  {EditorWidget::ComponentEnumPickerClose,kRange},{EditorWidget::ScriptArraySizeBase,kRange},
+  {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
+  {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -615,6 +624,18 @@ struct EditorScreenState final {
   std::vector<std::string> recentComponents;
   u32 componentPage=0,scriptPropertyPage=0;
   u64 expandedScript=0,scriptMenu=0,editingScriptInstance=0;
+  // Lista de script aberta (id do campo) e o elemento escolhido (índice+1):
+  // "−" remove o escolhido, ou o último quando nenhum está.
+  std::string expandedScriptArray;
+  u32 scriptArraySelected=0;
+  // Texto em edição: elemento (índice+1) da lista aberta, ou o Tamanho.
+  u32 editingScriptElement=0;
+  bool editingScriptArraySize=false;
+  // Seletor de referência aberto para um elemento (índice+1).
+  u32 referenceScriptElement=0;
+  // Arraste pela alça para reordenar elementos (índice+1 do levantado e do alvo).
+  u32 scriptArrayDrag=0,scriptArrayDragTarget=0;
+  ui::UiPoint scriptArrayDragPoint{};
   EditorEntityId editingScriptEntity=0;
   std::string editingScriptProperty,editingScriptType;
   std::shared_ptr<const EditorComponentValue> componentClipboard;

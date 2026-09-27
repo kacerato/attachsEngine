@@ -10,7 +10,7 @@ namespace Astra.Compilation;
 
 public sealed record ScriptDiagnostic(string File, int Line, int Column, string Code, string Message, bool Error,
     string SourceExcerpt = "", int ExcerptLine = 0);
-public sealed record ScriptPropertySchema(string Id, string Name, string ValueType);
+public sealed record ScriptPropertySchema(string Id, string Name, string ValueType, bool Hidden = false);
 public sealed record ScriptTypeSchema(string Id, string Name, string File, ScriptPropertySchema[] Properties);
 public sealed record CompiledProject(string Id, byte[] Assembly, byte[] Symbols, ScriptTypeSchema[] Types);
 public sealed record ScriptBuildResult(CompiledProject? Project, ScriptDiagnostic[] Diagnostics)
@@ -176,14 +176,15 @@ public sealed class ProjectCompiler
                     var propertyId = AttributeId(member, "Astra.PropertyIdAttribute"); if (propertyId is null) continue;
                     var valueType = member switch
                     {
-                        IFieldSymbol field when !field.IsReadOnly && !field.IsStatic && field.DeclaredAccessibility == Accessibility.Public => field.Type,
+                        IFieldSymbol field when !field.IsReadOnly && !field.IsStatic &&
+                            (field.DeclaredAccessibility == Accessibility.Public || AttributeFlag(field, "Astra.SerializeFieldAttribute")) => field.Type,
                         IPropertySymbol property when !property.IsStatic && !property.IsIndexer && property.GetMethod?.DeclaredAccessibility == Accessibility.Public && property.SetMethod?.DeclaredAccessibility == Accessibility.Public => property.Type,
                         _ => null
                     };
                     var name = valueType is null ? null : PropertyKind(valueType);
                     if (!ValidId(propertyId) || !propertyIds.Add(propertyId) || !propertyNames.Add(member.Name) || valueType is null || !Supported(valueType))
                     { Error("Unsupported, duplicate or inaccessible [PropertyId]: " + member.Name); continue; }
-                    properties.Add(new(propertyId, member.Name, name!));
+                    properties.Add(new(propertyId, member.Name, name!, AttributeFlag(member, "Astra.HideInInspectorAttribute")));
                 }
                 types.Add(new(id!, type.ToDisplayString(), tree.FilePath, properties.ToArray()));
             }
@@ -204,7 +205,18 @@ public sealed class ProjectCompiler
             return null;
         return facade.GetProperty("TypeId", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) as string;
     }
-    private static string PropertyKind(ITypeSymbol type) => FacadeTypeId(type) is { } component ? "component:" + component :
+    // Lista (Unity Manual/InspectorArray): `T[]` ou `List<T>` de um tipo de
+    // campo aceito; lista de lista não existe no Inspector.
+    private static ITypeSymbol? ArrayElement(ITypeSymbol type) => type switch
+    {
+        IArrayTypeSymbol { Rank: 1 } array => array.ElementType,
+        INamedTypeSymbol { IsGenericType: true } list when list.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.List<T>" => list.TypeArguments[0],
+        _ => null
+    };
+    private static bool AttributeFlag(ISymbol symbol, string attribute) =>
+        symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attribute);
+    private static string PropertyKind(ITypeSymbol type) => ArrayElement(type) is { } element ? "array:" + ScalarKind(element) : ScalarKind(type);
+    private static string ScalarKind(ITypeSymbol type) => FacadeTypeId(type) is { } component ? "component:" + component :
         type.TypeKind == TypeKind.Enum ? "enum" :
         type.SpecialType switch
         {
@@ -216,7 +228,10 @@ public sealed class ProjectCompiler
                 "Astra.AssetReference" => "asset", _ => "unsupported"
             }
         };
-    private static bool Supported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
+    private static bool Supported(ITypeSymbol type) => ArrayElement(type) is { } element
+        ? ArrayElement(element) is null && ScalarSupported(element)
+        : ScalarSupported(type);
+    private static bool ScalarSupported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
         type.SpecialType is SpecialType.System_Boolean or SpecialType.System_Int32 or SpecialType.System_Single or SpecialType.System_String ||
         type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" ||
         FacadeTypeId(type) is not null;

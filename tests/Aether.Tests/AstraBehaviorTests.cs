@@ -164,6 +164,46 @@ public static class AstraBehaviorTests
                      "instância do tipo certo vira fachada; a de outro tipo fica vazia");
         Assert.Equal(0, world.Failures.Count, "campo de componente aceito no Start");
     }
+    private const string ListFieldSource = """
+        using Astra;
+        using Astra.Components;
+        using System.Collections.Generic;
+        [ComponentId("test.list")]
+        public sealed class Patrol : Behavior
+        {
+            [PropertyId("waits")] public float[] Waits = [];
+            [PropertyId("names")] public List<string> Names = new();
+            [PropertyId("bodies")] public PhysicsBody?[] Bodies = [];
+            [PropertyId("seed"), HideInInspector] public int Seed;
+            [PropertyId("secret"), SerializeField] private int secret;
+            public override void Start() => Scene.Log(ObjectId, string.Join(",", Waits) + "|" + string.Join(",", Names) + "|" +
+                string.Join(",", System.Linq.Enumerable.Select(Bodies, b => b?.InstanceId ?? 0)) + "|" + Seed + "|" + secret);
+        }
+        """;
+
+    // Unity Manual/InspectorArray e [HideInInspector]/[SerializeField]: listas e
+    // campos ocultos/privados chegam ao esquema e à instância no Play.
+    [Test]
+    public static void ListAndAttributeFields_ReachTheSchemaAndTheInstance()
+    {
+        using var project = new Project(ListFieldSource); var compiled = project.Compile();
+        var properties = compiled.Types.Single().Properties.ToDictionary(p => p.Id);
+        Assert.Equal("array:float", properties["waits"].ValueType);
+        Assert.Equal("array:string", properties["names"].ValueType);
+        Assert.Equal("array:component:astra.physics.body", properties["bodies"].ValueType);
+        Assert.True(properties["seed"].Hidden && !properties["waits"].Hidden, "HideInInspector marca só o campo dele");
+        Assert.Equal("int32", properties["secret"].ValueType, "SerializeField expõe o campo privado");
+        using var world = new BehaviorWorld(); var scene = new ComponentScene();
+        world.Start(compiled, scene, [new(1, 10, "test.list", true, new Dictionary<string, JsonElement>
+        {
+            ["waits"] = JsonSerializer.SerializeToElement(new[] { 1.5f, 2f }),
+            ["names"] = JsonSerializer.SerializeToElement(new[] { "a", "b" }),
+            ["bodies"] = JsonSerializer.SerializeToElement(new[] { new { ObjectId = 2ul, InstanceId = 41ul }, new { ObjectId = 2ul, InstanceId = 40ul } }),
+            ["seed"] = JsonSerializer.SerializeToElement(9),
+            ["secret"] = JsonSerializer.SerializeToElement(4)
+        })]);
+        Assert.Equal("1.5,2|a,b|41,0|9|4", string.Join(' ', scene.Events), "listas, oculto e privado aplicados");
+    }
     private const string LifecycleSource = """
         using Astra;
         [ComponentId("test.life")]

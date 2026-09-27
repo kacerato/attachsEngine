@@ -2,7 +2,10 @@
 #include "scene/components.h"
 #include <array>
 #include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace ae::scene {
 // Property identity and declared type survive source changes. Unmentioned
@@ -37,6 +40,36 @@ inline bool parseScriptComponentValue(std::string_view text,u64 &object,u64 &ins
 inline std::string scriptComponentValue(u64 object,u64 instance) {
   return std::to_string(object)+":"+std::to_string(instance);
 }
+// Lista (Unity: campo `float[]`/`List<Transform>`, Manual/InspectorArray): tipo
+// "array:<tipo do elemento>", valor "<N>" seguido de N elementos entre aspas
+// no formato do elemento — `3 "1.5" "2" "4"`. Lista de lista não existe.
+inline constexpr u32 kScriptArrayMaximum=1024;
+inline std::string_view scriptArrayElementType(std::string_view type) {
+  constexpr std::string_view prefix="array:";
+  return type.starts_with(prefix)?type.substr(prefix.size()):std::string_view{};
+}
+inline bool parseScriptArray(std::string_view text,std::vector<std::string> &out) {
+  out.clear();
+  std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
+  u32 count=0;
+  if(!(in>>count) || count>kScriptArrayMaximum) return false;
+  for(u32 i=0;i<count;++i) {std::string element;if(!(in>>std::quoted(element))) return false;out.push_back(std::move(element));}
+  in>>std::ws;return in.eof();
+}
+inline std::string scriptArrayValue(const std::vector<std::string> &elements) {
+  std::ostringstream out;out.imbue(std::locale::classic());
+  out<<elements.size();
+  for(const auto &element:elements) out<<' '<<std::quoted(element);
+  return out.str();
+}
+// Valor de um elemento novo quando a lista está vazia (sem anterior para copiar).
+inline std::string scriptElementDefault(std::string_view type) {
+  if(type=="bool") return "false";
+  if(type=="float"||type=="int32"||type=="enum"||type=="object") return "0";
+  if(type=="vector3") return "0 0 0";
+  if(type.starts_with("component:")) return "0:0";
+  return "";
+}
 // Objeto apontado por um campo "object" ou "component:…"; falso para os demais
 // tipos. Duplicar, reimportar e editar em Play remapeiam por aqui.
 inline bool scriptPropertyObject(const ScriptPropertyValue &p,u64 &object) {
@@ -53,7 +86,43 @@ inline void retargetScriptPropertyObject(ScriptPropertyValue &p,u64 object) {
     if(parseScriptComponentValue(p.value,previous,instance)) p.value=scriptComponentValue(object,object?instance:0);
   } else if(p.valueType=="object") p.value=std::to_string(object);
 }
+// Todos os objetos que o campo cita, inclusive os elementos de uma lista de
+// referências. `remap` troca cada um pelo que a função devolver.
+template<class Visit> void forEachScriptPropertyObject(const ScriptPropertyValue &p,Visit &&visit) {
+  u64 object=0;
+  if(scriptPropertyObject(p,object)) {visit(object);return;}
+  const auto element=scriptArrayElementType(p.valueType);
+  if(element.empty()) return;
+  std::vector<std::string> items;
+  if(!parseScriptArray(p.value,items)) return;
+  for(const auto &item:items) {
+    ScriptPropertyValue single{p.id,std::string(element),item};
+    if(scriptPropertyObject(single,object)) visit(object);
+  }
+}
+template<class Map> void remapScriptPropertyObjects(ScriptPropertyValue &p,Map &&map) {
+  u64 object=0;
+  if(scriptPropertyObject(p,object)) {const u64 target=map(object);if(target!=object) retargetScriptPropertyObject(p,target);return;}
+  const auto element=scriptArrayElementType(p.valueType);
+  if(element.empty()) return;
+  std::vector<std::string> items;
+  if(!parseScriptArray(p.value,items)) return;
+  for(auto &item:items) {
+    ScriptPropertyValue single{p.id,std::string(element),item};
+    if(!scriptPropertyObject(single,object)) continue;
+    const u64 target=map(object);
+    if(target!=object) {retargetScriptPropertyObject(single,target);item=single.value;}
+  }
+  p.value=scriptArrayValue(items);
+}
 inline bool validScriptPropertyValue(std::string_view type,std::string_view text) {
+  if(const auto element=scriptArrayElementType(type);!element.empty()) {
+    if(!scriptArrayElementType(element).empty() || text.size()>256*1024) return false;
+    std::vector<std::string> items;
+    if(!parseScriptArray(text,items)) return false;
+    for(const auto &item:items) if(!validScriptPropertyValue(element,item)) return false;
+    return true;
+  }
   if(text.size()>4096 || text.find('\0')!=std::string_view::npos) return false;
   if(const auto component=scriptComponentTypeId(type);!component.empty()) {
     if(component.size()>256) return false;

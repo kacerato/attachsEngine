@@ -168,9 +168,9 @@ private:
       if (match == old.properties.end() || match->value != property.value || match->valueType != property.valueType) {
         changed.push_back(property);
         // Objeto criado no espelho durante o Play: o script recebe o id do mundo.
-        u64 target = 0;
-        if (scene::scriptPropertyObject(property, target) && target)
-          scene::retargetScriptPropertyObject(changed.back(), mapped(static_cast<ObjectId>(target)));
+        scene::remapScriptPropertyObjects(changed.back(), [&](u64 target) {
+          return target ? static_cast<u64>(mapped(static_cast<ObjectId>(target))) : target;
+        });
       }
     }
     auto applied = next;

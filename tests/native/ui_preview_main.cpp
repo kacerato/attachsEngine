@@ -206,6 +206,40 @@ int main(int argc, char **argv) {
     state.componentReorder=2;state.componentReorderTarget=1;
     state.componentReorderPoint={static_cast<float>(width)-150.0f,190.0f};
   }
+  // Listas em campos de script (Unity Manual/InspectorArray): uma de números e
+  // uma de componentes aberta, com um elemento escolhido e um ausente; um campo
+  // [HideInInspector] que não aparece.
+  if(argc>4 && std::string(argv[4])=="script-array") {
+    code.applyBuildReport("ASTRA_CODE 3 1 0 1 \"project.Patrulha\" \"Patrulha\" \"Scripts/Patrulha.cs\" 4 "
+                          "\"ativo\" \"Ativa\" \"bool\" 0 "
+                          "\"esperas\" \"Esperas\" \"array:float\" 0 "
+                          "\"pontos\" \"Pontos\" \"array:component:astra.physics.body\" 0 "
+                          "\"semente\" \"Semente\" \"int32\" 1",code.generation());
+    code.publishBuild();
+    state.code=&code;
+    std::vector<std::string> bodies;
+    for(const char *name:{"Poste A","Poste B"}) {
+      const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,name);
+      auto value=*document.find(id);
+      const u64 body=value.components.add(scene::PhysicsBody::descriptor)->instanceId();
+      value.components.add(scene::Collider::descriptor);
+      document.applyEntityValues(id,value);
+      bodies.push_back(scene::scriptComponentValue(id,body));
+    }
+    bodies.push_back(scene::scriptComponentValue(bodies.size(),99));
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Guarda");
+    auto value=*document.find(selection);
+    auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+    script->scriptType="project.Patrulha";script->source="Scripts/Patrulha.cs";
+    script->setProperty("ativo","bool","true");
+    script->setProperty("esperas","array:float",scene::scriptArrayValue({"1.5","2","4"}));
+    script->setProperty("pontos","array:component:astra.physics.body",scene::scriptArrayValue(bodies));
+    script->setProperty("semente","int32","7");
+    const u64 instance=script->instanceId();
+    document.applyEntityValues(selection,value);
+    state.componentSelection=selection;state.expandedScript=instance;
+    state.expandedScriptArray="pontos";state.scriptArraySelected=2;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

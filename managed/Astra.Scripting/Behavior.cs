@@ -15,6 +15,20 @@ public sealed class PropertyIdAttribute(string id) : Attribute
 }
 
 /// <summary>
+/// Campo guardado na cena que o Inspector não mostra (Unity: <c>[HideInInspector]</c>).
+/// O valor autoral continua preservado e entregue no Play.
+/// </summary>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true)]
+public sealed class HideInInspectorAttribute : Attribute { }
+
+/// <summary>
+/// Expõe um campo não público, junto com <see cref="PropertyIdAttribute"/>
+/// (Unity: <c>[SerializeField]</c>). Sem ele só campos públicos entram no Inspector.
+/// </summary>
+[AttributeUsage(AttributeTargets.Field, Inherited = true)]
+public sealed class SerializeFieldAttribute : Attribute { }
+
+/// <summary>
 /// O ID autoral é persistido na cena. Referências obtidas em Play também guardam
 /// a sessão e a geração, para não apontarem para outro objeto após Stop/Play.
 /// </summary>

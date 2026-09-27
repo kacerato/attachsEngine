@@ -298,14 +298,14 @@ bool EditorCodeWorkspace::applyBuildReport(std::string_view report,u64 generatio
   if(generation!=generation_) {error_="O código mudou durante a compilação; aplique a versão atual";return false;}
   if(report.size()>4*1024*1024) {error_="Diagnóstico de compilação excede o limite";return false;}
   std::istringstream in{std::string(report)};std::string magic;u32 version=0,success=0,count=0;
-  if(!(in>>magic>>version>>success>>count) || magic!="ASTRA_CODE" || (version!=1 && version!=2) || success>1 || count>4096) {
+  if(!(in>>magic>>version>>success>>count) || magic!="ASTRA_CODE" || version<1 || version>3 || success>1 || count>4096) {
     error_="Resposta inválida do compilador";return false;
   }
   std::vector<EditorCodeDiagnostic> diagnostics;
   for(u32 i=0;i<count;++i) {
     EditorCodeDiagnostic d;u32 error=0;
     if(!(in>>std::quoted(d.file)>>d.line>>d.column>>error>>std::quoted(d.code)>>std::quoted(d.message)) || error>1) return false;
-    if(version==2 && !(in>>d.excerptLine>>std::quoted(d.sourceExcerpt))) return false;
+    if(version>=2 && !(in>>d.excerptLine>>std::quoted(d.sourceExcerpt))) return false;
     d.generation=generation;
     d.error=error!=0;diagnostics.push_back(std::move(d));
   }
@@ -317,6 +317,9 @@ bool EditorCodeWorkspace::applyBuildReport(std::string_view report,u64 generatio
     for(u32 field=0;field<properties;++field) {
       EditorScriptProperty property;
       if(!(in>>std::quoted(property.id)>>std::quoted(property.name)>>std::quoted(property.valueType))) return false;
+      // Versão 3: marcas do campo; 1 = [HideInInspector].
+      u32 flags=0;if(version>=3 && (!(in>>flags) || flags>1)) return false;
+      property.hidden=flags&1u;
       type.properties.push_back(std::move(property));
     }
     types.push_back(std::move(type));

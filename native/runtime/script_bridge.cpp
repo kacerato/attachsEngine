@@ -108,6 +108,17 @@ namespace {
 // Um valor autoral de campo no JSON que o BehaviorWorld converte para o tipo do
 // membro C#. Compartilhado pelos anexos do Start e pela edição ao vivo.
 void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
+  if (const auto element = scene::scriptArrayElementType(p.valueType); !element.empty()) {
+    std::vector<std::string> items;
+    scene::parseScriptArray(p.value, items);
+    out << '[';
+    for (usize i = 0; i < items.size(); ++i) {
+      if (i) out << ',';
+      writeScriptValue(out, {p.id, std::string(element), items[i]});
+    }
+    out << ']';
+    return;
+  }
   if (p.valueType == "string") jsonString(out, p.value);
   else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
   else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }

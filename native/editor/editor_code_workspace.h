@@ -20,7 +20,8 @@ struct EditorCodeBuffer {
   bool dirty() const {return text!=saved;}
 };
 struct EditorCodeMatch {usize offset=0,length=0;u32 line=1,column=1;};
-struct EditorScriptProperty {std::string id,name,valueType;};
+// `hidden`: [HideInInspector] — guardado e entregue no Play, fora do Inspector.
+struct EditorScriptProperty {std::string id,name,valueType;bool hidden=false;};
 struct EditorScriptType {std::string id,name,file;std::vector<EditorScriptProperty> properties;};
 struct EditorCodeDiagnostic {
   std::string file,code,message;

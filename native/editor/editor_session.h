@@ -1517,6 +1517,14 @@ private:
   u32 hierarchyPointer_ = 0;
   u32 reorderPointer_ = 0, reorderPagerHover_ = 0;
   u32 numericFieldSeen_ = 0;
+  u32 scriptArrayPointer_ = 0, scriptArrayPagerHover_ = 0;
+  // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
+  // código) e gravação da lista inteira como um passo de Desfazer.
+  std::vector<std::string> scriptArrayItems(const scene::ScriptBehavior &script,std::string_view id) const;
+  bool setScriptArray(EditorEntityId entity,u64 instance,std::string_view id,std::string_view declaredType,
+                      const std::vector<std::string> &items);
+  const EditorScriptProperty *scriptProperty(std::string_view scriptType,std::string_view id) const;
+  bool handleScriptArrayDrag(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;

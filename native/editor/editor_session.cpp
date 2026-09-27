@@ -743,8 +743,14 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     edit.componentInstance=state_.editingScriptInstance;edit.propertyId=state_.editingScriptProperty;
     edit.propertyType=state_.editingScriptType;
     if(const auto *entity=document_.find(edit.entity))
-      if(const auto *script=scene::scriptBehavior(entity->components.findInstance(edit.componentInstance)))
-        for(const auto &p:script->properties) if(p.id==edit.propertyId) edit.text=p.value;
+      if(const auto *script=scene::scriptBehavior(entity->components.findInstance(edit.componentInstance))) {
+        if(state_.editingScriptArraySize||state_.editingScriptElement) {
+          // Tamanho ou elemento da lista: o campo mostra só aquele valor.
+          const auto items=scriptArrayItems(*script,edit.propertyId);
+          if(state_.editingScriptArraySize) edit.text=std::to_string(items.size());
+          else if(state_.editingScriptElement<=items.size()) edit.text=items[state_.editingScriptElement-1];
+        } else for(const auto &p:script->properties) if(p.id==edit.propertyId) edit.text=p.value;
+      }
     return edit;
   }
   if(state_.renamingResource && !state_.selectedFile.empty()) {
@@ -1027,6 +1033,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
+    state_.editingScriptElement=0;state_.editingScriptArraySize=false;
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
     state_.editingHierarchySearch=false;state_.editingCreationSearch=false;
@@ -1145,6 +1152,29 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
        current.componentInstance!=edit.componentInstance || current.propertyId!=edit.propertyId || current.propertyType!=edit.propertyType) return false;
     const auto *script=scene::scriptBehavior(entity->components.findInstance(edit.componentInstance));
     if(!script) return false;
+    if(state_.editingScriptArraySize || state_.editingScriptElement) {
+      const auto *declared=scriptProperty(script->scriptType,edit.propertyId);
+      const auto element=declared?scene::scriptArrayElementType(declared->valueType):std::string_view{};
+      if(element.empty()) return false;
+      auto items=scriptArrayItems(*script,edit.propertyId);
+      if(state_.editingScriptArraySize) {
+        // Unity: aumentar o Tamanho repete o último elemento; diminuir corta o fim.
+        u32 size=0;std::istringstream in{std::string(text)};
+        if(!(in>>size) || !(in>>std::ws).eof() || size>scene::kScriptArrayMaximum) {
+          state_.status="Tamanho entre 0 e "+std::to_string(scene::kScriptArrayMaximum);return false;
+        }
+        const auto fill=items.empty()?scene::scriptElementDefault(element):items.back();
+        items.resize(size,fill);
+        if(state_.scriptArraySelected>size) state_.scriptArraySelected=0;
+      } else {
+        if(state_.editingScriptElement>items.size() || !scene::validScriptPropertyValue(element,text)) {
+          state_.status="Valor incompatível com o tipo do elemento";return false;
+        }
+        items[state_.editingScriptElement-1]=std::string(text);
+      }
+      if(!setScriptArray(edit.entity,edit.componentInstance,edit.propertyId,declared->valueType,items)) return false;
+      close();return true;
+    }
     auto replacement=*script;
     if(!replacement.setProperty(edit.propertyId,edit.propertyType,text)) {state_.status="Valor incompatível com o tipo do campo";return false;}
     auto value=*entity;
@@ -2107,6 +2137,19 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         }
       }
       EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;request.componentInstance=state_.referenceInstance;request.componentProperty=state_.referenceProperty;
+      if(state_.referenceScript && state_.referenceScriptElement) {
+        // Elemento de uma lista de referências: troca só aquele elemento.
+        const auto *script=scene::scriptBehavior(entity->components.findInstance(state_.referenceInstance));
+        const auto *declared=script?scriptProperty(script->scriptType,state_.referenceProperty):nullptr;
+        const auto value=editorScriptReferenceValue(document_,state_.referenceScriptType,target);
+        auto items=script?scriptArrayItems(*script,state_.referenceProperty):std::vector<std::string>{};
+        if(!declared || value.empty() || state_.referenceScriptElement>items.size()) {state_.status="A referência não é compatível com este campo";return true;}
+        items[state_.referenceScriptElement-1]=value;
+        if(setScriptArray(entity->id,state_.referenceInstance,state_.referenceProperty,declared->valueType,items)) {
+          state_.referenceInstance=0;state_.referenceScriptElement=0;state_.status="Referência atualizada";
+        }
+        return true;
+      }
       if(state_.referenceScript) {
         request.action=EditorAction::ScriptProperty;request.scriptPropertyType=state_.referenceScriptType;
         request.scriptPropertyValue=editorScriptReferenceValue(document_,state_.referenceScriptType,target);
@@ -2659,10 +2702,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       else ++state_.scriptPropertyPage;
       return true;
     }
-    if(key>=widgetId(EditorWidget::ScriptAddBase)&&key<widgetId(EditorWidget::ScriptFieldBase)+0x01000000u) {
+    const u32 keyOperation=key&0xff000000u;
+    const bool arrayWidget=keyOperation>=widgetId(EditorWidget::ScriptArraySizeBase) && keyOperation<=widgetId(EditorWidget::ScriptArrayRemoveBase);
+    if((key>=widgetId(EditorWidget::ScriptAddBase)&&key<widgetId(EditorWidget::ScriptFieldBase)+0x01000000u) || arrayWidget) {
       const auto *entity=document_.find(state_.selection);if(!entity||state_.workspace!=EditorWorkspace::Scene||history_.isOpen()) return true;
       const u32 operation=key&0xff000000u;
-      const u32 index=key&(operation==widgetId(EditorWidget::ScriptFieldBase)?0xffu:0x00ffffffu);
+      const u32 index=key&(operation==widgetId(EditorWidget::ScriptFieldBase)||arrayWidget?0xffu:0x00ffffffu);
       state_.componentSelection=state_.selection;
       if(operation==widgetId(EditorWidget::ScriptAddBase)) {
         if(index>=code_.scriptTypes().size() || !state_.addingComponent) return true;
@@ -2677,13 +2722,60 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         state_.scriptMenu=state_.scriptMenu==script->instanceId()?0:script->instanceId();state_.expandedScript=0;state_.expandedComponent.clear();state_.expandedNative=0;state_.propertyQuery.clear();
       } else if(operation==widgetId(EditorWidget::ScriptSourceBase)) {
         if(code_.open(files_,script->source)) {state_.code=&code_;state_.workspace=EditorWorkspace::Code;} else state_.status=code_.error();
+      } else if(operation==widgetId(EditorWidget::ScriptArraySizeBase) || operation==widgetId(EditorWidget::ScriptArrayElementBase) ||
+                operation==widgetId(EditorWidget::ScriptArrayAddBase) || operation==widgetId(EditorWidget::ScriptArrayRemoveBase)) {
+        const auto *declared=scriptProperty(script->scriptType,state_.expandedScriptArray);
+        const auto element=declared?scene::scriptArrayElementType(declared->valueType):std::string_view{};
+        if(element.empty()) return true;
+        auto items=scriptArrayItems(*script,declared->id);
+        const u32 at=(key&0x00ffffffu)>>8;
+        if(operation==widgetId(EditorWidget::ScriptArraySizeBase)) {
+          state_.editingScriptInstance=script->instanceId();state_.editingScriptEntity=entity->id;
+          state_.editingScriptProperty=declared->id;state_.editingScriptType="int32";state_.editingScriptArraySize=true;
+        } else if(operation==widgetId(EditorWidget::ScriptArrayElementBase)) {
+          if(at>=items.size()) return true;
+          state_.scriptArraySelected=at+1;
+          if(element=="bool") {
+            items[at]=items[at]=="true"?"false":"true";
+            setScriptArray(entity->id,script->instanceId(),declared->id,declared->valueType,items);
+          } else if(element=="object" || !scene::scriptComponentTypeId(element).empty()) {
+            state_.referenceInstance=script->instanceId();state_.referenceProperty=declared->id;state_.referenceScript=true;
+            state_.referenceScriptType=std::string(element);state_.referenceScriptElement=at+1;
+            state_.referenceQuery.clear();state_.referencePage=0;
+          } else {
+            state_.editingScriptInstance=script->instanceId();state_.editingScriptEntity=entity->id;
+            state_.editingScriptProperty=declared->id;state_.editingScriptType=std::string(element);state_.editingScriptElement=at+1;
+          }
+        } else if(operation==widgetId(EditorWidget::ScriptArrayAddBase)) {
+          // Unity: o elemento novo copia o anterior.
+          items.push_back(items.empty()?scene::scriptElementDefault(element):items.back());
+          if(items.size()>scene::kScriptArrayMaximum) {state_.status="Limite de 1024 elementos";return true;}
+          if(setScriptArray(entity->id,script->instanceId(),declared->id,declared->valueType,items)) state_.scriptArraySelected=items.size();
+        } else if(!items.empty()) {
+          const usize removed=state_.scriptArraySelected&&state_.scriptArraySelected<=items.size()?state_.scriptArraySelected-1:items.size()-1;
+          items.erase(items.begin()+static_cast<std::ptrdiff_t>(removed));
+          if(setScriptArray(entity->id,script->instanceId(),declared->id,declared->valueType,items)) state_.scriptArraySelected=0;
+        }
       } else if(operation==widgetId(EditorWidget::ScriptFieldBase)) {
         const u32 field=(key&0x00ffffffu)>>8;
         for(const auto &type:code_.scriptTypes()) if(type.id==script->scriptType && field<type.properties.size()) {
           const auto &property=type.properties[field];
+          if(!scene::scriptArrayElementType(property.valueType).empty()) {
+            // Lista: o toque abre e fecha os elementos logo abaixo do campo.
+            state_.expandedScriptArray=state_.expandedScriptArray==property.id?std::string():property.id;
+            state_.scriptArraySelected=0;return true;
+          }
+          if(property.valueType=="bool") {
+            // Interruptor: grava direto, como a caixa de seleção da Unity.
+            bool on=false;for(const auto &p:script->properties) if(p.id==property.id&&p.valueType=="bool") on=p.value=="true";
+            EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;
+            request.componentInstance=script->instanceId();request.action=EditorAction::ScriptProperty;
+            request.componentProperty=property.id;request.scriptPropertyType="bool";request.scriptPropertyValue=on?"false":"true";
+            dispatch(request);return true;
+          }
           if(property.valueType=="object" || !scene::scriptComponentTypeId(property.valueType).empty()) {
             state_.referenceInstance=script->instanceId();state_.referenceProperty=property.id;state_.referenceScript=true;
-            state_.referenceScriptType=property.valueType;
+            state_.referenceScriptType=property.valueType;state_.referenceScriptElement=0;
             state_.referenceQuery.clear();state_.referencePage=0;return true;
           }
           state_.editingScriptInstance=script->instanceId();state_.editingScriptEntity=entity->id;
@@ -3478,6 +3570,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   }
 
   if(handleComponentReorder(event,routing)) return true;
+  if(handleScriptArrayDrag(event,routing)) return true;
 
   const u32 hierarchyRows=widgetId(EditorWidget::HierarchyRowBase);
   if(routing.widgetId>=hierarchyRows && routing.widgetId<hierarchyRows+EditorDocument::kMaximumEntities) {
@@ -3569,6 +3662,72 @@ void EditorSession::preparePlay() {
     if(characterComponent(*ancestor)) {state_.playHasCharacter=true;break;}
   playRequested_ = true;
   cancelPointers();
+}
+
+std::vector<std::string> EditorSession::scriptArrayItems(const scene::ScriptBehavior &script,std::string_view id) const {
+  std::vector<std::string> items;
+  const auto *declared=scriptProperty(script.scriptType,id);
+  if(!declared) return items;
+  for(const auto &p:script.properties) if(p.id==id && p.valueType==declared->valueType) scene::parseScriptArray(p.value,items);
+  return items;
+}
+
+bool EditorSession::setScriptArray(EditorEntityId entity,u64 instance,std::string_view id,std::string_view declaredType,
+                                   const std::vector<std::string> &items) {
+  EditorActionRequest request;request.version=sceneVersion();request.entity=entity;
+  request.componentInstance=instance;request.action=EditorAction::ScriptProperty;
+  request.componentProperty=std::string(id);request.scriptPropertyType=std::string(declaredType);
+  request.scriptPropertyValue=scene::scriptArrayValue(items);
+  if(dispatch(request).status==EditorActionStatus::Applied) return true;
+  state_.status="Lista recusada pelo tipo do campo";
+  return false;
+}
+
+const EditorScriptProperty *EditorSession::scriptProperty(std::string_view scriptType,std::string_view id) const {
+  for(const auto &type:code_.scriptTypes()) if(type.id==scriptType)
+    for(const auto &property:type.properties) if(property.id==id) return &property;
+  return nullptr;
+}
+
+// Unity Manual/InspectorArray: arrastar a alça de um elemento muda a posição
+// dele na lista. Solto sobre outro elemento, vai para aquele lugar; fora,
+// nada muda. A lista inteira é gravada num passo de Desfazer.
+bool EditorSession::handleScriptArrayDrag(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const u32 handleBase=widgetId(EditorWidget::ScriptArrayHandleBase);
+  const auto handle=[&](u32 widget) {return (widget&0xff000000u)==handleBase || (widget&0xff000000u)==widgetId(EditorWidget::ScriptArrayElementBase);};
+  if(!state_.scriptArrayDrag) {
+    if((routing.widgetId&0xff000000u)!=handleBase || !routing.dragging || event.phase!=UiPointerPhase::Move ||
+       std::abs(routing.totalDelta.y)<12.0f || history_.isOpen()) return false;
+    state_.scriptArrayDrag=((routing.widgetId&0x00ffffffu)>>8)+1;state_.scriptArrayDragTarget=0;
+    scriptArrayPointer_=event.pointerId;scriptArrayPagerHover_=0;
+  }
+  if(event.pointerId!=scriptArrayPointer_) return true;
+  state_.scriptArrayDragPoint=event.position;
+  const auto hover=router_.hitTest(event.position);
+  const u32 over=hover.target==UiPointerTarget::Widget?hover.widgetId:0;
+  state_.scriptArrayDragTarget=handle(over)?((over&0x00ffffffu)>>8)+1:0;
+  // Os campos paginam: passar pela seta durante o arraste vira a página.
+  if(event.phase==UiPointerPhase::Move && over!=scriptArrayPagerHover_) {
+    scriptArrayPagerHover_=over;
+    if(over==widgetId(EditorWidget::ScriptFieldsNext)) ++state_.scriptPropertyPage;
+    else if(over==widgetId(EditorWidget::ScriptFieldsPrevious) && state_.scriptPropertyPage) --state_.scriptPropertyPage;
+  }
+  if(event.phase!=UiPointerPhase::Up && event.phase!=UiPointerPhase::Cancel) return true;
+  const u32 from=state_.scriptArrayDrag-1,to=state_.scriptArrayDragTarget;
+  state_.scriptArrayDrag=0;state_.scriptArrayDragTarget=0;scriptArrayPointer_=0;scriptArrayPagerHover_=0;
+  if(event.phase==UiPointerPhase::Cancel || !to || to-1==from) return true;
+  const auto *entity=document_.find(state_.selection);
+  const auto *script=entity?scene::scriptBehavior(entity->components.findInstance(state_.expandedScript)):nullptr;
+  const auto *declared=script?scriptProperty(script->scriptType,state_.expandedScriptArray):nullptr;
+  if(!declared) return true;
+  auto items=scriptArrayItems(*script,declared->id);
+  if(from>=items.size() || to-1>=items.size()) return true;
+  auto moved=std::move(items[from]);items.erase(items.begin()+from);
+  items.insert(items.begin()+(to-1),std::move(moved));
+  if(setScriptArray(entity->id,script->instanceId(),declared->id,declared->valueType,items)) {
+    state_.scriptArraySelected=to;state_.status="Elemento movido";
+  }
+  return true;
 }
 
 // Unity Manual/UsingComponents: arrastar o cabeçalho de um componente muda a
