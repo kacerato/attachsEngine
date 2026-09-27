@@ -122,7 +122,11 @@ void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
   if (p.valueType == "string") jsonString(out, p.value);
   else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
   else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }
-  else if (!scene::scriptComponentTypeId(p.valueType).empty()) {
+  else if (scene::scriptColorType(p.valueType)) {
+    float rgba[4]{1, 1, 1, 1};
+    scene::parseScriptColor(p.value, rgba);
+    out << "{\"R\":" << rgba[0] << ",\"G\":" << rgba[1] << ",\"B\":" << rgba[2] << ",\"A\":" << rgba[3] << '}';
+  } else if (!scene::scriptComponentTypeId(p.valueType).empty()) {
     u64 object = 0, instance = 0;
     scene::parseScriptComponentValue(p.value, object, instance);
     out << "{\"ObjectId\":" << object << ",\"InstanceId\":" << instance << '}';

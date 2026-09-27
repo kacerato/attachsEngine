@@ -724,6 +724,19 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     if(!playInspecting() || !playMirrorValid_) return edit;
     return const_cast<EditorSession *>(this)->inPlayMirror([this] {return pendingTextEdit();});
   }
+  if(state_.colorField && state_.colorText) {
+    // Hexadecimal, nome de amostra ou nome de biblioteca da janela de cor.
+    edit.purpose=EditorTextPurpose::ColorText;edit.field=state_.colorText;
+    if(state_.colorText==1) {
+      float srgb[3];pickerRgb(state_.colorHue,state_.colorSaturation,state_.colorValue,srgb);
+      edit.text=formatColorHex(srgb,state_.colorAlpha,state_.colorHasAlpha);
+    } else if(state_.colorText==2) {
+      const auto *library=colorLibraries_.currentOrNull();
+      if(library && state_.colorSwatchMenu && state_.colorSwatchMenu<=library->entries.size())
+        edit.text=library->entries[state_.colorSwatchMenu-1].name;
+    }
+    return edit;
+  }
   if(state_.presetNaming) {
     edit.purpose=EditorTextPurpose::ComponentPresetName;edit.entity=state_.presetEntity;
     edit.componentInstance=state_.presetInstance;edit.text=state_.presetName;return edit;
@@ -1033,7 +1046,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
-    state_.editingScriptElement=0;state_.editingScriptArraySize=false;
+    state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
     state_.editingHierarchySearch=false;state_.editingCreationSearch=false;
@@ -1145,6 +1158,24 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     if(files_.exists(path)) {state_.status="Já existe um recurso com esse nome";return false;}
     if(!files_.createDirectory(path)) {state_.status=files_.error();return false;}
     files_.rebuildTree();state_.selectedFile=path;state_.status="Pasta criada: "+path;close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::ColorText) {
+    if(!state_.colorField || edit.field!=state_.colorText) return false;
+    if(state_.colorText==1) {
+      float srgb[3],alpha=state_.colorAlpha;
+      if(!parseColorHex(text,srgb,alpha,state_.colorHasAlpha)) {state_.status="Hexadecimal inválido: use RRGGBB";return false;}
+      float h=state_.colorHue,s=0,v=0;srgbToHsv(srgb,h,s,v);
+      state_.colorHue=h;state_.colorSaturation=s;state_.colorValue=v;state_.colorAlpha=alpha;
+    } else if(state_.colorText==2) {
+      if(!state_.colorSwatchMenu || !colorLibraries_.rename(state_.colorSwatchMenu-1,trimmedName(text))) {
+        state_.status="Nome inválido";return false;
+      }
+      state_.colorSwatchMenu=0;saveColorLibraries();
+    } else {
+      if(!colorLibraries_.createLibrary(trimmedName(text))) {state_.status="Nome de biblioteca inválido ou repetido";return false;}
+      state_.colorLibraryMenu=false;saveColorLibraries();
+    }
+    close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ScriptProperty) {
     const auto *entity=document_.find(edit.entity);
@@ -1493,30 +1524,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   if(cameraGestureOpen_ && routing.target==UiPointerTarget::Widget) finishCameraGesture(false);
-  if(state_.colorField) {
-    if(routing.tapped) {
-      const auto key=routing.widgetId;
-      if(key==widgetId(EditorWidget::ColorCancel)) state_.colorField=0;
-      else if(key>=widgetId(EditorWidget::ColorHueBase)&&key<widgetId(EditorWidget::ColorHueBase)+24)
-        state_.colorHue=(key-widgetId(EditorWidget::ColorHueBase))/24.f;
-      else if(key>=widgetId(EditorWidget::ColorSvBase)&&key<widgetId(EditorWidget::ColorSvBase)+121) {
-        const auto cell=key-widgetId(EditorWidget::ColorSvBase);
-        state_.colorSaturation=(cell%11)/10.f;state_.colorValue=1-(cell/11)/10.f;
-      } else if(key==widgetId(EditorWidget::ColorApply)) {
-        const auto *entity=document_.find(state_.colorEntity);
-        if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
-          state_.colorField=0;state_.status="Cor cancelada: a cena mudou";return true;
-        }
-        auto values=*entity;const auto *component=values.components.findInstance(state_.colorInstance);
-        float rgb[3];pickerRgb(state_.colorHue,state_.colorSaturation,state_.colorValue,rgb);
-        for(auto &channel:rgb) channel=colorToLinear(channel);
-        if(component && scene::setComponentTriple(values.components,component->type().id,state_.colorProperty,rgb,state_.colorInstance)==scene::ComponentPropertyStatus::Applied &&
-           history_.applyValues(document_,entity->id,values)) state_.colorField=0;
-        else state_.status="Cor recusada pelo componente";
-      }
-    }
-    return true;
-  }
+  if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.codeRecoveryPending) {
     if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CodeRecover)) {
       if(code_.restoreRecovery(files_)) {
@@ -2187,9 +2195,9 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         }
         if(!found) return true;
       }
-      state_.colorField=key;state_.colorEntity=entity->id;state_.colorInstance=component->instanceId();
-      state_.colorProperty=triple.id;state_.colorRevision=document_.revision();
-      pickerHsv(rgb,state_.colorHue,state_.colorSaturation,state_.colorValue);return true;
+      state_.colorEntity=entity->id;state_.colorInstance=component->instanceId();
+      state_.colorProperty=triple.id;state_.colorTarget=0;
+      openColorWindow(key,{rgb[0],rgb[1],rgb[2],1},false,false);return true;
     }
     if(key>=widgetId(EditorWidget::ComponentTripleBase) && key<widgetId(EditorWidget::ComponentTripleBase)+0x01000000u) {
       const auto *entity=document_.find(state_.selection);const u32 type=key&0xffu,field=(key&0x00ffffffu)>>8;
@@ -2735,7 +2743,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         } else if(operation==widgetId(EditorWidget::ScriptArrayElementBase)) {
           if(at>=items.size()) return true;
           state_.scriptArraySelected=at+1;
-          if(element=="bool") {
+          if(bool hdr=false,alpha=true;scene::scriptColorType(element,&hdr,&alpha)) {
+            float rgba[4]{1,1,1,1};scene::parseScriptColor(items[at],rgba);
+            state_.colorEntity=entity->id;state_.colorInstance=script->instanceId();state_.colorProperty=declared->id;
+            state_.colorTarget=2;state_.colorScriptType=declared->valueType;state_.colorScriptElement=at+1;
+            openColorWindow(key,rgba,alpha,hdr);
+          } else if(element=="bool") {
             items[at]=items[at]=="true"?"false":"true";
             setScriptArray(entity->id,script->instanceId(),declared->id,declared->valueType,items);
           } else if(element=="object" || !scene::scriptComponentTypeId(element).empty()) {
@@ -2764,6 +2777,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
             // Lista: o toque abre e fecha os elementos logo abaixo do campo.
             state_.expandedScriptArray=state_.expandedScriptArray==property.id?std::string():property.id;
             state_.scriptArraySelected=0;return true;
+          }
+          if(bool hdr=false,alpha=true;scene::scriptColorType(property.valueType,&hdr,&alpha)) {
+            float rgba[4]{1,1,1,1};
+            for(const auto &p:script->properties) if(p.id==property.id&&p.valueType==property.valueType) scene::parseScriptColor(p.value,rgba);
+            state_.colorEntity=entity->id;state_.colorInstance=script->instanceId();state_.colorProperty=property.id;
+            state_.colorTarget=1;state_.colorScriptType=property.valueType;state_.colorScriptElement=0;
+            openColorWindow(key,rgba,alpha,hdr);return true;
           }
           if(property.valueType=="bool") {
             // Interruptor: grava direto, como a caixa de seleção da Unity.
@@ -3727,6 +3747,144 @@ bool EditorSession::handleScriptArrayDrag(const UiPointerEvent &event,const UiPo
   if(setScriptArray(entity->id,script->instanceId(),declared->id,declared->valueType,items)) {
     state_.scriptArraySelected=to;state_.status="Elemento movido";
   }
+  return true;
+}
+
+void EditorSession::pickerFromLinear(const float (&linearRgba)[4]) {
+  float base[3],intensity=0;splitHdr({linearRgba[0],linearRgba[1],linearRgba[2]},base,intensity);
+  float srgb[3];for(u32 i=0;i<3;++i) srgb[i]=colorToSrgb(base[i]);
+  float h=state_.colorHue,s=0,v=0;srgbToHsv(srgb,h,s,v);
+  state_.colorHue=h;state_.colorSaturation=s;state_.colorValue=v;
+  state_.colorAlpha=state_.colorHasAlpha?std::clamp(linearRgba[3],0.f,1.f):1;
+  state_.colorIntensity=state_.colorHdr?std::clamp(intensity,-10.f,10.f):0;
+}
+
+void EditorSession::pickerLinear(float (&rgba)[4]) const {
+  float srgb[3];pickerRgb(state_.colorHue,state_.colorSaturation,state_.colorValue,srgb);
+  const float scale=state_.colorHdr?std::exp2(state_.colorIntensity):1;
+  for(u32 i=0;i<3;++i) rgba[i]=colorToLinear(srgb[i])*scale;
+  rgba[3]=state_.colorHasAlpha?state_.colorAlpha:1;
+}
+
+void EditorSession::openColorWindow(u32 key,const float (&linearRgba)[4],bool alpha,bool hdr) {
+  state_.colorField=key;state_.colorRevision=document_.revision();
+  state_.colorHasAlpha=alpha;state_.colorHdr=hdr;state_.colorMode=0;
+  state_.colorSwatchMenu=0;state_.colorLibraryMenu=false;state_.colorText=0;
+  std::copy(linearRgba,linearRgba+4,state_.colorOriginal);
+  pickerFromLinear(linearRgba);
+  // Amostras do projeto: sem projeto aberto a biblioteca existe só nesta sessão.
+  std::string error;
+  if(!files_.rootPath().empty() && !colorLibraries_.load(files_.rootPath(),EditorLibraryKind::Color,error)) state_.status=error;
+  state_.colorLibraries=&colorLibraries_;
+}
+
+void EditorSession::saveColorLibraries() {
+  std::string error;
+  if(!files_.rootPath().empty() && !colorLibraries_.save(error)) state_.status=error;
+}
+
+bool EditorSession::commitColorWindow() {
+  const auto *entity=document_.find(state_.colorEntity);
+  if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
+    state_.colorField=0;state_.status="Cor cancelada: a cena mudou";return true;
+  }
+  float rgba[4];pickerLinear(rgba);
+  if(state_.colorTarget==0) {
+    auto values=*entity;const auto *component=values.components.findInstance(state_.colorInstance);
+    const float rgb[3]{rgba[0],rgba[1],rgba[2]};
+    if(component && scene::setComponentTriple(values.components,component->type().id,state_.colorProperty,rgb,state_.colorInstance)==scene::ComponentPropertyStatus::Applied &&
+       history_.applyValues(document_,entity->id,values)) {state_.colorField=0;return true;}
+    state_.status="Cor recusada pelo componente";return false;
+  }
+  const auto value=scene::scriptColorValue(rgba);
+  if(state_.colorTarget==2) {
+    const auto *script=scene::scriptBehavior(entity->components.findInstance(state_.colorInstance));
+    auto items=script?scriptArrayItems(*script,state_.colorProperty):std::vector<std::string>{};
+    if(!script || !state_.colorScriptElement || state_.colorScriptElement>items.size()) {state_.colorField=0;return false;}
+    items[state_.colorScriptElement-1]=value;
+    if(setScriptArray(entity->id,state_.colorInstance,state_.colorProperty,state_.colorScriptType,items)) {state_.colorField=0;return true;}
+    return false;
+  }
+  EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;
+  request.componentInstance=state_.colorInstance;request.action=EditorAction::ScriptProperty;
+  request.componentProperty=state_.colorProperty;request.scriptPropertyType=state_.colorScriptType;request.scriptPropertyValue=value;
+  if(dispatch(request).status==EditorActionStatus::Applied) {state_.colorField=0;return true;}
+  state_.status="Cor recusada pelo campo";return false;
+}
+
+// Unity 6000.0 Manual/InspectorColorPicker. Quadrado, matiz e barras seguem o
+// dedo enquanto ele se move (não só no toque); abas, hexadecimal, original e
+// amostras são toques; toque longo numa amostra abre as ações dela.
+bool EditorSession::handleColorWindow(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const u32 key=routing.widgetId;
+  const bool tracking=event.phase==UiPointerPhase::Down || (event.phase==UiPointerPhase::Move && routing.dragging) ||
+                      event.phase==UiPointerPhase::Up;
+  const auto unit=[](float value,float start,float size) {return size>0?std::clamp((value-start)/size,0.f,1.f):0.f;};
+  if(tracking && key==widgetId(EditorWidget::ColorSquare)) {
+    state_.colorSaturation=unit(event.position.x,layout_.colorSquare.x,layout_.colorSquare.width);
+    state_.colorValue=1-unit(event.position.y,layout_.colorSquare.y,layout_.colorSquare.height);
+    return true;
+  }
+  if(tracking && key==widgetId(EditorWidget::ColorHueStrip)) {
+    state_.colorHue=std::min(unit(event.position.y,layout_.colorHue.y,layout_.colorHue.height),.9999f);
+    return true;
+  }
+  if(tracking && key>=widgetId(EditorWidget::ColorSliderBase) && key<widgetId(EditorWidget::ColorSliderBase)+5) {
+    const u32 slot=key-widgetId(EditorWidget::ColorSliderBase);
+    const auto &bar=layout_.colorSliders[slot];
+    const float t=unit(event.position.x,bar.x,bar.width);
+    // A ordem das barras é a mesma da tela: três do modo, alfa, intensidade.
+    if(slot<3) {
+      if(state_.colorMode==2) {
+        if(slot==0) state_.colorHue=std::min(t,.9999f);
+        else if(slot==1) state_.colorSaturation=t;
+        else state_.colorValue=t;
+      } else {
+        float srgb[3];pickerRgb(state_.colorHue,state_.colorSaturation,state_.colorValue,srgb);srgb[slot]=t;
+        float h=state_.colorHue,s=0,v=0;srgbToHsv(srgb,h,s,v);
+        state_.colorHue=h;state_.colorSaturation=s;state_.colorValue=v;
+      }
+    } else if(slot==3 && state_.colorHasAlpha) state_.colorAlpha=t;
+    else if(state_.colorHdr) state_.colorIntensity=-10+20*t;
+    return true;
+  }
+  if(!routing.tapped) return true;
+  const bool held=routing.heldSeconds>=ui::kUiLongPressSeconds;
+  const auto *library=colorLibraries_.currentOrNull();
+  if(key==widgetId(EditorWidget::ColorCancel)) {state_.colorField=0;state_.colorSwatchMenu=0;state_.colorLibraryMenu=false;}
+  else if(key==widgetId(EditorWidget::ColorApply)) commitColorWindow();
+  else if(key>=widgetId(EditorWidget::ColorModeBase) && key<widgetId(EditorWidget::ColorModeBase)+3)
+    state_.colorMode=static_cast<u8>(key-widgetId(EditorWidget::ColorModeBase));
+  else if(key==widgetId(EditorWidget::ColorOriginal)) pickerFromLinear(state_.colorOriginal);
+  else if(key==widgetId(EditorWidget::ColorHex)) state_.colorText=1;
+  else if(key==widgetId(EditorWidget::ColorLibraryToggle)) {state_.colorLibraryMenu=!state_.colorLibraryMenu;state_.colorSwatchMenu=0;}
+  else if(key==widgetId(EditorWidget::ColorLibraryNew)) state_.colorText=3;
+  else if(key>=widgetId(EditorWidget::ColorLibraryBase) && key<widgetId(EditorWidget::ColorLibraryBase)+EditorValueLibraries::kMaximumLibraries) {
+    if(colorLibraries_.select(key-widgetId(EditorWidget::ColorLibraryBase))) saveColorLibraries();
+    state_.colorLibraryMenu=false;
+  } else if(key==widgetId(EditorWidget::ColorSwatchAdd)) {
+    float rgba[4];pickerLinear(rgba);
+    if(colorLibraries_.add(colorLibraries_.nextName("Cor"),scene::scriptColorValue(rgba))) {saveColorLibraries();state_.status="Cor guardada na biblioteca";}
+    else state_.status="Biblioteca cheia";
+  } else if(key>=widgetId(EditorWidget::ColorSwatchBase) && key<widgetId(EditorWidget::ColorSwatchBase)+EditorValueLibraries::kMaximumEntries) {
+    const u32 index=key-widgetId(EditorWidget::ColorSwatchBase);
+    if(!library || index>=library->entries.size()) return true;
+    state_.colorLibraryMenu=false;
+    if(held) {state_.colorSwatchMenu=index+1;return true;}
+    float rgba[4]{1,1,1,1};scene::parseScriptColor(library->entries[index].value,rgba);
+    pickerFromLinear(rgba);state_.colorSwatchMenu=0;
+  } else if(key>=widgetId(EditorWidget::ColorSwatchActionBase) && key<widgetId(EditorWidget::ColorSwatchActionBase)+5 && state_.colorSwatchMenu) {
+    const u32 index=state_.colorSwatchMenu-1,action=key-widgetId(EditorWidget::ColorSwatchActionBase);
+    float rgba[4];pickerLinear(rgba);
+    bool changed=false;
+    if(action==0) changed=colorLibraries_.replace(index,scene::scriptColorValue(rgba));
+    else if(action==1) changed=index>0 && colorLibraries_.move(index,index-1);
+    else if(action==2) changed=colorLibraries_.move(index,index+1);
+    else if(action==3) {state_.colorText=2;return true;}
+    else changed=colorLibraries_.remove(index);
+    if(changed) saveColorLibraries();
+    state_.colorSwatchMenu=0;
+  } else {state_.colorSwatchMenu=0;state_.colorLibraryMenu=false;}
   return true;
 }
 

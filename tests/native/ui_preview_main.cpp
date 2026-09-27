@@ -13,6 +13,7 @@
 //   aether_ui_preview [saida.ppm] [largura] [altura]
 #include "editor/editor_history.h"
 #include "editor/editor_code_workspace.h"
+#include "editor/editor_value_library.h"
 #include "scene/script_behavior.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
@@ -108,6 +109,7 @@ int main(int argc, char **argv) {
   editor::EditorScreenState state{};
   editor::EditorConsole console;
   editor::EditorCodeWorkspace code;
+  editor::EditorValueLibraries swatches;
   if(argc>4 && std::string(argv[4]).starts_with("river")) {
     std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
     if(!renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials) || !map.import(document,draws,materials,false)) return 1;
@@ -239,6 +241,18 @@ int main(int argc, char **argv) {
     document.applyEntityValues(selection,value);
     state.componentSelection=selection;state.expandedScript=instance;
     state.expandedScriptArray="pontos";state.scriptArraySelected=2;
+  }
+  // Janela de cor com alfa, HDR e uma biblioteca de amostras.
+  if(argc>4 && std::string(argv[4]).starts_with("color")) {
+    state.colorField=editor::widgetId(editor::EditorWidget::ScriptFieldBase);
+    state.colorHue=.58f;state.colorSaturation=.72f;state.colorValue=.86f;state.colorAlpha=.8f;state.colorIntensity=1.5f;
+    state.colorHasAlpha=true;state.colorHdr=true;
+    state.colorOriginal[0]=.9f;state.colorOriginal[1]=.4f;state.colorOriginal[2]=.1f;state.colorOriginal[3]=1;
+    swatches.add("Laranja","1 0.35 0.05 1");swatches.add("Céu","0.2 0.5 1 1");swatches.add("Folha","0.1 0.6 0.15 1");
+    swatches.add("Neon","4 0.2 2 1");swatches.add("Cinza","0.2 0.2 0.2 1");
+    state.colorLibraries=&swatches;
+    if(std::string(argv[4])=="color-hsv") state.colorMode=2;
+    if(std::string(argv[4])=="color-swatch") state.colorSwatchMenu=2;
   }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;

@@ -15,6 +15,42 @@ public sealed class PropertyIdAttribute(string id) : Attribute
 }
 
 /// <summary>
+/// Cor em RGB linear com alfa (Unity: <c>Color</c>). Canais acima de 1 só em
+/// campos HDR; o Inspector edita pela janela de cor.
+/// </summary>
+public struct Color : IEquatable<Color>
+{
+    public float R, G, B, A;
+    public Color(float r, float g, float b, float a = 1) { R = r; G = g; B = b; A = a; }
+    public static Color White => new(1, 1, 1, 1);
+    public static Color Black => new(0, 0, 0, 1);
+    public static Color Clear => new(0, 0, 0, 0);
+    public static Color Lerp(Color a, Color b, float t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t, a.A + (b.A - a.A) * t);
+    }
+    public static Color operator *(Color c, float s) => new(c.R * s, c.G * s, c.B * s, c.A);
+    public bool Equals(Color other) => R == other.R && G == other.G && B == other.B && A == other.A;
+    public override bool Equals(object? obj) => obj is Color other && Equals(other);
+    public override int GetHashCode() => HashCode.Combine(R, G, B, A);
+    public static bool operator ==(Color a, Color b) => a.Equals(b);
+    public static bool operator !=(Color a, Color b) => !a.Equals(b);
+    public override string ToString() => $"({R}, {G}, {B}, {A})";
+}
+
+/// <summary>
+/// Como o Inspector mostra um campo <see cref="Color"/> (Unity: <c>[ColorUsage]</c>):
+/// sem alfa e/ou com intensidade HDR.
+/// </summary>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true)]
+public sealed class ColorUsageAttribute(bool showAlpha, bool hdr = false) : Attribute
+{
+    public bool ShowAlpha { get; } = showAlpha;
+    public bool Hdr { get; } = hdr;
+}
+
+/// <summary>
 /// Campo guardado na cena que o Inspector não mostra (Unity: <c>[HideInInspector]</c>).
 /// O valor autoral continua preservado e entregue no Play.
 /// </summary>

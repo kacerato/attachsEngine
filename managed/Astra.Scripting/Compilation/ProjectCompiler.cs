@@ -181,7 +181,7 @@ public sealed class ProjectCompiler
                         IPropertySymbol property when !property.IsStatic && !property.IsIndexer && property.GetMethod?.DeclaredAccessibility == Accessibility.Public && property.SetMethod?.DeclaredAccessibility == Accessibility.Public => property.Type,
                         _ => null
                     };
-                    var name = valueType is null ? null : PropertyKind(valueType);
+                    var name = valueType is null ? null : ColorFlags(PropertyKind(valueType), member);
                     if (!ValidId(propertyId) || !propertyIds.Add(propertyId) || !propertyNames.Add(member.Name) || valueType is null || !Supported(valueType))
                     { Error("Unsupported, duplicate or inaccessible [PropertyId]: " + member.Name); continue; }
                     properties.Add(new(propertyId, member.Name, name!, AttributeFlag(member, "Astra.HideInInspectorAttribute")));
@@ -213,6 +213,18 @@ public sealed class ProjectCompiler
         INamedTypeSymbol { IsGenericType: true } list when list.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.List<T>" => list.TypeArguments[0],
         _ => null
     };
+    // [ColorUsage(showAlpha, hdr)] vira marcas no tipo "color" (também nos
+    // elementos de uma lista de cores).
+    private static string ColorFlags(string kind, ISymbol member)
+    {
+        if (kind != "color" && kind != "array:color") return kind;
+        var usage = member.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "Astra.ColorUsageAttribute");
+        if (usage is null) return kind;
+        var arguments = usage.ConstructorArguments;
+        var alpha = arguments.Length > 0 && arguments[0].Value is bool a ? a : true;
+        var hdr = arguments.Length > 1 && arguments[1].Value is bool h && h;
+        return kind + (hdr ? ":hdr" : "") + (alpha ? "" : ":noalpha");
+    }
     private static bool AttributeFlag(ISymbol symbol, string attribute) =>
         symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attribute);
     private static string PropertyKind(ITypeSymbol type) => ArrayElement(type) is { } element ? "array:" + ScalarKind(element) : ScalarKind(type);
@@ -224,7 +236,7 @@ public sealed class ProjectCompiler
             SpecialType.System_Single => "float", SpecialType.System_String => "string",
             _ => type.ToDisplayString() switch
             {
-                "System.Numerics.Vector3" => "vector3", "Astra.ObjectReference" => "object",
+                "System.Numerics.Vector3" => "vector3", "Astra.ObjectReference" => "object", "Astra.Color" => "color",
                 "Astra.AssetReference" => "asset", _ => "unsupported"
             }
         };
@@ -233,7 +245,7 @@ public sealed class ProjectCompiler
         : ScalarSupported(type);
     private static bool ScalarSupported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
         type.SpecialType is SpecialType.System_Boolean or SpecialType.System_Int32 or SpecialType.System_Single or SpecialType.System_String ||
-        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" ||
+        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" or "Astra.Color" ||
         FacadeTypeId(type) is not null;
     private static string? AttributeId(ISymbol symbol, string attribute) => symbol.GetAttributes()
         .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attribute)?.ConstructorArguments.FirstOrDefault().Value as string;

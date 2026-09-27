@@ -1,6 +1,7 @@
 #pragma once
 #include "scene/components.h"
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <sstream>
@@ -40,6 +41,40 @@ inline bool parseScriptComponentValue(std::string_view text,u64 &object,u64 &ins
 inline std::string scriptComponentValue(u64 object,u64 instance) {
   return std::to_string(object)+":"+std::to_string(instance);
 }
+// Cor (Unity: campo `Color` e [ColorUsage(showAlpha, hdr)]): tipo "color" com
+// marcas opcionais ":hdr" e ":noalpha"; valor "r g b a" em RGB LINEAR. Sem hdr
+// nenhum canal passa de 1; alfa sempre entre 0 e 1.
+inline bool scriptColorType(std::string_view type,bool *hdr=nullptr,bool *alpha=nullptr) {
+  if(!type.starts_with("color")) return false;
+  std::string_view flags=type.substr(5);
+  bool high=false,transparent=true;
+  while(!flags.empty()) {
+    if(flags.front()!=':') return false;
+    flags.remove_prefix(1);
+    const auto end=flags.find(':');
+    const auto flag=flags.substr(0,end);
+    if(flag=="hdr") high=true;
+    else if(flag=="noalpha") transparent=false;
+    else return false;
+    flags=end==std::string_view::npos?std::string_view{}:flags.substr(end);
+  }
+  if(hdr) *hdr=high;
+  if(alpha) *alpha=transparent;
+  return true;
+}
+inline bool parseScriptColor(std::string_view text,float (&rgba)[4]) {
+  std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
+  if(!(in>>rgba[0]>>rgba[1]>>rgba[2]>>rgba[3])) return false;
+  in>>std::ws;
+  if(!in.eof()) return false;
+  for(const float v:rgba) if(!std::isfinite(v) || v<0) return false;
+  return true;
+}
+inline std::string scriptColorValue(const float (&rgba)[4]) {
+  std::ostringstream out;out.imbue(std::locale::classic());
+  out<<std::setprecision(9)<<rgba[0]<<' '<<rgba[1]<<' '<<rgba[2]<<' '<<rgba[3];
+  return out.str();
+}
 // Lista (Unity: campo `float[]`/`List<Transform>`, Manual/InspectorArray): tipo
 // "array:<tipo do elemento>", valor "<N>" seguido de N elementos entre aspas
 // no formato do elemento — `3 "1.5" "2" "4"`. Lista de lista não existe.
@@ -67,6 +102,7 @@ inline std::string scriptElementDefault(std::string_view type) {
   if(type=="bool") return "false";
   if(type=="float"||type=="int32"||type=="enum"||type=="object") return "0";
   if(type=="vector3") return "0 0 0";
+  if(scriptColorType(type)) return "1 1 1 1";
   if(type.starts_with("component:")) return "0:0";
   return "";
 }
@@ -124,6 +160,12 @@ inline bool validScriptPropertyValue(std::string_view type,std::string_view text
     return true;
   }
   if(text.size()>4096 || text.find('\0')!=std::string_view::npos) return false;
+  if(bool hdr=false;scriptColorType(type,&hdr)) {
+    float rgba[4];
+    if(!parseScriptColor(text,rgba) || rgba[3]>1) return false;
+    for(u32 i=0;i<3;++i) if(rgba[i]>(hdr?65504.f:1.f)) return false;
+    return true;
+  }
   if(const auto component=scriptComponentTypeId(type);!component.empty()) {
     if(component.size()>256) return false;
     for(const char c:component)

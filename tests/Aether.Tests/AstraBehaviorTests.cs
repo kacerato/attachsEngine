@@ -204,6 +204,36 @@ public static class AstraBehaviorTests
         })]);
         Assert.Equal("1.5,2|a,b|41,0|9|4", string.Join(' ', scene.Events), "listas, oculto e privado aplicados");
     }
+    private const string ColorFieldSource = """
+        using Astra;
+        [ComponentId("test.tint")]
+        public sealed class Tint : Behavior
+        {
+            [PropertyId("plain")] public Color Plain = Color.White;
+            [PropertyId("glow"), ColorUsage(false, true)] public Color Glow;
+            [PropertyId("palette")] public Color[] Palette = [];
+            public override void Start() => Scene.Log(ObjectId, $"{Plain.R},{Plain.A}|{Glow.R}|{Palette.Length}");
+        }
+        """;
+
+    // Unity: campo Color e [ColorUsage(showAlpha, hdr)].
+    [Test]
+    public static void ColorFields_CarryUsageFlagsAndReachTheInstance()
+    {
+        using var project = new Project(ColorFieldSource); var compiled = project.Compile();
+        var properties = compiled.Types.Single().Properties.ToDictionary(p => p.Id);
+        Assert.Equal("color", properties["plain"].ValueType);
+        Assert.Equal("color:hdr:noalpha", properties["glow"].ValueType);
+        Assert.Equal("array:color", properties["palette"].ValueType);
+        using var world = new BehaviorWorld(); var scene = new ComponentScene();
+        world.Start(compiled, scene, [new(1, 10, "test.tint", true, new Dictionary<string, JsonElement>
+        {
+            ["plain"] = JsonSerializer.SerializeToElement(new { R = 0.25f, G = 0f, B = 0f, A = 0.5f }),
+            ["glow"] = JsonSerializer.SerializeToElement(new { R = 4f, G = 0f, B = 0f, A = 1f }),
+            ["palette"] = JsonSerializer.SerializeToElement(new[] { new { R = 1f, G = 1f, B = 1f, A = 1f } })
+        })]);
+        Assert.Equal("0.25,0.5|4|1", string.Join(' ', scene.Events), "cores aplicadas à instância");
+    }
     private const string LifecycleSource = """
         using Astra;
         [ComponentId("test.life")]

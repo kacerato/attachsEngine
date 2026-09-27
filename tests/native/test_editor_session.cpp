@@ -2864,14 +2864,97 @@ AE_TEST(p01_color_picker_stages_and_commits_one_history_entry) {
   revealProperty(f,widgetId(EditorWidget::ComponentColorBase));
   tapWidget(f,widgetId(EditorWidget::ComponentColorBase));
   AE_EXPECT_TRUE(f.session.screen().colorField!=0,"swatch opens picker");
-  tapWidget(f,widgetId(EditorWidget::ColorHueBase)+8);tapWidget(f,widgetId(EditorWidget::ColorSvBase)+10);
+  // Matiz verde (1/3 da faixa) e o canto saturado e claro do quadrado.
+  const auto hue=f.session.layout().colorHue,square=f.session.layout().colorSquare;
+  f.down(90,{hue.x+hue.width*.5f,hue.y+hue.height/3.f});f.up(90,{hue.x+hue.width*.5f,hue.y+hue.height/3.f});f.session.update();
+  f.down(90,{square.right()-.01f,square.y});f.up(90,{square.right()-.01f,square.y});f.session.update();
   const auto read=[&](){return static_cast<const scene::Light*>(d.find(id)->components.find(scene::Light::descriptor));};
   AE_EXPECT_EQ(read()->color[0],1.f,"draft leaves authored light unchanged");
   tapWidget(f,widgetId(EditorWidget::ColorApply));AE_EXPECT_EQ(h.undoDepth(),1u,"single commit");
-  AE_EXPECT_EQ(read()->color[0],0.f,"green selection removes red");AE_EXPECT_EQ(read()->color[1],1.f,"green channel");
+  AE_EXPECT_TRUE(read()->color[0]<1e-3f,"green selection removes red");AE_EXPECT_EQ(read()->color[1],1.f,"green channel");
   AE_EXPECT_TRUE(h.undo(d),"undo color");AE_EXPECT_EQ(read()->color[0],1.f,"white restored");
   f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentColorBase));tapWidget(f,widgetId(EditorWidget::ColorCancel));
   AE_EXPECT_EQ(read()->color[2],1.f,"cancel preserves blue");
+}
+
+// Unity Manual/InspectorColorPicker: campo Color de script com [ColorUsage]
+// (alfa e HDR), arraste contínuo, hexadecimal, voltar à original, amostras em
+// biblioteca do projeto (guardar, aplicar, substituir, apagar) e bibliotecas.
+AE_TEST(color_window_edits_script_color_with_hex_swatches_and_libraries) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("aether-cor-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.setCodeCompilerAvailable(true);
+  f.session.pumpCodeAutoBuild(0.0);f.session.pumpCodeAutoBuild(10.0);
+  AE_EXPECT_TRUE(!f.session.takeCodeBuildRequest().empty(),"compilação pedida");
+  AE_EXPECT_TRUE(f.session.completeCodeBuild(
+      "ASTRA_CODE 3 1 0 1 \"project.Brilho\" \"Brilho\" \"Scripts/Brilho.cs\" 1 "
+      "\"tom\" \"Tom\" \"color:hdr\" 0"),"catálogo com cor HDR");
+  f.session.reportCodeCommit(true);
+  auto value=*doc.find(f.cube);
+  auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Brilho";script->source="Scripts/Brilho.cs";script->setProperty("tom","color:hdr","0.5 0.5 0.5 1");
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com o comportamento");
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i) if(scene::scriptBehavior(doc.find(f.cube)->components.at(i))) index=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ScriptFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ScriptFoldBase)+index);
+  const u32 field=widgetId(EditorWidget::ScriptFieldBase)+index;
+  const auto stored=[&] {
+    const auto *current=scene::scriptBehavior(doc.find(f.cube)->components.at(index));
+    return current->properties.empty()?std::string():current->properties[0].value;
+  };
+  tapWidget(f,field);
+  AE_EXPECT_TRUE(f.session.screen().colorField!=0 && f.session.screen().colorHdr && f.session.screen().colorHasAlpha,
+                 "o campo abre a janela com alfa e HDR");
+  // Hexadecimal: vermelho puro.
+  tapWidget(f,widgetId(EditorWidget::ColorHex));
+  auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::ColorText && edit.text.size()==8,"o hexadecimal abre com RRGGBBAA");
+  AE_EXPECT_TRUE(!f.session.completeTextEdit(edit,"XYZ",true),"hexadecimal inválido recusado");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"#FF0000",true),"hexadecimal aceito");
+  // Intensidade: arrastar até o fim da barra dá +10 stops.
+  const auto intensity=f.session.layout().colorSliders[4];
+  f.down(91,{intensity.x+1,intensity.y+intensity.height*.5f});
+  f.move(91,{intensity.right()+40,intensity.y+intensity.height*.5f});f.session.update();
+  f.up(91,{intensity.right()+40,intensity.y+intensity.height*.5f});f.session.update();
+  AE_EXPECT_EQ(f.session.screen().colorIntensity,10.f,"a barra segue o dedo até o limite");
+  // Guardar na biblioteca e voltar à original.
+  tapWidget(f,widgetId(EditorWidget::ColorSwatchAdd));
+  AE_EXPECT_TRUE(fs::exists(root/".astra"/"libraries"/"colors.astra"),"a amostra vai para o projeto");
+  tapWidget(f,widgetId(EditorWidget::ColorOriginal));
+  AE_EXPECT_EQ(f.session.screen().colorIntensity,0.f,"voltar à original desfaz a intensidade");
+  tapWidget(f,widgetId(EditorWidget::ColorSwatchBase));
+  AE_EXPECT_EQ(f.session.screen().colorIntensity,10.f,"tocar a amostra aplica a cor guardada");
+  tapWidget(f,widgetId(EditorWidget::ColorApply));
+  float rgba[4]{};
+  AE_EXPECT_TRUE(scene::parseScriptColor(stored(),rgba) && std::abs(rgba[0]-1024.f)<1e-2f && rgba[1]==0 && rgba[3]==1,
+                 stored().c_str());
+  AE_EXPECT_EQ(history.undoDepth(),1u,"aplicar é um passo");
+  // Ações da amostra (toque longo): apagar.
+  tapWidget(f,field);
+  const auto swatch=locateWidget(f.session,widgetId(EditorWidget::ColorSwatchBase));
+  f.session.handlePointer({92,UiPointerPhase::Down,swatch,10.0});
+  f.session.handlePointer({92,UiPointerPhase::Up,swatch,10.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  AE_EXPECT_EQ(f.session.screen().colorSwatchMenu,1u,"toque longo abre as ações da amostra");
+  tapWidget(f,widgetId(EditorWidget::ColorSwatchActionBase)+4);
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ColorSwatchBase)).x<0,"apagar tira a amostra");
+  // Nova biblioteca pelo nome.
+  tapWidget(f,widgetId(EditorWidget::ColorLibraryToggle));
+  tapWidget(f,widgetId(EditorWidget::ColorLibraryNew));
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"Paleta do nível",true),"biblioteca criada");
+  tapWidget(f,widgetId(EditorWidget::ColorCancel));
+  editor::EditorValueLibraries reloaded;std::string error;
+  AE_EXPECT_TRUE(reloaded.load(root.string(),editor::EditorLibraryKind::Color,error),error.c_str());
+  AE_EXPECT_TRUE(reloaded.libraries.size()==2 && reloaded.currentOrNull()->name=="Paleta do nível","a biblioteca nova é a ativa no arquivo");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"cancelar não grava nada");
 }
 
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {

@@ -20,6 +20,7 @@
 #include "editor/editor_play_scene.h"
 #include "editor/editor_play_edit.h"
 #include "editor/editor_numeric_expression.h"
+#include "editor/editor_value_library.h"
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
@@ -64,7 +65,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -1518,6 +1519,15 @@ private:
   u32 reorderPointer_ = 0, reorderPagerHover_ = 0;
   u32 numericFieldSeen_ = 0;
   u32 scriptArrayPointer_ = 0, scriptArrayPagerHover_ = 0;
+  // Janela de cor: amostras do projeto, abertura com a cor do campo e a cor
+  // escolhida em RGB linear (com alfa e intensidade quando o campo tem).
+  EditorValueLibraries colorLibraries_;
+  void openColorWindow(u32 key,const float (&linearRgba)[4],bool alpha,bool hdr);
+  void pickerFromLinear(const float (&linearRgba)[4]);
+  void pickerLinear(float (&rgba)[4]) const;
+  bool handleColorWindow(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  bool commitColorWindow();
+  void saveColorLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
   // código) e gravação da lista inteira como um passo de Desfazer.
   std::vector<std::string> scriptArrayItems(const scene::ScriptBehavior &script,std::string_view id) const;

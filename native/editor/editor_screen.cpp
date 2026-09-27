@@ -1,6 +1,7 @@
 #include "editor/editor_component_impact.h"
 #include "editor/editor_color_picker.h"
 #include "editor/editor_numeric_expression.h"
+#include "editor/editor_value_library.h"
 #include <sstream>
 #include "scene/script_behavior.h"
 #include "editor/editor_water_body_component.h"
@@ -279,6 +280,180 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
       builder.state.workspace==EditorWorkspace::Assets ? "Recursos importados" : "Edição";
   if(content.width>80) builder.label(content,context,theme.color.textDim,theme.type.caption);
 
+}
+
+// Janela de cor (Unity 6000.0 Manual/InspectorColorPicker), para triples de
+// cor dos componentes e campos Color dos scripts. À esquerda o quadrado de
+// saturação × valor e a faixa de matiz, contínuos; à direita a cor original
+// (tocar volta a ela) ao lado da nova, as barras do modo escolhido, alfa e
+// intensidade HDR quando o campo as tem, o hexadecimal e, embaixo, as amostras
+// da biblioteca ativa. Nada grava antes de Aplicar.
+void buildColorWindow(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  router.addBlocker(state.surface);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
+  const UiRect panel=centred(state.surface,std::min(640.f,state.surface.width-16),std::min(380.f,state.surface.height-16));
+  list.addRect(panel,theme.color.surface,theme.radius.control);
+  auto content=deflate(panel,UiInsets::all(10));
+  float srgb[3];pickerRgb(state.colorHue,state.colorSaturation,state.colorValue,srgb);
+  const UiColor current=pickerColor(state.colorHue,state.colorSaturation,state.colorValue);
+  // Cabeçalho: título, abas de modo e ações.
+  auto header=takeTop(content,34);
+  builder.label(takeLeft(header,110),state.colorHdr?"Cor HDR":"Cor",theme.color.text,theme.type.title);
+  const auto apply=takeRight(header,92);takeRight(header,6);const auto cancel=takeRight(header,92);
+  list.addRect(apply,theme.color.accent,theme.radius.control);
+  builder.label(apply,"Aplicar",theme.color.accentInk,theme.type.caption,UiAlign::Center);router.addRegion(apply,widgetId(EditorWidget::ColorApply));
+  list.addRect(cancel,theme.color.raised,theme.radius.control);
+  builder.label(cancel,"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);router.addRegion(cancel,widgetId(EditorWidget::ColorCancel));
+  takeRight(header,10);
+  const char *modes[]{"RGB 0-255","RGB 0-1","HSV"};
+  const float tab=std::min(84.f,header.width/3);
+  for(u32 i=0;i<3;++i) {
+    const UiRect cell{header.x+i*tab,header.y+3,tab-4,header.height-6};
+    const bool on=state.colorMode==i;
+    list.addRect(cell,on?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    builder.label(cell,modes[i],on?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(cell,widgetId(EditorWidget::ColorModeBase)+i);
+  }
+  takeTop(content,8);
+  // Faixa de amostras embaixo.
+  auto swatches=takeBottom(content,40);takeBottom(content,6);
+  // Esquerda: quadrado SV e matiz.
+  const float side=std::min(content.height,content.width*.42f);
+  auto left=takeLeft(content,side+36);takeLeft(content,12);
+  const UiRect square{left.x,left.y,side,side};
+  const UiRect hue{square.right()+10,left.y,24,side};
+  constexpr u32 steps=24;
+  for(u32 y=0;y<steps;++y) for(u32 x=0;x<steps;++x) {
+    const UiRect cell{square.x+x*side/steps,square.y+y*side/steps,side/steps+1,side/steps+1};
+    list.addRect(cell,pickerColor(state.colorHue,(x+.5f)/steps,1-(y+.5f)/steps),0);
+  }
+  const UiPoint mark{square.x+state.colorSaturation*side,square.y+(1-state.colorValue)*side};
+  list.addRect({mark.x-7,mark.y-7,14,14},0xffffffff,7);
+  list.addRect({mark.x-5,mark.y-5,10,10},current,5);
+  for(u32 i=0;i<36;++i) list.addRect({hue.x,hue.y+i*side/36,hue.width,side/36+1},pickerColor(i/36.f,1,1),0);
+  const float hueY=hue.y+state.colorHue*side;
+  list.addRect({hue.x-3,hueY-2,hue.width+6,4},0xffffffff,2);
+  router.addRegion(square,widgetId(EditorWidget::ColorSquare));
+  router.addRegion(hue,widgetId(EditorWidget::ColorHueStrip));
+  layout.colorSquare=square;layout.colorHue=hue;
+  // Direita: original × nova, barras, hexadecimal.
+  auto preview=takeTop(content,40);
+  const auto original=takeLeft(preview,preview.width*.5f);
+  float originalSrgb[3],originalBase[3],originalIntensity=0;
+  splitHdr({state.colorOriginal[0],state.colorOriginal[1],state.colorOriginal[2]},originalBase,originalIntensity);
+  for(u32 i=0;i<3;++i) originalSrgb[i]=colorToSrgb(originalBase[i]);
+  float h=0,sat=0,val=0;srgbToHsv(originalSrgb,h,sat,val);
+  list.addRect(original,pickerColor(h,sat,val),theme.radius.control);
+  builder.label(deflate(original,UiInsets{6,0,6,0}),"Original",val>.6f?0xff101010u:0xffffffffu,theme.type.caption);
+  router.addRegion(original,widgetId(EditorWidget::ColorOriginal));
+  list.addRect(preview,current,theme.radius.control);
+  builder.label(deflate(preview,UiInsets{6,0,6,0}),"Nova",state.colorValue>.6f?0xff101010u:0xffffffffu,theme.type.caption,UiAlign::End);
+  takeTop(content,6);
+  struct Slider {const char *label;float value;float minimum,maximum;int kind;};
+  std::vector<Slider> sliders;
+  if(state.colorMode==2) {
+    sliders.push_back({"H",state.colorHue,0,1,3});sliders.push_back({"S",state.colorSaturation,0,1,4});
+    sliders.push_back({"V",state.colorValue,0,1,5});
+  } else {
+    sliders.push_back({"R",srgb[0],0,1,0});sliders.push_back({"G",srgb[1],0,1,1});sliders.push_back({"B",srgb[2],0,1,2});
+  }
+  if(state.colorHasAlpha) sliders.push_back({"A",state.colorAlpha,0,1,6});
+  if(state.colorHdr) sliders.push_back({"Int.",state.colorIntensity,-10,10,7});
+  const float rowHeight=std::min(30.f,(content.height-34)/std::max<usize>(1,sliders.size()));
+  for(usize i=0;i<sliders.size() && i<5;++i) {
+    auto row=takeTop(content,rowHeight);
+    const auto &slider=sliders[i];
+    builder.label(takeLeft(row,34),slider.label,theme.color.textDim,theme.type.caption);
+    const auto valueBox=takeRight(row,58);
+    auto bar=deflate(row,UiInsets{4,rowHeight*.25f,6,rowHeight*.25f});
+    // O fundo da barra mostra o que cada posição daria.
+    constexpr u32 segments=24;
+    for(u32 k=0;k<segments;++k) {
+      const float t=(k+.5f)/segments;float c[3]{srgb[0],srgb[1],srgb[2]};UiColor color=0;
+      switch(slider.kind) {
+        case 0:case 1:case 2: c[slider.kind]=t;color=0xff000000u|static_cast<u32>(c[0]*255+.5f)<<16|static_cast<u32>(c[1]*255+.5f)<<8|static_cast<u32>(c[2]*255+.5f);break;
+        case 3: color=pickerColor(t,1,1);break;
+        case 4: color=pickerColor(state.colorHue,t,state.colorValue);break;
+        case 5: color=pickerColor(state.colorHue,state.colorSaturation,t);break;
+        case 6: color=pickerColor(state.colorHue,state.colorSaturation,state.colorValue,t);break;
+        default: {const float g=std::clamp(.5f+(t-.5f)*.8f,0.f,1.f);color=pickerColor(state.colorHue,state.colorSaturation*.5f,g);}
+      }
+      list.addRect({bar.x+k*bar.width/segments,bar.y,bar.width/segments+1,bar.height},color,0);
+    }
+    const float t=(slider.value-slider.minimum)/(slider.maximum-slider.minimum);
+    list.addRect({bar.x+t*bar.width-2,bar.y-3,4,bar.height+6},0xffffffff,2);
+    char text[24];
+    if(slider.kind==3) std::snprintf(text,sizeof(text),"%.0f°",slider.value*360);
+    else if(slider.kind==4||slider.kind==5) std::snprintf(text,sizeof(text),"%.0f%%",slider.value*100);
+    else if(slider.kind==7) std::snprintf(text,sizeof(text),"%+.2f",slider.value);
+    else if(state.colorMode==0) std::snprintf(text,sizeof(text),"%.0f",slider.value*255);
+    else std::snprintf(text,sizeof(text),"%.3f",slider.value);
+    builder.label(valueBox,text,theme.color.text,theme.type.caption,UiAlign::End);
+    const UiRect hit{bar.x,row.y,bar.width,row.height};
+    router.addRegion(hit,widgetId(EditorWidget::ColorSliderBase)+static_cast<u32>(i));
+    layout.colorSliders[i]=bar;
+  }
+  auto hex=takeTop(content,30);
+  builder.label(takeLeft(hex,70),"Hexadecimal",theme.color.textDim,theme.type.caption);
+  list.addRect(hex,theme.color.raised,theme.radius.control);
+  const auto hexText="#"+formatColorHex(srgb,state.colorAlpha,state.colorHasAlpha);
+  builder.label(deflate(hex,UiInsets{8,0,8,0}),hexText,theme.color.text,theme.type.caption);
+  router.addRegion(hex,widgetId(EditorWidget::ColorHex));
+  // Amostras: biblioteca ativa, cores salvas e "+" para guardar a atual.
+  const auto *libraries=state.colorLibraries;
+  const auto *library=libraries?libraries->currentOrNull():nullptr;
+  const auto chip=takeLeft(swatches,120);takeLeft(swatches,6);
+  list.addRect(chip,state.colorLibraryMenu?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+  builder.label(deflate(chip,UiInsets{8,0,8,0}),library?library->name:std::string("Padrão"),theme.color.text,theme.type.caption);
+  router.addRegion(chip,widgetId(EditorWidget::ColorLibraryToggle));
+  const auto add=takeRight(swatches,40);
+  list.addRect(add,withAlpha(theme.color.accent,.16f),theme.radius.control);
+  builder.label(add,"+",theme.color.accent,theme.type.title,UiAlign::Center);
+  router.addRegion(add,widgetId(EditorWidget::ColorSwatchAdd));
+  takeRight(swatches,6);
+  const u32 capacity=static_cast<u32>(std::max(0.f,swatches.width)/36);
+  if(library) for(u32 i=0;i<library->entries.size() && i<capacity;++i) {
+    const UiRect cell{swatches.x+i*36.f,swatches.y+4,32,32};
+    float rgba[4]{1,1,1,1};scene::parseScriptColor(library->entries[i].value,rgba);
+    float base[3],intensity=0;splitHdr({rgba[0],rgba[1],rgba[2]},base,intensity);
+    float c[3];for(u32 k=0;k<3;++k) c[k]=colorToSrgb(base[k]);
+    float sh=0,ss=0,sv=0;srgbToHsv(c,sh,ss,sv);
+    if(state.colorSwatchMenu==i+1) list.addRect(deflate(cell,UiInsets::all(-3)),theme.color.accent,theme.radius.control);
+    list.addRect(cell,pickerColor(sh,ss,sv),theme.radius.control);
+    router.addRegion(cell,widgetId(EditorWidget::ColorSwatchBase)+i);
+  }
+  if(!library || library->entries.empty())
+    builder.label(swatches,"Sem amostras: + guarda a cor atual",theme.color.textMuted,theme.type.caption);
+  // Menus sobre a faixa: bibliotecas ou ações da amostra (toque longo).
+  if(state.colorLibraryMenu && libraries) {
+    const float height=36.f*(libraries->libraries.size()+1)+8;
+    const UiRect menu{chip.x,std::max(panel.y+8,chip.y-height-4),200,height};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    for(u32 i=0;i<libraries->libraries.size();++i) {
+      const auto row=takeTop(rows,36);
+      if(i==libraries->active) list.addRect({row.x,row.y+6,3,row.height-12},theme.color.accent,1);
+      builder.label(deflate(row,UiInsets{10,0,6,0}),libraries->libraries[i].name,theme.color.text,theme.type.caption);
+      router.addRegion(row,widgetId(EditorWidget::ColorLibraryBase)+i);
+    }
+    const auto create=takeTop(rows,36);
+    builder.label(deflate(create,UiInsets{10,0,6,0}),"+ Nova biblioteca",theme.color.accent,theme.type.caption);
+    router.addRegion(create,widgetId(EditorWidget::ColorLibraryNew));
+  }
+  if(state.colorSwatchMenu && library && state.colorSwatchMenu<=library->entries.size()) {
+    const u32 i=state.colorSwatchMenu-1;
+    const char *actions[]{"Substituir pela atual","Mover para a esquerda","Mover para a direita","Renomear","Apagar"};
+    const UiRect menu{std::min(swatches.x+i*36.f,panel.right()-220),std::max(panel.y+8,swatches.y-5*34.f-30),210,5*34.f+26};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    builder.label(takeTop(rows,22),library->entries[i].name,theme.color.textDim,theme.type.caption);
+    for(u32 k=0;k<5;++k) {
+      const auto row=takeTop(rows,34);
+      builder.label(deflate(row,UiInsets{8,0,6,0}),actions[k],k==4?theme.color.axisX:theme.color.text,theme.type.caption);
+      router.addRegion(row,widgetId(EditorWidget::ColorSwatchActionBase)+k);
+    }
+  }
 }
 
 void buildPhysicsOverlay(ScreenBuilder &builder) {
@@ -2158,6 +2333,22 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
             std::string(typeName)+" ausente";
       missing=target&&!present;
     } else if(type=="string" && text && text->empty()) shown="(vazio)";
+    else if(bool hdr=false,alpha=true;scene::scriptColorType(type,&hdr,&alpha)) {
+      // Cor: amostra à esquerda e o hexadecimal (com a intensidade se HDR).
+      float rgba[4]{1,1,1,1};if(text) scene::parseScriptColor(*text,rgba);
+      float base[3],intensity=0;splitHdr({rgba[0],rgba[1],rgba[2]},base,intensity);
+      float srgb[3];for(u32 i=0;i<3;++i) srgb[i]=colorToSrgb(base[i]);
+      float h=0,s=0,v=0;srgbToHsv(srgb,h,s,v);
+      builder.list.addRect(row,theme.color.raised,theme.radius.control);
+      auto inner=deflate(row,UiInsets{4,4,6,4});
+      const auto swatch=takeLeft(inner,std::min(56.f,inner.width*.4f));
+      builder.list.addRect(swatch,pickerColor(h,s,v),theme.radius.control);
+      if(alpha) builder.list.addRect({swatch.x,swatch.bottom()-3,swatch.width*rgba[3],3},0xffffffffu,1);
+      takeLeft(inner,6);
+      char note[24];std::snprintf(note,sizeof(note),hdr&&intensity>0?" · +%.1f":"",intensity);
+      builder.label(inner,"#"+formatColorHex(srgb,rgba[3],alpha)+note,text?theme.color.text:theme.color.textMuted,theme.type.caption);
+      return;
+    }
     builder.list.addRect(row,theme.color.raised,theme.radius.control);
     if(componentSchema)
       builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(editorIconByName(componentSchema->icon)),
@@ -4174,7 +4365,7 @@ bool platformFieldActive(const EditorScreenState &state) {
   if (!state.platformTextInput || state.editingCode) return false;
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
-         state.editingReferenceSearch || state.numericField != 0 ||
+         state.editingReferenceSearch || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
          state.editingPhysicsLayerName || state.editingInputActionName || state.editingInputContext || state.inputEditField;
@@ -4183,6 +4374,7 @@ bool platformFieldActive(const EditorScreenState &state) {
 const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.presetNaming) return "Nome do preset";
   if (state.viewNaming) return state.viewRenaming ? "Novo nome da vista" : "Nome da vista";
+  if (state.colorField != 0 && state.colorText != 0) return state.colorText == 1 ? "Hexadecimal" : "Nome";
   if (state.numericField != 0) return "Valor";
   if (state.editingInputActionName) return "Ação";
   if (state.editingInputContext) return "Contexto";
@@ -6156,36 +6348,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
-  if(state.colorField) {
-    router.addBlocker(state.surface);
-    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
-    const auto panel=centred(state.surface,std::min(360.f,state.surface.width-16),std::min(360.f,state.surface.height-16));
-    list.addRect(panel,theme.color.surface,theme.radius.control);
-    auto content=deflate(panel,UiInsets::all(12));
-    auto title=takeTop(content,32);list.addRect(takeRight(title,48),pickerColor(state.colorHue,state.colorSaturation,state.colorValue),6);
-    builder.label(title,"Cor · RGB linear",theme.color.text,theme.type.title);
-    auto footer=takeBottom(content,38);const auto cancel=takeLeft(footer,footer.width/2);
-    builder.label(cancel,"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);router.addRegion(cancel,widgetId(EditorWidget::ColorCancel));
-    builder.label(footer,"Aplicar",theme.color.accent,theme.type.caption,UiAlign::Center);router.addRegion(footer,widgetId(EditorWidget::ColorApply));
-    const auto outline=[&](UiRect r) {
-      list.addRect({r.x,r.y,r.width,2},0xffffffff,0);
-      list.addRect({r.x,r.bottom()-2,r.width,2},0xff000000,0);
-      list.addRect({r.x,r.y,2,r.height},0xffffffff,0);
-      list.addRect({r.right()-2,r.y,2,r.height},0xff000000,0);
-    };
-    const auto hue=takeBottom(content,30);
-    for(u32 h=0;h<24;++h) {
-      const UiRect cell{hue.x+h*hue.width/24,hue.y,hue.width/24,26};
-      list.addRect(cell,pickerColor(h/24.f,1,1),0);router.addRegion(cell,widgetId(EditorWidget::ColorHueBase)+h);
-      if(h==static_cast<u32>(std::round(state.colorHue*24))%24) outline(cell);
-    }
-    for(u32 y=0;y<11;++y) for(u32 x=0;x<11;++x) {
-      const UiRect cell{content.x+x*content.width/11,content.y+y*content.height/11,content.width/11,content.height/11};
-      list.addRect(cell,pickerColor(state.colorHue,x/10.f,1-y/10.f),0);
-      router.addRegion(cell,widgetId(EditorWidget::ColorSvBase)+y*11+x);
-      if(x==static_cast<u32>(std::round(state.colorSaturation*10)) && y==static_cast<u32>(std::round((1-state.colorValue)*10))) outline(cell);
-    }
-  }
+  if(state.colorField) buildColorWindow(builder,layout);
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;

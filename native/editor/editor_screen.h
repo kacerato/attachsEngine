@@ -333,6 +333,12 @@ enum class EditorWidget : u32 {
   ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope, ImpactRemoveConfirm,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
+  // Janela de cor (Unity Manual/InspectorColorPicker): quadrado SV e matiz
+  // contínuos, abas de modo, barras de canal, hexadecimal, cor original e
+  // bibliotecas de amostras.
+  ColorSquare=0x5f000300u, ColorHueStrip, ColorHex, ColorOriginal, ColorSwatchAdd, ColorLibraryToggle, ColorLibraryNew,
+  ColorModeBase=0x5f000310u, ColorSliderBase=0x5f000320u, ColorSwatchActionBase=0x5f000340u,
+  ColorLibraryBase=0x5f000400u, ColorSwatchBase=0x5f000500u,
   ComponentTripleBase=0x7d000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -780,6 +786,23 @@ struct EditorScreenState final {
   u64 colorInstance=0,colorRevision=0;
   std::string colorProperty;
   float colorHue=0,colorSaturation=0,colorValue=1;
+  // Alfa e intensidade HDR (stops: cor = base × 2^intensidade) quando o campo
+  // os tem; a cor com que a janela abriu, em RGB linear, para voltar a ela.
+  float colorAlpha=1,colorIntensity=0;
+  float colorOriginal[4]{1,1,1,1};
+  bool colorHasAlpha=false,colorHdr=false;
+  // 0 = RGB 0–255, 1 = RGB 0–1, 2 = HSV.
+  u8 colorMode=0;
+  // Alvo: 0 = triple de componente, 1 = campo de script, 2 = elemento de lista.
+  u8 colorTarget=0;
+  std::string colorScriptType;
+  u32 colorScriptElement=0;
+  // Menus da faixa de amostras: amostra (índice+1) e lista de bibliotecas.
+  u32 colorSwatchMenu=0;
+  bool colorLibraryMenu=false;
+  // Texto em edição na janela: 1 = hexadecimal, 2 = nome da amostra, 3 = nova biblioteca.
+  u8 colorText=0;
+  const class EditorValueLibraries *colorLibraries=nullptr;
   u32 numericField = 0;
   u64 numericInstance=0;
   std::string numericProperty;
@@ -991,6 +1014,9 @@ struct EditorScreenState final {
 };
 
 struct EditorScreenLayout final {
+  // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
+  ui::UiRect colorSquare{},colorHue{};
+  ui::UiRect colorSliders[5]{};
   // A área da cena, JÁ descontados os painéis. É este retângulo que
   // `EditorViewport::rect` recebe, e é por isso que a projeção do gizmo
   // continua certa quando o usuário arrasta um divisor.
