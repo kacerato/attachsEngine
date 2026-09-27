@@ -1588,9 +1588,16 @@ private:
     if(state_.selection==target) state_.selection=saved;
     return result;
   }
+  // Inspectors focados: nomes guardados com a lista para conferir, ao abrir a
+  // cena, que o id ainda é o mesmo objeto (senão a aba não volta).
+  std::vector<std::string> focusedNames_;
+  bool focusedValidated_=false;
+  void validateFocusedInspectors();
 public:
   // Ping (Unity): abre os pais, rola a Hierarquia até o objeto e pisca a linha.
   void pingEntity(EditorEntityId id);
+  // Inspector focado (Unity: Properties) de um objeto ou de um componente dele.
+  void openFocusedInspector(EditorEntityId entity,u64 component=0);
 private:
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};

@@ -393,6 +393,9 @@ enum class EditorWidget : u32 {
   // Gestão do Inspector (Unity Manual/InspectorOptions e InspectorFocused):
   // cadeado, modo Debug e Ping.
   InspectorLock=0xC6000000u, InspectorDebugToggle, InspectorPing,
+  // Inspectors focados (Unity: Properties): abrir, abas, fechar, ⋮, minimizar.
+  InspectorOpenFocused, FocusedMenu, FocusedPing, FocusedCloseAll, FocusedCollapse, FocusedChip, HierarchyProperties,
+  FocusedTabBase=0xC6000100u, FocusedCloseBase=0xC6000200u, ComponentPropertiesBase=0xC6010000u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -633,6 +636,12 @@ struct EditorScreenState final {
   EditorEntityId inspectorLocked=0,inspectorTarget=0;
   // Modo Debug do Inspector (Unity ⋮ > Debug): valores crus, só leitura.
   bool inspectorDebug=false;
+  // Inspectors focados (Unity 6000.0 Manual/InspectorFocused): cada um presa
+  // a um objeto, ou a um componente dele (instância), sem seguir a seleção.
+  struct FocusedInspector { EditorEntityId entity=0; u64 component=0; };
+  std::vector<FocusedInspector> focusedInspectors;
+  u32 focusedActive=0;       // aba visível (índice+1)
+  bool focusedCollapsed=false,focusedMenu=false;
   // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
   EditorEntityId pingEntity=0;
   double pingUntil=0,uiTime=0;
@@ -1091,6 +1100,8 @@ struct EditorScreenLayout final {
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
   ui::UiRect lodBar{};
+  // Janela dos Inspectors focados (vazia quando nenhum está aberto).
+  ui::UiRect focusedWindow{};
   // A área da cena, JÁ descontados os painéis. É este retângulo que
   // `EditorViewport::rect` recebe, e é por isso que a projeção do gizmo
   // continua certa quando o usuário arrasta um divisor.

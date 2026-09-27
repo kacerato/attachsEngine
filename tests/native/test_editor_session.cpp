@@ -3277,6 +3277,107 @@ AE_TEST(inspector_lock_debug_mode_and_ping) {
   AE_EXPECT_EQ(f.session.screen().inspectorLocked,0u,"objeto apagado solta o cadeado");
 }
 
+// Unity 6000.0 Manual/InspectorFocused: Inspectors presos a um objeto ou a um
+// componente, abertos pelo ⋮ do Inspector, pelo ⋮ do cartão ou pelo toque longo
+// na Hierarquia; a edição vai ao alvo da aba e a lista volta com o projeto.
+AE_TEST(focused_inspectors_open_edit_ping_and_restore) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto post=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Poste");
+  auto value=*doc.find(post);value.components.add(scene::Light::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(post,value),"poste com luz");
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  const auto &state=f.session.screen();
+  // ⋮ do Inspector › Propriedades (janela).
+  tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  revealProperty(f,widgetId(EditorWidget::InspectorOpenFocused));
+  tapWidget(f,widgetId(EditorWidget::InspectorOpenFocused));
+  AE_EXPECT_EQ(state.focusedInspectors.size(),1u,"uma aba do cubo");
+  AE_EXPECT_EQ(state.focusedInspectors[0].entity,f.cube,"presa ao cubo");
+  // Toque longo na linha do poste: abre sem trocar a seleção.
+  const auto row=locateWidget(f.session,hierarchyRowWidget(post));
+  AE_EXPECT_TRUE(row.x>=0,"linha do poste visível");
+  f.session.handlePointer({120,UiPointerPhase::Down,row,20.0});
+  f.session.handlePointer({120,UiPointerPhase::Up,row,20.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"aba do poste");
+  AE_EXPECT_EQ(state.focusedActive,2u,"a nova aba fica à frente");
+  AE_EXPECT_EQ(state.selection,f.cube,"a seleção não muda");
+  // ⋮ do cartão da Malha › Propriedades: aba só do componente; repetir não duplica.
+  const u64 mesh=doc.find(f.cube)->components.at(0)->instanceId();
+  for(u32 i=0;i<2;++i) {
+    tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));
+    tapWidget(f,widgetId(EditorWidget::ComponentPropertiesBase));
+  }
+  AE_EXPECT_EQ(state.focusedInspectors.size(),3u,"uma aba por alvo");
+  AE_EXPECT_EQ(state.focusedInspectors[2].component,mesh,"presa à instância da Malha");
+  // Um toque dentro da janela edita o alvo da aba ativa.
+  const auto inWindow=[&](u32 widget) {
+    locateWidget(f.session,widget);
+    UiInputRouter router;UiDrawList list;
+    list.begin(state.surface,font().metrics(UiFontWeight::Regular));
+    buildEditorScreen(state,defaultTheme(),list,router);
+    const auto window=f.session.layout().focusedWindow;
+    for(float y=window.y+2;y<window.bottom();y+=4) for(float x=window.x+2;x<window.right();x+=4) {
+      const auto routed=router.route({99,UiPointerPhase::Down,{x,y},0});router.route({99,UiPointerPhase::Up,{x,y},0});
+      if(routed.target==UiPointerTarget::Widget && routed.widgetId==widget) return UiPoint{x,y};
+    }
+    return UiPoint{-1,-1};
+  };
+  tapWidget(f,widgetId(EditorWidget::FocusedTabBase)+1);
+  AE_EXPECT_EQ(state.focusedActive,2u,"aba do poste ativa");
+  // A janela é baixa: os cartões paginam como no Inspector.
+  for(u32 page=0;page<4 && inWindow(widgetId(EditorWidget::ComponentEnableBase)).x<0;++page) {
+    const auto next=inWindow(widgetId(EditorWidget::ComponentNext));
+    if(next.x<0) break;
+    f.down(122,next);f.up(122,next);f.session.update();
+  }
+  AE_EXPECT_TRUE(inWindow(widgetId(EditorWidget::InspectorLock)).x<0,"sem cadeado na janela focada");
+  const auto toggle=inWindow(widgetId(EditorWidget::ComponentEnableBase));
+  AE_EXPECT_TRUE(toggle.x>=0,"interruptor da luz na janela");
+  const bool meshBefore=meshRenderer(*doc.find(f.cube))->enabled;
+  f.down(121,toggle);f.up(121,toggle);f.session.update();
+  AE_EXPECT_TRUE(!static_cast<const scene::Light *>(doc.find(post)->components.find(scene::Light::descriptor))->enabled,
+                 "a luz do poste desliga");
+  AE_EXPECT_EQ(meshRenderer(*doc.find(f.cube))->enabled,meshBefore,"o objeto selecionado não muda");
+  AE_EXPECT_EQ(state.selection,f.cube,"editar na janela não rouba a seleção");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo de Desfazer");
+  // A aba de componente mostra só aquele cartão.
+  tapWidget(f,widgetId(EditorWidget::FocusedTabBase)+2);
+  AE_EXPECT_TRUE(inWindow(widgetId(EditorWidget::ComponentFoldBase)+1).x<0,"só o cartão da Malha");
+  // Minimizar e restaurar; Ping.
+  tapWidget(f,widgetId(EditorWidget::FocusedCollapse));
+  AE_EXPECT_TRUE(state.focusedCollapsed && locateWidget(f.session,widgetId(EditorWidget::FocusedChip)).x>=0,"minimizada num chip");
+  tapWidget(f,widgetId(EditorWidget::FocusedChip));
+  AE_EXPECT_TRUE(!state.focusedCollapsed,"restaurada");
+  tapWidget(f,widgetId(EditorWidget::FocusedTabBase)+1);
+  tapWidget(f,widgetId(EditorWidget::FocusedMenu));
+  tapWidget(f,widgetId(EditorWidget::FocusedPing));
+  AE_EXPECT_EQ(state.pingEntity,post,"ping no objeto da aba");
+  // Fechar uma aba; apagar o objeto fecha a dele.
+  tapWidget(f,widgetId(EditorWidget::FocusedCloseBase)+0);
+  AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"aba do cubo fechada");
+  AE_EXPECT_TRUE(history.destroyEntity(doc,post),"poste apagado");
+  f.session.update();
+  AE_EXPECT_EQ(state.focusedInspectors.size(),1u,"objeto apagado fecha a aba");
+  AE_EXPECT_EQ(state.focusedInspectors[0].component,mesh,"a da Malha fica");
+  // Guardadas no projeto e restauradas ao reabrir a cena.
+  const auto root=fs::temp_directory_path()/("aether-focados-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  AE_EXPECT_TRUE(state.focusedInspectors.empty(),"outro projeto começa sem abas");
+  f.session.openFocusedInspector(f.cube);f.session.openFocusedInspector(f.cube,mesh);
+  const auto scenePath=(root/"cena.astra").string();
+  AE_EXPECT_TRUE(f.session.save(scenePath.c_str(),0),"cena salva");
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto reaberto");
+  AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"lista lida do projeto");
+  AE_EXPECT_TRUE(f.session.load(scenePath.c_str(),0),"cena aberta");
+  AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"as duas abas voltam");
+  AE_EXPECT_EQ(state.focusedInspectors[1].entity,f.cube,"presa ao mesmo cubo");
+  AE_EXPECT_EQ(state.focusedInspectors[1].component,mesh,"e à mesma Malha");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

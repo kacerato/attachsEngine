@@ -328,6 +328,8 @@ bool EditorSession::setProjectDirectory(const char *path) {
 
 void EditorSession::loadEditorPreferences() {
   state_.pickerAdvanced=false;
+  state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
+  state_.focusedCollapsed=false;state_.focusedMenu=false;
   std::filesystem::path file;
   if(files_.rootPath().empty() ||
      !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
@@ -338,7 +340,19 @@ void EditorSession::loadEditorPreferences() {
   std::string magic,key,value;
   if(!(in>>magic) || magic!="ASTRA_EDITOR_PREFERENCES_1") return;
   // Chaves desconhecidas são ignoradas: uma versão futura pode acrescentar.
-  while(in>>key>>value) if(key=="object_picker") state_.pickerAdvanced=value=="advanced";
+  for(std::string line;std::getline(in,line);) {
+    std::istringstream fields(line);
+    if(!(fields>>key)) continue;
+    if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
+    else if(key=="focused") {
+      // Inspector focado aberto quando o projeto fechou (Unity os restaura).
+      EditorEntityId entity=0;u64 component=0;std::string name;
+      if(fields>>entity>>component>>std::quoted(name) && state_.focusedInspectors.size()<8) {
+        state_.focusedInspectors.push_back({entity,component});focusedNames_.push_back(name);
+      }
+    }
+  }
+  state_.focusedActive=state_.focusedInspectors.empty()?0:1;
 }
 
 void EditorSession::saveEditorPreferences() {
@@ -346,7 +360,12 @@ void EditorSession::saveEditorPreferences() {
   if(files_.rootPath().empty() ||
      !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
   std::error_code ec;std::filesystem::create_directories(file.parent_path(),ec);
-  const std::string text=std::string("ASTRA_EDITOR_PREFERENCES_1\nobject_picker ")+(state_.pickerAdvanced?"advanced":"classic")+"\n";
+  std::ostringstream out;
+  out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
+  for(u32 i=0;i<state_.focusedInspectors.size();++i)
+    out<<"focused "<<state_.focusedInspectors[i].entity<<' '<<state_.focusedInspectors[i].component<<' '
+       <<std::quoted(i<focusedNames_.size()?focusedNames_[i]:std::string())<<'\n';
+  const std::string text=out.str();
   if(ec || !EditorImportTransaction::writeText(file,text)) state_.status="Não foi possível guardar a preferência";
 }
 
@@ -1520,7 +1539,10 @@ EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Down) {
     EditorEntityId target=0;
     if(inspectorModalOpen()) target=state_.inspectorTarget;
-    else if(state_.inspectorLocked && layout_.inspectorPanel.contains(event.position)) target=state_.inspectorLocked;
+    else if(!state_.focusedCollapsed && !state_.focusedInspectors.empty() && layout_.focusedWindow.contains(event.position)) {
+      const u32 active=std::min(std::max(state_.focusedActive,1u),static_cast<u32>(state_.focusedInspectors.size()))-1;
+      target=state_.focusedInspectors[active].entity;
+    } else if(state_.inspectorLocked && layout_.inspectorPanel.contains(event.position)) target=state_.inspectorLocked;
     if(found!=inspectorPointers_.end()) found->second=target;
     else inspectorPointers_.push_back({event.pointerId,target});
     return target;
@@ -1543,6 +1565,41 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   };
   if(routeToPlayMirror(event)) return inPlayMirror(run);
   return run();
+}
+
+void EditorSession::openFocusedInspector(EditorEntityId entity,u64 component) {
+  const auto *object=state_.document?state_.document->find(entity):nullptr;
+  if(!object || entity==state_.document->root()) return;
+  for(u32 i=0;i<state_.focusedInspectors.size();++i)
+    if(state_.focusedInspectors[i].entity==entity && state_.focusedInspectors[i].component==component) {
+      state_.focusedActive=i+1;state_.focusedCollapsed=false;return;
+    }
+  // Até oito: cada aba é uma janela da Unity, mas a tela do telefone é uma só.
+  if(state_.focusedInspectors.size()>=8) {state_.focusedInspectors.erase(state_.focusedInspectors.begin());if(!focusedNames_.empty()) focusedNames_.erase(focusedNames_.begin());}
+  state_.focusedInspectors.push_back({entity,component});
+  focusedNames_.push_back(object->name);
+  state_.focusedActive=static_cast<u32>(state_.focusedInspectors.size());
+  state_.focusedCollapsed=false;state_.focusedMenu=false;focusedValidated_=true;
+  state_.status=std::string("Propriedades de ")+object->name;
+  saveEditorPreferences();
+}
+
+void EditorSession::validateFocusedInspectors() {
+  // Só voltam as abas cujo id ainda é o mesmo objeto (mesmo nome) e, se de
+  // componente, cuja instância ainda existe nele.
+  std::vector<EditorScreenState::FocusedInspector> kept;std::vector<std::string> names;
+  for(u32 i=0;i<state_.focusedInspectors.size();++i) {
+    const auto &focused=state_.focusedInspectors[i];
+    const auto *object=document_.find(focused.entity);
+    if(!object || (i<focusedNames_.size() && focusedNames_[i]!=object->name)) continue;
+    if(focused.component && !object->components.findInstance(focused.component)) continue;
+    kept.push_back(focused);names.push_back(object->name);
+  }
+  state_.focusedInspectors=std::move(kept);focusedNames_=std::move(names);
+  state_.focusedActive=state_.focusedInspectors.empty()?0:std::min<u32>(std::max(state_.focusedActive,1u),static_cast<u32>(state_.focusedInspectors.size()));
+  focusedValidated_=true;
+  // O arquivo só muda quando o usuário abre ou fecha abas: outra cena do
+  // projeto não apaga as abas da cena onde foram abertas.
 }
 
 void EditorSession::pingEntity(EditorEntityId id) {
@@ -1591,6 +1648,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   UiPointerRouting routing = router_.route(event);
   // Toque longo no cabeçalho de um componente abre o menu dele, como o clique
   // direito da Unity (Manual/UsingComponents).
+  // Unity "PropertyEditor/OpenMouseOver": toque longo numa linha da Hierarquia
+  // abre o Inspector focado daquele objeto sem trocar a seleção.
+  if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds &&
+     routing.widgetId>=widgetId(EditorWidget::HierarchyRowBase) &&
+     routing.widgetId<widgetId(EditorWidget::HierarchyRowBase)+EditorDocument::kMaximumEntities && !isPlaying()) {
+    openFocusedInspector(routing.widgetId-widgetId(EditorWidget::HierarchyRowBase));
+    return true;
+  }
   if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds) {
     const u32 operation=routing.widgetId&0xff000000u,index=routing.widgetId&0x00ffffffu;
     if(operation==widgetId(EditorWidget::ComponentFoldBase)) routing.widgetId=widgetId(EditorWidget::ComponentMenuBase)+index;
@@ -3774,6 +3839,42 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
 
+  // Inspectors focados. No escopo do Inspector, "a seleção" é o alvo dele.
+  if(routing.tapped) {
+    const u32 key=routing.widgetId;
+    if(key==widgetId(EditorWidget::InspectorOpenFocused)) {state_.inspectorMenu=false;openFocusedInspector(state_.selection);return true;}
+    if(key==widgetId(EditorWidget::HierarchyProperties)) {state_.entityMenu=false;openFocusedInspector(state_.selection);return true;}
+    if(key>=widgetId(EditorWidget::ComponentPropertiesBase) && key<widgetId(EditorWidget::ComponentPropertiesBase)+0x100u) {
+      const auto *entity=document_.find(state_.selection);
+      const u32 index=key-widgetId(EditorWidget::ComponentPropertiesBase);
+      if(entity && index<entity->components.size()) {
+        state_.nativeMenu=0;state_.scriptMenu=0;
+        openFocusedInspector(entity->id,entity->components.at(index)->instanceId());
+      }
+      return true;
+    }
+    const u32 count=static_cast<u32>(state_.focusedInspectors.size());
+    if(key>=widgetId(EditorWidget::FocusedTabBase) && key<widgetId(EditorWidget::FocusedTabBase)+count) {
+      state_.focusedActive=key-widgetId(EditorWidget::FocusedTabBase)+1;state_.focusedMenu=false;return true;
+    }
+    if(key>=widgetId(EditorWidget::FocusedCloseBase) && key<widgetId(EditorWidget::FocusedCloseBase)+count) {
+      const u32 index=key-widgetId(EditorWidget::FocusedCloseBase);
+      state_.focusedInspectors.erase(state_.focusedInspectors.begin()+index);
+      if(index<focusedNames_.size()) focusedNames_.erase(focusedNames_.begin()+index);
+      state_.focusedActive=state_.focusedInspectors.empty()?0:std::min<u32>(std::max(state_.focusedActive,1u),static_cast<u32>(state_.focusedInspectors.size()));
+      state_.focusedMenu=false;saveEditorPreferences();return true;
+    }
+    if(key==widgetId(EditorWidget::FocusedMenu)) {state_.focusedMenu=!state_.focusedMenu;return true;}
+    if(key==widgetId(EditorWidget::FocusedPing) && count) {
+      state_.focusedMenu=false;
+      pingEntity(state_.focusedInspectors[std::min(std::max(state_.focusedActive,1u),count)-1].entity);return true;
+    }
+    if(key==widgetId(EditorWidget::FocusedCloseAll)) {
+      state_.focusedInspectors.clear();focusedNames_.clear();state_.focusedActive=0;state_.focusedMenu=false;saveEditorPreferences();return true;
+    }
+    if(key==widgetId(EditorWidget::FocusedCollapse)) {state_.focusedCollapsed=true;state_.focusedMenu=false;return true;}
+    if(key==widgetId(EditorWidget::FocusedChip)) {state_.focusedCollapsed=false;return true;}
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::InspectorLock)) {
     // Dentro do escopo a "seleção" é o alvo do Inspector: travar prende nele.
     state_.inspectorLocked=state_.inspectorLocked?0:state_.selection;
@@ -4702,6 +4803,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   reportImportReconcile(reconcile,"Cena aberta");
   state_.selection=kInvalidEntity;state_.status="Cena restaurada";
   state_.collapsedEntities.clear();state_.hierarchyScroll=0;state_.renameEntity=kInvalidEntity;
+  validateFocusedInspectors();
   return true;
 }
 
@@ -6915,6 +7017,9 @@ void EditorSession::update() {
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   // Travado num objeto que deixou de existir (apagado, outra cena): volta a seguir a seleção.
   if(state_.inspectorLocked && !state_.document->exists(state_.inspectorLocked)) state_.inspectorLocked=0;
+  // Objeto de um focado apagado: a aba fecha (depois que a cena foi conferida).
+  if(focusedValidated_ && !isPlaying())
+    for(const auto &focused:state_.focusedInspectors) if(!document_.exists(focused.entity)) {validateFocusedInspectors();break;}
   // O campo acabou de abrir: o texto é o valor atual formatado, a base do
   // `+=` e da prévia. Fechar e abrir outro recomeça no teclado numérico.
   if(state_.numericField!=numericFieldSeen_) {

@@ -325,6 +325,18 @@ int main(int argc, char **argv) {
     state.inspectorDebug=std::string(argv[4])=="inspector-debug";
     state.pingEntity=locked;state.pingUntil=1;state.uiTime=0;
   }
+  // Inspectors focados: um de objeto, um só do componente de luz; ativo o de objeto.
+  if(argc>4 && std::string(argv[4]).starts_with("focused")) {
+    const auto lamp=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Lanterna");
+    auto value=*document.find(lamp);const auto *light=value.components.add(scene::Light::descriptor);
+    value.components.add(scene::PhysicsBody::descriptor);value.components.add(scene::Collider::descriptor);
+    document.applyEntityValues(lamp,value);
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Outro objeto");
+    state.focusedInspectors.push_back({lamp,0});state.focusedInspectors.push_back({lamp,light->instanceId()});
+    state.focusedActive=std::string(argv[4])=="focused-component"?2:1;
+    state.focusedCollapsed=std::string(argv[4])=="focused-collapsed";
+    state.focusedMenu=std::string(argv[4])=="focused-menu";
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

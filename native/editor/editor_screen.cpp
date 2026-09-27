@@ -130,6 +130,11 @@ struct ScreenBuilder final {
   std::vector<u32> *visibleSourceTextureRows=nullptr;
   // Medidas que a sessão usa para rolar o Inspector de textura.
   EditorScreenLayout *layout=nullptr;
+  // Inspector focado num componente: a instância cujo cartão aparece sozinho.
+  u64 onlyComponent=0;
+  // Dentro da janela focada: o cabeçalho não tem cadeado nem ⋮ (a aba já é
+  // presa ao alvo e a janela tem o seu próprio ⋮).
+  bool focusedWindow=false;
 
   bool isPressed(u32 widget) const { return state.pressedWidget == widget && widget != 0; }
 
@@ -846,6 +851,85 @@ void buildCurveEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
       builder.label(deflate(entry,UiInsets{8,0,6,0}),actions[k],k==4?theme.color.axisX:theme.color.text,theme.type.caption);
       router.addRegion(entry,widgetId(EditorWidget::CurvePresetActionBase)+k);
     }
+  }
+}
+
+void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
+// Inspectors focados (Unity 6000.0 Manual/InspectorFocused) numa janela sobre
+// o viewport: uma aba por Inspector, cada um preso ao seu objeto ou
+// componente; o cabeçalho mostra o caminho completo (o tooltip da aba na
+// Unity). ⋮ tem Ping e Fechar todas; "–" minimiza para um chip.
+void buildFocusedInspectors(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  if(state.focusedInspectors.empty() || layout.viewport.isEmpty()) return;
+  const u32 count=static_cast<u32>(state.focusedInspectors.size());
+  const u32 active=std::min(std::max(state.focusedActive,1u),count)-1;
+  if(state.focusedCollapsed) {
+    // Abaixo da barra do viewport, para não cobrir os botões dela.
+    const UiRect chip{layout.viewport.right()-150,layout.viewport.y+60,142,34};
+    list.addRect(chip,theme.color.raised,theme.radius.control);
+    list.addImage(centred({chip.x,chip.y,30,chip.height},16,16),static_cast<UiImageId>(UiIcon::ScenePin),theme.color.accent);
+    builder.label(deflate(chip,UiInsets{30,0,8,0}),("Propriedades · "+std::to_string(count)).c_str(),theme.color.text,theme.type.caption);
+    router.addRegion(chip,widgetId(EditorWidget::FocusedChip));
+    return;
+  }
+  const float width=std::min(300.f,layout.viewport.width-16);
+  const UiRect window{layout.viewport.right()-width-8,layout.viewport.y+8,width,layout.viewport.height-16};
+  layout.focusedWindow=window;
+  router.addBlocker(window);
+  list.addRect(deflate(window,UiInsets::all(-1)),theme.color.line,theme.radius.control);
+  list.addRect(window,theme.color.surface,theme.radius.control);
+  auto content=deflate(window,UiInsets::all(4));
+  auto tabs=takeTop(content,32);
+  builder.iconButton(takeRight(tabs,30),UiIcon::EditorAuthorMore,widgetId(EditorWidget::FocusedMenu),state.focusedMenu);
+  const auto collapse=takeRight(tabs,30);
+  builder.label(collapse,"-",theme.color.textDim,theme.type.title,UiAlign::Center);
+  router.addRegion(collapse,widgetId(EditorWidget::FocusedCollapse));
+  // Abas: nome do objeto (e do componente, se for de componente) com ×.
+  const float tabWidth=std::max(70.f,std::min(140.f,tabs.width/count));
+  for(u32 i=0;i<count && tabs.width>=40;++i) {
+    const auto &focused=state.focusedInspectors[i];
+    const auto *object=state.document->find(focused.entity);
+    std::string name=object?object->name:"Ausente";
+    if(object && focused.component)
+      if(const auto *value=object->components.findInstance(focused.component)) {
+        const auto *schema=scene::findComponentSchema(value->type().id);
+        const auto *script=scene::scriptBehavior(value);
+        name+=" · "+(script?script->scriptType:schema?std::string(schema->name):std::string(value->type().id));
+      }
+    auto tab=takeLeft(tabs,std::min(tabWidth,tabs.width));
+    const bool on=i==active;
+    list.addRect(deflate(tab,UiInsets{1,2,1,0}),on?theme.color.raised:theme.color.silhouette,theme.radius.control);
+    if(on) list.addRect({tab.x+2,tab.bottom()-2,tab.width-4,2},theme.color.accent,1);
+    const auto close=takeRight(tab,24);
+    builder.label(close,"×",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(close,widgetId(EditorWidget::FocusedCloseBase)+i);
+    list.pushClip(tab);
+    builder.label(deflate(tab,UiInsets{6,0,2,0}),name,on?theme.color.text:theme.color.textDim,theme.type.caption);
+    list.popClip();
+    router.addRegion(tab,widgetId(EditorWidget::FocusedTabBase)+i);
+  }
+  const auto &focused=state.focusedInspectors[active];
+  // Caminho completo do item.
+  auto path=takeTop(content,20);
+  std::string text;
+  for(const auto *up=state.document->find(focused.entity);up && up->id!=state.document->root();up=state.document->find(up->parent))
+    text=text.empty()?std::string(up->name):std::string(up->name)+" / "+text;
+  builder.label(deflate(path,UiInsets{6,0,6,0}),text.empty()?"Objeto ausente":"Cena / "+text,theme.color.textMuted,theme.type.caption);
+  builder.focusedWindow=true;
+  buildInspectorFor(builder,content,focused.entity,focused.component);
+  builder.focusedWindow=false;builder.onlyComponent=0;
+  if(state.focusedMenu) {
+    const UiRect menu{window.right()-170,window.y+34,164,80};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    auto ping=takeTop(rows,36),closeAll=takeTop(rows,36);
+    router.addRegion(ping,widgetId(EditorWidget::FocusedPing));
+    router.addRegion(closeAll,widgetId(EditorWidget::FocusedCloseAll));
+    list.addImage(centred(takeLeft(ping,30),16,16),static_cast<UiImageId>(UiIcon::EditorFrameObject),theme.color.textDim);
+    builder.label(ping,"Ping na Hierarquia",theme.color.text,theme.type.caption);
+    list.addImage(centred(takeLeft(closeAll,30),16,16),static_cast<UiImageId>(UiIcon::UiClose),theme.color.axisX);
+    builder.label(closeAll,"Fechar todas",theme.color.axisX,theme.type.caption);
   }
 }
 
@@ -3747,8 +3831,12 @@ void buildComponentMenu(ScreenBuilder &builder,UiRect &content,const EditorEntit
     actions.push_back({UiIcon::UiHelp,"Referência",widgetId(EditorWidget::ComponentHelpBase)+index,
                        schema && schema->reference.starts_with("https://")});
   } else if(script) actions.push_back({UiIcon::IdeCode,"Abrir código",widgetId(EditorWidget::ScriptSourceBase)+index,true});
+  // Unity: ⋮ › Properties abre um Inspector só deste componente.
+  actions.push_back({UiIcon::ScenePin,"Propriedades",widgetId(EditorWidget::ComponentPropertiesBase)+index,true});
   actions.push_back({UiIcon::UiRemove,"Remover",widgetId(native?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase)+index,true,true});
-  const float cell=32,gap=4;
+  // As linhas encolhem (até 26) para caber tudo, com Remover sempre por último.
+  const float gap=4,rows=static_cast<float>((actions.size()+1)/2);
+  const float cell=std::clamp(content.height/rows-gap,26.f,32.f);
   const float half=(content.width-gap)*.5f;
   for(usize i=0;i<actions.size();i+=2) {
     if(content.height<cell) break;
@@ -3963,11 +4051,13 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
   if(same && state.textureViewer && meshRenderer(entity)) {buildTextureViewer(builder,content);return;}
   if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
-  auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
-  builder.list.addRect(button,theme.color.raised,theme.radius.control);
-  builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
-  builder.list.addImage(centred(takeLeft(button,40),28,28),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
-  builder.label(button,"Adicionar componente",theme.color.text,theme.type.body);
+  if(!builder.onlyComponent) {
+    auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
+    builder.list.addRect(button,theme.color.raised,theme.radius.control);
+    builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
+    builder.list.addImage(centred(takeLeft(button,40),28,28),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
+    builder.label(button,"Adicionar componente",theme.color.text,theme.type.body);
+  }
   struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;bool object=false;};
   std::vector<Card> cards;
   {
@@ -3982,6 +4072,13 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       }
       if(!known && (scene::scriptBehavior(v)||v->unresolved())) cards.push_back({nullptr,v,i});
     }
+  }
+  // Inspector focado num componente: só o cartão dele, sempre aberto.
+  if(builder.onlyComponent) {
+    std::vector<Card> only;
+    for(const auto &card:cards) if(card.value && card.value->instanceId()==builder.onlyComponent) only.push_back(card);
+    cards=std::move(only);
+    if(cards.empty()) {builder.label(content,"O componente não existe mais neste objeto",theme.color.textMuted,theme.type.caption,UiAlign::Center);return;}
   }
   if(same) {
     const auto focused=std::find_if(cards.begin(),cards.end(),[&](const Card &item) {
@@ -4008,7 +4105,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   for(u32 card=page*perPage;card<end;++card) {
     if(content.height<40) break;
     const auto &item=cards[card];const auto *script=scene::scriptBehavior(item.value);const auto *schema=script?scriptSchema(state,script->scriptType):nullptr;
-    const bool open=same&&(item.object?state.expandedComponent=="astra.object":item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
+    const bool open=builder.onlyComponent?true:same&&(item.object?state.expandedComponent=="astra.object":item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
     const bool menu=same&&!item.object&&(item.transform?state.transformMenu:item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
     std::string title=item.object?"Objeto":item.transform?"Transformação":item.native?item.native->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
     if(item.value && item.native && item.native->type->allowMultiple) title+=" · "+std::to_string(item.value->instanceId());
@@ -4298,6 +4395,7 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
       {"Copiar transformação",EditorWidget::TransformCopy,!root},
       {"Colar transformação",EditorWidget::TransformPaste,!root && state.hasTransformClipboard},
       {"Redefinir transformação",EditorWidget::TransformReset,!root},
+      {"Propriedades (janela)",EditorWidget::InspectorOpenFocused,!root},
       {state.inspectorDebug?"Modo Normal":"Modo Debug",EditorWidget::InspectorDebugToggle,true},
       {"Ping na Hierarquia",EditorWidget::InspectorPing,!root}};
   const u32 count=static_cast<u32>(std::size(actions));
@@ -4921,6 +5019,7 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
 }
 } // namespace
 
+void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   if (builder.state.importPanel) {
     builder.list.addRect(panel, builder.theme.color.surface);
@@ -4938,14 +5037,21 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     else buildTextureInspector(builder, inner);
     return;
   }
-  const UiTheme &theme = builder.theme;
   // O cadeado prende o Inspector num objeto; a seleção segue livre na
   // Hierarquia e na cena (Unity Manual/InspectorOptions).
-  const EditorEntityId target = builder.state.inspectorLocked ? builder.state.inspectorLocked : builder.state.selection;
+  buildInspectorFor(builder, panel, builder.state.inspectorLocked ? builder.state.inspectorLocked : builder.state.selection, 0);
+}
+
+// Inspector de um alvo: o principal (travado ou a seleção) ou um focado. Com
+// `onlyComponent`, só o cartão daquela instância, aberto (Unity: Properties de
+// um componente).
+void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent) {
+  const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(target);
   builder.list.addRect(panel, theme.color.surface);
   builder.router.addBlocker(panel);
   UiRect content = deflate(panel, UiInsets::all(theme.spacing.small));
+  builder.onlyComponent = onlyComponent;
 
   if (entity == nullptr) {
     builder.label(content, "Nada selecionado", theme.color.textMuted, theme.type.body,
@@ -4956,11 +5062,13 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   UiRect header = takeTop(content, kPanelHeaderHeight);
   builder.list.addImage(centred(takeLeft(header, 26.0f), 18.0f, 18.0f),
                         static_cast<UiImageId>(iconForEntity(*entity)), theme.color.text);
-  builder.iconButton(takeRight(header, 28.0f), UiIcon::EditorAuthorMore,
-                     widgetId(EditorWidget::InspectorMenu));
-  builder.iconButton(takeRight(header, 28.0f), UiIcon::SceneLock, widgetId(EditorWidget::InspectorLock),
-                     builder.state.inspectorLocked != 0,
-                     builder.state.inspectorLocked ? theme.color.accentInk : theme.color.textDim);
+  if (!builder.focusedWindow) {
+    builder.iconButton(takeRight(header, 28.0f), UiIcon::EditorAuthorMore,
+                       widgetId(EditorWidget::InspectorMenu));
+    builder.iconButton(takeRight(header, 28.0f), UiIcon::SceneLock, widgetId(EditorWidget::InspectorLock),
+                       builder.state.inspectorLocked != 0,
+                       builder.state.inspectorLocked ? theme.color.accentInk : theme.color.textDim);
+  }
   takeRight(header, theme.spacing.tiny);
   builder.toggle(takeRight(header, kToggleWidth + 4.0f), entity->active,
                  widgetId(EditorWidget::InspectorActive));
@@ -6874,13 +6982,13 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.qualityPanel) buildQualityPanel(builder,layout.viewport);
   if(state.lightExplorer) buildLightExplorer(builder,layout.viewport);
   if (state.entityMenu) {
-    const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(180.0f,layout.viewport.width), std::min(280.0f,layout.viewport.height-56.0f)};
+    const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(180.0f,layout.viewport.width), std::min(315.0f,layout.viewport.height-56.0f)};
     builder.list.addRect(menu, theme.color.raised, theme.radius.control);
     UiRect rows=menu;
-    const char *names[]={"Duplicar selecionado","Criar grupo","Excluir selecionado","Mover acima","Mover abaixo","Mudar pai","Mover para raiz","Renomear"};
-    const EditorWidget actions[]={EditorWidget::DuplicateSelection,EditorWidget::CreateGroup,EditorWidget::DeleteSelection,EditorWidget::MoveEarlier,EditorWidget::MoveLater,EditorWidget::ReparentSelection,EditorWidget::MoveToRoot,EditorWidget::RenameSelection};
-    for(u32 i=0;i<8;++i) {
-      const auto row=takeTop(rows,menu.height/8.0f);
+    const char *names[]={"Duplicar selecionado","Criar grupo","Excluir selecionado","Mover acima","Mover abaixo","Mudar pai","Mover para raiz","Renomear","Propriedades"};
+    const EditorWidget actions[]={EditorWidget::DuplicateSelection,EditorWidget::CreateGroup,EditorWidget::DeleteSelection,EditorWidget::MoveEarlier,EditorWidget::MoveLater,EditorWidget::ReparentSelection,EditorWidget::MoveToRoot,EditorWidget::RenameSelection,EditorWidget::HierarchyProperties};
+    for(u32 i=0;i<9;++i) {
+      const auto row=takeTop(rows,menu.height/9.0f);
       builder.label(row,names[i],theme.color.text,theme.type.body,UiAlign::Center);
       router.addRegion(row,widgetId(actions[i]));
     }
@@ -7083,6 +7191,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
+  if(state.workspace==EditorWorkspace::Scene || (state.workspace==EditorWorkspace::Play && state.playInspect))
+    buildFocusedInspectors(builder,layout);
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);
   if(state.colorField) buildColorWindow(builder,layout);
