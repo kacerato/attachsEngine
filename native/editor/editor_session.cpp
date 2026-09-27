@@ -1305,7 +1305,7 @@ void EditorSession::enterPlayMirror() {
 void EditorSession::leavePlayMirror() {
   const bool changed=document_.revision()!=playMirrorRevision_;
   playMirrorBusy_=history_.isOpen()||componentDragOpen_||lensDragOpen_||fieldWidget_!=0||gizmoTransactionOpen_||
-                  state_.draggingEntity!=kInvalidEntity||state_.draggingAsset||
+                  state_.draggingEntity!=kInvalidEntity||state_.draggingAsset||state_.componentReorder!=0||
                   pendingTextEdit().purpose!=EditorTextPurpose::None;
   const auto requested=state_.workspace;
   std::swap(document_,playMirror_);std::swap(history_,playHistory_);std::swap(sceneEpoch_,playMirrorEpoch_);
@@ -3451,6 +3451,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
 
+  if(handleComponentReorder(event,routing)) return true;
+
   const u32 hierarchyRows=widgetId(EditorWidget::HierarchyRowBase);
   if(routing.widgetId>=hierarchyRows && routing.widgetId<hierarchyRows+EditorDocument::kMaximumEntities) {
     // Horizontal movement starts a hierarchy drag; vertical movement retains
@@ -3543,7 +3545,57 @@ void EditorSession::preparePlay() {
   cancelPointers();
 }
 
+// Unity Manual/UsingComponents: arrastar o cabeçalho de um componente muda a
+// ordem dele no objeto. Aqui o gesto nasce de um arraste VERTICAL no cabeçalho
+// (o toque curto continua abrindo o cartão e o longo, o menu), o destino é o
+// cabeçalho sob o dedo e as setas de página viram ao passar por elas, porque o
+// Inspector pagina em vez de rolar. O movimento é o mesmo `moveInstance` de
+// Subir/Descer: identidade preservada e um passo de Desfazer.
+bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const auto header=[&](u32 widget) {
+    const u32 operation=widget&0xff000000u;
+    return operation==widgetId(EditorWidget::ComponentFoldBase) || operation==widgetId(EditorWidget::ScriptFoldBase);
+  };
+  if(!state_.componentReorder) {
+    if(!header(routing.widgetId) || !routing.dragging || event.phase!=UiPointerPhase::Move || history_.isOpen() ||
+       std::abs(routing.totalDelta.y)<18.0f || std::abs(routing.totalDelta.y)<std::abs(routing.totalDelta.x)*1.5f) return false;
+    const auto *entity=document_.find(state_.selection);
+    const u32 index=routing.widgetId&0x00ffffffu;
+    if(!entity || index>=entity->components.size()) return false;
+    state_.componentReorder=index+1;state_.componentReorderTarget=0;reorderPointer_=event.pointerId;reorderPagerHover_=0;
+    state_.nativeMenu=0;state_.scriptMenu=0;
+    state_.status="Solte sobre outro cabeçalho para mudar a ordem";
+  }
+  if(event.pointerId!=reorderPointer_) return true;
+  state_.componentReorderPoint=event.position;
+  const auto hover=router_.hitTest(event.position);
+  const u32 over=hover.target==UiPointerTarget::Widget?hover.widgetId:0;
+  state_.componentReorderTarget=header(over)?(over&0x00ffffffu)+1:0;
+  if(event.phase==UiPointerPhase::Move && over!=reorderPagerHover_) {
+    reorderPagerHover_=over;
+    // Mesma aritmética do toque nas setas: parte da página desenhada.
+    if(over==widgetId(EditorWidget::ComponentNext) || over==widgetId(EditorWidget::ComponentPrevious)) {
+      state_.componentPage=layout_.componentPage;
+      if(over==widgetId(EditorWidget::ComponentNext)) ++state_.componentPage;
+      else if(state_.componentPage) --state_.componentPage;
+      state_.componentSelection=state_.selection;
+    }
+  }
+  if(event.phase!=UiPointerPhase::Up && event.phase!=UiPointerPhase::Cancel) return true;
+  const u32 from=state_.componentReorder-1,to=state_.componentReorderTarget;
+  state_.componentReorder=0;state_.componentReorderTarget=0;reorderPointer_=0;reorderPagerHover_=0;
+  if(event.phase==UiPointerPhase::Cancel || !to || to-1==from) {state_.status="Ordem mantida";return true;}
+  const auto *entity=document_.find(state_.selection);
+  if(!entity || from>=entity->components.size() || history_.isOpen()) return true;
+  auto value=*entity;
+  if(!value.components.moveInstance(entity->components.at(from)->instanceId(),to-1) ||
+     !history_.applyValues(document_,entity->id,value)) {state_.status="Não foi possível mudar a ordem";return true;}
+  state_.status="Componente movido";
+  return true;
+}
+
 void EditorSession::cancelPointers() {
+  state_.componentReorder=0;state_.componentReorderTarget=0;reorderPointer_=0;
   if(lensDragOpen_) {history_.cancel(document_);lensDragOpen_=false;}
   if(componentDragOpen_) {history_.cancel(document_);componentDragOpen_=false;}
   finishCameraGesture(true);

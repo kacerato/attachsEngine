@@ -37,6 +37,23 @@ AE_TEST(component_contracts_are_complete_for_every_registered_type) {
   AE_EXPECT_TRUE(issues.empty(), "há propriedades sem identidade, consumidor ou capacidade válida");
 }
 
+// Unity não tem teto de componentes por objeto; a Astra tem 64 (formato e
+// memória). O teto é atingível com qualquer combinação que caiba e a recusa
+// diz o número, em vez de um "limite" sem valor.
+AE_TEST(component_limit_is_reachable_and_the_refusal_names_it) {
+  scene::Components components;
+  for(u32 i=0;i<scene::Components::MaximumCount;++i) {
+    auto plan=scene::planComponentAddition(components,"astra.time.timer");
+    AE_EXPECT_TRUE(plan.ready,"cabe até o teto");
+    if(!plan.ready) return;
+    components=std::move(plan.candidate);
+  }
+  AE_EXPECT_EQ(components.size(),static_cast<usize>(scene::Components::MaximumCount),"64 instâncias");
+  const auto refused=scene::planComponentAddition(components,"astra.time.timer");
+  AE_EXPECT_TRUE(!refused.ready && refused.error && std::string(refused.error).find("64")!=std::string::npos,
+                 "a recusa cita o teto");
+}
+
 AE_TEST(component_matrix_reports_default_domain_and_invalidation) {
   const auto rows = scene::allComponentContracts();
   AE_EXPECT_TRUE(rows.size() > 40, "a matriz deve cobrir todos os tipos registrados");

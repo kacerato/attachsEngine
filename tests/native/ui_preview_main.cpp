@@ -195,6 +195,17 @@ int main(int argc, char **argv) {
       state.referenceScriptType="component:astra.physics.body";
     }
   }
+  // Arraste do cabeçalho: a Luz levantada sobre a Malha.
+  if(argc>4 && std::string(argv[4])=="reorder") {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Poste");
+    auto value=*document.find(selection);
+    value.components.add(scene::MeshRenderer::descriptor);
+    value.components.add(scene::Light::descriptor);
+    document.applyEntityValues(selection,value);
+    state.componentSelection=selection;
+    state.componentReorder=2;state.componentReorderTarget=1;
+    state.componentReorderPoint={static_cast<float>(width)-150.0f,190.0f};
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

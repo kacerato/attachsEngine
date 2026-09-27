@@ -1343,6 +1343,75 @@ AE_TEST(script_component_field_picks_and_drops_objects_that_have_the_component) 
                  f.session.screen().status.find("corpo")!=std::string::npos,f.session.screen().status.c_str());
 }
 
+// Unity Manual/UsingComponents: arrastar o cabeçalho reordena os componentes.
+// O arraste vertical levanta o cartão, o cabeçalho sob o dedo é o destino, a
+// seta de página vira ao passar por ela e soltar fora de um cabeçalho não muda
+// nada. Cada movimento é um passo de Desfazer e preserva a identidade.
+AE_TEST(dragging_component_header_reorders_components_with_undo) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  auto value=*doc.find(f.cube);
+  value.components.add(scene::Light::descriptor);
+  value.components.add(scene::PhysicsBody::descriptor);
+  value.components.add(scene::Collider::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"malha, luz, corpo e colisor");
+  const auto order=[&] {
+    std::vector<std::string> ids;
+    for(u32 i=0;i<doc.find(f.cube)->components.size();++i) ids.emplace_back(doc.find(f.cube)->components.at(i)->type().id);
+    return ids;
+  };
+  const auto indexOf=[&](std::string_view type) {
+    const auto ids=order();
+    for(u32 i=0;i<ids.size();++i) if(ids[i]==type) return i;
+    return ~0u;
+  };
+  const u64 lightInstance=doc.find(f.cube)->components.at(indexOf("astra.render.light"))->instanceId();
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  const auto header=[&](std::string_view type) {return widgetId(EditorWidget::ComponentFoldBase)+indexOf(type);};
+  const auto drag=[&](UiPoint from,std::initializer_list<UiPoint> path) {
+    f.down(85,from);
+    f.move(85,{from.x,from.y+24});f.session.update();
+    AE_EXPECT_TRUE(f.session.screen().componentReorder!=0,"arraste vertical levanta o cartão");
+    UiPoint last=from;
+    for(const auto &point:path) {f.move(85,point);f.session.update();last=point;}
+    f.up(85,last);f.session.update();
+  };
+  const auto light=locateWidget(f.session,header("astra.render.light"));
+  const auto mesh=locateWidget(f.session,header("astra.render.mesh"));
+  AE_EXPECT_TRUE(light.x>=0 && mesh.x>=0,"malha e luz na primeira página");
+  const auto meshIndex=indexOf("astra.render.mesh");
+  drag(light,{{mesh.x,(light.y+mesh.y)*.5f},mesh});
+  AE_EXPECT_EQ(indexOf("astra.render.light"),meshIndex,"a luz entra no lugar da malha");
+  AE_EXPECT_EQ(doc.find(f.cube)->components.at(meshIndex)->instanceId(),lightInstance,"identidade preservada");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo de Desfazer");
+  AE_EXPECT_EQ(f.session.screen().componentReorder,0u,"o cartão é solto");
+
+  // Soltar fora de um cabeçalho mantém a ordem.
+  const auto before=order();
+  const auto lifted=locateWidget(f.session,header("astra.render.mesh"));
+  drag(lifted,{f.viewportCentre()});
+  AE_EXPECT_TRUE(order()==before,"soltar no viewport não reordena");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"nada gravado");
+
+  // Passar pela seta vira a página: a malha vai para depois do colisor.
+  const auto next=locateWidget(f.session,widgetId(EditorWidget::ComponentNext));
+  AE_EXPECT_TRUE(next.x>=0,"os cartões paginam no telefone");
+  const auto source=locateWidget(f.session,header("astra.render.mesh"));
+  f.down(86,source);f.move(86,{source.x,source.y+24});f.session.update();
+  f.move(86,next);f.session.update();
+  const auto collider=locateWidget(f.session,header("astra.physics.collider"));
+  AE_EXPECT_TRUE(collider.x>=0,"a página seguinte aparece durante o arraste");
+  f.move(86,collider);f.session.update();f.up(86,collider);f.session.update();
+  AE_EXPECT_EQ(indexOf("astra.render.mesh"),static_cast<u32>(order().size()-1),"a malha vai para o fim");
+  AE_EXPECT_EQ(history.undoDepth(),2u,"outro passo");
+  AE_EXPECT_TRUE(history.undo(doc) && history.undo(doc),"desfazer os dois");
+  AE_EXPECT_EQ(indexOf("astra.render.mesh"),meshIndex,"ordem original de volta");
+
+  // Toque curto no cabeçalho continua abrindo o cartão.
+  if(locateWidget(f.session,header("astra.render.light")).x<0) tapWidget(f,widgetId(EditorWidget::ComponentPrevious));
+  tapWidget(f,header("astra.render.light"));
+  AE_EXPECT_EQ(f.session.screen().expandedNative,lightInstance,"toque abre o cartão");
+}
+
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));

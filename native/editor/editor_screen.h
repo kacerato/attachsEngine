@@ -569,6 +569,10 @@ struct EditorScreenState final {
   // pelo mundo, a faixa passa à cor de aviso com o motivo.
   std::string playEditNote;
   bool playEditRefused=false;
+  // Arraste do cabeçalho para reordenar (Unity: arrastar o componente no
+  // Inspector). Índice+1 do cartão levantado e do cabeçalho sob o dedo.
+  u32 componentReorder=0,componentReorderTarget=0;
+  ui::UiPoint componentReorderPoint{};
   EditorInspectorTab tab = EditorInspectorTab::Transform;
   // Diagnósticos da sessão são ferramentas editoriais, fora da cena e do Undo.
   bool diagnosticDockOpen=false;

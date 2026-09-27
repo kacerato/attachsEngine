@@ -2342,7 +2342,7 @@ void buildComponentList(ScreenBuilder &builder,UiRect content,const EditorEntity
     const EditorScriptType *script=row.kind==CatalogRow::Script?&state.code->scriptTypes()[row.index]:nullptr;
     const bool chosen=entry?state.componentPreview==row.index+1:state.scriptPreviewType==script->id;
     const char *reason=entry?(!entry->type->allowMultiple&&entity.components.find(*entry->type)?"Já adicionado":entry->unavailable(entity)):
-        entity.components.size()>=scene::Components::MaximumCount?"Limite de componentes atingido":nullptr;
+        entity.components.size()>=scene::Components::MaximumCount?"Limite de 64 componentes por objeto":nullptr;
     builder.list.addRect(cell,chosen?theme.color.line:theme.color.raised,theme.radius.control);
     if(chosen) builder.list.addRect({cell.x,cell.y+6,3,cell.height-12},theme.color.accent,1.5f);
     auto tile=takeLeft(cell,48);tile=centred(tile,38,38);
@@ -3101,6 +3101,15 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     auto row=takeTop(content,44.0f);const auto hit=row;
     builder.list.addRect(row,theme.color.raised,theme.radius.control);
     if(open) builder.list.addRect({row.x,row.y+4,3,row.height-8},theme.color.accent,1);
+    // Reordenando: o cartão levantado fica apagado e o destino mostra a barra
+    // de inserção do lado em que o cartão vai entrar.
+    if(state.componentReorder && item.value && !item.object && !item.transform) {
+      if(state.componentReorder==item.index+1) builder.list.addRect(hit,withAlpha(theme.color.voidBlack,.45f),theme.radius.control);
+      else if(state.componentReorderTarget==item.index+1) {
+        const float y=state.componentReorderTarget<state.componentReorder?hit.y-2:hit.bottom()-1;
+        builder.list.addRect({hit.x,y,hit.width,3},theme.color.accent,1);
+      }
+    }
     builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
     builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
     auto more=takeRight(row,item.object?0:32);
@@ -3950,9 +3959,17 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   const float half = header.height * 0.5f;
   builder.label({header.x, header.y, header.width, half}, entity->name, theme.color.text,
                 theme.type.cardName);
-  builder.label({header.x, header.y + half, header.width, half}, // O vínculo com a fonte tem linha própria, não é card: não entra na contagem.
-                (std::to_string(entity->components.size()-(scene::importLink(entity->components)?1u:0u))+" componentes").c_str(),
-                theme.color.textDim, theme.type.label);
+  // O vínculo com a fonte tem linha própria, não é card: não entra na contagem.
+  // Perto do teto por objeto (a Unity não tem teto; aqui é explícito) a linha
+  // passa a mostrar o limite em cor de aviso, antes de o Add recusar.
+  {
+    const usize cards=entity->components.size()-(scene::importLink(entity->components)?1u:0u);
+    const bool near=entity->components.size()+8>=scene::Components::MaximumCount;
+    const std::string count=near?std::to_string(entity->components.size())+" de "+std::to_string(scene::Components::MaximumCount)+" componentes":
+                                 std::to_string(cards)+(cards==1?" componente":" componentes");
+    builder.label({header.x, header.y + half, header.width, half},count.c_str(),
+                  near?theme.color.warning:theme.color.textDim, theme.type.label);
+  }
 
   if(builder.state.inspectorMenu && builder.state.workspace==EditorWorkspace::Scene) {
     buildObjectActions(builder,content,*entity);
@@ -5858,6 +5875,30 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       const UiRect cell{content.x+i*content.width/5,content.y+4*ch,content.width/5,ch};
       builder.label(cell,labels[i],theme.color.text,theme.type.caption,UiAlign::Center);
       router.addRegion(cell,widgetId(actions[i]));
+    }
+  }
+  if(state.componentReorder && state.document) {
+    const auto *entity=state.document->find(state.selection);
+    const auto *value=entity&&state.componentReorder<=entity->components.size()?entity->components.at(state.componentReorder-1):nullptr;
+    if(value) {
+      const auto *schema=scene::findComponentSchema(value->type().id);
+      const auto *script=scene::scriptBehavior(value);
+      const auto *scriptType=script?scriptSchema(state,script->scriptType):nullptr;
+      const std::string name=scriptType?scriptType->name:script?script->scriptType:schema?schema->name:std::string(value->type().id);
+      // Ao lado do dedo, do lado do viewport: por cima dos cartões ele
+      // esconderia justamente o cabeçalho de destino.
+      UiRect ghost{std::clamp(state.componentReorderPoint.x-244,state.surface.x,std::max(state.surface.x,state.surface.right()-220)),
+                   std::clamp(state.componentReorderPoint.y-22,state.surface.y,std::max(state.surface.y,state.surface.bottom()-44)),220,44};
+      list.addRect({ghost.x-1,ghost.y-1,ghost.width+2,ghost.height+2},theme.color.accent,theme.radius.control);
+      list.addRect(ghost,theme.color.raised,theme.radius.control);
+      list.addRect({ghost.x,ghost.y,3,ghost.height},theme.color.accent,1);
+      UiRect inner=deflate(ghost,UiInsets{10,0,8,0});
+      list.addImage(centred(takeLeft(inner,28),22,22),
+                    static_cast<UiImageId>(schema&&!script?editorIconByName(schema->icon):UiIcon::ScriptingCode),0xffffffff);
+      takeLeft(inner,6);
+      builder.label(takeTop(inner,24),name,theme.color.text,theme.type.body);
+      builder.label(inner,state.componentReorderTarget&&state.componentReorderTarget!=state.componentReorder?
+                    "Solte para mover aqui":"Solte sobre outro cabeçalho",theme.color.textMuted,theme.type.caption);
     }
   }
   if(state.draggingAsset || state.draggingEntity) {

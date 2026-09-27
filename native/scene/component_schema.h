@@ -213,7 +213,10 @@ inline ComponentCompositionPlan planComponentAddition(const Components &source,
       }
     }
     if(source.size()+plan.addedTypes.size()>=Components::MaximumCount) {
-      plan.error="Limite de componentes atingido";return false;
+      // Teto do formato e da memória por objeto; a Unity não tem teto, então
+      // a recusa diz qual é em vez de só "limite".
+      static_assert(Components::MaximumCount==64,"a mensagem do limite cita o número");
+      plan.error="Limite de 64 componentes por objeto";return false;
     }
     plan.addedTypes.push_back(id);
     visiting.pop_back();return true;
