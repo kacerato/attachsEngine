@@ -3378,6 +3378,57 @@ AE_TEST(focused_inspectors_open_edit_ping_and_restore) {
   AE_EXPECT_EQ(state.focusedInspectors[1].component,mesh,"e à mesma Malha");
 }
 
+// Unity 6000.0 Manual/UndoWindow: o histórico lista os passos com o objeto
+// afetado; tocar num ponto desfaz ou refaz até ele; os desfeitos seguem
+// listados até uma edição nova descartá-los.
+AE_TEST(undo_history_lists_steps_and_moves_to_a_point) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  history.clear();
+  const auto post=history.createEntity(doc,doc.root(),EditorEntityKind::Folder,"Poste");
+  auto moved=doc.find(f.cube)->transform;moved.position[0]+=2;
+  AE_EXPECT_TRUE(history.setTransform(doc,f.cube,moved),"cubo movido");
+  auto renamed=*doc.find(post);assignEntityName(renamed,"Poste alto");
+  AE_EXPECT_TRUE(history.applyValues(doc,post,renamed),"poste renomeado");
+  AE_EXPECT_EQ(history.entryCount(),3u,"três passos");
+  AE_EXPECT_TRUE(history.describe(0)=="Criar objeto \xC2\xB7 Poste","criar com o nome");
+  AE_EXPECT_TRUE(history.describe(1).starts_with("Transformação"),"passo implícito ganha o que mudou");
+  AE_EXPECT_TRUE(history.describe(2)=="Renomear \xC2\xB7 Poste alto","renomear");
+  // Toque curto desfaz um passo; toque longo abre o histórico.
+  const auto undo=locateWidget(f.session,widgetId(EditorWidget::Undo));
+  AE_EXPECT_TRUE(undo.x>=0,"botão Desfazer");
+  f.session.handlePointer({130,UiPointerPhase::Down,undo,30.0});
+  f.session.handlePointer({130,UiPointerPhase::Up,undo,30.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.undoHistory,"histórico aberto");
+  AE_EXPECT_EQ(history.undoDepth(),3u,"o toque longo não desfaz");
+  AE_EXPECT_EQ(state.undoEntries.size(),3u,"três linhas");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::UndoHistoryRowBase)+3).x<0,"o ponto atual não é tocável");
+  // Voltar ao ponto 1: desfaz dois passos de uma vez.
+  tapWidget(f,widgetId(EditorWidget::UndoHistoryRowBase)+1);
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo aplicado");
+  AE_EXPECT_EQ(history.redoDepth(),2u,"dois refazíveis");
+  AE_EXPECT_EQ(doc.find(f.cube)->transform.position[0],moved.position[0]-2,"o cubo voltou");
+  AE_EXPECT_TRUE(doc.exists(post) && std::string_view(doc.find(post)->name)=="Poste","o nome voltou");
+  AE_EXPECT_EQ(state.undoEntries.size(),3u,"os desfeitos seguem listados");
+  // Refazer até o fim e voltar ao começo.
+  tapWidget(f,widgetId(EditorWidget::UndoHistoryRowBase)+3);
+  AE_EXPECT_TRUE(std::string_view(doc.find(post)->name)=="Poste alto","refeito até o fim");
+  tapWidget(f,widgetId(EditorWidget::UndoHistoryRowBase)+0);
+  AE_EXPECT_TRUE(!doc.exists(post) && history.undoDepth()==0,"cena como abriu");
+  // Ordem: mais recente no topo ou embaixo.
+  const bool newest=state.undoNewestFirst;
+  tapWidget(f,widgetId(EditorWidget::UndoHistoryOrder));
+  AE_EXPECT_TRUE(state.undoNewestFirst!=newest,"ordem invertida");
+  // Uma edição nova descarta os desfeitos.
+  tapWidget(f,widgetId(EditorWidget::UndoHistoryRowBase)+1);
+  auto again=doc.find(f.cube)->transform;again.position[1]+=1;
+  AE_EXPECT_TRUE(history.setTransform(doc,f.cube,again),"edição nova");
+  f.session.update();
+  AE_EXPECT_EQ(state.undoEntries.size(),2u,"o futuro desfeito sai da lista");
+  tapWidget(f,widgetId(EditorWidget::UndoHistoryClose));
+  AE_EXPECT_TRUE(!state.undoHistory,"fechado");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

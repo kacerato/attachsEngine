@@ -23,6 +23,7 @@
 #include "core/base.h"
 #include "editor/editor_document.h"
 
+#include <string>
 #include <string_view>
 #include <vector>
 #include <functional>
@@ -104,6 +105,12 @@ public:
   std::string_view redoLabel() const noexcept;
   u32 undoDepth() const noexcept { return static_cast<u32>(undoStack_.size()); }
   u32 redoDepth() const noexcept { return static_cast<u32>(redoStack_.size()); }
+  // Janela de histórico (Unity 6000.0 Manual/UndoWindow): os passos do mais
+  // antigo ao mais novo, os aplicados seguidos dos desfeitos na ordem em que
+  // Refazer os traria. `describe` dá o rótulo com o objeto afetado; os passos
+  // implícitos ("Edit") ganham o nome do que mudou.
+  u32 entryCount() const noexcept { return undoDepth() + redoDepth(); }
+  std::string describe(u32 index) const;
 
   void clear() noexcept;
 

@@ -325,6 +325,13 @@ int main(int argc, char **argv) {
     state.inspectorDebug=std::string(argv[4])=="inspector-debug";
     state.pingEntity=locked;state.pingUntil=1;state.uiTime=0;
   }
+  // Histórico de Desfazer com passos aplicados e desfeitos.
+  if(argc>4 && std::string(argv[4]).starts_with("undo-history")) {
+    state.undoHistory=true;state.undoNewestFirst=std::string(argv[4])!="undo-history-oldest";
+    state.undoEntries={"Criar objeto \xC2\xB7 Poste","Transformação \xC2\xB7 Cubo","Adicionar componente \xC2\xB7 Poste",
+                       "Intensidade das luzes","Renomear \xC2\xB7 Poste alto","Excluir \xC2\xB7 2 objetos"};
+    state.undoApplied=4;
+  }
   // Inspectors focados: um de objeto, um só do componente de luz; ativo o de objeto.
   if(argc>4 && std::string(argv[4]).starts_with("focused")) {
     const auto lamp=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Lanterna");

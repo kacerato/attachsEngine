@@ -933,6 +933,72 @@ void buildFocusedInspectors(ScreenBuilder &builder,EditorScreenLayout &layout) {
   }
 }
 
+// Histórico de Desfazer (Unity 6000.0 Manual/UndoWindow) sob os botões de
+// Desfazer/Refazer: tocar num ponto leva a cena até ele, desfazendo ou refazendo
+// quantos passos forem precisos. Os desfeitos ficam apagados com um traço
+// vermelho (como na Unity) até uma edição nova descartá-los.
+void buildUndoHistory(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  const float width=std::min(320.f,state.surface.width-16);
+  const float top=layout.topBar.bottom()+4;
+  const UiRect window{state.surface.right()-width-8,top,width,std::max(120.f,state.surface.bottom()-top-8)};
+  router.addBlocker(window);
+  list.addRect(deflate(window,UiInsets::all(-1)),theme.color.line,theme.radius.control);
+  list.addRect(window,theme.color.surface,theme.radius.control);
+  auto content=deflate(window,UiInsets::all(6));
+  auto header=takeTop(content,40);
+  builder.iconButton(takeRight(header,36),UiIcon::UiClose,widgetId(EditorWidget::UndoHistoryClose));
+  takeRight(header,4);
+  builder.iconButton(takeRight(header,36),state.undoNewestFirst?UiIcon::UiChevronDown:UiIcon::UiChevronUp,
+                     widgetId(EditorWidget::UndoHistoryOrder));
+  list.addImage(centred(takeLeft(header,30),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+  const u32 count=static_cast<u32>(state.undoEntries.size());
+  const u32 undone=count-std::min(count,state.undoApplied);
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},"Histórico",theme.color.text,theme.type.cardName);
+  const std::string summary=std::to_string(state.undoApplied)+(state.undoApplied==1?" passo":" passos")+
+      (undone?" · "+std::to_string(undone)+(undone==1?" desfeito":" desfeitos"):std::string());
+  builder.label({header.x,header.y+half,header.width,half},summary.c_str(),theme.color.textDim,theme.type.label);
+  // Pontos: 0 = cena como abriu, i = depois do passo i.
+  const u32 points=count+1;
+  auto footer=takeBottom(content,30);
+  const float rowHeight=38;
+  const u32 perPage=std::max(1u,static_cast<u32>(content.height/rowHeight));
+  const u32 pages=(points+perPage-1)/perPage,page=std::min(state.undoHistoryPage,pages-1);
+  for(u32 slot=page*perPage;slot<points && slot<(page+1)*perPage;++slot) {
+    const u32 point=state.undoNewestFirst?points-1-slot:slot;
+    auto row=takeTop(content,rowHeight);row.height-=4;
+    const bool current=point==state.undoApplied,redo=point>state.undoApplied;
+    list.addRect(row,current?withAlpha(theme.color.accent,.18f):theme.color.silhouette,theme.radius.control);
+    if(current) list.addRect({row.x,row.y,3,row.height},theme.color.accent,1);
+    if(redo) list.addRect({row.x,row.y,3,row.height},theme.color.danger,1);
+    auto inner=deflate(row,UiInsets{10,0,8,0});
+    const auto number=takeLeft(inner,28);
+    builder.label(number,point?std::to_string(point).c_str():"·",redo?theme.color.textFaint:theme.color.textDim,
+                  theme.type.caption,UiAlign::Center);
+    if(current) {
+      const auto tag=takeRight(inner,56);
+      list.addRect(centred(tag,52,20),theme.color.accent,10);
+      builder.label(tag,"atual",theme.color.accentInk,theme.type.label,UiAlign::Center);
+    }
+    const std::string &text=point?state.undoEntries[point-1]:std::string("Cena aberta");
+    list.pushClip(inner);
+    builder.label(deflate(inner,UiInsets{4,0,2,0}),text,redo?theme.color.textFaint:current?theme.color.text:theme.color.textDim,
+                  theme.type.caption);
+    list.popClip();
+    if(!current) router.addRegion(row,widgetId(EditorWidget::UndoHistoryRowBase)+point);
+  }
+  if(pages>1) {
+    const auto previous=takeLeft(footer,44),next=takeRight(footer,44);
+    builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.title,UiAlign::Center);
+    builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.title,UiAlign::Center);
+    if(page) router.addRegion(previous,widgetId(EditorWidget::UndoHistoryPrevious));
+    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::UndoHistoryNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textDim,theme.type.caption,UiAlign::Center);
+  } else builder.label(footer,count?"Toque num ponto para voltar a ele":"Nada para desfazer ainda",theme.color.textFaint,
+                       theme.type.caption,UiAlign::Center);
+}
+
 void buildPhysicsOverlay(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto *entity=state.document->find(state.selection);
   if(!entity || state.workspace!=EditorWorkspace::Scene || state.componentSelection!=entity->id) return;
@@ -7196,6 +7262,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);
   if(state.colorField) buildColorWindow(builder,layout);
+  if(state.undoHistory) buildUndoHistory(builder,layout);
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;

@@ -1598,6 +1598,9 @@ public:
   void pingEntity(EditorEntityId id);
   // Inspector focado (Unity: Properties) de um objeto ou de um componente dele.
   void openFocusedInspector(EditorEntityId entity,u64 component=0);
+  // Leva a cena ao ponto `applied` do histórico (quantos passos aplicados),
+  // desfazendo ou refazendo em sequência. Falso se algum passo recusar.
+  bool moveHistoryTo(u32 applied);
 private:
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};

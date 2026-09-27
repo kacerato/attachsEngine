@@ -329,7 +329,7 @@ bool EditorSession::setProjectDirectory(const char *path) {
 void EditorSession::loadEditorPreferences() {
   state_.pickerAdvanced=false;
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
-  state_.focusedCollapsed=false;state_.focusedMenu=false;
+  state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
   std::filesystem::path file;
   if(files_.rootPath().empty() ||
      !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
@@ -344,6 +344,7 @@ void EditorSession::loadEditorPreferences() {
     std::istringstream fields(line);
     if(!(fields>>key)) continue;
     if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
+    else if(key=="undo_order" && fields>>value) state_.undoNewestFirst=value!="oldest";
     else if(key=="focused") {
       // Inspector focado aberto quando o projeto fechou (Unity os restaura).
       EditorEntityId entity=0;u64 component=0;std::string name;
@@ -362,6 +363,7 @@ void EditorSession::saveEditorPreferences() {
   std::error_code ec;std::filesystem::create_directories(file.parent_path(),ec);
   std::ostringstream out;
   out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
+  out<<"undo_order "<<(state_.undoNewestFirst?"newest":"oldest")<<'\n';
   for(u32 i=0;i<state_.focusedInspectors.size();++i)
     out<<"focused "<<state_.focusedInspectors[i].entity<<' '<<state_.focusedInspectors[i].component<<' '
        <<std::quoted(i<focusedNames_.size()?focusedNames_[i]:std::string())<<'\n';
@@ -1582,6 +1584,20 @@ void EditorSession::openFocusedInspector(EditorEntityId entity,u64 component) {
   state_.focusedCollapsed=false;state_.focusedMenu=false;focusedValidated_=true;
   state_.status=std::string("Propriedades de ")+object->name;
   saveEditorPreferences();
+}
+
+bool EditorSession::moveHistoryTo(u32 applied) {
+  if(isPlaying() || applied>history_.entryCount()) return false;
+  bool changed=false;
+  while(history_.undoDepth()!=applied) {
+    EditorActionRequest command;
+    command.version=sceneVersion();command.entity=state_.selection;
+    command.action=history_.undoDepth()>applied?EditorAction::Undo:EditorAction::Redo;
+    if(dispatch(command).status!=EditorActionStatus::Applied) break;
+    changed=true;
+  }
+  if(changed && state_.meshPicker && state_.resourceProperty=="collision_mesh") refreshCollisionMeshDraft();
+  return history_.undoDepth()==applied;
 }
 
 void EditorSession::validateFocusedInspectors() {
@@ -3924,6 +3940,30 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         state_.status=accepted?"Pai alterado; transformacao mundial preservada":"Mudanca de pai cancelada ou incompativel";
         if(accepted) setSelection(entity);
       }
+      return true;
+    }
+  }
+  // Unity 6000.0 Manual/UndoWindow: o histórico abre pelo ícone de Desfazer;
+  // aqui, pelo toque longo em Desfazer ou Refazer (o toque curto continua
+  // desfazendo um passo).
+  if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds &&
+     (routing.widgetId==widgetId(EditorWidget::Undo) || routing.widgetId==widgetId(EditorWidget::Redo))) {
+    state_.undoHistory=true;state_.undoHistoryPage=0;
+    return true;
+  }
+  if(routing.tapped && state_.undoHistory) {
+    const u32 key=routing.widgetId;
+    if(key==widgetId(EditorWidget::UndoHistoryClose)) {state_.undoHistory=false;return true;}
+    if(key==widgetId(EditorWidget::UndoHistoryOrder)) {
+      state_.undoNewestFirst=!state_.undoNewestFirst;state_.undoHistoryPage=0;saveEditorPreferences();return true;
+    }
+    if(key==widgetId(EditorWidget::UndoHistoryPrevious)) {if(state_.undoHistoryPage) --state_.undoHistoryPage;return true;}
+    if(key==widgetId(EditorWidget::UndoHistoryNext)) {++state_.undoHistoryPage;return true;}
+    if(key>=widgetId(EditorWidget::UndoHistoryRowBase) && key<=widgetId(EditorWidget::UndoHistoryRowBase)+history_.entryCount()) {
+      const u32 point=key-widgetId(EditorWidget::UndoHistoryRowBase);
+      const bool reached=moveHistoryTo(point);
+      state_.status=!reached?"Histórico: um passo recusou; a cena parou no último ponto possível":
+                    point?"Histórico: "+history_.describe(point-1):std::string("Histórico: cena como abriu");
       return true;
     }
   }
@@ -7054,6 +7094,12 @@ void EditorSession::update() {
   state_.assetCount=mapScene_.assetCount();
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
+  if(state_.undoHistory) {
+    if(isPlaying()) state_.undoHistory=false;
+    state_.undoEntries.resize(history_.entryCount());
+    for(u32 i=0;i<state_.undoEntries.size();++i) state_.undoEntries[i]=history_.describe(i);
+    state_.undoApplied=history_.undoDepth();
+  }
   u32 pressed = 0;
   state_.pressedWidget = router_.pressedWidget(pressed) ? pressed : 0;
 

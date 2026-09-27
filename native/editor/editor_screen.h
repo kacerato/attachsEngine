@@ -396,6 +396,10 @@ enum class EditorWidget : u32 {
   // Inspectors focados (Unity: Properties): abrir, abas, fechar, ⋮, minimizar.
   InspectorOpenFocused, FocusedMenu, FocusedPing, FocusedCloseAll, FocusedCollapse, FocusedChip, HierarchyProperties,
   FocusedTabBase=0xC6000100u, FocusedCloseBase=0xC6000200u, ComponentPropertiesBase=0xC6010000u,
+  // Histórico de Desfazer (Unity 6000.0 Manual/UndoWindow): fechar, ordem,
+  // páginas e uma linha por ponto do histórico (0 = cena como abriu).
+  UndoHistoryClose=0xC7000000u, UndoHistoryOrder, UndoHistoryPrevious, UndoHistoryNext,
+  UndoHistoryRowBase=0xC7000100u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -503,7 +507,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -642,6 +646,12 @@ struct EditorScreenState final {
   std::vector<FocusedInspector> focusedInspectors;
   u32 focusedActive=0;       // aba visível (índice+1)
   bool focusedCollapsed=false,focusedMenu=false;
+  // Histórico de Desfazer: aberto pelo toque longo em Desfazer/Refazer. As
+  // entradas vêm do EditorHistory (mais antiga primeiro); `undoApplied` é
+  // quantas estão aplicadas, isto é, o ponto atual.
+  bool undoHistory=false,undoNewestFirst=true;
+  u32 undoHistoryPage=0,undoApplied=0;
+  std::vector<std::string> undoEntries;
   // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
   EditorEntityId pingEntity=0;
   double pingUntil=0,uiTime=0;

@@ -5,6 +5,7 @@
 #include "editor/editor_map_scene.h"
 
 #include <algorithm>
+#include <cstring>
 
 namespace ae::editor {
 namespace {
@@ -408,6 +409,59 @@ bool EditorHistory::redo(EditorDocument &document) {
   replaying_ = false;
   undoStack_.push_back(std::move(transaction));
   return ok;
+}
+
+namespace {
+std::string_view describeCommand(const EditorCommand &command) {
+  switch (command.kind) {
+    case EditorCommandKind::Create: return "Criar objeto";
+    case EditorCommandKind::Destroy: return "Excluir objeto";
+    case EditorCommandKind::Reparent: return "Mudar pai";
+    case EditorCommandKind::Views: return "Vistas";
+    case EditorCommandKind::Layers: return "Camadas físicas";
+    case EditorCommandKind::InputActions: return "Mapa de entrada";
+    case EditorCommandKind::ApplyValues: break;
+  }
+  const auto &a = command.before, &b = command.after;
+  if (std::string_view(a.name) != std::string_view(b.name)) return "Renomear";
+  if (std::memcmp(&a.transform, &b.transform, sizeof(a.transform)) != 0) return "Transformação";
+  if (a.active != b.active) return b.active ? "Ativar" : "Desativar";
+  if (a.components.size() < b.components.size()) return "Adicionar componente";
+  if (a.components.size() > b.components.size()) return "Remover componente";
+  if (a.layer != b.layer) return "Camada";
+  if (a.visible != b.visible || a.castShadow != b.castShadow || a.receiveShadow != b.receiveShadow ||
+      a.isStatic != b.isStatic) return "Renderização";
+  return "Editar componente";
+}
+} // namespace
+
+std::string EditorHistory::describe(u32 index) const {
+  if (index >= entryCount()) return {};
+  const Transaction &step = index < undoStack_.size()
+      ? undoStack_[index] : redoStack_[redoStack_.size() - 1 - (index - undoStack_.size())];
+  std::string_view label = step.label;
+  // Rótulos genéricos antigos (em inglês) viram a descrição do comando.
+  if (label == "Delete") label = "Excluir";
+  else if (label == "Duplicate") label = "Duplicar";
+  else if (label == "Reparent") label = "Mudar pai";
+  std::string text = label.empty() || label == "Edit"
+      ? std::string(step.commands.empty() ? std::string_view("Editar") : describeCommand(step.commands.front()))
+      : std::string(label);
+  // Objeto afetado: o nome quando é um só, a contagem quando são vários.
+  EditorEntityId first = kInvalidEntity;
+  u32 objects = 0;
+  std::string_view name;
+  for (const auto &command : step.commands) {
+    if (command.id == kInvalidEntity || command.id == first) continue;
+    if (objects == 0) {
+      first = command.id;
+      name = command.kind == EditorCommandKind::Destroy ? command.before.name : command.after.name;
+    }
+    ++objects;
+  }
+  if (objects == 1 && !name.empty() && text.find(name) == std::string::npos) text += " \xC2\xB7 " + std::string(name);
+  else if (objects > 1) text += " \xC2\xB7 " + std::to_string(objects) + " objetos";
+  return text;
 }
 
 std::string_view EditorHistory::undoLabel() const noexcept {
