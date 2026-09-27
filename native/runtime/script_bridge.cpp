@@ -122,7 +122,20 @@ void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
   if (p.valueType == "string") jsonString(out, p.value);
   else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
   else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }
-  else if (scene::scriptColorType(p.valueType)) {
+  else if (scene::scriptGradientType(p.valueType)) {
+    scene::ScriptGradient gradient;
+    scene::parseScriptGradient(p.value, gradient);
+    out << "{\"Mode\":" << static_cast<u32>(gradient.mode) << ",\"ColorKeys\":[";
+    for (usize i = 0; i < gradient.colors.size(); ++i) {
+      const auto &key = gradient.colors[i];
+      out << (i ? "," : "") << "{\"Time\":" << key.time << ",\"Color\":{\"R\":" << key.rgb[0] << ",\"G\":" << key.rgb[1]
+          << ",\"B\":" << key.rgb[2] << ",\"A\":1}}";
+    }
+    out << "],\"AlphaKeys\":[";
+    for (usize i = 0; i < gradient.alphas.size(); ++i)
+      out << (i ? "," : "") << "{\"Time\":" << gradient.alphas[i].time << ",\"Alpha\":" << gradient.alphas[i].alpha << '}';
+    out << "]}";
+  } else if (scene::scriptColorType(p.valueType)) {
     float rgba[4]{1, 1, 1, 1};
     scene::parseScriptColor(p.value, rgba);
     out << "{\"R\":" << rgba[0] << ",\"G\":" << rgba[1] << ",\"B\":" << rgba[2] << ",\"A\":" << rgba[3] << '}';

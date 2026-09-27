@@ -456,6 +456,191 @@ void buildColorWindow(ScreenBuilder &builder,EditorScreenLayout &layout) {
   }
 }
 
+// Faixa de gradiente em fatias. Em cima a cor com alfa sobre xadrez; embaixo
+// a cor opaca, para o alfa baixo não esconder qual é a cor.
+void drawGradientBar(ScreenBuilder &builder,UiRect bar,const scene::ScriptGradient &gradient,u32 slices=48) {
+  auto &list=builder.list;
+  const float top=bar.height*.62f;
+  for(u32 k=0;k<slices;++k) {
+    const float x=bar.x+k*bar.width/slices,w=bar.width/slices+1;
+    const float checker=std::max(4.f,top*.5f);
+    for(float y=0;y<top;y+=checker) {
+      const bool dark=(static_cast<u32>((x-bar.x)/checker)+static_cast<u32>(y/checker))%2;
+      list.addRect({x,bar.y+y,w,std::min(checker,top-y)},dark?0xff8c8c8cu:0xffcfcfcfu,0);
+    }
+    float rgba[4];scene::evaluateScriptGradient(gradient,(k+.5f)/slices,rgba);
+    float base[3],intensity=0;splitHdr({rgba[0],rgba[1],rgba[2]},base,intensity);
+    float srgb[3];for(u32 i=0;i<3;++i) srgb[i]=colorToSrgb(base[i]);
+    float h=0,s=0,v=0;srgbToHsv(srgb,h,s,v);
+    list.addRect({x,bar.y,w,top},pickerColor(h,s,v,rgba[3]),0);
+    list.addRect({x,bar.y+top,w,bar.height-top},pickerColor(h,s,v),0);
+  }
+}
+
+// Editor de gradiente (Unity 6000.0 Manual/InspectorColorPicker, "Gradient
+// Editor"). Paradas de alfa em cima e de cor embaixo da faixa: tocar numa
+// parada escolhe, arrastar move, arrastar para longe da faixa apaga, tocar no
+// vazio de uma faixa acrescenta. A parada escolhida mostra cor (abre a janela
+// de cor) ou alfa e a posição. Modos Blend, Perceptual e Fixed; presets em
+// bibliotecas do projeto. Nada grava antes de Aplicar.
+void buildGradientEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  scene::ScriptGradient gradient;
+  if(!scene::parseScriptGradient(state.gradientDraft,gradient)) return;
+  router.addBlocker(state.surface);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
+  const UiRect panel=centred(state.surface,std::min(640.f,state.surface.width-16),std::min(360.f,state.surface.height-16));
+  list.addRect(panel,theme.color.surface,theme.radius.control);
+  auto content=deflate(panel,UiInsets::all(10));
+  auto header=takeTop(content,34);
+  builder.label(takeLeft(header,130),state.gradientType=="gradient:hdr"?"Gradiente HDR":"Gradiente",theme.color.text,theme.type.title);
+  const auto apply=takeRight(header,92);takeRight(header,6);const auto cancel=takeRight(header,92);
+  list.addRect(apply,theme.color.accent,theme.radius.control);
+  builder.label(apply,"Aplicar",theme.color.accentInk,theme.type.caption,UiAlign::Center);router.addRegion(apply,widgetId(EditorWidget::GradientApply));
+  list.addRect(cancel,theme.color.raised,theme.radius.control);
+  builder.label(cancel,"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);router.addRegion(cancel,widgetId(EditorWidget::GradientCancel));
+  takeRight(header,10);
+  const char *modes[]{"Blend","Fixed","Perceptual"};
+  const float tab=std::min(92.f,header.width/3);
+  for(u32 i=0;i<3;++i) {
+    const UiRect cell{header.x+i*tab,header.y+3,tab-4,header.height-6};
+    const bool on=static_cast<u32>(gradient.mode)==i;
+    list.addRect(cell,on?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    builder.label(cell,modes[i],on?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(cell,widgetId(EditorWidget::GradientModeBase)+i);
+  }
+  takeTop(content,6);
+  auto presets=takeBottom(content,44);takeBottom(content,6);
+  auto detail=takeBottom(content,36);takeBottom(content,10);
+  // Faixa de alfa, barra (o espaço que sobrar) e faixa de cor.
+  const auto alphaLane=takeTop(content,30);
+  const auto colorLane=takeBottom(content,30);
+  const auto bar=content;
+  const UiRect track{bar.x+14,bar.y,bar.width-28,bar.height};
+  list.addRect(deflate(bar,UiInsets{10,-2,10,-2}),theme.color.line,theme.radius.control);
+  drawGradientBar(builder,track,gradient);
+  layout.gradientBar=track;
+  router.addRegion({track.x-14,alphaLane.y,track.width+28,alphaLane.height},widgetId(EditorWidget::GradientAlphaLane));
+  router.addRegion({track.x-14,colorLane.y,track.width+28,colorLane.height},widgetId(EditorWidget::GradientColorLane));
+  const auto marker=[&](float time,bool up,UiColor fill,bool selected,bool removing,u32 widget,float laneY,float laneH) {
+    const float x=track.x+time*track.width;
+    const UiRect box{x-11,laneY+(up?2.f:6.f),22,laneH-8};
+    list.addRect(deflate(box,UiInsets::all(-2)),removing?theme.color.axisX:selected?theme.color.accent:theme.color.textMuted,4);
+    list.addRect(box,fill,3);
+    // O bico aponta para a barra.
+    list.addRect({x-1.5f,up?box.bottom():laneY,3,up?laneY+laneH-box.bottom():box.y-laneY},selected?theme.color.accent:theme.color.textMuted,1);
+    router.addRegion(deflate(box,UiInsets::all(-6)),widget);
+  };
+  for(u32 i=0;i<gradient.alphas.size();++i) {
+    const float a=gradient.alphas[i].alpha;const u32 g=static_cast<u32>(a*255+.5f);
+    const bool selected=state.gradientSelectedAlpha && state.gradientSelected==i+1;
+    marker(gradient.alphas[i].time,true,0xff000000u|g<<16|g<<8|g,selected,selected&&state.gradientRemoving,
+           widgetId(EditorWidget::GradientAlphaStopBase)+i,alphaLane.y,alphaLane.height);
+  }
+  for(u32 i=0;i<gradient.colors.size();++i) {
+    float base[3],intensity=0;splitHdr(gradient.colors[i].rgb,base,intensity);
+    float srgb[3];for(u32 k=0;k<3;++k) srgb[k]=colorToSrgb(base[k]);
+    float h=0,s=0,v=0;srgbToHsv(srgb,h,s,v);
+    const bool selected=!state.gradientSelectedAlpha && state.gradientSelected==i+1;
+    marker(gradient.colors[i].time,false,pickerColor(h,s,v),selected,selected&&state.gradientRemoving,
+           widgetId(EditorWidget::GradientColorStopBase)+i,colorLane.y,colorLane.height);
+  }
+  // Painel da parada escolhida.
+  const bool alpha=state.gradientSelectedAlpha;
+  const bool any=state.gradientSelected && state.gradientSelected<=(alpha?gradient.alphas.size():gradient.colors.size());
+  if(!any) builder.label(detail,"Toque numa parada para editar; toque no vazio de uma faixa para acrescentar",theme.color.textMuted,theme.type.caption);
+  else {
+    const u32 i=state.gradientSelected-1;
+    const float time=alpha?gradient.alphas[i].time:gradient.colors[i].time;
+    auto value=takeLeft(detail,detail.width*.42f);takeLeft(detail,10);
+    if(alpha) {
+      builder.label(takeLeft(value,40),"Alfa",theme.color.textDim,theme.type.caption);
+      const auto slider=deflate(takeLeft(value,value.width-44),UiInsets{0,12,6,12});
+      list.addRect(slider,theme.color.raised,theme.radius.control);
+      list.addRect({slider.x,slider.y,slider.width*gradient.alphas[i].alpha,slider.height},theme.color.accent,theme.radius.control);
+      char text[16];std::snprintf(text,sizeof(text),"%.0f",gradient.alphas[i].alpha*255);
+      builder.label(value,text,theme.color.text,theme.type.caption,UiAlign::End);
+      router.addRegion({slider.x,value.y,slider.width,value.height},widgetId(EditorWidget::GradientAlphaValue));
+      layout.gradientAlpha=slider;
+    } else {
+      builder.label(takeLeft(value,40),"Cor",theme.color.textDim,theme.type.caption);
+      const auto swatch=deflate(value,UiInsets{0,4,0,4});
+      float base[3],intensity=0;splitHdr(gradient.colors[i].rgb,base,intensity);
+      float srgb[3];for(u32 k=0;k<3;++k) srgb[k]=colorToSrgb(base[k]);
+      float h=0,s=0,v=0;srgbToHsv(srgb,h,s,v);
+      list.addRect(swatch,pickerColor(h,s,v),theme.radius.control);
+      builder.label(deflate(swatch,UiInsets{8,0,8,0}),"#"+formatColorHex(srgb,1,false),v>.6f?0xff101010u:0xffffffffu,theme.type.caption);
+      router.addRegion(swatch,widgetId(EditorWidget::GradientColorSwatch));
+    }
+    const auto remove=takeRight(detail,86);
+    const bool removable=(alpha?gradient.alphas.size():gradient.colors.size())>1;
+    list.addRect(remove,theme.color.raised,theme.radius.control);
+    builder.label(remove,"Apagar",removable?theme.color.axisX:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    if(removable) router.addRegion(remove,widgetId(EditorWidget::GradientDeleteStop));
+    takeRight(detail,8);
+    builder.label(takeLeft(detail,64),"Posição",theme.color.textDim,theme.type.caption);
+    const auto valueBox=takeRight(detail,48);
+    const auto slider=deflate(detail,UiInsets{0,12,6,12});
+    list.addRect(slider,theme.color.raised,theme.radius.control);
+    list.addRect({slider.x+time*slider.width-2,slider.y-4,4,slider.height+8},theme.color.accent,2);
+    char text[16];std::snprintf(text,sizeof(text),"%.1f%%",time*100);
+    builder.label(valueBox,text,theme.color.text,theme.type.caption,UiAlign::End);
+    router.addRegion({slider.x,detail.y,slider.width,detail.height},widgetId(EditorWidget::GradientLocation));
+    layout.gradientLocation=slider;
+  }
+  // Presets.
+  const auto *libraries=state.gradientLibraries;
+  const auto *library=libraries?libraries->currentOrNull():nullptr;
+  const auto chip=takeLeft(presets,120);takeLeft(presets,6);
+  list.addRect(chip,state.gradientLibraryMenu?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+  builder.label(deflate(chip,UiInsets{8,0,8,0}),library?library->name:std::string("Padrão"),theme.color.text,theme.type.caption);
+  router.addRegion(chip,widgetId(EditorWidget::GradientLibraryToggle));
+  const auto add=takeRight(presets,40);
+  list.addRect(add,withAlpha(theme.color.accent,.16f),theme.radius.control);
+  builder.label(add,"+",theme.color.accent,theme.type.title,UiAlign::Center);
+  router.addRegion(add,widgetId(EditorWidget::GradientPresetAdd));
+  takeRight(presets,6);
+  const u32 capacity=static_cast<u32>(std::max(0.f,presets.width)/64);
+  if(library) for(u32 i=0;i<library->entries.size() && i<capacity;++i) {
+    const UiRect cell{presets.x+i*64.f,presets.y+6,58,32};
+    scene::ScriptGradient preset;
+    if(!scene::parseScriptGradient(library->entries[i].value,preset)) continue;
+    if(state.gradientPresetMenu==i+1) list.addRect(deflate(cell,UiInsets::all(-3)),theme.color.accent,theme.radius.control);
+    drawGradientBar(builder,cell,preset,16);
+    router.addRegion(cell,widgetId(EditorWidget::GradientPresetBase)+i);
+  }
+  if(!library || library->entries.empty())
+    builder.label(presets,"Sem presets: + guarda o gradiente atual",theme.color.textMuted,theme.type.caption);
+  if(state.gradientLibraryMenu && libraries) {
+    const float height=36.f*(libraries->libraries.size()+1)+8;
+    const UiRect menu{chip.x,std::max(panel.y+8,chip.y-height-4),200,height};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    for(u32 i=0;i<libraries->libraries.size();++i) {
+      const auto row=takeTop(rows,36);
+      if(i==libraries->active) list.addRect({row.x,row.y+6,3,row.height-12},theme.color.accent,1);
+      builder.label(deflate(row,UiInsets{10,0,6,0}),libraries->libraries[i].name,theme.color.text,theme.type.caption);
+      router.addRegion(row,widgetId(EditorWidget::GradientLibraryBase)+i);
+    }
+    const auto create=takeTop(rows,36);
+    builder.label(deflate(create,UiInsets{10,0,6,0}),"+ Nova biblioteca",theme.color.accent,theme.type.caption);
+    router.addRegion(create,widgetId(EditorWidget::GradientLibraryNew));
+  }
+  if(state.gradientPresetMenu && library && state.gradientPresetMenu<=library->entries.size()) {
+    const u32 i=state.gradientPresetMenu-1;
+    const char *actions[]{"Substituir pelo atual","Mover para a esquerda","Mover para a direita","Renomear","Apagar"};
+    const UiRect menu{std::min(presets.x+i*64.f,panel.right()-220),std::max(panel.y+8,presets.y-5*34.f-30),210,5*34.f+26};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    builder.label(takeTop(rows,22),library->entries[i].name,theme.color.textDim,theme.type.caption);
+    for(u32 k=0;k<5;++k) {
+      const auto row=takeTop(rows,34);
+      builder.label(deflate(row,UiInsets{8,0,6,0}),actions[k],k==4?theme.color.axisX:theme.color.text,theme.type.caption);
+      router.addRegion(row,widgetId(EditorWidget::GradientPresetActionBase)+k);
+    }
+  }
+}
+
 void buildPhysicsOverlay(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto *entity=state.document->find(state.selection);
   if(!entity || state.workspace!=EditorWorkspace::Scene || state.componentSelection!=entity->id) return;
@@ -2333,6 +2518,14 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
             std::string(typeName)+" ausente";
       missing=target&&!present;
     } else if(type=="string" && text && text->empty()) shown="(vazio)";
+    else if(scene::scriptGradientType(type)) {
+      // Gradiente: a própria faixa, sem texto.
+      scene::ScriptGradient gradient;if(text) scene::parseScriptGradient(*text,gradient);
+      builder.list.addRect(row,theme.color.raised,theme.radius.control);
+      drawGradientBar(builder,deflate(row,UiInsets{6,8,6,8}),gradient,32);
+      if(!text) builder.label(deflate(row,UiInsets{10,0,6,0}),"Padrão do código",0xff202020u,theme.type.caption);
+      return;
+    }
     else if(bool hdr=false,alpha=true;scene::scriptColorType(type,&hdr,&alpha)) {
       // Cor: amostra à esquerda e o hexadecimal (com a intensidade se HDR).
       float rgba[4]{1,1,1,1};if(text) scene::parseScriptColor(*text,rgba);
@@ -4366,6 +4559,7 @@ bool platformFieldActive(const EditorScreenState &state) {
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
+         (state.gradientField != 0 && state.gradientText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
          state.editingPhysicsLayerName || state.editingInputActionName || state.editingInputContext || state.inputEditField;
@@ -6348,6 +6542,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
+  if(state.gradientField) buildGradientEditor(builder,layout);
   if(state.colorField) buildColorWindow(builder,layout);
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);

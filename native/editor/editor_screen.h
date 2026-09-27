@@ -370,6 +370,12 @@ enum class EditorWidget : u32 {
   ScriptArrayHandleBase=0xBF000000u,
   ScriptArrayAddBase=0xC0000000u,
   ScriptArrayRemoveBase=0xC1000000u,
+  // Editor de gradiente (Unity Gradient Editor): faixas de paradas, painel da
+  // parada escolhida, modos e presets.
+  GradientBase=0xC2000000u, GradientAlphaLane, GradientColorLane, GradientApply, GradientCancel, GradientLocation,
+  GradientAlphaValue, GradientColorSwatch, GradientDeleteStop, GradientPresetAdd, GradientLibraryToggle, GradientLibraryNew,
+  GradientModeBase=0xC2000010u, GradientPresetActionBase=0xC2000030u, GradientAlphaStopBase=0xC2000100u,
+  GradientColorStopBase=0xC2000200u, GradientLibraryBase=0xC2000400u, GradientPresetBase=0xC2000500u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -475,7 +481,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentEnableBase,kRange},{EditorWidget::ComponentEnumOptionBase,kRange},
   {EditorWidget::ComponentEnumPickerClose,kRange},{EditorWidget::ScriptArraySizeBase,kRange},
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
-  {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange}};
+  {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -803,6 +809,21 @@ struct EditorScreenState final {
   // Texto em edição na janela: 1 = hexadecimal, 2 = nome da amostra, 3 = nova biblioteca.
   u8 colorText=0;
   const class EditorValueLibraries *colorLibraries=nullptr;
+  // Alvo 3 da janela de cor: a parada de cor escolhida no editor de gradiente.
+  // Editor de gradiente aberto (chave do campo), rascunho no formato do campo,
+  // parada escolhida (índice+1, de alfa ou de cor) e parada sendo arrastada
+  // para fora (vai ser apagada ao soltar).
+  u32 gradientField=0;
+  std::string gradientDraft,gradientType;
+  EditorEntityId gradientEntity=0;
+  u64 gradientInstance=0;
+  std::string gradientProperty;
+  u32 gradientElement=0,gradientSelected=0;
+  bool gradientSelectedAlpha=false,gradientRemoving=false;
+  u32 gradientPresetMenu=0;
+  bool gradientLibraryMenu=false;
+  u8 gradientText=0;
+  const class EditorValueLibraries *gradientLibraries=nullptr;
   u32 numericField = 0;
   u64 numericInstance=0;
   std::string numericProperty;
@@ -1017,6 +1038,7 @@ struct EditorScreenLayout final {
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};
   ui::UiRect colorSliders[5]{};
+  ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   // A área da cena, JÁ descontados os painéis. É este retângulo que
   // `EditorViewport::rect` recebe, e é por isso que a projeção do gizmo
   // continua certa quando o usuário arrasta um divisor.

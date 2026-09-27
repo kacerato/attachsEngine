@@ -217,6 +217,11 @@ public sealed class ProjectCompiler
     // elementos de uma lista de cores).
     private static string ColorFlags(string kind, ISymbol member)
     {
+        if (kind is "gradient" or "array:gradient")
+        {
+            var gradient = member.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "Astra.GradientUsageAttribute");
+            return gradient?.ConstructorArguments.FirstOrDefault().Value is true ? kind + ":hdr" : kind;
+        }
         if (kind != "color" && kind != "array:color") return kind;
         var usage = member.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "Astra.ColorUsageAttribute");
         if (usage is null) return kind;
@@ -237,6 +242,7 @@ public sealed class ProjectCompiler
             _ => type.ToDisplayString() switch
             {
                 "System.Numerics.Vector3" => "vector3", "Astra.ObjectReference" => "object", "Astra.Color" => "color",
+                "Astra.Gradient" => "gradient",
                 "Astra.AssetReference" => "asset", _ => "unsupported"
             }
         };
@@ -245,7 +251,7 @@ public sealed class ProjectCompiler
         : ScalarSupported(type);
     private static bool ScalarSupported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
         type.SpecialType is SpecialType.System_Boolean or SpecialType.System_Int32 or SpecialType.System_Single or SpecialType.System_String ||
-        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" or "Astra.Color" ||
+        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" or "Astra.Color" or "Astra.Gradient" ||
         FacadeTypeId(type) is not null;
     private static string? AttributeId(ISymbol symbol, string attribute) => symbol.GetAttributes()
         .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attribute)?.ConstructorArguments.FirstOrDefault().Value as string;

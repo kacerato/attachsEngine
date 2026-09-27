@@ -254,6 +254,18 @@ int main(int argc, char **argv) {
     if(std::string(argv[4])=="color-hsv") state.colorMode=2;
     if(std::string(argv[4])=="color-swatch") state.colorSwatchMenu=2;
   }
+  // Editor de gradiente: pôr do sol com transparência e uma parada escolhida.
+  if(argc>4 && std::string(argv[4]).starts_with("gradient")) {
+    state.gradientField=editor::widgetId(editor::EditorWidget::ScriptFieldBase);state.gradientType="gradient";
+    state.gradientDraft="2 4 0 0.02 0.03 0.2 0.35 0.9 0.25 0.08 0.7 1 0.8 0.3 1 0.9 0.95 1 3 0 1 0.6 0.4 1 0.2";
+    state.gradientSelected=2;
+    swatches.kind=editor::EditorLibraryKind::Gradient;
+    swatches.add("Fogo","0 3 0 1 0 0 0.5 1 0.6 0 1 1 1 0.4 2 0 1 1 1");
+    swatches.add("Mar","2 2 0 0 0.1 0.3 1 0.2 0.8 0.9 1 0 1");
+    swatches.add("Degraus","1 3 0 1 0 0 0.5 0 1 0 1 0 0 1 1 0 1");
+    state.gradientLibraries=&swatches;
+    if(std::string(argv[4])=="gradient-alpha") {state.gradientSelectedAlpha=true;state.gradientSelected=2;}
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

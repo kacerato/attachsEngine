@@ -1528,6 +1528,17 @@ private:
   bool handleColorWindow(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   bool commitColorWindow();
   void saveColorLibraries();
+  // Editor de gradiente: rascunho em estrutura (o texto do estado é derivado),
+  // presets do projeto e o arraste de uma parada.
+  scene::ScriptGradient gradientEdit_;
+  EditorValueLibraries gradientLibraries_;
+  u32 gradientPointer_=0;
+  float gradientPressY_=0;
+  void openGradientEditor(u32 key,std::string_view value,std::string_view type);
+  void publishGradientDraft();
+  bool handleGradientEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  bool commitGradientEditor();
+  void saveGradientLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
   // código) e gravação da lista inteira como um passo de Desfazer.
   std::vector<std::string> scriptArrayItems(const scene::ScriptBehavior &script,std::string_view id) const;

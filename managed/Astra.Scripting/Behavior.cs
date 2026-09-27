@@ -39,6 +39,89 @@ public struct Color : IEquatable<Color>
     public override string ToString() => $"({R}, {G}, {B}, {A})";
 }
 
+/// <summary>Parada de cor de um <see cref="Gradient"/> (tempo em [0,1]).</summary>
+public struct GradientColorKey
+{
+    public Color Color; public float Time;
+    public GradientColorKey(Color color, float time) { Color = color; Time = time; }
+}
+/// <summary>Parada de alfa de um <see cref="Gradient"/>.</summary>
+public struct GradientAlphaKey
+{
+    public float Alpha; public float Time;
+    public GradientAlphaKey(float alpha, float time) { Alpha = alpha; Time = time; }
+}
+/// <summary>Interpolação entre paradas (Unity: GradientMode).</summary>
+public enum GradientMode { Blend = 0, Fixed = 1, PerceptualBlend = 2 }
+
+/// <summary>
+/// Gradiente de cor e alfa (Unity: <c>Gradient</c>), editado no Inspector pelo
+/// editor de gradiente. <see cref="Evaluate"/> segue a mesma regra do editor.
+/// </summary>
+public sealed class Gradient
+{
+    public GradientMode Mode { get; set; } = GradientMode.Blend;
+    public GradientColorKey[] ColorKeys { get; set; } = [new(Color.White, 0), new(Color.White, 1)];
+    public GradientAlphaKey[] AlphaKeys { get; set; } = [new(1, 0), new(1, 1)];
+
+    public Color Evaluate(float time)
+    {
+        var t = Math.Clamp(time, 0, 1);
+        var colors = ColorKeys.OrderBy(k => k.Time).ToArray();
+        var alphas = AlphaKeys.OrderBy(k => k.Time).ToArray();
+        Color color = colors.Length == 0 ? Color.White : Interpolate(colors, t);
+        color.A = alphas.Length == 0 ? 1 : InterpolateAlpha(alphas, t);
+        return color;
+    }
+    private Color Interpolate(GradientColorKey[] keys, float t)
+    {
+        if (keys.Length == 1 || t <= keys[0].Time) return keys[0].Color;
+        if (t >= keys[^1].Time) return keys[^1].Color;
+        var i = 1; while (i < keys.Length && keys[i].Time < t) ++i;
+        var a = keys[i - 1]; var b = keys[i];
+        if (Mode == GradientMode.Fixed) return b.Color;
+        var span = b.Time - a.Time; var f = span > 0 ? (t - a.Time) / span : 1;
+        if (Mode != GradientMode.PerceptualBlend) return Color.Lerp(a.Color, b.Color, f);
+        var la = ToOklab(a.Color); var lb = ToOklab(b.Color);
+        return FromOklab(la + (lb - la) * f);
+    }
+    private float InterpolateAlpha(GradientAlphaKey[] keys, float t)
+    {
+        if (keys.Length == 1 || t <= keys[0].Time) return keys[0].Alpha;
+        if (t >= keys[^1].Time) return keys[^1].Alpha;
+        var i = 1; while (i < keys.Length && keys[i].Time < t) ++i;
+        var a = keys[i - 1]; var b = keys[i];
+        if (Mode == GradientMode.Fixed) return b.Alpha;
+        var span = b.Time - a.Time; var f = span > 0 ? (t - a.Time) / span : 1;
+        return a.Alpha + (b.Alpha - a.Alpha) * f;
+    }
+    private static Vector3 ToOklab(Color c)
+    {
+        var l = MathF.Cbrt(0.4122214708f * c.R + 0.5363325363f * c.G + 0.0514459929f * c.B);
+        var m = MathF.Cbrt(0.2119034982f * c.R + 0.6806995451f * c.G + 0.1073969566f * c.B);
+        var s = MathF.Cbrt(0.0883024619f * c.R + 0.2817188376f * c.G + 0.6299787005f * c.B);
+        return new(0.2104542553f * l + 0.7936177850f * m - 0.0040720468f * s,
+                   1.9779984951f * l - 2.4285922050f * m + 0.4505937099f * s,
+                   0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s);
+    }
+    private static Color FromOklab(Vector3 lab)
+    {
+        var l = MathF.Pow(lab.X + 0.3963377774f * lab.Y + 0.2158037573f * lab.Z, 3);
+        var m = MathF.Pow(lab.X - 0.1055613458f * lab.Y - 0.0638541728f * lab.Z, 3);
+        var s = MathF.Pow(lab.X - 0.0894841775f * lab.Y - 1.2914855480f * lab.Z, 3);
+        return new(MathF.Max(0, 4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s),
+                   MathF.Max(0, -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s),
+                   MathF.Max(0, -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s), 1);
+    }
+}
+
+/// <summary>Gradiente com cores HDR no Inspector (Unity: <c>[GradientUsage(hdr)]</c>).</summary>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true)]
+public sealed class GradientUsageAttribute(bool hdr) : Attribute
+{
+    public bool Hdr { get; } = hdr;
+}
+
 /// <summary>
 /// Como o Inspector mostra um campo <see cref="Color"/> (Unity: <c>[ColorUsage]</c>):
 /// sem alfa e/ou com intensidade HDR.

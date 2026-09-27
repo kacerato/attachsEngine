@@ -724,6 +724,14 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     if(!playInspecting() || !playMirrorValid_) return edit;
     return const_cast<EditorSession *>(this)->inPlayMirror([this] {return pendingTextEdit();});
   }
+  if(state_.gradientField && state_.gradientText && !state_.colorField) {
+    // Nome de preset ou de biblioteca do editor de gradiente.
+    edit.purpose=EditorTextPurpose::ColorText;edit.field=10+state_.gradientText;
+    const auto *library=gradientLibraries_.currentOrNull();
+    if(state_.gradientText==2 && library && state_.gradientPresetMenu && state_.gradientPresetMenu<=library->entries.size())
+      edit.text=library->entries[state_.gradientPresetMenu-1].name;
+    return edit;
+  }
   if(state_.colorField && state_.colorText) {
     // Hexadecimal, nome de amostra ou nome de biblioteca da janela de cor.
     edit.purpose=EditorTextPurpose::ColorText;edit.field=state_.colorText;
@@ -1046,7 +1054,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
-    state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;
+    state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;state_.gradientText=0;
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
     state_.editingHierarchySearch=false;state_.editingCreationSearch=false;
@@ -1158,6 +1166,15 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     if(files_.exists(path)) {state_.status="Já existe um recurso com esse nome";return false;}
     if(!files_.createDirectory(path)) {state_.status=files_.error();return false;}
     files_.rebuildTree();state_.selectedFile=path;state_.status="Pasta criada: "+path;close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::ColorText && edit.field>=10) {
+    if(!state_.gradientField || edit.field!=10u+state_.gradientText) return false;
+    if(state_.gradientText==2) {
+      if(!state_.gradientPresetMenu || !gradientLibraries_.rename(state_.gradientPresetMenu-1,trimmedName(text))) {state_.status="Nome inválido";return false;}
+      state_.gradientPresetMenu=0;
+    } else if(!gradientLibraries_.createLibrary(trimmedName(text))) {state_.status="Nome de biblioteca inválido ou repetido";return false;}
+    state_.gradientLibraryMenu=false;saveGradientLibraries();
+    state_.gradientText=0;close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ColorText) {
     if(!state_.colorField || edit.field!=state_.colorText) return false;
@@ -1525,6 +1542,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   }
   if(cameraGestureOpen_ && routing.target==UiPointerTarget::Widget) finishCameraGesture(false);
   if(state_.colorField) return handleColorWindow(event,routing);
+  if(state_.gradientField) return handleGradientEditor(event,routing);
   if(state_.codeRecoveryPending) {
     if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CodeRecover)) {
       if(code_.restoreRecovery(files_)) {
@@ -2743,7 +2761,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         } else if(operation==widgetId(EditorWidget::ScriptArrayElementBase)) {
           if(at>=items.size()) return true;
           state_.scriptArraySelected=at+1;
-          if(bool hdr=false,alpha=true;scene::scriptColorType(element,&hdr,&alpha)) {
+          if(scene::scriptGradientType(element)) {
+            state_.gradientEntity=entity->id;state_.gradientInstance=script->instanceId();state_.gradientProperty=declared->id;
+            state_.gradientElement=at+1;
+            openGradientEditor(key,items[at],element);
+            state_.gradientType=declared->valueType;
+          } else if(bool hdr=false,alpha=true;scene::scriptColorType(element,&hdr,&alpha)) {
             float rgba[4]{1,1,1,1};scene::parseScriptColor(items[at],rgba);
             state_.colorEntity=entity->id;state_.colorInstance=script->instanceId();state_.colorProperty=declared->id;
             state_.colorTarget=2;state_.colorScriptType=declared->valueType;state_.colorScriptElement=at+1;
@@ -2777,6 +2800,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
             // Lista: o toque abre e fecha os elementos logo abaixo do campo.
             state_.expandedScriptArray=state_.expandedScriptArray==property.id?std::string():property.id;
             state_.scriptArraySelected=0;return true;
+          }
+          if(scene::scriptGradientType(property.valueType)) {
+            std::string value=scene::scriptElementDefault(property.valueType);
+            for(const auto &p:script->properties) if(p.id==property.id&&p.valueType==property.valueType) value=p.value;
+            state_.gradientEntity=entity->id;state_.gradientInstance=script->instanceId();state_.gradientProperty=property.id;
+            state_.gradientElement=0;
+            openGradientEditor(key,value,property.valueType);return true;
           }
           if(bool hdr=false,alpha=true;scene::scriptColorType(property.valueType,&hdr,&alpha)) {
             float rgba[4]{1,1,1,1};
@@ -3784,6 +3814,16 @@ void EditorSession::saveColorLibraries() {
 }
 
 bool EditorSession::commitColorWindow() {
+  if(state_.colorTarget==3) {
+    // Parada de cor do gradiente: volta ao rascunho do editor, sem gravar.
+    float rgba[4];pickerLinear(rgba);
+    if(state_.gradientField && state_.gradientSelected && !state_.gradientSelectedAlpha &&
+       state_.gradientSelected<=gradientEdit_.colors.size()) {
+      std::copy(rgba,rgba+3,gradientEdit_.colors[state_.gradientSelected-1].rgb);
+      publishGradientDraft();
+    }
+    state_.colorField=0;return true;
+  }
   const auto *entity=document_.find(state_.colorEntity);
   if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
     state_.colorField=0;state_.status="Cor cancelada: a cena mudou";return true;
@@ -3885,6 +3925,180 @@ bool EditorSession::handleColorWindow(const UiPointerEvent &event,const UiPointe
     if(changed) saveColorLibraries();
     state_.colorSwatchMenu=0;
   } else {state_.colorSwatchMenu=0;state_.colorLibraryMenu=false;}
+  return true;
+}
+
+void EditorSession::publishGradientDraft() {
+  state_.gradientDraft=scene::scriptGradientValue(gradientEdit_);
+}
+
+void EditorSession::openGradientEditor(u32 key,std::string_view value,std::string_view type) {
+  gradientEdit_={};
+  scene::parseScriptGradient(value,gradientEdit_);
+  state_.gradientField=key;state_.gradientType=std::string(type);state_.gradientSelected=0;state_.gradientSelectedAlpha=false;
+  state_.gradientRemoving=false;state_.gradientPresetMenu=0;state_.gradientLibraryMenu=false;state_.gradientText=0;
+  state_.colorRevision=document_.revision();
+  publishGradientDraft();
+  std::string error;
+  if(!files_.rootPath().empty() && !gradientLibraries_.load(files_.rootPath(),EditorLibraryKind::Gradient,error)) state_.status=error;
+  state_.gradientLibraries=&gradientLibraries_;
+}
+
+void EditorSession::saveGradientLibraries() {
+  std::string error;
+  if(!files_.rootPath().empty() && !gradientLibraries_.save(error)) state_.status=error;
+}
+
+bool EditorSession::commitGradientEditor() {
+  const auto *entity=document_.find(state_.gradientEntity);
+  bool hdr=false;scene::scriptGradientType(scene::scriptArrayElementType(state_.gradientType).empty()?
+      std::string_view(state_.gradientType):scene::scriptArrayElementType(state_.gradientType),&hdr);
+  if(!gradientEdit_.valid(hdr)) {state_.status="Gradiente fora do alcance do campo (cor HDR num campo comum)";return false;}
+  if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
+    state_.gradientField=0;state_.status="Gradiente cancelado: a cena mudou";return true;
+  }
+  const auto value=scene::scriptGradientValue(gradientEdit_);
+  if(state_.gradientElement) {
+    const auto *script=scene::scriptBehavior(entity->components.findInstance(state_.gradientInstance));
+    auto items=script?scriptArrayItems(*script,state_.gradientProperty):std::vector<std::string>{};
+    if(!script || state_.gradientElement>items.size()) {state_.gradientField=0;return false;}
+    items[state_.gradientElement-1]=value;
+    if(setScriptArray(entity->id,state_.gradientInstance,state_.gradientProperty,state_.gradientType,items)) {state_.gradientField=0;return true;}
+    return false;
+  }
+  EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;
+  request.componentInstance=state_.gradientInstance;request.action=EditorAction::ScriptProperty;
+  request.componentProperty=state_.gradientProperty;request.scriptPropertyType=state_.gradientType;request.scriptPropertyValue=value;
+  if(dispatch(request).status==EditorActionStatus::Applied) {state_.gradientField=0;return true;}
+  state_.status="Gradiente recusado pelo campo";return false;
+}
+
+// Unity Gradient Editor. A parada escolhida segue o dedo em x; afastada da
+// faixa mais de 48 dp ela fica marcada e some ao soltar (se não for a única).
+// Reordenar por tempo mantém a escolha na mesma parada.
+bool EditorSession::handleGradientEditor(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const u32 key=routing.widgetId;
+  const auto &bar=layout_.gradientBar;
+  const auto timeAt=[&](float x) {return bar.width>0?std::clamp((x-bar.x)/bar.width,0.f,1.f):0.f;};
+  const auto settle=[&](bool alpha,u32 selected) {
+    // Ordena por tempo e devolve a nova posição da parada escolhida.
+    std::vector<u32> order(alpha?gradientEdit_.alphas.size():gradientEdit_.colors.size());
+    for(u32 i=0;i<order.size();++i) order[i]=i;
+    if(alpha) {
+      std::stable_sort(order.begin(),order.end(),[&](u32 a,u32 b){return gradientEdit_.alphas[a].time<gradientEdit_.alphas[b].time;});
+      auto keys=gradientEdit_.alphas;for(u32 i=0;i<order.size();++i) gradientEdit_.alphas[i]=keys[order[i]];
+    } else {
+      std::stable_sort(order.begin(),order.end(),[&](u32 a,u32 b){return gradientEdit_.colors[a].time<gradientEdit_.colors[b].time;});
+      auto keys=gradientEdit_.colors;for(u32 i=0;i<order.size();++i) gradientEdit_.colors[i]=keys[order[i]];
+    }
+    for(u32 i=0;i<order.size();++i) if(order[i]+1==selected) return i+1;
+    return 0u;
+  };
+  const bool alphaStop=key>=widgetId(EditorWidget::GradientAlphaStopBase) && key<widgetId(EditorWidget::GradientAlphaStopBase)+8;
+  const bool colorStop=key>=widgetId(EditorWidget::GradientColorStopBase) && key<widgetId(EditorWidget::GradientColorStopBase)+8;
+  if(alphaStop || colorStop) {
+    const u32 index=key-widgetId(alphaStop?EditorWidget::GradientAlphaStopBase:EditorWidget::GradientColorStopBase);
+    if(event.phase==UiPointerPhase::Down) {
+      state_.gradientSelected=index+1;state_.gradientSelectedAlpha=alphaStop;state_.gradientRemoving=false;
+      gradientPointer_=event.pointerId;gradientPressY_=event.position.y;
+      state_.gradientPresetMenu=0;state_.gradientLibraryMenu=false;
+      return true;
+    }
+    if(event.pointerId!=gradientPointer_ || !state_.gradientSelected) return true;
+    const usize count=alphaStop?gradientEdit_.alphas.size():gradientEdit_.colors.size();
+    if(event.phase==UiPointerPhase::Move && routing.dragging) {
+      const u32 i=state_.gradientSelected-1;
+      if(i>=count) return true;
+      state_.gradientRemoving=count>1 && std::abs(event.position.y-gradientPressY_)>48.f;
+      if(alphaStop) gradientEdit_.alphas[i].time=timeAt(event.position.x);
+      else gradientEdit_.colors[i].time=timeAt(event.position.x);
+      state_.gradientSelected=settle(alphaStop,state_.gradientSelected);
+      publishGradientDraft();
+    } else if(event.phase==UiPointerPhase::Up || event.phase==UiPointerPhase::Cancel) {
+      if(state_.gradientRemoving && event.phase==UiPointerPhase::Up && count>1) {
+        const u32 i=state_.gradientSelected-1;
+        if(alphaStop) gradientEdit_.alphas.erase(gradientEdit_.alphas.begin()+i);
+        else gradientEdit_.colors.erase(gradientEdit_.colors.begin()+i);
+        state_.gradientSelected=0;publishGradientDraft();state_.status="Parada apagada";
+      }
+      state_.gradientRemoving=false;gradientPointer_=0;
+    }
+    return true;
+  }
+  const bool dragging=event.phase==UiPointerPhase::Down || (event.phase==UiPointerPhase::Move && routing.dragging) || event.phase==UiPointerPhase::Up;
+  if(dragging && key==widgetId(EditorWidget::GradientLocation) && state_.gradientSelected) {
+    const auto &slider=layout_.gradientLocation;
+    const float t=slider.width>0?std::clamp((event.position.x-slider.x)/slider.width,0.f,1.f):0.f;
+    const bool alpha=state_.gradientSelectedAlpha;const u32 i=state_.gradientSelected-1;
+    if(alpha && i<gradientEdit_.alphas.size()) gradientEdit_.alphas[i].time=t;
+    else if(!alpha && i<gradientEdit_.colors.size()) gradientEdit_.colors[i].time=t;
+    state_.gradientSelected=settle(alpha,state_.gradientSelected);publishGradientDraft();
+    return true;
+  }
+  if(dragging && key==widgetId(EditorWidget::GradientAlphaValue) && state_.gradientSelected && state_.gradientSelectedAlpha) {
+    const auto &slider=layout_.gradientAlpha;
+    if(state_.gradientSelected<=gradientEdit_.alphas.size())
+      gradientEdit_.alphas[state_.gradientSelected-1].alpha=slider.width>0?std::clamp((event.position.x-slider.x)/slider.width,0.f,1.f):0.f;
+    publishGradientDraft();
+    return true;
+  }
+  if(!routing.tapped) return true;
+  const bool held=routing.heldSeconds>=ui::kUiLongPressSeconds;
+  const auto *library=gradientLibraries_.currentOrNull();
+  if(key==widgetId(EditorWidget::GradientCancel)) state_.gradientField=0;
+  else if(key==widgetId(EditorWidget::GradientApply)) commitGradientEditor();
+  else if(key>=widgetId(EditorWidget::GradientModeBase) && key<widgetId(EditorWidget::GradientModeBase)+3) {
+    gradientEdit_.mode=static_cast<scene::GradientMode>(key-widgetId(EditorWidget::GradientModeBase));publishGradientDraft();
+  } else if(key==widgetId(EditorWidget::GradientAlphaLane) || key==widgetId(EditorWidget::GradientColorLane)) {
+    // Tocar no vazio da faixa acrescenta uma parada com o valor daquele ponto.
+    const bool alpha=key==widgetId(EditorWidget::GradientAlphaLane);
+    const float t=timeAt(event.position.x);
+    float rgba[4];scene::evaluateScriptGradient(gradientEdit_,t,rgba);
+    if((alpha?gradientEdit_.alphas.size():gradientEdit_.colors.size())>=scene::ScriptGradient::kMaximumKeys) {
+      state_.status="No máximo 8 paradas de cada tipo";return true;
+    }
+    if(alpha) gradientEdit_.alphas.push_back({t,rgba[3]});
+    else gradientEdit_.colors.push_back({t,{rgba[0],rgba[1],rgba[2]}});
+    const u32 added=static_cast<u32>(alpha?gradientEdit_.alphas.size():gradientEdit_.colors.size());
+    state_.gradientSelectedAlpha=alpha;state_.gradientSelected=settle(alpha,added);publishGradientDraft();
+  } else if(key==widgetId(EditorWidget::GradientColorSwatch) && state_.gradientSelected && !state_.gradientSelectedAlpha &&
+            state_.gradientSelected<=gradientEdit_.colors.size()) {
+    const auto &color=gradientEdit_.colors[state_.gradientSelected-1];
+    state_.colorTarget=3;
+    openColorWindow(key,{color.rgb[0],color.rgb[1],color.rgb[2],1},false,state_.gradientType.ends_with(":hdr"));
+  } else if(key==widgetId(EditorWidget::GradientDeleteStop) && state_.gradientSelected) {
+    const u32 i=state_.gradientSelected-1;
+    if(state_.gradientSelectedAlpha && gradientEdit_.alphas.size()>1 && i<gradientEdit_.alphas.size()) gradientEdit_.alphas.erase(gradientEdit_.alphas.begin()+i);
+    else if(!state_.gradientSelectedAlpha && gradientEdit_.colors.size()>1 && i<gradientEdit_.colors.size()) gradientEdit_.colors.erase(gradientEdit_.colors.begin()+i);
+    state_.gradientSelected=0;publishGradientDraft();
+  } else if(key==widgetId(EditorWidget::GradientLibraryToggle)) {state_.gradientLibraryMenu=!state_.gradientLibraryMenu;state_.gradientPresetMenu=0;}
+  else if(key==widgetId(EditorWidget::GradientLibraryNew)) state_.gradientText=3;
+  else if(key>=widgetId(EditorWidget::GradientLibraryBase) && key<widgetId(EditorWidget::GradientLibraryBase)+EditorValueLibraries::kMaximumLibraries) {
+    if(gradientLibraries_.select(key-widgetId(EditorWidget::GradientLibraryBase))) saveGradientLibraries();
+    state_.gradientLibraryMenu=false;
+  } else if(key==widgetId(EditorWidget::GradientPresetAdd)) {
+    if(gradientLibraries_.add(gradientLibraries_.nextName("Gradiente"),scene::scriptGradientValue(gradientEdit_))) {
+      saveGradientLibraries();state_.status="Gradiente guardado na biblioteca";
+    } else state_.status="Biblioteca cheia";
+  } else if(key>=widgetId(EditorWidget::GradientPresetBase) && key<widgetId(EditorWidget::GradientPresetBase)+EditorValueLibraries::kMaximumEntries) {
+    const u32 index=key-widgetId(EditorWidget::GradientPresetBase);
+    if(!library || index>=library->entries.size()) return true;
+    state_.gradientLibraryMenu=false;
+    if(held) {state_.gradientPresetMenu=index+1;return true;}
+    scene::ScriptGradient preset;
+    if(scene::parseScriptGradient(library->entries[index].value,preset)) {gradientEdit_=preset;state_.gradientSelected=0;publishGradientDraft();}
+    state_.gradientPresetMenu=0;
+  } else if(key>=widgetId(EditorWidget::GradientPresetActionBase) && key<widgetId(EditorWidget::GradientPresetActionBase)+5 && state_.gradientPresetMenu) {
+    const u32 index=state_.gradientPresetMenu-1,action=key-widgetId(EditorWidget::GradientPresetActionBase);
+    bool changed=false;
+    if(action==0) changed=gradientLibraries_.replace(index,scene::scriptGradientValue(gradientEdit_));
+    else if(action==1) changed=index>0 && gradientLibraries_.move(index,index-1);
+    else if(action==2) changed=gradientLibraries_.move(index,index+1);
+    else if(action==3) {state_.gradientText=2;return true;}
+    else changed=gradientLibraries_.remove(index);
+    if(changed) saveGradientLibraries();
+    state_.gradientPresetMenu=0;
+  } else {state_.gradientPresetMenu=0;state_.gradientLibraryMenu=false;}
   return true;
 }
 

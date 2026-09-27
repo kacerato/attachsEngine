@@ -1,5 +1,6 @@
 #include "harness.h"
 #include "editor/editor_numeric_expression.h"
+#include "scene/script_behavior.h"
 
 #include <cmath>
 #include <string>
@@ -19,6 +20,33 @@ bool refused(const char *text, NumericExpressionContext context = {}) {
 }
 bool near(double a, double b) { return std::abs(a - b) < 1e-9; }
 } // namespace
+
+// Unity ScriptReference/Gradient.Evaluate: fora das paradas vale a ponta;
+// Blend interpola, Fixed dá degrau na parada seguinte, Perceptual passa por
+// Oklab (de preto a branco o meio perceptual é mais escuro que o linear).
+AE_TEST(script_gradient_format_validation_and_evaluation) {
+  scene::ScriptGradient gradient;
+  AE_EXPECT_TRUE(scene::parseScriptGradient("0 2 0.25 1 0 0 0.75 0 1 0 2 0 1 1 0", gradient), "formato lido");
+  float rgba[4];
+  scene::evaluateScriptGradient(gradient, 0.f, rgba);
+  AE_EXPECT_TRUE(near(rgba[0], 1) && near(rgba[1], 0) && near(rgba[3], 1), "antes da primeira parada vale a primeira");
+  scene::evaluateScriptGradient(gradient, .5f, rgba);
+  AE_EXPECT_TRUE(near(rgba[0], .5) && near(rgba[1], .5) && near(rgba[3], .5), "Blend no meio");
+  gradient.mode = scene::GradientMode::Fixed;
+  scene::evaluateScriptGradient(gradient, .5f, rgba);
+  AE_EXPECT_TRUE(near(rgba[0], 0) && near(rgba[1], 1) && near(rgba[3], 0), "Fixed vale a parada seguinte");
+  scene::ScriptGradient gray;
+  AE_EXPECT_TRUE(scene::parseScriptGradient("2 2 0 0 0 0 1 1 1 1 2 0 1 1 0", gray), "preto a branco");
+  scene::evaluateScriptGradient(gray, .5f, rgba);
+  AE_EXPECT_TRUE(std::abs(rgba[0] - .125f) < .01f && std::abs(rgba[0] - rgba[2]) < 1e-4f,
+                 "Perceptual: L de Oklab no meio (0,5) é 0,125 linear, não 0,5");
+  AE_EXPECT_TRUE(std::abs(rgba[3] - .5f) < 1e-6f, "o alfa não passa por Oklab");
+  AE_EXPECT_TRUE(scene::validScriptPropertyValue("gradient", scene::scriptGradientValue(gradient)), "formato gravado é válido");
+  AE_EXPECT_TRUE(!scene::validScriptPropertyValue("gradient", "0 1 0 2 0 0 1 0 1") &&
+                 scene::validScriptPropertyValue("gradient:hdr", "0 1 0 2 0 0 1 0 1"), "cor acima de 1 só em HDR");
+  AE_EXPECT_TRUE(!scene::validScriptPropertyValue("gradient", "0 0 1 0 1") &&
+                 !scene::validScriptPropertyValue("gradient", "0 1 1.5 1 1 1 1 0 1"), "sem parada ou fora de [0,1] recusado");
+}
 
 // Unity 6000.0 ScriptReference/ExpressionEvaluator: + - * / % ^, parênteses,
 // sqrt floor ceil round sin cos tan e pi.

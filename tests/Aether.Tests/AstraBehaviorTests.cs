@@ -234,6 +234,41 @@ public static class AstraBehaviorTests
         })]);
         Assert.Equal("0.25,0.5|4|1", string.Join(' ', scene.Events), "cores aplicadas à instância");
     }
+    private const string GradientFieldSource = """
+        using Astra;
+        [ComponentId("test.sky")]
+        public sealed class Sky : Behavior
+        {
+            [PropertyId("tones")] public Gradient Tones = new();
+            [PropertyId("glow"), GradientUsage(true)] public Gradient Glow = new();
+            public override void Start()
+            {
+                var mid = Tones.Evaluate(0.5f);
+                Scene.Log(ObjectId, $"{mid.R:0.00},{mid.G:0.00},{mid.A:0.00}|{Tones.Mode}");
+            }
+        }
+        """;
+
+    // Unity: campo Gradient e [GradientUsage(hdr)]; Evaluate segue o editor.
+    [Test]
+    public static void GradientFields_ReachTheInstanceAndEvaluate()
+    {
+        using var project = new Project(GradientFieldSource); var compiled = project.Compile();
+        var properties = compiled.Types.Single().Properties.ToDictionary(p => p.Id);
+        Assert.Equal("gradient", properties["tones"].ValueType);
+        Assert.Equal("gradient:hdr", properties["glow"].ValueType);
+        using var world = new BehaviorWorld(); var scene = new ComponentScene();
+        world.Start(compiled, scene, [new(1, 10, "test.sky", true, new Dictionary<string, JsonElement>
+        {
+            ["tones"] = JsonSerializer.SerializeToElement(new
+            {
+                Mode = 0,
+                ColorKeys = new[] { new { Time = 0f, Color = new { R = 1f, G = 0f, B = 0f, A = 1f } }, new { Time = 1f, Color = new { R = 0f, G = 1f, B = 0f, A = 1f } } },
+                AlphaKeys = new[] { new { Time = 0f, Alpha = 1f }, new { Time = 1f, Alpha = 0f } }
+            })
+        })]);
+        Assert.Equal("0.50,0.50,0.50|Blend", string.Join(' ', scene.Events), "gradiente aplicado e avaliado");
+    }
     private const string LifecycleSource = """
         using Astra;
         [ComponentId("test.life")]

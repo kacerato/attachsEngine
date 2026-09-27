@@ -48,7 +48,7 @@ public:
   }
   // O tipo de campo que valida uma entrada da biblioteca.
   static std::string_view valueType(EditorLibraryKind kind) {
-    return kind == EditorLibraryKind::Color ? "color:hdr" : kind == EditorLibraryKind::Gradient ? "gradient" : "curve";
+    return kind == EditorLibraryKind::Color ? "color:hdr" : kind == EditorLibraryKind::Gradient ? "gradient:hdr" : "curve";
   }
   static bool validName(std::string_view name) {
     if (name.empty() || name.size() > 64 || name.find_first_not_of(' ') == std::string_view::npos) return false;

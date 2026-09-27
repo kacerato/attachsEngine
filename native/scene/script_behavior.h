@@ -1,5 +1,6 @@
 #pragma once
 #include "scene/components.h"
+#include "scene/script_gradient.h"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -103,6 +104,7 @@ inline std::string scriptElementDefault(std::string_view type) {
   if(type=="float"||type=="int32"||type=="enum"||type=="object") return "0";
   if(type=="vector3") return "0 0 0";
   if(scriptColorType(type)) return "1 1 1 1";
+  if(scriptGradientType(type)) return scriptGradientValue({});
   if(type.starts_with("component:")) return "0:0";
   return "";
 }
@@ -160,6 +162,10 @@ inline bool validScriptPropertyValue(std::string_view type,std::string_view text
     return true;
   }
   if(text.size()>4096 || text.find('\0')!=std::string_view::npos) return false;
+  if(bool hdr=false;scriptGradientType(type,&hdr)) {
+    ScriptGradient gradient;
+    return parseScriptGradient(text,gradient) && gradient.valid(hdr);
+  }
   if(bool hdr=false;scriptColorType(type,&hdr)) {
     float rgba[4];
     if(!parseScriptColor(text,rgba) || rgba[3]>1) return false;

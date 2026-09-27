@@ -2957,6 +2957,78 @@ AE_TEST(color_window_edits_script_color_with_hex_swatches_and_libraries) {
   AE_EXPECT_EQ(history.undoDepth(),1u,"cancelar não grava nada");
 }
 
+// Unity Gradient Editor: tocar numa faixa acrescenta parada, arrastar move,
+// arrastar para longe apaga, a cor da parada vem da janela de cor, modo e
+// preset; nada grava antes de Aplicar e aplicar é um passo.
+AE_TEST(gradient_editor_adds_moves_removes_stops_and_applies_once) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("aether-gradiente-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.setCodeCompilerAvailable(true);
+  f.session.pumpCodeAutoBuild(0.0);f.session.pumpCodeAutoBuild(10.0);
+  AE_EXPECT_TRUE(!f.session.takeCodeBuildRequest().empty(),"compilação pedida");
+  AE_EXPECT_TRUE(f.session.completeCodeBuild(
+      "ASTRA_CODE 3 1 0 1 \"project.Ceu\" \"Ceu\" \"Scripts/Ceu.cs\" 1 \"tons\" \"Tons\" \"gradient\" 0"),"catálogo com gradiente");
+  f.session.reportCodeCommit(true);
+  auto value=*doc.find(f.cube);
+  auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Ceu";script->source="Scripts/Ceu.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com o comportamento");
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i) if(scene::scriptBehavior(doc.find(f.cube)->components.at(i))) index=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ScriptFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ScriptFoldBase)+index);
+  tapWidget(f,widgetId(EditorWidget::ScriptFieldBase)+index);
+  AE_EXPECT_TRUE(f.session.screen().gradientField!=0,"o campo abre o editor de gradiente");
+  const auto draft=[&] {scene::ScriptGradient g;scene::parseScriptGradient(f.session.screen().gradientDraft,g);return g;};
+  AE_EXPECT_EQ(draft().colors.size(),2u,"padrão: branco a branco");
+  // Acrescentar uma parada de cor no meio da faixa.
+  const auto bar=f.session.layout().gradientBar;
+  const auto lane=locateWidget(f.session,widgetId(EditorWidget::GradientColorLane));
+  f.down(93,{bar.x+bar.width*.5f,lane.y});f.up(93,{bar.x+bar.width*.5f,lane.y});f.session.update();
+  AE_EXPECT_EQ(draft().colors.size(),3u,"tocar na faixa acrescenta");
+  AE_EXPECT_EQ(f.session.screen().gradientSelected,2u,"a parada nova fica escolhida");
+  // Cor pela janela de cor.
+  tapWidget(f,widgetId(EditorWidget::GradientColorSwatch));
+  AE_EXPECT_TRUE(f.session.screen().colorField!=0 && f.session.screen().colorTarget==3,"a janela de cor abre para a parada");
+  tapWidget(f,widgetId(EditorWidget::ColorHex));
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"00FF00",true),"verde");
+  tapWidget(f,widgetId(EditorWidget::ColorApply));
+  AE_EXPECT_TRUE(f.session.screen().colorField==0 && f.session.screen().gradientField!=0,"volta ao editor de gradiente");
+  AE_EXPECT_TRUE(draft().colors[1].rgb[1]==1.f && draft().colors[1].rgb[0]==0.f,"a parada ficou verde");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"nada gravado ainda");
+  // Arrastar a parada para 80%: passa a ser a última antes da ponta.
+  const auto stop=locateWidget(f.session,widgetId(EditorWidget::GradientColorStopBase)+1);
+  f.down(94,stop);f.move(94,{stop.x+8,stop.y});f.move(94,{bar.x+bar.width*.8f,stop.y});f.up(94,{bar.x+bar.width*.8f,stop.y});
+  f.session.update();
+  AE_EXPECT_TRUE(std::abs(draft().colors[1].time-.8f)<.01f,"o arraste move a parada");
+  // Arrastar a parada da ponta esquerda para longe apaga.
+  const auto first=locateWidget(f.session,widgetId(EditorWidget::GradientColorStopBase));
+  f.down(95,first);f.move(95,{first.x+8,first.y});f.move(95,{first.x+8,first.y+90});f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().gradientRemoving,"longe da faixa a parada fica marcada");
+  f.up(95,{first.x+8,first.y+90});f.session.update();
+  AE_EXPECT_EQ(draft().colors.size(),2u,"soltar longe apaga");
+  tapWidget(f,widgetId(EditorWidget::GradientModeBase)+1);
+  AE_EXPECT_TRUE(draft().mode==scene::GradientMode::Fixed,"modo Fixed");
+  tapWidget(f,widgetId(EditorWidget::GradientPresetAdd));
+  AE_EXPECT_TRUE(fs::exists(root/".astra"/"libraries"/"gradients.astra"),"preset guardado no projeto");
+  tapWidget(f,widgetId(EditorWidget::GradientApply));
+  const auto *current=scene::scriptBehavior(doc.find(f.cube)->components.at(index));
+  scene::ScriptGradient stored;
+  AE_EXPECT_TRUE(current && !current->properties.empty() && scene::parseScriptGradient(current->properties[0].value,stored),"gravado");
+  AE_EXPECT_TRUE(stored.mode==scene::GradientMode::Fixed && stored.colors.size()==2 && stored.colors[0].rgb[1]==1.f,
+                 current->properties.empty()?"":current->properties[0].value.c_str());
+  AE_EXPECT_EQ(history.undoDepth(),1u,"aplicar é um passo");
+  AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"ColorKeys\"")!=std::string::npos,"o Play recebe as paradas");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
