@@ -2916,6 +2916,9 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
 }
 void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &state=builder.state;const auto &theme=builder.theme;
+  // O avançado é uma janela sobre a tela (buildAdvancedReferencePicker); o
+  // Inspector só diz que ela está aberta.
+  if(state.pickerAdvanced) {builder.label(content,"Seletor de objeto aberto",theme.color.textMuted,theme.type.caption,UiAlign::Center);return;}
   const auto scriptReference=editorScriptReference(state.referenceScriptType);
   const auto *property=state.referenceScript?&scriptReference:editorReferenceProperty(entity,state.referenceInstance,state.referenceProperty);
   const auto *requiredSchema=property&&!property->requiredType.empty()?scene::findComponentSchema(property->requiredType):nullptr;
@@ -2927,7 +2930,13 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
     builder.label(header,(std::string("Componente · ")+requiredSchema->name).c_str(),theme.color.text,theme.type.body);
   } else builder.label(header,property?property->name:"Referência ausente",theme.color.text,theme.type.body);
   if(!property) return;
-  auto search=deflate(takeTop(content,38),UiInsets::all(2));builder.list.addRect(search,theme.color.raised,theme.radius.control);
+  auto searchRow=takeTop(content,38);
+  // Unity: o seletor clássico tem filtro fixo; "Avançado" troca de modo.
+  const auto mode=deflate(takeRight(searchRow,86),UiInsets::all(2));
+  builder.list.addRect(mode,theme.color.raised,theme.radius.control);
+  builder.label(mode,"Avançado",theme.color.accent,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(mode,widgetId(EditorWidget::ReferenceModeToggle));
+  auto search=deflate(searchRow,UiInsets::all(2));builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.referenceQuery.empty()?"Buscar objeto":state.referenceQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::ReferenceSearch));
   auto clear=takeTop(content,34);builder.label(clear,property->nullLabel,theme.color.textDim,theme.type.caption);builder.router.addRegion(clear,widgetId(EditorWidget::ReferenceClear));
@@ -2955,6 +2964,156 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
   if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ReferencePrevious));
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ReferenceNext));
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
+// Seletor de objeto avançado (Unity 6000.0 Manual/search-advanced-object-
+// picker), em janela própria como na Unity: consulta editável ("t:Tipo" e
+// palavras), filtro de tipo do campo que se pode tirar, visões lista/grade/
+// tabela à esquerda e, à direita, o painel do item destacado (caminho, estado,
+// componentes) com "Escolher". Tocar destaca; o segundo toque ou "Escolher"
+// atribuem. Incompatíveis aparecem apagados, com o motivo.
+void buildAdvancedReferencePicker(ScreenBuilder &builder) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  const auto *entity=state.document?state.document->find(state.selection):nullptr;
+  if(!entity) return;
+  const auto scriptReference=editorScriptReference(state.referenceScriptType);
+  const auto *propertyPointer=state.referenceScript?&scriptReference:editorReferenceProperty(*entity,state.referenceInstance,state.referenceProperty);
+  if(!propertyPointer) return;
+  const auto &property=*propertyPointer;
+  const auto *required=property.requiredType.empty()?nullptr:scene::findComponentSchema(property.requiredType);
+  router.addBlocker(state.surface);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
+  const UiRect panel=centred(state.surface,std::min(700.f,state.surface.width-16),std::min(380.f,state.surface.height-16));
+  list.addRect(panel,theme.color.surface,theme.radius.control);
+  auto content=deflate(panel,UiInsets::all(10));
+  auto header=takeTop(content,34),back=takeLeft(header,34);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);router.addRegion(back,widgetId(EditorWidget::ReferenceClose));
+  const auto mode=deflate(takeRight(header,92),UiInsets::all(2));
+  list.addRect(mode,theme.color.raised,theme.radius.control);
+  builder.label(mode,"Clássico",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  router.addRegion(mode,widgetId(EditorWidget::ReferenceModeToggle));
+  const auto clear=deflate(takeRight(header,140),UiInsets::all(2));
+  list.addRect(clear,theme.color.raised,theme.radius.control);
+  builder.label(clear,property.nullLabel,theme.color.textDim,theme.type.caption,UiAlign::Center);
+  router.addRegion(clear,widgetId(EditorWidget::ReferenceClear));
+  builder.label(deflate(header,UiInsets{4,0,6,0}),required?std::string(property.name)+" · "+required->name:std::string(property.name),
+                theme.color.text,theme.type.body);
+  takeTop(content,6);
+  // Consulta, filtro de tipo e visões.
+  auto query=takeTop(content,34);
+  const char *views[]{"Lista","Grade","Tabela"};
+  for(u32 i=3;i-->0;) {
+    const auto cell=deflate(takeRight(query,66),UiInsets::all(2));
+    const bool on=state.pickerView==i;
+    list.addRect(cell,on?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    builder.label(cell,views[i],on?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(cell,widgetId(EditorWidget::ReferenceViewBase)+i);
+  }
+  takeRight(query,8);
+  if(required) {
+    const auto chip=deflate(takeLeft(query,170),UiInsets::all(2));
+    const bool on=state.referenceTypeFilter;
+    list.addRect(chip,on?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    builder.label(deflate(chip,UiInsets{8,0,8,0}),(on?std::string("t:")+required->name+"   ×":std::string("+ t:")+required->name).c_str(),
+                  on?theme.color.accent:theme.color.textDim,theme.type.caption);
+    router.addRegion(chip,widgetId(EditorWidget::ReferenceTypeFilter));
+  }
+  const auto search=deflate(query,UiInsets::all(2));
+  list.addRect(search,theme.color.raised,theme.radius.control);
+  builder.label(deflate(search,UiInsets{8,0,8,0}),state.referenceQuery.empty()?"Buscar · t:Tipo nome":state.referenceQuery.c_str(),
+                state.referenceQuery.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
+  router.addRegion(search,widgetId(EditorWidget::ReferenceSearch));
+  takeTop(content,8);
+  // Direita: painel de inspeção.
+  auto inspection=takeRight(content,std::min(230.f,content.width*.38f));takeRight(content,10);
+  const auto results=editorAdvancedReferenceResults(*state.document,entity->id,property,state.referenceQuery,state.referenceTypeFilter);
+  const EditorReferenceResult *highlighted=nullptr;
+  for(const auto &result:results) if(result.id==state.referenceHighlight) highlighted=&result;
+  list.addRect(inspection,theme.color.silhouette,theme.radius.control);
+  auto inner=deflate(inspection,UiInsets::all(10));
+  if(!highlighted) {
+    builder.label(takeTop(inner,inner.height*.5f),"Toque para ver o objeto",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.label(inner,"toque de novo para escolher",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+  else {
+    const auto *object=state.document->find(highlighted->id);
+    const auto assign=takeBottom(inner,40);
+    list.addRect(assign,highlighted->compatible?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(assign,highlighted->compatible?"Escolher":"O campo recusa",highlighted->compatible?theme.color.accentInk:theme.color.textFaint,
+                  theme.type.caption,UiAlign::Center);
+    if(highlighted->compatible) router.addRegion(assign,widgetId(EditorWidget::ReferenceAssign));
+    takeBottom(inner,8);
+    list.addImage(centred(takeTop(inner,40),32,32),static_cast<UiImageId>(UiIcon::EditorAuthorObject),0xffffffffu);
+    builder.label(takeTop(inner,24),object->name,theme.color.text,theme.type.body,UiAlign::Center);
+    std::string path;
+    for(const auto *up=state.document->find(object->parent);up && up->id!=state.document->root();up=state.document->find(up->parent))
+      path=path.empty()?std::string(up->name):std::string(up->name)+" / "+path;
+    builder.label(takeTop(inner,18),path.empty()?"Na raiz da cena":path,theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.label(takeTop(inner,18),(std::string(object->active?"Ativo":"Inativo")+" · id "+std::to_string(object->id)).c_str(),
+                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    takeTop(inner,6);
+    // Um componente por linha, o exigido pelo campo em destaque.
+    for(usize c=0;c<object->components.size() && inner.height>=22;++c) {
+      const auto *value=object->components.at(c);
+      const auto *schema=scene::findComponentSchema(value->type().id);
+      const auto *script=scene::scriptBehavior(value);
+      auto row=takeTop(inner,22);
+      const bool isRequired=!property.requiredType.empty() && value->type().id==property.requiredType;
+      list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(schema&&!script?editorIconByName(schema->icon):UiIcon::ScriptingCode),
+                    isRequired?theme.color.accent:theme.color.textDim);
+      builder.label(row,script?script->scriptType:schema?schema->name:std::string(value->type().id),
+                    isRequired?theme.color.accent:theme.color.text,theme.type.caption);
+    }
+    if(object->components.size()==0) builder.label(takeTop(inner,22),"Sem componentes",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+  // Esquerda: resultados.
+  auto pager=takeBottom(content,28);
+  if(state.pickerView==2) {
+    auto head=takeTop(content,22);
+    builder.label(takeLeft(head,head.width*.42f),"Nome",theme.color.textMuted,theme.type.caption);
+    builder.label(takeLeft(head,head.width*.62f),"Pai",theme.color.textMuted,theme.type.caption);
+    builder.label(head,"Componentes",theme.color.textMuted,theme.type.caption,UiAlign::End);
+  }
+  const float cellHeight=state.pickerView==1?72.f:state.pickerView==2?30.f:44.f;
+  const u32 columns=state.pickerView==1?std::max(1u,static_cast<u32>(content.width/104)):1u;
+  const u32 rows=std::max(1u,static_cast<u32>(content.height/cellHeight));
+  const u32 perPage=rows*columns;
+  const u32 pages=std::max(1u,(static_cast<u32>(results.size())+perPage-1)/perPage),page=std::min(state.referencePage,pages-1);
+  const float cellWidth=content.width/columns;
+  for(u32 i=page*perPage;i<results.size() && i<(page+1)*perPage;++i) {
+    const u32 local=i-page*perPage;
+    const UiRect cell{content.x+(local%columns)*cellWidth,content.y+(local/columns)*cellHeight,cellWidth,cellHeight};
+    const auto *object=state.document->find(results[i].id);
+    const bool chosen=results[i].id==state.referenceHighlight;
+    const UiColor ink=results[i].compatible?theme.color.text:theme.color.textFaint;
+    list.addRect(deflate(cell,UiInsets::all(2)),chosen?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    const auto *parent=state.document->find(object->parent);
+    if(state.pickerView==1) {
+      auto box=deflate(cell,UiInsets::all(8));
+      list.addImage(centred(takeTop(box,30),26,26),static_cast<UiImageId>(UiIcon::EditorAuthorObject),results[i].compatible?0xffffffffu:0x55ffffffu);
+      builder.label(box,object->name,ink,theme.type.caption,UiAlign::Center);
+    } else if(state.pickerView==2) {
+      auto box=deflate(cell,UiInsets{10,0,10,0});
+      builder.label(takeLeft(box,box.width*.42f),object->name,ink,theme.type.caption);
+      builder.label(takeLeft(box,box.width*.62f),parent&&parent->id!=state.document->root()?parent->name:"Cena",theme.color.textMuted,theme.type.caption);
+      builder.label(box,std::to_string(object->components.size()).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::End);
+    } else {
+      auto box=deflate(cell,UiInsets{4,2,10,2});
+      list.addImage(centred(takeLeft(box,36),22,22),static_cast<UiImageId>(UiIcon::EditorAuthorObject),results[i].compatible?0xffffffffu:0x55ffffffu);
+      builder.label(takeTop(box,box.height*.55f),object->name,ink,theme.type.body);
+      const auto detail=std::string(parent&&parent->id!=state.document->root()?parent->name:"Cena")+" · id "+std::to_string(object->id)+
+          (results[i].compatible?"":" · o campo recusa");
+      builder.label(box,detail.c_str(),results[i].compatible?theme.color.textMuted:theme.color.warning,theme.type.caption);
+    }
+    router.addRegion(cell,widgetId(EditorWidget::ReferenceResultBase)+i);
+  }
+  if(results.empty()) builder.label(content,"Nenhum objeto para esta consulta",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  const auto previous=takeLeft(pager,40),next=takeRight(pager,40);
+  builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(page) router.addRegion(previous,widgetId(EditorWidget::ReferencePrevious));
+  if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::ReferenceNext));
+  builder.label(pager,(std::to_string(results.size())+(results.size()==1?" objeto · ":" objetos · ")+std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),
+                theme.color.textMuted,theme.type.caption,UiAlign::Center);
 }
 
 void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity);
@@ -6814,6 +6973,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
+  if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);
   if(state.colorField) buildColorWindow(builder,layout);
   buildProjectDialogs(builder);

@@ -1,4 +1,5 @@
 #include "editor/editor_component_impact.h"
+#include "editor/editor_reference_picker.h"
 #include "scene/component_properties.h"
 #include "renderer/authoring_geometry.h"
 #include "renderer/rendering_settings_file.h"
@@ -3156,6 +3157,70 @@ AE_TEST(lod_bar_slider_drags_transitions_and_inserts_or_deletes_levels) {
   AE_EXPECT_TRUE(group()->levelCount==3 && group()->transitions[1]==30.f,"apagar desfaz a inserção");
   tapWidget(f,widgetId(EditorWidget::LodBarSegmentBase)+2);
   AE_EXPECT_EQ(f.session.screen().lodSelected,3u,"toque escolhe o nível");
+}
+
+// Unity 6000.0 Advanced Object Picker: modo alternável, filtro de tipo que se
+// pode tirar, consulta "t:Tipo", destacar antes de escolher, incompatíveis
+// visíveis e recusados.
+AE_TEST(advanced_object_picker_filters_highlights_and_refuses_incompatible) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  auto value=*doc.find(f.cube);
+  value.components.add(scene::PhysicsBody::descriptor);value.components.add(scene::Collider::descriptor);
+  value.components.add(scene::Joint::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com junta");
+  const auto other=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Porta");
+  auto door=*doc.find(other);door.components.add(scene::PhysicsBody::descriptor);door.components.add(scene::Collider::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(other,door),"porta com corpo");
+  const auto plain=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Enfeite");
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i)
+    if(&doc.find(f.cube)->components.at(i)->type()==&scene::Joint::descriptor) index=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+index);
+  const u32 field=widgetId(EditorWidget::ComponentReferenceBase)+index;
+  revealProperty(f,field);
+  tapWidget(f,field);
+  tapWidget(f,widgetId(EditorWidget::ReferenceModeToggle));
+  AE_EXPECT_TRUE(f.session.screen().pickerAdvanced,"modo avançado");
+  const auto &property=scene::jointReferences[0];
+  auto results=editorAdvancedReferenceResults(doc,f.cube,property,"",true);
+  AE_EXPECT_EQ(results.size(),2u,"com o filtro de tipo, só quem tem corpo");
+  u32 own=0,door_=0;
+  for(u32 i=0;i<results.size();++i) {if(results[i].id==f.cube) own=i;if(results[i].id==other) door_=i;}
+  AE_EXPECT_TRUE(!results[own].compatible && results[door_].compatible,"o próprio objeto aparece recusado (escopo Outro)");
+  // Os resultados paginam: volta ao começo e avança até o item.
+  const auto revealResult=[&](u32 i) {
+    for(u32 k=0;k<16 && locateWidget(f.session,widgetId(EditorWidget::ReferenceResultBase)+i).x<0 &&
+        locateWidget(f.session,widgetId(EditorWidget::ReferencePrevious)).x>=0;++k) tapWidget(f,widgetId(EditorWidget::ReferencePrevious));
+    for(u32 k=0;k<16 && locateWidget(f.session,widgetId(EditorWidget::ReferenceResultBase)+i).x<0 &&
+        locateWidget(f.session,widgetId(EditorWidget::ReferenceNext)).x>=0;++k) tapWidget(f,widgetId(EditorWidget::ReferenceNext));
+  };
+  // Destacar e escolher.
+  revealResult(door_);
+  tapWidget(f,widgetId(EditorWidget::ReferenceResultBase)+door_);
+  AE_EXPECT_EQ(f.session.screen().referenceHighlight,static_cast<u64>(other),"primeiro toque destaca");
+  const auto joint=[&]{return static_cast<const scene::Joint *>(doc.find(f.cube)->components.find(scene::Joint::descriptor));};
+  AE_EXPECT_EQ(joint()->connectedBody,0ull,"destacar não atribui");
+  tapWidget(f,widgetId(EditorWidget::ReferenceAssign));
+  AE_EXPECT_EQ(joint()->connectedBody,static_cast<u64>(other),"Escolher atribui");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo");
+  // Reabrir, tirar o filtro: o objeto sem corpo aparece, recusado.
+  tapWidget(f,field);
+  tapWidget(f,widgetId(EditorWidget::ReferenceTypeFilter));
+  results=editorAdvancedReferenceResults(doc,f.cube,property,"",f.session.screen().referenceTypeFilter);
+  bool plainShown=false;for(const auto &r:results) if(r.id==plain) plainShown=!r.compatible;
+  AE_EXPECT_TRUE(plainShown,"sem o filtro aparecem todos, e o incompatível vem marcado");
+  u32 plainIndex=0;for(u32 i=0;i<results.size();++i) if(results[i].id==plain) plainIndex=i;
+  revealResult(plainIndex);
+  tapWidget(f,widgetId(EditorWidget::ReferenceResultBase)+plainIndex);
+  tapWidget(f,widgetId(EditorWidget::ReferenceResultBase)+plainIndex);
+  AE_EXPECT_EQ(joint()->connectedBody,static_cast<u64>(other),"segundo toque num incompatível não atribui");
+  // Consulta por tipo: t:corpo com o filtro desligado volta aos dois.
+  AE_EXPECT_EQ(editorAdvancedReferenceResults(doc,f.cube,property,"t:corpo",false).size(),2u,"t:Tipo filtra por componente");
+  AE_EXPECT_EQ(editorAdvancedReferenceResults(doc,f.cube,property,"t:corpo port",false).size(),1u,"palavras filtram por nome");
 }
 
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {

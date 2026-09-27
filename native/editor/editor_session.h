@@ -1569,6 +1569,10 @@ private:
   // Desfazer), escolha de segmento e inserir/apagar nível.
   bool handleLodBar(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   u32 lodDivider_=0,lodPointer_=0;
+  // Preferências do editor guardadas no projeto (.astra/editor-preferences.astra):
+  // hoje, o seletor de objeto Clássico ou Avançado (Unity: Preferences > Search).
+  void loadEditorPreferences();
+  void saveEditorPreferences();
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;

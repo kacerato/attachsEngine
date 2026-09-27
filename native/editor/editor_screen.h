@@ -386,6 +386,10 @@ enum class EditorWidget : u32 {
   // Barra dividida do LOD Group (Unity Manual/InspectorBarSliders): a barra,
   // divisores entre níveis, segmentos e o menu do segmento.
   LodBar=0xC4000000u, LodBarInsert, LodBarDelete, LodBarDividerBase=0xC4000010u, LodBarSegmentBase=0xC4000020u,
+  // Seletor de objeto avançado: alternar Clássico/Avançado, visões, filtro de
+  // tipo, escolher o destacado e os resultados.
+  ReferenceModeToggle=0xC5000000u, ReferenceTypeFilter, ReferenceAssign, ReferenceViewBase=0xC5000010u,
+  ReferenceResultBase=0xC5010000u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -492,7 +496,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentEnumPickerClose,kRange},{EditorWidget::ScriptArraySizeBase,kRange},
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
-  {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange}};
+  {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -616,6 +620,11 @@ struct EditorScreenState final {
   u64 referenceInstance=0;
   std::string referenceProperty,referenceQuery;
   bool referenceScript=false,editingReferenceSearch=false;
+  // Seletor avançado (preferência do projeto), visão 0 lista/1 grade/2 tabela,
+  // filtro de tipo ligado e o resultado destacado (painel de inspeção).
+  bool pickerAdvanced=false,referenceTypeFilter=true;
+  u8 pickerView=0;
+  u64 referenceHighlight=0;
   // Tipo declarado do campo de script aberto no seletor: "object" ou
   // "component:<id>" (referência a componente).
   std::string referenceScriptType;

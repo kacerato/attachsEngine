@@ -294,6 +294,26 @@ int main(int argc, char **argv) {
     state.lodStatus="Na vista: LOD 1 · 42% da tela";
     if(std::string(argv[4])=="lod-menu") state.lodMenu=2;
   }
+  // Seletor avançado sobre o campo "Conectar corpo" da junta.
+  if(argc>4 && std::string(argv[4]).starts_with("picker")) {
+    for(const char *name:{"Porta","Portão","Ponte"}) {
+      const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,name);
+      auto value=*document.find(id);value.components.add(scene::PhysicsBody::descriptor);value.components.add(scene::Collider::descriptor);
+      document.applyEntityValues(id,value);
+    }
+    document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Enfeite");
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Dobradiça");
+    auto value=*document.find(selection);
+    value.components.add(scene::PhysicsBody::descriptor);value.components.add(scene::Collider::descriptor);
+    const auto *joint=value.components.add(scene::Joint::descriptor);
+    document.applyEntityValues(selection,value);
+    state.componentSelection=selection;state.expandedNative=joint->instanceId();
+    state.referenceInstance=joint->instanceId();state.referenceProperty="connected_body";
+    state.pickerAdvanced=true;
+    if(std::string(argv[4])=="picker-grid") state.pickerView=1;
+    if(std::string(argv[4])=="picker-table") {state.pickerView=2;state.referenceTypeFilter=false;}
+    if(std::string(argv[4])=="picker") state.referenceHighlight=2;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

@@ -322,7 +322,32 @@ bool EditorSession::setProjectDirectory(const char *path) {
   environmentMaps_.clear();
   state_.presetPanel=false;state_.presetNaming=false;state_.presetChoices.clear();componentPresets_=EditorComponentPresets{};
   state_.codeRecoveryPending=code_.hasRecovery(files_);
+  loadEditorPreferences();
   return true;
+}
+
+void EditorSession::loadEditorPreferences() {
+  state_.pickerAdvanced=false;
+  std::filesystem::path file;
+  if(files_.rootPath().empty() ||
+     !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
+  std::vector<u8> bytes;
+  std::error_code ec;
+  if(!std::filesystem::exists(file,ec) || !EditorImportTransaction::read(file,bytes,64u*1024u)) return;
+  std::istringstream in(std::string(bytes.begin(),bytes.end()));
+  std::string magic,key,value;
+  if(!(in>>magic) || magic!="ASTRA_EDITOR_PREFERENCES_1") return;
+  // Chaves desconhecidas são ignoradas: uma versão futura pode acrescentar.
+  while(in>>key>>value) if(key=="object_picker") state_.pickerAdvanced=value=="advanced";
+}
+
+void EditorSession::saveEditorPreferences() {
+  std::filesystem::path file;
+  if(files_.rootPath().empty() ||
+     !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
+  std::error_code ec;std::filesystem::create_directories(file.parent_path(),ec);
+  const std::string text=std::string("ASTRA_EDITOR_PREFERENCES_1\nobject_picker ")+(state_.pickerAdvanced?"advanced":"classic")+"\n";
+  if(ec || !EditorImportTransaction::writeText(file,text)) state_.status="Não foi possível guardar a preferência";
 }
 
 void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
@@ -2155,6 +2180,16 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::ReferenceClose)) {state_.referenceInstance=0;return true;}
     if(key==widgetId(EditorWidget::ReferencePrevious)) {if(state_.referencePage) --state_.referencePage;return true;}
     if(key==widgetId(EditorWidget::ReferenceNext)) {++state_.referencePage;return true;}
+    if(key==widgetId(EditorWidget::ReferenceModeToggle)) {
+      state_.pickerAdvanced=!state_.pickerAdvanced;state_.referenceHighlight=0;state_.referencePage=0;
+      saveEditorPreferences();return true;
+    }
+    if(key==widgetId(EditorWidget::ReferenceTypeFilter)) {
+      state_.referenceTypeFilter=!state_.referenceTypeFilter;state_.referencePage=0;return true;
+    }
+    if(key>=widgetId(EditorWidget::ReferenceViewBase) && key<widgetId(EditorWidget::ReferenceViewBase)+3) {
+      state_.pickerView=static_cast<u8>(key-widgetId(EditorWidget::ReferenceViewBase));state_.referencePage=0;return true;
+    }
     if(key==widgetId(EditorWidget::ReferenceSearch)) {
       state_.editingReferenceSearch=true;std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.referenceQuery.c_str());return true;
     }
@@ -2165,13 +2200,31 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.referenceInstance=component->instanceId();state_.referenceProperty=component->type().references[field].id;
       state_.referenceScript=false;state_.referenceQuery.clear();state_.referencePage=0;return true;
     }
-    if(key==widgetId(EditorWidget::ReferenceClear)||(key>=widgetId(EditorWidget::ReferenceChoiceBase)&&key<widgetId(EditorWidget::ReferenceChoiceBase)+0x01000000u)) {
+    if(key==widgetId(EditorWidget::ReferenceClear)||(key>=widgetId(EditorWidget::ReferenceChoiceBase)&&key<widgetId(EditorWidget::ReferenceChoiceBase)+0x01000000u)||
+       key==widgetId(EditorWidget::ReferenceAssign)||(key>=widgetId(EditorWidget::ReferenceResultBase)&&key<widgetId(EditorWidget::ReferenceResultBase)+0x10000u)) {
       const auto *entity=document_.find(state_.selection);if(!entity||!state_.referenceInstance) return true;
       const auto scriptReference=editorScriptReference(state_.referenceScriptType);
       const auto *property=state_.referenceScript?&scriptReference:editorReferenceProperty(*entity,state_.referenceInstance,state_.referenceProperty);
       if(!property) {state_.referenceInstance=0;return true;}
       u64 target=0;
-      if(key!=widgetId(EditorWidget::ReferenceClear)) {
+      if(key==widgetId(EditorWidget::ReferenceAssign) ||
+         (key>=widgetId(EditorWidget::ReferenceResultBase)&&key<widgetId(EditorWidget::ReferenceResultBase)+0x10000u)) {
+        // Avançado: o primeiro toque destaca (painel de inspeção); o segundo
+        // toque ou "Escolher" atribui — só quando o campo aceita o objeto.
+        const auto results=editorAdvancedReferenceResults(document_,entity->id,*property,state_.referenceQuery,state_.referenceTypeFilter);
+        const EditorReferenceResult *chosen=nullptr;
+        if(key==widgetId(EditorWidget::ReferenceAssign)) {
+          for(const auto &result:results) if(result.id==state_.referenceHighlight) chosen=&result;
+        } else {
+          const u32 index=key-widgetId(EditorWidget::ReferenceResultBase);
+          if(index>=results.size()) return true;
+          if(results[index].id!=state_.referenceHighlight) {state_.referenceHighlight=results[index].id;return true;}
+          chosen=&results[index];
+        }
+        if(!chosen) return true;
+        if(!chosen->compatible) {state_.status="O campo recusa este objeto";return true;}
+        target=chosen->id;state_.referenceHighlight=0;
+      } else if(key!=widgetId(EditorWidget::ReferenceClear)) {
         const auto choices=editorReferenceChoices(document_,entity->id,*property,state_.referenceQuery);const auto index=key-widgetId(EditorWidget::ReferenceChoiceBase);
         if(index>=choices.size()) return true;
         target=choices[index];

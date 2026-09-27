@@ -16,6 +16,54 @@ inline scene::ComponentObjectReference editorScriptReference(std::string_view de
   if(component.empty()) return editorAnyObjectReference;
   return {"component","Componente",component,scene::ObjectReferenceScope::Any,"Nenhum"};
 }
+// Seletor avançado (Unity 6000.0 Manual/search-advanced-object-picker): a
+// consulta aceita "t:<tipo>" (tem um componente cujo nome ou id contém o
+// texto) e palavras soltas (o nome contém). Com o filtro de tipo ligado, só
+// aparecem objetos que têm o tipo exigido pelo campo; desligado, todos. Os
+// que o campo recusa (escopo, falta do tipo) vêm marcados, não escondidos.
+struct EditorReferenceResult {
+  EditorEntityId id=0;
+  bool compatible=false;
+};
+inline bool editorEntityHasComponent(const EditorEntity &entity,std::string_view key) {
+  for(usize i=0;i<entity.components.size();++i) {
+    const auto &type=entity.components.at(i)->type();
+    const auto *schema=scene::findComponentSchema(type.id);
+    if(editorSearchKey(type.id).find(key)!=std::string::npos) return true;
+    if(schema && editorSearchKey(schema->name).find(key)!=std::string::npos) return true;
+    if(const auto *script=scene::scriptBehavior(entity.components.at(i)))
+      if(editorSearchKey(script->scriptType).find(key)!=std::string::npos) return true;
+  }
+  return false;
+}
+inline std::vector<EditorReferenceResult> editorAdvancedReferenceResults(const runtime::SceneGraph &document,EditorEntityId source,
+    const scene::ComponentObjectReference &property,std::string_view query,bool typeFilter) {
+  std::vector<std::string> types,words;
+  std::string token;
+  const auto flush=[&] {
+    if(token.empty()) return;
+    if(token.size()>2 && (token[0]=='t'||token[0]=='T') && token[1]==':') types.push_back(editorSearchKey(token.substr(2)));
+    else words.push_back(editorSearchKey(token));
+    token.clear();
+  };
+  for(const char c:query) {if(c==' ') flush();else token+=c;}
+  flush();
+  std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+  std::vector<EditorReferenceResult> results;
+  for(const auto id:ids) {
+    if(id==document.root()) continue;
+    const auto *entity=document.find(id);
+    if(!entity) continue;
+    if(typeFilter && !property.requiredType.empty() && !entity->components.find(property.requiredType)) continue;
+    bool match=true;
+    for(const auto &type:types) match=match && editorEntityHasComponent(*entity,type);
+    const auto name=editorSearchKey(std::string(entity->name)+" "+std::to_string(id));
+    for(const auto &word:words) match=match && name.find(word)!=std::string::npos;
+    if(!match) continue;
+    results.push_back({id,editorReferenceAccepts(document,source,property,id,true)});
+  }
+  return results;
+}
 // Unity: arrastar um GameObject para um campo de componente atribui o
 // primeiro componente daquele tipo no objeto. Zero quando não há nenhum.
 inline u64 editorFirstComponentInstance(const runtime::SceneGraph &graph,u64 object,std::string_view type) {
