@@ -115,6 +115,71 @@ public sealed class Gradient
     }
 }
 
+/// <summary>Modo de cada lado da tangente de uma chave (Unity: AnimationUtility.TangentMode).</summary>
+public enum TangentMode { Free = 0, Auto = 1, Linear = 2, Constant = 3, ClampedAuto = 4 }
+/// <summary>Repetição antes da primeira e depois da última chave (Unity: WrapMode).</summary>
+public enum CurveWrapMode { Clamp = 0, Loop = 1, PingPong = 2 }
+
+/// <summary>Chave de uma <see cref="AnimationCurve"/> (Unity: <c>Keyframe</c>).</summary>
+public struct Keyframe
+{
+    public float Time, Value, InTangent, OutTangent;
+    public TangentMode LeftMode, RightMode;
+    public bool Broken;
+    public Keyframe(float time, float value, float inTangent = 0, float outTangent = 0)
+    { Time = time; Value = value; InTangent = inTangent; OutTangent = outTangent; LeftMode = RightMode = TangentMode.Free; Broken = false; }
+}
+
+/// <summary>
+/// Curva de valores (Unity: <c>AnimationCurve</c>), editada no Inspector pelo
+/// editor de curvas. <see cref="Evaluate"/> segue a mesma regra do editor:
+/// Hermite entre chaves, Constant segura o valor, Clamp/Loop/PingPong fora.
+/// </summary>
+public sealed class AnimationCurve
+{
+    public Keyframe[] Keys { get; set; } = [];
+    public CurveWrapMode PreWrapMode { get; set; } = CurveWrapMode.Clamp;
+    public CurveWrapMode PostWrapMode { get; set; } = CurveWrapMode.Clamp;
+    public int Length => Keys.Length;
+
+    public static AnimationCurve Linear(float timeStart, float valueStart, float timeEnd, float valueEnd)
+    {
+        var slope = (valueEnd - valueStart) / (timeEnd - timeStart);
+        return new() { Keys = [new(timeStart, valueStart, slope, slope), new(timeEnd, valueEnd, slope, slope)] };
+    }
+    public static AnimationCurve Constant(float timeStart, float timeEnd, float value) =>
+        new() { Keys = [new(timeStart, value), new(timeEnd, value)] };
+
+    public float Evaluate(float time)
+    {
+        var keys = Keys;
+        if (keys.Length == 0) return 0;
+        if (keys.Length == 1) return keys[0].Value;
+        float start = keys[0].Time, end = keys[^1].Time, length = end - start;
+        if (time < start || time > end)
+        {
+            var mode = time < start ? PreWrapMode : PostWrapMode;
+            if (mode == CurveWrapMode.Clamp || length <= 0) time = Math.Clamp(time, start, end);
+            else
+            {
+                var local = (time - start) % (2 * length);
+                if (local < 0) local += 2 * length;
+                if (mode == CurveWrapMode.Loop) local %= length;
+                else if (local > length) local = 2 * length - local;
+                time = start + local;
+            }
+        }
+        var i = 1;
+        while (i < keys.Length - 1 && keys[i].Time < time) ++i;
+        var a = keys[i - 1]; var b = keys[i];
+        if (a.RightMode == TangentMode.Constant || b.LeftMode == TangentMode.Constant) return time >= b.Time ? b.Value : a.Value;
+        var dt = b.Time - a.Time;
+        if (dt <= 0) return b.Value;
+        var s = (time - a.Time) / dt; var s2 = s * s; var s3 = s2 * s;
+        return (2 * s3 - 3 * s2 + 1) * a.Value + (s3 - 2 * s2 + s) * dt * a.OutTangent + (-2 * s3 + 3 * s2) * b.Value + (s3 - s2) * dt * b.InTangent;
+    }
+}
+
 /// <summary>Gradiente com cores HDR no Inspector (Unity: <c>[GradientUsage(hdr)]</c>).</summary>
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true)]
 public sealed class GradientUsageAttribute(bool hdr) : Attribute

@@ -21,6 +21,33 @@ bool refused(const char *text, NumericExpressionContext context = {}) {
 bool near(double a, double b) { return std::abs(a - b) < 1e-9; }
 } // namespace
 
+// Unity AnimationCurve.Evaluate e modos de tangente: Hermite entre chaves,
+// Linear vira reta, Constant segura, ClampedAuto não passa dos vizinhos,
+// Clamp/Loop/PingPong fora das chaves; presets de fábrica são válidos.
+AE_TEST(script_curve_tangents_wrap_and_evaluation) {
+  scene::ScriptCurve curve;
+  AE_EXPECT_TRUE(scene::parseScriptCurve("0 0 2 0 0 1 1 2 2 0 1 1 1 1 2 2 0", curve), "linear lida");
+  AE_EXPECT_TRUE(near(scene::evaluateScriptCurve(curve, .25f), .25), "Linear é reta");
+  AE_EXPECT_TRUE(near(scene::evaluateScriptCurve(curve, -3.f), 0) && near(scene::evaluateScriptCurve(curve, 4.f), 1), "Clamp nas pontas");
+  curve.post = scene::CurveWrapMode::Loop;
+  AE_EXPECT_TRUE(std::abs(scene::evaluateScriptCurve(curve, 1.25f) - .25f) < 1e-5f, "Loop repete");
+  curve.post = scene::CurveWrapMode::PingPong;
+  AE_EXPECT_TRUE(std::abs(scene::evaluateScriptCurve(curve, 1.25f) - .75f) < 1e-5f, "PingPong volta");
+  curve.keys[0].right = scene::CurveTangentMode::Constant;
+  AE_EXPECT_TRUE(near(scene::evaluateScriptCurve(curve, .9f), 0), "Constant segura o valor até a próxima chave");
+  scene::ScriptCurve peak;
+  peak.keys = {{0, 0}, {.5f, 1}, {1, 0}};
+  peak.updateTangents();
+  AE_EXPECT_TRUE(near(peak.keys[1].in, 0) && near(peak.keys[1].out, 0), "ClampedAuto deixa plano o extremo local");
+  float highest = 0;
+  for (u32 i = 0; i <= 100; ++i) highest = std::max(highest, scene::evaluateScriptCurve(peak, i / 100.f));
+  AE_EXPECT_TRUE(highest <= 1.0001f, "ClampedAuto não passa do pico");
+  for (const auto &preset : scene::curveFactoryPresets)
+    AE_EXPECT_TRUE(scene::validScriptPropertyValue("curve", preset.value), preset.name);
+  AE_EXPECT_TRUE(!scene::validScriptPropertyValue("curve", "0 0 2 1 0 0 0 0 0 0 1 1 0 0 0 0 0"), "tempos repetidos recusados");
+  AE_EXPECT_TRUE(scene::validScriptPropertyValue("curve", "0 0 0"), "curva vazia é válida");
+}
+
 // Unity ScriptReference/Gradient.Evaluate: fora das paradas vale a ponta;
 // Blend interpola, Fixed dá degrau na parada seguinte, Perceptual passa por
 // Oklab (de preto a branco o meio perceptual é mais escuro que o linear).

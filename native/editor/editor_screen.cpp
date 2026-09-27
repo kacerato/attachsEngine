@@ -2,6 +2,7 @@
 #include "editor/editor_color_picker.h"
 #include "editor/editor_numeric_expression.h"
 #include "editor/editor_value_library.h"
+#include "editor/editor_curve_view.h"
 #include <sstream>
 #include "scene/script_behavior.h"
 #include "editor/editor_water_body_component.h"
@@ -637,6 +638,213 @@ void buildGradientEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
       const auto row=takeTop(rows,34);
       builder.label(deflate(row,UiInsets{8,0,6,0}),actions[k],k==4?theme.color.axisX:theme.color.text,theme.type.caption);
       router.addRegion(row,widgetId(EditorWidget::GradientPresetActionBase)+k);
+    }
+  }
+}
+
+// Curva desenhada em linha dentro de um retângulo: miniatura de campo e de preset.
+void drawCurveThumbnail(ScreenBuilder &builder,UiRect box,const scene::ScriptCurve &curve,UiColor color) {
+  float view[4];frameCurve(curve,view);
+  if(curve.keys.empty()) return;
+  UiPoint previous{};
+  for(u32 i=0;i<=24;++i) {
+    const float t=view[0]+(view[2]-view[0])*i/24.f;
+    const auto point=curveToScreen(box,view,t,scene::evaluateScriptCurve(curve,t));
+    if(i) builder.list.addLine(previous,point,color,1.5f);
+    previous=point;
+  }
+}
+
+// Editor de curvas (Unity 6000.0 Manual/EditingCurves e InspectorCurves).
+// Toque duplo no gráfico acrescenta chave sobre a curva; arrastar uma chave
+// move tempo e valor; a chave escolhida mostra as alças de tangente
+// (arrastar muda a inclinação) e o painel com tempo, valor, modo de tangente
+// e Apagar. Arrastar o vazio desloca a vista; Enquadrar, + e − ajustam.
+// Presets em bibliotecas do projeto, com os de fábrica. Nada grava antes de
+// Aplicar.
+void buildCurveEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  scene::ScriptCurve curve;
+  if(!scene::parseScriptCurve(state.curveDraft,curve)) return;
+  router.addBlocker(state.surface);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
+  const UiRect panel=centred(state.surface,std::min(700.f,state.surface.width-16),std::min(380.f,state.surface.height-16));
+  list.addRect(panel,theme.color.surface,theme.radius.control);
+  auto content=deflate(panel,UiInsets::all(10));
+  auto header=takeTop(content,34);
+  builder.label(takeLeft(header,90),"Curva",theme.color.text,theme.type.title);
+  const auto button=[&](UiRect rect,const char *label,EditorWidget widget,bool primary=false) {
+    list.addRect(rect,primary?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(rect,label,primary?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(rect,widgetId(widget));
+  };
+  button(takeRight(header,88),"Aplicar",EditorWidget::CurveApply,true);takeRight(header,6);
+  button(takeRight(header,88),"Cancelar",EditorWidget::CurveCancel);takeRight(header,14);
+  button(takeRight(header,40),"+",EditorWidget::CurveZoomIn);takeRight(header,4);
+  button(takeRight(header,40),"-",EditorWidget::CurveZoomOut);takeRight(header,4);
+  button(takeRight(header,92),"Enquadrar",EditorWidget::CurveFrame);
+  takeTop(content,6);
+  auto presets=takeBottom(content,44);takeBottom(content,6);
+  const bool selected=state.curveSelected && state.curveSelected<=curve.keys.size();
+  const bool broken=selected && curve.keys[state.curveSelected-1].broken;
+  auto panelRows=takeBottom(content,broken?72.f:36.f);takeBottom(content,8);
+  // Gráfico.
+  const UiRect graph=deflate(content,UiInsets{34,4,4,16});
+  list.addRect(content,theme.color.voidBlack,theme.radius.control);
+  layout.curveGraph=graph;
+  router.addRegion(content,widgetId(EditorWidget::CurveGraph));
+  const auto &view=state.curveView;
+  for(u32 i=0;i<=4;++i) {
+    const float t=view[0]+(view[2]-view[0])*i/4.f,v=view[1]+(view[3]-view[1])*i/4.f;
+    const auto x=curveToScreen(graph,view,t,view[1]).x,y=curveToScreen(graph,view,view[0],v).y;
+    list.addRect({x,graph.y,1,graph.height},theme.color.line);
+    list.addRect({graph.x,y,graph.width,1},theme.color.line);
+    char text[16];
+    std::snprintf(text,sizeof(text),"%.3g",t);
+    builder.label({x-24,graph.bottom()+1,48,14},text,theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    std::snprintf(text,sizeof(text),"%.3g",v);
+    builder.label({content.x+2,y-7,30,14},text,theme.color.textMuted,theme.type.caption,UiAlign::End);
+  }
+  list.pushClip(graph);
+  if(curve.keys.empty())
+    builder.label(graph,"Curva vazia · toque duplo acrescenta a primeira chave",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  else {
+    // Dentro das chaves em destaque; fora, a repetição (Clamp/Loop/PingPong) apagada.
+    const float first=curve.keys.front().time,last=curve.keys.back().time;
+    UiPoint previous{};bool started=false;
+    constexpr u32 samples=160;
+    for(u32 i=0;i<=samples;++i) {
+      const float t=view[0]+(view[2]-view[0])*i/samples;
+      const auto point=curveToScreen(graph,view,t,scene::evaluateScriptCurve(curve,t));
+      if(started) {
+        const bool inside=t>=first && t<=last;
+        list.addLine(previous,point,inside?theme.color.accent:withAlpha(theme.color.accent,.35f),inside?2.f:1.5f);
+      }
+      previous=point;started=true;
+    }
+    for(u32 i=0;i<curve.keys.size();++i) {
+      const auto &key=curve.keys[i];
+      const auto at=curveToScreen(graph,view,key.time,key.value);
+      const bool chosen=state.curveSelected==i+1;
+      if(chosen) {
+        for(const bool incoming:{true,false}) {
+          const auto mode=incoming?key.left:key.right;
+          if((incoming && i==0) || (!incoming && i+1==curve.keys.size())) continue;
+          if(mode==scene::CurveTangentMode::Linear || mode==scene::CurveTangentMode::Constant) continue;
+          const auto handle=curveHandle(graph,view,key,incoming);
+          list.addLine(at,handle,theme.color.textDim,1.5f);
+          list.addRect({handle.x-6,handle.y-6,12,12},theme.color.textDim,6);
+        }
+        list.addRect({at.x-9,at.y-9,18,18},theme.color.accent,9);
+      }
+      list.addRect({at.x-6,at.y-6,12,12},chosen?0xffffffffu:theme.color.text,6);
+    }
+  }
+  list.popClip();
+  // Painel: chave escolhida ou repetição.
+  auto row=takeTop(panelRows,36);
+  const auto chip=[&](UiRect rect,const char *label,u32 widget,bool on) {
+    list.addRect(rect,on?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    builder.label(rect,label,on?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(rect,widget);
+  };
+  if(!selected) {
+    const char *wraps[]{"Clamp","Loop","PingPong"};
+    builder.label(takeLeft(row,52),"Antes",theme.color.textDim,theme.type.caption);
+    for(u32 i=0;i<3;++i) chip(deflate(takeLeft(row,78),UiInsets{2,2,2,2}),wraps[i],widgetId(EditorWidget::CurvePreWrapBase)+i,static_cast<u32>(curve.pre)==i);
+    takeLeft(row,14);
+    builder.label(takeLeft(row,56),"Depois",theme.color.textDim,theme.type.caption);
+    for(u32 i=0;i<3;++i) chip(deflate(takeLeft(row,78),UiInsets{2,2,2,2}),wraps[i],widgetId(EditorWidget::CurvePostWrapBase)+i,static_cast<u32>(curve.post)==i);
+    takeLeft(row,10);
+    builder.label(row,"Toque duplo acrescenta chave",theme.color.textMuted,theme.type.caption);
+  } else {
+    const auto &key=curve.keys[state.curveSelected-1];
+    const auto field=[&](const char *label,float value,EditorWidget widget) {
+      builder.label(takeLeft(row,44),label,theme.color.textDim,theme.type.caption);
+      const auto box=deflate(takeLeft(row,72),UiInsets{0,2,4,2});
+      list.addRect(box,theme.color.raised,theme.radius.control);
+      char text[24];std::snprintf(text,sizeof(text),"%.4g",value);
+      builder.label(deflate(box,UiInsets{6,0,6,0}),text,theme.color.text,theme.type.caption);
+      router.addRegion(box,widgetId(widget));
+    };
+    field("Tempo",key.time,EditorWidget::CurveKeyTime);
+    field("Valor",key.value,EditorWidget::CurveKeyValue);
+    const auto remove=takeRight(row,78);
+    list.addRect(deflate(remove,UiInsets{0,2,0,2}),theme.color.raised,theme.radius.control);
+    builder.label(remove,"Apagar",theme.color.axisX,theme.type.caption,UiAlign::Center);
+    router.addRegion(remove,widgetId(EditorWidget::CurveKeyDelete));
+    takeRight(row,6);
+    // Modos: os quatro alinhados e "Quebrada".
+    const bool smooth=!key.broken && key.left==key.right;
+    const struct {const char *label;bool on;} modes[]{
+      {"Auto suave",smooth&&key.left==scene::CurveTangentMode::ClampedAuto},{"Auto",smooth&&key.left==scene::CurveTangentMode::Auto},
+      {"Livre",smooth&&key.left==scene::CurveTangentMode::Free&&(key.in!=0||key.out!=0)},
+      {"Plana",smooth&&key.left==scene::CurveTangentMode::Free&&key.in==0&&key.out==0},{"Quebrada",key.broken}};
+    const float width=row.width/5;
+    for(u32 i=0;i<5;++i) chip({row.x+i*width+2,row.y+2,width-4,row.height-4},modes[i].label,widgetId(EditorWidget::CurveTangentBase)+i,modes[i].on);
+    if(key.broken) {
+      auto sides=takeTop(panelRows,36);
+      const char *sideModes[]{"Livre","Linear","Constante"};
+      const auto sideIndex=[](scene::CurveTangentMode mode){return mode==scene::CurveTangentMode::Linear?1u:mode==scene::CurveTangentMode::Constant?2u:0u;};
+      builder.label(takeLeft(sides,70),"Esquerda",theme.color.textDim,theme.type.caption);
+      for(u32 i=0;i<3;++i) chip(deflate(takeLeft(sides,84),UiInsets{2,2,2,2}),sideModes[i],widgetId(EditorWidget::CurveLeftModeBase)+i,sideIndex(key.left)==i);
+      takeLeft(sides,16);
+      builder.label(takeLeft(sides,64),"Direita",theme.color.textDim,theme.type.caption);
+      for(u32 i=0;i<3;++i) chip(deflate(takeLeft(sides,84),UiInsets{2,2,2,2}),sideModes[i],widgetId(EditorWidget::CurveRightModeBase)+i,sideIndex(key.right)==i);
+    }
+  }
+  // Presets.
+  const auto *libraries=state.curveLibraries;
+  const auto *library=libraries?libraries->currentOrNull():nullptr;
+  const auto libraryChip=takeLeft(presets,120);takeLeft(presets,6);
+  list.addRect(libraryChip,state.curveLibraryMenu?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+  builder.label(deflate(libraryChip,UiInsets{8,0,8,0}),library?library->name:std::string("Padrão"),theme.color.text,theme.type.caption);
+  router.addRegion(libraryChip,widgetId(EditorWidget::CurveLibraryToggle));
+  const auto add=takeRight(presets,40);
+  list.addRect(add,withAlpha(theme.color.accent,.16f),theme.radius.control);
+  builder.label(add,"+",theme.color.accent,theme.type.title,UiAlign::Center);
+  router.addRegion(add,widgetId(EditorWidget::CurvePresetAdd));
+  takeRight(presets,6);
+  const u32 capacity=static_cast<u32>(std::max(0.f,presets.width)/64);
+  if(library) for(u32 i=0;i<library->entries.size() && i<capacity;++i) {
+    const UiRect cell{presets.x+i*64.f,presets.y+4,58,36};
+    scene::ScriptCurve preset;
+    if(!scene::parseScriptCurve(library->entries[i].value,preset)) continue;
+    list.addRect(cell,state.curvePresetMenu==i+1?withAlpha(theme.color.accent,.30f):theme.color.raised,theme.radius.control);
+    drawCurveThumbnail(builder,deflate(cell,UiInsets::all(5)),preset,theme.color.accent);
+    router.addRegion(cell,widgetId(EditorWidget::CurvePresetBase)+i);
+  }
+  if(!library || library->entries.empty())
+    builder.label(presets,"Sem presets: + guarda a curva, ou use os de fábrica",theme.color.textMuted,theme.type.caption);
+  if(state.curveLibraryMenu && libraries) {
+    const float height=36.f*(libraries->libraries.size()+2)+8;
+    const UiRect menu{libraryChip.x,std::max(panel.y+8,libraryChip.y-height-4),230,height};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    for(u32 i=0;i<libraries->libraries.size();++i) {
+      const auto entry=takeTop(rows,36);
+      if(i==libraries->active) list.addRect({entry.x,entry.y+6,3,entry.height-12},theme.color.accent,1);
+      builder.label(deflate(entry,UiInsets{10,0,6,0}),libraries->libraries[i].name,theme.color.text,theme.type.caption);
+      router.addRegion(entry,widgetId(EditorWidget::CurveLibraryBase)+i);
+    }
+    const auto create=takeTop(rows,36);
+    builder.label(deflate(create,UiInsets{10,0,6,0}),"+ Nova biblioteca",theme.color.accent,theme.type.caption);
+    router.addRegion(create,widgetId(EditorWidget::CurveLibraryNew));
+    const auto factory=takeTop(rows,36);
+    builder.label(deflate(factory,UiInsets{10,0,6,0}),"+ Presets de fábrica",theme.color.accent,theme.type.caption);
+    router.addRegion(factory,widgetId(EditorWidget::CurveLibraryFactory));
+  }
+  if(state.curvePresetMenu && library && state.curvePresetMenu<=library->entries.size()) {
+    const u32 i=state.curvePresetMenu-1;
+    const char *actions[]{"Substituir pela atual","Mover para a esquerda","Mover para a direita","Renomear","Apagar"};
+    const UiRect menu{std::min(presets.x+i*64.f,panel.right()-220),std::max(panel.y+8,presets.y-5*34.f-30),210,5*34.f+26};
+    list.addRect(menu,theme.color.raised,theme.radius.control);
+    auto rows=deflate(menu,UiInsets::all(4));
+    builder.label(takeTop(rows,22),library->entries[i].name,theme.color.textDim,theme.type.caption);
+    for(u32 k=0;k<5;++k) {
+      const auto entry=takeTop(rows,34);
+      builder.label(deflate(entry,UiInsets{8,0,6,0}),actions[k],k==4?theme.color.axisX:theme.color.text,theme.type.caption);
+      router.addRegion(entry,widgetId(EditorWidget::CurvePresetActionBase)+k);
     }
   }
 }
@@ -2518,6 +2726,14 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
             std::string(typeName)+" ausente";
       missing=target&&!present;
     } else if(type=="string" && text && text->empty()) shown="(vazio)";
+    else if(scene::scriptCurveType(type)) {
+      // Curva: a própria forma, sem texto.
+      scene::ScriptCurve curve;if(text) scene::parseScriptCurve(*text,curve);
+      builder.list.addRect(row,theme.color.raised,theme.radius.control);
+      if(curve.keys.empty()) builder.label(deflate(row,UiInsets{10,0,6,0}),text?"Curva vazia":"Padrão do código",theme.color.textMuted,theme.type.caption);
+      else drawCurveThumbnail(builder,deflate(row,UiInsets{8,6,8,6}),curve,theme.color.accent);
+      return;
+    }
     else if(scene::scriptGradientType(type)) {
       // Gradiente: a própria faixa, sem texto.
       scene::ScriptGradient gradient;if(text) scene::parseScriptGradient(*text,gradient);
@@ -2538,7 +2754,7 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
       builder.list.addRect(swatch,pickerColor(h,s,v),theme.radius.control);
       if(alpha) builder.list.addRect({swatch.x,swatch.bottom()-3,swatch.width*rgba[3],3},0xffffffffu,1);
       takeLeft(inner,6);
-      char note[24];std::snprintf(note,sizeof(note),hdr&&intensity>0?" · +%.1f":"",intensity);
+      char note[24]{};if(hdr&&intensity>0) std::snprintf(note,sizeof(note)," · +%.1f",intensity);
       builder.label(inner,"#"+formatColorHex(srgb,rgba[3],alpha)+note,text?theme.color.text:theme.color.textMuted,theme.type.caption);
       return;
     }
@@ -4559,7 +4775,7 @@ bool platformFieldActive(const EditorScreenState &state) {
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
-         (state.gradientField != 0 && state.gradientText != 0) ||
+         (state.gradientField != 0 && state.gradientText != 0) || (state.curveField != 0 && state.curveText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
          state.editingPhysicsLayerName || state.editingInputActionName || state.editingInputContext || state.inputEditField;
@@ -6481,6 +6697,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     if(const auto *entity=state.document->find(state.selection)) buildComponentSheet(builder,*entity);
   if(state.creationMenu && !state.editingCreationSearch) buildCreationSheet(builder,layout);
   if(state.enumPicker) buildEnumPicker(builder);
+  // O editor de curvas abre o teclado numérico para tempo e valor da chave:
+  // desenhado antes, fica por baixo dele.
+  if(state.curveField) buildCurveEditor(builder,layout);
   if (!state.platformTextInput && state.numericField != 0) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));

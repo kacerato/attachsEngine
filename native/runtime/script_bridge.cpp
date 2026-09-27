@@ -122,7 +122,18 @@ void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
   if (p.valueType == "string") jsonString(out, p.value);
   else if (p.valueType == "asset") { out << "{\"AssetId\":"; jsonString(out, p.value); out << '}'; }
   else if (p.valueType == "object") { std::istringstream in(p.value); u64 v = 0; in >> v; out << "{\"ObjectId\":" << v << '}'; }
-  else if (scene::scriptGradientType(p.valueType)) {
+  else if (scene::scriptCurveType(p.valueType)) {
+    scene::ScriptCurve curve;
+    scene::parseScriptCurve(p.value, curve);
+    out << "{\"PreWrapMode\":" << static_cast<u32>(curve.pre) << ",\"PostWrapMode\":" << static_cast<u32>(curve.post) << ",\"Keys\":[";
+    for (usize i = 0; i < curve.keys.size(); ++i) {
+      const auto &k = curve.keys[i];
+      out << (i ? "," : "") << "{\"Time\":" << k.time << ",\"Value\":" << k.value << ",\"InTangent\":" << k.in
+          << ",\"OutTangent\":" << k.out << ",\"LeftMode\":" << static_cast<u32>(k.left) << ",\"RightMode\":"
+          << static_cast<u32>(k.right) << ",\"Broken\":" << (k.broken ? "true" : "false") << '}';
+    }
+    out << "]}";
+  } else if (scene::scriptGradientType(p.valueType)) {
     scene::ScriptGradient gradient;
     scene::parseScriptGradient(p.value, gradient);
     out << "{\"Mode\":" << static_cast<u32>(gradient.mode) << ",\"ColorKeys\":[";

@@ -242,7 +242,7 @@ public sealed class ProjectCompiler
             _ => type.ToDisplayString() switch
             {
                 "System.Numerics.Vector3" => "vector3", "Astra.ObjectReference" => "object", "Astra.Color" => "color",
-                "Astra.Gradient" => "gradient",
+                "Astra.Gradient" => "gradient", "Astra.AnimationCurve" => "curve",
                 "Astra.AssetReference" => "asset", _ => "unsupported"
             }
         };
@@ -251,7 +251,7 @@ public sealed class ProjectCompiler
         : ScalarSupported(type);
     private static bool ScalarSupported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
         type.SpecialType is SpecialType.System_Boolean or SpecialType.System_Int32 or SpecialType.System_Single or SpecialType.System_String ||
-        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" or "Astra.Color" or "Astra.Gradient" ||
+        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference" or "Astra.Color" or "Astra.Gradient" or "Astra.AnimationCurve" ||
         FacadeTypeId(type) is not null;
     private static string? AttributeId(ISymbol symbol, string attribute) => symbol.GetAttributes()
         .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attribute)?.ConstructorArguments.FirstOrDefault().Value as string;

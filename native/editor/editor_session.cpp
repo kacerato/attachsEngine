@@ -724,6 +724,14 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     if(!playInspecting() || !playMirrorValid_) return edit;
     return const_cast<EditorSession *>(this)->inPlayMirror([this] {return pendingTextEdit();});
   }
+  if(state_.curveField && state_.curveText && !state_.numericField) {
+    // Nome de preset ou de biblioteca do editor de curvas.
+    edit.purpose=EditorTextPurpose::ColorText;edit.field=20+state_.curveText;
+    const auto *library=curveLibraries_.currentOrNull();
+    if(state_.curveText==2 && library && state_.curvePresetMenu && state_.curvePresetMenu<=library->entries.size())
+      edit.text=library->entries[state_.curvePresetMenu-1].name;
+    return edit;
+  }
   if(state_.gradientField && state_.gradientText && !state_.colorField) {
     // Nome de preset ou de biblioteca do editor de gradiente.
     edit.purpose=EditorTextPurpose::ColorText;edit.field=10+state_.gradientText;
@@ -1054,7 +1062,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
-    state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;state_.gradientText=0;
+    state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;state_.gradientText=0;state_.curveText=0;
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
     state_.editingHierarchySearch=false;state_.editingCreationSearch=false;
@@ -1166,6 +1174,15 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     if(files_.exists(path)) {state_.status="Já existe um recurso com esse nome";return false;}
     if(!files_.createDirectory(path)) {state_.status=files_.error();return false;}
     files_.rebuildTree();state_.selectedFile=path;state_.status="Pasta criada: "+path;close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::ColorText && edit.field>=20) {
+    if(!state_.curveField || edit.field!=20u+state_.curveText) return false;
+    if(state_.curveText==2) {
+      if(!state_.curvePresetMenu || !curveLibraries_.rename(state_.curvePresetMenu-1,trimmedName(text))) {state_.status="Nome inválido";return false;}
+      state_.curvePresetMenu=0;
+    } else if(!curveLibraries_.createLibrary(trimmedName(text))) {state_.status="Nome de biblioteca inválido ou repetido";return false;}
+    state_.curveLibraryMenu=false;saveCurveLibraries();
+    state_.curveText=0;close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ColorText && edit.field>=10) {
     if(!state_.gradientField || edit.field!=10u+state_.gradientText) return false;
@@ -1324,6 +1341,19 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
       state_.status="Expressão recusada: "+(reason.empty()?std::string("fora do alcance de um número"):reason);return false;
     }
     const float number=static_cast<float>(evaluated);
+    // Tempo ou valor da chave escolhida no editor de curvas (rascunho).
+    if(edit.field==widgetId(EditorWidget::CurveKeyTime) || edit.field==widgetId(EditorWidget::CurveKeyValue)) {
+      if(!state_.curveField || !state_.curveSelected || state_.curveSelected>curveEdit_.keys.size()) return false;
+      auto &key=curveEdit_.keys[state_.curveSelected-1];
+      if(edit.field==widgetId(EditorWidget::CurveKeyValue)) key.value=number;
+      else {
+        for(u32 i=0;i<curveEdit_.keys.size();++i)
+          if(i+1!=state_.curveSelected && curveEdit_.keys[i].time==number) {state_.status="Já existe chave nesse tempo";return false;}
+        key.time=number;
+      }
+      state_.curveSelected=settleCurveSelection(state_.curveSelected);publishCurveDraft();
+      state_.numericError=false;close();return true;
+    }
     // Campo de material de slot: vale no alcance escolhido no inspetor.
     if(edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
        edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size()) {
@@ -1543,6 +1573,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(cameraGestureOpen_ && routing.target==UiPointerTarget::Widget) finishCameraGesture(false);
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
+  if(state_.curveField && !state_.numericField) return handleCurveEditor(event,routing);
   if(state_.codeRecoveryPending) {
     if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CodeRecover)) {
       if(code_.restoreRecovery(files_)) {
@@ -2761,7 +2792,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         } else if(operation==widgetId(EditorWidget::ScriptArrayElementBase)) {
           if(at>=items.size()) return true;
           state_.scriptArraySelected=at+1;
-          if(scene::scriptGradientType(element)) {
+          if(scene::scriptCurveType(element)) {
+            state_.curveEntity=entity->id;state_.curveInstance=script->instanceId();state_.curveProperty=declared->id;
+            state_.curveElement=at+1;
+            openCurveEditor(key,items[at],declared->valueType);
+          } else if(scene::scriptGradientType(element)) {
             state_.gradientEntity=entity->id;state_.gradientInstance=script->instanceId();state_.gradientProperty=declared->id;
             state_.gradientElement=at+1;
             openGradientEditor(key,items[at],element);
@@ -2800,6 +2835,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
             // Lista: o toque abre e fecha os elementos logo abaixo do campo.
             state_.expandedScriptArray=state_.expandedScriptArray==property.id?std::string():property.id;
             state_.scriptArraySelected=0;return true;
+          }
+          if(scene::scriptCurveType(property.valueType)) {
+            std::string value=scene::scriptElementDefault(property.valueType);
+            for(const auto &p:script->properties) if(p.id==property.id&&p.valueType==property.valueType) value=p.value;
+            state_.curveEntity=entity->id;state_.curveInstance=script->instanceId();state_.curveProperty=property.id;
+            state_.curveElement=0;
+            openCurveEditor(key,value,property.valueType);return true;
           }
           if(scene::scriptGradientType(property.valueType)) {
             std::string value=scene::scriptElementDefault(property.valueType);
@@ -4099,6 +4141,227 @@ bool EditorSession::handleGradientEditor(const UiPointerEvent &event,const UiPoi
     if(changed) saveGradientLibraries();
     state_.gradientPresetMenu=0;
   } else {state_.gradientPresetMenu=0;state_.gradientLibraryMenu=false;}
+  return true;
+}
+
+void EditorSession::publishCurveDraft() {
+  curveEdit_.updateTangents();
+  state_.curveDraft=scene::scriptCurveValue(curveEdit_);
+}
+
+u32 EditorSession::settleCurveSelection(u32 selected) {
+  std::vector<u32> order(curveEdit_.keys.size());
+  for(u32 i=0;i<order.size();++i) order[i]=i;
+  std::stable_sort(order.begin(),order.end(),[&](u32 a,u32 b){return curveEdit_.keys[a].time<curveEdit_.keys[b].time;});
+  const auto keys=curveEdit_.keys;
+  for(u32 i=0;i<order.size();++i) curveEdit_.keys[i]=keys[order[i]];
+  // Dois tempos iguais tornariam a curva ambígua: o recém-movido cede 1e-4.
+  for(u32 i=1;i<curveEdit_.keys.size();++i)
+    if(curveEdit_.keys[i].time<=curveEdit_.keys[i-1].time) curveEdit_.keys[i].time=curveEdit_.keys[i-1].time+1e-4f;
+  for(u32 i=0;i<order.size();++i) if(order[i]+1==selected) return i+1;
+  return 0;
+}
+
+void EditorSession::openCurveEditor(u32 key,std::string_view value,std::string_view type) {
+  curveEdit_={};
+  scene::parseScriptCurve(value,curveEdit_);
+  state_.curveField=key;state_.curveType=std::string(type);state_.curveSelected=0;
+  state_.curvePresetMenu=0;state_.curveLibraryMenu=false;state_.curveText=0;
+  state_.colorRevision=document_.revision();curveDrag_=CurveDrag::None;curveLastTap_=-1;
+  frameCurve(curveEdit_,state_.curveView);
+  publishCurveDraft();
+  std::string error;
+  if(!files_.rootPath().empty() && !curveLibraries_.load(files_.rootPath(),EditorLibraryKind::Curve,error)) state_.status=error;
+  state_.curveLibraries=&curveLibraries_;
+}
+
+void EditorSession::saveCurveLibraries() {
+  std::string error;
+  if(!files_.rootPath().empty() && !curveLibraries_.save(error)) state_.status=error;
+}
+
+bool EditorSession::commitCurveEditor() {
+  const auto *entity=document_.find(state_.curveEntity);
+  if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
+    state_.curveField=0;state_.status="Curva cancelada: a cena mudou";return true;
+  }
+  const auto value=scene::scriptCurveValue(curveEdit_);
+  if(state_.curveElement) {
+    const auto *script=scene::scriptBehavior(entity->components.findInstance(state_.curveInstance));
+    auto items=script?scriptArrayItems(*script,state_.curveProperty):std::vector<std::string>{};
+    if(!script || state_.curveElement>items.size()) {state_.curveField=0;return false;}
+    items[state_.curveElement-1]=value;
+    if(setScriptArray(entity->id,state_.curveInstance,state_.curveProperty,state_.curveType,items)) {state_.curveField=0;return true;}
+    return false;
+  }
+  EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;
+  request.componentInstance=state_.curveInstance;request.action=EditorAction::ScriptProperty;
+  request.componentProperty=state_.curveProperty;request.scriptPropertyType=state_.curveType;request.scriptPropertyValue=value;
+  if(dispatch(request).status==EditorActionStatus::Applied) {state_.curveField=0;return true;}
+  state_.status="Curva recusada pelo campo";return false;
+}
+
+// Unity Manual/EditingCurves adaptado ao toque: toque duplo acrescenta chave
+// (o clique duplo da Unity), arrastar chave/alça edita, arrastar o vazio
+// desloca a vista. Tangente arrastada vira Free (alinhada, ou só aquele lado
+// quando a chave está quebrada).
+bool EditorSession::handleCurveEditor(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const u32 key=routing.widgetId;
+  const auto &graph=layout_.curveGraph;
+  if(key==widgetId(EditorWidget::CurveGraph)) {
+    const auto distance=[](UiPoint a,UiPoint b){return std::hypot(a.x-b.x,a.y-b.y);};
+    if(event.phase==UiPointerPhase::Down) {
+      curvePointer_=event.pointerId;curvePress_=event.position;curveDrag_=CurveDrag::Pan;
+      std::copy(state_.curveView,state_.curveView+4,curvePressView_);
+      state_.curvePresetMenu=0;state_.curveLibraryMenu=false;
+      // Alças da chave escolhida têm prioridade: ficam perto dela.
+      if(state_.curveSelected && state_.curveSelected<=curveEdit_.keys.size()) {
+        const auto &selected=curveEdit_.keys[state_.curveSelected-1];
+        const bool first=state_.curveSelected==1,last=state_.curveSelected==curveEdit_.keys.size();
+        if(!first && distance(event.position,curveHandle(graph,state_.curveView,selected,true))<22) curveDrag_=CurveDrag::HandleIn;
+        else if(!last && distance(event.position,curveHandle(graph,state_.curveView,selected,false))<22) curveDrag_=CurveDrag::HandleOut;
+      }
+      if(curveDrag_==CurveDrag::Pan) {
+        float best=24;
+        for(u32 i=0;i<curveEdit_.keys.size();++i) {
+          const float d=distance(event.position,curveToScreen(graph,state_.curveView,curveEdit_.keys[i].time,curveEdit_.keys[i].value));
+          if(d<best) {
+            best=d;state_.curveSelected=i+1;curveDrag_=CurveDrag::Key;
+            curvePressKey_[0]=curveEdit_.keys[i].time;curvePressKey_[1]=curveEdit_.keys[i].value;
+          }
+        }
+      }
+      return true;
+    }
+    if(event.pointerId!=curvePointer_) return true;
+    if(event.phase==UiPointerPhase::Move && routing.dragging) {
+      float time=0,value=0;screenToCurve(graph,state_.curveView,event.position,time,value);
+      if(curveDrag_==CurveDrag::Key && state_.curveSelected && graph.width>0 && graph.height>0) {
+        // Deslocamento relativo ao toque: arrastar só na vertical não mexe no tempo.
+        auto &moved=curveEdit_.keys[state_.curveSelected-1];
+        moved.time=curvePressKey_[0]+(event.position.x-curvePress_.x)/graph.width*(state_.curveView[2]-state_.curveView[0]);
+        moved.value=curvePressKey_[1]-(event.position.y-curvePress_.y)/graph.height*(state_.curveView[3]-state_.curveView[1]);
+        state_.curveSelected=settleCurveSelection(state_.curveSelected);publishCurveDraft();
+      } else if((curveDrag_==CurveDrag::HandleIn || curveDrag_==CurveDrag::HandleOut) && state_.curveSelected) {
+        auto &edited=curveEdit_.keys[state_.curveSelected-1];
+        const float dt=time-edited.time;
+        const float slope=std::clamp(std::abs(dt)<1e-5f?(value>edited.value?1e4f:-1e4f):(value-edited.value)/dt,-1e4f,1e4f);
+        const bool incoming=curveDrag_==CurveDrag::HandleIn;
+        if(edited.broken) {
+          (incoming?edited.left:edited.right)=scene::CurveTangentMode::Free;
+          (incoming?edited.in:edited.out)=slope;
+        } else {
+          edited.left=edited.right=scene::CurveTangentMode::Free;edited.in=edited.out=slope;
+        }
+        publishCurveDraft();
+      } else if(curveDrag_==CurveDrag::Pan && graph.width>0 && graph.height>0) {
+        const float dt=(event.position.x-curvePress_.x)/graph.width*(curvePressView_[2]-curvePressView_[0]);
+        const float dv=(event.position.y-curvePress_.y)/graph.height*(curvePressView_[3]-curvePressView_[1]);
+        state_.curveView[0]=curvePressView_[0]-dt;state_.curveView[2]=curvePressView_[2]-dt;
+        state_.curveView[1]=curvePressView_[1]+dv;state_.curveView[3]=curvePressView_[3]+dv;
+      }
+      return true;
+    }
+    if(event.phase==UiPointerPhase::Up) {
+      if(routing.tapped && curveDrag_==CurveDrag::Pan) {
+        // Toque no vazio: o segundo toque perto do primeiro, em até 0,4 s, acrescenta.
+        const bool twice=curveLastTap_>=0 && event.timeSeconds-curveLastTap_<=.4 && distance(event.position,curveLastTapPoint_)<24;
+        if(twice) {
+          if(curveEdit_.keys.size()>=scene::ScriptCurve::kMaximumKeys) state_.status="No máximo 256 chaves";
+          else {
+            float time=0,value=0;screenToCurve(graph,state_.curveView,event.position,time,value);
+            // Sobre a curva quando ela existe; senão onde o dedo tocou.
+            if(!curveEdit_.keys.empty()) value=scene::evaluateScriptCurve(curveEdit_,time);
+            curveEdit_.keys.push_back({time,value});
+            state_.curveSelected=settleCurveSelection(static_cast<u32>(curveEdit_.keys.size()));publishCurveDraft();
+          }
+          curveLastTap_=-1;
+        } else {state_.curveSelected=0;curveLastTap_=event.timeSeconds;curveLastTapPoint_=event.position;}
+      }
+      curveDrag_=CurveDrag::None;curvePointer_=0;
+    }
+    return true;
+  }
+  if(!routing.tapped) return true;
+  const bool held=routing.heldSeconds>=ui::kUiLongPressSeconds;
+  const auto *library=curveLibraries_.currentOrNull();
+  const auto zoom=[&](float factor) {
+    const float ct=(state_.curveView[0]+state_.curveView[2])*.5f,cv=(state_.curveView[1]+state_.curveView[3])*.5f;
+    const float ht=(state_.curveView[2]-state_.curveView[0])*.5f*factor,hv=(state_.curveView[3]-state_.curveView[1])*.5f*factor;
+    state_.curveView[0]=ct-ht;state_.curveView[2]=ct+ht;state_.curveView[1]=cv-hv;state_.curveView[3]=cv+hv;
+  };
+  auto *selected=state_.curveSelected && state_.curveSelected<=curveEdit_.keys.size()?&curveEdit_.keys[state_.curveSelected-1]:nullptr;
+  if(key==widgetId(EditorWidget::CurveCancel)) state_.curveField=0;
+  else if(key==widgetId(EditorWidget::CurveApply)) commitCurveEditor();
+  else if(key==widgetId(EditorWidget::CurveFrame)) frameCurve(curveEdit_,state_.curveView);
+  else if(key==widgetId(EditorWidget::CurveZoomIn)) zoom(.5f);
+  else if(key==widgetId(EditorWidget::CurveZoomOut)) zoom(2.f);
+  else if(key>=widgetId(EditorWidget::CurvePreWrapBase) && key<widgetId(EditorWidget::CurvePreWrapBase)+3) {
+    curveEdit_.pre=static_cast<scene::CurveWrapMode>(key-widgetId(EditorWidget::CurvePreWrapBase));publishCurveDraft();
+  } else if(key>=widgetId(EditorWidget::CurvePostWrapBase) && key<widgetId(EditorWidget::CurvePostWrapBase)+3) {
+    curveEdit_.post=static_cast<scene::CurveWrapMode>(key-widgetId(EditorWidget::CurvePostWrapBase));publishCurveDraft();
+  } else if(selected && (key==widgetId(EditorWidget::CurveKeyTime) || key==widgetId(EditorWidget::CurveKeyValue))) {
+    // Teclado numérico (com expressões) sobre o rascunho.
+    state_.numericField=key;state_.numericEntity=state_.curveEntity;state_.numericInstance=0;state_.numericProperty.clear();
+    std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",
+                  static_cast<double>(key==widgetId(EditorWidget::CurveKeyTime)?selected->time:selected->value));
+    state_.numericReplace=true;state_.numericError=false;
+  } else if(selected && key==widgetId(EditorWidget::CurveKeyDelete)) {
+    curveEdit_.keys.erase(curveEdit_.keys.begin()+(state_.curveSelected-1));state_.curveSelected=0;publishCurveDraft();
+  } else if(selected && key>=widgetId(EditorWidget::CurveTangentBase) && key<widgetId(EditorWidget::CurveTangentBase)+5) {
+    const u32 mode=key-widgetId(EditorWidget::CurveTangentBase);
+    if(mode==4) {
+      selected->broken=!selected->broken;
+      if(!selected->broken) {selected->left=selected->right=scene::CurveTangentMode::Free;selected->out=selected->in;}
+    } else {
+      selected->broken=false;
+      selected->left=selected->right=mode==0?scene::CurveTangentMode::ClampedAuto:mode==1?scene::CurveTangentMode::Auto:scene::CurveTangentMode::Free;
+      if(mode==2) selected->out=selected->in;
+      if(mode==3) selected->in=selected->out=0;
+    }
+    publishCurveDraft();
+  } else if(selected && selected->broken && ((key>=widgetId(EditorWidget::CurveLeftModeBase) && key<widgetId(EditorWidget::CurveLeftModeBase)+3) ||
+                                           (key>=widgetId(EditorWidget::CurveRightModeBase) && key<widgetId(EditorWidget::CurveRightModeBase)+3))) {
+    const bool left=key<widgetId(EditorWidget::CurveRightModeBase);
+    const u32 choice=key-widgetId(left?EditorWidget::CurveLeftModeBase:EditorWidget::CurveRightModeBase);
+    (left?selected->left:selected->right)=choice==1?scene::CurveTangentMode::Linear:choice==2?scene::CurveTangentMode::Constant:scene::CurveTangentMode::Free;
+    publishCurveDraft();
+  } else if(key==widgetId(EditorWidget::CurveLibraryToggle)) {state_.curveLibraryMenu=!state_.curveLibraryMenu;state_.curvePresetMenu=0;}
+  else if(key==widgetId(EditorWidget::CurveLibraryNew)) state_.curveText=3;
+  else if(key==widgetId(EditorWidget::CurveLibraryFactory)) {
+    // Unity: "Add Factory Presets To Current Library".
+    u32 added=0;
+    for(const auto &preset:scene::curveFactoryPresets) added+=curveLibraries_.add(preset.name,preset.value);
+    if(added) saveCurveLibraries();
+    state_.status=std::to_string(added)+" presets de fábrica na biblioteca";state_.curveLibraryMenu=false;
+  } else if(key>=widgetId(EditorWidget::CurveLibraryBase) && key<widgetId(EditorWidget::CurveLibraryBase)+EditorValueLibraries::kMaximumLibraries) {
+    if(curveLibraries_.select(key-widgetId(EditorWidget::CurveLibraryBase))) saveCurveLibraries();
+    state_.curveLibraryMenu=false;
+  } else if(key==widgetId(EditorWidget::CurvePresetAdd)) {
+    if(curveLibraries_.add(curveLibraries_.nextName("Curva"),scene::scriptCurveValue(curveEdit_))) {
+      saveCurveLibraries();state_.status="Curva guardada na biblioteca";
+    } else state_.status="Biblioteca cheia";
+  } else if(key>=widgetId(EditorWidget::CurvePresetBase) && key<widgetId(EditorWidget::CurvePresetBase)+EditorValueLibraries::kMaximumEntries) {
+    const u32 index=key-widgetId(EditorWidget::CurvePresetBase);
+    if(!library || index>=library->entries.size()) return true;
+    state_.curveLibraryMenu=false;
+    if(held) {state_.curvePresetMenu=index+1;return true;}
+    scene::ScriptCurve preset;
+    if(scene::parseScriptCurve(library->entries[index].value,preset)) {
+      curveEdit_=preset;state_.curveSelected=0;publishCurveDraft();frameCurve(curveEdit_,state_.curveView);
+    }
+    state_.curvePresetMenu=0;
+  } else if(key>=widgetId(EditorWidget::CurvePresetActionBase) && key<widgetId(EditorWidget::CurvePresetActionBase)+5 && state_.curvePresetMenu) {
+    const u32 index=state_.curvePresetMenu-1,action=key-widgetId(EditorWidget::CurvePresetActionBase);
+    bool changed=false;
+    if(action==0) changed=curveLibraries_.replace(index,scene::scriptCurveValue(curveEdit_));
+    else if(action==1) changed=index>0 && curveLibraries_.move(index,index-1);
+    else if(action==2) changed=curveLibraries_.move(index,index+1);
+    else if(action==3) {state_.curveText=2;return true;}
+    else changed=curveLibraries_.remove(index);
+    if(changed) saveCurveLibraries();
+    state_.curvePresetMenu=0;
+  } else {state_.curvePresetMenu=0;state_.curveLibraryMenu=false;}
   return true;
 }
 

@@ -376,6 +376,13 @@ enum class EditorWidget : u32 {
   GradientAlphaValue, GradientColorSwatch, GradientDeleteStop, GradientPresetAdd, GradientLibraryToggle, GradientLibraryNew,
   GradientModeBase=0xC2000010u, GradientPresetActionBase=0xC2000030u, GradientAlphaStopBase=0xC2000100u,
   GradientColorStopBase=0xC2000200u, GradientLibraryBase=0xC2000400u, GradientPresetBase=0xC2000500u,
+  // Editor de curvas (Unity Curve Editor): gráfico, enquadrar/zoom, chave
+  // escolhida (tempo, valor, tangentes), repetição e presets.
+  CurveBase=0xC3000000u, CurveGraph, CurveApply, CurveCancel, CurveFrame, CurveZoomIn, CurveZoomOut, CurveKeyTime,
+  CurveKeyValue, CurveKeyDelete, CurvePresetAdd, CurveLibraryToggle, CurveLibraryNew, CurveLibraryFactory,
+  CurvePreWrapBase=0xC3000010u, CurvePostWrapBase=0xC3000014u, CurveTangentBase=0xC3000020u,
+  CurveLeftModeBase=0xC3000028u, CurveRightModeBase=0xC300002Cu, CurvePresetActionBase=0xC3000030u,
+  CurveLibraryBase=0xC3000400u, CurvePresetBase=0xC3000500u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -481,7 +488,8 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentEnableBase,kRange},{EditorWidget::ComponentEnumOptionBase,kRange},
   {EditorWidget::ComponentEnumPickerClose,kRange},{EditorWidget::ScriptArraySizeBase,kRange},
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
-  {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange}};
+  {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
+  {EditorWidget::CurveBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -824,6 +832,19 @@ struct EditorScreenState final {
   bool gradientLibraryMenu=false;
   u8 gradientText=0;
   const class EditorValueLibraries *gradientLibraries=nullptr;
+  // Editor de curvas aberto (chave do campo), rascunho no formato do campo,
+  // chave escolhida (índice+1), faixa visível {t0,v0,t1,v1} e menus de preset.
+  u32 curveField=0;
+  std::string curveDraft,curveType;
+  EditorEntityId curveEntity=0;
+  u64 curveInstance=0;
+  std::string curveProperty;
+  u32 curveElement=0,curveSelected=0;
+  float curveView[4]{0,0,1,1};
+  u32 curvePresetMenu=0;
+  bool curveLibraryMenu=false;
+  u8 curveText=0;
+  const class EditorValueLibraries *curveLibraries=nullptr;
   u32 numericField = 0;
   u64 numericInstance=0;
   std::string numericProperty;
@@ -1039,6 +1060,7 @@ struct EditorScreenLayout final {
   ui::UiRect colorSquare{},colorHue{};
   ui::UiRect colorSliders[5]{};
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
+  ui::UiRect curveGraph{};
   // A área da cena, JÁ descontados os painéis. É este retângulo que
   // `EditorViewport::rect` recebe, e é por isso que a projeção do gizmo
   // continua certa quando o usuário arrasta um divisor.

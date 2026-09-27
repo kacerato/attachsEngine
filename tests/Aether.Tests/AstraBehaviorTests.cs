@@ -269,6 +269,38 @@ public static class AstraBehaviorTests
         })]);
         Assert.Equal("0.50,0.50,0.50|Blend", string.Join(' ', scene.Events), "gradiente aplicado e avaliado");
     }
+    private const string CurveFieldSource = """
+        using Astra;
+        [ComponentId("test.jump")]
+        public sealed class Jump : Behavior
+        {
+            [PropertyId("height")] public AnimationCurve Height = new();
+            public override void Start() =>
+                Scene.Log(ObjectId, $"{Height.Evaluate(0.5f):0.00}|{Height.Evaluate(1.5f):0.00}|{Height.Evaluate(2.5f):0.00}");
+        }
+        """;
+
+    // Unity: campo AnimationCurve; Evaluate segue o editor (linear e Loop).
+    [Test]
+    public static void CurveFields_ReachTheInstanceAndEvaluateWithWrap()
+    {
+        using var project = new Project(CurveFieldSource); var compiled = project.Compile();
+        Assert.Equal("curve", compiled.Types.Single().Properties.Single().ValueType);
+        using var world = new BehaviorWorld(); var scene = new ComponentScene();
+        world.Start(compiled, scene, [new(1, 10, "test.jump", true, new Dictionary<string, JsonElement>
+        {
+            ["height"] = JsonSerializer.SerializeToElement(new
+            {
+                PreWrapMode = 0, PostWrapMode = 1,
+                Keys = new[]
+                {
+                    new { Time = 0f, Value = 0f, InTangent = 2f, OutTangent = 2f, LeftMode = 2, RightMode = 2, Broken = false },
+                    new { Time = 1f, Value = 2f, InTangent = 2f, OutTangent = 2f, LeftMode = 2, RightMode = 2, Broken = false }
+                }
+            })
+        })]);
+        Assert.Equal("1.00|1.00|1.00", string.Join(' ', scene.Events), "linear no meio e Loop depois do fim");
+    }
     private const string LifecycleSource = """
         using Astra;
         [ComponentId("test.life")]

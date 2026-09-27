@@ -14,6 +14,7 @@
 #include "editor/editor_history.h"
 #include "editor/editor_code_workspace.h"
 #include "editor/editor_value_library.h"
+#include "editor/editor_curve_view.h"
 #include "scene/script_behavior.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
@@ -265,6 +266,22 @@ int main(int argc, char **argv) {
     swatches.add("Degraus","1 3 0 1 0 0 0.5 0 1 0 1 0 0 1 1 0 1");
     state.gradientLibraries=&swatches;
     if(std::string(argv[4])=="gradient-alpha") {state.gradientSelectedAlpha=true;state.gradientSelected=2;}
+  }
+  // Editor de curvas: quatro chaves, a segunda escolhida (e quebrada na variante).
+  if(argc>4 && std::string(argv[4]).starts_with("curve")) {
+    scene::ScriptCurve curve;
+    curve.post=scene::CurveWrapMode::PingPong;
+    curve.keys={{0,0},{0.35f,1.2f},{0.7f,0.4f},{1,1}};
+    if(std::string(argv[4])=="curve-broken") {
+      curve.keys[1].broken=true;curve.keys[1].left=scene::CurveTangentMode::Linear;curve.keys[1].right=scene::CurveTangentMode::Constant;
+    }
+    curve.updateTangents();
+    state.curveField=editor::widgetId(editor::EditorWidget::ScriptFieldBase);state.curveType="curve";
+    state.curveDraft=scene::scriptCurveValue(curve);state.curveSelected=2;
+    editor::frameCurve(curve,state.curveView);state.curveView[2]+=.6f;
+    swatches.kind=editor::EditorLibraryKind::Curve;
+    for(const auto &preset:scene::curveFactoryPresets) swatches.add(preset.name,preset.value);
+    state.curveLibraries=&swatches;
   }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;

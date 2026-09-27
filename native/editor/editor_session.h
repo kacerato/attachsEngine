@@ -21,6 +21,7 @@
 #include "editor/editor_play_edit.h"
 #include "editor/editor_numeric_expression.h"
 #include "editor/editor_value_library.h"
+#include "editor/editor_curve_view.h"
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
@@ -1539,6 +1540,24 @@ private:
   bool handleGradientEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   bool commitGradientEditor();
   void saveGradientLibraries();
+  // Editor de curvas: rascunho em estrutura, presets, e o gesto em curso no
+  // gráfico (chave, alça de entrada/saída ou deslocar a vista).
+  scene::ScriptCurve curveEdit_;
+  EditorValueLibraries curveLibraries_;
+  enum class CurveDrag : u8 { None, Key, HandleIn, HandleOut, Pan };
+  CurveDrag curveDrag_=CurveDrag::None;
+  u32 curvePointer_=0;
+  ui::UiPoint curvePress_{};
+  float curvePressView_[4]{};
+  float curvePressKey_[2]{};
+  double curveLastTap_=-1;
+  ui::UiPoint curveLastTapPoint_{};
+  void openCurveEditor(u32 key,std::string_view value,std::string_view type);
+  void publishCurveDraft();
+  u32 settleCurveSelection(u32 selected);
+  bool handleCurveEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  bool commitCurveEditor();
+  void saveCurveLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
   // código) e gravação da lista inteira como um passo de Desfazer.
   std::vector<std::string> scriptArrayItems(const scene::ScriptBehavior &script,std::string_view id) const;

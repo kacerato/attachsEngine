@@ -3029,6 +3029,92 @@ AE_TEST(gradient_editor_adds_moves_removes_stops_and_applies_once) {
   AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"ColorKeys\"")!=std::string::npos,"o Play recebe as paradas");
 }
 
+// Unity Curve Editor adaptado ao toque: toque duplo acrescenta chave, arrastar
+// move, tempo/valor pelo teclado numérico, tangente por modo e pela alça,
+// repetição, presets de fábrica e aplicar como um passo.
+AE_TEST(curve_editor_adds_moves_edits_keys_and_applies_once) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("aether-curva-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.setCodeCompilerAvailable(true);
+  f.session.pumpCodeAutoBuild(0.0);f.session.pumpCodeAutoBuild(10.0);
+  AE_EXPECT_TRUE(!f.session.takeCodeBuildRequest().empty(),"compilação pedida");
+  AE_EXPECT_TRUE(f.session.completeCodeBuild(
+      "ASTRA_CODE 3 1 0 1 \"project.Pulo\" \"Pulo\" \"Scripts/Pulo.cs\" 1 \"altura\" \"Altura\" \"curve\" 0"),"catálogo com curva");
+  f.session.reportCodeCommit(true);
+  auto value=*doc.find(f.cube);
+  auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Pulo";script->source="Scripts/Pulo.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com o comportamento");
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i) if(scene::scriptBehavior(doc.find(f.cube)->components.at(i))) index=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ScriptFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ScriptFoldBase)+index);
+  tapWidget(f,widgetId(EditorWidget::ScriptFieldBase)+index);
+  AE_EXPECT_TRUE(f.session.screen().curveField!=0,"o campo abre o editor de curvas");
+  const auto draft=[&] {scene::ScriptCurve c;scene::parseScriptCurve(f.session.screen().curveDraft,c);return c;};
+  AE_EXPECT_EQ(draft().keys.size(),0u,"curva nova vazia, como na Unity");
+  f.session.update();
+  const auto graph=f.session.layout().curveGraph;
+  const auto tapTwice=[&](UiPoint at,double time) {
+    f.session.handlePointer({96,UiPointerPhase::Down,at,time});f.session.handlePointer({96,UiPointerPhase::Up,at,time+.05});
+    f.session.handlePointer({96,UiPointerPhase::Down,at,time+.2});f.session.handlePointer({96,UiPointerPhase::Up,at,time+.25});
+    f.session.update();
+  };
+  // Duas chaves por toque duplo: canto inferior esquerdo e superior direito.
+  tapTwice({graph.x+graph.width*.1f,graph.bottom()-graph.height*.1f},20);
+  AE_EXPECT_EQ(draft().keys.size(),1u,"toque duplo acrescenta");
+  tapTwice({graph.x+graph.width*.9f,graph.y+graph.height*.1f},30);
+  AE_EXPECT_EQ(draft().keys.size(),2u,"segunda chave sobre a curva");
+  AE_EXPECT_EQ(f.session.screen().curveSelected,2u,"a chave nova fica escolhida");
+  // Valor da chave pelo teclado numérico (aceita expressão).
+  tapWidget(f,widgetId(EditorWidget::CurveKeyValue));
+  AE_EXPECT_EQ(f.session.screen().numericField,widgetId(EditorWidget::CurveKeyValue),"o teclado abre sobre o editor");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"2*1.5",true),"valor aceito");
+  AE_EXPECT_EQ(draft().keys[1].value,3.f,"a chave recebeu 3");
+  tapWidget(f,widgetId(EditorWidget::CurveKeyTime));
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"2",true),"tempo aceito");
+  AE_EXPECT_EQ(draft().keys[1].time,2.f,"a chave foi para t=2");
+  // Modo Linear pelos lados quebrados e Plana.
+  tapWidget(f,widgetId(EditorWidget::CurveTangentBase)+4);
+  AE_EXPECT_TRUE(draft().keys[1].broken,"Quebrada");
+  tapWidget(f,widgetId(EditorWidget::CurveLeftModeBase)+1);
+  AE_EXPECT_TRUE(draft().keys[1].left==scene::CurveTangentMode::Linear,"lado esquerdo Linear");
+  tapWidget(f,widgetId(EditorWidget::CurveTangentBase)+3);
+  AE_EXPECT_TRUE(!draft().keys[1].broken && draft().keys[1].in==0 && draft().keys[1].out==0,"Plana zera as duas tangentes");
+  // Arrastar a primeira chave para cima.
+  tapWidget(f,widgetId(EditorWidget::CurveFrame));
+  auto c=draft();
+  const auto first=curveToScreen(f.session.layout().curveGraph,f.session.screen().curveView,c.keys[0].time,c.keys[0].value);
+  f.down(97,first);f.move(97,{first.x,first.y-10});f.move(97,{first.x,first.y-40});f.up(97,{first.x,first.y-40});f.session.update();
+  AE_EXPECT_TRUE(draft().keys[0].value>c.keys[0].value+.1f,"arrastar a chave muda o valor");
+  AE_EXPECT_EQ(draft().keys[0].time,c.keys[0].time,"arraste vertical não mexe no tempo");
+  // Repetição e presets de fábrica.
+  f.session.handlePointer({98,UiPointerPhase::Down,{graph.x+graph.width*.5f,graph.y+graph.height*.5f},50});
+  f.session.handlePointer({98,UiPointerPhase::Up,{graph.x+graph.width*.5f,graph.y+graph.height*.5f},50.05});f.session.update();
+  AE_EXPECT_EQ(f.session.screen().curveSelected,0u,"toque único no vazio solta a chave");
+  tapWidget(f,widgetId(EditorWidget::CurvePostWrapBase)+1);
+  AE_EXPECT_TRUE(draft().post==scene::CurveWrapMode::Loop,"repetição Loop depois da última chave");
+  tapWidget(f,widgetId(EditorWidget::CurveLibraryToggle));
+  tapWidget(f,widgetId(EditorWidget::CurveLibraryFactory));
+  AE_EXPECT_TRUE(fs::exists(root/".astra"/"libraries"/"curves.astra"),"presets de fábrica na biblioteca do projeto");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"nada gravado antes de Aplicar");
+  tapWidget(f,widgetId(EditorWidget::CurveApply));
+  const auto *current=scene::scriptBehavior(doc.find(f.cube)->components.at(index));
+  scene::ScriptCurve stored;
+  AE_EXPECT_TRUE(current && !current->properties.empty() && scene::parseScriptCurve(current->properties[0].value,stored) &&
+                 stored.keys.size()==2 && stored.post==scene::CurveWrapMode::Loop && stored.keys[1].value==3.f,"gravado");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"aplicar é um passo");
+  AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"PostWrapMode\":1")!=std::string::npos,"o Play recebe a curva");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
