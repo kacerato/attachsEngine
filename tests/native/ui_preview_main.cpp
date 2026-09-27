@@ -283,6 +283,17 @@ int main(int argc, char **argv) {
     for(const auto &preset:scene::curveFactoryPresets) swatches.add(preset.name,preset.value);
     state.curveLibraries=&swatches;
   }
+  // LOD Group aberto: barra dividida com o marcador da vista e um nível escolhido.
+  if(argc>4 && std::string(argv[4]).starts_with("lod")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Árvore");
+    auto value=*document.find(selection);
+    const auto *group=value.components.add(scene::LodGroup::descriptor);
+    document.applyEntityValues(selection,value);
+    state.componentSelection=selection;state.expandedNative=group->instanceId();
+    state.lodSelected=2;state.lodViewPercent=42;
+    state.lodStatus="Na vista: LOD 1 · 42% da tela";
+    if(std::string(argv[4])=="lod-menu") state.lodMenu=2;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;

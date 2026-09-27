@@ -383,6 +383,9 @@ enum class EditorWidget : u32 {
   CurvePreWrapBase=0xC3000010u, CurvePostWrapBase=0xC3000014u, CurveTangentBase=0xC3000020u,
   CurveLeftModeBase=0xC3000028u, CurveRightModeBase=0xC300002Cu, CurvePresetActionBase=0xC3000030u,
   CurveLibraryBase=0xC3000400u, CurvePresetBase=0xC3000500u,
+  // Barra dividida do LOD Group (Unity Manual/InspectorBarSliders): a barra,
+  // divisores entre níveis, segmentos e o menu do segmento.
+  LodBar=0xC4000000u, LodBarInsert, LodBarDelete, LodBarDividerBase=0xC4000010u, LodBarSegmentBase=0xC4000020u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -489,7 +492,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentEnumPickerClose,kRange},{EditorWidget::ScriptArraySizeBase,kRange},
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
-  {EditorWidget::CurveBase,kRange}};
+  {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -845,6 +848,10 @@ struct EditorScreenState final {
   bool curveLibraryMenu=false;
   u8 curveText=0;
   const class EditorValueLibraries *curveLibraries=nullptr;
+  // Barra do LOD Group: nível escolhido (índice+1; levelCount+1 = Culled),
+  // menu do segmento aberto e a altura da vista atual em % (-1 sem leitura).
+  u32 lodSelected=0,lodMenu=0;
+  float lodViewPercent=-1;
   u32 numericField = 0;
   u64 numericInstance=0;
   std::string numericProperty;
@@ -1061,6 +1068,7 @@ struct EditorScreenLayout final {
   ui::UiRect colorSliders[5]{};
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
+  ui::UiRect lodBar{};
   // A área da cena, JÁ descontados os painéis. É este retângulo que
   // `EditorViewport::rect` recebe, e é por isso que a projeção do gizmo
   // continua certa quando o usuário arrasta um divisor.

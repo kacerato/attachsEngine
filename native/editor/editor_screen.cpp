@@ -2189,6 +2189,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       fields.push_back({1,i});
     }
   }
+  // Barra dividida do LOD Group antes dos objetos de cada nível, como na Unity.
+  if(!searching && !mesh && entry.type==&scene::LodGroup::descriptor && group=="Níveis") fields.push_back({3,widgetId(EditorWidget::LodBar)});
   for(u32 i=0;i<entry.type->references.size();++i) if(show(entry.type->references[i].presentation)) fields.push_back({4,i});
   // O seletor de malha atende qualquer binding refletido de malha. Material e
   // textura continuam nos editores próprios por slot, que também configuram
@@ -2476,6 +2478,57 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     } else if(f.index==widgetId(EditorWidget::ToggleCastShadow)) {
       auto toggle=takeRight(slot,44);builder.label(slot,"Projetar sombra",theme.color.textDim,theme.type.caption);
       builder.toggle(toggle,entity.castShadow,f.index);
+    } else if(f.index==widgetId(EditorWidget::LodBar)) {
+      // Unity Manual/InspectorBarSliders e LOD Group: da esquerda (100% da
+      // tela) para a direita (0%), um segmento por nível e o Culled; cada um
+      // mostra onde termina. Divisores arrastam, o marcador é a vista atual.
+      const auto &group=static_cast<const scene::LodGroup &>(*component);
+      const auto bar=deflate(hit,UiInsets{0,2,0,2});
+      const u32 count=group.levelCount;
+      const UiColor colors[]{0xff3f8f5au,0xff2f6f9fu,0xff6f5aa6u,0xff9a7a38u};
+      const auto xAt=[&](float percent){return bar.x+(1-percent/100.f)*bar.width;};
+      float start=100;
+      for(u32 i=0;i<=count;++i) {
+        const float end=i<count?group.transitions[i]:0;
+        const UiRect segment{xAt(start),bar.y,xAt(end)-xAt(start),bar.height};
+        const bool culled=i==count,chosen=builder.state.lodSelected==i+1;
+        builder.list.addRect(segment,culled?0xff7a2e2eu:colors[i%4],0);
+        if(chosen) builder.list.addRect({segment.x,segment.bottom()-3,segment.width,3},0xffffffffu,0);
+        builder.list.pushClip(segment);
+        char text[24];
+        if(culled) std::snprintf(text,sizeof(text),"Culled");
+        else std::snprintf(text,sizeof(text),"LOD %u · %.0f%%",i,static_cast<double>(end));
+        builder.label(deflate(segment,UiInsets{5,0,3,0}),text,0xffffffffu,theme.type.caption);
+        builder.list.popClip();
+        builder.router.addRegion(segment,widgetId(EditorWidget::LodBarSegmentBase)+i);
+        start=end;
+      }
+      // Divisores depois dos segmentos: ficam por cima para o dedo pegar.
+      for(u32 i=0;i<count;++i) {
+        const float x=xAt(group.transitions[i]);
+        builder.list.addRect({x-1.5f,bar.y-2,3,bar.height+4},0xffffffffu,1);
+        builder.router.addRegion({x-12,bar.y,24,bar.height},widgetId(EditorWidget::LodBarDividerBase)+i);
+      }
+      if(builder.state.lodViewPercent>=0) {
+        const float x=xAt(std::min(builder.state.lodViewPercent,100.f));
+        builder.list.addRect({x-5,bar.y-5,10,5},theme.color.accent,2);
+        builder.list.addRect({x-1,bar.y,2,bar.height},withAlpha(theme.color.accent,.8f),0);
+      }
+      if(builder.layout) builder.layout->lodBar=bar;
+      // Menu do segmento (toque longo), sobre a própria barra.
+      if(builder.state.lodMenu) {
+        const u32 i=builder.state.lodMenu-1;
+        const bool canInsert=count<scene::LodGroupMaximumLevels,canDelete=i<count&&count>1;
+        const UiRect menu{std::clamp(xAt(i<count?(i?group.transitions[i-1]:100):group.transitions[count-1])-4,bar.x,bar.right()-150),
+                          bar.y,150,bar.height};
+        builder.list.addRect(menu,theme.color.raised,theme.radius.control);
+        const auto insert=UiRect{menu.x,menu.y,menu.width*.5f,menu.height};
+        const auto remove=UiRect{menu.x+menu.width*.5f,menu.y,menu.width*.5f,menu.height};
+        builder.label(insert,"Inserir antes",canInsert?theme.color.accent:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+        builder.label(remove,"Apagar",canDelete?theme.color.axisX:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+        if(canInsert) builder.router.addRegion(insert,widgetId(EditorWidget::LodBarInsert));
+        if(canDelete) builder.router.addRegion(remove,widgetId(EditorWidget::LodBarDelete));
+      }
     } else if(f.index==widgetId(EditorWidget::LodGroupStatus)) {
       // Leitura, não controle: sem região de toque.
       builder.label(slot,builder.state.lodStatus.c_str(),theme.color.accent,theme.type.caption);

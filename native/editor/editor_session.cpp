@@ -3663,6 +3663,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
 
   if(handleComponentReorder(event,routing)) return true;
   if(handleScriptArrayDrag(event,routing)) return true;
+  if(handleLodBar(event,routing)) return true;
 
   const u32 hierarchyRows=widgetId(EditorWidget::HierarchyRowBase);
   if(routing.widgetId>=hierarchyRows && routing.widgetId<hierarchyRows+EditorDocument::kMaximumEntities) {
@@ -4365,6 +4366,73 @@ bool EditorSession::handleCurveEditor(const UiPointerEvent &event,const UiPointe
   return true;
 }
 
+// Unity Manual/InspectorBarSliders e LOD Group. O divisor i é a transição do
+// LOD i: arrastar muda só ela, presa entre as vizinhas (a ordem estritamente
+// decrescente é o que o componente exige). Toque escolhe o nível; toque longo
+// abre Inserir antes/Apagar, que deslocam níveis, referências e larguras de
+// fade juntos.
+bool EditorSession::handleLodBar(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const u32 key=routing.widgetId;
+  const u32 dividers=widgetId(EditorWidget::LodBarDividerBase),segments=widgetId(EditorWidget::LodBarSegmentBase);
+  const bool divider=key>=dividers && key<dividers+scene::LodGroupMaximumLevels;
+  const bool segment=key>=segments && key<=segments+scene::LodGroupMaximumLevels;
+  const bool menu=key==widgetId(EditorWidget::LodBarInsert) || key==widgetId(EditorWidget::LodBarDelete);
+  if(!divider && !segment && !menu && !lodDivider_) return false;
+  const auto *entity=document_.find(state_.selection);
+  const auto *group=entity?static_cast<const scene::LodGroup *>(entity->components.find(scene::LodGroup::descriptor)):nullptr;
+  if(!group) return true;
+  if(divider || lodDivider_) {
+    if(event.phase==UiPointerPhase::Down && !lodDivider_) {
+      if(history_.isOpen() || !history_.begin("Transição de LOD")) return true;
+      lodDivider_=key-dividers+1;lodPointer_=event.pointerId;state_.lodMenu=0;
+    }
+    if(event.pointerId!=lodPointer_) return true;
+    const u32 i=lodDivider_-1;
+    if(event.phase==UiPointerPhase::Cancel) {history_.cancel(document_);lodDivider_=0;return true;}
+    const auto &bar=layout_.lodBar;
+    if(bar.width>0 && i<group->levelCount) {
+      const float upper=i?group->transitions[i-1]-.1f:100.f,lower=i+1<group->levelCount?group->transitions[i+1]+.1f:.1f;
+      const float percent=std::clamp(100.f*(1-(event.position.x-bar.x)/bar.width),lower,upper);
+      auto value=*entity;
+      if(scene::setComponentProperty(value.components,scene::LodGroup::descriptor.id,"transition_"+std::to_string(i),percent,
+                                     group->instanceId())==scene::ComponentPropertyStatus::Applied)
+        history_.applyValues(document_,entity->id,value);
+    }
+    if(event.phase==UiPointerPhase::Up) {history_.end();lodDivider_=0;lodPointer_=0;state_.status="Transição de LOD ajustada";}
+    return true;
+  }
+  if(!routing.tapped) return true;
+  if(segment) {
+    const u32 i=key-segments;
+    if(routing.heldSeconds>=ui::kUiLongPressSeconds) state_.lodMenu=i+1;
+    else {state_.lodSelected=i+1;state_.lodMenu=0;}
+    return true;
+  }
+  if(!state_.lodMenu || history_.isOpen()) return true;
+  const u32 at=state_.lodMenu-1;state_.lodMenu=0;
+  auto value=*entity;
+  auto *edited=static_cast<scene::LodGroup *>(value.components.editInstance(group->instanceId()));
+  if(!edited) return true;
+  if(key==widgetId(EditorWidget::LodBarInsert) && edited->levelCount<scene::LodGroupMaximumLevels) {
+    // O nível novo entra antes do escolhido (antes do Culled = no fim), no
+    // meio da faixa que aquele segmento ocupava.
+    const u32 i=std::min(at,edited->levelCount);
+    const float upper=i?edited->transitions[i-1]:100.f,lower=i<edited->levelCount?edited->transitions[i]:0.f;
+    for(u32 k=edited->levelCount;k>i;--k) {
+      edited->transitions[k]=edited->transitions[k-1];edited->levels[k]=edited->levels[k-1];edited->fadeWidths[k]=edited->fadeWidths[k-1];
+    }
+    edited->transitions[i]=(upper+lower)*.5f;edited->levels[i]=0;edited->fadeWidths[i]=.2f;++edited->levelCount;
+  } else if(key==widgetId(EditorWidget::LodBarDelete) && at<edited->levelCount && edited->levelCount>1) {
+    for(u32 k=at;k+1<edited->levelCount;++k) {
+      edited->transitions[k]=edited->transitions[k+1];edited->levels[k]=edited->levels[k+1];edited->fadeWidths[k]=edited->fadeWidths[k+1];
+    }
+    --edited->levelCount;edited->levels[edited->levelCount]=0;
+  } else return true;
+  if(!edited->valid() || !history_.applyValues(document_,entity->id,value)) {state_.status="Níveis de LOD recusados";return true;}
+  state_.lodSelected=0;state_.status="Níveis de LOD alterados";
+  return true;
+}
+
 // Unity Manual/UsingComponents: arrastar o cabeçalho de um componente muda a
 // ordem dele no objeto. Aqui o gesto nasce de um arraste VERTICAL no cabeçalho
 // (o toque curto continua abrindo o cartão e o longo, o menu), o destino é o
@@ -4416,6 +4484,7 @@ bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiP
 
 void EditorSession::cancelPointers() {
   state_.componentReorder=0;state_.componentReorderTarget=0;reorderPointer_=0;
+  if(lodDivider_) {history_.cancel(document_);lodDivider_=0;lodPointer_=0;}
   if(lensDragOpen_) {history_.cancel(document_);lensDragOpen_=false;}
   if(componentDragOpen_) {history_.cancel(document_);componentDragOpen_=false;}
   finishCameraGesture(true);
@@ -6641,7 +6710,7 @@ void EditorSession::frameSubtree(EditorEntityId root) {
 }
 
 void EditorSession::refreshLodStatus() {
-  state_.lodStatus.clear();
+  state_.lodStatus.clear();state_.lodViewPercent=-1;
   const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
   float relative=0;u32 level=0;
   if(!runtime::lodGroupViewLevel(graph,state_.selection,lodView(),relative,level)) return;
@@ -6649,6 +6718,7 @@ void EditorSession::refreshLodStatus() {
   const std::string height=std::isinf(relative)?std::string("dentro do grupo"):
       std::to_string(static_cast<int>(std::lround(std::min(relative,99.99f)*100)))+"% da tela";
   state_.lodStatus="Na vista: "+(level<group->levelCount?"LOD "+std::to_string(level):std::string("Culled"))+" · "+height;
+  state_.lodViewPercent=std::isinf(relative)?100.f:std::min(relative,1.f)*100.f;
 }
 void EditorSession::refreshSkinningStatus() {
   state_.skinStatus.clear();state_.animationStatus.clear();state_.blendShapeNames.clear();

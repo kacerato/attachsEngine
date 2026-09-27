@@ -3115,6 +3115,49 @@ AE_TEST(curve_editor_adds_moves_edits_keys_and_applies_once) {
   AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"PostWrapMode\":1")!=std::string::npos,"o Play recebe a curva");
 }
 
+// Unity Manual/InspectorBarSliders no LOD Group: arrastar o divisor muda só
+// aquela transição, presa entre as vizinhas, num passo; toque longo no
+// segmento insere antes ou apaga o nível.
+AE_TEST(lod_bar_slider_drags_transitions_and_inserts_or_deletes_levels) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  auto value=*doc.find(f.cube);value.components.add(scene::LodGroup::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com LOD Group");
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i)
+    if(&doc.find(f.cube)->components.at(i)->type()==&scene::LodGroup::descriptor) index=i;
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+index);
+  revealProperty(f,widgetId(EditorWidget::LodBarDividerBase)+1);
+  const auto group=[&]{return static_cast<const scene::LodGroup *>(doc.find(f.cube)->components.find(scene::LodGroup::descriptor));};
+  const auto divider=locateWidget(f.session,widgetId(EditorWidget::LodBarDividerBase)+1);
+  AE_EXPECT_TRUE(divider.x>=0,"divisor LOD1|LOD2 visível");
+  const auto bar=f.session.layout().lodBar;
+  // Arrastar muito para a esquerda: para em LOD0 - 0,1 (60 → 59,9).
+  f.down(99,divider);f.move(99,{divider.x-5,divider.y});f.move(99,{bar.x+2,divider.y});f.up(99,{bar.x+2,divider.y});f.session.update();
+  AE_EXPECT_TRUE(std::abs(group()->transitions[1]-59.9f)<1e-3f,"a transição para antes da vizinha");
+  AE_EXPECT_EQ(group()->transitions[0],60.f,"a vizinha não muda");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um arraste, um passo");
+  AE_EXPECT_TRUE(history.undo(doc) && group()->transitions[1]==30.f,"Desfazer volta a 30%");
+  // Toque longo no segmento LOD1: inserir antes.
+  const auto segment=locateWidget(f.session,widgetId(EditorWidget::LodBarSegmentBase)+1);
+  f.session.handlePointer({100,UiPointerPhase::Down,segment,60.0});
+  f.session.handlePointer({100,UiPointerPhase::Up,segment,60.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  AE_EXPECT_EQ(f.session.screen().lodMenu,2u,"toque longo abre o menu do segmento");
+  tapWidget(f,widgetId(EditorWidget::LodBarInsert));
+  AE_EXPECT_EQ(group()->levelCount,4u,"um nível a mais");
+  AE_EXPECT_TRUE(group()->transitions[1]==45.f && group()->transitions[2]==30.f,"o novo fica no meio da faixa e empurra os outros");
+  const auto culled=locateWidget(f.session,widgetId(EditorWidget::LodBarSegmentBase)+1);
+  f.session.handlePointer({101,UiPointerPhase::Down,culled,70.0});
+  f.session.handlePointer({101,UiPointerPhase::Up,culled,70.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  tapWidget(f,widgetId(EditorWidget::LodBarDelete));
+  AE_EXPECT_TRUE(group()->levelCount==3 && group()->transitions[1]==30.f,"apagar desfaz a inserção");
+  tapWidget(f,widgetId(EditorWidget::LodBarSegmentBase)+2);
+  AE_EXPECT_EQ(f.session.screen().lodSelected,3u,"toque escolhe o nível");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

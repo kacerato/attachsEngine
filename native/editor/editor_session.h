@@ -1565,6 +1565,10 @@ private:
                       const std::vector<std::string> &items);
   const EditorScriptProperty *scriptProperty(std::string_view scriptType,std::string_view id) const;
   bool handleScriptArrayDrag(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  // Barra do LOD Group: arraste de divisor numa transação (um passo de
+  // Desfazer), escolha de segmento e inserir/apagar nível.
+  bool handleLodBar(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  u32 lodDivider_=0,lodPointer_=0;
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;
