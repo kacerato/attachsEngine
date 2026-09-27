@@ -245,13 +245,17 @@ extern "C" JNIEXPORT jobjectArray JNICALL
 Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
   std::lock_guard lock(mutex);
   if(!visible) return nullptr;
-  const bool number=(request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType!="triple") || request.purpose==ae::editor::EditorTextPurpose::CodeLine || request.purpose==ae::editor::EditorTextPurpose::InputNumber;
+  // "expression": o campo numérico pediu o teclado de texto para operadores,
+  // parênteses, pi, L(a,b) e R(a,b) (Unity Manual/InspectorNumericFields).
+  const bool expression=request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType=="expression";
+  const bool number=(request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType!="triple" && !expression) || request.purpose==ae::editor::EditorTextPurpose::CodeLine || request.purpose==ae::editor::EditorTextPurpose::InputNumber;
   const bool code=request.purpose==ae::editor::EditorTextPurpose::Code;
   const bool property=request.purpose==ae::editor::EditorTextPurpose::ScriptProperty;
   const bool triple=request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType=="triple";
   const auto caret=std::min<std::size_t>(seedCaret,request.text.size());
   const std::string values[]{std::to_string(sequence),code?"code":number?"number":"text",
-    invalid?"Alteração recusada; revise o campo":code?"Editar código":triple?"Três canais · separados por espaço":number?"Editar valor":
+    invalid?"Alteração recusada; revise o campo":code?"Editar código":triple?"Três canais · separados por espaço":
+      expression?"Expressão · + - * / ^ ( ) pi  +=  L(a,b)  R(a,b)":number?"Editar valor":
       property?("Campo · "+request.propertyType):
       request.purpose==ae::editor::EditorTextPurpose::ScriptName?"Nova classe C#":
       request.purpose==ae::editor::EditorTextPurpose::ResourceName?"Renomear recurso":
@@ -262,7 +266,7 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
       request.purpose==ae::editor::EditorTextPurpose::InputNumber?"Valor da entrada":
       request.purpose==ae::editor::EditorTextPurpose::TextureSearch?"Buscar textura":
       request.purpose==ae::editor::EditorTextPurpose::ComponentPresetName?"Nome do preset":"Pesquisar",
-    request.text,code?"524288":property?"4096":(number||triple)?"47":"63",
+    request.text,code?"524288":property?"4096":(number||triple||expression)?"47":"63",
     // Onde o cursor comeca, em BYTES. Para o codigo ele vem do toque -- a linha
     // que o dedo escolheu --, e nao do fim do arquivo.
     std::to_string(caret)};

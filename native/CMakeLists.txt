@@ -720,6 +720,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_screen.cpp
     ../tests/native/test_editor_session.cpp
+    ../tests/native/test_numeric_expression.cpp
     ../tests/native/test_editor_environment_assets.cpp
     ../tests/native/test_editor_composition.cpp
     ../tests/native/test_editor_history.cpp

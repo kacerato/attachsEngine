@@ -187,6 +187,7 @@ enum class EditorWidget : u32 {
   PausePlay,
   StepPlay,
   PlayInspect,
+  NumericExpressionToggle,
   ToggleCharacter,
   JumpCharacter,
   PlaySecondaryAction,
@@ -763,6 +764,11 @@ struct EditorScreenState final {
   std::string numericProperty;
   EditorEntityId numericEntity = kInvalidEntity;
   char numericText[48]{};
+  // Valor do campo quando ele abriu: base de `+=` e da prévia do resultado.
+  double numericCurrent=0;
+  // Teclado de texto no lugar do numérico do sistema, para digitar expressões
+  // (operadores, parênteses, pi, L e R não existem no teclado numérico).
+  bool numericExpression=false;
   bool numericReplace = false;
   bool numericError = false;
   bool platformTextInput = false;

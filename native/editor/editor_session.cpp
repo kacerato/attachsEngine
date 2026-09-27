@@ -792,6 +792,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     edit.field=state_.numericField;edit.text=state_.numericText;
     edit.componentInstance=state_.numericInstance;edit.propertyId=state_.numericProperty;
     if((edit.field&0xff000000u)==widgetId(EditorWidget::ComponentTripleBase)) edit.propertyType="triple";
+    else if(state_.numericExpression) edit.propertyType="expression";
   } else {
     if(!state_.editingCreationSearch && !state_.editingHierarchySearch && !state_.renameEntity) return edit;
     edit.entity=state_.renameEntity;edit.text=state_.renameText;
@@ -1232,13 +1233,19 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
       if(!history_.applyValues(document_,edit.entity,values)) return false;
       close();return true;
     }
-    // Android keyboards may use a decimal comma. Mixed separators remain invalid.
-    if(value.find('.')==std::string::npos) std::replace(value.begin(),value.end(),',','.');
-    float number=0;std::istringstream input(value);input.imbue(std::locale::classic());
-    const bool parsed=static_cast<bool>(input>>number);input>>std::ws;
+    // Expressão da Unity (editor/editor_numeric_expression.h): conta,
+    // relativo ao valor aberto (+=) e L/R. A vírgula decimal do teclado do
+    // Android continua valendo fora de parênteses.
+    NumericExpressionContext context;context.current=state_.numericCurrent;
+    context.seed=static_cast<u64>(std::chrono::steady_clock::now().time_since_epoch().count());
+    double evaluated=0;std::string reason;
     const auto *entity=document_.find(edit.entity);
     state_.numericError=true;
-    if(!entity || !parsed || !input.eof() || !std::isfinite(number)) return false;
+    if(!entity) return false;
+    if(!evaluateNumericExpression(value,context,evaluated,&reason) || std::abs(evaluated)>3.4e38) {
+      state_.status="Expressão recusada: "+(reason.empty()?std::string("fora do alcance de um número"):reason);return false;
+    }
+    const float number=static_cast<float>(evaluated);
     // Campo de material de slot: vale no alcance escolhido no inspetor.
     if(edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
        edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size()) {
@@ -1377,7 +1384,17 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
 
 bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) playTouches_.cancel();
-  if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) return true;
+  if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) {
+    // O campo do sistema tem o foco; só o botão "Expressão" da barra responde,
+    // trocando o teclado numérico pelo de texto sem perder o que foi digitado.
+    const auto routed=router_.route(event);
+    if(routed.tapped && routed.widgetId==widgetId(EditorWidget::NumericExpressionToggle) && state_.numericField) {
+      if(!state_.platformDraft.empty() && state_.platformDraft.size()<sizeof(state_.numericText))
+        std::snprintf(state_.numericText,sizeof(state_.numericText),"%s",state_.platformDraft.c_str());
+      state_.numericExpression=!state_.numericExpression;state_.numericReplace=false;
+    }
+    return true;
+  }
   UiPointerRouting routing = router_.route(event);
   // Toque longo no cabeçalho de um componente abre o menu dele, como o clique
   // direito da Unity (Manual/UsingComponents).
@@ -2933,16 +2950,25 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if (routing.tapped) {
       const u32 keyBase = widgetId(EditorWidget::NumericKeyBase);
       const u32 key = routing.widgetId;
+      // Teclas de expressão: o texto inserido é o da sintaxe (`*`, `pi`), o
+      // rótulo é o da tela (`×`, `pi`). As relativas trocam o prefixo.
+      static constexpr const char *inserts[]{"1","2","3","4","5","6","7","8","9",".","0","-"," ",
+                                            "+","*","/","(",")","^","pi",",","+=","-=","*=","/=","L(","R(","sqrt("};
       if (key == widgetId(EditorWidget::NumericCancel)) completeTextEdit(pendingTextEdit(),{},false);
-      else if (key == widgetId(EditorWidget::NumericClear)) state_.numericText[0] = 0;
+      else if (key == widgetId(EditorWidget::NumericClear)) {state_.numericText[0] = 0;state_.numericError=false;}
       else if (key == widgetId(EditorWidget::NumericBackspace)) {
         const auto n=std::strlen(state_.numericText);if(n) state_.numericText[n-1]=0;
-      } else if (key >= keyBase && key < keyBase+13) {
+        state_.numericReplace=false;state_.numericError=false;
+      } else if (key >= keyBase && key < keyBase+std::size(inserts)) {
+        const u32 index=key-keyBase;
         if(state_.numericReplace) {state_.numericText[0]=0;state_.numericReplace=false;}
-        const auto n=std::strlen(state_.numericText);
-        if(n+1<sizeof(state_.numericText)) {
-          state_.numericText[n]="123456789.0- "[key-keyBase];state_.numericText[n+1]=0;
-        }
+        std::string text=state_.numericText;
+        if(index>=21 && index<=24) {
+          if(text.size()>=2 && text[1]=='=' && std::strchr("+-*/",text[0])) text.erase(0,2);
+          text.insert(0,inserts[index]);
+        } else text+=inserts[index];
+        if(text.size()<sizeof(state_.numericText)) std::snprintf(state_.numericText,sizeof(state_.numericText),"%s",text.c_str());
+        state_.numericError=false;
       } else if (key == widgetId(EditorWidget::NumericApply)) {
         completeTextEdit(pendingTextEdit(),state_.numericText,true);
       }
@@ -5897,6 +5923,15 @@ void EditorSession::refreshSkinningStatus() {
 }
 void EditorSession::update() {
   state_.document=playInspecting()?&playScene_.document():&document_;
+  // O campo acabou de abrir: o texto é o valor atual formatado, a base do
+  // `+=` e da prévia. Fechar e abrir outro recomeça no teclado numérico.
+  if(state_.numericField!=numericFieldSeen_) {
+    numericFieldSeen_=state_.numericField;state_.numericExpression=false;
+    std::string text=state_.numericText;
+    if(text.find('.')==std::string::npos) std::replace(text.begin(),text.end(),',','.');
+    char *stop=nullptr;const double value=std::strtod(text.c_str(),&stop);
+    state_.numericCurrent=stop&&stop!=text.c_str()&&std::isfinite(value)?value:0;
+  }
   state_.cameraPreviewEntity=cameraPreview_.camera();
   state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion());
   state_.cameraPreviewFailed=cameraPreview_.failed();

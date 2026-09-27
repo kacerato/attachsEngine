@@ -1,5 +1,6 @@
 #include "editor/editor_component_impact.h"
 #include "editor/editor_color_picker.h"
+#include "editor/editor_numeric_expression.h"
 #include <sstream>
 #include "scene/script_behavior.h"
 #include "editor/editor_water_body_component.h"
@@ -4132,6 +4133,24 @@ void buildPlatformTextField(ScreenBuilder &builder) {
   std::string shown = state.platformDraft.substr(0, caret);
   shown += "|";
   shown += state.platformDraft.substr(caret);
+  // Campo numérico com o teclado do sistema: o teclado numérico não tem
+  // operadores, então "Expressão" troca para o de texto (e volta).
+  if (state.numericField != 0 && (state.numericField&0xff000000u)!=widgetId(EditorWidget::ComponentTripleBase)) {
+    const UiRect toggle = takeRight(content, 96.0f);
+    builder.list.addRect(toggle, state.numericExpression ? theme.color.accent : theme.color.raised, theme.radius.control);
+    builder.label(toggle, state.numericExpression ? "Números" : "Expressão",
+                  state.numericExpression ? theme.color.accentInk : theme.color.text, theme.type.caption, UiAlign::Center);
+    builder.router.addRegion(toggle, widgetId(EditorWidget::NumericExpressionToggle), theme.touch.minimumTarget);
+    takeRight(content, 8.0f);
+    double preview = 0;
+    NumericExpressionContext context;
+    context.current = state.numericCurrent;
+    if (!state.platformDraft.empty() && evaluateNumericExpression(state.platformDraft, context, preview)) {
+      char line[40];
+      std::snprintf(line, sizeof(line), "= %.6g", preview);
+      builder.label(takeRight(content, 110.0f), line, theme.color.accent, theme.type.caption, UiAlign::End);
+    }
+  }
   builder.label(content, shown, theme.color.text,
                 state.numericField != 0 ? theme.type.numeric : theme.type.body, UiAlign::Start);
 }
@@ -5987,29 +6006,61 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if (!state.platformTextInput && state.numericField != 0) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
-    const float width=std::min(320.0f,state.surface.width-16.0f);
-    const float height=std::min(320.0f,state.surface.height-16.0f);
+    // Unity Manual/InspectorNumericFields: o campo aceita contas, edição
+    // relativa (+=) e as distribuições L(a,b) e R(a,b). Os dígitos ficam onde
+    // estavam; operadores numa coluna ao lado e as funções numa faixa acima,
+    // com a prévia do resultado antes de aplicar.
+    const bool triple=(state.numericField&0xff000000u)==widgetId(EditorWidget::ComponentTripleBase);
+    const float width=std::min(triple?320.0f:440.0f,state.surface.width-16.0f);
+    const float height=std::min(triple?320.0f:372.0f,state.surface.height-16.0f);
     const UiRect modal=centred(state.surface,width,height);
     list.addRect(modal,theme.color.surface,theme.radius.control);
     UiRect content=deflate(modal,UiInsets::all(8.0f));
-    builder.label(takeTop(content,36.0f),state.numericError ? "Valor invalido" : state.numericText,
-                  theme.color.text,theme.type.numeric,UiAlign::Center);
-    if((state.numericField&0xff000000u)==widgetId(EditorWidget::ComponentTripleBase)) {
+    builder.label(takeTop(content,34.0f),state.numericText,theme.color.text,theme.type.numeric,UiAlign::Center);
+    if(!triple) {
+      double preview=0;std::string reason;
+      NumericExpressionContext context;context.current=state.numericCurrent;
+      const bool ok=state.numericText[0] && evaluateNumericExpression(state.numericText,context,preview,&reason);
+      char line[96];
+      if(ok) std::snprintf(line,sizeof(line),"= %.6g",preview);
+      else std::snprintf(line,sizeof(line),"%s",state.numericError?"Valor inválido":state.numericText[0]?reason.c_str():" ");
+      builder.label(takeTop(content,20.0f),line,ok?theme.color.accent:theme.color.warning,theme.type.caption,UiAlign::Center);
+      takeTop(content,4.0f);
+      auto chips=takeTop(content,30.0f);
+      const struct {const char *label;u32 key;} functions[]{{"+=",21},{"-=",22},{"×=",23},{"÷=",24},{"L(a,b)",25},{"R(a,b)",26},{"raiz",27}};
+      const float chipWidth=chips.width/std::size(functions);
+      for(u32 i=0;i<std::size(functions);++i) {
+        const UiRect cell{chips.x+i*chipWidth+2,chips.y,chipWidth-4,chips.height};
+        list.addRect(cell,withAlpha(theme.color.accent,.16f),theme.radius.control);
+        builder.label(cell,functions[i].label,theme.color.accent,theme.type.caption,UiAlign::Center);
+        router.addRegion(cell,widgetId(EditorWidget::NumericKeyBase)+functions[i].key);
+      }
+      takeTop(content,6.0f);
+    } else {
+      if(state.numericError) builder.label(takeTop(content,20.0f),"Valor inválido",theme.color.warning,theme.type.caption,UiAlign::Center);
       const auto separator=takeTop(content,28);
       builder.label(separator,"Separar canais · espaço",theme.color.accent,theme.type.caption,UiAlign::Center);
       router.addRegion(separator,widgetId(EditorWidget::NumericKeyBase)+12);
     }
-    const float cellWidth=content.width/4.0f,cellHeight=content.height/4.0f;
-    const char *labels[16]={"1","2","3","Apagar","4","5","6","Limpar","7","8","9","Cancelar",".","0","-","Aplicar"};
-    const u32 keys[16]={0,1,2,12,3,4,5,13,6,7,8,14,9,10,11,15};
-    for(u32 i=0;i<16;++i) {
-      const UiRect cell{content.x+(i%4)*cellWidth+2,content.y+(i/4)*cellHeight+2,cellWidth-4,cellHeight-4};
-      const u32 key=keys[i];
-      const u32 widget=key<12 ? widgetId(EditorWidget::NumericKeyBase)+key :
-        key==12?widgetId(EditorWidget::NumericBackspace):key==13?widgetId(EditorWidget::NumericClear):
-        key==14?widgetId(EditorWidget::NumericCancel):widgetId(EditorWidget::NumericApply);
-      list.addRect(cell,theme.color.raised,theme.radius.control);
-      builder.label(cell,labels[i],theme.color.text,theme.type.caption,UiAlign::Center);
+    const u32 columns=triple?4:6;
+    const float cellWidth=content.width/columns,cellHeight=content.height/4.0f;
+    // Chave: 0..11 dígitos, ponto e menos; 13.. operadores; 100+ ações.
+    constexpr u32 backspace=100,clear=101,cancel=102,apply=103;
+    const char *tripleLabels[16]={"1","2","3","Apagar","4","5","6","Limpar","7","8","9","Cancelar",".","0","-","Aplicar"};
+    const u32 tripleKeys[16]={0,1,2,backspace,3,4,5,clear,6,7,8,cancel,9,10,11,apply};
+    const char *labels[24]={"1","2","3","+","(","Apagar","4","5","6","×",")","Limpar","7","8","9","÷","^","Cancelar",".","0","-","pi",",","Aplicar"};
+    const u32 keys[24]={0,1,2,13,16,backspace,3,4,5,14,17,clear,6,7,8,15,18,cancel,9,10,11,19,20,apply};
+    for(u32 i=0;i<columns*4;++i) {
+      const UiRect cell{content.x+(i%columns)*cellWidth+2,content.y+(i/columns)*cellHeight+2,cellWidth-4,cellHeight-4};
+      const u32 key=triple?tripleKeys[i]:keys[i];
+      const u32 widget=key<backspace ? widgetId(EditorWidget::NumericKeyBase)+key :
+        key==backspace?widgetId(EditorWidget::NumericBackspace):key==clear?widgetId(EditorWidget::NumericClear):
+        key==cancel?widgetId(EditorWidget::NumericCancel):widgetId(EditorWidget::NumericApply);
+      const bool operatorKey=key>=13 && key<backspace;
+      list.addRect(cell,key==apply?theme.color.accent:operatorKey?theme.color.silhouette:theme.color.raised,theme.radius.control);
+      const char *label=triple?tripleLabels[i]:labels[i];
+      builder.label(cell,label,key==apply?theme.color.accentInk:operatorKey?theme.color.accent:theme.color.text,
+                    std::strlen(label)<=2?theme.type.title:theme.type.caption,UiAlign::Center);
       router.addRegion(cell,widget);
     }
   }

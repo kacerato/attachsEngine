@@ -19,6 +19,7 @@
 #include "core/base.h"
 #include "editor/editor_play_scene.h"
 #include "editor/editor_play_edit.h"
+#include "editor/editor_numeric_expression.h"
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
@@ -1515,6 +1516,7 @@ private:
   u32 assetPointer_ = 0;
   u32 hierarchyPointer_ = 0;
   u32 reorderPointer_ = 0, reorderPagerHover_ = 0;
+  u32 numericFieldSeen_ = 0;
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;

@@ -860,6 +860,32 @@ AE_TEST(session_tap_jitter_does_not_orbit) {
   f.down(1,at);f.move(1,{at.x+1,at.y+1});f.up(1,{at.x+1,at.y+1});
   AE_EXPECT_EQ(f.session.camera().yaw,yaw,"selection jitter must not move camera");
 }
+// Unity Manual/InspectorNumericFields no teclado embutido: conta, depois
+// edição relativa ao valor aberto; a prévia mostra o resultado antes de
+// aplicar e a expressão inválida não grava nada.
+AE_TEST(session_numeric_keypad_accepts_expressions_and_relative_edits) {
+  Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
+  tapWidget(f,widgetId(EditorWidget::TransformFold));
+  tapWidget(f,transformFieldWidget(0,0));
+  const u32 base=widgetId(EditorWidget::NumericKeyBase);
+  tapWidget(f,base+1);tapWidget(f,base+14);tapWidget(f,base+2);   // 2 × 3
+  AE_EXPECT_EQ(std::string(f.session.screen().numericText),std::string("2*3"),"os operadores entram na expressão");
+  tapWidget(f,widgetId(EditorWidget::NumericApply));
+  AE_EXPECT_EQ(f.session.document().find(f.cube)->transform.position[0],6.0f,"2×3 grava 6");
+  tapWidget(f,transformFieldWidget(0,0));
+  AE_EXPECT_EQ(f.session.screen().numericCurrent,6.0,"o campo abre sabendo o valor atual");
+  tapWidget(f,base+21);tapWidget(f,base+3);                        // += 4
+  AE_EXPECT_EQ(std::string(f.session.screen().numericText),std::string("+=4"),"o prefixo relativo substitui o valor mostrado");
+  tapWidget(f,widgetId(EditorWidget::NumericApply));
+  AE_EXPECT_EQ(f.session.document().find(f.cube)->transform.position[0],10.0f,"+=4 soma ao valor atual");
+  tapWidget(f,transformFieldWidget(0,0));
+  tapWidget(f,base+15);tapWidget(f,base+10);                       // "/0" (substitui)
+  tapWidget(f,widgetId(EditorWidget::NumericApply));
+  AE_EXPECT_TRUE(f.session.screen().numericField!=0 && f.session.screen().numericError,"divisão sem número fica aberta com erro");
+  AE_EXPECT_EQ(f.session.document().find(f.cube)->transform.position[0],10.0f,"nada gravado");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),2u,"um passo por expressão aceita");
+}
+
 AE_TEST(session_numeric_entry_changes_exact_axis_and_undo_restores_it) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::TransformFold));
