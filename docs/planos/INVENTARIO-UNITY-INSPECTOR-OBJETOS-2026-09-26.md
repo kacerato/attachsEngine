@@ -18,7 +18,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 6 | Qualquer número/combinação de componentes | A | adaptação explícita: teto de 64 por objeto (Unity não tem), recusa cita o número e o cabeçalho avisa perto do teto; singulares recusam duplicata com motivo · `32e4738b` | I1 |
 | 7 | Ícone de ajuda (?) no cabeçalho abre a referência | ✔ | Referência no menu abre o link https do schema (`ExternalLinks` no Android) · `e9c51e8d` | I1 |
 | 8 | Valores padrão ao anexar | ✔ | descritores | — |
-| 9 | Editar valor: texto | ◐ | só nome do objeto e campos de script; falta string em componente (§4.2) | I2 |
+| 9 | Editar valor: texto | ◐ | nome do objeto, campos e listas de texto em script; o tipo texto NATIVO entra com o primeiro consumidor (Text da UI/TextMesh), como decide o §4.2 do plano | C |
 | 10 | Editar valor: interruptor | ✔ | booleanos | — |
 | 11 | Editar valor: lista suspensa (enum) | ✔ | lista de opções com a atual marcada · `e9c51e8d` | I1 |
 | 12 | Referência: arrastar do Project | ✔ | recurso arrastado da aba Recursos para o campo · `b96c358a` | I1 |
@@ -42,12 +42,12 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
 | 27 | Adicionar, remover, reordenar e editar valores | ✔ | reordenar pelo menu (19, 21) e pelo arraste (20) · `32e4738b` | I1 |
-| 28 | D · Advanced Object Picker (filtro de tipo editável, busca) | ✗ | seletor tem busca; falta filtro visível/editável | I2 |
+| 28 | D · Advanced Object Picker (filtro de tipo editável, busca) | ✔ | janela própria: `t:Tipo`, chip de tipo removível, lista/grade/tabela, painel do item; sem abas de provedor (só objetos de cena) · `e8e5dc8d` | I2 |
 | 29 | D · Expressões em campo numérico (`2*3`, `+=5`, `L(a,b)`, `R(a,b)`) | ✔ | avaliador `+ - * / % ^`, funções, pi, relativos, L/R; teclado com operadores e prévia; "Expressão" no teclado do sistema · `88cced9c` | I2 |
-| 30 | D · Curvas | ✗ | ver §6 | I2 |
+| 30 | D · Curvas | ✔ | `Astra.AnimationCurve` em scripts com editor de curvas · `ff1d8e32` | I2 |
 | 31 | D · Arrays | ✔ | `T[]`/`List<T>` em campos de script; nativos seguem por slot (materiais) e lista de clipes · `1e634f23` | I2 |
-| 32 | D · Bar slider (dividir um todo em partes, ex. LOD) | ◐ | LOD Group tem transições numéricas, sem barra | I2 |
-| 33 | D · Cores e gradientes | ◐ | ver §9 | I2 |
+| 32 | D · Bar slider (dividir um todo em partes, ex. LOD) | ✔ | barra do LOD Group: divisores, marcador da vista, inserir/apagar nível · `89c5349e` | I2 |
+| 33 | D · Cores e gradientes | ◐ | janela de cor (SV/matiz contínuos, RGB 0–255/0–1/HSV, hex, alfa, HDR, original, amostras em bibliotecas) · `59c4a626`; `Astra.Gradient` com editor e presets · `a09ec1e9`; falta o conta-gotas (precisa ler o quadro da GPU) | I2 |
 
 ## 3. Introduction to components — `Components.html`
 
@@ -66,7 +66,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 39 | Arrastar da Hierarchy para o campo | ✔ | validação do seletor; recusa não reparenteia · `b96c358a` | I1 |
 | 40 | Arrastar do Project para o campo | ✔ | recurso da aba Recursos no campo de recurso · `b96c358a` | I1 |
 | 41 | Object Picker filtra pelo tipo do campo | ✔ | `requiredType`, tipo de recurso | — |
-| 42 | Picker clássico × avançado (alternar) | ✗ | | I2 |
+| 42 | Picker clássico × avançado (alternar) | ✔ | preferência do projeto · `e8e5dc8d` | I2 |
 | 43 | Atribuir objeto a campo de componente usa o primeiro componente do tipo | ✔ | seletor e arraste guardam o 1º do tipo; seletor avisa quando há vários · `253e3990` | I1 |
 | 44 | Recusar objeto sem o componente exigido | ✔ | `referenceAccepts` | — |
 
@@ -85,12 +85,12 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 51 | Campo de curva e Curve Editor (chaves, tangentes, wrap) | ✗ | | I2 |
-| 52 | Salvar preset de curva | ✗ | | I2 |
-| 53 | Apagar preset | ✗ | | I2 |
-| 54 | Substituir preset | ✗ | | I2 |
-| 55 | Bibliotecas de presets (criar, alternar) | ✗ | | I2 |
-| 56 | Add Factory Presets To Current Library | ✗ | | I2 |
+| 51 | Campo de curva e Curve Editor (chaves, tangentes, wrap) | ✔ | toque duplo, arraste, alças, 5 modos + lados quebrados, Clamp/Loop/PingPong, enquadrar/zoom · `ff1d8e32` | I2 |
+| 52 | Salvar preset de curva | ✔ | `ff1d8e32` | I2 |
+| 53 | Apagar preset | ✔ | toque longo no preset · `ff1d8e32` | I2 |
+| 54 | Substituir preset | ✔ | `ff1d8e32` | I2 |
+| 55 | Bibliotecas de presets (criar, alternar) | ✔ | .astra/libraries (cores, gradientes, curvas) · `ff1d8e32` | I2 |
+| 56 | Add Factory Presets To Current Library | ✔ | 6 presets de fábrica · `ff1d8e32` | I2 |
 
 ## 7. Manage the Inspector window — `InspectorOptions.html`
 
