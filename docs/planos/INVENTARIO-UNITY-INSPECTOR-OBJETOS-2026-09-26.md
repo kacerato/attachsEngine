@@ -15,7 +15,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 3 | Navegar por categoria | ✔ | trilho de famílias | — |
 | 4 | Buscar por nome | ✔ | busca com termos de outras engines | — |
 | 5 | Scripts do projeto no navegador; não compilados ficam fora | ✔ | "Scripts do projeto" na família Lógica | — |
-| 6 | Qualquer número/combinação de componentes | ◐ | limite 64 por objeto; tipos singulares recusam duplicata com motivo | I1 |
+| 6 | Qualquer número/combinação de componentes | A | adaptação explícita: teto de 64 por objeto (Unity não tem), recusa cita o número e o cabeçalho avisa perto do teto; singulares recusam duplicata com motivo · `32e4738b` | I1 |
 | 7 | Ícone de ajuda (?) no cabeçalho abre a referência | ✔ | Referência no menu abre o link https do schema (`ExternalLinks` no Android) · `e9c51e8d` | I1 |
 | 8 | Valores padrão ao anexar | ✔ | descritores | — |
 | 9 | Editar valor: texto | ◐ | só nome do objeto e campos de script; falta string em componente (§4.2) | I2 |
@@ -23,13 +23,13 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 11 | Editar valor: lista suspensa (enum) | ✔ | lista de opções com a atual marcada · `e9c51e8d` | I1 |
 | 12 | Referência: arrastar do Project | ✔ | recurso arrastado da aba Recursos para o campo · `b96c358a` | I1 |
 | 13 | Referência: Object Picker (⊙) | ✔ | `buildReferencePicker`, seletor de malha/material/textura | — |
-| 14 | Referência a componente, objeto ou recurso | ◐ | objeto e recurso; falta referência a componente | I1 |
+| 14 | Referência a componente, objeto ou recurso | ✔ | campo de script `component:<tipo>` com a fachada gerada; valor objeto:instância · `253e3990` | I1 |
 | 15 | Menu de contexto no cabeçalho (clique direito → toque longo) | ✔ | toque longo 0,45 s · `e9c51e8d` | I1 |
 | 16 | Menu ⋮ no cabeçalho | ✔ | `ComponentMenuBase` | — |
 | 17 | Reset | ✔ | nativos e comportamentos C# · `e9c51e8d` | I1 |
 | 18 | Remove Component com aviso de dependentes | ✔ | "Revisar remoção" + `componentRemovalBlockedBy` | — |
 | 19 | Move Up | ✔ | `Components::moveInstance`, com Undo · `e9c51e8d` | I1 |
-| 20 | Arrastar componente para reordenar | ✗ | | I1 |
+| 20 | Arrastar componente para reordenar | ✔ | arraste vertical no cabeçalho, barra de inserção, vira página nas setas, Undo · `32e4738b` | I1 |
 | 21 | Move Down | ✔ | idem · `e9c51e8d` | I1 |
 | 22 | Copy Component | ✔ | nativos e C# · `e9c51e8d` | I1 |
 | 23 | Paste Component As New | ✔ | `e9c51e8d` | I1 |
@@ -41,7 +41,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 27 | Adicionar, remover, reordenar e editar valores | ◐ | reordenar pelo menu entregue (19, 21); falta arrastar (20) | I1 |
+| 27 | Adicionar, remover, reordenar e editar valores | ✔ | reordenar pelo menu (19, 21) e pelo arraste (20) · `32e4738b` | I1 |
 | 28 | D · Advanced Object Picker (filtro de tipo editável, busca) | ✗ | seletor tem busca; falta filtro visível/editável | I2 |
 | 29 | D · Expressões em campo numérico (`2*3`, `+=5`, `L(a,b)`, `R(a,b)`) | ✗ | teclado numérico só aceita número | I2 |
 | 30 | D · Curvas | ✗ | ver §6 | I2 |
@@ -67,7 +67,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 40 | Arrastar do Project para o campo | ✔ | recurso da aba Recursos no campo de recurso · `b96c358a` | I1 |
 | 41 | Object Picker filtra pelo tipo do campo | ✔ | `requiredType`, tipo de recurso | — |
 | 42 | Picker clássico × avançado (alternar) | ✗ | | I2 |
-| 43 | Atribuir objeto a campo de componente usa o primeiro componente do tipo | ✗ | depende de referência a componente (14) | I1 |
+| 43 | Atribuir objeto a campo de componente usa o primeiro componente do tipo | ✔ | seletor e arraste guardam o 1º do tipo; seletor avisa quando há vários · `253e3990` | I1 |
 | 44 | Recusar objeto sem o componente exigido | ✔ | `referenceAccepts` | — |
 
 ## 5. Use arrays — `InspectorArray.html`
@@ -197,7 +197,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 125 | `GetComponent` de script pelo tipo da classe | ◐ | `FindBehavior<T>` protegido; falta em `GameObject` | O1 |
 | 126 | `GetComponent` devolve nulo quando ausente | ✔ | | — |
 | 127 | Campo público de objeto no Inspector + arrastar | ✔ | campo `object` de script aceita objeto arrastado · `b96c358a` | I1 |
-| 128 | Campo de tipo componente (arrastar objeto que o tem) | ✗ | | I1 |
+| 128 | Campo de tipo componente (arrastar objeto que o tem) | ✔ | objeto sem o tipo é recusado com o motivo; instância removida aparece "ausente" · `253e3990` | I1 |
 | 129 | Array de referências | ✗ | | I2 |
 | 130 | Filhos pelo Transform (`childCount`, enumerar) | ✔ | `Children()`, `ChildAt` | — |
 | 131 | `Transform.Find` | ✔ | `GameObject.Find(name)` | — |
