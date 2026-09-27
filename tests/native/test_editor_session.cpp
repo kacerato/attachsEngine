@@ -3429,6 +3429,58 @@ AE_TEST(undo_history_lists_steps_and_moves_to_a_point) {
   AE_EXPECT_TRUE(!state.undoHistory,"fechado");
 }
 
+// Unity 6000.0 SceneVisibility / ScenePickingControls por camada: esconder
+// tira o desenho só da vista do editor e tira da seleção por toque; a seta
+// deixa desenhado mas fora da seleção. A cena não muda e não há passo de Desfazer.
+AE_TEST(scene_layer_visibility_hides_drawing_and_picking_only_in_editor) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  auto layers=doc.layers();AE_EXPECT_TRUE(layers.setName(3,"Cenário"),"camada nomeada");
+  AE_EXPECT_TRUE(history.setLayers(doc,layers),"camadas da cena");
+  EditorTransform transform{};transform.position[1]=0.5f;
+  AE_EXPECT_TRUE(history.setTransform(doc,f.cube,transform),"cubo no centro");
+  auto value=*doc.find(f.cube);value.layer=3;AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo na camada 3");
+  f.session.update();history.clear();
+  const auto revision=doc.revision();
+  const auto drawOf=[&]()->bool{
+    std::vector<renderer::MapDrawState> draws;
+    if(!f.session.extractMap(draws)) return false;
+    for(const auto &d:draws) if(d.objectId==f.cube) return d.visible;
+    return false;
+  };
+  AE_EXPECT_TRUE(drawOf(),"visível de início");
+  tapWidget(f,widgetId(EditorWidget::SceneLayersOpen));
+  AE_EXPECT_TRUE(f.session.screen().sceneLayersPanel,"painel aberto");
+  (void)f.session.takeAppearanceChanged();
+  tapWidget(f,widgetId(EditorWidget::SceneLayerVisibleBase)+3);
+  AE_EXPECT_EQ(f.session.screen().hiddenLayers,1u<<3,"camada 3 escondida");
+  AE_EXPECT_TRUE(f.session.takeAppearanceChanged(),"o shell republica o desenho");
+  AE_EXPECT_TRUE(!drawOf(),"o cubo sai do desenho");
+  AE_EXPECT_TRUE(doc.find(f.cube)->visible,"o objeto continua visível no jogo");
+  AE_EXPECT_EQ(doc.revision(),revision,"a cena não muda");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"sem passo de Desfazer");
+  tapWidget(f,widgetId(EditorWidget::SceneLayersClose));
+  f.session.setSelection(kInvalidEntity);f.session.update();
+  const UiPoint centre=f.viewportCentre();
+  f.down(1,centre);f.up(1,centre);
+  AE_EXPECT_EQ(f.session.selection(),kInvalidEntity,"camada escondida não se seleciona na vista");
+  // Mostrar tudo; tirar só da seleção.
+  tapWidget(f,widgetId(EditorWidget::SceneLayersOpen));
+  tapWidget(f,widgetId(EditorWidget::SceneLayersShowAll));
+  tapWidget(f,widgetId(EditorWidget::SceneLayerPickBase)+3);
+  tapWidget(f,widgetId(EditorWidget::SceneLayersClose));
+  AE_EXPECT_TRUE(drawOf(),"desenhado de novo");
+  f.down(2,centre);f.up(2,centre);
+  AE_EXPECT_EQ(f.session.selection(),kInvalidEntity,"sem seleção pela vista");
+  tapWidget(f,hierarchyRowWidget(f.cube));
+  AE_EXPECT_EQ(f.session.selection(),f.cube,"a Hierarquia ainda seleciona");
+  tapWidget(f,widgetId(EditorWidget::SceneLayersOpen));
+  tapWidget(f,widgetId(EditorWidget::SceneLayersPickAll));
+  tapWidget(f,widgetId(EditorWidget::SceneLayersClose));
+  f.session.setSelection(kInvalidEntity);f.session.update();
+  f.down(3,centre);f.up(3,centre);
+  AE_EXPECT_EQ(f.session.selection(),f.cube,"selecionável de novo");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

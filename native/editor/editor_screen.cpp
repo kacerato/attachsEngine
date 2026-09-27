@@ -1402,7 +1402,10 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
 
     UiRect rowContent = deflate(row, UiInsets::symmetric(theme.spacing.tiny, 0.0f));
     takeLeft(rowContent, std::min(static_cast<float>(frame.depth) * 14.0f, std::max(0.0f,rowContent.width-110.0f)));
-    const UiColor ink = selected ? theme.color.accentInk : theme.color.text;
+    // Objeto numa camada escondida na vista: a linha fica apagada (Unity
+    // SceneVisibility), mas continua selecionável pela Hierarquia.
+    const bool layerHidden = entity->layer < 32 && (builder.state.hiddenLayers & (1u << entity->layer));
+    const UiColor ink = selected ? theme.color.accentInk : layerHidden ? theme.color.textFaint : theme.color.text;
     const UiRect twisty = takeLeft(rowContent, 28.0f);
     if (!children.empty())
       builder.list.addImage(centred(twisty, 12.0f, 12.0f),
@@ -6107,6 +6110,82 @@ void buildSceneTemplatePanel(ScreenBuilder &builder, const UiRect &viewport) {
 // sobre a escolhida — atualizar com a vista atual, renomear, excluir — e
 // "Salvar vista atual" cria uma nova. A lista é curta de propósito: ela existe
 // para repetir um enquadramento, não para organizar um acervo.
+// Camadas na vista da cena: o olho esconde os objetos da camada só no editor
+// (Unity 6000.0 SceneVisibility / View Options › Layers); a seta os tira da
+// seleção por toque na vista (ScenePickingControls). A Hierarquia continua
+// selecionando tudo. Tudo/Nada como no menu Layers da Unity.
+void buildSceneLayersPanel(ScreenBuilder &builder, const UiRect &viewport) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  const auto &layers=state.document->layers();
+  u32 counts[runtime::GameplayLayers::kCount]{};
+  std::vector<EditorEntityId> all;state.document->collectSubtree(state.document->root(),all);
+  for(const auto id:all) if(const auto *e=state.document->find(id); e && id!=state.document->root() && e->layer<runtime::GameplayLayers::kCount) ++counts[e->layer];
+  // Camadas com nome, e as sem nome que ainda têm objetos (senão sumiriam).
+  std::vector<u32> shown;
+  for(u32 i=0;i<runtime::GameplayLayers::kCount;++i) if(layers.named(i) || counts[i]) shown.push_back(i);
+  const float width=std::min(310.f,std::max(200.f,viewport.width-16));
+  const UiRect panel{viewport.x+std::max(8.f,std::min(276.f,viewport.width-width-8)),viewport.y+56,width,
+                     std::max(160.f,viewport.height-64)};
+  list.addRect(deflate(panel,UiInsets::all(-1)),theme.color.line,theme.radius.control);
+  list.addRect(panel,theme.color.surface,theme.radius.control);
+  router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets::all(8));
+  auto header=takeTop(content,36);
+  builder.iconButton(takeRight(header,32),UiIcon::UiClose,widgetId(EditorWidget::SceneLayersClose));
+  list.addImage(centred(takeLeft(header,28),18,18),static_cast<UiImageId>(UiIcon::SceneVisibility),theme.color.accent);
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},"Camadas na vista",theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y+half,header.width,half},"Só no editor; o jogo não muda",theme.color.textDim,theme.type.caption);
+  // Ações de conjunto.
+  auto actions=takeTop(content,30);takeTop(content,6);
+  const float third=(actions.width-8)/3;
+  const struct {const char *label;EditorWidget id;bool on;} bulk[]{
+    {"Ver todas",EditorWidget::SceneLayersShowAll,state.hiddenLayers!=0},
+    {"Esconder",EditorWidget::SceneLayersHideAll,state.hiddenLayers!=0xffffffffu},
+    {"Tocar todas",EditorWidget::SceneLayersPickAll,state.unpickableLayers!=0}};
+  for(u32 i=0;i<3;++i) {
+    const UiRect rect{actions.x+i*(third+4),actions.y,third,actions.height};
+    list.addRect(rect,theme.color.raised,theme.radius.control);
+    builder.label(rect,bulk[i].label,bulk[i].on?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    if(bulk[i].on) router.addRegion(rect,widgetId(bulk[i].id));
+  }
+  auto footer=takeBottom(content,26);
+  const float rowHeight=38;
+  const u32 perPage=std::max(1u,static_cast<u32>(content.height/rowHeight));
+  const u32 count=static_cast<u32>(shown.size());
+  const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.sceneLayersPage,pages-1);
+  for(u32 slot=page*perPage;slot<count && slot<(page+1)*perPage;++slot) {
+    const u32 layer=shown[slot];
+    const bool hidden=state.hiddenLayers&(1u<<layer),locked=state.unpickableLayers&(1u<<layer);
+    auto row=takeTop(content,rowHeight);row.height-=4;
+    list.addRect(row,hidden?theme.color.silhouette:theme.color.raised,theme.radius.control);
+    const auto eye=takeLeft(row,40),pick=takeRight(row,40);
+    list.addImage(centred(eye,18,18),static_cast<UiImageId>(hidden?UiIcon::SceneVisibilityOff:UiIcon::SceneVisibility),
+                  hidden?theme.color.textFaint:theme.color.accent);
+    list.addImage(centred(pick,18,18),static_cast<UiImageId>(locked?UiIcon::SceneLock:UiIcon::EditorAuthorSelect),
+                  locked||hidden?theme.color.textFaint:theme.color.text);
+    auto text=deflate(row,UiInsets{2,0,4,0});
+    const auto number=takeRight(text,64);
+    const std::string name=layers.named(layer)?std::string(layers.name(layer)):"Camada "+std::to_string(layer)+" (sem nome)";
+    builder.label({text.x,text.y,text.width,text.height*.55f},name.c_str(),hidden?theme.color.textFaint:theme.color.text,theme.type.caption);
+    const std::string detail=std::to_string(counts[layer])+(counts[layer]==1?" objeto":" objetos")+
+        (hidden?" · escondida":locked?" · sem seleção":"");
+    builder.label({text.x,text.y+text.height*.5f,text.width,text.height*.5f},detail.c_str(),
+                  hidden?theme.color.warning:locked?theme.color.textMuted:theme.color.textDim,theme.type.caption);
+    builder.label(number,("#"+std::to_string(layer)).c_str(),theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    router.addRegion(eye,widgetId(EditorWidget::SceneLayerVisibleBase)+layer);
+    router.addRegion(pick,widgetId(EditorWidget::SceneLayerPickBase)+layer);
+  }
+  if(pages>1) {
+    const auto previous=takeLeft(footer,40),next=takeRight(footer,40);
+    builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.title,UiAlign::Center);
+    builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.title,UiAlign::Center);
+    if(page) router.addRegion(previous,widgetId(EditorWidget::SceneLayersPrevious));
+    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::SceneLayersNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textDim,theme.type.caption,UiAlign::Center);
+  } else builder.label(footer,"Olho: mostrar · seta: tocar seleciona",theme.color.textFaint,theme.type.caption,UiAlign::Center);
+}
+
 void buildSceneViewsPanel(ScreenBuilder &builder, const UiRect &viewport) {
   const auto &state = builder.state;
   const auto &theme = builder.theme;
@@ -6872,6 +6951,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // Lighting cobria este e ele não aparecia no aparelho.
   builder.iconButton({layout.viewport.x + 228.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
+  // Unity 6 põe as camadas visíveis nas View Options do Scene view; o olho
+  // aceso indica que alguma está escondida ou fora da seleção.
+  builder.iconButton({layout.viewport.x + 276.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
+                     UiIcon::SceneVisibility,
+                     widgetId(EditorWidget::SceneLayersOpen), state.sceneLayersPanel || state.hiddenLayers || state.unpickableLayers);
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);
   if(compact) {
@@ -7263,6 +7347,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.gradientField) buildGradientEditor(builder,layout);
   if(state.colorField) buildColorWindow(builder,layout);
   if(state.undoHistory) buildUndoHistory(builder,layout);
+  // Depois das ferramentas do viewport, para ficar por cima delas.
+  if(state.sceneLayersPanel && state.document && state.workspace==EditorWorkspace::Scene)
+    buildSceneLayersPanel(builder,layout.viewport);
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;

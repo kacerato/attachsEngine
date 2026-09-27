@@ -400,6 +400,10 @@ enum class EditorWidget : u32 {
   // páginas e uma linha por ponto do histórico (0 = cena como abriu).
   UndoHistoryClose=0xC7000000u, UndoHistoryOrder, UndoHistoryPrevious, UndoHistoryNext,
   UndoHistoryRowBase=0xC7000100u,
+  // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
+  // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
+  SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
+  SceneLayersPrevious, SceneLayersNext, SceneLayerVisibleBase=0xC8000100u, SceneLayerPickBase=0xC8000200u,
   ComponentFoldBase=0x68000000u,
   ComponentRemoveBase=0x69000000u,
   ComponentBooleanBase=0x6a000000u,
@@ -507,7 +511,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -652,6 +656,10 @@ struct EditorScreenState final {
   bool undoHistory=false,undoNewestFirst=true;
   u32 undoHistoryPage=0,undoApplied=0;
   std::vector<std::string> undoEntries;
+  // Camadas escondidas e não selecionáveis na vista da cena: estado do editor
+  // (preferência do projeto), nunca da cena — o jogo e o Play não mudam.
+  u32 hiddenLayers=0,unpickableLayers=0,sceneLayersPage=0;
+  bool sceneLayersPanel=false;
   // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
   EditorEntityId pingEntity=0;
   double pingUntil=0,uiTime=0;

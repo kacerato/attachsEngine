@@ -330,6 +330,7 @@ void EditorSession::loadEditorPreferences() {
   state_.pickerAdvanced=false;
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
   state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
+  state_.hiddenLayers=0;state_.unpickableLayers=0;appearanceChanged_=true;
   std::filesystem::path file;
   if(files_.rootPath().empty() ||
      !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
@@ -345,6 +346,7 @@ void EditorSession::loadEditorPreferences() {
     if(!(fields>>key)) continue;
     if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
     else if(key=="undo_order" && fields>>value) state_.undoNewestFirst=value!="oldest";
+    else if(key=="scene_layers") {u32 hidden=0,locked=0;if(fields>>hidden>>locked) {state_.hiddenLayers=hidden;state_.unpickableLayers=locked;}}
     else if(key=="focused") {
       // Inspector focado aberto quando o projeto fechou (Unity os restaura).
       EditorEntityId entity=0;u64 component=0;std::string name;
@@ -364,6 +366,7 @@ void EditorSession::saveEditorPreferences() {
   std::ostringstream out;
   out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
   out<<"undo_order "<<(state_.undoNewestFirst?"newest":"oldest")<<'\n';
+  out<<"scene_layers "<<state_.hiddenLayers<<' '<<state_.unpickableLayers<<'\n';
   for(u32 i=0;i<state_.focusedInspectors.size();++i)
     out<<"focused "<<state_.focusedInspectors[i].entity<<' '<<state_.focusedInspectors[i].component<<' '
        <<std::quoted(i<focusedNames_.size()?focusedNames_[i]:std::string())<<'\n';
@@ -527,7 +530,8 @@ void EditorSession::buildPickCandidates() {
     // Missing resources have no viewport silhouette. Keep their document row
     // available for repair, but never invent an invisible pick sphere.
     if(!mapScene_.bounds(document_, id, candidate.center, candidate.radius)) continue;
-    candidate.selectable = entity->visible && entity->active;
+    candidate.selectable = entity->visible && entity->active &&
+        !(entity->layer<32 && ((state_.hiddenLayers|state_.unpickableLayers)&(1u<<entity->layer)));
     for(auto parent=document_.find(entity->parent);parent;parent=document_.find(parent->parent))
       candidate.selectable &= parent->visible && parent->active;
     mapScene_.pickGeometry(document_,id,candidate);
@@ -3801,7 +3805,34 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       routing.target == UiPointerTarget::Widget &&
       routing.widgetId < widgetId(EditorWidget::GizmoAxisBase)) return true;
   if (routing.tapped && routing.widgetId == widgetId(EditorWidget::ViewsOpen)) {
-    state_.viewsPanel=!state_.viewsPanel;return true;
+    state_.viewsPanel=!state_.viewsPanel;state_.sceneLayersPanel=false;return true;
+  }
+  if (routing.tapped && routing.widgetId == widgetId(EditorWidget::SceneLayersOpen)) {
+    state_.sceneLayersPanel=!state_.sceneLayersPanel;state_.viewsPanel=false;state_.sceneLayersPage=0;return true;
+  }
+  if (state_.sceneLayersPanel && routing.tapped) {
+    const u32 key=routing.widgetId;
+    const u32 hidden=state_.hiddenLayers,locked=state_.unpickableLayers;
+    if(key==widgetId(EditorWidget::SceneLayersClose)) {state_.sceneLayersPanel=false;return true;}
+    if(key==widgetId(EditorWidget::SceneLayersPrevious)) {if(state_.sceneLayersPage) --state_.sceneLayersPage;return true;}
+    if(key==widgetId(EditorWidget::SceneLayersNext)) {++state_.sceneLayersPage;return true;}
+    if(key==widgetId(EditorWidget::SceneLayersShowAll)) state_.hiddenLayers=0;
+    else if(key==widgetId(EditorWidget::SceneLayersHideAll)) state_.hiddenLayers=0xffffffffu;
+    else if(key==widgetId(EditorWidget::SceneLayersPickAll)) state_.unpickableLayers=0;
+    else if(key>=widgetId(EditorWidget::SceneLayerVisibleBase) && key<widgetId(EditorWidget::SceneLayerVisibleBase)+32)
+      state_.hiddenLayers^=1u<<(key-widgetId(EditorWidget::SceneLayerVisibleBase));
+    else if(key>=widgetId(EditorWidget::SceneLayerPickBase) && key<widgetId(EditorWidget::SceneLayerPickBase)+32)
+      state_.unpickableLayers^=1u<<(key-widgetId(EditorWidget::SceneLayerPickBase));
+    if(hidden!=state_.hiddenLayers || locked!=state_.unpickableLayers) {
+      // O desenho muda sem a cena mudar de revisão: o shell republica.
+      if(hidden!=state_.hiddenLayers) appearanceChanged_=true;
+      // O que ficou escondido ou sem seleção sai da seleção da vista.
+      if(const auto *selected=document_.find(state_.selection);
+         selected && selected->layer<32 && ((state_.hiddenLayers|state_.unpickableLayers)&(1u<<selected->layer)) &&
+         !((hidden|locked)&(1u<<selected->layer))) state_.status="O selecionado está numa camada escondida ou sem seleção";
+      saveEditorPreferences();
+      return true;
+    }
   }
   if (state_.viewsPanel && routing.tapped) {
     const auto key=routing.widgetId;

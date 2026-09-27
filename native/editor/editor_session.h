@@ -865,6 +865,10 @@ public:
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
     if(!mapScene_.extract(document_, out)) return false;
     applyLodGroups(document_, out);
+    // Camadas escondidas na vista da cena (só o editor; o Play extrai do mundo).
+    if(state_.hiddenLayers) for(auto &draw:out)
+      if(const auto *entity=document_.find(static_cast<EditorEntityId>(draw.objectId));
+         entity && entity->layer<32 && (state_.hiddenLayers&(1u<<entity->layer))) draw.visible=false;
     return true;
   }
   // A vista que escolhe os níveis dos LOD Groups: a câmera da cena no Play,

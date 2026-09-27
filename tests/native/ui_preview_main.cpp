@@ -325,6 +325,18 @@ int main(int argc, char **argv) {
     state.inspectorDebug=std::string(argv[4])=="inspector-debug";
     state.pingEntity=locked;state.pingUntil=1;state.uiTime=0;
   }
+  // Camadas na vista: duas nomeadas, uma escondida, uma fora da seleção.
+  if(argc>4 && std::string(argv[4])=="scene-layers") {
+    auto layers=document.layers();layers.setName(3,"Cenário");layers.setName(5,"Interface");layers.setName(8,"Gatilhos");
+    document.setLayers(layers);
+    for(u32 i=0;i<3;++i) {
+      const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,i?"Árvore":"Casa");
+      auto value=*document.find(id);value.layer=3;document.applyEntityValues(id,value);
+    }
+    const auto trigger=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Zona de porta");
+    auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
+    state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
+  }
   // Histórico de Desfazer com passos aplicados e desfeitos.
   if(argc>4 && std::string(argv[4]).starts_with("undo-history")) {
     state.undoHistory=true;state.undoNewestFirst=std::string(argv[4])!="undo-history-oldest";
