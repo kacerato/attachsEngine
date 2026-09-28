@@ -559,6 +559,7 @@ bool EditorSession::setProjectDirectory(const char *path) {
   state_.folderImportRequested=false;
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   if(!files_.setRoot(path)) return false;
+  environmentBatchRequest_.clear();multiEnvironments_.clear();multiProfiles_.clear();
   environmentMaps_.clear();
   state_.presetPanel=false;state_.presetNaming=false;state_.presetChoices.clear();componentPresets_=EditorComponentPresets{};
   state_.codeRecoveryPending=code_.hasRecovery(files_);
@@ -2189,8 +2190,8 @@ void EditorSession::refreshMultiAsset() {
   std::erase_if(paths,[&](const std::string &path){return !files_.exists(path);});
   if(state_.selectedFile.empty()) paths.clear();
   else if(!state_.isFileSelected(state_.selectedFile)) paths={state_.selectedFile};
-  if(paths.size()<2) {view={};multiTextures_.clear();multiAssetGroups_.clear();multiMaterials_.clear();state_.materialMixed.clear();return;}
-  multiMaterials_.clear();state_.materialMixed.clear();
+  if(paths.size()<2) {view={};multiProfiles_.clear();multiEnvironments_.clear();state_.environmentMixed=0;state_.environmentPending=0;multiTextures_.clear();multiAssetGroups_.clear();multiMaterials_.clear();state_.materialMixed.clear();return;}
+  multiMaterials_.clear();multiProfiles_.clear();state_.materialMixed.clear();state_.environmentMixed=0;state_.environmentPending=0;
   view.items.clear();view.groups.clear();multiAssetGroups_.clear();
   std::array<u32,std::size(fileKinds)> counts{};
   std::vector<resources::AssetGuid> textures;
@@ -2220,6 +2221,8 @@ void EditorSession::refreshMultiAsset() {
   }
   const u32 count=static_cast<u32>(paths.size());
   view.fields={};view.mixed=0;view.pending=0;
+  if(kinds==1 && (only==3 || only==4)) {multiTextures_.clear();refreshMultiEnvironmentAssets(only==4);return;}
+  multiEnvironments_.clear();
   if(kinds>1) {
     view.kind=EditorScreenState::MultiAssetView::Kind::Mixed;
     view.title=std::to_string(count)+" recursos";
@@ -2342,6 +2345,8 @@ bool EditorSession::applySetValue(u32 row) {
     else state_.status="Valor copiado para os materiais selecionados";
     return true;
   }
+  if(menu.key.starts_with("asset.hdri.")) return applyEnvironmentValue(row);
+  if(menu.key.starts_with("asset.profile.")) return applyProfileValue(row);
   const auto *source=document_.find(menu.rows[row].first);if(!source) return false;
   const u32 depth=history_.undoDepth();u32 applied=0;
   for(const auto id:std::vector<EditorEntityId>(state_.selectionSet)) {
@@ -2712,7 +2717,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
-  if(multiMaterialEditing_ && state_.materialInspector.valid() && routing.tapped &&
+  if(multiAssetEditing_ && state_.materialInspector.valid() && routing.tapped &&
      routing.heldSeconds>=ui::kUiLongPressSeconds && state_.setValueMenu.key.empty()) {
     const auto field=materialWidgetField(routing.widgetId,state_.textureBinding);
     if(!field.empty() && state_.materialMixedHas(field)) {
@@ -2732,6 +2737,19 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
   }
 
+  if(multiAssetEditing_ && state_.profileInspector.valid() && routing.tapped &&
+     routing.heldSeconds>=ui::kUiLongPressSeconds && state_.setValueMenu.key.empty() &&
+     routing.widgetId>=widgetId(EditorWidget::ProfileRowBase) &&
+     routing.widgetId<widgetId(EditorWidget::ProfileRowBase)+state_.profileRows.size())
+    if(showProfileValueMenu(routing.widgetId-widgetId(EditorWidget::ProfileRowBase))) return true;
+
+  if(multiAssetEditing_ && state_.environmentInspector.valid() && routing.tapped &&
+     routing.heldSeconds>=ui::kUiLongPressSeconds && state_.setValueMenu.key.empty()) {
+    const u32 key=routing.widgetId;
+    const bool down=key>=widgetId(EditorWidget::EnvironmentRecipeDownBase) && key<widgetId(EditorWidget::EnvironmentRecipeDownBase)+5;
+    const bool up=key>=widgetId(EditorWidget::EnvironmentRecipeUpBase) && key<widgetId(EditorWidget::EnvironmentRecipeUpBase)+5;
+    if((down||up) && showEnvironmentValueMenu(key-widgetId(down?EditorWidget::EnvironmentRecipeDownBase:EditorWidget::EnvironmentRecipeUpBase))) return true;
+  }
   // "Definir como o valor de…": modal pequeno com um objeto por linha.
   if(!state_.setValueMenu.key.empty() && routing.tapped) {
     const u32 key=routing.widgetId;
@@ -2881,6 +2899,10 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   // continua respondendo enquanto a prévia está aberta.
   if(state_.importPanel && routing.tapped) {
     const auto is=[&routing](EditorWidget widget) {return routing.widgetId==widgetId(widget);};
+    if(state_.importBatch) {
+      if(is(EditorWidget::ImportCancel)) {state_.importCancel=true;closeImportPreview();}
+      return true;
+    }
     if(state_.importTexture) {
       if(is(EditorWidget::ImportCancel)) {state_.importCancel=true;closeImportPreview();}
       else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
@@ -3131,6 +3153,21 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(state_.editingCode) placeCodeCaret(routing.position);
     }
     return true;
+  }
+  if(routing.dragging && state_.texturePicker) {
+    const u32 key=routing.widgetId;
+    const bool control=key==widgetId(EditorWidget::TexturePickerScroll) || key==widgetId(EditorWidget::TextureUseInherited) ||
+        key==widgetId(EditorWidget::TextureUseNone) || key==widgetId(EditorWidget::TextureSamplingUv) ||
+        key==widgetId(EditorWidget::TextureSamplingWrap) || key==widgetId(EditorWidget::TextureSamplingFilter) ||
+        key==widgetId(EditorWidget::TextureUvReset) ||
+        (key>=widgetId(EditorWidget::TextureUvStepBase) && key<widgetId(EditorWidget::TextureUvStepBase)+10) ||
+        (key>=widgetId(EditorWidget::TextureChoiceBase) && key<widgetId(EditorWidget::TextureChoiceBase)+state_.projectTextureNames.size()) ||
+        (key>=widgetId(EditorWidget::TextureViewBase) && key<widgetId(EditorWidget::TextureViewBase)+state_.projectTextureNames.size());
+    if(control) {
+      const u32 scope=previewSecondary_?1u:0u;
+      const float limit=std::max(0.f,layout_.texturePickerContent[scope]-layout_.texturePickerWindow[scope]);
+      state_.texturePickerScroll=std::clamp(state_.texturePickerScroll-routing.stepDelta.y,0.f,limit);return true;
+    }
   }
   // Inspector de vários recursos: arrastar em qualquer ponto dele rola.
   if(routing.dragging && state_.multiAsset.items.size()>1 && routing.widgetId>=widgetId(EditorWidget::MultiAssetApply) &&
@@ -3717,7 +3754,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     // Perfil de ambiente do projeto em Propriedades.
     if(state_.profileInspector.valid()) {
-      if(key==widgetId(EditorWidget::ProfileInspectorClose)) {state_.profileInspector={};state_.selectedFile.clear();return true;}
+      if(key==widgetId(EditorWidget::ProfileInspectorClose)) {state_.profileInspector={};state_.selectedFile.clear();state_.selectedFiles.clear();return true;}
       if(key==widgetId(EditorWidget::ProfileInspectorUses)) {
         const auto &users=state_.profileObjects;
         if(users.empty()) {state_.status="Nenhum componente Ambiente da cena usa este perfil";return true;}
@@ -3734,7 +3771,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         if(!row.editable) {state_.status="Sem consumidor neste aparelho ou dependente de outra opção";return true;}
         using Kind=EditorScreenState::ProfileRow::Kind;
         std::string diagnostic;bool applied=false;
-        if(row.kind==Kind::Boolean) applied=editProfileProperty(row,!row.on,nullptr,nullptr,diagnostic);
+        if(row.kind==Kind::Boolean) applied=editProfileProperty(row,row.mixed?true:!row.on,nullptr,nullptr,diagnostic);
         else if(row.kind==Kind::Enum) {
           for(const auto &p:scene::Environment::descriptor.enums) if(p.id==row.id) {
             const auto *profile=findEnvironmentProfile(state_.profileInspector);
@@ -3766,7 +3803,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     // Mapa HDRI do projeto em Propriedades.
     if(state_.environmentInspector.valid()) {
       auto &draft=state_.environmentDraft;
-      if(key==widgetId(EditorWidget::EnvironmentInspectorClose)) {state_.environmentInspector={};state_.selectedFile.clear();return true;}
+      if(key==widgetId(EditorWidget::EnvironmentInspectorClose)) {state_.environmentInspector={};state_.selectedFile.clear();state_.selectedFiles.clear();return true;}
       if(key==widgetId(EditorWidget::EnvironmentExposureDown) || key==widgetId(EditorWidget::EnvironmentExposureUp)) {
         state_.environmentExposure=std::clamp(state_.environmentExposure+(key==widgetId(EditorWidget::EnvironmentExposureUp)?.5f:-.5f),-6.0f,6.0f);
         writeEnvironmentPreview();return true;
@@ -3784,16 +3821,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       const bool up=key>=widgetId(EditorWidget::EnvironmentRecipeUpBase) && key<widgetId(EditorWidget::EnvironmentRecipeUpBase)+5;
       if(down || up) {
         const u32 row=key-widgetId(down?EditorWidget::EnvironmentRecipeDownBase:EditorWidget::EnvironmentRecipeUpBase);
-        u32 *fields[]{&draft.panoramaWidth,&draft.specularSize,&draft.specularSamples,&draft.brdfSize,&draft.brdfSamples};
-        const std::span<const u32> steps[]{resources::EnvironmentPanoramaSteps,resources::EnvironmentSpecularSizeSteps,
-            resources::EnvironmentSpecularSampleSteps,resources::EnvironmentBrdfSizeSteps,resources::EnvironmentBrdfSampleSteps};
-        const u32 next=resources::stepEnvironmentMapChoice(*fields[row],steps[row],up);
-        if(next==*fields[row]) state_.status=up?"Já no degrau mais alto":"Já no degrau mais baixo";
-        *fields[row]=next;
+        editEnvironmentRecipe(row,up);
         return true;
       }
-      if(key==widgetId(EditorWidget::EnvironmentRecipeRevert)) {draft=state_.environmentSaved;state_.status="Receita HDRI revertida";return true;}
+      if(key==widgetId(EditorWidget::EnvironmentRecipeRevert)) {revertEnvironmentRecipes();state_.status="Receita HDRI revertida";return true;}
       if(key==widgetId(EditorWidget::EnvironmentRecipeApply)) {
+        if(multiAssetEditing_ && multiEnvironments_.size()>1) {requestEnvironmentBatch();return true;}
         // O shell reimporta pela mesma trilha do botão Reimportar, com esta receita.
         environmentReimportPath_=state_.environmentInspectorPath;environmentReimportOverride_=draft;
         state_.status="Reimportando o HDRI com a receita nova";return true;
@@ -3827,7 +3860,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     // R4: textura por binding, no alcance em edição.
     if(key>=widgetId(EditorWidget::MaterialTextureBase) && key<widgetId(EditorWidget::MaterialTextureBase)+scene::MaterialTextureCount) {
       state_.textureBinding=key-widgetId(EditorWidget::MaterialTextureBase);
-      state_.texturePicker=true;state_.materialPicker=false;state_.meshPage=0;return true;
+      state_.texturePicker=true;state_.texturePickerScroll=0;state_.materialPicker=false;state_.meshPage=0;return true;
     }
     if(key==widgetId(EditorWidget::TexturePickerClose)) {state_.texturePicker=false;return true;}
     // R4: amostragem do binding aberto no seletor, no alcance em edição.
@@ -3982,7 +4015,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::MaterialOcclusionTexture)) {
       state_.textureBinding=scene::MaterialOcclusionTextureBinding;
-      state_.texturePicker=true;state_.materialPicker=false;state_.meshPage=0;return true;
+      state_.texturePicker=true;state_.texturePickerScroll=0;state_.materialPicker=false;state_.meshPage=0;return true;
     }
     const auto applyTexture=[&](const resources::AssetGuid &texture,const std::string &done) {
       std::string diagnostic;
@@ -9668,62 +9701,7 @@ bool EditorSession::writeEnvironmentProfile(const resources::EnvironmentProfile 
 
 bool EditorSession::commitEnvironmentProfile(const resources::EnvironmentProfile &candidate,
                                              std::string &diagnostic,bool recordHistory) {
-  diagnostic.clear();
-  if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição antes de alterar o perfil.";return false;}
-  auto found=std::find_if(environmentProfiles_.begin(),environmentProfiles_.end(),
-      [&](const auto &value){return value.guid==candidate.guid;});
-  const auto *record=assets_.find(candidate.guid);
-  if(!candidate.valid()||found==environmentProfiles_.end()||!record||
-     record->type!=resources::AssetType::EnvironmentProfile||
-     found->revision==std::numeric_limits<u32>::max()||candidate.revision!=found->revision+1) {
-    diagnostic="Perfil ou revisão indisponível; reabra o recurso.";return false;
-  }
-  const auto serialized=candidate.serialize();
-  const std::span<const u8> bytes{reinterpret_cast<const u8*>(serialized.data()),serialized.size()};
-  std::vector<resources::AssetGuid> dependencies;
-  if(candidate.values.environmentMap.valid()) {
-    const auto *map=assets_.find(candidate.values.environmentMap);
-    if(!map||map->type!=resources::AssetType::EnvironmentMap) {
-      diagnostic="O mapa HDRI do perfil não pertence ao projeto.";return false;
-    }
-    dependencies.push_back(candidate.values.environmentMap);
-  }
-  auto nextAssets=assets_;
-  if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,
-      record->importerParameters,record->derived,std::move(dependencies))) {
-    diagnostic="Registro recusou a atualização do perfil.";return false;
-  }
-  std::filesystem::path absolute;std::vector<u8> previous;
-  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),record->path,absolute)||
-     !EditorImportTransaction::read(absolute,previous)) {
-    diagnostic="Arquivo do perfil indisponível; nenhuma alteração aplicada.";return false;
-  }
-  resources::EnvironmentProfile onDisk;
-  if(!resources::EnvironmentProfile::deserialize(std::string(previous.begin(),previous.end()),onDisk)||
-     onDisk.serialize()!=found->serialize()) {
-    diagnostic="O perfil mudou no disco. Reabra o recurso antes de editar.";return false;
-  }
-  EditorImportTransaction transaction(files_.rootPath());
-  if(!transaction.begin(record->path,Sha256::hex(previous),diagnostic)) return false;
-  if(!transaction.commit(bytes,nextAssets.serialize())) {
-    diagnostic=transaction.rollback()?"Gravação recusada; perfil e registro anteriores restaurados.":
-        "Falha na recuperação; backups preservados no journal do projeto.";return false;
-  }
-  const auto before=*found;assets_=std::move(nextAssets);*found=candidate;assetRegistryDirty_=true;
-  synchronizeEnvironmentProfile(candidate);
-  if(recordHistory) {
-    const auto project=files_.rootPath();
-    history_.recordResource("Perfil de ambiente",[this,before,after=candidate,project](bool forward) {
-      const auto *current=findEnvironmentProfile(before.guid);
-      if(files_.rootPath()!=project||!current) {state_.status="Perfil do histórico indisponível neste projeto.";return false;}
-      auto expected=forward?before:after;expected.revision=current->revision;
-      if(expected.serialize()!=current->serialize()) {state_.status="O perfil mudou; histórico preservado sem sobrescrever.";return false;}
-      auto restored=forward?after:before;restored.revision=current->revision+1;
-      std::string error;if(!commitEnvironmentProfile(restored,error,false)) {state_.status=error;return false;}
-      state_.status=forward?"Perfil de ambiente refeito":"Perfil de ambiente desfeito";return true;
-    });
-  }
-  return true;
+  return commitProfileBatch({candidate},diagnostic,recordHistory);
 }
 
 void EditorSession::synchronizeEnvironmentProfile(const resources::EnvironmentProfile &profile) {
@@ -9802,7 +9780,7 @@ bool EditorSession::commitSharedMaterial(const resources::MaterialAsset &candida
   // Só uma ação do Inspector principal amplia o alvo. Replay e janelas focadas
   // continuam editando exatamente os recursos capturados pelo seu comando.
   std::vector<resources::MaterialAsset> candidates{candidate};
-  if(recordHistory && multiMaterialEditing_ && candidate.guid==state_.materialInspector && multiMaterials_.size()>1) {
+  if(recordHistory && multiAssetEditing_ && candidate.guid==state_.materialInspector && multiMaterials_.size()>1) {
     const auto *before=findMaterialAsset(candidate.guid);
     if(!before) {diagnostic="Material ativo indisponível.";return false;}
     for(const auto &guid:multiMaterials_) if(guid!=candidate.guid) {
@@ -9872,44 +9850,9 @@ bool EditorSession::commitMaterialBatch(const std::vector<resources::MaterialAss
     texts.push_back(text);hashes.push_back(Sha256::hex(previous));
   }
   if(after.empty()) return true;
-  // O journal já suporta arquivos companheiros. Usá-los para os outros
-  // materiais mantém arquivos + registro indivisíveis, inclusive após crash.
-  std::vector<EditorImportTransaction::Companion> companions;
-  const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
-  std::filesystem::path staging;
-  if(after.size()>1) {
-    const std::string relative=".astra/import-staging/material-edit-"+std::to_string(after.front().revision);
-    if(!EditorImportTransaction::safePath(root,relative,staging)) {diagnostic="Pasta de preparo inválida.";return false;}
-    std::error_code error;std::filesystem::create_directories(staging.parent_path(),error);
-    if(error || !std::filesystem::create_directory(staging,error)) {
-      diagnostic="Preparo de materiais pendente; reabra o projeto para recuperar.";return false;
-    }
-    for(usize i=1;i<after.size();++i) {
-      const std::string staged=relative+"/"+std::to_string(i)+".material";
-      if(!EditorImportTransaction::writeText(root/EditorImportTransaction::fromUtf8(staged),texts[i])) {
-        diagnostic="Não foi possível preparar os materiais; nada publicado.";
-        std::filesystem::remove_all(staging,error);return false;
-      }
-      companions.push_back({staged,paths[i]});
-    }
-  }
-  EditorImportTransaction transaction(files_.rootPath());
-  if(!transaction.begin(paths.front(),hashes.front(),diagnostic,{},companions)) {
-    // Um journal parcialmente preparado ainda pode precisar destes arquivos.
-    std::error_code error;
-    if(!staging.empty() && !std::filesystem::exists(root/".astra/import-transaction/journal",error) && !error)
-      std::filesystem::remove_all(staging,error);
-    return false;
-  }
-  const std::span<const u8> bytes{reinterpret_cast<const u8*>(texts.front().data()),texts.front().size()};
-  if(!transaction.commit(bytes,nextAssets.serialize())) {
-    const bool restored=transaction.rollback();
-    diagnostic=restored?"Gravação recusada; todos os materiais e o registro foram restaurados.":
-        "Falha na recuperação; backups preservados no journal do projeto.";
-    if(restored && !staging.empty()) {std::error_code error;std::filesystem::remove_all(staging,error);}
-    return false;
-  }
-  if(!staging.empty()) {std::error_code error;std::filesystem::remove_all(staging,error);}
+  std::vector<EditorImportTransaction::TextEdit> edits;
+  for(usize i=0;i<after.size();++i) edits.push_back({paths[i],hashes[i],texts[i]});
+  if(!EditorImportTransaction::publishTextBatch(files_.rootPath(),edits,nextAssets.serialize(),diagnostic)) return false;
   assets_=std::move(nextAssets);
   for(const auto &value:after) for(auto &material:materials_) if(material.guid==value.guid) {material=value;break;}
   assetRegistryDirty_=true;publishMaterialLibrary();
@@ -10162,7 +10105,8 @@ bool EditorSession::saveProjectImportProfile(const resources::ImportProfile &pro
   return writeProjectImportProfile(files_.rootPath(),resources::ImportProfileDefaultPath,profile);
 }
 
-void EditorSession::beginImportPreparation(std::string_view path) {
+void EditorSession::beginImportPreparation(std::string_view path,bool batch) {
+  state_.importBatch=batch;
   state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;
   state_.importSummary.clear();state_.importPath=std::string(path);state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importStatus="Preparando recurso…";state_.importTab=EditorScreenState::ImportTab::Summary;

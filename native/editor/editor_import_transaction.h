@@ -8,6 +8,7 @@
 #include <cstring>
 #include <span>
 #include <vector>
+#include <chrono>
 
 namespace ae::editor {
 // Single editor writer. A prepared journal restores every file after an
@@ -65,6 +66,51 @@ public:
   }
   static bool writeText(const std::filesystem::path &path,const std::string &text) {
     return write(path,{reinterpret_cast<const u8 *>(text.data()),text.size()});
+  }
+  struct TextEdit {std::string path,expectedHash,text;};
+  // Publicação de recursos autorais pequenos (materiais/perfis). O journal
+  // existente continua sendo o único dono do rollback e da recuperação.
+  static bool publishTextBatch(const std::string &project,const std::vector<TextEdit> &edits,
+                               const std::string &registry,std::string &diagnostic) {
+    if(edits.empty()) return true;
+    const auto root=fromUtf8(project);
+    for(usize i=0;i<edits.size();++i) {
+      std::filesystem::path path;std::vector<u8> bytes;
+      if(!safePath(root,edits[i].path,path)||!read(path,bytes)||Sha256::hex(bytes)!=edits[i].expectedHash) {
+        diagnostic="Recurso mudou no disco: "+edits[i].path;return false;
+      }
+      for(usize k=0;k<i;++k) if(edits[k].path==edits[i].path) {diagnostic="Recurso duplicado no lote.";return false;}
+    }
+    std::vector<Companion> companions;std::filesystem::path staging;std::error_code error;
+    if(edits.size()>1) {
+      const std::string relative=".astra/import-staging/resource-edit-"+
+          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+      if(!safePath(root,relative,staging)) {diagnostic="Preparo fora do projeto.";return false;}
+      std::filesystem::create_directories(staging.parent_path(),error);
+      if(error||!std::filesystem::create_directory(staging,error)) {diagnostic="Não foi possível preparar os recursos.";return false;}
+      for(usize i=1;i<edits.size();++i) {
+        const std::string staged=relative+"/"+std::to_string(i)+".resource";
+        if(!writeText(root/fromUtf8(staged),edits[i].text)) {
+          diagnostic="Falha ao preparar os recursos; nada publicado.";std::filesystem::remove_all(staging,error);return false;
+        }
+        companions.push_back({staged,edits[i].path});
+      }
+    }
+    EditorImportTransaction transaction(project);
+    if(!transaction.begin(edits.front().path,edits.front().expectedHash,diagnostic,{},companions)) {
+      if(!staging.empty() && !std::filesystem::exists(root/".astra/import-transaction/journal",error) && !error)
+        std::filesystem::remove_all(staging,error);
+      return false;
+    }
+    const auto &text=edits.front().text;
+    if(!transaction.commit({reinterpret_cast<const u8*>(text.data()),text.size()},registry)) {
+      const bool restored=transaction.rollback();
+      diagnostic=restored?"Gravação recusada; recursos e registro restaurados.":"Recuperação pendente; backups preservados no journal.";
+      if(restored && !staging.empty()) std::filesystem::remove_all(staging,error);
+      return false;
+    }
+    if(!staging.empty()) std::filesystem::remove_all(staging,error);
+    return true;
   }
   static bool recover(const std::string &root,std::string &diagnostic) {
     EditorImportTransaction transaction(root);

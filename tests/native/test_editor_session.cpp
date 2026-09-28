@@ -3761,6 +3761,21 @@ AE_TEST(project_hdri_opens_in_properties_with_preview_uses_and_recipe) {
   AE_EXPECT_EQ(state.environmentDraft.panoramaWidth,256u,"reverter");
   tapWidget(f,widgetId(EditorWidget::EnvironmentInspectorClose));
   AE_EXPECT_TRUE(!state.environmentInspector.valid(),"voltar");
+  // Rascunho conjunto não pode absorver uma base reimportada enquanto estava aberto.
+  AE_EXPECT_TRUE(f.session.commitEnvironmentMap("Ambientes/outro.hdr",source,{},map,settings,diagnostic),diagnostic.c_str());
+  f.session.openProjectFile(file);
+  auto &mutableState=const_cast<EditorScreenState&>(state);
+  mutableState.selectedFiles={"Ambientes/estudio.hdr","Ambientes/outro.hdr"};mutableState.filesMultiSelect=true;f.session.update();
+  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeUpBase));
+  auto externalSettings=settings;externalSettings.brdfSamples=256;
+  auto externalMap=std::make_shared<renderer::EnvironmentMapResource>(*map);
+  externalMap->cacheKey=resources::environmentMapCacheKey(map->sourceHash,externalSettings,{});
+  AE_EXPECT_TRUE(f.session.commitEnvironmentMap(file.relativePath,source,map->sourceHash,externalMap,externalSettings,diagnostic),diagnostic.c_str());
+  f.session.update();tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeApply));
+  AE_EXPECT_TRUE(f.session.takeEnvironmentBatchRequest().empty(),"base alterada recusa publicação de rascunho antigo");
+  AE_EXPECT_EQ(state.environmentSaved.brdfSamples,128u,"conserva a base do rascunho para detectar conflito");
+  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeRevert));f.session.update();
+  AE_EXPECT_EQ(state.environmentDraft.brdfSamples,256u,"reverter adota a receita realmente salva");
 }
 
 // Regressão (achada no aparelho): o interruptor no cabeçalho do cartão tem de
@@ -5204,11 +5219,19 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   AE_EXPECT_TRUE(std::abs(read(a,1)-read(b,1))<1e-5f,"valor do ativo copiado");
   AE_EXPECT_TRUE(history.undo(doc),"desfazer cópia");session.update();
   // Zerar UV quando o ativo já está zerado ainda zera o outro, em um passo.
-  // O seletor existente exibe a transformação completa quando há altura.
-  session.setSurface({0,0,400,740},{});session.update();
+  // O corpo rola em landscape curto sem esconder o cabeçalho.
+  session.setSurface({0,0,853,394},{});session.update();
   while(locateWidget(session,widgetId(EditorWidget::PropertyPrevious)).x>=0) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
   tapWidget(f,widgetId(EditorWidget::MaterialTextureBase));
   AE_EXPECT_TRUE(state.materialMixedHas("uv0.offset0"),"diferença da amostragem identificada");
+  for(u32 drag=0;drag<5 && locateWidget(session,widgetId(EditorWidget::TextureUvReset)).x<0;++drag) {
+    auto start=locateWidget(session,widgetId(EditorWidget::TexturePickerScroll));
+    AE_EXPECT_TRUE(start.x>=0,"corpo rolável roteado");
+    start.y+=30;const UiPoint end{start.x,start.y-90};
+    f.down(142,start);f.move(142,end);f.up(142,end);session.update();
+  }
+  AE_EXPECT_TRUE(state.texturePickerScroll>0,"rolagem real do seletor");
+  AE_EXPECT_TRUE(locateWidget(session,widgetId(EditorWidget::TexturePickerClose)).x>=0,"voltar continua acessível");
   const auto uvDepth=history.undoDepth();tapWidget(f,widgetId(EditorWidget::TextureUvReset));
   AE_EXPECT_TRUE(session.findMaterialAsset(b)->sampling[0].offset[0]==0 && session.findMaterialAsset(b)->sampling[0].scale[1]==1,"reset explícito em todos");
   AE_EXPECT_EQ(history.undoDepth(),uvDepth+1,"reset em um passo");
@@ -5221,4 +5244,76 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   }
   tapWidget(f,widgetId(EditorWidget::MaterialInspectorClose));session.update();
   AE_EXPECT_TRUE(!state.materialInspector.valid() && state.selectedFiles.empty(),"fechar não reabre o conjunto no quadro seguinte");
+}
+AE_TEST(multiple_environment_profiles_preserve_other_fields_and_synchronize_their_users) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &session=f.session;auto &doc=session.document();auto &history=session.history();
+  const auto root=fs::temp_directory_path()/("astra-profile-batch-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(root);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  AE_EXPECT_TRUE(session.setProjectDirectory(root.string().c_str()),"projeto");
+  std::string diagnostic;resources::AssetGuid guids[2];EditorEntityId entities[2];
+  for(u32 i=0;i<2;++i) {
+    entities[i]=doc.createEntity(doc.root(),EditorEntityKind::Folder,i?"Noite":"Dia");
+    auto entity=*doc.find(entities[i]);
+    auto *environment=static_cast<scene::Environment*>(entity.components.add(scene::Environment::descriptor));
+    environment->values.fog=true;environment->values.fogColor[0]=i?.8f:.2f;
+    environment->values.fogColor[1]=.3f;environment->values.fogColor[2]=.4f;
+    environment->values.exposureEv=static_cast<float>(i);environment->weight=.6f;
+    const auto instance=environment->instanceId();
+    AE_EXPECT_TRUE(doc.applyEntityValues(entities[i],entity),"ambiente real");
+    guids[i]=session.createEnvironmentProfile(entities[i],instance,diagnostic);
+    AE_EXPECT_TRUE(guids[i].valid(),diagnostic.c_str());
+  }
+  const auto pathA=session.assets().find(guids[0])->path,pathB=session.assets().find(guids[1])->path;
+  EditorFileEntry file;file.relativePath=pathA;file.name="Dia";session.openProjectFile(file);
+  auto &state=const_cast<EditorScreenState&>(session.screen());state.selectedFiles={pathA,pathB};state.filesMultiSelect=true;
+  session.update();history.clear();
+  AE_EXPECT_TRUE(state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::Profiles,"Inspector conjunto de perfis");
+  u32 fogGroup=0;for(u32 i=0;i<state.profileGroups.size();++i) if(state.profileGroups[i]=="Neblina") fogGroup=i;
+  for(u32 i=0;i<16 && state.profileGroup!=fogGroup;++i)
+    tapWidget(f,widgetId(EditorWidget::ProfileGroupBase)+(state.profileGroup<fogGroup?state.profileGroup+1:state.profileGroup-1));
+  const auto colorRow=[&]() {for(u32 i=0;i<state.profileRows.size();++i) if(state.profileRows[i].id=="fog_color") return i;return ~0u;};
+  AE_EXPECT_TRUE(colorRow()!=~0u && state.profileRows[colorRow()].mixed,"cor mista identificada");
+  const auto edit=[&](const char *text) {
+    revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+colorRow());tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+colorRow());
+    const bool result=session.completeTextEdit(session.pendingTextEdit(),text,true);session.update();return result;
+  };
+  AE_EXPECT_TRUE(edit("0.2 0.3 0.4"),"atribuir o valor do ativo a todos");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um gesto um passo");
+  for(u32 i=0;i<2;++i) {
+    const auto *profile=session.findEnvironmentProfile(guids[i]);
+    AE_EXPECT_TRUE(std::abs(profile->values.fogColor[0]-.2f)<1e-5f,"perfil recebe propriedade");
+    AE_EXPECT_EQ(profile->values.exposureEv,static_cast<float>(i),"exposição individual preservada");
+    const auto *environment=static_cast<const scene::Environment*>(doc.find(entities[i])->components.find(scene::Environment::descriptor));
+    AE_EXPECT_TRUE(std::abs(environment->values.fogColor[0]-.2f)<1e-5f && std::abs(environment->weight-.6f)<1e-5f,"consumidor sincronizado sem alterar volume");
+  }
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer");session.update();
+  AE_EXPECT_TRUE(state.profileRows[colorRow()].mixed,"desfazer restaura diferença");
+  revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+colorRow());
+  const auto point=locateWidget(session,widgetId(EditorWidget::ProfileRowBase)+colorRow());
+  f.down(190,point);session.handlePointer({190,UiPointerPhase::Up,point,1.0});session.update();
+  AE_EXPECT_TRUE(state.setValueMenu.key.starts_with("asset.profile."),"menu de copiar valor misto");
+  tapWidget(f,widgetId(EditorWidget::SetValueRowBase));
+  AE_EXPECT_TRUE(std::abs(session.findEnvironmentProfile(guids[1])->values.fogColor[0]-.2f)<1e-5f,"copia só a propriedade");
+  AE_EXPECT_TRUE(edit("0.5 0.6 0.7"),"altera ambos com journal");
+  const auto beforeA=session.findEnvironmentProfile(guids[0])->serialize(),beforeB=session.findEnvironmentProfile(guids[1])->serialize();
+  const auto registry=session.serializeAssets();const auto depth=history.undoDepth();
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(root/pathB,"conflito externo"),"conflito");
+  AE_EXPECT_TRUE(!edit("0.9 0.8 0.7"),"recusa antes de publicar primeiro perfil");
+  session.completeTextEdit(session.pendingTextEdit(),"",false);session.update();
+  AE_EXPECT_EQ(session.findEnvironmentProfile(guids[0])->serialize(),beforeA,"primeiro intacto");
+  AE_EXPECT_EQ(session.serializeAssets(),registry,"registro intacto");
+  AE_EXPECT_EQ(history.undoDepth(),depth,"sem histórico falso");
+  AE_EXPECT_TRUE(!history.undo(doc),"replay também recusa conflito");
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(root/pathB,beforeB),"restaura fixture");
+  AE_EXPECT_TRUE(history.undo(doc)&&history.redo(doc),"replay continua válido");
+  for(const auto guid:guids) {
+    std::vector<u8> bytes;resources::EnvironmentProfile saved;
+    AE_EXPECT_TRUE(EditorImportTransaction::read(root/session.assets().find(guid)->path,bytes),"perfil gravado");
+    AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(std::string(bytes.begin(),bytes.end()),saved),"perfil reabre");
+    AE_EXPECT_EQ(saved.serialize(),session.findEnvironmentProfile(guid)->serialize(),"arquivo reflete recurso vivo");
+  }
+  tapWidget(f,widgetId(EditorWidget::ProfileInspectorClose));session.update();
+  AE_EXPECT_TRUE(!state.profileInspector.valid()&&state.selectedFiles.empty(),"fechar encerra conjunto");
 }

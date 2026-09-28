@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
   // Perfil de ambiente em Propriedades.
-  if(argc>4 && std::string(argv[4])=="profile-asset") {
+  if(argc>4 && (std::string(argv[4])=="profile-asset" || std::string(argv[4])=="multi-profile")) {
     state.profileInspector=resources::assetGuidFromSeed("preview-profile");
     state.profileInspectorName="Tarde nublada";state.profileInspectorPath="Ambientes/Tarde nublada.environment";
     state.profileInspectorRevision=4;state.profileObjects={1,2};
@@ -352,18 +352,28 @@ int main(int argc, char **argv) {
     Row falloff;falloff.kind=Row::Kind::Number;falloff.label="Decaimento por altura";falloff.value="0.15 1/m";
     Row start;start.kind=Row::Kind::Number;start.label="Início";start.value="4 m";start.editable=false;
     state.profileRows={fog,color,density,falloff,start};
+    if(std::string(argv[4])=="multi-profile") {
+      state.multiAsset.kind=editor::EditorScreenState::MultiAssetView::Kind::Profiles;
+      state.multiAsset.title="2 perfis de ambiente";state.multiAsset.items.resize(2);
+      state.profileRows[1].mixed=true;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    }
   }
   // HDRI em Propriedades: a prévia vem de um gradiente de céu escrito no atlas.
-  if(argc>4 && std::string(argv[4])=="hdri-asset") {
+  if(argc>4 && (std::string(argv[4])=="hdri-asset" || std::string(argv[4])=="multi-hdri")) {
     state.environmentInspector=resources::assetGuidFromSeed("preview-hdri");
     state.environmentInspectorPath="Ambientes/estudio-noturno.hdr";
     state.environmentSaved.panoramaWidth=1024;state.environmentDraft=state.environmentSaved;state.environmentDraft.specularSamples=256;
     state.environmentDerived={"Panorama 1024×512 · 11 níveis","Reflexão GGX 256×256 · 9 níveis","BRDF 128×128 · 7 MB derivados · irradiância SH9"};
     state.environmentObjects={1,2};state.environmentProfiles=1;state.environmentExposure=.5f;
     state.environmentPreview={0,512,512,256};
+    if(std::string(argv[4])=="multi-hdri") {
+      state.multiAsset.kind=editor::EditorScreenState::MultiAssetView::Kind::EnvironmentMaps;
+      state.multiAsset.title="2 mapas HDRI";state.multiAsset.items.resize(2);state.environmentMixed=5;
+      state.environmentPending=2;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    }
   }
   // Material do projeto em Propriedades (a vista é a que a sessão prepara).
-  if(argc>4 && (std::string(argv[4])=="material-asset" || std::string(argv[4])=="multi-material")) {
+  if(argc>4 && (std::string(argv[4])=="material-asset" || std::string(argv[4])=="multi-material" || std::string(argv[4])=="material-uv")) {
     state.materialInspector=resources::assetGuidFromSeed("preview-material");state.materialShared=true;
     auto &view=state.materialSlotView;view.slots=1;view.shared=true;view.name="Madeira envernizada";
     state.materialInspectorPath="Materiais/Madeira envernizada.material";state.materialInspectorRevision=7;
@@ -371,6 +381,13 @@ int main(int argc, char **argv) {
       state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
       state.multiAsset.kind=editor::EditorScreenState::MultiAssetView::Kind::Materials;
       state.multiAsset.items.resize(3);state.materialMixed={"tex0","alpha","num0","uv0.offset0"};
+    }
+    if(std::string(argv[4])=="material-uv") {
+      state.texturePicker=true;state.texturePickerScroll=155;state.textureUvLabel="UV 0";
+      state.textureWrapLabel="Repetir";state.textureFilterLabel="Linear";
+      const char *labels[]{"Desl. U 0","Desl. V 0","Esc. U 1","Esc. V 1","Rot. 0°"};
+      for(u32 i=0;i<5;++i) state.textureUvLabels[i]=labels[i];
+      state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
     }
     state.materialInspectorSlots=5;state.materialInspectorObjects={1,2,3};
     view.textureNames[0]="madeira-cor.png";view.textureOrigins[0]="do material do projeto";

@@ -212,6 +212,7 @@ struct AndroidShell final {
   std::future<PreparedModel> importWork;
   std::optional<PreparedModel> importPreview;
   struct PreparedEnvironment {
+    bool batch=false;std::vector<ae::editor::EditorSession::PreparedEnvironmentEdit> edits;
     std::string root,path,expectedHash,diagnostic;
     ae::u64 epoch=0;
     std::vector<ae::u8> bytes;
@@ -2996,6 +2997,18 @@ void android_main(android_app *app) {
             launchTextureImport({},std::move(path),session.textureProfileFor(record->guid));
           else launchImport({},std::move(path));
         }
+        if(!importRequestTaken&&importSlotAvailable()) if(auto edits=session.takeEnvironmentBatchRequest();!edits.empty()) {
+          importRequestTaken=true;session.beginImportPreparation(std::to_string(edits.size())+" mapas HDRI",true);
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          const auto cancel=shell.importCancellation;const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
+          shell.environmentImportWork=std::async(std::launch::async,[edits=std::move(edits),root,epoch,cancel]() {
+            AndroidShell::PreparedEnvironment result;result.root=root;result.epoch=epoch;result.batch=true;
+            const ae::resources::EnvironmentMapCancel watch{
+                [](void *context){return static_cast<std::atomic<bool>*>(context)->load();},cancel.get()};
+            result.accepted=ae::editor::EditorSession::prepareEnvironmentBatch(root,edits,watch,result.edits,result.diagnostic);
+            return result;
+          });
+        }
         if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeEnvironmentReimportPath();!path.empty()) {
           importRequestTaken=true;
           const auto *record=session.assets().findByPath(path);
@@ -3190,6 +3203,10 @@ void android_main(android_app *app) {
           if(shell.importCancellation->load()||prepared.root!=session.codeProjectRoot()||
              prepared.epoch!=session.sceneVersion().epoch) {
             session.closeImportPreview();session.setImportStatus("Preparação HDRI descartada; projeto preservado.");
+          } else if(prepared.batch) {
+            session.closeImportPreview();std::string diagnostic=prepared.diagnostic;
+            if(!prepared.accepted || !session.commitEnvironmentBatch(prepared.edits,diagnostic))
+              session.setImportStatus("Nenhuma receita HDRI aplicada. "+diagnostic);
           } else if(!sameEnvironmentSettings(prepared.settings,session.environmentMapImportSettings())) {
             session.takeEnvironmentImportReprepare(environmentSettings);
             session.setImportStatus("Repreparando iluminação HDRI com as últimas opções…");

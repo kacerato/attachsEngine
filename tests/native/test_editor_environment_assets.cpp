@@ -107,3 +107,58 @@ AE_TEST(editor_environment_map_commit_reopen_and_component_binding_use_one_regis
   AE_EXPECT_TRUE(reopened.takeAppearanceChanged(),
                  "shell recebe invalidação única para republicar a biblioteca HDRI");
 }
+AE_TEST(environment_batch_prepares_real_hdris_and_publishes_or_replays_all_recipes_atomically) {
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("astra-hdri-batch-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(root);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  EditorSession session;std::string diagnostic;
+  AE_EXPECT_TRUE(session.setProjectDirectory(root.string().c_str()),"projeto isolado");
+  const std::string header="#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 4\n";
+  std::vector<u8> source(header.begin(),header.end());
+  for(u32 i=0;i<8;++i) source.insert(source.end(),{128,96,64,129});
+  resources::EnvironmentMapImportSettings settings;
+  settings.panoramaWidth=64;settings.specularSize=16;settings.brdfSize=16;settings.specularSamples=16;settings.brdfSamples=32;
+  renderer::SharedEnvironmentMap map;
+  AE_EXPECT_TRUE(resources::importRadianceEnvironmentMap(source,settings,{}, {},map,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.commitEnvironmentMap("HDRI/a.hdr",source,{},map,settings,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.commitEnvironmentMap("HDRI/b.hdr",source,{},map,settings,diagnostic),diagnostic.c_str());
+  session.history().clear();session.takeAppearanceChanged();
+  std::vector<EditorSession::EnvironmentBatchEdit> edits;
+  auto changed=settings;changed.specularSamples=32;
+  for(const auto &path:{"HDRI/a.hdr","HDRI/b.hdr"}) {
+    const auto before=*session.assets().findByPath(path);auto after=before;
+    after.importerParameters=resources::writeEnvironmentMapImportSettings(changed);edits.push_back({before,after});
+  }
+  const auto registry=session.serializeAssets();
+  std::vector<EditorSession::PreparedEnvironmentEdit> prepared;
+  AE_EXPECT_TRUE(!EditorSession::prepareEnvironmentBatch(root.string(),edits,{[](void*){return true;},nullptr},prepared,diagnostic),"cancelar antes de publicar");
+  AE_EXPECT_EQ(session.serializeAssets(),registry,"cancelamento não altera registro");
+  AE_EXPECT_TRUE(EditorSession::prepareEnvironmentBatch(root.string(),edits,{},prepared,diagnostic),diagnostic.c_str());
+  AE_EXPECT_EQ(prepared.size(),2u,"dois derivados reais prontos");
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(root/"HDRI/b.hdr","alterado externamente"),"conflito no segundo alvo");
+  AE_EXPECT_TRUE(!session.commitEnvironmentBatch(prepared,diagnostic),"nenhum alvo publicado se uma fonte mudou");
+  AE_EXPECT_EQ(session.serializeAssets(),registry,"primeiro alvo não publicado isoladamente");
+  AE_EXPECT_EQ(session.history().undoDepth(),0u,"falha não cria histórico");
+  AE_EXPECT_TRUE(EditorImportTransaction::write(root/"HDRI/b.hdr",source),"restaura fixture");
+  AE_EXPECT_TRUE(session.commitEnvironmentBatch(prepared,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.takeAppearanceChanged(),"renderer precisa republicar biblioteca de mapas");
+  AE_EXPECT_EQ(session.history().undoDepth(),1u,"uma operação para o lote");
+  for(const auto &edit:edits) AE_EXPECT_EQ(session.assets().find(edit.after.guid)->importerParameters,edit.after.importerParameters,"receita publicada");
+  for(const auto &entry:session.environmentMaps()) AE_EXPECT_TRUE(entry.second->cacheKey!=map->cacheKey,"biblioteca usa derivados novos");
+  const auto oldCache=root/resources::environmentMapCacheRelativePath(map->cacheKey);
+  std::vector<u8> cacheBytes;AE_EXPECT_TRUE(EditorImportTransaction::read(oldCache,cacheBytes),"cache anterior preservado");
+  AE_EXPECT_TRUE(fs::remove(oldCache),"simula limpeza do cache do histórico");
+  const auto published=session.serializeAssets();
+  AE_EXPECT_TRUE(!session.history().undo(session.document()),"cache ausente recusa desfazer inteiro");
+  AE_EXPECT_EQ(session.serializeAssets(),published,"recusa não altera registro");
+  AE_EXPECT_TRUE(EditorImportTransaction::write(oldCache,cacheBytes),"restaura cache");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"desfazer pelos caches");
+  AE_EXPECT_EQ(session.serializeAssets(),registry,"receitas anteriores exatas");
+  AE_EXPECT_TRUE(session.history().redo(session.document()),"refazer pelos caches");
+  AE_EXPECT_EQ(session.serializeAssets(),published,"receitas novas exatas");
+  std::vector<u8> disk;AE_EXPECT_TRUE(EditorImportTransaction::read(root/".astra/assets.astra",disk),"registro persistido");
+  EditorSession reopened;AE_EXPECT_TRUE(reopened.setProjectDirectory(root.string().c_str()),"reabre projeto");
+  AE_EXPECT_TRUE(reopened.loadAssets(std::string(disk.begin(),disk.end())),"reabre registro em disco");
+  AE_EXPECT_EQ(reopened.serializeAssets(),published,"reabrir conserva receitas");
+}

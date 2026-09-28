@@ -11,8 +11,193 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 
 namespace ae::editor {
+
+namespace {
+bool sameRecipe(const resources::EnvironmentMapImportSettings &a,const resources::EnvironmentMapImportSettings &b) {
+  return resources::writeEnvironmentMapImportSettings(a)==resources::writeEnvironmentMapImportSettings(b);
+}
+u32 &recipeField(resources::EnvironmentMapImportSettings &s,u32 field) {
+  u32 *values[]{&s.panoramaWidth,&s.specularSize,&s.specularSamples,&s.brdfSize,&s.brdfSamples};return *values[field];
+}
+bool sameEnvironmentRecord(const resources::AssetRecord &a,const resources::AssetRecord &b) {
+  return a.guid==b.guid && a.type==b.type && a.path==b.path && a.source==b.source &&
+      a.contentHash==b.contentHash && a.importerVersion==b.importerVersion && a.importerParameters==b.importerParameters;
+}
+}
+
+void EditorSession::refreshMultiEnvironmentAssets(bool profiles) {
+  auto &view=state_.multiAsset;
+  view.kind=profiles?EditorScreenState::MultiAssetView::Kind::Profiles:EditorScreenState::MultiAssetView::Kind::EnvironmentMaps;
+  view.title=std::to_string(view.items.size())+(profiles?" perfis de ambiente":" mapas HDRI");view.note.clear();
+  resources::AssetGuid active;std::vector<MultiEnvironmentDraft> drafts;
+  for(const auto &item:view.items) {
+    const auto *record=assets_.findByPath(item.path);
+    resources::EnvironmentMapImportSettings saved;
+    if(!record || (profiles?!findEnvironmentProfile(record->guid):
+        !resources::readEnvironmentMapImportSettings(record->importerParameters,saved))) {
+      view.kind=EditorScreenState::MultiAssetView::Kind::Other;view.note="Um recurso está ilegível. Abra-o sozinho para verificar.";
+      state_.environmentInspector={};state_.profileInspector={};multiProfiles_.clear();multiEnvironments_.clear();return;
+    }
+    if(item.active) active=record->guid;
+    if(profiles) multiProfiles_.push_back(record->guid);
+    else {
+      MultiEnvironmentDraft draft{record->guid,saved,saved};
+      // Rascunho conserva também a base: uma reimportação externa não pode
+      // virar a nova base silenciosamente e depois ser sobrescrita por Aplicar.
+      for(const auto &old:multiEnvironments_) if(old.guid==record->guid && !sameRecipe(old.saved,old.draft)) draft=old;
+      drafts.push_back(draft);
+    }
+  }
+  if(profiles) {
+    multiEnvironments_.clear();if(state_.profileInspector!=active) openProfileInspector(active);
+  } else {
+    multiEnvironments_=std::move(drafts);
+    if(state_.environmentInspector!=active) openEnvironmentInspector(active);
+    state_.profileInspector={};
+    for(const auto &entry:multiEnvironments_) {
+      if(entry.guid==active) {state_.environmentDraft=entry.draft;state_.environmentSaved=entry.saved;}
+      if(!sameRecipe(entry.draft,entry.saved)) ++state_.environmentPending;
+    }
+    for(u32 field=0;field<5;++field) for(auto &entry:multiEnvironments_)
+      if(recipeField(entry.draft,field)!=recipeField(state_.environmentDraft,field)) state_.environmentMixed|=static_cast<u8>(1u<<field);
+  }
+}
+
+void EditorSession::editEnvironmentRecipe(u32 field,bool up) {
+  if(field>=5) return;
+  const std::span<const u32> steps[]{resources::EnvironmentPanoramaSteps,resources::EnvironmentSpecularSizeSteps,
+      resources::EnvironmentSpecularSampleSteps,resources::EnvironmentBrdfSizeSteps,resources::EnvironmentBrdfSampleSteps};
+  auto &value=recipeField(state_.environmentDraft,field);value=resources::stepEnvironmentMapChoice(value,steps[field],up);
+  if(multiAssetEditing_) for(auto &entry:multiEnvironments_) recipeField(entry.draft,field)=value;
+}
+void EditorSession::revertEnvironmentRecipes() {
+  state_.environmentDraft=state_.environmentSaved;
+  if(multiAssetEditing_) for(auto &entry:multiEnvironments_) entry.draft=entry.saved;
+}
+bool EditorSession::showEnvironmentValueMenu(u32 field) {
+  if(field>=5 || !(state_.environmentMixed&(1u<<field))) return false;
+  auto &menu=state_.setValueMenu;menu.key="asset.hdri."+std::to_string(field);menu.label="Receita HDRI";menu.rows.clear();
+  for(u32 i=0;i<multiEnvironments_.size();++i) {
+    const auto *record=assets_.find(multiEnvironments_[i].guid);
+    if(record) menu.rows.push_back({i,record->path+" · "+std::to_string(recipeField(multiEnvironments_[i].draft,field))});
+  }
+  return true;
+}
+bool EditorSession::applyEnvironmentValue(u32 row) {
+  const auto &menu=state_.setValueMenu;const auto field=static_cast<u32>(std::stoul(menu.key.substr(11)));
+  if(field>=5 || row>=menu.rows.size() || menu.rows[row].first>=multiEnvironments_.size()) return false;
+  const u32 value=recipeField(multiEnvironments_[menu.rows[row].first].draft,field);
+  for(auto &entry:multiEnvironments_) recipeField(entry.draft,field)=value;
+  recipeField(state_.environmentDraft,field)=value;state_.status="Valor copiado; Aplicar prepara os mapas selecionados";return true;
+}
+bool EditorSession::requestEnvironmentBatch() {
+  if(isPlaying() || history_.isOpen() || !environmentBatchRequest_.empty()) return false;
+  std::vector<EnvironmentBatchEdit> edits;bool changed=false;
+  for(const auto &draft:multiEnvironments_) {
+    changed|=!sameRecipe(draft.saved,draft.draft);
+    const auto *record=assets_.find(draft.guid);resources::EnvironmentMapImportSettings saved;
+    if(!record || !resources::readEnvironmentMapImportSettings(record->importerParameters,saved) || !sameRecipe(saved,draft.saved)) {
+      state_.status="Receita mudou; reabra a seleção antes de aplicar.";return false;
+    }
+    auto after=*record;after.importerParameters=resources::writeEnvironmentMapImportSettings(draft.draft);
+    after.importerVersion=resources::EnvironmentMapImporterRevision;edits.push_back({*record,std::move(after)});
+  }
+  if(!changed) return true;
+  environmentBatchRequest_=std::move(edits);
+  state_.status="Preparando receitas HDRI; nenhuma será publicada até todas ficarem prontas";return true;
+}
+
+bool EditorSession::prepareEnvironmentBatch(const std::string &project,const std::vector<EnvironmentBatchEdit> &edits,
+    resources::EnvironmentMapCancel cancel,std::vector<PreparedEnvironmentEdit> &prepared,std::string &diagnostic,bool allowImport) {
+  prepared.clear();diagnostic.clear();const auto root=EditorImportTransaction::fromUtf8(project);
+  const resources::EnvironmentMapImportLimits limits;u64 total=0;
+  for(const auto &edit:edits) {
+    if(cancel.cancelled()) {diagnostic="Preparação cancelada.";return false;}
+    resources::EnvironmentMapImportSettings before,after;
+    if(edit.before.guid!=edit.after.guid || edit.before.path!=edit.after.path || edit.before.contentHash!=edit.after.contentHash ||
+       edit.before.type!=resources::AssetType::EnvironmentMap || edit.after.type!=resources::AssetType::EnvironmentMap ||
+       !resources::readEnvironmentMapImportSettings(edit.before.importerParameters,before) ||
+       !resources::readEnvironmentMapImportSettings(edit.after.importerParameters,after)) {diagnostic="Receita HDRI inválida.";return false;}
+    std::filesystem::path path;std::vector<u8> source;
+    if(!EditorImportTransaction::safePath(root,edit.before.path,path)||!EditorImportTransaction::read(path,source,limits.maximumSourceBytes)||
+       Sha256::hex(source)!=edit.before.contentHash) {diagnostic="Fonte HDRI mudou: "+edit.before.path;return false;}
+    const auto load=[&](const resources::EnvironmentMapImportSettings &settings,renderer::SharedEnvironmentMap &map) {
+      const auto key=resources::environmentMapCacheKey(edit.before.contentHash,settings,limits);
+      std::filesystem::path cache;std::vector<u8> bytes;
+      if(!EditorImportTransaction::safePath(root,resources::environmentMapCacheRelativePath(key),cache)) return false;
+      if(EditorImportTransaction::read(cache,bytes) && resources::readEnvironmentMapCache(bytes,key,limits,map)) return true;
+      if(!allowImport) {diagnostic="Cache do histórico indisponível; nenhuma receita alterada.";return false;}
+      if(!resources::importRadianceEnvironmentMap(source,settings,limits,cancel,map,diagnostic)||!resources::writeEnvironmentMapCache(*map,bytes)) return false;
+      std::error_code error;std::filesystem::create_directories(cache.parent_path(),error);
+      if(error || !EditorImportTransaction::write(cache,bytes)) {diagnostic="Não foi possível preservar o cache HDRI.";return false;}
+      return true;
+    };
+    // Preserve o derivado anterior no cache antes de preparar o novo. O histórico
+    // guarda receitas e hashes, não dezenas de cópias de panoramas na memória.
+    renderer::SharedEnvironmentMap map;
+    if(allowImport && !load(before,map)) return false;
+    map.reset();if(!load(after,map)) return false;
+    total+=(map->panorama.texels.size()+map->specular.texels.size()+map->brdf.texels.size())*sizeof(u16);
+    if(total>limits.maximumOutputBytes) {diagnostic="O lote HDRI excede 128 MB de derivados; selecione menos mapas.";return false;}
+    prepared.push_back({edit,std::move(map)});
+  }
+  if(cancel.cancelled()) {diagnostic="Preparação cancelada.";return false;}
+  return true;
+}
+
+bool EditorSession::commitEnvironmentBatch(const std::vector<PreparedEnvironmentEdit> &prepared,std::string &diagnostic,bool recordHistory) {
+  diagnostic.clear();if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição antes de publicar HDRI.";return false;}
+  if(prepared.empty()) return true;
+  auto next=assets_;std::vector<EnvironmentBatchEdit> edits;
+  std::vector<u8> firstSource;
+  const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());const resources::EnvironmentMapImportLimits limits;
+  for(const auto &entry:prepared) {
+    const auto &edit=entry.edit;const auto *current=assets_.find(edit.before.guid);
+    resources::EnvironmentMapImportSettings settings;std::filesystem::path path;std::vector<u8> source;
+    if(!current || !sameEnvironmentRecord(*current,edit.before) || edit.before.guid!=edit.after.guid ||
+       edit.before.path!=edit.after.path || edit.after.type!=resources::AssetType::EnvironmentMap ||
+       edit.before.contentHash!=edit.after.contentHash || !entry.map || !entry.map->valid() ||
+       !resources::readEnvironmentMapImportSettings(edit.after.importerParameters,settings) ||
+       entry.map->panorama.width!=settings.panoramaWidth || entry.map->specular.width!=settings.specularSize ||
+       entry.map->brdf.width!=settings.brdfSize || entry.map->sourceHash!=edit.before.contentHash || entry.map->cacheKey!=resources::environmentMapCacheKey(edit.before.contentHash,settings,limits) ||
+       !EditorImportTransaction::safePath(root,edit.before.path,path) || !EditorImportTransaction::read(path,source,limits.maximumSourceBytes) ||
+       Sha256::hex(source)!=edit.before.contentHash) {diagnostic="HDRI mudou durante a preparação: "+edit.before.path;return false;}
+    for(const auto &prior:edits) if(prior.before.guid==edit.before.guid) {diagnostic="HDRI duplicado no lote.";return false;}
+    if(edits.empty()) firstSource=std::move(source);
+    if(!next.publishImport(edit.after.guid,edit.after.contentHash,edit.after.importerVersion,edit.after.importerParameters,
+        edit.after.derived,edit.after.dependencies)) {diagnostic="Registro recusou a receita HDRI.";return false;}
+    edits.push_back(edit);
+  }
+  // As fontes não mudam: só o registro passa a apontar para receitas cujos
+  // derivados já estão completos. A primeira fonte ancora o journal existente.
+  EditorImportTransaction transaction(files_.rootPath());
+  if(!transaction.begin(edits.front().before.path,edits.front().before.contentHash,diagnostic)) return false;
+  if(!transaction.commit(firstSource,next.serialize())) {
+    diagnostic=transaction.rollback()?"Registro HDRI restaurado; nenhum mapa publicado.":"Recuperação HDRI pendente no journal.";return false;
+  }
+  assets_=std::move(next);assetRegistryDirty_=false;
+  for(const auto &entry:prepared) if(!adoptEnvironmentMap(entry.edit.after.guid,entry.map,diagnostic)) return false;
+  appearanceChanged_=true;
+  for(auto &draft:multiEnvironments_) for(const auto &edit:edits) if(draft.guid==edit.after.guid) {
+    resources::readEnvironmentMapImportSettings(edit.after.importerParameters,draft.saved);draft.draft=draft.saved;
+  }
+  if(recordHistory) {
+    const auto project=files_.rootPath();
+    history_.recordResource("Receitas HDRI",[this,project,edits](bool forward) {
+      if(files_.rootPath()!=project) {state_.status="Projeto do histórico indisponível.";return false;}
+      auto replay=edits;if(!forward) for(auto &edit:replay) std::swap(edit.before,edit.after);
+      std::vector<PreparedEnvironmentEdit> prepared;std::string error;
+      if(!prepareEnvironmentBatch(project,replay,{},prepared,error,false)||!commitEnvironmentBatch(prepared,error,false)) {
+        state_.status=error;return false;
+      }
+      state_.status=forward?"Receitas HDRI refeitas":"Receitas HDRI desfeitas";return true;
+    });
+  }
+  state_.status="Receitas HDRI aplicadas em conjunto";return true;
+}
 
 bool EditorSession::adoptEnvironmentMap(const resources::AssetGuid &guid,
                                         renderer::SharedEnvironmentMap map,
@@ -150,8 +335,10 @@ void EditorSession::refreshEnvironmentInspector() {
     return a.panoramaWidth==b.panoramaWidth && a.specularSize==b.specularSize && a.brdfSize==b.brdfSize &&
            a.specularSamples==b.specularSamples && a.brdfSamples==b.brdfSamples;
   };
-  if(same(state_.environmentDraft,state_.environmentSaved)) state_.environmentDraft=saved;
-  state_.environmentSaved=saved;
+  if(previewSecondary_ || multiEnvironments_.size()<2) {
+    if(same(state_.environmentDraft,state_.environmentSaved)) state_.environmentDraft=saved;
+    state_.environmentSaved=saved;
+  }
   // Usos: componentes Ambiente da cena e perfis de ambiente do projeto.
   state_.environmentObjects.clear();state_.environmentProfiles=0;
   std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
@@ -255,6 +442,133 @@ const scene::ComponentNumber *numberById(std::string_view id) {
 }
 }
 
+namespace {
+std::string profileRowText(const resources::EnvironmentProfile &profile,const EditorScreenState::ProfileRow &row,bool precise=true) {
+  scene::Environment proxy;proxy.values=profile.values;
+  using Kind=EditorScreenState::ProfileRow::Kind;
+  const auto &type=scene::Environment::descriptor;
+  if(row.kind==Kind::Boolean) for(const auto &p:type.booleans) if(p.id==row.id) return p.read(proxy)?"Ligado":"Desligado";
+  if(row.kind==Kind::Enum) for(const auto &p:type.enums) if(p.id==row.id)
+    for(const auto &option:p.options) if(option.value==p.read(proxy)) return std::string(option.name);
+  char text[96];
+  if(row.kind==Kind::Number) if(const auto *p=numberById(row.id)) {
+    std::snprintf(text,sizeof text,precise?"%.9g":"%.6g",static_cast<double>(p->read(proxy)));return text;
+  }
+  if(row.kind==Kind::Triple) for(const auto &t:type.triples) if(t.id==row.id) {
+    float v[3]{};for(u32 i=0;i<3;++i) if(const auto *p=numberById(t.channels[i])) v[i]=p->read(proxy);
+    std::snprintf(text,sizeof text,precise?"%.9g %.9g %.9g":"%.6g %.6g %.6g",static_cast<double>(v[0]),static_cast<double>(v[1]),static_cast<double>(v[2]));return text;
+  }
+  if(row.kind==Kind::EnvironmentMap) return profile.values.environmentMap.text();
+  return {};
+}
+bool profileRowAvailable(const resources::EnvironmentProfile &profile,const EditorScreenState::ProfileRow &row) {
+  scene::Environment proxy;proxy.values=profile.values;
+  const scene::PropertyPresentation *presentation=nullptr;
+  const auto &type=scene::Environment::descriptor;
+  using Kind=EditorScreenState::ProfileRow::Kind;
+  if(row.kind==Kind::Boolean) for(const auto &p:type.booleans) if(p.id==row.id) presentation=&p.presentation;
+  if(row.kind==Kind::Enum) for(const auto &p:type.enums) if(p.id==row.id) presentation=&p.presentation;
+  if(row.kind==Kind::Number) if(const auto *p=numberById(row.id)) presentation=&p->presentation;
+  if(row.kind==Kind::Triple) for(const auto &t:type.triples) if(t.id==row.id)
+    if(const auto *p=numberById(t.channels[0])) presentation=&p->presentation;
+  return !presentation || (presentation->isVisible(proxy) && presentation->isEditable(proxy) && presentation->hasConsumer());
+}
+}
+
+bool EditorSession::showProfileValueMenu(u32 index) {
+  if(index>=state_.profileRows.size() || !state_.profileRows[index].mixed || !state_.profileRows[index].editable) return false;
+  const auto &row=state_.profileRows[index];auto &menu=state_.setValueMenu;
+  menu.key="asset.profile."+std::to_string(index);menu.label=row.label;menu.rows.clear();
+  for(u32 i=0;i<multiProfiles_.size();++i) if(const auto *profile=findEnvironmentProfile(multiProfiles_[i])) {
+    auto value=profileRowText(*profile,row,false);
+    if(row.kind==EditorScreenState::ProfileRow::Kind::EnvironmentMap) {
+      const auto *record=assets_.find(profile->values.environmentMap);
+      value=record?record->path:profile->values.environmentMap.valid()?"Mapa ausente":"Ambiente padrão";
+    }
+    menu.rows.push_back({i,profile->name+" · "+value});
+  }
+  return true;
+}
+bool EditorSession::applyProfileValue(u32 index) {
+  const auto &menu=state_.setValueMenu;
+  if(index>=menu.rows.size() || menu.rows[index].first>=multiProfiles_.size()) return false;
+  const auto n=static_cast<u32>(std::stoul(menu.key.substr(14)));
+  if(n>=state_.profileRows.size()) return false;
+  const auto row=state_.profileRows[n];const auto *source=findEnvironmentProfile(multiProfiles_[menu.rows[index].first]);
+  if(!source) return false;
+  scene::Environment proxy;proxy.values=source->values;
+  scene::ComponentPropertyValue value=false;float triple[3]{};
+  using Kind=EditorScreenState::ProfileRow::Kind;
+  const auto &type=scene::Environment::descriptor;
+  if(row.kind==Kind::Boolean) for(const auto &p:type.booleans) if(p.id==row.id) value=p.read(proxy);
+  if(row.kind==Kind::Enum) for(const auto &p:type.enums) if(p.id==row.id) value=p.read(proxy);
+  if(row.kind==Kind::Number) if(const auto *p=numberById(row.id)) value=p->read(proxy);
+  if(row.kind==Kind::Triple) for(const auto &t:type.triples) if(t.id==row.id)
+    for(u32 i=0;i<3;++i) if(const auto *p=numberById(t.channels[i])) triple[i]=p->read(proxy);
+  std::string diagnostic;
+  const bool applied=editProfileProperty(row,value,triple,&source->values.environmentMap,diagnostic);
+  state_.status=diagnostic;return applied;
+}
+
+bool EditorSession::commitProfileBatch(const std::vector<resources::EnvironmentProfile> &candidates,
+                                      std::string &diagnostic,bool recordHistory) {
+  diagnostic.clear();
+  if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição antes de alterar os perfis.";return false;}
+  auto next=assets_;
+  std::vector<resources::EnvironmentProfile> before,after;
+  std::vector<EditorImportTransaction::TextEdit> edits;
+  const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+  for(const auto &candidate:candidates) {
+    const auto *current=findEnvironmentProfile(candidate.guid);const auto *record=assets_.find(candidate.guid);
+    if(!candidate.valid() || !current || !record || record->type!=resources::AssetType::EnvironmentProfile ||
+       current->revision==std::numeric_limits<u32>::max() || candidate.revision!=current->revision+1) {
+      diagnostic="Perfil ou revisão indisponível.";return false;
+    }
+    std::filesystem::path path;std::vector<u8> bytes;resources::EnvironmentProfile disk;
+    if(!EditorImportTransaction::safePath(root,record->path,path)||!EditorImportTransaction::read(path,bytes)||
+       !resources::EnvironmentProfile::deserialize(std::string(bytes.begin(),bytes.end()),disk)||disk.serialize()!=current->serialize()) {
+      diagnostic="Perfil mudou no disco: "+record->path;return false;
+    }
+    auto same=candidate;same.revision=current->revision;if(same.serialize()==current->serialize()) continue;
+    std::vector<resources::AssetGuid> dependencies;
+    if(candidate.values.environmentMap.valid()) {
+      const auto *map=assets_.find(candidate.values.environmentMap);
+      if(!map || map->type!=resources::AssetType::EnvironmentMap) {diagnostic="Mapa HDRI do perfil indisponível.";return false;}
+      dependencies.push_back(map->guid);
+    }
+    const auto text=candidate.serialize();
+    if(!next.publishImport(candidate.guid,Sha256::hex({reinterpret_cast<const u8*>(text.data()),text.size()}),
+        record->importerVersion,record->importerParameters,record->derived,std::move(dependencies))) {
+      diagnostic="Registro recusou o perfil.";return false;
+    }
+    edits.push_back({record->path,Sha256::hex(bytes),text});before.push_back(*current);after.push_back(candidate);
+  }
+  if(after.empty()) return true;
+  if(!EditorImportTransaction::publishTextBatch(files_.rootPath(),edits,next.serialize(),diagnostic)) return false;
+  assets_=std::move(next);assetRegistryDirty_=true;
+  for(const auto &value:after) {
+    for(auto &profile:environmentProfiles_) if(profile.guid==value.guid) {profile=value;break;}
+    synchronizeEnvironmentProfile(value);
+  }
+  if(recordHistory) {
+    const auto project=files_.rootPath();
+    history_.recordResource(after.size()>1?"Perfis de ambiente":"Perfil de ambiente",[this,before,after,project](bool forward) {
+      if(files_.rootPath()!=project) {state_.status="Projeto do histórico indisponível.";return false;}
+      std::vector<resources::EnvironmentProfile> candidates;
+      for(usize i=0;i<before.size();++i) {
+        const auto *current=findEnvironmentProfile(before[i].guid);
+        if(!current) {state_.status="Perfil do histórico indisponível.";return false;}
+        auto expected=forward?before[i]:after[i];expected.revision=current->revision;
+        if(expected.serialize()!=current->serialize()) {state_.status="Perfil mudou; histórico preservado.";return false;}
+        auto value=forward?after[i]:before[i];value.revision=current->revision+1;candidates.push_back(std::move(value));
+      }
+      std::string error;if(!commitProfileBatch(candidates,error,false)) {state_.status=error;return false;}
+      state_.status=forward?"Perfis refeitos":"Perfis desfeitos";return true;
+    });
+  }
+  return true;
+}
+
 bool EditorSession::openProfileInspector(const resources::AssetGuid &guid) {
   if(!findEnvironmentProfile(guid)) return false;
   state_.profileInspector=guid;state_.profileGroup=0;state_.profileUse=0;state_.propertyPage=0;
@@ -333,12 +647,26 @@ void EditorSession::refreshProfileInspector() {
     row.value=map?map->path.substr(map->path.rfind('/')+1):proxy.values.environmentMap.valid()?std::string("Mapa ausente"):std::string("Ambiente padrão");
     rows.push_back(std::move(row));
   }
+  if(!previewSecondary_ && multiProfiles_.size()>1) for(auto &row:rows) {
+    const auto value=profileRowText(*profile,row);
+    for(const auto &guid:multiProfiles_) if(const auto *other=findEnvironmentProfile(guid)) {
+      row.mixed|=profileRowText(*other,row)!=value;
+      row.editable&=profileRowAvailable(*other,row);
+    }
+  }
+
 }
 
 bool EditorSession::editProfileProperty(const EditorScreenState::ProfileRow &row,const scene::ComponentPropertyValue &value,
                                         const float *triple,const resources::AssetGuid *map,std::string &diagnostic) {
   const auto *profile=findEnvironmentProfile(state_.profileInspector);
   if(!profile) {diagnostic="Perfil indisponível.";return false;}
+  std::vector<resources::AssetGuid> targets{profile->guid};
+  if(multiAssetEditing_ && multiProfiles_.size()>1) targets=multiProfiles_;
+  std::vector<resources::EnvironmentProfile> candidates;
+  for(const auto &guid:targets) {
+  profile=findEnvironmentProfile(guid);
+  if(!profile || !profileRowAvailable(*profile,row)) {diagnostic="Propriedade indisponível em um perfil da seleção.";return false;}
   scene::Components components;
   auto *proxy=static_cast<scene::Environment *>(components.add(scene::Environment::descriptor));
   if(!proxy) {diagnostic="Não foi possível preparar o perfil.";return false;}
@@ -362,7 +690,9 @@ bool EditorSession::editProfileProperty(const EditorScreenState::ProfileRow &row
   const auto *edited=static_cast<const scene::Environment *>(components.find(scene::Environment::descriptor));
   auto candidate=*profile;candidate.values=edited->values;
   candidate.values.active=true;candidate.values.priority=0;++candidate.revision;
-  if(!commitEnvironmentProfile(candidate,diagnostic)) return false;
+  candidates.push_back(std::move(candidate));
+  }
+  if(!commitProfileBatch(candidates,diagnostic,true)) return false;
   diagnostic="Perfil atualizado em todos os ambientes que o usam";return true;
 }
 

@@ -604,6 +604,12 @@ public:
   bool commitEnvironmentMap(const std::string &path,std::span<const u8> bytes,
                             const std::string &expectedHash,renderer::SharedEnvironmentMap prepared,
                             const resources::EnvironmentMapImportSettings &settings,std::string &diagnostic);
+  struct EnvironmentBatchEdit {resources::AssetRecord before,after;};
+  struct PreparedEnvironmentEdit {EnvironmentBatchEdit edit;renderer::SharedEnvironmentMap map;};
+  std::vector<EnvironmentBatchEdit> takeEnvironmentBatchRequest() {return std::exchange(environmentBatchRequest_,{});}
+  static bool prepareEnvironmentBatch(const std::string &root,const std::vector<EnvironmentBatchEdit> &edits,
+      resources::EnvironmentMapCancel cancel,std::vector<PreparedEnvironmentEdit> &prepared,std::string &diagnostic,bool allowImport=true);
+  bool commitEnvironmentBatch(const std::vector<PreparedEnvironmentEdit> &prepared,std::string &diagnostic,bool recordHistory=true);
   void showEnvironmentImportPreview(std::string path,const renderer::EnvironmentMapResource &map,
                                     const resources::EnvironmentMapImportSettings &settings={});
   void beginEnvironmentImportPreparation(std::string_view path,
@@ -636,7 +642,7 @@ public:
   const resources::TextureBudgetReport &textureResidency() const {return textureResidency_;}
   // Abre o importador em Propriedades. `path` já conhecido (reimportação) carrega
   // o perfil guardado daquela fonte; sem caminho, o padrão do projeto.
-  void beginImportPreparation(std::string_view path={});
+  void beginImportPreparation(std::string_view path={},bool batch=false);
   // R3: perfis. Fonte → padrão do projeto → embutido; arquivo inválido cai no próximo.
   resources::ImportProfile importProfileFor(const resources::AssetGuid &source) const;
   resources::ImportProfile projectImportProfile() const;
@@ -1677,9 +1683,11 @@ private:
   template<class F> auto withMultiEdit(F &&body) {
     // O escopo só autoriza comandos do Inspector principal. Desfazer/Refazer
     // e a janela focada não replicam alterações por efeito colateral.
-    if(multiMaterials_.size()>1 && state_.materialInspector.valid() && !isPlaying()) {
-      const bool previous=multiMaterialEditing_;multiMaterialEditing_=true;
-      auto result=body();multiMaterialEditing_=previous;return result;
+    if(((multiMaterials_.size()>1 && state_.materialInspector.valid()) ||
+        (multiProfiles_.size()>1 && state_.profileInspector.valid()) ||
+        (multiEnvironments_.size()>1 && state_.environmentInspector.valid())) && !isPlaying()) {
+      const bool previous=multiAssetEditing_;multiAssetEditing_=true;
+      auto result=body();multiAssetEditing_=previous;return result;
     }
     if(state_.selectionSet.size()<2 || isPlaying() || !document_.exists(state_.selection)) return body();
     const auto id=state_.selection;const EditorEntity before=*document_.find(id);
@@ -1696,7 +1704,20 @@ private:
   std::vector<MultiTextureDraft> multiTextures_;
   std::vector<u32> multiAssetGroups_;  // tipo de cada arquivo escolhido (índice do grupo)
   std::vector<resources::AssetGuid> multiMaterials_;  // materiais escolhidos, o ativo incluído
-  bool multiMaterialEditing_=false;
+  bool multiAssetEditing_=false;
+  std::vector<resources::AssetGuid> multiProfiles_;
+  struct MultiEnvironmentDraft {resources::AssetGuid guid;resources::EnvironmentMapImportSettings saved,draft;};
+  std::vector<MultiEnvironmentDraft> multiEnvironments_;
+  std::vector<EnvironmentBatchEdit> environmentBatchRequest_;
+  void refreshMultiEnvironmentAssets(bool profiles);
+  void editEnvironmentRecipe(u32 field,bool up);
+  void revertEnvironmentRecipes();
+  bool requestEnvironmentBatch();
+  bool showEnvironmentValueMenu(u32 field);
+  bool applyEnvironmentValue(u32 row);
+  bool showProfileValueMenu(u32 row);
+  bool applyProfileValue(u32 row);
+  bool commitProfileBatch(const std::vector<resources::EnvironmentProfile> &candidates,std::string &diagnostic,bool recordHistory);
   void refreshMultiAsset();
   void selectFiles(std::vector<std::string> paths);
   bool applyMultiTextureProfiles();

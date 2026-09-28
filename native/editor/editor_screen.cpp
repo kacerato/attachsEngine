@@ -2153,9 +2153,10 @@ void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) 
   list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneLighting),theme.color.accent);
   const auto slash=state.environmentInspectorPath.rfind('/');
   const std::string name=slash==std::string::npos?state.environmentInspectorPath:state.environmentInspectorPath.substr(slash+1);
+  const bool many=!builder.focusedWindow && state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::EnvironmentMaps;
   const float half=header.height*.5f;
-  builder.label({header.x,header.y,header.width,half},name.c_str(),theme.color.text,theme.type.cardName);
-  builder.label({header.x,header.y+half,header.width,half},"Mapa HDRI · céu, luz difusa e reflexos",theme.color.textDim,theme.type.caption);
+  builder.label({header.x,header.y,header.width,half},many?state.multiAsset.title:name,theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y+half,header.width,half},many?"Ativo: "+name:std::string("Mapa HDRI · céu, luz difusa e reflexos"),theme.color.textDim,theme.type.caption);
   // Prévia 2:1 com exposição.
   auto preview=takeTop(content,std::min(content.width*.5f,96.f));takeTop(content,4);
   list.addRect(preview,theme.color.voidBlack,theme.radius.control);
@@ -2193,7 +2194,7 @@ void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) 
   builder.label(inner,usage.c_str(),objects?theme.color.text:theme.color.textDim,theme.type.caption);
   // Rodapé: reverter e aplicar.
   const auto &draft=state.environmentDraft,&saved=state.environmentSaved;
-  const bool dirty=draft.panoramaWidth!=saved.panoramaWidth || draft.specularSize!=saved.specularSize ||
+  const bool dirty=(many && state.environmentPending) || draft.panoramaWidth!=saved.panoramaWidth || draft.specularSize!=saved.specularSize ||
       draft.specularSamples!=saved.specularSamples || draft.brdfSize!=saved.brdfSize || draft.brdfSamples!=saved.brdfSamples;
   auto footer=takeBottom(content,36);takeBottom(content,4);
   const float bw=(footer.width-6)/2;
@@ -2237,8 +2238,9 @@ void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) 
     builder.label(plus,"+",theme.color.text,theme.type.body,UiAlign::Center);
     router.addRegion(minus,widgetId(EditorWidget::EnvironmentRecipeDownBase)+i);
     router.addRegion(plus,widgetId(EditorWidget::EnvironmentRecipeUpBase)+i);
+    if(many && (state.environmentMixed&(1u<<i))) router.addRegion(row,widgetId(EditorWidget::EnvironmentRecipeUpBase)+i);
     const bool changed=recipe[i].value!=recipe[i].saved;
-    builder.label(row,std::to_string(recipe[i].value).c_str(),changed?theme.color.accent:theme.color.text,theme.type.numeric,UiAlign::Center);
+    builder.label(row,many && (state.environmentMixed&(1u<<i))?"—":std::to_string(recipe[i].value),changed?theme.color.accent:theme.color.text,theme.type.numeric,UiAlign::Center);
   }
 }
 
@@ -2259,11 +2261,12 @@ void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   if(!builder.focusedWindow) builder.iconButton(takeRight(header,32),UiIcon::UiPanelRight,widgetId(EditorWidget::AssetInspectorFocus));
   list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneEffects),theme.color.accent);
   const u32 objects=static_cast<u32>(state.profileObjects.size());
+  const bool many=!builder.focusedWindow && state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::Profiles;
   const float half=header.height*.5f;
-  builder.label({header.x,header.y,header.width,half},state.profileInspectorName.c_str(),theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y,header.width,half},many?state.multiAsset.title:state.profileInspectorName,theme.color.text,theme.type.cardName);
   const std::string sub="Perfil de ambiente · rev. "+std::to_string(state.profileInspectorRevision)+" · "+std::to_string(objects)+
       (objects==1?" ambiente":" ambientes");
-  builder.label({header.x,header.y+half,header.width,half},sub.c_str(),theme.color.textDim,theme.type.caption);
+  builder.label({header.x,header.y+half,header.width,half},many?"Ativo: "+state.profileInspectorName:sub,theme.color.textDim,theme.type.caption);
   // Grupo do esquema num seletor de uma linha (as abas em quebra comiam metade
   // do Inspector estreito); Localizar ao lado.
   {
@@ -2296,13 +2299,13 @@ void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
     auto rect=takeTop(content,rowHeight);rect.height-=4;
     const auto ink=row.editable?theme.color.text:theme.color.textFaint;
     builder.label(takeLeft(rect,rect.width*.46f),row.label.c_str(),row.editable?theme.color.textDim:theme.color.textFaint,theme.type.caption);
-    if(row.kind==Kind::Boolean) {
+    if(row.kind==Kind::Boolean && !row.mixed && row.editable) {
       builder.toggle(takeRight(rect,52),row.on,widgetId(EditorWidget::ProfileRowBase)+i);
       continue;
     }
     list.addRect(rect,theme.color.raised,theme.radius.control);
     auto inner=deflate(rect,UiInsets{8,0,8,0});
-    if(row.kind==Kind::Triple && row.color) {
+    if(row.kind==Kind::Triple && row.color && !row.mixed) {
       const auto swatch=centred(takeLeft(inner,22),18,18);
       const auto channel=[&](float v){return static_cast<u32>(std::clamp(std::pow(std::max(v,0.f),1/2.2f),0.f,1.f)*255+.5f);};
       list.addRect(swatch,0xff000000u|(channel(row.rgb[2])<<16)|(channel(row.rgb[1])<<8)|channel(row.rgb[0]),4);
@@ -2313,7 +2316,7 @@ void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
       builder.label(arrow,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
     }
     list.pushClip(inner);
-    builder.label(inner,row.value.c_str(),ink,row.kind==Kind::Number||row.kind==Kind::Triple?theme.type.numeric:theme.type.caption,
+    builder.label(inner,row.mixed?"—":row.kind==Kind::Boolean?(row.on?"Ligado":"Desligado"):row.value,ink,row.kind==Kind::Number||row.kind==Kind::Triple?theme.type.numeric:theme.type.caption,
                   row.kind==Kind::Number?UiAlign::Center:UiAlign::Start);
     list.popClip();
     if(row.editable) router.addRegion(rect,widgetId(EditorWidget::ProfileRowBase)+i);
@@ -2376,6 +2379,19 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount)]+
                 (state.materialInspector.valid()?" · material do projeto":state.materialShared?" · compartilhado":" · esta instância"),
                 theme.color.text,theme.type.caption);
+  const UiRect window=content;
+  const u32 rows=static_cast<u32>(state.projectTextureNames.size());
+  const bool narrow=window.width<320;
+  const float transformHeight=narrow?216.f:108.f;
+  const float height=96+(state.textureBinding<scene::MaterialTextureCount?
+      40+(state.textureSamplerEditable?0:22)+transformHeight:22)+std::max(40.f,48.f*rows);
+  const float scroll=std::clamp(state.texturePickerScroll,0.f,std::max(0.f,height-window.height));
+  builder.router.addRegion(window,widgetId(EditorWidget::TexturePickerScroll));
+  builder.list.pushClip(window);
+  const auto region=[&](const UiRect &rect,u32 widget) {
+    const auto hit=intersect(rect,window);if(!hit.isEmpty()) builder.router.addRegion(hit,widget);
+  };
+  content={window.x,window.y-scroll,window.width-5,height};
   // R4: amostragem do binding. O conjunto de UV vale para qualquer textura;
   // repetição e filtro são o sampler da textura do projeto e não recebem toque
   // quando o binding usa a textura da fonte. Vem depois de Herdar e Sem textura:
@@ -2392,7 +2408,7 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
       box=deflate(box,UiInsets::all(2));
       builder.list.addRect(box,theme.color.raised,theme.radius.control);
       builder.label(box,text,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-      if(enabled) builder.router.addRegion(box,widget);
+      if(enabled) region(box,widget);
     };
     button(takeLeft(sampling,third),mixed("set")?"UV: —":state.textureUvLabel,true,widgetId(EditorWidget::TextureSamplingUv));
     button(takeLeft(sampling,third),mixed("wrap")?"Rep.: —":state.textureWrapLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingWrap));
@@ -2401,31 +2417,37 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
       builder.label(takeTop(content,22),"Repetição e filtro valem só com textura do projeto",theme.color.textMuted,theme.type.caption);
   }
   // R4: transformação de UV do binding. Vale com qualquer textura: o shader a aplica.
-  if(content.height>=36*3) {
+  if(content.height>=transformHeight) {
     const auto stepper=[&](UiRect row,const std::string &text,u32 field) {
       const auto down=deflate(takeLeft(row,34),UiInsets::all(2)),up=deflate(takeRight(row,34),UiInsets::all(2));
       builder.list.addRect(down,theme.color.raised,theme.radius.control);
       builder.label(down,"-",theme.color.text,theme.type.body,UiAlign::Center);
-      builder.router.addRegion(down,widgetId(EditorWidget::TextureUvStepBase)+field*2);
+      region(down,widgetId(EditorWidget::TextureUvStepBase)+field*2);
       builder.list.addRect(up,theme.color.raised,theme.radius.control);
       builder.label(up,"+",theme.color.text,theme.type.body,UiAlign::Center);
-      builder.router.addRegion(up,widgetId(EditorWidget::TextureUvStepBase)+field*2+1);
+      region(up,widgetId(EditorWidget::TextureUvStepBase)+field*2+1);
       static constexpr const char *keys[]{"offset0","offset1","scale0","scale1","rotation"};
       static constexpr const char *labels[]{"Desl. U —","Desl. V —","Esc. U —","Esc. V —","Rot. —"};
       builder.label(row,mixed(keys[field])?labels[field]:text,theme.color.text,theme.type.caption,UiAlign::Center);
     };
-    auto offsets=takeTop(content,36);
-    stepper(takeLeft(offsets,offsets.width*.5f),state.textureUvLabels[0],0);
-    stepper(offsets,state.textureUvLabels[1],1);
-    auto scales=takeTop(content,36);
-    stepper(takeLeft(scales,scales.width*.5f),state.textureUvLabels[2],2);
-    stepper(scales,state.textureUvLabels[3],3);
-    auto rotation=takeTop(content,36);
-    stepper(takeLeft(rotation,rotation.width*.5f),state.textureUvLabels[4],4);
-    const auto reset=deflate(rotation,UiInsets::all(2));
+    UiRect reset;
+    if(narrow) {
+      for(u32 field=0;field<5;++field) stepper(takeTop(content,36),state.textureUvLabels[field],field);
+      reset=deflate(takeTop(content,36),UiInsets::all(2));
+    } else {
+      auto offsets=takeTop(content,36);
+      stepper(takeLeft(offsets,offsets.width*.5f),state.textureUvLabels[0],0);
+      stepper(offsets,state.textureUvLabels[1],1);
+      auto scales=takeTop(content,36);
+      stepper(takeLeft(scales,scales.width*.5f),state.textureUvLabels[2],2);
+      stepper(scales,state.textureUvLabels[3],3);
+      auto rotation=takeTop(content,36);
+      stepper(takeLeft(rotation,rotation.width*.5f),state.textureUvLabels[4],4);
+      reset=deflate(rotation,UiInsets::all(2));
+    }
     builder.list.addRect(reset,theme.color.raised,theme.radius.control);
     builder.label(reset,"Zerar transformação",theme.color.text,theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(reset,widgetId(EditorWidget::TextureUvReset));
+    region(reset,widgetId(EditorWidget::TextureUvReset));
   }
   };
   const auto option=[&](const std::string &label,const std::string &detail,u32 widget) {
@@ -2435,7 +2457,7 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
     takeLeft(row,12);
     builder.label(takeTop(row,25),label,theme.color.text,theme.type.body);
     builder.label(row,detail,theme.color.textMuted,theme.type.caption);
-    builder.router.addRegion(hit,widget);
+    region(hit,widget);
   };
   option("Herdar",state.materialShared?"volta à textura da fonte":"do material do projeto, senão da fonte",
          widgetId(EditorWidget::TextureUseInherited));
@@ -2443,16 +2465,11 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   if(state.textureBinding<scene::MaterialTextureCount) samplingControls();
   else if(content.height>=22)
     builder.label(takeTop(content,22),"A oclusão usa o conjunto de UV e a amostragem do mapa metal/rugosidade",theme.color.textMuted,theme.type.caption);
-  const u32 rows=static_cast<u32>(state.projectTextureNames.size());
   if(!rows) {
     builder.label(takeTop(content,40),"Nenhuma textura no projeto. Use Importar textura em Arquivos.",
                   theme.color.textMuted,theme.type.caption);
-    return;
   }
-  auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
-  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/48));
-  const u32 pages=std::max(1u,(rows+perPage-1)/perPage),page=std::min(state.meshPage,pages-1);
-  for(u32 row=page*perPage;row<rows && row<(page+1)*perPage;++row) {
+  for(u32 row=0;row<rows;++row) {
     if(content.height<48) break;
     auto line=takeTop(content,48);
     const auto viewArea=takeRight(line,60);
@@ -2471,17 +2488,22 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
     takeLeft(line,6);
     builder.label(takeTop(line,25),state.projectTextureNames[row],theme.color.text,theme.type.body);
     builder.label(line,row<state.projectTextureDetails.size()?state.projectTextureDetails[row]:std::string(),theme.color.textMuted,theme.type.caption);
-    builder.router.addRegion(hit,widgetId(EditorWidget::TextureChoiceBase)+row);
+    region(hit,widgetId(EditorWidget::TextureChoiceBase)+row);
     const auto viewButton=deflate(viewArea,UiInsets::all(4));
     builder.list.addRect(viewButton,theme.color.raised,theme.radius.control);
     builder.label(viewButton,"Ver",theme.color.text,theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(viewButton,widgetId(EditorWidget::TextureViewBase)+row);
+    region(viewButton,widgetId(EditorWidget::TextureViewBase)+row);
   }
-  builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
-  builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
-  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
-  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
-  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  builder.list.popClip();
+  if(builder.layout) {
+    const u32 scope=builder.focusedWindow?1u:0u;
+    builder.layout->texturePickerContent[scope]=height;builder.layout->texturePickerWindow[scope]=window.height;
+  }
+  if(height>window.height) {
+    const float thumb=std::max(24.f,window.height*window.height/height);
+    const float offset=scroll/(height-window.height)*(window.height-thumb);
+    builder.list.addRect({window.right()-3,window.y+offset,3,thumb},theme.color.line,1.5f);
+  }
 }
 
 // R4: visualizador de textura. A imagem vem do atlas de prévia com o nível de
@@ -5219,11 +5241,20 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   auto header=takeTop(content,kPanelHeaderHeight);
   list.addImage(centred(takeLeft(header,26.0f),18.0f,18.0f),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.text);
   const float half=header.height*.5f;
-  builder.label({header.x,header.y,header.width,half},state.importTexture?"Importar textura":"Importar recurso",theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y,header.width,half},state.importBatch?"Aplicar receitas HDRI":state.importTexture?"Importar textura":"Importar recurso",theme.color.text,theme.type.cardName);
   builder.label({header.x,header.y+half,header.width,half},state.importPath.empty()?"Escolhendo arquivo…":state.importPath,
                 theme.color.textDim,theme.type.caption); // caption: o caminho mantém a caixa do nome do arquivo
   builder.label(takeTop(content,24),state.importStatus,theme.color.accent,theme.type.caption);
 
+  if(state.importBatch) {
+    const auto cancel=deflate(takeBottom(content,40),UiInsets::all(2));
+    list.addRect(cancel,theme.color.raised,theme.radius.control);
+    builder.label(cancel,"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
+    for(const auto &line:wrapText(list,"Preparando todos os mapas. As receitas serão publicadas juntas quando o lote estiver pronto.",content.width,theme.type.body))
+      builder.label(takeTop(content,24),line,theme.color.textDim,theme.type.body);
+    return;
+  }
   if(state.importTexture) {
     auto actions=takeBottom(content,40);
     const bool recipeReady=resources::sameTexturePreparation(state.textureImportSettings,state.textureImportPreparedSettings);
@@ -5942,7 +5973,9 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     buildImportDock(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
     return;
   }
-  if (builder.state.multiAsset.items.size() > 1 && builder.state.multiAsset.kind != EditorScreenState::MultiAssetView::Kind::Materials) {
+  if (builder.state.multiAsset.items.size() > 1 && builder.state.multiAsset.kind != EditorScreenState::MultiAssetView::Kind::Materials &&
+      builder.state.multiAsset.kind != EditorScreenState::MultiAssetView::Kind::Profiles &&
+      builder.state.multiAsset.kind != EditorScreenState::MultiAssetView::Kind::EnvironmentMaps) {
     builder.list.addRect(panel, builder.theme.color.canvas);
     builder.router.addBlocker(panel);
     buildMultiAssetInspector(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));

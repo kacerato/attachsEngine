@@ -460,6 +460,7 @@ enum class EditorWidget : u32 {
   HierarchyPickBase = 0xCE00'0000u,
   // Vários recursos em Arquivos (Unity: Ctrl/Shift+clique no Project) e o
   // Inspector deles: estreitar por tipo, campos comuns, a lista escolhida.
+  TexturePickerScroll = 0xCEFF'0000u,
   FilesMultiToggle = 0xCF00'0000u, FilesSelectNone, MultiAssetApply, MultiAssetRevert, MultiAssetScroll,
   MultiAssetNarrowBase = 0xCF00'0100u, MultiAssetFieldBase = 0xCF00'0200u,
   MultiAssetItemBase = 0xCF00'0300u, MultiAssetRemoveBase = 0xCF00'0400u,
@@ -693,7 +694,7 @@ struct EditorScreenState final {
   // "Inspect multiple assets"): tipos presentes para estreitar, a lista e, quando
   // todos são texturas do projeto, o perfil de importação comum com "—" no que difere.
   struct MultiAssetView {
-    enum class Kind : u8 {Mixed, Textures, Materials, Other};
+    enum class Kind : u8 {Mixed, Textures, Materials, EnvironmentMaps, Profiles, Other};
     struct Group {std::string label;u32 count=0,icon=0;};
     struct Item {std::string name,path,detail;u32 icon=0;bool active=false;};
     Kind kind=Kind::Mixed;
@@ -1117,7 +1118,7 @@ struct EditorScreenState final {
   std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
   bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false,folderImportRequested=false;
-  bool importPanel=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;
+  bool importPanel=false,importBatch=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;
   bool importEnvironment=false,importTexture=false;
   resources::EnvironmentMapImportSettings environmentImportSettings{};
   bool environmentImportReprepare=false;
@@ -1237,6 +1238,7 @@ struct EditorScreenState final {
   u32 environmentUse=0;
   std::vector<EditorEntityId> environmentObjects;
   u32 environmentProfiles=0;
+  u8 environmentMixed=0;u32 environmentPending=0;
   // Perfil de ambiente do projeto em Propriedades (Unity: Volume Profile). As
   // linhas são as propriedades do componente Ambiente que o perfil guarda,
   // descobertas pelo esquema; a sessão as prepara para o grupo escolhido.
@@ -1244,7 +1246,7 @@ struct EditorScreenState final {
     enum class Kind : u8 { Boolean, Enum, Number, Triple, EnvironmentMap } kind=Kind::Boolean;
     std::string_view id;
     std::string label,value;
-    bool on=false,editable=true,color=false;
+    bool on=false,editable=true,color=false,mixed=false;
     float rgb[3]{};
   };
   resources::AssetGuid profileInspector{};
@@ -1261,7 +1263,7 @@ struct EditorScreenState final {
     resources::AssetGuid materialInspector{};bool materialShared=false;MaterialSlotView materialSlotView;
     std::string materialInspectorPath;u32 materialInspectorRevision=0,materialInspectorSlots=0,materialInspectorUse=0;
     std::vector<EditorEntityId> materialInspectorObjects;
-    bool texturePicker=false;u32 textureBinding=0;
+    bool texturePicker=false;u32 textureBinding=0;float texturePickerScroll=0;
     std::string textureUvLabel,textureWrapLabel,textureFilterLabel,textureUvLabels[5];bool textureSamplerEditable=false;
     resources::AssetGuid environmentInspector{};std::string environmentInspectorPath;
     resources::EnvironmentMapImportSettings environmentDraft{},environmentSaved{};std::vector<std::string> environmentDerived;
@@ -1278,7 +1280,7 @@ struct EditorScreenState final {
     swap(materialInspector,o.materialInspector);swap(materialShared,o.materialShared);swap(materialSlotView,o.materialSlotView);
     swap(materialInspectorPath,o.materialInspectorPath);swap(materialInspectorRevision,o.materialInspectorRevision);
     swap(materialInspectorSlots,o.materialInspectorSlots);swap(materialInspectorUse,o.materialInspectorUse);
-    swap(materialInspectorObjects,o.materialInspectorObjects);swap(texturePicker,o.texturePicker);swap(textureBinding,o.textureBinding);
+    swap(materialInspectorObjects,o.materialInspectorObjects);swap(texturePicker,o.texturePicker);swap(textureBinding,o.textureBinding);swap(texturePickerScroll,o.texturePickerScroll);
     swap(textureUvLabel,o.textureUvLabel);swap(textureWrapLabel,o.textureWrapLabel);swap(textureFilterLabel,o.textureFilterLabel);
     for(u32 i=0;i<5;++i) swap(textureUvLabels[i],o.textureUvLabels[i]);
     swap(textureSamplerEditable,o.textureSamplerEditable);
@@ -1306,6 +1308,7 @@ struct EditorScreenState final {
   bool materialShared=false,materialPicker=false;
   // R4: seletor de textura de um binding e as texturas do projeto para ele.
   bool texturePicker=false;
+  float texturePickerScroll=0;
   // R4: o renderer do aparelho descarta faces por material (culling dinâmico).
   bool materialCulling=true;
   u32 textureBinding=0;
@@ -1391,6 +1394,7 @@ struct EditorScreenLayout final {
   // Inspector de textura: altura rolável e quanto dela cabe na janela.
   float textureInspectorContent=0,textureInspectorWindow=0;
   float multiAssetContent=0,multiAssetWindow=0;
+  float texturePickerContent[2]{},texturePickerWindow[2]{};
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
   // a partir desta contagem.
