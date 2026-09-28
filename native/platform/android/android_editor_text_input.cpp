@@ -265,6 +265,7 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
       request.purpose==ae::editor::EditorTextPurpose::InputContext?"Contexto da ação":
       request.purpose==ae::editor::EditorTextPurpose::InputNumber?"Valor da entrada":
       request.purpose==ae::editor::EditorTextPurpose::TextureSearch?"Buscar textura":
+      request.purpose==ae::editor::EditorTextPurpose::GlobalSearch?"Buscar · t:Tipo h: cena p: projeto m: criar":
       request.purpose==ae::editor::EditorTextPurpose::ComponentPresetName?"Nome do preset":
       request.purpose==ae::editor::EditorTextPurpose::ColorText?(request.field==1?"Cor hexadecimal · RRGGBB":"Nome"):"Pesquisar",
     request.text,code?"524288":property?"4096":(number||triple||expression)?"47":"63",

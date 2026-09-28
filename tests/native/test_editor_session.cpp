@@ -3481,6 +3481,77 @@ AE_TEST(scene_layer_visibility_hides_drawing_and_picking_only_in_editor) {
   AE_EXPECT_EQ(f.session.selection(),f.cube,"selecionável de novo");
 }
 
+// Unity 6000.0 Search: uma consulta, provedores de cena, projeto e criação;
+// "t:" filtra objetos por componente; tocar abre o resultado.
+AE_TEST(global_search_finds_objects_files_and_recipes_and_opens_them) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();
+  const auto lamp=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Poste de Luz");
+  auto value=*doc.find(lamp);value.components.add(scene::Light::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(lamp,value),"poste com luz");
+  doc.createEntity(doc.root(),EditorEntityKind::Folder,"Árvore alta");
+  const auto root=fs::temp_directory_path()/("aether-busca-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root/"Scripts"/"Jogador");fs::create_directories(root/".astra");
+  {std::ofstream(root/"Scripts"/"Jogador"/"Pulo.cs")<<"class Pulo {}";}
+  {std::ofstream(root/".astra"/"poste-cache.txt")<<"x";}
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.update();
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchOpen));
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.globalSearch,"busca aberta");
+  const auto search=[&](const char *text) {
+    auto &mutableState=const_cast<EditorScreenState &>(state);mutableState.globalQuery=text;f.session.update();
+  };
+  search("poste");
+  AE_EXPECT_EQ(state.globalCounts.scene,1u,"o poste na cena");
+  AE_EXPECT_EQ(state.globalCounts.project,0u,".astra fica fora do índice");
+  search("arvore");
+  AE_EXPECT_TRUE(state.globalCounts.scene==1 && state.globalResults[0].title=="Árvore alta","acento não atrapalha");
+  search("t:luz");
+  AE_EXPECT_TRUE(state.globalCounts.scene==1 && state.globalResults[0].key==lamp,"t:Tipo filtra por componente");
+  AE_EXPECT_EQ(state.globalCounts.create,0u,"t: não casa receitas");
+  search("p:pulo");
+  AE_EXPECT_TRUE(state.globalCounts.project==1 && state.globalCounts.scene==0,"prefixo p: só o projeto");
+  // Uma receita disponível neste editor, procurada pelo nome; tocar abre Criar nela.
+  u32 recipe=0;while(recipe<editorCreationCatalog.size() && !creationAvailable(state,recipe)) ++recipe;
+  AE_EXPECT_TRUE(recipe<editorCreationCatalog.size(),"alguma receita disponível");
+  search(editorCreationCatalog[recipe].name);
+  u32 created=0;bool found=false;
+  for(u32 i=0;i<state.globalResults.size();++i)
+    if(state.globalResults[i].provider==EditorSearchProvider::Create && state.globalResults[i].key==recipe) {created=i;found=true;}
+  AE_EXPECT_TRUE(found,"receita de criação encontrada");
+  while(locateWidget(f.session,widgetId(EditorWidget::GlobalSearchResultBase)+created).x<0 &&
+        locateWidget(f.session,widgetId(EditorWidget::GlobalSearchNext)).x>=0) tapWidget(f,widgetId(EditorWidget::GlobalSearchNext));
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchResultBase)+created);
+  AE_EXPECT_TRUE(state.creationMenu && state.creationSelection==recipe,"Criar abre na receita");
+  const_cast<EditorScreenState &>(state).creationMenu=false;
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchOpen));
+  // Abrir: objeto seleciona e faz Ping.
+  search("poste");
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchResultBase));
+  AE_EXPECT_TRUE(!state.globalSearch && state.selection==lamp && state.pingEntity==lamp,"objeto selecionado e ping");
+  // Arquivo: revela no painel e abre no editor de código.
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchOpen));
+  search("pulo");
+  u32 file=0;for(u32 i=0;i<state.globalResults.size();++i) if(state.globalResults[i].provider==EditorSearchProvider::Project) file=i;
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchResultBase)+file);
+  AE_EXPECT_TRUE(state.selectedFile=="Scripts/Jogador/Pulo.cs","arquivo escolhido");
+  AE_EXPECT_TRUE(state.workspace==EditorWorkspace::Code,"o .cs abre no código");
+  bool revealed=false;for(const auto &e:state.files->tree()) revealed|=e.relativePath=="Scripts/Jogador/Pulo.cs";
+  AE_EXPECT_TRUE(revealed,"pastas abertas até o arquivo");
+  // Chip de provedor sem texto lista o provedor inteiro.
+  auto &mutableState=const_cast<EditorScreenState &>(state);mutableState.workspace=EditorWorkspace::Scene;
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchOpen));
+  search("");
+  AE_EXPECT_TRUE(state.globalResults.empty(),"sem texto e sem provedor, nada");
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchProviderBase)+1);
+  AE_EXPECT_TRUE(state.globalCounts.scene>=4 && state.globalCounts.project==0,"Cena lista todos os objetos");
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchClose));
+  AE_EXPECT_TRUE(!state.globalSearch,"fechada");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

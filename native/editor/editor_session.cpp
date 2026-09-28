@@ -31,6 +31,7 @@
 #include <cmath>
 #include <cstdio>
 #include <sstream>
+#include "editor/editor_global_search.h"
 #include <locale>
 #include <cstring>
 #include <cstdlib>
@@ -847,6 +848,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.editingComponentSearch) {edit.purpose=EditorTextPurpose::ComponentSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingPropertySearch) {edit.purpose=EditorTextPurpose::PropertySearch;edit.entity=state_.selection;edit.componentInstance=state_.expandedNative;edit.text=state_.renameText;return edit;}
   if(state_.editingReferenceSearch) {edit.purpose=EditorTextPurpose::ReferenceSearch;edit.text=state_.renameText;return edit;}
+  if(state_.editingGlobalSearch) {edit.purpose=EditorTextPurpose::GlobalSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingPhysicsLayerName) {
     edit.purpose=EditorTextPurpose::PhysicsLayerName;edit.field=state_.physicsLayer;
     edit.text=document_.layers().name(state_.physicsLayer);return edit;
@@ -1115,7 +1117,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;state_.gradientText=0;state_.curveText=0;
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
-    state_.editingHierarchySearch=false;state_.editingCreationSearch=false;
+    state_.editingHierarchySearch=false;state_.editingCreationSearch=false;state_.editingGlobalSearch=false;
     cancelPointers();
   };
   if(!accept) {close();return true;}
@@ -1347,8 +1349,10 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.status=std::to_string(matches.size())+" ocorrências";close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::PropertySearch ||
-     edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch) {
+     edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch ||
+     edit.purpose==EditorTextPurpose::GlobalSearch) {
     if(text.size()>63 || text.find('\0')!=std::string_view::npos) return false;
+    if(edit.purpose==EditorTextPurpose::GlobalSearch) {state_.globalQuery=text;state_.globalPage=0;close();return true;}
     if(edit.purpose==EditorTextPurpose::ComponentSearch) {state_.componentQuery=text;state_.componentPage=0;state_.addScroll=0;}
     else if(edit.purpose==EditorTextPurpose::PropertySearch) {state_.propertyQuery=text;state_.propertyPage=0;}
     else if(edit.purpose==EditorTextPurpose::ReferenceSearch) {state_.referenceQuery=text;state_.referencePage=0;}
@@ -1588,6 +1592,113 @@ void EditorSession::openFocusedInspector(EditorEntityId entity,u64 component) {
   state_.focusedCollapsed=false;state_.focusedMenu=false;focusedValidated_=true;
   state_.status=std::string("Propriedades de ")+object->name;
   saveEditorPreferences();
+}
+
+void EditorSession::openGlobalSearch() {
+  state_.globalSearch=true;state_.globalPage=0;
+  // Índice dos arquivos do projeto, uma vez por abertura: nenhuma leitura de
+  // disco por quadro. `.astra` e pastas ocultas ficam de fora, como no painel.
+  searchFiles_.clear();
+  const auto root=files_.rootPath();
+  if(root.empty()) return;
+  std::error_code error;
+  const std::filesystem::path base=EditorImportTransaction::fromUtf8(root);
+  for(std::filesystem::recursive_directory_iterator it(base,std::filesystem::directory_options::skip_permission_denied,error),end;
+      !error && it!=end && searchFiles_.size()<EditorFileSystem::MaximumEntries;it.increment(error)) {
+    const auto name=it->path().filename().u8string();
+    const std::string leaf(name.begin(),name.end());
+    if(leaf.empty() || leaf[0]=='.') {if(it->is_directory(error)) it.disable_recursion_pending();continue;}
+    const auto relative=std::filesystem::relative(it->path(),base,error).generic_u8string();
+    EditorFileEntry entry;entry.name=leaf;entry.relativePath.assign(relative.begin(),relative.end());
+    entry.directory=it->is_directory(error);entry.depth=static_cast<unsigned>(it.depth());
+    searchFiles_.push_back(std::move(entry));
+  }
+}
+
+bool EditorSession::openSearchResult(u32 index) {
+  if(index>=state_.globalResults.size()) return false;
+  const auto result=state_.globalResults[index];
+  state_.globalSearch=false;
+  switch(result.provider) {
+    case EditorSearchProvider::Scene: {
+      const auto id=static_cast<EditorEntityId>(result.key);
+      if(!document_.exists(id)) {state_.status="Objeto não existe mais";return false;}
+      setSelection(id);pingEntity(id);
+      state_.status="Selecionado: "+result.title;
+      return true;
+    }
+    case EditorSearchProvider::Project: {
+      if(result.key>=searchFiles_.size()) return false;
+      const auto entry=searchFiles_[result.key];
+      if(!files_.exists(entry.relativePath)) {state_.status="Arquivo não existe mais";return false;}
+      state_.filesCollapsed=false;
+      revealProjectPath(entry.relativePath);
+      openProjectFile(entry);
+      return true;
+    }
+    case EditorSearchProvider::Create: {
+      const u32 recipe=static_cast<u32>(result.key);
+      if(recipe>=editorCreationCatalog.size() || !creationAvailable(state_,recipe) || isPlaying()) return false;
+      // Abre Criar na receita: o toque em Criar é o mesmo caminho do menu.
+      state_.creationMenu=true;state_.creationCategory=editorCreationCatalog[recipe].category;
+      state_.creationSelection=recipe;state_.creationScroll=0;state_.creationSearch[0]=0;
+      return true;
+    }
+    case EditorSearchProvider::All: break;
+  }
+  return false;
+}
+
+void EditorSession::revealProjectPath(const std::string &relative) {
+  // Cada pasta ancestral fechada é aberta pelo mesmo `toggle` do painel.
+  for(usize slash=relative.find('/');slash!=std::string::npos;slash=relative.find('/',slash+1)) {
+    const auto folder=relative.substr(0,slash);
+    const auto &tree=files_.tree();
+    for(unsigned i=0;i<tree.size();++i)
+      if(tree[i].directory && tree[i].relativePath==folder) {if(!tree[i].expanded) files_.toggle(i);break;}
+  }
+}
+
+void EditorSession::openProjectFile(const EditorFileEntry &entry) {
+  // Escolher e a acao mais barata do toque, e vale para pasta e arquivo:
+  // as acoes de recurso precisam de um alvo, e abrir um arquivo nem sempre
+  // e possivel.
+  state_.selectedFile=entry.relativePath;
+  state_.pendingResourceDelete.clear();
+  // R4: a pasta Texturas (ou uma subpasta) abre o gerenciador em Propriedades;
+  // uma textura do projeto abre a própria textura, logo abaixo.
+  state_.textureManager=false;state_.textureInspector=false;
+  if(entry.directory && (entry.relativePath=="Texturas" || entry.relativePath.starts_with("Texturas/")))
+    openTextureManager(entry.relativePath=="Texturas"?std::string():entry.relativePath);
+  if(entry.directory) return;
+  if(entry.name.ends_with(".cs") || entry.name.ends_with(".json") || entry.name.ends_with(".md")) {
+    state_.code=&code_;
+    if(code_.open(files_,entry.relativePath)) {state_.workspace=EditorWorkspace::Code;state_.codeFiles=false;}
+    else state_.status=code_.error();
+  }
+  else if(entry.name.ends_with(".aescene"))
+    requestedScenePath_=files_.resolveFile(entry.relativePath);
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Texture) {
+    const auto *texture=findProjectTexture(record->guid);
+    for(u32 index=0;index<textures_.size();++index)
+      if(textures_[index].guid==record->guid) {openTextureInspector(index);break;}
+    const auto users=textureUsersOf(record->guid);
+    state_.status=std::string("Textura do projeto")+
+        (texture && texture->width?" · "+std::to_string(texture->width)+"×"+std::to_string(texture->height):std::string())+
+        " · "+std::to_string(users)+(users==1?" uso":" usos");
+  }
+  else if(const i32 source=sourceTextureForFile(entry.relativePath);source>=0) {
+    // Bloco F: a imagem de uma fonte abre a textura que o modelo usa dela.
+    openSourceTextureInspector(static_cast<u32>(source));
+  }
+  else {
+    const auto *selectedAsset=assets_.findByPath(entry.relativePath);
+    state_.status=selectedAsset&&selectedAsset->type==resources::AssetType::EnvironmentMap?
+        "Mapa HDRI · Reimportar atualiza céu, irradiância e reflexões":
+        entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":
+        selectedAsset&&selectedAsset->type==resources::AssetType::Mesh?
+        "Modelo em pasta · Instanciar adiciona à cena; Reimportar relê a pasta com o perfil da fonte":"Arquivo de origem";
+  }
 }
 
 bool EditorSession::moveHistoryTo(u32 applied) {
@@ -3240,45 +3351,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key>=base && key-base<files_.tree().size()) {
       const auto entry=files_.tree()[key-base];
-      // Escolher e a acao mais barata do toque, e vale para pasta e arquivo:
-      // as acoes de recurso precisam de um alvo, e abrir um arquivo nem sempre
-      // e possivel.
-      state_.selectedFile=entry.relativePath;
-      state_.pendingResourceDelete.clear();
-      // R4: a pasta Texturas (ou uma subpasta) abre o gerenciador em Propriedades;
-      // uma textura do projeto abre a própria textura, logo abaixo.
-      state_.textureManager=false;state_.textureInspector=false;
-      if(entry.directory && (entry.relativePath=="Texturas" || entry.relativePath.starts_with("Texturas/")))
-        openTextureManager(entry.relativePath=="Texturas"?std::string():entry.relativePath);
       if(entry.directory) files_.toggle(key-base);
-      else if(entry.name.ends_with(".cs") || entry.name.ends_with(".json") || entry.name.ends_with(".md")) {
-        state_.code=&code_;
-        if(code_.open(files_,entry.relativePath)) {state_.workspace=EditorWorkspace::Code;state_.codeFiles=false;}
-        else state_.status=code_.error();
-      }
-      else if(entry.name.ends_with(".aescene"))
-        requestedScenePath_=files_.resolveFile(entry.relativePath);
-      else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Texture) {
-        const auto *texture=findProjectTexture(record->guid);
-        for(u32 index=0;index<textures_.size();++index)
-          if(textures_[index].guid==record->guid) {openTextureInspector(index);break;}
-        const auto users=textureUsersOf(record->guid);
-        state_.status=std::string("Textura do projeto")+
-            (texture && texture->width?" · "+std::to_string(texture->width)+"×"+std::to_string(texture->height):std::string())+
-            " · "+std::to_string(users)+(users==1?" uso":" usos");
-      }
-      else if(const i32 source=sourceTextureForFile(entry.relativePath);source>=0) {
-        // Bloco F: a imagem de uma fonte abre a textura que o modelo usa dela.
-        openSourceTextureInspector(static_cast<u32>(source));
-      }
-      else {
-        const auto *selectedAsset=assets_.findByPath(entry.relativePath);
-        state_.status=selectedAsset&&selectedAsset->type==resources::AssetType::EnvironmentMap?
-            "Mapa HDRI · Reimportar atualiza céu, irradiância e reflexões":
-            entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":
-            selectedAsset&&selectedAsset->type==resources::AssetType::Mesh?
-            "Modelo em pasta · Instanciar adiciona à cena; Reimportar relê a pasta com o perfil da fonte":"Arquivo de origem";
-      }
+      openProjectFile(entry);
       return true;
     }
   }
@@ -3309,7 +3383,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingPhysicsLayerName) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingPhysicsLayerName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -3973,6 +4047,26 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       }
       return true;
     }
+  }
+  // Busca global: modal sobre tudo; toques fora dela não chegam ao editor.
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::GlobalSearchOpen)) {openGlobalSearch();return true;}
+  if(state_.globalSearch && routing.target==UiPointerTarget::Widget) {
+    if(!routing.tapped) return true;
+    const u32 key=routing.widgetId;
+    if(key==widgetId(EditorWidget::GlobalSearchClose)) {state_.globalSearch=false;return true;}
+    if(key==widgetId(EditorWidget::GlobalSearchField)) {
+      state_.editingGlobalSearch=true;std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.globalQuery.c_str());return true;
+    }
+    if(key==widgetId(EditorWidget::GlobalSearchPrevious)) {if(state_.globalPage) --state_.globalPage;return true;}
+    if(key==widgetId(EditorWidget::GlobalSearchNext)) {++state_.globalPage;return true;}
+    if(key>=widgetId(EditorWidget::GlobalSearchProviderBase) && key<widgetId(EditorWidget::GlobalSearchProviderBase)+4) {
+      state_.globalProvider=static_cast<EditorSearchProvider>(key-widgetId(EditorWidget::GlobalSearchProviderBase));
+      state_.globalPage=0;return true;
+    }
+    if(key>=widgetId(EditorWidget::GlobalSearchResultBase) && key<widgetId(EditorWidget::GlobalSearchResultBase)+state_.globalResults.size()) {
+      openSearchResult(key-widgetId(EditorWidget::GlobalSearchResultBase));return true;
+    }
+    return true;
   }
   // Unity 6000.0 Manual/UndoWindow: o histórico abre pelo ícone de Desfazer;
   // aqui, pelo toque longo em Desfazer ou Refazer (o toque curto continua
@@ -7125,6 +7219,10 @@ void EditorSession::update() {
   state_.assetCount=mapScene_.assetCount();
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
+  if(state_.globalSearch) {
+    state_.globalResults=editorGlobalSearch(document_,searchFiles_,state_.globalQuery,state_.globalProvider,
+        [&](u32 i){return creationAvailable(state_,i) && !isPlaying();},state_.globalCounts);
+  }
   if(state_.undoHistory) {
     if(isPlaying()) state_.undoHistory=false;
     state_.undoEntries.resize(history_.entryCount());

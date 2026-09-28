@@ -337,6 +337,17 @@ int main(int argc, char **argv) {
     auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
+  // Busca global com resultados dos três provedores.
+  if(argc>4 && std::string(argv[4])=="global-search") {
+    state.globalSearch=true;state.globalQuery="porta";
+    state.globalResults={
+      {editor::EditorSearchProvider::Scene,0,"Porta da frente","Cena / Casa · 4 componentes",ui::UiIcon::SceneObject,0},
+      {editor::EditorSearchProvider::Scene,0,"Porta dos fundos","Cena / Casa / Cozinha · 3 componentes",ui::UiIcon::SceneObject,0},
+      {editor::EditorSearchProvider::Project,0,"PortaAutomatica.cs","Projeto / Scripts/Portas",ui::UiIcon::IdeCode,0},
+      {editor::EditorSearchProvider::Project,0,"porta-madeira.png","Projeto / Texturas",ui::UiIcon::AssetsTexture,1},
+      {editor::EditorSearchProvider::Create,0,"Porta com dobradiça","Criar · corpo, colisor e junta de dobradiça",ui::UiIcon::SceneObjectAdd,2}};
+    state.globalCounts={2,2,1};
+  }
   // Histórico de Desfazer com passos aplicados e desfeitos.
   if(argc>4 && std::string(argv[4]).starts_with("undo-history")) {
     state.undoHistory=true;state.undoNewestFirst=std::string(argv[4])!="undo-history-oldest";

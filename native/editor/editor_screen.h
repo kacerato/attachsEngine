@@ -35,6 +35,7 @@
 #include "editor/editor_view.h"
 #include "scene/component_preset.h"
 #include "ui/ui_draw_list.h"
+#include "ui/ui_icon_id.h"
 #include "ui/ui_input.h"
 #include "ui/ui_theme.h"
 #include <string>
@@ -400,6 +401,10 @@ enum class EditorWidget : u32 {
   // páginas e uma linha por ponto do histórico (0 = cena como abriu).
   UndoHistoryClose=0xC7000000u, UndoHistoryOrder, UndoHistoryPrevious, UndoHistoryNext,
   UndoHistoryRowBase=0xC7000100u,
+  // Busca global (Unity 6000.0 Search): abrir na barra, campo, chips de
+  // provedor, páginas e um resultado por linha.
+  GlobalSearchOpen=0xC9000000u, GlobalSearchClose, GlobalSearchField, GlobalSearchPrevious, GlobalSearchNext,
+  GlobalSearchProviderBase=0xC9000010u, GlobalSearchResultBase=0xC9000100u,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
@@ -511,7 +516,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -544,6 +549,20 @@ enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code }
 enum class EditorProjectSection : u8 { Layers, Input, Water };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
+
+enum class EditorSearchProvider : u8 { All = 0, Scene, Project, Create };
+
+struct EditorSearchResult {
+  EditorSearchProvider provider = EditorSearchProvider::Scene;
+  // Objeto: id da entidade; receita: índice no catálogo; arquivo: índice no
+  // índice de arquivos passado à busca.
+  u64 key = 0;
+  std::string title, detail;
+  ui::UiIcon icon = ui::UiIcon::None;
+  u8 rank = 0;  // 0 começa com a palavra, 1 contém numa fronteira, 2 contém
+};
+
+struct EditorSearchCounts { u32 scene = 0, project = 0, create = 0; };
 
 struct EditorScreenState final {
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
@@ -659,6 +678,14 @@ struct EditorScreenState final {
   // Camadas escondidas e não selecionáveis na vista da cena: estado do editor
   // (preferência do projeto), nunca da cena — o jogo e o Play não mudam.
   u32 hiddenLayers=0,unpickableLayers=0,sceneLayersPage=0;
+  // Busca global: consulta, provedor escolhido (chip), página e resultados que
+  // a sessão recalcula enquanto a janela está aberta.
+  bool globalSearch=false,editingGlobalSearch=false;
+  std::string globalQuery;
+  EditorSearchProvider globalProvider=EditorSearchProvider::All;
+  u32 globalPage=0;
+  std::vector<EditorSearchResult> globalResults;
+  EditorSearchCounts globalCounts;
   bool sceneLayersPanel=false;
   // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
   EditorEntityId pingEntity=0;

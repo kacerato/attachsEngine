@@ -218,6 +218,10 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   } else {
     action(UiIcon::EditorAuthorRedo, EditorWidget::Redo, builder.state.canRedo);
     action(UiIcon::EditorAuthorUndo, EditorWidget::Undo, builder.state.canUndo);
+    // Unity 6000.0: a Busca global fica na barra, ao lado do histórico.
+    builder.iconButton(takeRight(content, kActionButton), UiIcon::IdeSearch, widgetId(EditorWidget::GlobalSearchOpen),
+                       builder.state.globalSearch);
+    takeRight(content, theme.spacing.tiny);
   }
 
   const auto sceneMenu=takeLeft(content,76.0f);
@@ -254,7 +258,12 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   // Desligada → TAA nativo → Arm ASR → AMD FSR 2, pulando o que o aparelho
   // recusa (o motivo vai para a barra de estado).
   if(builder.state.workspace==EditorWorkspace::Scene || builder.state.workspace==EditorWorkspace::Play) {
-    if(content.width>=250.0f) {
+    // Cabe o chip: o rótulo de contexto à direita é opcional e some antes. Uma
+    // vista de diagnóstico ligada tem prioridade: é estado vivo que precisa de
+    // saída à vista, então o chip de modo cede o espaço a ela.
+    const bool debugQuick=builder.state.workspace==EditorWorkspace::Scene &&
+        builder.state.qualityTemporalAvailable && builder.state.qualityTemporalDebug!=0;
+    if(content.width>=(debugQuick?264.0f:120.0f)) {
       const auto &state=builder.state;
       const char *executed=renderer::isTemporalUpscaler(state.qualityExecutedUpscaler)
           ?renderer::upscalingFilterLabel(state.qualityExecutedUpscaler)
@@ -997,6 +1006,91 @@ void buildUndoHistory(ScreenBuilder &builder,EditorScreenLayout &layout) {
     builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textDim,theme.type.caption,UiAlign::Center);
   } else builder.label(footer,count?"Toque num ponto para voltar a ele":"Nada para desfazer ainda",theme.color.textFaint,
                        theme.type.caption,UiAlign::Center);
+}
+
+// Busca global (Unity 6000.0 Manual/search-overview) em tela cheia: campo no
+// topo, chips de provedor com a contagem de cada um, resultados com ícone,
+// título, caminho e o provedor; tocar abre o resultado (objeto: seleciona e faz
+// Ping; arquivo: revela no painel e abre; receita: abre Criar nela).
+void buildGlobalSearch(ScreenBuilder &builder) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  router.addBlocker(state.surface);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
+  const float width=std::min(640.f,state.surface.width-16);
+  const UiRect window{state.surface.x+(state.surface.width-width)*.5f,state.surface.y+8,width,state.surface.height-16};
+  list.addRect(deflate(window,UiInsets::all(-1)),theme.color.line,theme.radius.control);
+  list.addRect(window,theme.color.surface,theme.radius.control);
+  auto content=deflate(window,UiInsets::all(8));
+  // Campo.
+  auto top=takeTop(content,40);
+  builder.iconButton(takeRight(top,40),UiIcon::UiClose,widgetId(EditorWidget::GlobalSearchClose));
+  takeRight(top,6);
+  list.addRect(top,state.editingGlobalSearch?theme.color.raised:theme.color.silhouette,theme.radius.control);
+  if(state.editingGlobalSearch) list.addRect({top.x,top.bottom()-2,top.width,2},theme.color.accent,1);
+  list.addImage(centred(UiRect{top.x,top.y,36,top.height},18,18),static_cast<UiImageId>(UiIcon::IdeSearch),theme.color.accent);
+  const std::string shown=state.editingGlobalSearch?std::string(state.renameText):state.globalQuery;
+  builder.label(deflate(top,UiInsets{38,0,8,0}),shown.empty()?"Buscar na cena, no projeto e em Criar  (t:Tipo  h:  p:  m:)":shown,
+                shown.empty()?theme.color.textFaint:theme.color.text,theme.type.body);
+  router.addRegion(top,widgetId(EditorWidget::GlobalSearchField));
+  takeTop(content,8);
+  // Chips de provedor.
+  auto chips=takeTop(content,32);takeTop(content,8);
+  const u32 total=state.globalCounts.scene+state.globalCounts.project+state.globalCounts.create;
+  const struct {const char *name;UiIcon icon;u32 count;} providers[]{
+    {"Tudo",UiIcon::AssetsSearch,total},{"Cena",UiIcon::SceneObject,state.globalCounts.scene},
+    {"Projeto",UiIcon::AssetsFolder,state.globalCounts.project},{"Criar",UiIcon::SceneObjectAdd,state.globalCounts.create}};
+  const float chipWidth=std::min(140.f,(chips.width-12)/4);
+  for(u32 i=0;i<4;++i) {
+    const UiRect chip{chips.x+i*(chipWidth+4),chips.y,chipWidth,chips.height};
+    const bool on=static_cast<u32>(state.globalProvider)==i;
+    list.addRect(chip,on?theme.color.accent:theme.color.raised,16);
+    auto inner=deflate(chip,UiInsets{10,0,10,0});
+    list.addImage(centred(takeLeft(inner,18),14,14),static_cast<UiImageId>(providers[i].icon),on?theme.color.accentInk:theme.color.textDim);
+    const auto count=takeRight(inner,30);
+    builder.label(count,std::to_string(providers[i].count).c_str(),on?theme.color.accentInk:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(deflate(inner,UiInsets{4,0,0,0}),providers[i].name,on?theme.color.accentInk:theme.color.text,theme.type.caption);
+    router.addRegion(chip,widgetId(EditorWidget::GlobalSearchProviderBase)+i);
+  }
+  // Resultados.
+  auto footer=takeBottom(content,28);
+  const float rowHeight=44;
+  const u32 count=static_cast<u32>(state.globalResults.size());
+  const u32 perPage=std::max(1u,static_cast<u32>(content.height/rowHeight));
+  const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.globalPage,pages-1);
+  if(!count) {
+    const bool idle=state.globalQuery.empty() && state.globalProvider==EditorSearchProvider::All;
+    builder.label(content,idle?"Digite para buscar, ou escolha um provedor para ver tudo dele":"Nada encontrado",
+                  theme.color.textDim,theme.type.body,UiAlign::Center);
+  }
+  for(u32 i=page*perPage;i<count && i<(page+1)*perPage;++i) {
+    const auto &result=state.globalResults[i];
+    auto row=takeTop(content,rowHeight);row.height-=4;
+    list.addRect(row,theme.color.raised,theme.radius.control);
+    auto inner=deflate(row,UiInsets{8,0,8,0});
+    auto icon=result.icon;
+    if(result.provider==EditorSearchProvider::Scene)
+      if(const auto *entity=state.document->find(static_cast<EditorEntityId>(result.key))) icon=iconForEntity(*entity);
+    list.addImage(centred(takeLeft(inner,30),18,18),static_cast<UiImageId>(icon),theme.color.accent);
+    const auto tag=takeRight(inner,70);
+    const char *tagName=result.provider==EditorSearchProvider::Scene?"Cena":result.provider==EditorSearchProvider::Project?"Projeto":"Criar";
+    list.addRect(centred(tag,64,20),theme.color.silhouette,10);
+    builder.label(tag,tagName,theme.color.textDim,theme.type.caption,UiAlign::Center);
+    list.pushClip(inner);
+    builder.label({inner.x+4,inner.y+2,inner.width-4,inner.height*.5f},result.title,theme.color.text,theme.type.caption);
+    builder.label({inner.x+4,inner.y+inner.height*.5f,inner.width-4,inner.height*.5f-2},result.detail,theme.color.textDim,theme.type.caption);
+    list.popClip();
+    router.addRegion(row,widgetId(EditorWidget::GlobalSearchResultBase)+i);
+  }
+  if(pages>1) {
+    const auto previous=takeLeft(footer,44),next=takeRight(footer,44);
+    builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.title,UiAlign::Center);
+    builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.title,UiAlign::Center);
+    if(page) router.addRegion(previous,widgetId(EditorWidget::GlobalSearchPrevious));
+    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::GlobalSearchNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)+" · "+std::to_string(count)+" resultados").c_str(),
+                  theme.color.textDim,theme.type.caption,UiAlign::Center);
+  } else if(count) builder.label(footer,(std::to_string(count)+(count==1?" resultado":" resultados")).c_str(),
+                                 theme.color.textDim,theme.type.caption,UiAlign::Center);
 }
 
 void buildPhysicsOverlay(ScreenBuilder &builder) {
@@ -5270,7 +5364,7 @@ bool platformFieldActive(const EditorScreenState &state) {
   if (!state.platformTextInput || state.editingCode) return false;
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
-         state.editingReferenceSearch || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
+         state.editingReferenceSearch || state.editingGlobalSearch || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
          (state.gradientField != 0 && state.gradientText != 0) || (state.curveField != 0 && state.curveText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
@@ -7143,7 +7237,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(row,widgetId(actions[i]));
     }
   }
-  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
+  // A busca global fica sob o teclado interno, que edita o campo dela.
+  if(state.globalSearch) buildGlobalSearch(builder);
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));

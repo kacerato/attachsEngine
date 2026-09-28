@@ -66,7 +66,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -1595,6 +1595,7 @@ private:
   // Inspectors focados: nomes guardados com a lista para conferir, ao abrir a
   // cena, que o id ainda é o mesmo objeto (senão a aba não volta).
   std::vector<std::string> focusedNames_;
+  std::vector<EditorFileEntry> searchFiles_;
   bool focusedValidated_=false;
   void validateFocusedInspectors();
 public:
@@ -1605,6 +1606,14 @@ public:
   // Leva a cena ao ponto `applied` do histórico (quantos passos aplicados),
   // desfazendo ou refazendo em sequência. Falso se algum passo recusar.
   bool moveHistoryTo(u32 applied);
+  // Busca global: índice de arquivos do projeto (montado ao abrir, não por
+  // quadro) e a aplicação de um resultado.
+  void openGlobalSearch();
+  bool openSearchResult(u32 index);
+  // Abre um arquivo do projeto como o toque na linha do painel Arquivos.
+  void openProjectFile(const EditorFileEntry &entry);
+  // Expande as pastas até `relative` na árvore do painel Arquivos.
+  void revealProjectPath(const std::string &relative);
 private:
   bool handleComponentReorder(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   EditorEntity fieldInitial_{};
