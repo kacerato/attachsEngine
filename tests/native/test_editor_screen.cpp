@@ -582,25 +582,29 @@ AE_TEST(screen_tapping_a_row_selects_it) {
   AE_EXPECT_EQ(state.selection, lab.environment, "tocar na linha seleciona a entidade");
 }
 
-AE_TEST(screen_tapping_the_eye_toggles_visibility_and_is_undoable) {
-  // Tudo que o dedo faz passa pelo historico. Um campo que a interface mudasse
-  // direto seria um campo que o Ctrl+Z nao desfaz, sem nada na tela dizendo qual.
+AE_TEST(screen_tapping_the_eye_toggles_scene_visibility_without_touching_the_scene) {
+  // Unity 6000.0 Scene visibility: o olho da Hierarquia é estado do editor.
+  // O `visible` autoral (cartão Objeto) e o histórico não mudam.
   WaterLab lab;
   Frame frame;
   EditorScreenState state = waterLabState(lab);
   composeFrame(frame, state);
 
   const bool before = lab.document.find(lab.environment)->visible;
+  const u32 depth = lab.history.undoDepth();
   UiPoint at{};
   AE_EXPECT_TRUE(findWidget(frame, hierarchyEyeWidget(lab.environment),
                             frame.layout.hierarchyPanel, at),
                  "");
   const EditorPointerOutcome outcome = tap(frame, state, lab, at);
-  AE_EXPECT_TRUE(outcome.documentChanged, "");
-  AE_EXPECT_TRUE(lab.document.find(lab.environment)->visible != before, "");
-  AE_EXPECT_TRUE(lab.history.undo(lab.document), "");
-  AE_EXPECT_TRUE(lab.document.find(lab.environment)->visible == before,
-                 "e desfazer devolve o estado");
+  AE_EXPECT_TRUE(!outcome.documentChanged, "a cena não muda");
+  AE_EXPECT_TRUE(lab.document.find(lab.environment)->visible == before, "visibilidade autoral intacta");
+  AE_EXPECT_TRUE(state.sceneHiddenHas(lab.environment), "escondido na vista do editor");
+  AE_EXPECT_EQ(lab.history.undoDepth(), depth, "fora do Desfazer");
+  composeFrame(frame, state);
+  AE_EXPECT_TRUE(findWidget(frame, hierarchyEyeWidget(lab.environment), frame.layout.hierarchyPanel, at), "");
+  tap(frame, state, lab, at);
+  AE_EXPECT_TRUE(!state.sceneHiddenHas(lab.environment), "o olho de novo mostra");
 }
 
 AE_TEST(screen_splitter_drag_resizes_the_panel_continuously) {

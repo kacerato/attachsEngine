@@ -399,6 +399,7 @@ void EditorSession::loadEditorPreferences() {
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
   state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
   state_.hiddenLayers=0;state_.unpickableLayers=0;appearanceChanged_=true;state_.userLayouts.clear();state_.layoutsPanel=false;
+  state_.sceneHidden.clear();state_.scenePickOff.clear();sceneHiddenNames_.clear();scenePickOffNames_.clear();
   std::filesystem::path file;
   if(files_.rootPath().empty() ||
      !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
@@ -438,6 +439,10 @@ void EditorSession::loadEditorPreferences() {
         state_.filesCollapsed=layout.filesCollapsed;state_.diagnosticDockOpen=layout.diagnosticDock;
       }
     }
+    else if(key=="scene_hidden" || key=="scene_pick_off") {
+      EditorEntityId id=0;std::string name;
+      if(fields>>id>>std::quoted(name)) (key=="scene_hidden"?sceneHiddenNames_:scenePickOffNames_).push_back({id,name});
+    }
     else if(key=="scene_layers") {u32 hidden=0,locked=0;if(fields>>hidden>>locked) {state_.hiddenLayers=hidden;state_.unpickableLayers=locked;}}
     else if(key=="focused") {
       // Inspector focado aberto quando o projeto fechou (Unity os restaura).
@@ -459,6 +464,9 @@ void EditorSession::saveEditorPreferences() {
   out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
   out<<"undo_order "<<(state_.undoNewestFirst?"newest":"oldest")<<'\n';
   out<<"scene_layers "<<state_.hiddenLayers<<' '<<state_.unpickableLayers<<'\n';
+  // Visibilidade e seleção por objeto: o id e o nome (a cena reaberta confere).
+  for(const auto id:state_.sceneHidden) if(const auto *e=document_.find(id)) out<<"scene_hidden "<<id<<' '<<std::quoted(std::string(e->name))<<'\n';
+  for(const auto id:state_.scenePickOff) if(const auto *e=document_.find(id)) out<<"scene_pick_off "<<id<<' '<<std::quoted(std::string(e->name))<<'\n';
   const auto writeLayout=[&](const EditorLayout &l) {
     out<<l.hierarchyWidth<<' '<<l.inspectorWidth<<' '<<l.hierarchyVisible<<' '<<l.inspectorVisible<<' '
        <<l.filesCollapsed<<' '<<l.diagnosticDock<<'\n';
@@ -637,7 +645,8 @@ void EditorSession::buildPickCandidates() {
     // available for repair, but never invent an invisible pick sphere.
     if(!mapScene_.bounds(document_, id, candidate.center, candidate.radius)) continue;
     candidate.selectable = entity->visible && entity->active &&
-        !(entity->layer<32 && ((state_.hiddenLayers|state_.unpickableLayers)&(1u<<entity->layer)));
+        !(entity->layer<32 && ((state_.hiddenLayers|state_.unpickableLayers)&(1u<<entity->layer))) &&
+        !state_.sceneHiddenHas(id) && !state_.scenePickOffHas(id);
     for(auto parent=document_.find(entity->parent);parent;parent=document_.find(parent->parent))
       candidate.selectable &= parent->visible && parent->active;
     mapScene_.pickGeometry(document_,id,candidate);
@@ -2251,6 +2260,16 @@ bool EditorSession::moveHistoryTo(u32 applied) {
   }
   if(changed && state_.meshPicker && state_.resourceProperty=="collision_mesh") refreshCollisionMeshDraft();
   return history_.undoDepth()==applied;
+}
+
+void EditorSession::restoreSceneVisibility() {
+  // Só voltam os ids que ainda são o mesmo objeto (mesmo nome) nesta cena.
+  const auto restore=[&](const std::vector<std::pair<EditorEntityId,std::string>> &saved,std::vector<EditorEntityId> &out) {
+    out.clear();
+    for(const auto &[id,name]:saved) if(const auto *e=document_.find(id); e && std::string_view(e->name)==name) out.push_back(id);
+  };
+  restore(sceneHiddenNames_,state_.sceneHidden);restore(scenePickOffNames_,state_.scenePickOff);
+  appearanceChanged_=true;
 }
 
 void EditorSession::validateFocusedInspectors() {
@@ -3988,6 +4007,21 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(height>0) state_.filePanelRatio=std::clamp(state_.filePanelRatio-routing.stepDelta.y/height,.28f,.58f);
     }
     return true;
+  }
+  // Toque longo no olho ou na mão: só o objeto, sem os descendentes (Unity:
+  // Alt+clique).
+  if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds) {
+    const u32 key=routing.widgetId;
+    const bool eye=key>=widgetId(EditorWidget::HierarchyEyeBase) && key<widgetId(EditorWidget::HierarchyEyeBase)+EditorDocument::kMaximumEntities;
+    const bool hand=key>=widgetId(EditorWidget::HierarchyPickBase) && key<widgetId(EditorWidget::HierarchyPickBase)+EditorDocument::kMaximumEntities;
+    if(eye || hand) {
+      const EditorEntityId id=key-widgetId(eye?EditorWidget::HierarchyEyeBase:EditorWidget::HierarchyPickBase);
+      auto &list=eye?state_.sceneHidden:state_.scenePickOff;
+      auto found=std::find(list.begin(),list.end(),id);
+      if(found!=list.end()) list.erase(found); else if(document_.exists(id)) list.push_back(id);
+      state_.sceneVisibilityChanged=true;
+      return true;
+    }
   }
   // Toque longo num recurso em Arquivos: abre-o numa janela focada (Unity:
   // Properties), sem trocar o que Propriedades mostra.
@@ -5788,6 +5822,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   state_.selection=kInvalidEntity;state_.status="Cena restaurada";
   state_.collapsedEntities.clear();state_.hierarchyScroll=0;state_.renameEntity=kInvalidEntity;
   validateFocusedInspectors();
+  restoreSceneVisibility();
   return true;
 }
 
@@ -8046,6 +8081,9 @@ void EditorSession::update() {
     if(!document_.exists(state_.selection)) {state_.selection=set.empty()?kInvalidEntity:set.back();}
     if(state_.selection==kInvalidEntity) set.clear();
     else if(!state_.isSelected(state_.selection)) set={state_.selection};
+  }
+  if(state_.sceneVisibilityChanged) {
+    state_.sceneVisibilityChanged=false;appearanceChanged_=true;saveEditorPreferences();
   }
   refreshMultiEdit();
   refreshFocusedAsset();

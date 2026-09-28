@@ -4136,6 +4136,57 @@ AE_TEST(multi_selection_gizmo_moves_every_selected_root) {
   AE_EXPECT_TRUE(history.undo(doc) && doc.find(other)->transform.position[0]==5,"Desfazer volta os dois");
 }
 
+// Unity 6000.0 Scene visibility e Scene picking: olho e mão da Hierarquia, só
+// do editor; pai com filhos em outro estado ganha o marcador; o desenho e o
+// toque na vista respeitam; o projeto guarda.
+AE_TEST(scene_visibility_and_picking_per_object_are_editor_state) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  EditorTransform start{};start.position[1]=.5f;history.setTransform(doc,f.cube,start);
+  const auto parent=doc.find(f.cube)->parent;
+  f.session.update();history.clear();
+  const auto drawn=[&]()->bool{
+    std::vector<renderer::MapDrawState> draws;if(!f.session.extractMap(draws)) return false;
+    for(const auto &d:draws) if(d.objectId==f.cube) return d.visible;
+    return false;
+  };
+  AE_EXPECT_TRUE(drawn(),"cubo desenhado");
+  // Olho do pai: esconde o pai e o cubo (descendente).
+  tapWidget(f,hierarchyEyeWidget(parent));
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.sceneHiddenHas(parent) && state.sceneHiddenHas(f.cube),"pai e filho escondidos");
+  AE_EXPECT_TRUE(!drawn(),"o cubo sai da vista");
+  AE_EXPECT_TRUE(doc.find(f.cube)->visible,"a cena não muda");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"fora do Desfazer");
+  // Toque longo no olho do cubo: mostra só ele (pai oculto com filho visível).
+  const auto eye=locateWidget(f.session,hierarchyEyeWidget(f.cube));
+  f.session.handlePointer({170,UiPointerPhase::Down,eye,90.0});
+  f.session.handlePointer({170,UiPointerPhase::Up,eye,90.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  AE_EXPECT_TRUE(state.sceneHiddenHas(parent) && !state.sceneHiddenHas(f.cube),"só o cubo voltou");
+  AE_EXPECT_TRUE(drawn(),"cubo desenhado de novo");
+  // Mão do cubo: não seleciona pela vista; a Hierarquia continua.
+  tapWidget(f,hierarchyPickWidget(f.cube));
+  AE_EXPECT_TRUE(state.scenePickOffHas(f.cube),"sem seleção pela vista");
+  const_cast<EditorScreenState &>(state).selection=kInvalidEntity;f.session.update();
+  const UiPoint centre=f.viewportCentre();
+  f.down(171,centre);f.up(171,centre);
+  AE_EXPECT_EQ(f.session.selection(),kInvalidEntity,"toque na vista não pega o cubo");
+  tapWidget(f,hierarchyRowWidget(f.cube));
+  AE_EXPECT_EQ(f.session.selection(),f.cube,"a Hierarquia seleciona");
+  // O projeto guarda e a cena reaberta restaura (mesmo id, mesmo nome).
+  const auto root=fs::temp_directory_path()/("aether-visib-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto");
+  tapWidget(f,hierarchyEyeWidget(parent));tapWidget(f,hierarchyPickWidget(f.cube));tapWidget(f,hierarchyPickWidget(f.cube));
+  f.session.update();
+  const auto scene=(root/"cena.astra").string();
+  AE_EXPECT_TRUE(f.session.save(scene.c_str(),0),"cena salva");
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"reaberto");
+  AE_EXPECT_TRUE(f.session.load(scene.c_str(),0),"cena aberta");
+  AE_EXPECT_TRUE(state.sceneHiddenHas(parent),"pai escondido de novo");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

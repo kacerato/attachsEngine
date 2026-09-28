@@ -456,6 +456,8 @@ enum class EditorWidget : u32 {
   AssetRowBase = 0x6000'0000u,
   HierarchyRowBase = 0x1000'0000u,
   HierarchyEyeBase = 0x2000'0000u,
+  // Seleção pela vista por objeto (Unity: Scene picking), a mão da linha.
+  HierarchyPickBase = 0xCE00'0000u,
   TransformFieldBase = 0x3000'0000u,  // + linha * 3 + eixo
   GizmoAxisBase = 0x4000'0000u,       // + eixo
   ComponentPreviewComposition=0x9a00'0000u,
@@ -544,7 +546,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -560,6 +562,9 @@ inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
 }
 inline constexpr u32 hierarchyEyeWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyEyeBase) + entity;
+}
+inline constexpr u32 hierarchyPickWidget(EditorEntityId entity) noexcept {
+  return widgetId(EditorWidget::HierarchyPickBase) + entity;
 }
 inline std::string multiKey(u64 instance, std::string_view property) {
   return std::to_string(instance) + "/" + std::string(property);
@@ -760,6 +765,16 @@ struct EditorScreenState final {
   // modo "Selecionar vários" tocar numa linha ou objeto soma ou tira do conjunto.
   std::vector<EditorEntityId> selectionSet;
   bool multiSelect=false;
+  // Visibilidade e seleção na vista, por objeto (Unity 6000.0 Scene visibility
+  // e Scene picking): estado do editor, fora da cena e do Desfazer. O olho da
+  // Hierarquia esconde o objeto e os descendentes (toque longo: só ele); a mão
+  // tira da seleção por toque na vista. A visibilidade autoral (`visible`)
+  // continua no cartão Objeto.
+  std::vector<EditorEntityId> sceneHidden,scenePickOff;
+  bool sceneHiddenHas(EditorEntityId id) const {return std::find(sceneHidden.begin(),sceneHidden.end(),id)!=sceneHidden.end();}
+  bool scenePickOffHas(EditorEntityId id) const {return std::find(scenePickOff.begin(),scenePickOff.end(),id)!=scenePickOff.end();}
+  // A sessão republica o desenho e guarda nas preferências quando muda.
+  bool sceneVisibilityChanged=false;
   bool isSelected(EditorEntityId id) const {return std::find(selectionSet.begin(),selectionSet.end(),id)!=selectionSet.end();}
   // Inspector na multisseleção (Unity 6000.0 Manual/Multi-object editing): a
   // sessão compara os selecionados com o ativo. Chaves: "name", "visible",

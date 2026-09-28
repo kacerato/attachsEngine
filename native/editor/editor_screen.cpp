@@ -1757,7 +1757,8 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     takeLeft(rowContent, std::min(static_cast<float>(frame.depth) * 14.0f, std::max(0.0f,rowContent.width-110.0f)));
     // Objeto numa camada escondida na vista: a linha fica apagada (Unity
     // SceneVisibility), mas continua selecionável pela Hierarquia.
-    const bool layerHidden = entity->layer < 32 && (builder.state.hiddenLayers & (1u << entity->layer));
+    const bool layerHidden = (entity->layer < 32 && (builder.state.hiddenLayers & (1u << entity->layer))) ||
+                             builder.state.sceneHiddenHas(frame.entity);
     const UiColor ink = selected ? theme.color.accentInk : layerHidden ? theme.color.textFaint : theme.color.text;
     const UiRect twisty = takeLeft(rowContent, 28.0f);
     if (!children.empty())
@@ -1767,12 +1768,34 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     builder.list.addImage(centred(takeLeft(rowContent, 22.0f), 15.0f, 15.0f),
                           static_cast<UiImageId>(iconForEntity(*entity)),
                           selected ? theme.color.accentInk : theme.color.accent);
-    const UiRect eye = takeRight(rowContent, 24.0f);
-    builder.list.addImage(
-        centred(eye, 15.0f, 15.0f),
-        static_cast<UiImageId>(entity->visible ? UiIcon::EditorAuthorEye
-                                               : UiIcon::EditorAuthorEyeOff),
-        selected ? theme.color.accentInk : theme.color.textDim);
+    // Olho e mão (Unity: Scene visibility e Scene picking), só do editor. Com
+    // filhos em estado diferente do pai, um ponto marca a mistura (pai visível
+    // com filho oculto, pai oculto com filho visível; idem para a seleção).
+    const UiRect eye = takeRight(rowContent, 26.0f);
+    const UiRect hand = takeRight(rowContent, 26.0f);
+    {
+      const auto &s=builder.state;
+      const bool hiddenSelf=s.sceneHiddenHas(frame.entity),pickOffSelf=s.scenePickOffHas(frame.entity);
+      bool anyHidden=false,anyShown=false,anyPickOff=false,anyPickOn=false;
+      if(!children.empty()) {
+        std::vector<EditorEntityId> subtree;document.collectSubtree(frame.entity,subtree);
+        for(const auto id:subtree) if(id!=frame.entity) {
+          (s.sceneHiddenHas(id)?anyHidden:anyShown)=true;
+          (s.scenePickOffHas(id)?anyPickOff:anyPickOn)=true;
+        }
+      }
+      const UiColor quiet=selected?withAlpha(theme.color.accentInk,.45f):theme.color.textFaint;
+      const UiColor loud=selected?theme.color.accentInk:theme.color.warning;
+      builder.list.addImage(centred(eye,15.0f,15.0f),static_cast<UiImageId>(hiddenSelf?UiIcon::EditorAuthorEyeOff:UiIcon::EditorAuthorEye),
+                            hiddenSelf?loud:quiet);
+      if((!hiddenSelf && anyHidden) || (hiddenSelf && anyShown))
+        builder.list.addRect({eye.right()-8,eye.y+eye.height*.5f-9,5,5},loud,2.5f);
+      const UiRect handIcon=centred(hand,15.0f,15.0f);
+      builder.list.addImage(handIcon,static_cast<UiImageId>(UiIcon::EditorAuthorPan),pickOffSelf?loud:quiet);
+      if(pickOffSelf) builder.list.addLine({handIcon.x-1,handIcon.bottom()+1},{handIcon.right()+1,handIcon.y-1},loud,1.8f);
+      if((!pickOffSelf && anyPickOff) || (pickOffSelf && anyPickOn))
+        builder.list.addRect({hand.right()-8,hand.y+hand.height*.5f-9,5,5},loud,2.5f);
+    }
     // O objeto em que o Inspector está travado leva o cadeado na linha.
     if (builder.state.inspectorLocked == frame.entity)
       builder.list.addImage(centred(takeRight(rowContent, 20.0f), 13.0f, 13.0f), static_cast<UiImageId>(UiIcon::SceneLock),
@@ -1784,7 +1807,8 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     // fundo da linha, senão tocar nele seleciona em vez de alternar.
     builder.router.addRegion(row, hierarchyRowWidget(frame.entity));
     if (!children.empty()) builder.router.addRegion(twisty,widgetId(EditorWidget::HierarchyCollapseBase)+frame.entity);
-    builder.router.addRegion(eye, hierarchyEyeWidget(frame.entity), theme.touch.minimumTarget);
+    builder.router.addRegion(eye, hierarchyEyeWidget(frame.entity));
+    builder.router.addRegion(hand, hierarchyPickWidget(frame.entity));
   }
   builder.list.popClip();
   return rows;
@@ -8527,12 +8551,34 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   }
   if (widget >= widgetId(EditorWidget::HierarchyEyeBase) &&
       widget < widgetId(EditorWidget::TransformFieldBase)) {
+    // Unity SceneVisibility: o olho esconde (ou mostra) o objeto e os
+    // descendentes só na vista do editor; a cena e o jogo não mudam.
     const EditorEntityId entity = widget - widgetId(EditorWidget::HierarchyEyeBase);
-    const EditorEntity *found = document.find(entity);
-    if (found != nullptr) {
-      EditorEntity values = *found;
-      values.visible = !values.visible;
-      outcome.documentChanged = history.applyValues(document, entity, values);
+    if (document.find(entity) != nullptr) {
+      std::vector<EditorEntityId> subtree;document.collectSubtree(entity,subtree);
+      const bool hide=!state.sceneHiddenHas(entity);
+      for(const auto id:subtree) {
+        auto found=std::find(state.sceneHidden.begin(),state.sceneHidden.end(),id);
+        if(hide && found==state.sceneHidden.end()) state.sceneHidden.push_back(id);
+        if(!hide && found!=state.sceneHidden.end()) state.sceneHidden.erase(found);
+      }
+      state.sceneVisibilityChanged=true;
+    }
+    return outcome;
+  }
+  if (widget >= widgetId(EditorWidget::HierarchyPickBase) && widget < widgetId(EditorWidget::HierarchyPickBase)+EditorDocument::kMaximumEntities) {
+    // Unity Scene picking: a mão tira (ou devolve) o objeto e os descendentes
+    // da seleção por toque na vista; a Hierarquia continua selecionando.
+    const EditorEntityId entity = widget - widgetId(EditorWidget::HierarchyPickBase);
+    if (document.find(entity) != nullptr) {
+      std::vector<EditorEntityId> subtree;document.collectSubtree(entity,subtree);
+      const bool off=!state.scenePickOffHas(entity);
+      for(const auto id:subtree) {
+        auto found=std::find(state.scenePickOff.begin(),state.scenePickOff.end(),id);
+        if(off && found==state.scenePickOff.end()) state.scenePickOff.push_back(id);
+        if(!off && found!=state.scenePickOff.end()) state.scenePickOff.erase(found);
+      }
+      state.sceneVisibilityChanged=true;
     }
     return outcome;
   }

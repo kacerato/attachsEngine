@@ -429,6 +429,8 @@ int main(int argc, char **argv) {
     state.multi.count=3;state.multi.hidden=1;state.multi.common={lightInstance};
     state.multi.mixed={"name",editor::multiKey(lightInstance,"intensity"),"t.00"};
     state.componentSelection=selection;
+    // Olho e mão: poste B escondido, poste A sem seleção pela vista.
+    state.sceneHidden={ids[1]};state.scenePickOff={ids[0]};
     if(std::string(argv[4])!="multi") state.expandedNative=lightInstance;
     if(std::string(argv[4])=="multi-set") {
       state.setValueMenu.key=editor::multiKey(lightInstance,"intensity");state.setValueMenu.label="Intensidade";

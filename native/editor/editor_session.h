@@ -903,10 +903,11 @@ public:
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
     if(!mapScene_.extract(document_, out)) return false;
     applyLodGroups(document_, out);
-    // Camadas escondidas na vista da cena (só o editor; o Play extrai do mundo).
-    if(state_.hiddenLayers) for(auto &draw:out)
+    // Camadas e objetos escondidos na vista da cena (só o editor; o Play
+    // extrai do mundo).
+    if(state_.hiddenLayers || !state_.sceneHidden.empty()) for(auto &draw:out)
       if(const auto *entity=document_.find(static_cast<EditorEntityId>(draw.objectId));
-         entity && entity->layer<32 && (state_.hiddenLayers&(1u<<entity->layer))) draw.visible=false;
+         entity && ((entity->layer<32 && (state_.hiddenLayers&(1u<<entity->layer))) || state_.sceneHiddenHas(entity->id))) draw.visible=false;
     return true;
   }
   // A vista que escolhe os níveis dos LOD Groups: a câmera da cena no Play,
@@ -1685,6 +1686,9 @@ private:
   float dragInitialWorld_[16]{};
   void applyMultiDrag(const EditorTransform &moved,u32 axis);
   void validateFocusedInspectors();
+  // Visibilidade e seleção por objeto guardadas (id, nome), aplicadas à cena aberta.
+  std::vector<std::pair<EditorEntityId,std::string>> sceneHiddenNames_,scenePickOffNames_;
+  void restoreSceneVisibility();
 public:
   // Ping (Unity): abre os pais, rola a Hierarquia até o objeto e pisca a linha.
   void pingEntity(EditorEntityId id);
