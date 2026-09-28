@@ -107,7 +107,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
 | 62 | Travar o Inspector na seleção atual | ✔ | cadeado no cabeçalho; edição vai ao travado · `902b804f` | I3 |
-| 63 | Inspector focado de objeto ou recurso | ◐ | objeto de cena; recurso fica com o bloco de assets (86) · `cba8cc82` | I3 |
+| 63 | Inspector focado de objeto ou recurso | ✔ | objeto `cba8cc82`; material, HDRI e perfil de ambiente (botão de janela ou toque longo no arquivo) `3383e558` | I3 |
 | 64 | Inspector focado de componente ou referência (Properties) | ✔ | aba presa à instância do componente, só aquele cartão · `cba8cc82` | I3 |
 | 65 | Abrir por ⋮ › Properties | ✔ | ⋮ do cartão, ⋮ do Inspector e menu da Hierarquia · `cba8cc82` | I3 |
 | 66 | Restaurar os focados ao reabrir o projeto | ✔ | `.astra/editor-preferences.astra`; volta só se o id ainda é o mesmo objeto · `cba8cc82` | I3 |
