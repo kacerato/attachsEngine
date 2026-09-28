@@ -282,6 +282,7 @@ public interface ISceneAccess
     bool SetName(ulong objectId, string name) => throw new NotSupportedException();
     /// <summary>1 ativo, 0 inativo, -1 objeto indisponível.</summary>
     int GetActive(ulong objectId) => throw new NotSupportedException();
+    int GetActiveSelf(ulong objectId) => throw new NotSupportedException();
     bool SetActive(ulong objectId, bool active) => throw new NotSupportedException();
 
     // --- v3: ciclo de vida --------------------------------------------------
@@ -451,12 +452,14 @@ public abstract class Behavior
     internal void Detach() { _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
     // Ordem de uma sessão de Play (comparável a Unity 6000.0, Manual/execution-order):
     //   Awake  → uma vez por instância, depois que TODAS foram criadas e receberam
-    //            as propriedades autoradas; roda mesmo desativada.
+    //            as propriedades autoradas; roda mesmo com Enabled=false, mas
+    //            aguarda a primeira ativação do objeto na hierarquia.
     //   Enable → quando passa a ativa (logo após Awake, ou ao religar Enabled).
     //   Start  → antes do primeiro quadro em que está ativa.
     //   quadro → Update, depois animação e física (FixedUpdate e contatos),
     //            depois LateUpdate, depois o acompanhamento de câmera.
-    //   Disable → ao desligar Enabled e no fim do Play; Stop por último.
+    //   Disable → ao desligar Enabled ou a hierarquia, no próximo despacho de
+    //             callbacks, e no fim do Play; Stop por último.
     // Exceção em qualquer callback desativa só aquela instância, sem Disable.
     public virtual void Awake() { }
     public virtual void Enable() { }

@@ -20,10 +20,12 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         protected override Assembly? Load(AssemblyName name) =>
             name.Name == typeof(Behavior).Assembly.GetName().Name ? typeof(Behavior).Assembly : null;
     }
-    private sealed class Entry(Behavior instance, ScriptTypeSchema schema)
+    private sealed class Entry(Behavior instance, ScriptTypeSchema schema, GameObject owner)
     {
         public Behavior Instance { get; } = instance;
         public ScriptTypeSchema Schema { get; } = schema;
+        public GameObject Owner { get; } = owner;
+        public bool Awoken { get; set; }
         public bool Started { get; set; }
         // Último estado entregue por Enable/Disable; a transição é detectada
         // quando o próprio script (ou outro) muda Enabled.
@@ -64,7 +66,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                     ?? throw new InvalidOperationException("Behavior construction failed: " + schema.Name);
                 instance.Attach(scene, attachment.ObjectId, attachment.InstanceId, this);
                 instance.Enabled = attachment.Enabled;
-                prepared.Add(new(instance, schema));
+                prepared.Add(new(instance, schema, GameObject.Resolve(scene, attachment.ObjectId)));
                 if (attachment.PropertyTypes is { } authoredTypes)
                     foreach (var field in schema.Properties)
                         if (authoredTypes.TryGetValue(field.Id, out var kind) && kind != field.ValueType)
@@ -72,9 +74,9 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                 ApplyProperties(instance, schema, attachment.Properties, scene);
             }
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
-            // Awake de todas antes de qualquer Enable/Start: uma pode procurar a
-            // outra com FindBehavior sem depender da ordem da cena.
-            foreach (var entry in _entries) Invoke(entry, "Awake", static b => b.Awake());
+            // Todas as instâncias existem antes dos callbacks. Objetos inativos
+            // aguardam sua primeira ativação; Enabled=false não adia o Awake.
+            foreach (var entry in _entries) EnsureAwake(entry);
             foreach (var entry in _entries) EnsureStarted(entry);
         }
         catch
@@ -167,22 +169,41 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                 yield return entry.Instance;
     }
 
+    private static bool ObjectActive(Entry entry) => entry.Owner.IsAlive && entry.Owner.ActiveInHierarchy;
+
+    private void EnsureAwake(Entry entry)
+    {
+        if (entry.Awoken || entry.Failed || !ObjectActive(entry)) return;
+        entry.Awoken = true;
+        Invoke(entry, "Awake", static b => b.Awake());
+    }
+
+    private bool MayRun(Entry entry) => !entry.Failed && entry.Instance.Enabled && ObjectActive(entry);
+
+    private void Deactivate(Entry entry)
+    {
+        var wasActive = entry.Active;
+        entry.Active = false;
+        if (wasActive && !entry.Failed) Invoke(entry, "Disable", static b => b.Disable());
+    }
+
     private bool EnsureStarted(Entry entry)
     {
-        if (!entry.Instance.Enabled)
+        EnsureAwake(entry);
+        if (!MayRun(entry))
         {
-            if (entry.Active && !entry.Failed) { entry.Active = false; Invoke(entry, "Disable", static b => b.Disable()); }
-            entry.Active = false;
+            Deactivate(entry);
             return false;
         }
         if (!entry.Active)
         {
             entry.Active = true;
             Invoke(entry, "Enable", static b => b.Enable());
-            if (!entry.Instance.Enabled) return false;
+            if (!MayRun(entry)) { Deactivate(entry); return false; }
         }
         if (!entry.Started) { entry.Started = true; Invoke(entry, "Start", static b => b.Start()); }
-        return entry.Instance.Enabled;
+        if (!MayRun(entry)) { Deactivate(entry); return false; }
+        return true;
     }
     private void Invoke(Entry entry, string phase, Action<Behavior> action)
     {

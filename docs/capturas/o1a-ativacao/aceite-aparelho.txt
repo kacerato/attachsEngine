@@ -1,0 +1,19 @@
+09-28 12:16:43.237 28973 31776 I Astra.Script: 2: O1A local=True herdado=False; Awake adiado
+09-28 12:16:44.165 28973 31776 I Astra.Script: 4: O1A Awake
+09-28 12:16:44.166 28973 31776 I Astra.Script: 4: O1A Enable
+09-28 12:16:44.166 28973 31776 I Astra.Script: 4: O1A Start
+09-28 12:16:45.170 28973 31776 I Astra.Script: 4: O1A Disable
+09-28 12:16:46.171 28973 31776 I Astra.Script: 4: O1A Enable
+09-28 12:16:47.168 28973 31776 I Astra.Script: 4: O1A Disable
+09-28 12:16:49.162 28973 31776 I Astra.Script: 4: O1A Enable
+09-28 12:16:50.167 28973 31776 I Astra.Script: 2: O1A PASS: Awake=1 Start=1 Enable=3 Disable=2; mesma instancia
+09-28 12:17:30.793 28973 31776 I Astra.Script: 4: O1A Disable
+09-28 12:18:08.519 31785 13001 I Astra.Script: 2: O1A local=True herdado=False; Awake adiado
+09-28 12:18:09.286 31785 13001 I Astra.Script: 4: O1A Awake
+09-28 12:18:09.286 31785 13001 I Astra.Script: 4: O1A Enable
+09-28 12:18:09.287 31785 13001 I Astra.Script: 4: O1A Start
+09-28 12:18:10.288 31785 13001 I Astra.Script: 4: O1A Disable
+09-28 12:18:11.301 31785 13001 I Astra.Script: 4: O1A Enable
+09-28 12:18:12.282 31785 13001 I Astra.Script: 4: O1A Disable
+09-28 12:18:14.284 31785 13001 I Astra.Script: 4: O1A Enable
+09-28 12:18:15.286 31785 13001 I Astra.Script: 2: O1A PASS: Awake=1 Start=1 Enable=3 Disable=2; mesma instancia

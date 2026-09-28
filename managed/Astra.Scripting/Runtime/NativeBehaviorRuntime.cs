@@ -48,7 +48,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v13). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v14). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -133,6 +133,8 @@ public static unsafe class NativeBehaviorRuntime
         // v13: resultado das operações estruturais no ponto seguro.
         public delegate* unmanaged<void*, uint, ulong, ulong, uint, uint, ulong*, int> QueueStructuralOperation;
         public delegate* unmanaged<void*, uint, ulong, uint*, uint*, int> QueryOperation;
+        // v14: estado ativo local, separado do estado herdado.
+        public delegate* unmanaged<void*, ulong, int> GetActiveSelf;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -150,7 +152,7 @@ public static unsafe class NativeBehaviorRuntime
             AnimationCommand != null && GetAnimationState != null && SetAnimationState != null && AnimationClipAt != null &&
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
-            SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null;
+            SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -273,6 +275,7 @@ public static unsafe class NativeBehaviorRuntime
             fixed (byte* pointer = bytes) return access.SetName(access.Context, objectId, pointer, bytes.Length) != 0;
         }
         public int GetActive(ulong objectId) => Accessible ? access.GetActive(access.Context, objectId) : -1;
+        public int GetActiveSelf(ulong objectId) => Accessible ? access.GetActiveSelf(access.Context, objectId) : -1;
         public bool SetActive(ulong objectId, bool active) =>
             Accessible && access.SetActive(access.Context, objectId, active ? 1 : 0) != 0;
 
@@ -618,7 +621,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 13 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 14 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

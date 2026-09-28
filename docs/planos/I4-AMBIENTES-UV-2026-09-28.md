@@ -65,3 +65,5 @@ O plano principal continua sendo [Expansão de objetos, componentes e API](EXPAN
 | **P completo; S → M; T; C** | Expandir prefabs/overrides; sprites antes de tilemap; terreno com autoria e runtime; Canvas apoiado em texto/input reais. Continuar por famílias do atlas, sem aumentar contagem por nomes vazios. |
 
 `Static` (115) não deve voltar como flag decorativa: cada opção só entra com seu consumidor de iluminação, oclusão, batching ou navegação. A ordem do inventário é referência; dependências reais, como P para Instantiate(prefab), precisam ser antecipadas de forma explícita.
+
+Continuação em 28/09: [O1a — ativação e lifecycle](O1A-ATIVACAO-2026-09-28.md) entrega o item 113 e corrige scripts sob hierarquia inativa. Tags e habilitação uniforme continuam pendentes.

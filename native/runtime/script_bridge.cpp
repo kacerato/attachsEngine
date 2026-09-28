@@ -175,7 +175,8 @@ std::string ScriptBridge::attachments(const SceneGraph &graph) {
   bool first = true;
   for (auto id : ids) {
     const auto &object = *graph.find(id);
-    if (!graph.activeInHierarchy(id)) continue;
+    // Instâncias inativas também pertencem à sessão: o runtime adia o Awake
+    // até a primeira ativação, sem perder seus campos nem recriar a instância.
     for (usize i = 0; i < object.components.size(); ++i) if (const auto *script = scene::scriptBehavior(object.components.at(i))) {
       if (!first) out << ',';
       first = false;
@@ -328,10 +329,19 @@ void ScriptBridge::installAccess() {
   };
   access_.getActive = [](void *c, u64 id) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
+    if (id > std::numeric_limits<ObjectId>::max()) { s.lastStatus_ = WorldStatus::InvalidArgument; return -1; }
     const auto handle = s.world_->handle(static_cast<ObjectId>(id));
     s.lastStatus_ = s.world_->validate(handle);
     if (s.lastStatus_ != WorldStatus::Ok) return -1;
     return s.world_->activeInHierarchy(handle) ? 1 : 0;
+  };
+  access_.getActiveSelf = [](void *c, u64 id) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (id > std::numeric_limits<ObjectId>::max()) { s.lastStatus_ = WorldStatus::InvalidArgument; return -1; }
+    const auto handle = s.world_->handle(static_cast<ObjectId>(id));
+    s.lastStatus_ = s.world_->validate(handle);
+    if (s.lastStatus_ != WorldStatus::Ok) return -1;
+    return s.world_->activeSelf(handle) ? 1 : 0;
   };
   access_.setActive = [](void *c, u64 id, int active) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);

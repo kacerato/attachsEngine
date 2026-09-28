@@ -176,6 +176,11 @@ WorldStatus GameWorld::setName(const ObjectHandle &h, std::string_view name) {
   return graph_.setName(h.id, name) ? WorldStatus::Ok : WorldStatus::Rejected;
 }
 
+bool GameWorld::activeSelf(const ObjectHandle &h) const noexcept {
+  const auto *object = find(h);
+  return object && object->active;
+}
+
 bool GameWorld::activeInHierarchy(const ObjectHandle &h) const noexcept {
   return validate(h) == WorldStatus::Ok && graph_.activeInHierarchy(h.id);
 }
@@ -184,6 +189,7 @@ WorldStatus GameWorld::setActive(const ObjectHandle &h, bool active) {
   const auto status = validate(h);
   if (status != WorldStatus::Ok) return status;
   const bool changed = graph_.find(h.id) && graph_.find(h.id)->active != active;
+  if (!changed) return WorldStatus::Ok;
   if (!graph_.setActive(h.id, active)) return WorldStatus::Rejected;
   ++structuralRevision_;
   if (changed) invalidated_ |= subtreeInvalidation(h.id);

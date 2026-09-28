@@ -105,6 +105,7 @@ public static class AstraWorldTests
             if (string.IsNullOrEmpty(name)) return Fail(WorldStatus.InvalidArgument);
             entry.Name = name; LastStatus = WorldStatus.Ok; return true;
         }
+        public int GetActiveSelf(ulong objectId) => Live(objectId) is { } entry ? (entry.Active ? 1 : 0) : -1;
         public int GetActive(ulong objectId)
         {
             var entry = Live(objectId);
@@ -302,6 +303,13 @@ public static class AstraWorldTests
         Assert.Equal("Elevador", child.Name);
         child.SetActive(false);
         Assert.False(child.ActiveInHierarchy, "objeto desativado");
+        Assert.False(child.ActiveSelf);
+        parent.SetActive(false);
+        child.SetActive(true);
+        Assert.True(child.ActiveSelf, "estado local preservado sob pai inativo");
+        Assert.False(child.ActiveInHierarchy);
+        parent.SetActive(true);
+        Assert.True(child.ActiveSelf && child.ActiveInHierarchy, "reativação não altera estado local do filho");
     }
 
     [Test]
@@ -334,6 +342,7 @@ public static class AstraWorldTests
         Assert.False(child.IsAlive, "a subárvore inteira vence junto");
         Assert.Throws<WorldException>(() => _ = parent.Name, "leitura por referência vencida é recusada");
         Assert.Throws<WorldException>(() => child.SetActive(true), "escrita por referência vencida é recusada");
+        Assert.Throws<WorldException>(() => _ = child.ActiveSelf, "estado local de referência vencida é recusado");
         // O armazenamento só some no ponto seguro.
         Assert.True(world.Exists(parent.ObjectId), "objeto ainda presente antes do ponto seguro");
         world.Flush();

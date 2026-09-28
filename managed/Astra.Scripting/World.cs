@@ -160,10 +160,18 @@ public sealed class GameObject : IEquatable<GameObject>
         set { Require("renomear"); Check(Scene.SetName(ObjectId, value), "renomear"); }
     }
 
+    /// <summary>Estado local persistido; pode ser verdadeiro com um ancestral inativo.</summary>
+    public bool ActiveSelf
+    {
+        get { Require("ler estado ativo local"); var value = Scene.GetActiveSelf(ObjectId);
+            Check(value >= 0, "ler estado ativo local"); return value == 1; }
+    }
+
     /// <summary>Ativo considerando também os ancestrais.</summary>
     public bool ActiveInHierarchy
     {
-        get { Require("ler estado ativo"); return Scene.GetActive(ObjectId) == 1; }
+        get { Require("ler estado ativo"); var value = Scene.GetActive(ObjectId);
+            Check(value >= 0, "ler estado ativo"); return value == 1; }
     }
     public void SetActive(bool active)
     {

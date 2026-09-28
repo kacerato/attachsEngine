@@ -141,6 +141,7 @@ public:
   ObjectHandle findChildByName(const ObjectHandle &parent, std::string_view name, bool recursive) const noexcept;
   std::string_view nameOf(const ObjectHandle &handle) const noexcept;
   WorldStatus setName(const ObjectHandle &handle, std::string_view name);
+  bool activeSelf(const ObjectHandle &handle) const noexcept;
   bool activeInHierarchy(const ObjectHandle &handle) const noexcept;
   WorldStatus setActive(const ObjectHandle &handle, bool active);
   // Camada de gameplay (filtro de física e consultas) e flags de desenho do

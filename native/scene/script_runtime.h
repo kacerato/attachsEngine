@@ -153,7 +153,7 @@ struct ScriptRenderingState {
 };
 
 struct ScriptSceneAccess {
-  u32 version=13,size=sizeof(ScriptSceneAccess);
+  u32 version=14,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -246,6 +246,8 @@ struct ScriptSceneAccess {
   // confirma apenas entrada na fila; queryOperation devolve o resultado final.
   int (*queueStructuralOperation)(void *,u32,u64,u64,u32,u32,u64 *)=nullptr;
   int (*queryOperation)(void *,u32,u64,u32 *,u32 *)=nullptr;
+  // ABI v14: estado local; getActive continua incluindo os ancestrais.
+  int (*getActiveSelf)(void *,u64)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
@@ -258,14 +260,15 @@ struct ScriptSceneAccess {
            animationCommand&&getAnimationState&&setAnimationState&&animationClipAt&&
            resourceElementId&&getResourceByElementId&&setResourceByElementId&&
             appendAnimationClip&&removeAnimationClip&&moveAnimationClip&&setParentWithPolicy&&
-            queueStructuralOperation&&queryOperation;
+            queueStructuralOperation&&queryOperation&&getActiveSelf;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,cameraLook)==offsetof(ScriptSceneAccess,characterJump)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,animationCommand)==offsetof(ScriptSceneAccess,cameraLook)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,appendAnimationClip)==offsetof(ScriptSceneAccess,setResourceByElementId)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,queryOperation)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,getActiveSelf)==offsetof(ScriptSceneAccess,queryOperation)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,getActiveSelf)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 // Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.

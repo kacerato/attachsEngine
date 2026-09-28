@@ -297,6 +297,36 @@ AE_TEST(play_camera_follow_tracks_target_after_world_pose_changes) {
   play.stop();
 }
 
+AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
+  EditorDocument doc;
+  const auto parent = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Pai");
+  const auto child = doc.createEntity(parent, EditorEntityKind::Folder, "Filho");
+  attachScript(doc, child, "project.Activation");
+  AE_EXPECT_TRUE(doc.setActive(parent, false), "pai desativado na autoria");
+  EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc, 42), 42, reopened), "salva e reabre");
+  AE_EXPECT_TRUE(reopened.find(child)->active && !reopened.activeInHierarchy(child), "local e herdado distintos no arquivo");
+  FakeRuntime::reset(); EditorMapScene resources; EditorPlayScene play;
+  play.setScriptRuntime(FakeRuntime::api(), "/projeto");
+  AE_EXPECT_TRUE(play.start(reopened, resources), "Play com script inicialmente inativo");
+  AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
+                 "instância incluída para permitir a primeira ativação");
+  const auto &abi = FakeRuntime::sceneAccess;
+  AE_EXPECT_TRUE(abi.version == 14 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
+  AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
+  const auto revision = play.world().structuralRevision();
+  AE_EXPECT_EQ(abi.setActive(abi.context, child, 1), 1, "escrita idempotente aceita");
+  AE_EXPECT_EQ(play.world().structuralRevision(), revision, "não pede reconstrução sem mudança");
+  AE_EXPECT_EQ(abi.setActive(abi.context, parent, 1), 1, "ativa pai");
+  AE_EXPECT_EQ(abi.getActive(abi.context, child), 1, "filho agora ativo na hierarquia");
+  AE_EXPECT_TRUE(!reopened.find(parent)->active, "Play não altera autoria");
+  AE_EXPECT_EQ(abi.getActiveSelf(abi.context, (1ull << 32) + child), -1, "id largo não pode acertar outro objeto");
+  AE_EXPECT_EQ(abi.destroyObject(abi.context, parent), 1, "remove subárvore");
+  AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), -1, "filho vencido não vira falso silencioso");
+  play.stop();
+}
+
 AE_TEST(play_scene_delivers_solid_contacts_to_the_script_runtime) {
   EditorDocument doc;
   const auto floorId = physical(doc, "Piso", -1, scene::BodyMotion::Static, .5f);

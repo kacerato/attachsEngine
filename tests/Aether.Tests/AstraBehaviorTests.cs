@@ -28,6 +28,9 @@ public static class AstraBehaviorTests
         public int SlotWrites;
         public readonly List<string> SlotPropertyIds = [];
         public bool Exists(ulong id) => id is 1 or 2;
+        public bool HierarchyActive = true;
+        public int GetActive(ulong id) => Exists(id) ? (HierarchyActive ? 1 : 0) : -1;
+        public int GetActiveSelf(ulong id) => Exists(id) ? 1 : -1;
         public uint WorldId => 7;
         public uint GenerationOf(ulong id) => Exists(id) ? 1u : 0u;
         public WorldStatus LastStatus => WorldStatus.Ok;
@@ -114,6 +117,7 @@ public static class AstraBehaviorTests
     private sealed class ComponentScene : ISceneAccess
     {
         public bool Exists(ulong id) => id is 1 or 2;
+        public int GetActive(ulong id) => Exists(id) ? 1 : -1;
         public uint WorldId => 7;
         public uint GenerationOf(ulong id) => Exists(id) ? 1u : 0u;
         public WorldStatus LastStatus => WorldStatus.Ok;
@@ -347,6 +351,32 @@ public static class AstraBehaviorTests
         world.Dispose();
         Assert.Equal("1:stop:21 1:disable:20 1:stop:20", string.Join(' ', scene.Events),
                      "fim do Play: Disable das ativas e Stop de quem começou");
+    }
+
+    [Test]
+    public static void Lifecycle_InactiveHierarchyDefersAwakeAndResumesTheSameInstance()
+    {
+        using var project = new Project(LifecycleSource); var compiled = project.Compile();
+        var scene = new Scene { HierarchyActive = false };
+        using var world = new BehaviorWorld();
+        world.Start(compiled, scene, [Life(20), Life(22, enabled: false)]);
+        var instance = world.FindBehaviors(1, typeof(Behavior)).Cast<Behavior>().First();
+        Assert.Equal(0, scene.Events.Count, "objeto inativo não recebe Awake nem Start");
+        world.Update(.01f); world.FixedUpdate(.01f); world.LateUpdate(.01f);
+        world.Application(BehaviorWorld.ApplicationEvent.Pause, true);
+        Assert.Equal(0, scene.Events.Count, "nenhuma fase executa o objeto inativo");
+        scene.HierarchyActive = true;
+        world.Update(.01f);
+        Assert.Equal("1:awake:20 1:enable:20 1:start:20 1:update:20 1:awake:22", string.Join(' ', scene.Events));
+        scene.Events.Clear(); scene.HierarchyActive = false;
+        world.LateUpdate(.01f); world.Update(.01f); world.FixedUpdate(.01f);
+        Assert.Equal("1:disable:20", string.Join(' ', scene.Events), "uma transição, sem callbacks de quadro");
+        Assert.True(instance.Enabled, "inatividade herdada não apaga Enabled");
+        scene.Events.Clear(); scene.HierarchyActive = true;
+        world.Update(.01f);
+        Assert.Equal("1:enable:20 1:update:20", string.Join(' ', scene.Events), "Awake e Start não repetem");
+        Assert.True(ReferenceEquals(instance, world.FindBehaviors(1, typeof(Behavior)).First()), "mesma instância e campos");
+        Assert.Equal(0, world.Failures.Count);
     }
 
     [Test]
