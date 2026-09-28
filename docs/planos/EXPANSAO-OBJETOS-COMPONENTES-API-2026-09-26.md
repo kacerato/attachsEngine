@@ -6,6 +6,11 @@ Referências: Unity 6000.0 e pacotes fixados em [resumo-cobertura.json](../compo
 
 Este plano **substitui a ordem de execução** do [ROADMAP de 23/09](ampliacao-2026-09-23/ROADMAP.md). O atlas e as fichas daquele diretório continuam valendo como material de pesquisa.
 
+Atualização operacional de 28/09/2026: a execução atual reúne os blocos do
+inventário **O1 + O2 + O4 + P completo** no [bloco ampliado de objetos, scripts e prefabs](BLOCO-OBJETOS-SCRIPTS-PREFABS-2026-09-28.md).
+Essa é a sequência vigente para esse recorte; as metas de expansão e os demais
+sistemas deste documento permanecem como planejamento, não como entregas.
+
 ---
 
 ## 1. Resumo

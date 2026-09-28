@@ -1,5 +1,9 @@
 # O1a — estado ativo e ciclo de vida
 
+Registro histórico da entrega de ativação. Depois dela, [tags foram entregues](O1A-TAGS-2026-09-28.md)
+e a continuação foi ampliada para [O1 + O2 + O4 + P completo](BLOCO-OBJETOS-SCRIPTS-PREFABS-2026-09-28.md).
+As pendências e contagens abaixo descrevem o momento desta entrega.
+
 Entrega de 28/09/2026, na branch `codex/gameplay-runtime`. **A parte de ativação está implementada e validada. O1a continua parcial:** catálogo de tags, consultas por tag e habilitação uniforme dos componentes ainda não foram entregues. Nenhum tipo novo foi adicionado ao catálogo.
 
 ## Problema e implementação

@@ -337,6 +337,12 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 ## Blocos de execução (ordem por dependência)
 
+Atualização de 28/09/2026: por solicitação do usuário, **O1, O2, O4 e P passam
+a compor um único bloco de execução**, incluindo P completo. A ordem interna,
+as dependências e os aceites estão no [plano ampliado](BLOCO-OBJETOS-SCRIPTS-PREFABS-2026-09-28.md).
+Os códigos abaixo são preservados para rastrear os itens; agrupar o trabalho
+não altera seus estados nem as contagens de capacidades implementadas.
+
 | Bloco | Itens | Por que nesta ordem |
 |---|---|---|
 | **I1** Inspector de componentes | 6, 7, 11, 12, 14, 15, 17, 19–27, 39, 40, 43, 127, 128 | base de toda edição; Play-edit é pré-requisito para testar os demais |
