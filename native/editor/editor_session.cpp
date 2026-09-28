@@ -320,6 +320,125 @@ void setTextureProfileToggle(resources::TextureProfile &profile,u32 field,bool o
     default: break;
   }
 }
+// Campos de um material do projeto como o Inspector os mostra (chaves de
+// buildMaterialSlots): quais diferem entre dois materiais, e a cópia do que
+// mudou (antes × depois) para outro — números pelos mesmos descritores do
+// MeshRenderer que o Inspector lê e grava.
+void materialDifferences(const resources::MaterialAsset &a,const resources::MaterialAsset &b,std::vector<std::string> &out) {
+  const auto add=[&](bool differ,std::string key) {if(differ && std::find(out.begin(),out.end(),key)==out.end()) out.push_back(std::move(key));};
+  for(u32 i=0;i<scene::MaterialTextureCount;++i) {
+    add(!(a.textures[i]==b.textures[i]),"tex"+std::to_string(i));
+    const auto key="uv"+std::to_string(i)+".";const auto &x=a.sampling[i],&y=b.sampling[i];
+    add(x.uvSet!=y.uvSet,key+"set");add(x.wrap!=y.wrap,key+"wrap");add(x.filter!=y.filter,key+"filter");
+    for(u32 k=0;k<2;++k) {add(x.offset[k]!=y.offset[k],key+"offset"+std::to_string(k));add(x.scale[k]!=y.scale[k],key+"scale"+std::to_string(k));}
+    add(x.rotation!=y.rotation,key+"rotation");
+  }
+  add(a.surface.alphaMode!=b.surface.alphaMode,"alpha");add(a.surface.sides!=b.surface.sides,"sides");
+  add(a.surface.alphaCutoff!=b.surface.alphaCutoff,"cutoff");
+  add(a.channels.occlusionSource!=b.channels.occlusionSource,"ch0");add(!(a.occlusionTexture==b.occlusionTexture),"ch1");
+  add(a.channels.occlusionStrength!=b.channels.occlusionStrength,"ch2");
+  add(a.channels.roughness!=b.channels.roughness,"ch3.0");add(a.channels.metallic!=b.channels.metallic,"ch3.1");
+  add(a.channels.occlusion!=b.channels.occlusion,"ch3.2");
+  add(a.channels.normalFlipY!=b.channels.normalFlipY,"ch4");add(a.channels.alphaSource!=b.channels.alphaSource,"ch5");
+  scene::MeshRenderer pa,pb;pa.material=a.values;pb.material=b.values;
+  for(u32 field=0;field<scene::meshRendererNumbers.size();++field)
+    add(scene::meshRendererNumbers[field].read(pa)!=scene::meshRendererNumbers[field].read(pb),"num"+std::to_string(field));
+}
+bool copyMaterialChange(const resources::MaterialAsset &before,const resources::MaterialAsset &after,
+                        resources::MaterialAsset &target,std::string_view field) {
+  bool changed=false;
+  const auto copy=[&](auto &to,const auto &from,const auto &was,const std::string &key) {
+    if((field==key || !(from==was)) && !(to==from)) {to=from;changed=true;}
+  };
+  for(u32 i=0;i<scene::MaterialTextureCount;++i) {
+    const auto key="tex"+std::to_string(i),uv="uv"+std::to_string(i)+".";
+    copy(target.textures[i],after.textures[i],before.textures[i],key);
+    auto &to=target.sampling[i];const auto &from=after.sampling[i],&was=before.sampling[i];
+    copy(to.uvSet,from.uvSet,was.uvSet,uv+"set");copy(to.wrap,from.wrap,was.wrap,uv+"wrap");
+    copy(to.filter,from.filter,was.filter,uv+"filter");
+    for(u32 k=0;k<2;++k) {
+      copy(to.offset[k],from.offset[k],was.offset[k],field==uv+"reset"?std::string(field):uv+"offset"+std::to_string(k));
+      copy(to.scale[k],from.scale[k],was.scale[k],field==uv+"reset"?std::string(field):uv+"scale"+std::to_string(k));
+    }
+    copy(to.rotation,from.rotation,was.rotation,field==uv+"reset"?std::string(field):uv+"rotation");
+  }
+  copy(target.surface.alphaMode,after.surface.alphaMode,before.surface.alphaMode,"alpha");
+  copy(target.surface.sides,after.surface.sides,before.surface.sides,"sides");
+  copy(target.surface.alphaCutoff,after.surface.alphaCutoff,before.surface.alphaCutoff,"cutoff");
+  auto &ch=target.channels;const auto &now=after.channels,&old=before.channels;
+  copy(ch.roughness,now.roughness,old.roughness,"ch3.0");copy(ch.metallic,now.metallic,old.metallic,"ch3.1");
+  copy(ch.occlusion,now.occlusion,old.occlusion,"ch3.2");copy(ch.occlusionSource,now.occlusionSource,old.occlusionSource,"ch0");
+  copy(ch.occlusionStrength,now.occlusionStrength,old.occlusionStrength,"ch2");
+  copy(ch.normalFlipY,now.normalFlipY,old.normalFlipY,"ch4");copy(ch.alphaSource,now.alphaSource,old.alphaSource,"ch5");
+  copy(target.occlusionTexture,after.occlusionTexture,before.occlusionTexture,"ch1");
+  copy(target.values.enabled,after.values.enabled,before.values.enabled,field.starts_with("num")?std::string(field):"enabled");
+  scene::MeshRenderer was,now2,to;was.material=before.values;now2.material=after.values;to.material=target.values;
+  for(u32 i=0;i<scene::meshRendererNumbers.size();++i) {
+    const auto &number=scene::meshRendererNumbers[i];const float value=number.read(now2);
+    if((field=="num"+std::to_string(i) || value!=number.read(was)) && number.write && value!=number.read(to)) {
+      *number.write(to)=value;changed=true;
+    }
+  }
+  target.values=to.material;
+  return changed;
+}
+std::string materialWidgetField(u32 widget,u32 binding) {
+  if(widget>=widgetId(EditorWidget::MaterialNumberBase) && widget-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size())
+    return "num"+std::to_string(widget-widgetId(EditorWidget::MaterialNumberBase));
+  if(widget>=widgetId(EditorWidget::MaterialTextureBase) && widget-widgetId(EditorWidget::MaterialTextureBase)<scene::MaterialTextureCount)
+    return "tex"+std::to_string(widget-widgetId(EditorWidget::MaterialTextureBase));
+  const auto uv="uv"+std::to_string(binding)+".";
+  if(widget>=widgetId(EditorWidget::TextureUvStepBase) && widget-widgetId(EditorWidget::TextureUvStepBase)<10) {
+    static constexpr const char *keys[]{"offset0","offset1","scale0","scale1","rotation"};
+    return uv+keys[(widget-widgetId(EditorWidget::TextureUvStepBase))/2];
+  }
+  switch(static_cast<EditorWidget>(widget)) {
+    case EditorWidget::MaterialAlphaCycle:return "alpha";
+    case EditorWidget::MaterialSidesCycle:return "sides";
+    case EditorWidget::MaterialCutoffDown:case EditorWidget::MaterialCutoffUp:return "cutoff";
+    case EditorWidget::MaterialOcclusionSourceCycle:return "ch0";
+    case EditorWidget::MaterialOcclusionTexture:return "ch1";
+    case EditorWidget::MaterialOcclusionStrengthDown:case EditorWidget::MaterialOcclusionStrengthUp:return "ch2";
+    case EditorWidget::MaterialChannelRoughness:return "ch3.0";
+    case EditorWidget::MaterialChannelMetallic:return "ch3.1";
+    case EditorWidget::MaterialChannelOcclusion:return "ch3.2";
+    case EditorWidget::MaterialNormalFlipCycle:return "ch4";
+    case EditorWidget::MaterialAlphaSourceCycle:return "ch5";
+    case EditorWidget::TextureSamplingUv:return uv+"set";
+    case EditorWidget::TextureSamplingWrap:return uv+"wrap";
+    case EditorWidget::TextureSamplingFilter:return uv+"filter";
+    default:return {};
+  }
+}
+std::string materialFieldText(const resources::MaterialAsset &material,std::string_view key) {
+  const auto number=[](float value) {char text[32];std::snprintf(text,sizeof(text),"%.6g",static_cast<double>(value));return std::string(text);};
+  if(key.starts_with("num")) {
+    const auto i=static_cast<u32>(std::stoul(std::string(key.substr(3))));
+    scene::MeshRenderer probe;probe.material=material.values;
+    return i<scene::meshRendererNumbers.size()?number(scene::meshRendererNumbers[i].read(probe)):std::string();
+  }
+  if(key=="alpha") {static constexpr const char *labels[]{"Como a fonte","Opaco","Recorte","Transparente"};return labels[material.surface.alphaMode];}
+  if(key=="sides") {static constexpr const char *labels[]{"Como a fonte","Uma face","Dupla face"};return labels[material.surface.sides];}
+  if(key=="cutoff") return number(material.surface.alphaCutoff);
+  if(key=="ch0") {static constexpr const char *labels[]{"Como a fonte","Sem oclusão","Metal/rugosidade","Textura própria"};return labels[material.channels.occlusionSource];}
+  if(key=="ch2") return material.channels.occlusionStrength<0?"Como a fonte":number(material.channels.occlusionStrength);
+  if(key.starts_with("ch3.")) {
+    const u8 values[]{material.channels.roughness,material.channels.metallic,material.channels.occlusion};
+    static constexpr const char *labels[]{"Como a fonte","R","G","B","A"};return labels[values[key.back()-'0']];
+  }
+  if(key=="ch4") {static constexpr const char *labels[]{"Como a fonte","OpenGL","DirectX"};return labels[material.channels.normalFlipY];}
+  if(key=="ch5") {static constexpr const char *labels[]{"Como a fonte","Alfa da cor base","Ignorar alfa","Luminância"};return labels[material.channels.alphaSource];}
+  if(key.starts_with("uv") && key.size()>4 && key[2]>='0' && static_cast<u32>(key[2]-'0')<scene::MaterialTextureCount) {
+    const auto &uv=material.sampling[key[2]-'0'];const auto field=key.substr(4);
+    if(field=="set") {static constexpr const char *labels[]{"Herdar","UV 0","UV 1","Mundo"};return labels[uv.uvSet];}
+    if(field=="wrap") {static constexpr const char *labels[]{"Herdar","Repetir","Limitar","Espelhar"};return labels[uv.wrap];}
+    if(field=="filter") {static constexpr const char *labels[]{"Herdar","Linear","Próximo"};return labels[uv.filter];}
+    if(field.starts_with("offset")) return number(uv.offset[field.back()-'0']);
+    if(field.starts_with("scale")) return number(uv.scale[field.back()-'0']);
+    if(field=="rotation") return number(uv.rotation);
+  }
+  return {};
+}
 // Tipos de arquivo que o Inspector de vários recursos agrupa (a ordem é a dos
 // grupos na tela).
 struct FileKind {const char *label,*plural;ui::UiIcon icon;};
@@ -2070,7 +2189,8 @@ void EditorSession::refreshMultiAsset() {
   std::erase_if(paths,[&](const std::string &path){return !files_.exists(path);});
   if(state_.selectedFile.empty()) paths.clear();
   else if(!state_.isFileSelected(state_.selectedFile)) paths={state_.selectedFile};
-  if(paths.size()<2) {view={};multiTextures_.clear();multiAssetGroups_.clear();return;}
+  if(paths.size()<2) {view={};multiTextures_.clear();multiAssetGroups_.clear();multiMaterials_.clear();state_.materialMixed.clear();return;}
+  multiMaterials_.clear();state_.materialMixed.clear();
   view.items.clear();view.groups.clear();multiAssetGroups_.clear();
   std::array<u32,std::size(fileKinds)> counts{};
   std::vector<resources::AssetGuid> textures;
@@ -2104,11 +2224,34 @@ void EditorSession::refreshMultiAsset() {
     view.kind=EditorScreenState::MultiAssetView::Kind::Mixed;
     view.title=std::to_string(count)+" recursos";
     view.note="Tipos diferentes: só o comum aparece. Toque num tipo para estreitar.";
+    if(state_.materialInspector.valid()) {state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;}
     multiTextures_.clear();return;
   }
   std::string plural=fileKinds[only].plural;
   plural[0]=static_cast<char>(std::tolower(static_cast<unsigned char>(plural[0])));
   view.title=std::to_string(count)+" "+(only==7?std::string("arquivos"):plural);
+  if(only==1) {
+    // Materiais: o Inspector do ativo edita todos; o que difere mostra "—".
+    view.kind=EditorScreenState::MultiAssetView::Kind::Materials;view.note.clear();multiTextures_.clear();
+    resources::AssetGuid active{};
+    for(const auto &path:paths) if(const auto *record=assets_.findByPath(path)) {
+      multiMaterials_.push_back(record->guid);
+      if(path==state_.selectedFile) active=record->guid;
+    }
+    if(multiMaterials_.empty() || std::any_of(multiMaterials_.begin(),multiMaterials_.end(),
+        [&](const auto &guid){return !findMaterialAsset(guid);})) {
+      view.kind=EditorScreenState::MultiAssetView::Kind::Other;
+      view.note="Um material da seleção está ilegível. Abra-o sozinho para verificar.";
+      state_.materialInspector={};multiMaterials_.clear();return;
+    }
+    if(!active.valid()) active=multiMaterials_.back();
+    if(!(state_.materialInspector==active)) openMaterialInspector(active);
+    if(const auto *reference=findMaterialAsset(active))
+      for(const auto &guid:multiMaterials_) if(!(guid==active)) if(const auto *other=findMaterialAsset(guid))
+        materialDifferences(*reference,*other,state_.materialMixed);
+    return;
+  }
+  if(state_.materialInspector.valid()) {state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;}
   if(only!=0) {
     // Unity: "Multi-object editing not supported" para o tipo sem editor comum.
     view.kind=EditorScreenState::MultiAssetView::Kind::Other;
@@ -2183,6 +2326,20 @@ bool EditorSession::applySetValue(u32 row) {
     const auto source=multiTextures_[index].draft;
     for(auto &texture:multiTextures_) copyTextureProfileField(texture.draft,source,field);
     state_.status="Valor copiado para todas; Aplicar publica";
+    return true;
+  }
+  if(menu.key.starts_with("asset.mat.")) {
+    const u32 index=menu.rows[row].first;
+    if(index>=multiMaterials_.size()) return false;
+    const auto *source=findMaterialAsset(multiMaterials_[index]);
+    const auto *active=findMaterialAsset(state_.materialInspector);
+    if(!source || !active) return false;
+    const auto field=std::string_view(menu.key).substr(10);auto candidate=*active;
+    copyMaterialChange(*source,*source,candidate,field);++candidate.revision;
+    std::string diagnostic;
+    if(!commitSharedMaterial(candidate,diagnostic,true,field)) {state_.status=diagnostic;return false;}
+    if(!ensureTexturesPublished(diagnostic)) state_.status="Materiais atualizados; publicação pendente: "+diagnostic;
+    else state_.status="Valor copiado para os materiais selecionados";
     return true;
   }
   const auto *source=document_.find(menu.rows[row].first);if(!source) return false;
@@ -2555,6 +2712,26 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  if(multiMaterialEditing_ && state_.materialInspector.valid() && routing.tapped &&
+     routing.heldSeconds>=ui::kUiLongPressSeconds && state_.setValueMenu.key.empty()) {
+    const auto field=materialWidgetField(routing.widgetId,state_.textureBinding);
+    if(!field.empty() && state_.materialMixedHas(field)) {
+      state_.setValueMenu.key="asset.mat."+field;state_.setValueMenu.label="Valor do material";
+      if(field.starts_with("num")) state_.setValueMenu.label=scene::meshRendererNumbers[std::stoul(field.substr(3))].name;
+      state_.setValueMenu.rows.clear();
+      for(u32 i=0;i<multiMaterials_.size();++i) if(const auto *material=findMaterialAsset(multiMaterials_[i])) {
+        auto value=materialFieldText(*material,field);
+        if(field.starts_with("tex") || field=="ch1") {
+          const auto texture=field=="ch1"?material->occlusionTexture:material->textures[std::stoul(field.substr(3))];
+          const auto *record=assets_.find(texture);
+          value=texture==scene::MaterialTextureNone?"Sem textura":!texture.valid()?"Como a fonte":record?baseName(record->path):"Textura ausente";
+        }
+        state_.setValueMenu.rows.push_back({i,material->name+" · "+value});
+      }
+      return true;
+    }
+  }
+
   // "Definir como o valor de…": modal pequeno com um objeto por linha.
   if(!state_.setValueMenu.key.empty() && routing.tapped) {
     const u32 key=routing.widgetId;
@@ -3684,7 +3861,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       }
       std::string diagnostic;
       state_.status=setSlotSampling(state_.selection,state_.materialSlot,state_.textureBinding,
-                                    shared?MaterialScope::Shared:MaterialScope::Instance,sampling,diagnostic)?
+                                    shared?MaterialScope::Shared:MaterialScope::Instance,sampling,diagnostic,
+          "uv"+std::to_string(state_.textureBinding)+"."+
+          (key==widgetId(EditorWidget::TextureSamplingUv)?"set":key==widgetId(EditorWidget::TextureSamplingWrap)?"wrap":
+           key==widgetId(EditorWidget::TextureSamplingFilter)?"filter":key==widgetId(EditorWidget::TextureUvReset)?"reset":
+           (key-widgetId(EditorWidget::TextureUvStepBase))/2==0?"offset0":(key-widgetId(EditorWidget::TextureUvStepBase))/2==1?"offset1":
+           (key-widgetId(EditorWidget::TextureUvStepBase))/2==2?"scale0":(key-widgetId(EditorWidget::TextureUvStepBase))/2==3?"scale1":"rotation"))?
           (shared?"Amostragem compartilhada atualizada em todos os usos":"Amostragem desta instância atualizada"):diagnostic;
       return true;
     }
@@ -3753,7 +3935,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       else if(surface.alphaMode==scene::MaterialAlphaMask)
         surface.alphaCutoff=std::clamp(std::round((surface.alphaCutoff+(key==widgetId(EditorWidget::MaterialCutoffUp)?.05f:-.05f))*100.0f)/100.0f,0.0f,1.0f);
       std::string diagnostic;
-      state_.status=setSlotSurface(state_.selection,state_.materialSlot,shared?MaterialScope::Shared:MaterialScope::Instance,surface,diagnostic)?
+      state_.status=setSlotSurface(state_.selection,state_.materialSlot,shared?MaterialScope::Shared:MaterialScope::Instance,surface,diagnostic,
+          key==widgetId(EditorWidget::MaterialAlphaCycle)?"alpha":key==widgetId(EditorWidget::MaterialSidesCycle)?"sides":"cutoff")?
           (shared?"Material compartilhado atualizado em todos os usos":"Material desta instância atualizado"):diagnostic;
       return true;
     }
@@ -3782,7 +3965,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       else if(key==widgetId(EditorWidget::MaterialNormalFlipCycle)) channels.normalFlipY=cycle(channels.normalFlipY,3);
       else channels.alphaSource=cycle(channels.alphaSource,4);
       std::string diagnostic;
-      state_.status=setSlotChannels(state_.selection,state_.materialSlot,shared?MaterialScope::Shared:MaterialScope::Instance,channels,diagnostic)?
+      state_.status=setSlotChannels(state_.selection,state_.materialSlot,shared?MaterialScope::Shared:MaterialScope::Instance,channels,diagnostic,
+          key==widgetId(EditorWidget::MaterialOcclusionSourceCycle)?"ch0":
+          key==widgetId(EditorWidget::MaterialChannelRoughness)?"ch3.0":
+          key==widgetId(EditorWidget::MaterialChannelMetallic)?"ch3.1":
+          key==widgetId(EditorWidget::MaterialChannelOcclusion)?"ch3.2":
+          key==widgetId(EditorWidget::MaterialNormalFlipCycle)?"ch4":
+          key==widgetId(EditorWidget::MaterialAlphaSourceCycle)?"ch5":"ch2")?
           (shared?"Material compartilhado atualizado em todos os usos":"Material desta instância atualizado"):diagnostic;
       return true;
     }
@@ -9323,7 +9512,7 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
     if(binding==scene::MaterialOcclusionTextureBinding) candidate.occlusionTexture=texture;
     else candidate.textures[binding]=texture;
     ++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic)) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,binding==scene::MaterialOcclusionTextureBinding?"ch1":"tex"+std::to_string(binding))) return false;
   } else {
     auto values=*entity;
     if(binding==scene::MaterialOcclusionTextureBinding) *editMeshRenderer(values)->editSlotOcclusionTexture(slot)=texture;
@@ -9336,7 +9525,7 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
 }
 
 bool EditorSession::setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialSurface &surface,
-                                   std::string &diagnostic) {
+                                   std::string &diagnostic,std::string_view field) {
   diagnostic.clear();
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
@@ -9354,7 +9543,7 @@ bool EditorSession::setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scop
     if(!record) {diagnostic="Material fora do registro.";return false;}
     auto candidate=*found;
     candidate.surface=surface;++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic)) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,field)) return false;
     return true;
   }
   auto values=*entity;
@@ -9364,7 +9553,7 @@ bool EditorSession::setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scop
 }
 
 bool EditorSession::setSlotChannels(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialChannels &channels,
-                                    std::string &diagnostic) {
+                                    std::string &diagnostic,std::string_view field) {
   diagnostic.clear();
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
@@ -9382,7 +9571,7 @@ bool EditorSession::setSlotChannels(EditorEntityId id,u32 slot,MaterialScope sco
     if(!record) {diagnostic="Material fora do registro.";return false;}
     auto candidate=*found;
     candidate.channels=channels;++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic)) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,field)) return false;
     return true;
   }
   auto values=*entity;
@@ -9392,7 +9581,7 @@ bool EditorSession::setSlotChannels(EditorEntityId id,u32 slot,MaterialScope sco
 }
 
 bool EditorSession::setSlotSampling(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const scene::MaterialSampling &sampling,
-                                    std::string &diagnostic) {
+                                    std::string &diagnostic,std::string_view field) {
   diagnostic.clear();
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
@@ -9410,7 +9599,7 @@ bool EditorSession::setSlotSampling(EditorEntityId id,u32 slot,u32 binding,Mater
     if(!record) {diagnostic="Material fora do registro.";return false;}
     auto candidate=*found;
     candidate.sampling[binding]=sampling;++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic)) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,field)) return false;
   } else {
     auto values=*entity;
     (*editMeshRenderer(values)->editSlotSampling(slot))[binding]=sampling;
@@ -9608,73 +9797,139 @@ bool EditorSession::updateEnvironmentProfile(EditorEntityId id,u64 instance,std:
   diagnostic="Perfil compartilhado atualizado: "+candidate.name;return true;
 }
 
-bool EditorSession::commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,bool recordHistory) {
+bool EditorSession::commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,
+                                        bool recordHistory,std::string_view field) {
+  // Só uma ação do Inspector principal amplia o alvo. Replay e janelas focadas
+  // continuam editando exatamente os recursos capturados pelo seu comando.
+  std::vector<resources::MaterialAsset> candidates{candidate};
+  if(recordHistory && multiMaterialEditing_ && candidate.guid==state_.materialInspector && multiMaterials_.size()>1) {
+    const auto *before=findMaterialAsset(candidate.guid);
+    if(!before) {diagnostic="Material ativo indisponível.";return false;}
+    for(const auto &guid:multiMaterials_) if(guid!=candidate.guid) {
+      const auto *other=findMaterialAsset(guid);
+      if(!other) {diagnostic="Um material da seleção está ilegível; nenhuma alteração aplicada.";return false;}
+      auto next=*other;
+      copyMaterialChange(*before,candidate,next,field);
+      // Inclui os alvos sem diferença: todos precisam passar pela verificação
+      // de revisão e do arquivo antes de publicar qualquer mudança.
+      next.revision=other->revision+1;candidates.push_back(std::move(next));
+    }
+  }
+  return commitMaterialBatch(candidates,diagnostic,recordHistory);
+}
+
+bool EditorSession::commitMaterialBatch(const std::vector<resources::MaterialAsset> &candidates,
+                                       std::string &diagnostic,bool recordHistory) {
   diagnostic.clear();
   if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição antes de alterar o recurso.";return false;}
-  auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &value){return value.guid==candidate.guid;});
-  const auto *record=assets_.find(candidate.guid);
-  if(!candidate.valid()||found==materials_.end()||!record||record->type!=resources::AssetType::Material||
-      found->revision==std::numeric_limits<u32>::max()||candidate.revision!=found->revision+1) {
-    diagnostic="Material ou revisão indisponível; reabra o recurso.";return false;
-  }
-  std::vector<resources::AssetGuid> dependencies;
-  // Keep non-texture dependencies owned by other import/provider contracts.
-  for(const auto &guid:record->dependencies) {
-    const auto *dependency=assets_.find(guid);
-    if(!dependency) {diagnostic="Dependência não registrada no material.";return false;}
-    if(dependency->type!=resources::AssetType::Texture) dependencies.push_back(guid);
-  }
-  const auto append=[&](resources::AssetGuid guid) {
-    if(!guid.valid()||guid==scene::MaterialTextureNone) return true;
-    const auto *texture=assets_.find(guid);
-    // Undo may restore an originally broken binding. Keep the authored GUID,
-    // but never fabricate a valid registry edge for it.
-    if(!texture||texture->type!=resources::AssetType::Texture) return !recordHistory;
-    if(std::find(dependencies.begin(),dependencies.end(),guid)==dependencies.end()) dependencies.push_back(guid);
-    return true;
-  };
-  for(const auto &texture:candidate.textures) if(!append(texture)) {
-    diagnostic="Textura do material ausente ou com tipo incompatível.";return false;
-  }
-  if(!append(candidate.occlusionTexture)) {diagnostic="Textura de oclusão ausente ou incompatível.";return false;}
-  const auto serialized=candidate.serialize();
-  const std::span<const u8> bytes{reinterpret_cast<const u8*>(serialized.data()),serialized.size()};
+  if(candidates.empty()) return true;
   auto nextAssets=assets_;
-  if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,
-      record->importerParameters,record->derived,std::move(dependencies))) {
-    diagnostic="Registro recusou a atualização do material.";return false;
+  std::vector<resources::MaterialAsset> before,after;
+  std::vector<std::string> paths,texts,hashes;
+  for(const auto &candidate:candidates) {
+    const auto *current=findMaterialAsset(candidate.guid);const auto *record=assets_.find(candidate.guid);
+    if(!candidate.valid()||!current||!record||record->type!=resources::AssetType::Material||
+       current->revision==std::numeric_limits<u32>::max()||candidate.revision!=current->revision+1) {
+      diagnostic="Material ou revisão indisponível; reabra o recurso.";return false;
+    }
+    std::filesystem::path absolute;std::vector<u8> previous;
+    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),record->path,absolute)||
+       !EditorImportTransaction::read(absolute,previous)) {
+      diagnostic="Arquivo do material indisponível: "+record->path+"; nenhuma alteração aplicada.";return false;
+    }
+    resources::MaterialAsset onDisk;
+    if(!resources::MaterialAsset::deserialize(std::string(previous.begin(),previous.end()),onDisk)||onDisk.serialize()!=current->serialize()) {
+      diagnostic="O material mudou no disco: "+record->path+". Reabra o recurso antes de editar.";return false;
+    }
+    auto same=candidate;same.revision=current->revision;
+    if(same.serialize()==current->serialize()) continue;
+    std::vector<resources::AssetGuid> dependencies;
+    for(const auto &guid:record->dependencies) {
+      const auto *dependency=assets_.find(guid);
+      if(!dependency) {diagnostic="Dependência não registrada no material.";return false;}
+      if(dependency->type!=resources::AssetType::Texture) dependencies.push_back(guid);
+    }
+    const auto append=[&](resources::AssetGuid guid) {
+      if(!guid.valid()||guid==scene::MaterialTextureNone) return true;
+      const auto *texture=assets_.find(guid);
+      // Desfazer pode restaurar um vínculo originalmente quebrado, sem inventar
+      // uma aresta válida no registro.
+      if(!texture||texture->type!=resources::AssetType::Texture) return !recordHistory;
+      if(std::find(dependencies.begin(),dependencies.end(),guid)==dependencies.end()) dependencies.push_back(guid);
+      return true;
+    };
+    for(const auto &texture:candidate.textures) if(!append(texture)) {
+      diagnostic="Textura do material ausente ou com tipo incompatível.";return false;
+    }
+    if(!append(candidate.occlusionTexture)) {diagnostic="Textura de oclusão ausente ou incompatível.";return false;}
+    const auto text=candidate.serialize();
+    const std::span<const u8> bytes{reinterpret_cast<const u8*>(text.data()),text.size()};
+    if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,
+        record->importerParameters,record->derived,std::move(dependencies))) {
+      diagnostic="Registro recusou a atualização do material.";return false;
+    }
+    before.push_back(*current);after.push_back(candidate);paths.push_back(record->path);
+    texts.push_back(text);hashes.push_back(Sha256::hex(previous));
   }
-  std::filesystem::path absolute;std::vector<u8> previous;
-  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),record->path,absolute)||
-      !EditorImportTransaction::read(absolute,previous)) {
-    diagnostic="Arquivo do material indisponível; nenhuma alteração aplicada.";return false;
-  }
-  resources::MaterialAsset onDisk;
-  if(!resources::MaterialAsset::deserialize(std::string(previous.begin(),previous.end()),onDisk)||onDisk.serialize()!=found->serialize()) {
-    diagnostic="O material mudou no disco. Reabra o recurso antes de editar.";return false;
+  if(after.empty()) return true;
+  // O journal já suporta arquivos companheiros. Usá-los para os outros
+  // materiais mantém arquivos + registro indivisíveis, inclusive após crash.
+  std::vector<EditorImportTransaction::Companion> companions;
+  const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+  std::filesystem::path staging;
+  if(after.size()>1) {
+    const std::string relative=".astra/import-staging/material-edit-"+std::to_string(after.front().revision);
+    if(!EditorImportTransaction::safePath(root,relative,staging)) {diagnostic="Pasta de preparo inválida.";return false;}
+    std::error_code error;std::filesystem::create_directories(staging.parent_path(),error);
+    if(error || !std::filesystem::create_directory(staging,error)) {
+      diagnostic="Preparo de materiais pendente; reabra o projeto para recuperar.";return false;
+    }
+    for(usize i=1;i<after.size();++i) {
+      const std::string staged=relative+"/"+std::to_string(i)+".material";
+      if(!EditorImportTransaction::writeText(root/EditorImportTransaction::fromUtf8(staged),texts[i])) {
+        diagnostic="Não foi possível preparar os materiais; nada publicado.";
+        std::filesystem::remove_all(staging,error);return false;
+      }
+      companions.push_back({staged,paths[i]});
+    }
   }
   EditorImportTransaction transaction(files_.rootPath());
-  if(!transaction.begin(record->path,Sha256::hex(previous),diagnostic)) return false;
-  if(!transaction.commit(bytes,nextAssets.serialize())) {
-    diagnostic=transaction.rollback()?"Gravação recusada; material e registro anteriores restaurados.":
-        "Falha na recuperação; backups preservados no journal do projeto.";
+  if(!transaction.begin(paths.front(),hashes.front(),diagnostic,{},companions)) {
+    // Um journal parcialmente preparado ainda pode precisar destes arquivos.
+    std::error_code error;
+    if(!staging.empty() && !std::filesystem::exists(root/".astra/import-transaction/journal",error) && !error)
+      std::filesystem::remove_all(staging,error);
     return false;
   }
-  const auto before=*found;
-  assets_=std::move(nextAssets);*found=candidate;assetRegistryDirty_=true;
-  publishMaterialLibrary();
+  const std::span<const u8> bytes{reinterpret_cast<const u8*>(texts.front().data()),texts.front().size()};
+  if(!transaction.commit(bytes,nextAssets.serialize())) {
+    const bool restored=transaction.rollback();
+    diagnostic=restored?"Gravação recusada; todos os materiais e o registro foram restaurados.":
+        "Falha na recuperação; backups preservados no journal do projeto.";
+    if(restored && !staging.empty()) {std::error_code error;std::filesystem::remove_all(staging,error);}
+    return false;
+  }
+  if(!staging.empty()) {std::error_code error;std::filesystem::remove_all(staging,error);}
+  assets_=std::move(nextAssets);
+  for(const auto &value:after) for(auto &material:materials_) if(material.guid==value.guid) {material=value;break;}
+  assetRegistryDirty_=true;publishMaterialLibrary();
   if(recordHistory) {
     const auto project=files_.rootPath();
-    history_.recordResource("Material compartilhado",[this,before,after=candidate,project](bool forward) {
-      const auto *current=findMaterialAsset(before.guid);
-      if(files_.rootPath()!=project||!current) {state_.status="Recurso do histórico indisponível neste projeto.";return false;}
-      auto expected=forward?before:after;expected.revision=current->revision;
-      if(expected.serialize()!=current->serialize()) {state_.status="O material mudou; histórico preservado sem sobrescrever.";return false;}
-      auto restored=forward?after:before;restored.revision=current->revision+1;
+    history_.recordResource(candidates.size()>1?"Material · "+std::to_string(candidates.size())+" materiais":"Material compartilhado",
+        [this,before,after,project](bool forward) {
+      if(files_.rootPath()!=project) {state_.status="Recurso do histórico indisponível neste projeto.";return false;}
+      std::vector<resources::MaterialAsset> restored;
+      for(usize i=0;i<before.size();++i) {
+        const auto *current=findMaterialAsset(before[i].guid);
+        if(!current) {state_.status="Material do histórico indisponível.";return false;}
+        auto expected=forward?before[i]:after[i];expected.revision=current->revision;
+        if(expected.serialize()!=current->serialize()) {state_.status="O material mudou; histórico preservado sem sobrescrever.";return false;}
+        auto value=forward?after[i]:before[i];value.revision=current->revision+1;restored.push_back(std::move(value));
+      }
       std::string error;
-      if(!commitSharedMaterial(restored,error,false)) {state_.status=error;return false;}
-      if(!ensureTexturesPublished(error)) state_.status="Material restaurado; publicação pendente: "+error;
-      else state_.status=forward?"Material compartilhado refeito":"Material compartilhado desfeito";
+      if(!commitMaterialBatch(restored,error,false)) {state_.status=error;return false;}
+      if(!ensureTexturesPublished(error)) state_.status="Materiais restaurados; publicação pendente: "+error;
+      else state_.status=forward?"Materiais refeitos":"Materiais desfeitos";
       return true;
     });
   }
@@ -9791,7 +10046,7 @@ bool EditorSession::setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScop
     scene::MeshRenderer probe;probe.material=candidate.values;
     *number.write(probe)=value;
     candidate.values=probe.material;candidate.values.enabled=true;++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic)) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,"num"+std::to_string(field))) return false;
     state_.status="Material compartilhado atualizado em todos os usos";
     return true;
   }

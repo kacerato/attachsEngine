@@ -789,12 +789,12 @@ public:
   // MaterialAsset do slot, em todos os usos. Identidade inválida herda;
   // `scene::MaterialTextureNone` tira a textura.
   // R4: modo de alfa, corte e faces do slot, no mesmo contrato de alcance.
-  bool setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialSurface &surface,std::string &diagnostic);
+  bool setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialSurface &surface,std::string &diagnostic,std::string_view field={});
   // R4: conjunto de UV, repetição e filtro de um binding, na instância ou no material do projeto.
   bool setSlotSampling(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const scene::MaterialSampling &sampling,
-                       std::string &diagnostic);
+                       std::string &diagnostic,std::string_view field={});
   // R4: canais do metal/rugosidade, oclusão, inversão Y do normal e origem do alfa.
-  bool setSlotChannels(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialChannels &channels,std::string &diagnostic);
+  bool setSlotChannels(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialChannels &channels,std::string &diagnostic,std::string_view field={});
   bool setSlotTexture(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const resources::AssetGuid &texture,
                       std::string &diagnostic);
   // Nome do material da FONTE usado pela primitiva de identidade `draw`.
@@ -1438,7 +1438,9 @@ private:
   bool ensureTexturesPublished(std::string &diagnostic);
   void refreshMaterialSlotView();
   bool writeMaterialAsset(const resources::MaterialAsset &material,const std::string &path,std::string &diagnostic);
-  bool commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,bool recordHistory=true);
+  bool commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,bool recordHistory=true,
+                            std::string_view field={});
+  bool commitMaterialBatch(const std::vector<resources::MaterialAsset> &candidates,std::string &diagnostic,bool recordHistory);
   bool writeEnvironmentProfile(const resources::EnvironmentProfile &profile,const std::string &path,std::string &diagnostic);
   bool commitEnvironmentProfile(const resources::EnvironmentProfile &candidate,std::string &diagnostic,bool recordHistory=true);
   void synchronizeEnvironmentProfile(const resources::EnvironmentProfile &profile);
@@ -1673,6 +1675,12 @@ private:
   // outros selecionados, no mesmo passo de Desfazer; e a vista que o
   // Inspector usa para "—" e para os componentes em comum.
   template<class F> auto withMultiEdit(F &&body) {
+    // O escopo só autoriza comandos do Inspector principal. Desfazer/Refazer
+    // e a janela focada não replicam alterações por efeito colateral.
+    if(multiMaterials_.size()>1 && state_.materialInspector.valid() && !isPlaying()) {
+      const bool previous=multiMaterialEditing_;multiMaterialEditing_=true;
+      auto result=body();multiMaterialEditing_=previous;return result;
+    }
     if(state_.selectionSet.size()<2 || isPlaying() || !document_.exists(state_.selection)) return body();
     const auto id=state_.selection;const EditorEntity before=*document_.find(id);
     const u32 depth=history_.undoDepth();
@@ -1687,6 +1695,8 @@ private:
   struct MultiTextureDraft {resources::AssetGuid guid;resources::TextureProfile saved,draft;};
   std::vector<MultiTextureDraft> multiTextures_;
   std::vector<u32> multiAssetGroups_;  // tipo de cada arquivo escolhido (índice do grupo)
+  std::vector<resources::AssetGuid> multiMaterials_;  // materiais escolhidos, o ativo incluído
+  bool multiMaterialEditing_=false;
   void refreshMultiAsset();
   void selectFiles(std::vector<std::string> paths);
   bool applyMultiTextureProfiles();

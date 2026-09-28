@@ -1915,6 +1915,10 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
   if(!view.slots || content.height<40) return;
   // Material do projeto em Propriedades: sem slot nem alcance, só os campos.
   const bool assetMode=state.materialInspector.valid();
+  // "—" no campo que difere entre os materiais escolhidos (só no recurso).
+  const bool manyMaterials=assetMode && !builder.focusedWindow && !state.materialMixed.empty();
+  const auto mixed=[&](std::string_view key) {return manyMaterials && state.materialMixedHas(key);};
+  static const std::string dash="\xE2\x80\x94",differs="Valores diferentes";
   if(!assetMode) {
   // Uma linha só para slot e material: "<  Slot 2/3 · Vidro · da fonte  >". O
   // centro abre a escolha do material; as setas trocam de slot. Numa tela de
@@ -1992,8 +1996,9 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
       builder.label(takeLeft(row,row.width*.42f),bindingNames[entry],theme.color.textDim,theme.type.caption);
       builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       auto inner=deflate(row,UiInsets::symmetric(8,2));
-      builder.label(takeTop(inner,inner.height*.55f),view.textureNames[entry],theme.color.text,theme.type.caption);
-      builder.label(inner,view.textureOrigins[entry],theme.color.textMuted,theme.type.caption);
+      const bool different=mixed("tex"+std::to_string(entry));
+      builder.label(takeTop(inner,inner.height*.55f),different?dash:view.textureNames[entry],different?theme.color.textDim:theme.color.text,theme.type.caption);
+      builder.label(inner,different?differs:view.textureOrigins[entry],theme.color.textMuted,theme.type.caption);
       builder.router.addRegion(row,widgetId(EditorWidget::MaterialTextureBase)+entry);
       continue;
     }
@@ -2010,15 +2015,15 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
           builder.router.addRegion(down,widgetId(EditorWidget::MaterialCutoffDown));
           builder.router.addRegion(up,widgetId(EditorWidget::MaterialCutoffUp));
           char cutoff[16];std::snprintf(cutoff,sizeof(cutoff),"%.2f",static_cast<double>(view.alphaCutoff));
-          builder.label(inner,cutoff,theme.color.text,theme.type.numeric,UiAlign::Center);
+          builder.label(inner,mixed("cutoff")?dash:std::string(cutoff),mixed("cutoff")?theme.color.textDim:theme.color.text,theme.type.numeric,UiAlign::Center);
         } else {
           builder.label(inner,view.cutoffLabel,theme.color.textMuted,theme.type.caption);
         }
         continue;
       }
-      const bool alpha=kind==0;
-      builder.label(takeTop(inner,inner.height*.55f),alpha?view.alphaLabel:view.sidesLabel,theme.color.text,theme.type.caption);
-      builder.label(inner,alpha?view.alphaOrigin:view.sidesOrigin,theme.color.textMuted,theme.type.caption);
+      const bool alpha=kind==0,different=mixed(alpha?"alpha":"sides");
+      builder.label(takeTop(inner,inner.height*.55f),different?dash:alpha?view.alphaLabel:view.sidesLabel,different?theme.color.textDim:theme.color.text,theme.type.caption);
+      builder.label(inner,different?differs:alpha?view.alphaOrigin:view.sidesOrigin,theme.color.textMuted,theme.type.caption);
       // Faces sem culling no aparelho não recebe toque: não haveria efeito visível.
       if(alpha || state.materialCulling)
         builder.router.addRegion(row,widgetId(alpha?EditorWidget::MaterialAlphaCycle:EditorWidget::MaterialSidesCycle));
@@ -2035,14 +2040,15 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
         builder.label(up,"+",theme.color.text,theme.type.body,UiAlign::Center);
         builder.router.addRegion(down,widgetId(EditorWidget::MaterialOcclusionStrengthDown));
         builder.router.addRegion(up,widgetId(EditorWidget::MaterialOcclusionStrengthUp));
-        builder.label(inner,view.occlusionStrengthLabel,theme.color.text,theme.type.numeric,UiAlign::Center);
+        builder.label(inner,mixed("ch2")?dash:view.occlusionStrengthLabel,mixed("ch2")?theme.color.textDim:theme.color.text,theme.type.numeric,UiAlign::Center);
         continue;
       }
       if(kind==3) {
         const float third=inner.width/3;
         for(u32 channel=0;channel<3;++channel) {
           const auto box=channel<2?takeLeft(inner,third):inner;
-          builder.label(box,view.channelLabels[channel],theme.color.text,theme.type.caption,UiAlign::Center);
+          const bool different=mixed("ch3."+std::to_string(channel));
+          builder.label(box,different?dash:view.channelLabels[channel],different?theme.color.textDim:theme.color.text,theme.type.caption,UiAlign::Center);
           builder.router.addRegion(box,widgetId(EditorWidget::MaterialChannelRoughness)+channel);
         }
         continue;
@@ -2058,8 +2064,9 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
       case 5: value=view.alphaSourceLabel;origin=view.alphaSourceOrigin;break;
       default: value=view.isolateLabel;origin="só na prévia do editor; não é salvo";break;
       }
-      builder.label(takeTop(inner,inner.height*.55f),value,theme.color.text,theme.type.caption);
-      builder.label(inner,origin,theme.color.textMuted,theme.type.caption);
+      const bool different=mixed("ch"+std::to_string(kind));
+      builder.label(takeTop(inner,inner.height*.55f),different?dash:value,different?theme.color.textDim:theme.color.text,theme.type.caption);
+      builder.label(inner,different?differs:origin,theme.color.textMuted,theme.type.caption);
       builder.router.addRegion(row,widgetId(channelWidgets[kind]));
       continue;
     }
@@ -2067,7 +2074,8 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
     builder.label(takeLeft(row,row.width*.62f),scene::meshRendererNumbers[field].name,theme.color.textDim,theme.type.caption);
     char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(view.values[field]));
     builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
-    builder.label(row,value,theme.color.text,theme.type.numeric,UiAlign::Center);
+    const bool different=mixed("num"+std::to_string(field));
+    builder.label(row,different?dash:std::string(value),different?theme.color.textDim:theme.color.text,theme.type.numeric,UiAlign::Center);
     builder.router.addRegion(row,widgetId(EditorWidget::MaterialNumberBase)+field);
   }
   if(pages>1) {
@@ -2098,9 +2106,15 @@ void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   if(!builder.focusedWindow) builder.iconButton(takeRight(header,32),UiIcon::UiPanelRight,widgetId(EditorWidget::AssetInspectorFocus));
   list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::AssetsMaterial),theme.color.accent);
   const float half=header.height*.5f;
-  builder.label({header.x,header.y,header.width,half},state.materialSlotView.name,theme.color.text,theme.type.cardName);
-  builder.label({header.x,header.y+half,header.width,half},
-                ("Material do projeto · rev. "+std::to_string(state.materialInspectorRevision)).c_str(),theme.color.textDim,theme.type.caption);
+  // Vários materiais escolhidos: este é o ativo e a edição vale para todos.
+  const bool several=!builder.focusedWindow && state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::Materials &&
+                     state.multiAsset.items.size()>1;
+  builder.label({header.x,header.y,header.width,half},several?std::to_string(state.multiAsset.items.size())+" materiais":state.materialSlotView.name,theme.color.text,theme.type.cardName);
+  if(several)
+    builder.label({header.x,header.y+half,header.width,half},"Ativo: "+state.materialSlotView.name,theme.color.accent,theme.type.caption);
+  else
+    builder.label({header.x,header.y+half,header.width,half},
+                  ("Material do projeto · rev. "+std::to_string(state.materialInspectorRevision)).c_str(),theme.color.textDim,theme.type.caption);
   // Cartão de usos.
   auto uses=takeTop(content,44);takeTop(content,4);
   list.addRect(uses,theme.color.raised,theme.radius.control);
@@ -2112,8 +2126,8 @@ void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
     builder.label(ping,"Localizar",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(ping,widgetId(EditorWidget::MaterialInspectorUses));
   }
-  const std::string usage=objects?std::to_string(state.materialInspectorSlots)+(state.materialInspectorSlots==1?" slot":" slots")+" em "+
-      std::to_string(objects)+(objects==1?" objeto":" objetos"):std::string("Sem usos nesta cena");
+  const std::string usage=(several?std::string("Ativo · "):std::string())+(objects?std::to_string(state.materialInspectorSlots)+(state.materialInspectorSlots==1?" slot":" slots")+" em "+
+      std::to_string(objects)+(objects==1?" objeto":" objetos"):std::string("Sem usos nesta cena"));
   builder.label({inner.x,inner.y,inner.width,inner.height*.5f},usage.c_str(),objects?theme.color.text:theme.color.textDim,theme.type.caption);
   list.pushClip(inner);
   builder.label({inner.x,inner.y+inner.height*.5f,inner.width,inner.height*.5f},state.materialInspectorPath.c_str(),theme.color.textMuted,theme.type.caption);
@@ -2366,6 +2380,10 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   // repetição e filtro são o sampler da textura do projeto e não recebem toque
   // quando o binding usa a textura da fonte. Vem depois de Herdar e Sem textura:
   // as escolhas principais do seletor não podem sair da tela por causa dele.
+  const auto mixed=[&](std::string_view key) {
+    return !builder.focusedWindow && state.materialInspector.valid() &&
+        state.materialMixedHas("uv"+std::to_string(state.textureBinding)+"."+std::string(key));
+  };
   const auto samplingControls=[&]() {
   if(content.height>=40) {
     auto sampling=takeTop(content,40);
@@ -2376,9 +2394,9 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
       builder.label(box,text,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
       if(enabled) builder.router.addRegion(box,widget);
     };
-    button(takeLeft(sampling,third),state.textureUvLabel,true,widgetId(EditorWidget::TextureSamplingUv));
-    button(takeLeft(sampling,third),state.textureWrapLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingWrap));
-    button(sampling,state.textureFilterLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingFilter));
+    button(takeLeft(sampling,third),mixed("set")?"UV: —":state.textureUvLabel,true,widgetId(EditorWidget::TextureSamplingUv));
+    button(takeLeft(sampling,third),mixed("wrap")?"Rep.: —":state.textureWrapLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingWrap));
+    button(sampling,mixed("filter")?"Filtro: —":state.textureFilterLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingFilter));
     if(!state.textureSamplerEditable && content.height>=22)
       builder.label(takeTop(content,22),"Repetição e filtro valem só com textura do projeto",theme.color.textMuted,theme.type.caption);
   }
@@ -2392,7 +2410,9 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
       builder.list.addRect(up,theme.color.raised,theme.radius.control);
       builder.label(up,"+",theme.color.text,theme.type.body,UiAlign::Center);
       builder.router.addRegion(up,widgetId(EditorWidget::TextureUvStepBase)+field*2+1);
-      builder.label(row,text,theme.color.text,theme.type.caption,UiAlign::Center);
+      static constexpr const char *keys[]{"offset0","offset1","scale0","scale1","rotation"};
+      static constexpr const char *labels[]{"Desl. U —","Desl. V —","Esc. U —","Esc. V —","Rot. —"};
+      builder.label(row,mixed(keys[field])?labels[field]:text,theme.color.text,theme.type.caption,UiAlign::Center);
     };
     auto offsets=takeTop(content,36);
     stepper(takeLeft(offsets,offsets.width*.5f),state.textureUvLabels[0],0);
@@ -5922,7 +5942,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     buildImportDock(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
     return;
   }
-  if (builder.state.multiAsset.items.size() > 1) {
+  if (builder.state.multiAsset.items.size() > 1 && builder.state.multiAsset.kind != EditorScreenState::MultiAssetView::Kind::Materials) {
     builder.list.addRect(panel, builder.theme.color.canvas);
     builder.router.addBlocker(panel);
     buildMultiAssetInspector(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));

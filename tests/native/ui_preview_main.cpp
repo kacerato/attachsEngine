@@ -363,10 +363,15 @@ int main(int argc, char **argv) {
     state.environmentPreview={0,512,512,256};
   }
   // Material do projeto em Propriedades (a vista é a que a sessão prepara).
-  if(argc>4 && std::string(argv[4])=="material-asset") {
+  if(argc>4 && (std::string(argv[4])=="material-asset" || std::string(argv[4])=="multi-material")) {
     state.materialInspector=resources::assetGuidFromSeed("preview-material");state.materialShared=true;
     auto &view=state.materialSlotView;view.slots=1;view.shared=true;view.name="Madeira envernizada";
     state.materialInspectorPath="Materiais/Madeira envernizada.material";state.materialInspectorRevision=7;
+    if(std::string(argv[4])=="multi-material") {
+      state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+      state.multiAsset.kind=editor::EditorScreenState::MultiAssetView::Kind::Materials;
+      state.multiAsset.items.resize(3);state.materialMixed={"tex0","alpha","num0","uv0.offset0"};
+    }
     state.materialInspectorSlots=5;state.materialInspectorObjects={1,2,3};
     view.textureNames[0]="madeira-cor.png";view.textureOrigins[0]="do material do projeto";
     view.textureNames[1]="madeira-normal.png";view.textureOrigins[1]="do material do projeto · amostragem própria";

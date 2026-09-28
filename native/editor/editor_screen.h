@@ -693,7 +693,7 @@ struct EditorScreenState final {
   // "Inspect multiple assets"): tipos presentes para estreitar, a lista e, quando
   // todos são texturas do projeto, o perfil de importação comum com "—" no que difere.
   struct MultiAssetView {
-    enum class Kind : u8 {Mixed, Textures, Other};
+    enum class Kind : u8 {Mixed, Textures, Materials, Other};
     struct Group {std::string label;u32 count=0,icon=0;};
     struct Item {std::string name,path,detail;u32 icon=0;bool active=false;};
     Kind kind=Kind::Mixed;
@@ -705,7 +705,12 @@ struct EditorScreenState final {
     u32 pending=0;                      // texturas cujo rascunho difere do aplicado
   };
   MultiAssetView multiAsset;
-  float multiAssetScroll=0;  bool renamingResource=false;
+  float multiAssetScroll=0;
+  // Vários materiais: o Inspector é o do ativo, a edição vale para todos e
+  // estes campos (chaves de buildMaterialSlots) diferem entre eles: "—".
+  std::vector<std::string> materialMixed;
+  bool materialMixedHas(std::string_view key) const {return std::find(materialMixed.begin(),materialMixed.end(),key)!=materialMixed.end();}
+  bool renamingResource=false;
   // Apagar pede confirmação em DOIS toques, e não num diálogo. Guarda o caminho
   // que o primeiro toque recusou; o segundo, no mesmo caminho, confirma.
   std::string pendingResourceDelete;

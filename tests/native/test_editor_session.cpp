@@ -8,6 +8,7 @@
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_session.h"
+#include "editor/editor_import_transaction.h"
 #include "core/sha256.h"
 #include "scene/environment.h"
 #include "editor/editor_scene_template.h"
@@ -5100,4 +5101,124 @@ AE_TEST(every_creation_recipe_has_its_own_icon_and_id) {
     }
   }
   for(const auto name:creationCategoryIcons) AE_EXPECT_TRUE(editorIconByName(name)!=ui::UiIcon::None,"ícone de categoria existe");
+}
+
+// Unity 6000.0 Inspector multi-object editing: o gesto edita a propriedade,
+// inclusive quando o valor escolhido já é o do ativo. Arquivos, consumidores
+// e registro têm um único histórico; conflito em um alvo não altera o outro.
+AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_scope) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &session=f.session;auto &doc=session.document();auto &history=session.history();
+  const auto root=fs::temp_directory_path()/("astra-multi-material-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(session.setProjectDirectory(root.string().c_str()),"projeto");
+  std::string diagnostic;
+  const auto a=session.createMaterialFromSlot(f.cube,0,diagnostic);
+  const auto other=history.duplicateEntity(doc,f.cube);
+  const auto b=session.createMaterialFromSlot(other,0,diagnostic);
+  AE_EXPECT_TRUE(a.valid() && b.valid() && a!=b,"dois materiais reais");
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(f.cube,0,EditorSession::MaterialScope::Shared,0,.2f,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(other,0,EditorSession::MaterialScope::Shared,0,.8f,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(other,0,EditorSession::MaterialScope::Shared,1,.7f,diagnostic),diagnostic.c_str());
+  scene::MaterialSampling sampling;sampling.offset[0]=.4f;sampling.scale[1]=2;
+  AE_EXPECT_TRUE(session.setSlotSampling(other,0,0,EditorSession::MaterialScope::Shared,sampling,diagnostic),diagnostic.c_str());
+  const auto pathA=session.assets().find(a)->path,pathB=session.assets().find(b)->path;
+  EditorFileEntry file;file.relativePath=pathA;file.name="Ativo";
+  session.openProjectFile(file);
+  auto &state=const_cast<EditorScreenState&>(session.screen());
+  state.selectedFiles={pathA,pathB};state.filesMultiSelect=true;session.update();history.clear();
+  AE_EXPECT_TRUE(state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::Materials,"Inspector conjunto");
+  AE_EXPECT_TRUE(state.materialMixedHas("num0"),"valor misto");
+  const auto read=[&](resources::AssetGuid guid,u32 index) {
+    scene::MeshRenderer probe;probe.material=session.findMaterialAsset(guid)->values;
+    return scene::meshRendererNumbers[index].read(probe);
+  };
+  const auto editNumber=[&](const char *text) {
+    revealProperty(f,widgetId(EditorWidget::MaterialNumberBase));tapWidget(f,widgetId(EditorWidget::MaterialNumberBase));
+    return session.completeTextEdit(session.pendingTextEdit(),text,true);
+  };
+  AE_EXPECT_TRUE(editNumber("0.2"),"atribuir o valor que o ativo já possui");session.update();
+  AE_EXPECT_TRUE(std::abs(read(a,0)-.2f)<1e-5f && std::abs(read(b,0)-.2f)<1e-5f,"todos recebem o valor explícito");
+  AE_EXPECT_TRUE(std::abs(read(b,1)-.7f)<1e-5f,"outra propriedade preservada");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo para o conjunto");
+  AE_EXPECT_TRUE(!state.materialMixedHas("num0"),"valor deixou de ser misto");
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer");session.update();
+  AE_EXPECT_TRUE(std::abs(read(b,0)-.8f)<1e-5f && state.materialMixedHas("num0"),"diferença restaurada");
+  AE_EXPECT_TRUE(history.redo(doc),"refazer");session.update();
+  // Alteração em ambos exercita o journal com arquivos companheiros.
+  AE_EXPECT_TRUE(editNumber("0.35"),"editar ambos");session.update();
+  AE_EXPECT_EQ(history.undoDepth(),2u,"segundo gesto, um passo");
+  for(const auto &guid:{a,b}) {
+    std::vector<u8> bytes;resources::MaterialAsset disk;
+    AE_EXPECT_TRUE(EditorImportTransaction::read(root/session.assets().find(guid)->path,bytes),"arquivo gravado");
+    AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(std::string(bytes.begin(),bytes.end()),disk),"material reabre");
+    AE_EXPECT_EQ(disk.serialize(),session.findMaterialAsset(guid)->serialize(),"disco igual ao recurso vivo");
+  }
+  const auto beforeA=session.findMaterialAsset(a)->serialize(),beforeB=session.findMaterialAsset(b)->serialize();
+  const auto registry=session.serializeAssets();const auto depth=history.undoDepth();
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(root/pathB,"conflito externo"),"conflito no segundo alvo");
+  AE_EXPECT_TRUE(!editNumber("0.5"),"edição recusada");session.update();
+  session.completeTextEdit(session.pendingTextEdit(),"",false);session.update();
+  AE_EXPECT_EQ(session.findMaterialAsset(a)->serialize(),beforeA,"primeiro material intacto");
+  AE_EXPECT_EQ(session.serializeAssets(),registry,"registro intacto");
+  AE_EXPECT_EQ(history.undoDepth(),depth,"sem passo para a recusa");
+  AE_EXPECT_TRUE(!history.undo(doc),"desfazer também recusa conflito antes de alterar o primeiro");
+  AE_EXPECT_EQ(session.findMaterialAsset(a)->serialize(),beforeA,"desfazer não aplica pela metade");
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(root/pathB,beforeB),"restaurar arquivo da fixture");
+  AE_EXPECT_TRUE(history.undo(doc) && history.redo(doc),"histórico continua utilizável");session.update();
+  // Janela focada no segundo material nunca herda o conjunto do principal.
+  AE_EXPECT_TRUE(session.openFocusedAsset(EditorScreenState::FocusedAsset::Material,b),"janela focada");
+  const auto inWindow=[&](u32 widget) {
+    locateWidget(f.session,widget);
+    UiInputRouter router;UiDrawList list;
+    list.begin(state.surface,font().metrics(UiFontWeight::Regular));
+    buildEditorScreen(state,defaultTheme(),list,router);
+    const auto window=f.session.layout().focusedWindow;
+    for(float y=window.y+2;y<window.bottom();y+=3) for(float x=window.x+2;x<window.right();x+=3) {
+      const auto routed=router.route({99,UiPointerPhase::Down,{x,y},0});router.route({99,UiPointerPhase::Up,{x,y},0});
+      if(routed.target==UiPointerTarget::Widget && routed.widgetId==widget) return UiPoint{x,y};
+    }
+    return UiPoint{-1,-1};
+  };
+  const auto tapAt=[&](UiPoint p){f.down(140,p);f.up(140,p);f.session.update();};
+  const auto aBeforeFocus=session.findMaterialAsset(a)->serialize();
+  const auto bAlpha=session.findMaterialAsset(b)->surface.alphaMode;
+  for(u32 page=0;page<8 && inWindow(widgetId(EditorWidget::MaterialAlphaCycle)).x<0;++page) {
+    const auto next=inWindow(widgetId(EditorWidget::PropertyNext));if(next.x<0) break;tapAt(next);
+  }
+  const auto alphaRow=inWindow(widgetId(EditorWidget::MaterialAlphaCycle));
+  AE_EXPECT_TRUE(alphaRow.x>=0,"alfa na janela focada");tapAt(alphaRow);
+  AE_EXPECT_TRUE(session.findMaterialAsset(b)->surface.alphaMode!=bAlpha,"só o material da janela mudou");
+  AE_EXPECT_EQ(session.findMaterialAsset(a)->serialize(),aBeforeFocus,"principal não foi replicado");
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer focado");session.update();
+  AE_EXPECT_EQ(session.findMaterialAsset(b)->surface.alphaMode,bAlpha,"replay exato da janela");
+  state.focusedInspectors.clear();state.focusedActive=0;session.update();
+  // Copiar um valor misto do próprio ativo também precisa atingir o conjunto.
+  revealProperty(f,widgetId(EditorWidget::MaterialNumberBase)+1);
+  const auto mixedPoint=locateWidget(session,widgetId(EditorWidget::MaterialNumberBase)+1);
+  f.down(141,mixedPoint);session.handlePointer({141,UiPointerPhase::Up,mixedPoint,1.0});session.update();
+  AE_EXPECT_TRUE(state.setValueMenu.key=="asset.mat.num1","menu do campo misto");
+  tapWidget(f,widgetId(EditorWidget::SetValueRowBase));
+  AE_EXPECT_TRUE(std::abs(read(a,1)-read(b,1))<1e-5f,"valor do ativo copiado");
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer cópia");session.update();
+  // Zerar UV quando o ativo já está zerado ainda zera o outro, em um passo.
+  // O seletor existente exibe a transformação completa quando há altura.
+  session.setSurface({0,0,400,740},{});session.update();
+  while(locateWidget(session,widgetId(EditorWidget::PropertyPrevious)).x>=0) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
+  tapWidget(f,widgetId(EditorWidget::MaterialTextureBase));
+  AE_EXPECT_TRUE(state.materialMixedHas("uv0.offset0"),"diferença da amostragem identificada");
+  const auto uvDepth=history.undoDepth();tapWidget(f,widgetId(EditorWidget::TextureUvReset));
+  AE_EXPECT_TRUE(session.findMaterialAsset(b)->sampling[0].offset[0]==0 && session.findMaterialAsset(b)->sampling[0].scale[1]==1,"reset explícito em todos");
+  AE_EXPECT_EQ(history.undoDepth(),uvDepth+1,"reset em um passo");
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer reset");session.update();
+  tapWidget(f,widgetId(EditorWidget::TexturePickerClose));
+  // A biblioteca consumida pelo desenho resolve o novo valor, não só a UI.
+  for(const auto id:{f.cube,other}) {
+    scene::MeshRenderer probe;probe.material=session.mapScene().slotMaterial(*meshRenderer(*doc.find(id)),0);
+    AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[0].read(probe)-.35f)<1e-5f,"consumidor de render atualizado");
+  }
+  tapWidget(f,widgetId(EditorWidget::MaterialInspectorClose));session.update();
+  AE_EXPECT_TRUE(!state.materialInspector.valid() && state.selectedFiles.empty(),"fechar não reabre o conjunto no quadro seguinte");
 }
