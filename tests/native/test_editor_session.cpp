@@ -3599,6 +3599,37 @@ AE_TEST(panel_layouts_apply_save_delete_and_restore_with_project) {
   AE_EXPECT_TRUE(!state.layoutsPanel,"fechado");
 }
 
+// Unity 6000.0 StatusBar: última mensagem do console (tocar abre o console),
+// contagens e trabalhos em segundo plano com progresso real e cancelamento.
+AE_TEST(status_bar_shows_console_and_background_tasks) {
+  Fixture f;
+  f.session.update();
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(!f.session.layout().statusBar.isEmpty(),"barra na coluna central");
+  AE_EXPECT_TRUE(f.session.layout().statusBar.y>=f.session.layout().viewport.bottom(),"sob o viewport");
+  AE_EXPECT_TRUE(f.session.layout().inspectorPanel.bottom()>f.session.layout().statusBar.y,"os painéis não encolhem");
+  // Sem trabalhos, não há atividade.
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::StatusTasks)).x<0,"sem trabalho, sem atividade");
+  tapWidget(f,widgetId(EditorWidget::StatusConsole));
+  AE_EXPECT_TRUE(state.diagnosticDockOpen,"a mensagem abre o console");
+  // Trabalhos do shell: um com medida, um cancelável.
+  using Task=EditorBackgroundTask;
+  f.session.setBackgroundTasks({{Task::Kind::ProjectOpen,"Abrindo projeto","Recurso 2 de 4",.25f,false},
+                                {Task::Kind::ModelImport,"Importando modelo","Lendo a fonte",-1,true}});
+  f.session.update();
+  AE_EXPECT_EQ(state.backgroundTasks.size(),2u,"dois trabalhos");
+  tapWidget(f,widgetId(EditorWidget::StatusTasks));
+  AE_EXPECT_TRUE(state.backgroundPanel,"janela de trabalhos");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::StatusTaskCancelBase)).x<0,"abrir projeto não se cancela");
+  tapWidget(f,widgetId(EditorWidget::StatusTaskCancelBase)+1);
+  AE_EXPECT_TRUE(f.session.takeImportCancel(),"cancelar a importação usa o mesmo pedido do painel");
+  // Terminados: a lista esvazia.
+  f.session.setBackgroundTasks({});f.session.update();
+  AE_EXPECT_TRUE(state.backgroundTasks.empty(),"lista vazia");
+  tapWidget(f,widgetId(EditorWidget::StatusTasksClose));
+  AE_EXPECT_TRUE(!state.backgroundPanel,"fechada");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

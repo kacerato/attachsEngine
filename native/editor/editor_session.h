@@ -843,6 +843,14 @@ public:
   // Etapa corrente de um trabalho longo (R1): só a barra de estado, sem entrada
   // no console a cada troca, e reafirmada enquanto o trabalho durar para que um
   // aviso de outra origem não esconda que o projeto ainda está abrindo.
+  // Trabalhos do shell em andamento, reafirmados a cada quadro (lista vazia
+  // quando nada roda); a sessão acrescenta os seus (compilação).
+  void setBackgroundTasks(std::vector<EditorBackgroundTask> tasks) {shellTasks_=std::move(tasks);}
+  // Cancelamento pedido na janela de trabalhos; o shell aplica ao trabalho.
+  bool takeBackgroundCancel(EditorBackgroundTask::Kind &kind) {
+    if(backgroundCancel_==EditorBackgroundTask::Kind::Other) return false;
+    kind=std::exchange(backgroundCancel_,EditorBackgroundTask::Kind::Other);return true;
+  }
   void setWorkStatus(std::string_view message) {
     if(state_.status!=message) state_.status=std::string(message);
   }
@@ -1596,6 +1604,8 @@ private:
   // cena, que o id ainda é o mesmo objeto (senão a aba não volta).
   std::vector<std::string> focusedNames_;
   std::vector<EditorFileEntry> searchFiles_;
+  std::vector<EditorBackgroundTask> shellTasks_;
+  EditorBackgroundTask::Kind backgroundCancel_=EditorBackgroundTask::Kind::Other;
   bool focusedValidated_=false;
   void validateFocusedInspectors();
 public:

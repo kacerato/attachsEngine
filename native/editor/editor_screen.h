@@ -411,6 +411,9 @@ enum class EditorWidget : u32 {
   // atual, restaurar o padrão; um por linha (predefinidos e do usuário).
   LayoutsOpen=0xCA000000u, LayoutsClose, LayoutSave, LayoutReset,
   LayoutBuiltinBase=0xCA000100u, LayoutUserBase=0xCA000200u, LayoutDeleteBase=0xCA000300u,
+  // Barra de status (Unity 6000.0 Manual/StatusBar): última mensagem do
+  // console, contagens, atividade e a janela de trabalhos em segundo plano.
+  StatusConsole=0xCB000000u, StatusTasks, StatusTasksClose, StatusTaskCancelBase=0xCB000100u,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
@@ -522,7 +525,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -599,6 +602,17 @@ inline std::array<EditorLayout, 5> editorBuiltinLayouts(float surface) {
   layouts[4].hierarchyVisible = layouts[4].inspectorVisible = false;
   return layouts;
 }
+
+// Trabalho longo fora da thread do editor (importação, abertura do projeto,
+// compilação...). `progress` em 0..1, ou negativo quando não há medida real —
+// a barra mostra só a atividade, sem porcentagem inventada.
+struct EditorBackgroundTask {
+  enum class Kind : u8 { Other, ModelImport, EnvironmentImport, TextureImport, ProjectOpen, FolderCopy, CodeBuild, CodeAnalysis };
+  Kind kind = Kind::Other;
+  std::string label, detail;
+  float progress = -1;
+  bool cancelable = false;
+};
 
 struct EditorScreenState final {
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
@@ -724,6 +738,9 @@ struct EditorScreenState final {
   EditorSearchCounts globalCounts;
   // Layouts salvos pelo usuário (até 12) e o painel que os lista.
   std::vector<EditorLayout> userLayouts;
+  // Trabalhos em andamento (do shell e da sessão) e a janela que os lista.
+  std::vector<EditorBackgroundTask> backgroundTasks;
+  bool backgroundPanel=false;
   bool layoutsPanel=false,namingLayout=false;
   bool sceneLayersPanel=false;
   // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
@@ -1191,6 +1208,7 @@ struct EditorScreenLayout final {
   // continua certa quando o usuário arrasta um divisor.
   ui::UiRect viewport{};
   ui::UiRect topBar{};
+  ui::UiRect statusBar{};
   ui::UiRect hierarchyPanel{};
   ui::UiRect filesPanel{};
   ui::UiRect inspectorPanel{};

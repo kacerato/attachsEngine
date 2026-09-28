@@ -4102,6 +4102,29 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
   }
+  // Barra de status: console e trabalhos.
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::StatusConsole)) {
+    if(state_.workspace==EditorWorkspace::Code) {
+      state_.codeFiles=false;state_.codeMenu=false;state_.consoleCollapsed=false;state_.consoleExpanded=true;
+    } else if(!isPlaying()) {state_.workspace=EditorWorkspace::Scene;state_.diagnosticDockOpen=true;}
+    return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::StatusTasks)) {state_.backgroundPanel=!state_.backgroundPanel;return true;}
+  if(state_.backgroundPanel && routing.tapped) {
+    const u32 key=routing.widgetId;
+    if(key==widgetId(EditorWidget::StatusTasksClose)) {state_.backgroundPanel=false;return true;}
+    if(key>=widgetId(EditorWidget::StatusTaskCancelBase) && key<widgetId(EditorWidget::StatusTaskCancelBase)+state_.backgroundTasks.size()) {
+      const auto &task=state_.backgroundTasks[key-widgetId(EditorWidget::StatusTaskCancelBase)];
+      if(task.cancelable) {
+        // Importações usam o mesmo cancelamento do botão da preparação.
+        if(task.kind==EditorBackgroundTask::Kind::ModelImport || task.kind==EditorBackgroundTask::Kind::EnvironmentImport ||
+           task.kind==EditorBackgroundTask::Kind::TextureImport) state_.importCancel=true;
+        else backgroundCancel_=task.kind;
+        state_.status="Cancelando: "+task.label;
+      }
+      return true;
+    }
+  }
   // Layouts dos painéis.
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::LayoutsOpen)) {
     state_.workspaceMenu=false;state_.layoutsPanel=true;return true;
@@ -7298,6 +7321,8 @@ void EditorSession::update() {
   state_.assetCount=mapScene_.assetCount();
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
+  state_.backgroundTasks=shellTasks_;
+  if(state_.codeBuildBusy) state_.backgroundTasks.push_back({EditorBackgroundTask::Kind::CodeBuild,"Compilando scripts","C# do projeto",-1,false});
   if(state_.globalSearch) {
     state_.globalResults=editorGlobalSearch(document_,searchFiles_,state_.globalQuery,state_.globalProvider,
         [&](u32 i){return creationAvailable(state_,i) && !isPlaying();},state_.globalCounts);

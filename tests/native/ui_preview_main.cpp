@@ -337,6 +337,19 @@ int main(int argc, char **argv) {
     auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
+  // Barra de status com mensagem do console e trabalhos; "status-tasks" abre a janela.
+  if(argc>4 && std::string(argv[4]).starts_with("status")) {
+    editor::EditorConsoleEntry warning;warning.severity=editor::EditorConsoleSeverity::Warning;
+    warning.message="Textura sem mipmaps: porta-madeira.png";console.add(warning);
+    editor::EditorConsoleEntry error;error.severity=editor::EditorConsoleSeverity::Error;
+    error.message="Scripts/Porta.cs(12,5): ';' esperado";console.add(error);
+    state.console=&console;state.uiTime=0.4;
+    using Task=editor::EditorBackgroundTask;
+    state.backgroundTasks={{Task::Kind::ProjectOpen,"Abrindo projeto","Recurso 3 de 8 · Lendo casa.glb",.3f,false},
+                           {Task::Kind::ModelImport,"Importando modelo","Lendo e preparando a fonte",-1,true},
+                           {Task::Kind::CodeBuild,"Compilando scripts","C# do projeto",-1,false}};
+    state.backgroundPanel=std::string(argv[4])=="status-tasks";
+  }
   // Layouts: um salvo ativo e outro salvo.
   if(argc>4 && std::string(argv[4])=="layouts") {
     state.layoutsPanel=true;

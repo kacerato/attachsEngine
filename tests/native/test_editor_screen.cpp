@@ -474,8 +474,10 @@ AE_TEST(diagnostic_dock_compact_sheet_blocks_scene_without_shrinking_viewport) {
   EditorScreenState state=waterLabState(lab);
   state.surface={0,0,600,360};state.diagnosticDockOpen=true;
   Frame frame;composeFrame(frame,state);
+  // A sheet cobre, não encolhe: o viewport só cede a linha da barra de status.
   AE_EXPECT_TRUE(frame.layout.diagnosticDock.width==600 &&
-                 frame.layout.viewport.height==308,"sheet compacto ocupa largura da tela");
+                 frame.layout.viewport.height+frame.layout.statusBar.height==308 && frame.layout.statusBar.height==24,
+                 "sheet compacto ocupa largura da tela");
   const UiPoint under{frame.layout.diagnosticDock.x+4,frame.layout.diagnosticDock.bottom()-4};
   const auto route=frame.router.route({2,UiPointerPhase::Down,under,0.0});
   AE_EXPECT_TRUE(route.target!=UiPointerTarget::Viewport,"toque na sheet não orbita a câmera");

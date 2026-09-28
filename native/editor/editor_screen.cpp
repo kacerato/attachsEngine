@@ -49,6 +49,8 @@ using namespace ae::ui;
 // superior ocupando 16% da altura em vez de 7%. As PROPORÇÕES dos masters são o
 // alvo; os números, não.
 constexpr float kTopBarHeight = 52.0f;
+// Barra de status: uma linha de texto de legenda com folga para o toque.
+constexpr float kStatusBarHeight = 24.0f;
 constexpr float kPanelHeaderHeight = 38.0f;
 constexpr float kRowHeight = 28.0f;
 constexpr float kActionButton = 36.0f;
@@ -1170,6 +1172,126 @@ void buildLayoutsPanel(ScreenBuilder &builder) {
   list.addRect(reset,theme.color.raised,theme.radius.control);
   builder.label(reset,"Restaurar o padrão",theme.color.text,theme.type.caption,UiAlign::Center);
   router.addRegion(reset,widgetId(EditorWidget::LayoutReset));
+}
+
+// Barra de status (Unity 6000.0 Manual/StatusBar): à esquerda a última
+// mensagem do console com o ícone da severidade (tocar abre o console); à
+// direita as contagens de avisos e erros e, quando há trabalho em segundo
+// plano, a atividade girando com o nome do primeiro trabalho e a barra de
+// progresso quando ele tem medida real (tocar lista todos).
+void buildStatusBar(ScreenBuilder &builder,const UiRect &bar) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  if(bar.isEmpty()) return;
+  list.addRect(bar,theme.color.voidBlack);
+  list.addRect({bar.x,bar.y,bar.width,1},theme.color.line);
+  auto content=deflate(bar,UiInsets{8,1,8,0});
+  // Trabalhos à direita.
+  if(!state.backgroundTasks.empty()) {
+    const auto &first=state.backgroundTasks.front();
+    // Coluna estreita (telefone deitado com os dois painéis): a atividade
+    // encolhe e, com vários trabalhos, vira a contagem; a mensagem fica com o resto.
+    const bool narrow=content.width<520;
+    auto tasks=takeRight(content,narrow?140.f:std::min(280.f,content.width*.4f));
+    const auto spinner=takeLeft(tasks,20);
+    const UiPoint centre{spinner.x+spinner.width*.5f,spinner.y+spinner.height*.5f};
+    for(u32 i=0;i<8;++i) {
+      const float angle=static_cast<float>(state.uiTime*6.0)+i*0.785398f;
+      const float fade=static_cast<float>((i+1))/8.0f;
+      list.addRect({centre.x+std::cos(angle)*6-1.5f,centre.y+std::sin(angle)*6-1.5f,3,3},withAlpha(theme.color.accent,fade),1.5f);
+    }
+    const float trackWidth=narrow?36.f:56.f;
+    if(first.progress>=0) {
+      auto track=takeRight(tasks,trackWidth+4);track=centred(track,trackWidth,4);
+      list.addRect(track,theme.color.track,2);
+      list.addRect({track.x,track.y,track.width*std::clamp(first.progress,0.f,1.f),track.height},theme.color.accent,2);
+      takeRight(tasks,6);
+    }
+    std::string label=first.label;
+    if(state.backgroundTasks.size()>1)
+      label=narrow?std::to_string(state.backgroundTasks.size())+" trabalhos":label+" +"+std::to_string(state.backgroundTasks.size()-1);
+    list.pushClip(tasks);
+    builder.label(deflate(tasks,UiInsets{4,0,0,0}),label.c_str(),theme.color.text,theme.type.caption);
+    list.popClip();
+    router.addRegion({tasks.x-20,bar.y,tasks.width+20+(first.progress>=0?trackWidth+10:0.f),bar.height},widgetId(EditorWidget::StatusTasks));
+    takeRight(content,10);
+  }
+  // Contagens.
+  u32 warnings=0,errors=0;
+  const EditorConsoleEntry *last=nullptr;
+  if(state.console) {
+    warnings=state.console->count(EditorConsoleSeverity::Warning);errors=state.console->count(EditorConsoleSeverity::Error);
+    if(!state.console->entries().empty()) last=&state.console->entries().back();
+  }
+  const auto counter=[&](UiIcon icon,u32 value,UiColor tint) {
+    auto area=takeRight(content,value>99?52.f:40.f);
+    list.addImage(centred(takeLeft(area,18),13,13),static_cast<UiImageId>(icon),value?tint:theme.color.textFaint);
+    builder.label(area,std::to_string(value).c_str(),value?theme.color.text:theme.color.textFaint,theme.type.caption);
+  };
+  const float countsRight=content.right();
+  counter(UiIcon::IdeError,errors,theme.color.danger);
+  counter(UiIcon::IdeWarning,warnings,theme.color.warning);
+  const UiRect counts{content.right(),bar.y,countsRight-content.right(),bar.height};
+  // Última mensagem.
+  const UiColor tint=!last?theme.color.textFaint:last->severity==EditorConsoleSeverity::Error?theme.color.danger:
+      last->severity==EditorConsoleSeverity::Warning?theme.color.warning:theme.color.textDim;
+  list.addImage(centred(takeLeft(content,20),13,13),static_cast<UiImageId>(
+      !last?UiIcon::IdeConsole:last->severity==EditorConsoleSeverity::Error?UiIcon::IdeError:
+      last->severity==EditorConsoleSeverity::Warning?UiIcon::IdeWarning:UiIcon::IdeConsole),tint);
+  std::string message=last?last->message.substr(0,last->message.find('\n')):std::string("Console vazio");
+  if(last && last->repeats>1) message+="  \xC3\x97"+std::to_string(last->repeats);
+  list.pushClip(content);
+  builder.label(deflate(content,UiInsets{4,0,0,0}),message.c_str(),last?theme.color.text:theme.color.textFaint,theme.type.caption);
+  list.popClip();
+  router.addRegion({bar.x,bar.y,counts.right()-bar.x,bar.height},widgetId(EditorWidget::StatusConsole));
+}
+
+// Trabalhos em segundo plano (Unity: Background Tasks), sobre a barra de
+// status: um cartão por trabalho com detalhe, progresso real quando existe e
+// Cancelar quando o trabalho aceita.
+void buildBackgroundTasks(ScreenBuilder &builder,const EditorScreenLayout &layout) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  const float width=std::min(360.f,state.surface.width-16);
+  const u32 count=static_cast<u32>(state.backgroundTasks.size());
+  const float height=std::min(56.f+std::max(1u,count)*58.f,layout.statusBar.y-layout.topBar.bottom()-8);
+  const UiRect window{state.surface.right()-width-8,layout.statusBar.y-height-4,width,height};
+  router.addBlocker(window);
+  list.addRect(deflate(window,UiInsets::all(-1)),theme.color.line,theme.radius.control);
+  list.addRect(window,theme.color.surface,theme.radius.control);
+  auto content=deflate(window,UiInsets::all(8));
+  auto header=takeTop(content,36);
+  builder.iconButton(takeRight(header,32),UiIcon::UiClose,widgetId(EditorWidget::StatusTasksClose));
+  builder.label(header,"Trabalhos em segundo plano",theme.color.text,theme.type.cardName);
+  if(!count) builder.label(content,"Nada em andamento",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  for(u32 i=0;i<count && content.height>=54;++i) {
+    const auto &task=state.backgroundTasks[i];
+    auto card=takeTop(content,54);card.height-=4;
+    list.addRect(card,theme.color.raised,theme.radius.control);
+    auto inner=deflate(card,UiInsets{10,6,8,6});
+    if(task.cancelable) {
+      const auto cancel=takeRight(inner,76);
+      list.addRect(centred(cancel,72,28),theme.color.silhouette,theme.radius.control);
+      builder.label(cancel,"Cancelar",theme.color.danger,theme.type.caption,UiAlign::Center);
+      router.addRegion(cancel,widgetId(EditorWidget::StatusTaskCancelBase)+i);
+    }
+    auto line=takeTop(inner,18);
+    if(task.progress>=0) {
+      const std::string percent=std::to_string(static_cast<int>(std::clamp(task.progress,0.f,1.f)*100+.5f))+"%";
+      builder.label(takeRight(line,44),percent.c_str(),theme.color.accent,theme.type.caption,UiAlign::Center);
+    }
+    builder.label(line,task.label.c_str(),theme.color.text,theme.type.caption);
+    auto detail=takeTop(inner,16);
+    list.pushClip(detail);
+    builder.label(detail,task.detail.empty()?"Sem etapa informada":task.detail.c_str(),theme.color.textDim,theme.type.caption);
+    list.popClip();
+    auto track=takeBottom(inner,4);
+    list.addRect(track,theme.color.track,2);
+    if(task.progress>=0) list.addRect({track.x,track.y,track.width*std::clamp(task.progress,0.f,1.f),track.height},theme.color.accent,2);
+    else {
+      // Sem medida real: um segmento que corre, não uma porcentagem.
+      const float t=static_cast<float>(std::fmod(state.uiTime*.6,1.0));
+      list.addRect({track.x+track.width*t*.75f,track.y,track.width*.25f,track.height},withAlpha(theme.color.accent,.8f),2);
+    }
+  }
 }
 
 void buildPhysicsOverlay(ScreenBuilder &builder) {
@@ -7004,6 +7126,14 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     const auto splitter=takeRight(body, kSplitterWidth);
     if (!compact) buildSplitter(builder, splitter, EditorWidget::SplitterRight);
   }
+  // A barra de status fica na coluna central, sob o viewport: numa tela de
+  // telefone deitado, atravessar a largura toda tiraria uma linha da Hierarquia
+  // e do Inspector. Só onde o editor mostra seus painéis (Cena e Play
+  // inspecionado); o jogo em Play ocupa o viewport inteiro.
+  if(state.workspace==EditorWorkspace::Scene || (state.workspace==EditorWorkspace::Play && state.playInspect)) {
+    layout.statusBar = takeBottom(body, kStatusBarHeight);
+    buildStatusBar(builder, layout.statusBar);
+  }
   if(state.workspace==EditorWorkspace::Scene && state.diagnosticDockOpen) {
     if(compact || body.height<310.0f) {
       const float height=std::min(212.0f,remaining.height*.62f);
@@ -7426,6 +7556,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     }
   }
   if(state.layoutsPanel) buildLayoutsPanel(builder);
+  if(state.backgroundPanel) buildBackgroundTasks(builder,layout);
   if(compact && state.compactPanelMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.6f));
     router.addBlocker(state.surface);

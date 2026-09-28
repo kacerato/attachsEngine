@@ -3053,6 +3053,41 @@ void android_main(android_app *app) {
           }
           shell.editorSession.setWorkStatus(text);
         }
+        // Barra de status: trabalhos em andamento, reafirmados a cada quadro. O
+        // progresso só vai quando há medida real (recursos abertos, bytes copiados).
+        {
+          using Task=ae::editor::EditorBackgroundTask;
+          std::vector<Task> tasks;
+          const auto running=[](auto &future) {
+            return future.valid() && future.wait_for(std::chrono::seconds(0))!=std::future_status::ready;
+          };
+          if(running(shell.importWork)) tasks.push_back({Task::Kind::ModelImport,"Importando modelo","Lendo e preparando a fonte",-1,true});
+          if(running(shell.environmentImportWork))
+            tasks.push_back({Task::Kind::EnvironmentImport,"Importando HDRI","Céu, irradiância e reflexos",-1,true});
+          if(running(shell.textureImportWork))
+            tasks.push_back({Task::Kind::TextureImport,"Importando textura","Decodificando e preparando mipmaps",-1,true});
+          if(shell.projectReopening && shell.reopenProgress) {
+            std::lock_guard<std::mutex> hold(shell.reopenProgress->lock);
+            const auto &p=*shell.reopenProgress;
+            Task task{Task::Kind::ProjectOpen,"Abrindo projeto",
+                      "Recurso "+std::to_string(std::min(p.done+1,p.total))+" de "+std::to_string(p.total)+
+                      (p.current.empty()?std::string():" · "+p.stage+" "+p.current),
+                      p.total?static_cast<float>(p.done)/static_cast<float>(p.total):-1.f,false};
+            tasks.push_back(std::move(task));
+          }
+          if(shell.folderCopyToken) if(const auto token=shell.folderCopyToken->load()) {
+            ae::platform::android::FolderCopyState copy;
+            if(ae::platform::android::folderCopyState(token,copy) && !copy.finished) {
+              char detail[96];
+              std::snprintf(detail,sizeof detail,"%u arquivo(s) · %.0f de %.0f MB",copy.files,
+                            static_cast<double>(copy.doneBytes)/1048576.0,static_cast<double>(copy.totalBytes)/1048576.0);
+              tasks.push_back({Task::Kind::FolderCopy,"Copiando pasta do modelo",detail,
+                               copy.totalBytes?static_cast<float>(copy.doneBytes)/static_cast<float>(copy.totalBytes):-1.f,false});
+            }
+          }
+          if(running(shell.languageWork)) tasks.push_back({Task::Kind::CodeAnalysis,"Analisando código","Diagnósticos do editor de código",-1,false});
+          shell.editorSession.setBackgroundTasks(std::move(tasks));
+        }
         // R1: fontes do projeto prontas no worker -> uma publicação e a cena salva.
         if(shell.projectReopening && shell.reopenWork.valid() &&
            shell.reopenWork.wait_for(std::chrono::seconds(0))==std::future_status::ready)
