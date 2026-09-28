@@ -1,4 +1,5 @@
 #include "runtime/game_world.h"
+#include "runtime/prefab.h"
 #include "scene/camera_look.h"
 #include "scene/camera.h"
 #include "scene/environment.h"
@@ -310,6 +311,18 @@ ObjectHandle GameWorld::instantiate(const ObjectHandle &source,const ObjectHandl
   if(unpublishedClones_.size()>=32) {status=WorldStatus::LimitReached;return {};}
   const auto root=graph_.cloneSubtree(source.id,parent.id,mapping,[&](ObjectId id) {return handle(id).valid();});
   if(!root) {status=WorldStatus::Rejected;return {};}
+  status=WorldStatus::Ok;return registerInstantiation(root,mapping);
+}
+
+ObjectHandle GameWorld::instantiate(const Prefab &prefab,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status,std::string &diagnostic) {
+  mapping.clear();diagnostic.clear();status=validate(parent);if(status!=WorldStatus::Ok) return {};
+  if(unpublishedClones_.size()>=32) {status=WorldStatus::LimitReached;return {};}
+  const auto root=prefab.instantiate(graph_,parent.id,mapping,diagnostic);
+  if(!root) {status=WorldStatus::Rejected;return {};}
+  status=WorldStatus::Ok;return registerInstantiation(root,mapping);
+}
+
+ObjectHandle GameWorld::registerInstantiation(ObjectId root,const ObjectCloneMap &mapping) {
   for(const auto &[original,copy]:mapping) {
     (void)original;
     if(copy>=slots_.size()) {slots_.resize(static_cast<usize>(copy)+1);authorities_.resize(static_cast<usize>(copy)+1,TransformAuthority::Free);}
@@ -317,7 +330,7 @@ ObjectHandle GameWorld::instantiate(const ObjectHandle &source,const ObjectHandl
   }
   ++structuralRevision_;invalidated_|=subtreeInvalidation(root);
   unpublishedClones_.push_back(root);
-  status=WorldStatus::Ok;return handle(root);
+  return handle(root);
 }
 
 WorldStatus GameWorld::finishInstantiation(const ObjectHandle &root,bool commit) {

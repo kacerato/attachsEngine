@@ -109,6 +109,10 @@ Essas peças passam a compor cenários verificáveis das etapas de prefab.
 
 ### 6. Criar o recurso prefab e suas instâncias — P, itens 149, 150 e 156
 
+**Entregue e validado em 28/09.** Criação pela UI, persistência, instanciação no
+editor com histórico e no runtime com scripts/física/destruição passaram no
+Android. Contrato e evidências: [recurso prefab](P-RECURSO-PREFAB-2026-09-28.md).
+
 Estabelecer identidade persistente do recurso, formato versionado, dependências
 e vínculo entre fonte e instância. Criar o recurso a partir de uma hierarquia,
 salvá-lo, carregá-lo e instanciá-lo no editor e no runtime, usando a etapa 4.
@@ -119,6 +123,11 @@ Receitas/presets existentes continuam distintos de prefabs vinculados.
 instâncias por ambos os caminhos, preservando dados e referências.
 
 ### 7. Overrides, atualização da fonte e Unpack — P, itens 84, 85, 110, 111, 154, 155 e 157
+
+**Parcial:** Unpack (155) entregue, com preservação de identidade e histórico,
+incluindo salvar/reabrir no Android. Overrides, propagação e Apply/Revert
+continuam pendentes. Inventário acumulado: **127 existentes, 5 parciais,
+80 ausentes e 7 adaptações** (219). O bloco ampliado permanece aberto.
 
 Representar diferenças de propriedades, componentes e objetos por identidade
 estável. Implementar Apply/Revert com validação de dependências e atualização

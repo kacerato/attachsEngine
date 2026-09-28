@@ -9,6 +9,7 @@
 #pragma once
 #include "runtime/script_inspection.h"
 #include "runtime/game_world.h"
+#include "runtime/prefab.h"
 #include "runtime/input_actions.h"
 #include "runtime/scene_physics.h"
 #include "runtime/scene_animation.h"
@@ -30,6 +31,8 @@ public:
   // O callback pode publicar sob demanda. O candidato já contém o novo GUID;
   // ele também pode reconciliar campos transitórios, como o índice de malha.
   using ResourceAvailability = ComponentResourceResolver;
+  using PrefabLoader = std::function<bool(resources::AssetGuid,Prefab &,std::string &)>;
+  void setPrefabLoader(PrefabLoader loader) {if(!running_) prefabLoader_=std::move(loader);}
   void setLogSink(LogSink sink) { logSink_ = std::move(sink); }
   void setPrimitiveLibrary(const std::array<PrimitiveResource,6> &library) {if(!running_) primitives_=library;}
   ~ScriptBridge() { stop(); }
@@ -91,7 +94,7 @@ public:
   const std::string &diagnostics() const { return diagnostics_; }
   static bool hasScripts(const SceneGraph &graph);
   // Descrição JSON dos comportamentos anexados, na ordem de pré-ordem da cena.
-  static std::string attachments(const SceneGraph &graph);
+  static std::string attachments(const SceneGraph &graph,ObjectId root=0);
 
 private:
   void collectDiagnostics();
@@ -110,6 +113,7 @@ private:
   const resources::AssetRegistry *assets_ = nullptr;
   const std::vector<resources::EnvironmentProfile> *environmentProfiles_ = nullptr;
   ResourceAvailability resourceAvailable_;
+  PrefabLoader prefabLoader_;
   std::array<PrimitiveResource,6> primitives_{};
   RuntimeRenderingState rendering_{};
   renderer::ResolvedRenderingPolicy initialEffective_{};

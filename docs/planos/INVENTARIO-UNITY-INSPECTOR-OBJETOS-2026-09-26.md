@@ -228,14 +228,14 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 149 | Criar prefab a partir de objeto | ✗ | "receita de objeto" de preset não é prefab | P |
-| 150 | Instanciar na cena | ✗ | | P |
+| 149 | Criar prefab a partir de objeto | ✔ | Recurso versionado, vínculo, dependências e criação pela UI; aceite Android em P-RECURSO-PREFAB-2026-09-28.md | P |
+| 150 | Instanciar na cena | ✔ | Arquivos → Instanciar prefab, histórico e salvar/reabrir | P |
 | 151 | Editar o recurso (modo prefab) | ✗ | | P |
 | 152 | Prefabs aninhados | ✗ | | P |
 | 153 | Variantes | ✗ | | P |
 | 154 | Overrides de instância (componente, dado, objeto) | ✗ | | P |
-| 155 | Unpack | ✗ | | P |
-| 156 | Instanciar em execução | ✗ | | P |
+| 155 | Unpack | ✔ | Retira vínculo, conserva dados/identidades e suporta desfazer/refazer; fonte ausente não impede a recuperação | P |
+| 156 | Instanciar em execução | ✔ | API C#, campos antes de Awake, referências, física, destruição e rollback | P |
 | 157 | Inspector da instância (Open, Select, Overrides, Apply, Revert) | ✗ | | P |
 
 ## 16. Edit prefab assets — `EditingInPrefabMode.html`
@@ -329,9 +329,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 123 |
+| ✔ existe | 127 |
 | ◐ parcial | 5 |
-| ✗ falta | 84 |
+| ✗ falta | 80 |
 | A adaptação | 7 |
 | **Total** | **219** |
 

@@ -1170,6 +1170,12 @@
       "name": "quad",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "scene/prefab": {
+      "category": "scene",
+      "name": "prefab",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

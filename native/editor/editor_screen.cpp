@@ -5,6 +5,7 @@
 #include "editor/editor_curve_view.h"
 #include <sstream>
 #include "scene/script_behavior.h"
+#include "scene/prefab_link.h"
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
@@ -113,6 +114,7 @@ UiIcon iconForKind(EditorEntityKind kind) {
 }
 
 UiIcon iconForEntity(const EditorEntity &entity) {
+  if(const auto *link=scene::prefabLink(entity.components);link && link->instanceRoot==entity.id) return UiIcon::ScenePrefab;
   if(cameraComponent(entity)) return UiIcon::EditorAuthorCamera;
   if(meshRenderer(entity)) return UiIcon::EditorAuthorObject;
   if(runtime::lightComponent(entity)) return UiIcon::EditorAuthorSun;
@@ -1623,6 +1625,12 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
       builder.label(button,item.first,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(button,widgetId(item.second));
     }
+  } else if(selectedRecord&&selectedRecord->type==resources::AssetType::Prefab) {
+    auto actions=takeBottom(content,40);
+    auto button=deflate(actions,UiInsets::all(3));
+    builder.list.addRect(button,theme.color.raised,theme.radius.control);
+    builder.label(button,"Instanciar prefab",theme.color.text,theme.type.caption,UiAlign::Center);
+    if(builder.state.workspace!=EditorWorkspace::Play) builder.router.addRegion(button,widgetId(EditorWidget::AssetInstantiate));
   } else if(selectedRecord&&selectedRecord->type==resources::AssetType::EnvironmentMap) {
     auto actions=takeBottom(content,36);
     auto button=deflate(actions,UiInsets::all(3));
@@ -1661,7 +1669,7 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     }
     auto icon=takeLeft(row,22);
     builder.list.addImage(centred(icon,code?20:15,code?20:15),static_cast<UiImageId>(entry.directory?(code?UiIcon::IdeFiles:UiIcon::EditorAuthorFolder):
-        entry.name.ends_with(".cs")?(code?UiIcon::IdeCode:UiIcon::ScriptingCode):UiIcon::AssetsFile),code?0xffffffff:theme.color.textDim);
+        entry.name.ends_with(".cs")?(code?UiIcon::IdeCode:UiIcon::ScriptingCode):entry.name.ends_with(".prefab")?UiIcon::ScenePrefab:UiIcon::AssetsFile),code?0xffffffff:theme.color.textDim);
     builder.label(row,entry.name.c_str(),theme.color.text,theme.type.caption);
     builder.router.addRegion(hit,widgetId(EditorWidget::FileRowBase)+i);
   }
@@ -4055,7 +4063,7 @@ std::vector<CatalogRow> componentCatalogRows(const EditorScreenState &state,cons
       if(!any || (family && title!=group)) header(std::string(title));
       group=title;any=true;native(i);
     }
-    if(f==static_cast<u32>(scene::ComponentFamily::Logic) && family) scripts(false);
+    if(f==static_cast<u32>(scene::ComponentFamily::Logic)) scripts(false);
   }
   return rows;
 }
@@ -5255,6 +5263,8 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
       {"Excluir",EditorWidget::DeleteSelection,!root},
       {"Enquadrar na vista",EditorWidget::FrameSelection,true},
       {"Criar filho vazio",EditorWidget::CreateChildGroup,true},
+      {"Criar prefab da seleção",EditorWidget::PrefabCreate,!root && !scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},
+      {"Desvincular instância de prefab",EditorWidget::PrefabUnpack,scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},
       {"Mover acima",EditorWidget::MoveEarlier,!root},
       {"Mover abaixo",EditorWidget::MoveLater,!root},
       {"Mudar pai",EditorWidget::ReparentSelection,!root},
@@ -6133,7 +6143,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
   // Perto do teto por objeto (a Unity não tem teto; aqui é explícito) a linha
   // passa a mostrar o limite em cor de aviso, antes de o Add recusar.
   if (!builder.multiEdit) {
-    const usize cards=entity->components.size()-(scene::importLink(entity->components)?1u:0u);
+    const usize cards=entity->components.size()-(scene::importLink(entity->components)?1u:0u)-(scene::prefabLink(entity->components)?1u:0u);
     const bool near=entity->components.size()+8>=scene::Components::MaximumCount;
     const std::string count=near?std::to_string(entity->components.size())+" de "+std::to_string(scene::Components::MaximumCount)+" componentes":
                                  std::to_string(cards)+(cards==1?" componente":" componentes");
@@ -6191,6 +6201,12 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     return;
   }
   takeTop(content,6);
+  if(const auto *link=scene::prefabLink(entity->components)) {
+    const auto *record=builder.state.assetRegistry?builder.state.assetRegistry->find(link->asset):nullptr;
+    auto row=takeTop(content,28);
+    builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(UiIcon::ScenePrefab),theme.color.accent);
+    builder.label(row,record?record->path:"Fonte de prefab ausente",record?theme.color.textDim:theme.color.warning,theme.type.caption);
+  }
   buildImportLinkCard(builder,content);
   buildComponents(builder,content,*entity);
 }

@@ -5,6 +5,7 @@
 #include "editor/editor_collider_fit.h"
 #include "editor/editor_lod_group.h"
 #include "scene/script_behavior.h"
+#include "scene/prefab_link.h"
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
@@ -473,7 +474,7 @@ const scene::ComponentValue *matchComponent(const scene::Components &components,
 // blend shapes da malha, tipo ausente): a Unity também não os edita juntos.
 bool multiEditable(const scene::ComponentValue &value) {
   const auto &type=value.type();
-  return &type!=&scene::ImportLink::descriptor && &type!=&scene::LodGroup::descriptor &&
+  return &type!=&scene::ImportLink::descriptor && &type!=&scene::PrefabLink::descriptor && &type!=&scene::LodGroup::descriptor &&
          &type!=&scene::SkinnedMesh::descriptor && !value.unresolved();
 }
 std::string transformChannel(const EditorTransform &t,u32 row,u32 axis) {
@@ -708,6 +709,9 @@ void EditorSession::saveEditorPreferences() {
 void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
   playScene_.setScriptRuntime(api,files_.rootPath());
   playScene_.setScriptResourceAvailability(runtimeResourceResolver());
+  playScene_.setPrefabLoader([this](resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) {
+    return preparePrefab(asset,prefab,error);
+  });
 }
 
 // Quem publica sob demanda um recurso trocado com o Play rodando: o mesmo
@@ -2681,6 +2685,11 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   }
   else if(entry.name.ends_with(".aescene"))
     requestedScenePath_=files_.resolveFile(entry.relativePath);
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Prefab) {
+    runtime::Prefab prefab;std::string error;
+    state_.status=loadPrefab(record->guid,prefab,error)?
+      "Prefab · "+std::to_string(prefab.graph().entityCount()-1)+" objetos · Instanciar adiciona uma cópia vinculada à cena":error;
+  }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Material) {
     if(!openMaterialInspector(record->guid)) state_.status="Material registrado, mas o arquivo não pôde ser lido";
   }
@@ -4669,6 +4678,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::ImportTexture)) {state_.textureImportRequested=true;state_.codeFiles=false;return true;}
     if(key==widgetId(EditorWidget::AssetInstantiate)) {
       const auto *record=assets_.findByPath(state_.selectedFile);
+      if(record && record->type==resources::AssetType::Prefab) {
+        std::string error;
+        if(!instantiatePrefab(record->guid,document_.root(),error)) state_.status=error;
+        return true;
+      }
       ModelImportReport report;
       if(!record) setImportStatus("Registre o recurso com Reimportar antes de instanciar.",EditorConsoleSeverity::Warning);
       else if(!instantiateModel(record->guid,report)) setImportStatus(report.diagnostic,EditorConsoleSeverity::Error);
@@ -5557,6 +5571,18 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     state_.entityMenu=false;
     if(result.status!=EditorActionStatus::Applied) state_.status="Operação indisponível";
     return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabCreate)) {
+    std::string error;
+    if(state_.selectionSet.size()>1) state_.status="Selecione uma raiz para criar o prefab da subárvore";
+    else if(!createPrefab(state_.inspectorTarget?state_.inspectorTarget:state_.selection,error).valid()) state_.status=error;
+    state_.entityMenu=false;return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabUnpack)) {
+    std::string error;
+    if(state_.selectionSet.size()>1) state_.status="Selecione uma instância para desvincular";
+    else if(!unpackPrefab(state_.inspectorTarget?state_.inspectorTarget:state_.selection,error)) state_.status=error;
+    state_.entityMenu=false;return true;
   }
   const EditorPointerOutcome outcome =
       applyEditorPointer(state_, layout_, routing, document_, history_);
@@ -10450,7 +10476,7 @@ bool EditorSession::saveComponentPreset(EditorEntityId entity,u64 instance,std::
 // A verificação percorre os bindings declarados pelo componente — não há aqui
 // uma lista de campos do MeshRenderer escrita à mão — e reconcilia o slot
 // resolvido no pacote, que é índice de processo e não identidade.
-bool EditorSession::resolvePresetResources(scene::ComponentValue &value,const std::vector<scene::FieldAddress> *only,std::string &error) {
+bool EditorSession::resolveComponentResources(scene::ComponentValue &value,const std::vector<scene::FieldAddress> *only,std::string &error) {
   const auto applies=[&](const scene::FieldAddress &address) {
     if(!only) return true;
     for(const auto &field:*only) if(field==address) return true;
@@ -10460,7 +10486,7 @@ bool EditorSession::resolvePresetResources(scene::ComponentValue &value,const st
   if(mesh) for(u32 slot=0;slot<mesh->slotCount();++slot) {
     if(!applies({"mesh",slot,scene::FieldKind::Resource})) continue;
     const auto resolved=mapScene_.assetSlot(mesh->slotAsset(slot));
-    if(!resolved) {error="Malha do preset não está carregada neste projeto";return false;}
+    if(!resolved) {error="Malha do recurso não está carregada neste projeto";return false;}
     *mesh->editSlotMesh(slot)=resolved;
   }
   for(const auto &binding:value.type().resourceBindings) {
@@ -10469,25 +10495,33 @@ bool EditorSession::resolvePresetResources(scene::ComponentValue &value,const st
       if(!applies({binding.id,slot,scene::FieldKind::Resource})) continue;
       const auto asset=binding.read(value,slot);
       if(!asset.valid()||binding.declaresNone(asset)) continue;
+      if(binding.kind==resources::AssetType::AnimationClip) {
+        runtime::AnimationClipView view;
+        if(!mapScene_.findClip(asset,view)) {error="Clipe do recurso não está carregado";return false;}
+        continue;
+      }
+      if(binding.kind==resources::AssetType::EnvironmentProfile && !findEnvironmentProfile(asset)) {
+        error="Perfil de ambiente do recurso não está carregado";return false;
+      }
       if(binding.kind==resources::AssetType::Mesh) {
         // O MeshRenderer já resolveu também o índice transitório acima. Outros
         // componentes, como o Colisor, consomem a identidade diretamente.
         if(&value.type()!=&scene::MeshRenderer::descriptor&&!mapScene_.assetSlot(asset)) {
-          error="Malha do preset não está carregada neste projeto";return false;
+          error="Malha do recurso não está carregada neste projeto";return false;
         }
         continue;
       }
-      if(binding.kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(asset)) {error="Material do preset indisponível";return false;}
+      if(binding.kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(asset)) {error="Material do recurso indisponível";return false;}
       if(binding.kind==resources::AssetType::Texture) {
         const auto *record=assets_.find(asset);
         if(!record||record->type!=resources::AssetType::Texture||!decodeProjectTexture(asset,true,EditorMapScene::DefaultTextureSampler)) {
-          error="Textura do preset indisponível ou inválida";return false;
+          error="Textura do recurso indisponível ou inválida";return false;
         }
       }
       if(binding.kind==resources::AssetType::EnvironmentMap) {
         const auto *record=assets_.find(asset);
         if(!record||record->type!=resources::AssetType::EnvironmentMap||!findEnvironmentMap(asset)) {
-          error="Mapa HDRI do preset indisponível ou inválido";return false;
+          error="Mapa HDRI do recurso indisponível ou inválido";return false;
         }
       }
     }
@@ -10523,7 +10557,7 @@ bool EditorSession::applyComponentRecipe(u64 preset,EditorEntityId entity,Editor
   if(values.empty()) return false;
   auto candidate=*object;u32 added=0,updated=0;
   for(auto &value:values) {
-    if(!resolvePresetResources(*value,nullptr,error)) return false;
+    if(!resolveComponentResources(*value,nullptr,error)) return false;
     const auto *existing=candidate.components.find(value->type().id);
     u64 target=0;
     if(existing&&!value->type().allowMultiple) {
@@ -10590,7 +10624,7 @@ bool EditorSession::applyComponentPreset(u64 preset,EditorEntityId entity,u64 in
     }
     if(fields.empty()) {error="Nenhum campo marcado para aplicar";return false;}
   }
-  if(!resolvePresetResources(*replacement,add||!selective?nullptr:&fields,error)) return false;
+  if(!resolveComponentResources(*replacement,add||!selective?nullptr:&fields,error)) return false;
   if(!replacement->valid()||!editorReferencesAccept(document_,entity,*replacement)) {error="Referências ou valores incompatíveis";return false;}
   auto candidate=*object;u64 target=instance;
   if(add||!selective) {

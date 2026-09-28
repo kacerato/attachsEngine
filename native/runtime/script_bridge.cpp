@@ -166,12 +166,12 @@ void writeScriptValue(std::ostream &out, const scene::ScriptPropertyValue &p) {
 }
 }
 
-std::string ScriptBridge::attachments(const SceneGraph &graph) {
+std::string ScriptBridge::attachments(const SceneGraph &graph,ObjectId root) {
   std::ostringstream out;
   out.imbue(std::locale::classic());
   out << std::setprecision(std::numeric_limits<float>::max_digits10) << '[';
   std::vector<ObjectId> ids;
-  graph.collectSubtree(graph.root(), ids);
+  graph.collectSubtree(root?root:graph.root(), ids);
   bool first = true;
   for (auto id : ids) {
     const auto &object = *graph.find(id);
@@ -454,6 +454,34 @@ void ScriptBridge::installAccess() {
     const auto type=static_cast<scene::PrimitiveType>(kind);
     if(!scene::validPrimitive(type) || parent>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
     return s.world_->createPrimitive(s.world_->handle(static_cast<ObjectId>(parent)),type,s.primitives_[kind],s.lastStatus_).id;
+  };
+  access_.instantiatePrefab=[](void *c,u64 parent,scene::ScriptAssetGuid asset)->u64 {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_ || !s.prefabLoader_) {s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(parent>std::numeric_limits<ObjectId>::max() || !(asset.high || asset.low)) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto destination=s.world_->handle(static_cast<ObjectId>(parent));
+    s.lastStatus_=s.world_->validate(destination);if(s.lastStatus_!=WorldStatus::Ok) return 0;
+    Prefab prefab;std::string error;
+    if(!s.prefabLoader_({asset.high,asset.low},prefab,error)) {
+      s.lastStatus_=WorldStatus::UnknownResource;
+      if(s.logSink_) s.logSink_(parent,"Prefab recusado: "+error);
+      return 0;
+    }
+    ObjectCloneMap mapping;
+    const auto created=s.world_->instantiate(prefab,destination,mapping,s.lastStatus_,error);
+    if(!created.valid() && s.logSink_) s.logSink_(parent,"Prefab recusado: "+error);
+    return created.id;
+  };
+  access_.instantiationAttachments=[](void *c,u64 root,u8 *out,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_ || root>std::numeric_limits<ObjectId>::max() || capacity<0 || !s.world_->handle(static_cast<ObjectId>(root)).valid()) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    const auto text=attachments(s.world_->graph(),static_cast<ObjectId>(root));
+    if(text.size()>32*1024*1024) {s.lastStatus_=WorldStatus::LimitReached;return -1;}
+    s.lastStatus_=WorldStatus::Ok;
+    if(out && static_cast<usize>(capacity)>=text.size()) std::memcpy(out,text.data(),text.size());
+    return static_cast<int>(text.size());
   };
   access_.instantiate=[](void *c,u64 source,u64 parent,u64 *pairs,int capacity)->int {
     auto &s=*static_cast<ScriptBridge *>(c);

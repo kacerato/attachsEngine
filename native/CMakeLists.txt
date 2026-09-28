@@ -437,6 +437,7 @@ target_link_libraries(aether_assets PUBLIC aether_core aether_renderer)
 # "objeto de cena" para manter em sincronia.
 add_library(aether_runtime STATIC
   runtime/scene_graph.cpp
+  runtime/prefab.cpp
   runtime/input_actions.cpp
   runtime/transform_math.cpp
   runtime/game_world.cpp
@@ -465,6 +466,7 @@ add_library(aether_editor STATIC
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
   editor/editor_session.cpp
+  editor/editor_prefab.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
   editor/editor_texture_assets.cpp
@@ -678,6 +680,7 @@ if(NOT ANDROID)
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_runtime_world.cpp
     ../tests/native/test_primitives.cpp
+    ../tests/native/test_prefab.cpp
     ../tests/native/test_runtime_physics_access.cpp
     ../tests/native/test_mesh_collider.cpp
     ../tests/native/test_lod_group.cpp

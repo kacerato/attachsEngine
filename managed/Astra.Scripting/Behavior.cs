@@ -295,6 +295,8 @@ public interface ISceneAccess
     bool DestroyAfter(ulong objectId, double seconds) => throw new NotSupportedException();
     ulong AddBehavior(ulong objectId, string typeId, string source) => throw new NotSupportedException();
     ulong CreatePrimitive(ulong parent, PrimitiveType type) => throw new NotSupportedException();
+    ulong InstantiatePrefab(ulong parent, AssetGuid asset) => throw new NotSupportedException();
+    string InstantiationAttachments(ulong root) => throw new NotSupportedException();
     IReadOnlyDictionary<ulong, ulong> Instantiate(ulong source, ulong parent) => throw new NotSupportedException();
     bool FinishInstantiation(ulong root, bool commit) => throw new NotSupportedException();
     IBehaviorRegistry? Behaviors => null;
@@ -397,6 +399,7 @@ public interface IBehaviorRegistry
     object? FindBehavior(ulong objectId, Type contract);
     Behavior AddBehavior(GameObject owner, Type type);
     GameObject Instantiate(GameObject source, GameObject parent);
+    GameObject InstantiatePrefab(GameObject parent, AssetGuid asset);
     void RemoveBehavior(Behavior behavior);
     int Message(GameObject target, string method, object? payload, bool hasPayload, MessageRoute route, bool requireReceiver);
     /// <summary>Todos os comportamentos desse objeto atribuíveis ao tipo pedido.</summary>

@@ -369,7 +369,7 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
                  "instância incluída para permitir a primeira ativação");
   const auto &abi = FakeRuntime::sceneAccess;
-  AE_EXPECT_TRUE(abi.version == 18 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_TRUE(abi.version == 19 && abi.available(), "contrato ABI completo");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
   AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
   const auto revision = play.world().structuralRevision();
@@ -695,4 +695,30 @@ AE_TEST(play_abi_v16_dynamic_script_and_delayed_destroy_respect_pause_and_step) 
   AE_EXPECT_TRUE(play.step(),"first simulated step");AE_EXPECT_TRUE(play.world().alive(play.world().handle(target)),"not yet due");
   AE_EXPECT_TRUE(play.step() && !play.world().graph().exists(target),"second step crosses deadline and drains");
   play.stop();AE_EXPECT_TRUE(doc.exists(target) && doc.find(target)->components.size()==0,"authoring remains unchanged");
+}
+
+AE_TEST(play_prefab_abi_creates_once_queries_attachments_and_can_rollback) {
+  EditorDocument doc;const auto driver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Driver");
+  attachScript(doc,driver,"test.driver");
+  EditorDocument source;const auto sourceRoot=source.createEntity(source.root(),EditorEntityKind::Folder,"Source");
+  attachScript(source,sourceRoot,"test.prefab");
+  const auto guid=resources::assetGuidFromSeed("ABI prefab");runtime::Prefab prefab;std::string error;
+  AE_EXPECT_TRUE(prefab.capture(source,sourceRoot,guid,error),error.c_str());
+  FakeRuntime::reset();EditorMapScene resources;EditorPlayScene play;
+  play.setScriptRuntime(FakeRuntime::api(),"/project");
+  play.setPrefabLoader([&](resources::AssetGuid id,runtime::Prefab &out,std::string &diagnostic) {
+    if(id!=guid) {diagnostic="missing source";return false;}out=prefab;return true;
+  });
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play");const auto &abi=FakeRuntime::sceneAccess;auto *c=abi.context;
+  const auto count=play.document().entityCount();
+  const auto root=abi.instantiatePrefab(c,doc.root(),{guid.high,guid.low});
+  AE_EXPECT_TRUE(root && play.document().entityCount()==count+1,"exactly one creation");
+  const auto size=abi.instantiationAttachments(c,root,nullptr,0);
+  AE_EXPECT_TRUE(size>2 && play.document().entityCount()==count+1,"size query is read only");
+  std::string json(static_cast<usize>(size),'\0');
+  AE_EXPECT_EQ(abi.instantiationAttachments(c,root,reinterpret_cast<u8*>(json.data()),size),size,"copy attachment description");
+  AE_EXPECT_TRUE(json.find("test.prefab")!=std::string::npos && json.find("test.driver")==std::string::npos,"only the new subtree scripts");
+  AE_EXPECT_TRUE(abi.finishInstantiation(c,root,0) && play.document().entityCount()==count,"managed binding failure can rollback");
+  AE_EXPECT_TRUE(!abi.instantiatePrefab(c,doc.root(),{1,2}) && play.document().entityCount()==count,"missing resource never creates objects");
+  play.stop();FakeRuntime::reset();
 }

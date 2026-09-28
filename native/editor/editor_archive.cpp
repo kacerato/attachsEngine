@@ -1,5 +1,6 @@
 #include "scene/script_behavior.h"
 #include "scene/import_link.h"
+#include "scene/prefab_link.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_properties.h"
@@ -34,6 +35,7 @@ EditorComponentRegistry defaultEditorComponentRegistry() {
     std::vector<const EditorComponentType*> result{&EditorRouteComponent::descriptor,&EditorWaterBodyComponent::descriptor};
     for(const auto &schema:scene::componentSchemas) result.push_back(schema.type);
     result.push_back(&scene::ImportLink::descriptor);
+    result.push_back(&scene::PrefabLink::descriptor);
     result.push_back(&LegacyWaterSettings::descriptor);
     return result;
   }();

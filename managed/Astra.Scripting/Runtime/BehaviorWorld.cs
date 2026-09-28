@@ -61,26 +61,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             _types.Clear();
             foreach (var schema in project.Types) _types.Add(assembly.GetType(schema.Name, throwOnError: true)!, schema);
             _bindComponentState = bindComponentState;
-            var identities = new HashSet<(ulong, ulong)>();
-            foreach (var attachment in attachments)
-            {
-                if (attachment.InstanceId == 0 || !scene.Exists(attachment.ObjectId) ||
-                    !identities.Add((attachment.ObjectId, attachment.InstanceId)))
-                    throw new InvalidOperationException("Invalid or duplicate behavior instance identity.");
-                var schema = project.Types.SingleOrDefault(t => t.Id == attachment.TypeId)
-                    ?? throw new InvalidOperationException("Unavailable behavior type: " + attachment.TypeId);
-                var type = assembly.GetType(schema.Name, throwOnError: true)!;
-                var instance = (Behavior?)Activator.CreateInstance(type)
-                    ?? throw new InvalidOperationException("Behavior construction failed: " + schema.Name);
-                instance.Enabled = attachment.Enabled;
-                instance.Attach(scene, attachment.ObjectId, attachment.InstanceId, this, bindComponentState);
-                prepared.Add(new(instance, schema, GameObject.Resolve(scene, attachment.ObjectId)));
-                if (attachment.PropertyTypes is { } authoredTypes)
-                    foreach (var field in schema.Properties)
-                        if (authoredTypes.TryGetValue(field.Id, out var kind) && kind != field.ValueType)
-                            throw new InvalidDataException("Property type changed; migrate its authored value: " + schema.Name + "." + field.Id);
-                ApplyProperties(instance, schema, attachment.Properties, scene);
-            }
+            PrepareAttachments(scene, attachments, prepared);
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
             // Todas as instâncias existem antes dos callbacks. Objetos inativos
             // aguardam sua primeira ativação; Enabled=false não adia o Awake.
@@ -326,6 +307,60 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         try { foreach (var entry in prepared) EnsureActivated(entry); }
         finally { if (--_dispatchDepth == 0) SweepRemoved(); }
         return result;
+    }
+
+    public GameObject InstantiatePrefab(GameObject parent, AssetGuid asset)
+    {
+        if (!Running || _stopping || _scene is null) throw new WorldException(WorldStatus.NotRunning, "instanciar prefab");
+        if (!parent.BelongsTo(_scene)) throw new WorldException(WorldStatus.ForeignWorld, "instanciar prefab");
+        if (_dispatchDepth >= 32) throw new WorldException(WorldStatus.LimitReached, "instanciar prefab");
+        var root = _scene.InstantiatePrefab(parent.ObjectId, asset);
+        if (root == 0) throw new WorldException(_scene.LastStatus, "instanciar prefab");
+        var prepared = new List<Entry>();
+        try
+        {
+            var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(_scene.InstantiationAttachments(root))
+                ?? throw new InvalidDataException("Descrição de scripts do prefab ausente.");
+            if (_entries.Count + attachments.Length > 4096) throw new WorldException(WorldStatus.LimitReached, "instanciar scripts");
+            PrepareAttachments(_scene, attachments, prepared);
+            if (!_scene.FinishInstantiation(root, true)) throw new WorldException(_scene.LastStatus, "publicar prefab");
+        }
+        catch
+        {
+            foreach (var entry in prepared) entry.Instance.Detach();
+            if (!_scene.FinishInstantiation(root, false)) throw new InvalidOperationException("Falha ao reverter instanciação de prefab.");
+            throw;
+        }
+        _entries.AddRange(prepared);
+        var result = GameObject.Resolve(_scene, root);
+        ++_dispatchDepth;
+        try { foreach (var entry in prepared) EnsureActivated(entry); }
+        finally { if (--_dispatchDepth == 0) SweepRemoved(); }
+        return result;
+    }
+
+    private void PrepareAttachments(ISceneAccess scene, IEnumerable<BehaviorAttachment> attachments, List<Entry> prepared)
+    {
+        var identities = new HashSet<(ulong, ulong)>();
+        foreach (var attachment in attachments)
+        {
+            if (attachment.InstanceId == 0 || !scene.Exists(attachment.ObjectId) ||
+                !identities.Add((attachment.ObjectId, attachment.InstanceId)))
+                throw new InvalidOperationException("Invalid or duplicate behavior instance identity.");
+            var pair = _types.SingleOrDefault(t => t.Value.Id == attachment.TypeId);
+            if (pair.Key is null) throw new InvalidOperationException("Unavailable behavior type: " + attachment.TypeId);
+            var schema = pair.Value;
+            var instance = (Behavior?)Activator.CreateInstance(pair.Key)
+                ?? throw new InvalidOperationException("Behavior construction failed: " + schema.Name);
+            instance.Enabled = attachment.Enabled;
+            instance.Attach(scene, attachment.ObjectId, attachment.InstanceId, this, _bindComponentState);
+            prepared.Add(new(instance, schema, GameObject.Resolve(scene, attachment.ObjectId)));
+            if (attachment.PropertyTypes is { } authoredTypes)
+                foreach (var field in schema.Properties)
+                    if (authoredTypes.TryGetValue(field.Id, out var kind) && kind != field.ValueType)
+                        throw new InvalidDataException("Property type changed; migrate its authored value: " + schema.Name + "." + field.Id);
+            ApplyProperties(instance, schema, attachment.Properties, scene);
+        }
     }
 
     public object? FindBehavior(ulong objectId, Type contract)

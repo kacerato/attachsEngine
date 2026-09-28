@@ -218,6 +218,8 @@ enum class EditorWidget : u32 {
   // no menu da hierarquia (padrão Unity/Godot: o objeto selecionado se edita
   // onde estão as propriedades dele).
   ObjectFold, ObjectLayerPrevious, ObjectLayerNext, CreateChildGroup,
+  PrefabCreate,
+  PrefabUnpack,
   TransformMenu, TransformCopy, TransformPaste, TransformReset,
   TransformResetPosition, TransformResetRotation, TransformResetScale,
   // R3: importação no painel de Propriedades (abas, perfil e ações do perfil).

@@ -1,0 +1,11 @@
+09-28 17:23:21.863 13918 28441 I Astra.Script: 3: PREFAB AWAKE: authored value 41
+09-28 17:23:21.873 13918 28441 I Astra.Script: 4: PREFAB AWAKE: authored value 41
+09-28 17:23:21.873 13918 28441 I Astra.Script: 5: PREFAB AWAKE: authored value 41
+09-28 17:23:21.874 13918 28441 I Astra.Script: 2: PREFAB READY: two independent hierarchies and scripts
+09-28 17:23:22.781 13918 28441 I Astra.Script: 2: PREFAB PASS: authored fields, isolated scripts, collision and destruction
+09-28 17:29:02.096 15416 24739 I Astra.Script: 3: PREFAB AWAKE: authored value 41
+09-28 17:29:02.096 15416 24739 I Astra.Script: 4: PREFAB AWAKE: authored value 41
+09-28 17:29:02.106 15416 24739 I Astra.Script: 5: PREFAB AWAKE: authored value 41
+09-28 17:29:02.108 15416 24739 I Astra.Script: 6: PREFAB AWAKE: authored value 41
+09-28 17:29:02.110 15416 24739 I Astra.Script: 2: PREFAB READY: two independent hierarchies and scripts
+09-28 17:29:03.000 15416 24739 I Astra.Script: 2: PREFAB PASS: authored fields, isolated scripts, collision and destruction

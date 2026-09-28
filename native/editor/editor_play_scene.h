@@ -49,6 +49,7 @@ class EditorPlayScene final {
 public:
   ~EditorPlayScene(){stop();}
   void setScriptRuntime(scene::ScriptRuntimeApi api,const std::string &root) {scripts_.configure(api,root);}
+  void setPrefabLoader(runtime::ScriptBridge::PrefabLoader loader) {scripts_.setPrefabLoader(std::move(loader));}
   void setScriptResourceAvailability(runtime::ScriptBridge::ResourceAvailability available) {
     scripts_.setResourceAvailability(std::move(available));
   }

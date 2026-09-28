@@ -140,29 +140,9 @@ EditorEntityId EditorHistory::duplicateEntity(EditorDocument &document, EditorEn
   // references to siblings. External object references intentionally survive.
   runtime::ObjectCloneMap mapping;
   for(usize j=0;j<ids.size();++j) mapping.emplace(ids[j],created[j]);
+  if(!runtime::remapSubtreeReferences(values,mapping)) {cancel(document);return kInvalidEntity;}
   for(usize i=0;i<values.size();++i) {
-    auto value=values[i];
-    if(!runtime::remapObjectReferences(value,mapping)) {end();undo(document);return kInvalidEntity;}
-    // Vínculo com a fonte importada (M08.2). Duplicar a instância inteira cria
-    // OUTRA instância: mesma fonte, identidade de instância nova. Duplicar uma
-    // parte solta cria um objeto independente — duas peças dizendo ser o mesmo
-    // nó da mesma instância travariam a reconciliação.
-    if(const auto *link=scene::importLink(value.components)) {
-      const auto *rootLink=scene::importLink(values.front().components);
-      if(rootLink && rootLink->root && rootLink->instance==link->instance && rootLink->source==link->source) {
-        auto copy=*link;
-        // Semente estável DENTRO desta duplicação (a revisão do documento muda a
-        // cada filho aplicado); ids de entidade nunca são reciclados.
-        copy.instance=resources::assetGuidFromSeed("copia:"+link->instance.text()+":"+std::to_string(ids.front())+":"+
-                                                   std::to_string(created.front()));
-        copy.orphan=link->orphan;
-        if(!value.components.replace(copy)) {end();undo(document);return kInvalidEntity;}
-      } else if(!link->unlinked) {
-        auto copy=*link;copy.unlinked=true;
-        if(!value.components.replace(copy)) {end();undo(document);return kInvalidEntity;}
-      }
-    }
-    if(!applyValues(document,created[i],value)) {end();undo(document);return kInvalidEntity;}
+    if(!applyValues(document,created[i],values[i])) {cancel(document);return kInvalidEntity;}
   }
   end();return created.front();
 }

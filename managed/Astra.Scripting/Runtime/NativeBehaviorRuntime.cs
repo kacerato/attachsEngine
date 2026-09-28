@@ -145,6 +145,8 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, ulong, ulong*, int, int> Instantiate;
         public delegate* unmanaged<void*, ulong, int, int> FinishInstantiation;
         public delegate* unmanaged<void*, ulong, uint, ulong> CreatePrimitive;
+        public delegate* unmanaged<void*, ulong, NativeAssetGuid, ulong> InstantiatePrefab;
+        public delegate* unmanaged<void*, ulong, byte*, int, int> InstantiationAttachments;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -163,7 +165,7 @@ public static unsafe class NativeBehaviorRuntime
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
             SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
-            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null;
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -405,6 +407,18 @@ public static unsafe class NativeBehaviorRuntime
             return result;
         }
         public ulong CreatePrimitive(ulong parent, PrimitiveType type) => Accessible ? access.CreatePrimitive(access.Context, parent, (uint)type) : 0;
+        public ulong InstantiatePrefab(ulong parent, AssetGuid asset) => Accessible ? access.InstantiatePrefab(access.Context, parent, new NativeAssetGuid { High=asset.High, Low=asset.Low }) : 0;
+        public string InstantiationAttachments(ulong root)
+        {
+            if (!Accessible) throw new WorldException(WorldStatus.NotRunning, "ler scripts do prefab");
+            var count = access.InstantiationAttachments(access.Context, root, null, 0);
+            if (count < 2 || count > 32*1024*1024) throw new WorldException(LastStatus, "ler scripts do prefab");
+            var bytes = new byte[count];
+            fixed (byte* output = bytes)
+                if (access.InstantiationAttachments(access.Context, root, output, count) != count)
+                    throw new WorldException(LastStatus, "ler scripts do prefab");
+            return Encoding.UTF8.GetString(bytes);
+        }
         public bool FinishInstantiation(ulong root, bool commit) => Accessible && access.FinishInstantiation(access.Context, root, commit ? 1 : 0) != 0;
 
         public ulong AddComponent(ulong objectId, string typeId)
@@ -696,7 +710,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 18 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 19 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

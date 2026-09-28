@@ -1,5 +1,7 @@
 #include "runtime/scene_graph.h"
 #include "scene/script_behavior.h"
+#include "scene/prefab_link.h"
+#include "scene/import_link.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,6 +36,10 @@ void assignObjectName(SceneObject &object, std::string_view name) noexcept {
 bool SceneGraph::acceptObject(const SceneObject &object) const { return object.components.valid(); }
 
 bool remapObjectReferences(SceneObject &object,const ObjectCloneMap &mapping) {
+  // Clonar apenas um filho não cria uma segunda identidade de origem dentro
+  // da instância antiga. A subárvore solta se torna autoria independente.
+  if(const auto *link=scene::prefabLink(object.components);link && !mapping.contains(static_cast<ObjectId>(link->instanceRoot)))
+    object.components.remove(scene::PrefabLink::descriptor);
   const auto remap=[&](u64 id)->u64 {
     if(id>std::numeric_limits<ObjectId>::max()) return id;
     const auto found=mapping.find(static_cast<ObjectId>(id));
@@ -61,16 +67,39 @@ bool remapObjectReferences(SceneObject &object,const ObjectCloneMap &mapping) {
   return true;
 }
 
+bool remapSubtreeReferences(std::span<SceneObject> objects,const ObjectCloneMap &mapping) {
+  std::unordered_map<resources::AssetGuid,resources::AssetGuid,resources::AssetGuidHash> imports;
+  for(const auto &object:objects) if(const auto *link=scene::importLink(object.components);link && link->root && !link->unlinked) {
+    const auto target=mapping.find(object.id);if(target==mapping.end()) return false;
+    imports.emplace(link->instance,resources::assetGuidFromSeed("copia:"+link->instance.text()+":"+
+      std::to_string(object.id)+":"+std::to_string(target->second)));
+  }
+  for(auto &object:objects) {
+    if(!remapObjectReferences(object,mapping)) return false;
+    if(const auto *link=scene::importLink(object.components);link && !link->unlinked) {
+      auto value=*link;const auto target=imports.find(link->instance);
+      if(target!=imports.end()) value.instance=target->second;
+      else value.unlinked=true;
+      if(!object.components.replace(value)) return false;
+    }
+  }
+  return true;
+}
+
 ObjectId SceneGraph::cloneSubtree(ObjectId source,ObjectId parent,ObjectCloneMap &mapping,const std::function<bool(ObjectId)> &include) {
+  return cloneSubtree(*this,source,parent,mapping,include);
+}
+
+ObjectId SceneGraph::cloneSubtree(const SceneGraph &sourceGraph,ObjectId source,ObjectId parent,ObjectCloneMap &mapping,const std::function<bool(ObjectId)> &include) {
   mapping.clear();
-  if(source==root() || !exists(source) || !exists(parent)) return kInvalidObject;
-  std::vector<ObjectId> ids;collectSubtree(source,ids);
+  if(source==sourceGraph.root() || !sourceGraph.exists(source) || !exists(parent)) return kInvalidObject;
+  std::vector<ObjectId> ids;sourceGraph.collectSubtree(source,ids);
   if(include) std::erase_if(ids,[&](ObjectId id) {return !include(id);});
   if(ids.empty() || ids.front()!=source) return kInvalidObject;
   if(ids.size()>kMaximumObjects-entityCount()) return kInvalidObject;
   std::vector<SceneObject> values;values.reserve(ids.size());
   for(const auto id:ids) {
-    const auto &value=*find(id);
+    const auto &value=*sourceGraph.find(id);
     if(value.components.hasUnresolved() || !acceptObject(value)) return kInvalidObject;
     values.push_back(value);
   }
@@ -85,8 +114,9 @@ ObjectId SceneGraph::cloneSubtree(ObjectId source,ObjectId parent,ObjectCloneMap
     mapping.emplace(value.id,copy);
   }
   // Todos os destinos existem antes das referências, inclusive irmãos à frente.
+  if(!remapSubtreeReferences(values,mapping)) return rollback();
   for(auto &value:values) {
-    if(!remapObjectReferences(value,mapping) || !applyEntityValues(mapping.at(value.id),value)) return rollback();
+    if(!applyEntityValues(mapping.at(value.id),value)) return rollback();
   }
   return createdRoot;
 }

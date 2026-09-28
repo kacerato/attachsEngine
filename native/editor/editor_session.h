@@ -25,6 +25,7 @@
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
+#include "runtime/prefab.h"
 #include "editor/editor_character.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_camera_handles.h"
@@ -1178,6 +1179,11 @@ public:
   // histórico. Recusa sem efeito quando a composição, um valor inicial ou a
   // hierarquia física não são válidos; o motivo vai para o status.
   EditorEntityId createRecipe(u32 index, EditorEntityId parent);
+  resources::AssetGuid createPrefab(EditorEntityId root,std::string &error);
+  bool unpackPrefab(EditorEntityId selected,std::string &error);
+  bool loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) const;
+  bool preparePrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error);
+  EditorEntityId instantiatePrefab(resources::AssetGuid asset,EditorEntityId parent,std::string &error);
   // Soltar um objeto da Hierarquia ou um recurso sobre um campo do Inspector
   // (Unity: arrastar para o campo de referência). `field` é o id do widget do
   // campo sob o dedo; a validação é a mesma do seletor. Falso quando o widget
@@ -1233,7 +1239,7 @@ private:
   // Valida e reconcilia os recursos de um componente vindo de preset contra
   // ESTE projeto. `only` restringe aos endereços que vão de fato ser aplicados;
   // nulo cobre o componente inteiro.
-  bool resolvePresetResources(scene::ComponentValue &value,const std::vector<scene::FieldAddress> *only,std::string &error);
+  bool resolveComponentResources(scene::ComponentValue &value,const std::vector<scene::FieldAddress> *only,std::string &error);
   //
   // Por fonte, e não uma lista achatada, porque reimportar substitui o bloco
   // daquele arquivo e preserva os outros. Numa lista achatada, reimportar

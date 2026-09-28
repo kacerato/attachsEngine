@@ -128,6 +128,8 @@ def camera_follow() -> str:
 
 
 ICONS: dict[str, str] = {
+    "scene/prefab": f'''<path d="m28 34 30-17 30 17v36L58 88 28 70Z M28 34l30 18 30-18M58 52v36" {stroke(5)}/>
+<path d="M80 86h20a12 12 0 0 0 0-24H88M80 74H68a12 12 0 0 0 0 24h20" {stroke(7, ACCENT)}/>''',
     "primitive/plane": f'''<path d="M16 75 64 45 112 75 64 105Z" {stroke(5)}/>
 <path d="M32 85 80 55M48 95 96 65M32 65 80 95M48 55 96 85" {stroke(2, extra='opacity=".55"')}/>
 <path d="M64 73V18m-9 10 9-10 9 10" {stroke(5, ACCENT)}/>''',

@@ -39,6 +39,7 @@
 #include <vector>
 
 namespace ae::runtime {
+class Prefab;
 
 using ComponentResourceResolver = std::function<bool(resources::AssetGuid,resources::AssetType,std::string_view,u32,
                                                      scene::ComponentValue &)>;
@@ -160,6 +161,7 @@ public:
   ObjectHandle createObject(const ObjectHandle &parent, std::string_view name, WorldStatus &status);
   ObjectHandle createPrimitive(const ObjectHandle &parent,scene::PrimitiveType type,const PrimitiveResource &resource,WorldStatus &status);
   ObjectHandle instantiate(const ObjectHandle &source,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status);
+  ObjectHandle instantiate(const Prefab &prefab,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status,std::string &diagnostic);
   WorldStatus finishInstantiation(const ObjectHandle &root,bool commit);
   // Marca o objeto e a subárvore como vencidos na hora; o armazenamento sai no
   // próximo `flush()`. Handles guardados passam a ser recusados imediatamente.
@@ -241,6 +243,7 @@ public:
   void advanceClock(double delta);
 
 private:
+  ObjectHandle registerInstantiation(ObjectId root,const ObjectCloneMap &mapping);
   struct Slot {
     u32 generation = 0;  // zero quando o id nunca existiu ou já foi destruído
   };

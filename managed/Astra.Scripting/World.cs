@@ -271,6 +271,14 @@ public sealed class GameObject : IEquatable<GameObject>
         return Resolve(Scene, created);
     }
 
+    /// <summary>Instantiates a project prefab under this object, binding scripts before lifecycle callbacks.</summary>
+    public GameObject InstantiatePrefab(AssetGuid asset)
+    {
+        Require("instanciar prefab");
+        if (!asset.IsValid) throw new ArgumentException("Prefab inválido.", nameof(asset));
+        return Behaviors.InstantiatePrefab(this, asset);
+    }
+
     public GameObject CreateChild(string name)
     {
         Require("criar objeto");

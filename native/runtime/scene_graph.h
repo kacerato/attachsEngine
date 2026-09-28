@@ -81,6 +81,7 @@ void assignObjectName(SceneObject &object, std::string_view name) noexcept;
 using ObjectCloneMap = std::unordered_map<ObjectId,ObjectId>;
 // Identidade de componente é local ao objeto: conserva instanceId e troca owner.
 bool remapObjectReferences(SceneObject &object,const ObjectCloneMap &mapping);
+bool remapSubtreeReferences(std::span<SceneObject> objects,const ObjectCloneMap &mapping);
 
 class SceneGraph {
 public:
@@ -103,6 +104,7 @@ public:
 
   ObjectId createEntity(ObjectId parent, ObjectKind kind, std::string_view name);
   ObjectId cloneSubtree(ObjectId source,ObjectId parent,ObjectCloneMap &mapping,const std::function<bool(ObjectId)> &include={});
+  ObjectId cloneSubtree(const SceneGraph &sourceGraph,ObjectId source,ObjectId parent,ObjectCloneMap &mapping,const std::function<bool(ObjectId)> &include={});
   // Recria um objeto com um id específico. Existe para o `undo` de uma remoção:
   // se o id mudasse ao voltar, toda seleção e todo comando posterior no
   // histórico passariam a apontar para outra coisa.

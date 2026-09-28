@@ -2,6 +2,7 @@
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_archive.h"
 #include "runtime/object_tags.h"
+#include "runtime/prefab.h"
 
 namespace ae::editor {
 inline bool loadProjectTags(const std::string &root,runtime::ObjectTags &tags,std::string &error) {
@@ -34,7 +35,7 @@ inline bool saveProjectTags(const std::string &root,const runtime::ObjectTags &e
 // Em dúvida (arquivo inválido, symlink, limite), a remoção é recusada.
 inline bool projectTagUnused(const std::string &root,const EditorDocument &current,
                              std::string_view tag,std::string &error) {
-  const auto uses=[&](const EditorDocument &doc) {
+  const auto uses=[&](const runtime::SceneGraph &doc) {
     std::vector<EditorEntityId> ids;doc.collectSubtree(doc.root(),ids);
     for(const auto id:ids) if(doc.find(id)->tag==tag) return true;
     return false;
@@ -48,11 +49,18 @@ inline bool projectTagUnused(const std::string &root,const EditorDocument &curre
       error="Link simbólico impede conferir todas as cenas; tag preservada";return false;
     }
     if(it->is_directory(ec) && it->path().filename()==".astra") {it.disable_recursion_pending();continue;}
-    if(it->path().extension()!=".aescene" || !it->is_regular_file(ec)) continue;
+    const bool prefab=it->path().extension()==".prefab";
+    if((it->path().extension()!=".aescene" && !prefab) || !it->is_regular_file(ec)) continue;
     if(++inspected>1024) {error="Muitas cenas para conferir a exclusão da tag";return false;}
     std::vector<u8> bytes;
     if(!EditorImportTransaction::read(it->path(),bytes,32*1024*1024)) {error="Uma cena não pôde ser conferida; tag preservada";return false;}
     const std::string text(bytes.begin(),bytes.end());std::istringstream header(text);
+    if(prefab) {
+      runtime::Prefab resource;
+      if(!resource.read(text,defaultEditorComponentRegistry(),error)) {error="Um prefab está inválido; tag preservada: "+error;return false;}
+      if(uses(resource.graph())) {error="Tag em uso num prefab salvo; remova a atribuição antes de excluir";return false;}
+      continue;
+    }
     std::string magic;u32 version=0;u64 fingerprint=0;EditorDocument scene;
     if(!(header>>magic>>version>>fingerprint) || !deserializeEditorDocument(text,fingerprint,scene)) {
       error="Uma cena está inválida; tag preservada";return false;

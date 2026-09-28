@@ -10,6 +10,15 @@ namespace Aether.Tests;
 public static class AstraBehaviorTests
 {
     [Test]
+    public static void PrefabAcceptanceFixture_CompilesWithTheProjectCompiler()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "tests", "fixtures", "prefab"))) root = root.Parent;
+        Assert.True(root is not null);
+        using var project = new Project(File.ReadAllText(Path.Combine(root!.FullName, "tests", "fixtures", "prefab", "PrefabProbe.cs")));
+        Assert.Equal(2, project.Compile().Types.Length);
+    }
+    [Test]
     public static void PrimitivesAcceptanceFixture_CompilesWithTheProjectCompiler()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
@@ -72,6 +81,18 @@ public static class AstraBehaviorTests
         private readonly Dictionary<ulong, double> _due = [];
         private readonly HashSet<ulong> _destroyed = [];
         public readonly List<string> Events = [];
+        public string PrefabType = "test.prefab.receiver";
+        private readonly Dictionary<ulong, string> _prefabAttachments = [];
+        public ulong InstantiatePrefab(ulong parent, AssetGuid asset)
+        {
+            var root = CreateObject(parent, "Prefab"); CreateObject(root, "Child");
+            var instance = AddBehavior(root, PrefabType, "Receiver.cs");
+            _prefabAttachments[root] = JsonSerializer.Serialize(new BehaviorAttachment[] {
+                new(root, instance, PrefabType, true, new Dictionary<string, JsonElement> {
+                    ["value"] = JsonSerializer.SerializeToElement(17) }) });
+            return root;
+        }
+        public string InstantiationAttachments(ulong root) => _prefabAttachments[root];
         public IBehaviorRegistry? Behaviors { get; set; }
         public DynamicScene() { _nodes[2].Scripts[1] = true; _nodes[2].Next = 2; }
         public uint WorldId => 1;
@@ -205,6 +226,30 @@ public static class AstraBehaviorTests
             { ["optional"] = JsonSerializer.SerializeToElement(new int[1025]) }));
         Assert.True(world.InspectFields(copy.ObjectId).Contains("1024 elementos"), "inspection bounds runtime lists before allocating snapshots");
         Assert.Equal(0, world.Failures.Count);
+    }
+
+    [Test]
+    public static void Prefab_BindsAuthoredFieldsBeforeAwakeAndRollsBackMissingType()
+    {
+        using var project = new Project("""
+            using Astra;
+            [ComponentId("test.prefab.receiver")]
+            public sealed class Receiver : Behavior {
+                [PropertyId("value")] public int Value;
+                public override void Awake() { Scene.Log(ObjectId, "PREFAB AWAKE " + Value); }
+            }
+            """);
+        using var world = new BehaviorWorld(); var scene = new DynamicScene { Behaviors = world };
+        world.Start(project.Compile(), scene, [], true);
+        var parent = GameObject.Resolve(scene, 1);
+        var created = parent.InstantiatePrefab(new AssetGuid(1, 2));
+        Assert.True(created.IsAlive && scene.Events.Contains("PREFAB AWAKE 17"), "authored field applied before lifecycle");
+        var count = scene.ChildCount(1); scene.PrefabType = "missing.type";
+        var rejected = false;
+        try { parent.InstantiatePrefab(new AssetGuid(1, 2)); }
+        catch (InvalidOperationException) { rejected = true; }
+        Assert.True(rejected && scene.ChildCount(1) == count, "missing type rolls back the hierarchy");
+        Assert.Equal(1, scene.Events.Count(e => e.StartsWith("PREFAB AWAKE")), "no callback from failed instance");
     }
 
     private sealed class Scene : ISceneAccess
