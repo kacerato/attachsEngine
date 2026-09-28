@@ -141,7 +141,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 84 | Instância de prefab: opções e overrides em negrito | ✗ | | P |
 | 85 | Vários prefabs (sem Select/Revert/Apply) | ✗ | | P |
 | 86 | Recurso único: importação e propriedades | ✔ | textura, modelo, material `9ce0c9fe`, HDRI com receita reimportável `e4608651` (degraus `267fd86c`), perfil de ambiente pelo esquema `586671c8`; áudio: não aplicável até existir o subsistema (bloco próprio) | I3 |
-| 87 | Vários recursos: comuns e "—" | ◐ | modo "Selecionar vários" em Arquivos; tipos com contagem para estreitar; texturas do projeto com perfil de importação comum, "—", copiar de uma e Aplicar atômico num passo de Desfazer · `df0c1538`. Falta: materiais, mapas HDRI e perfis de ambiente em conjunto (hoje declaram "sem edição em conjunto") | I4 |
+| 87 | Vários recursos: comuns e "—" | ◐ | modo "Selecionar vários" em Arquivos; tipos com contagem para estreitar; texturas do projeto com perfil de importação comum, "—", copiar de uma e Aplicar atômico num passo de Desfazer · `df0c1538`. Materiais: campos comuns e mistos, copiar valor de um alvo, persistência e Desfazer/Refazer atômicos; janela focada preserva alvo próprio ([entrega I4](I4-MATERIAIS-2026-09-28.md)). Falta: mapas HDRI e perfis de ambiente em conjunto | I4 |
 | 88 | Script: campos públicos/[SerializeField]; HideInInspector | ✔ | `[SerializeField]` expõe privado, `[HideInInspector]` guarda sem mostrar · `1e634f23` | I2 |
 | 89 | Ping pelo ⋮ | ✔ | ⋮ do Inspector e ⋮ da janela focada · `902b804f` | I3 |
 
