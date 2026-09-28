@@ -399,7 +399,20 @@ public abstract class Behavior
     private IBehaviorRegistry? _registry;
     public ulong ObjectId { get; private set; }
     public ulong InstanceId { get; private set; }
-    public bool Enabled { get; set; } = true;
+    private bool _enabled = true;
+    private Component? _stateComponent;
+    /// <summary>Estado local; no hospedeiro nativo lê/escreve o mesmo componente do Inspector.</summary>
+    public bool Enabled
+    {
+        get => _stateComponent is { } component ? component.Enabled : _enabled;
+        set
+        {
+            if (_stateComponent is { } component) component.Enabled = value;
+            _enabled = value;
+        }
+    }
+    internal bool AttachedComponentAlive => _stateComponent is null ||
+        Scene.TryGetProperty(ObjectId, InstanceId, "enabled", out _, out _);
     protected ISceneAccess Scene => _scene ?? throw new InvalidOperationException("Behavior is not attached to an execution world.");
 
     private GameObject? _object;
@@ -447,13 +460,16 @@ public abstract class Behavior
             ? _registry.FindBehaviors(target.ObjectId, typeof(T)).OfType<T>()
             : [];
 
-    internal void Attach(ISceneAccess scene, ulong objectId, ulong instanceId, IBehaviorRegistry? registry = null)
+    internal void Attach(ISceneAccess scene, ulong objectId, ulong instanceId, IBehaviorRegistry? registry = null,
+        bool bindComponentState = false)
     {
         if (_scene is not null || objectId == 0 || instanceId == 0)
             throw new InvalidOperationException("Invalid or duplicate behavior attachment.");
         _scene = scene; ObjectId = objectId; InstanceId = instanceId; _registry = registry;
+        if (bindComponentState)
+            _stateComponent = new Component(scene, Object, instanceId, ComponentIds.ScriptBehavior);
     }
-    internal void Detach() { _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
+    internal void Detach() { _stateComponent = null; _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
     // Ordem de uma sessão de Play (comparável a Unity 6000.0, Manual/execution-order):
     //   Awake  → uma vez por instância, depois que TODAS foram criadas e receberam
     //            as propriedades autoradas; roda mesmo com Enabled=false, mas

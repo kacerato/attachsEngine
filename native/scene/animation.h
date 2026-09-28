@@ -32,6 +32,7 @@ public:
   };
   std::vector<ClipEntry> clips;
   resources::AssetGuid clip{};
+  bool enabled = true;
   bool playAutomatically = true;
   // glTF não declara modo de repetição; Loop deixa o clipe importado visível.
   resources::AnimationWrapMode wrapMode = resources::AnimationWrapMode::Loop;
@@ -87,8 +88,10 @@ public:
     out << guid(clip) << ' ' << playAutomatically << ' ' << static_cast<u32>(wrapMode) << ' ' << speed << ' '
         << clips.size() << ' ' << nextClipId_;
     for (const auto &entry : clips) out << ' ' << entry.id << ' ' << guid(entry.asset);
+    out << ' ' << enabled;
   }
   bool read(std::istream &in, u32 version) override {
+    enabled = true;
     clips.clear();
     nextClipId_=1;
     clip = {};
@@ -102,7 +105,7 @@ public:
       wrapMode = static_cast<resources::AnimationWrapMode>(mode);
       return valid();
     }
-    if (version != 2 && version != 3) return false;
+    if (version < 2 || version > 4) return false;
     std::string clipText;
     usize count = 0;
     if (!(in >> clipText >> playAutomatically >> mode >> speed >> count) || mode > 3 || count > MaximumClips) return false;
@@ -111,17 +114,18 @@ public:
       return text == "-" || resources::AssetGuid::parse(text, out);
     };
     if (!parse(clipText, clip)) return false;
-    if(version==3 && !(in>>nextClipId_)) return false;
+    if(version>=3 && !(in>>nextClipId_)) return false;
     for (usize i=0;i<count;++i) {
       std::string text;
       u64 id=0;
-      if(version==3 && !(in>>id)) return false;
+      if(version>=3 && !(in>>id)) return false;
       if (!(in >> text)) return false;
       resources::AssetGuid asset;
       if(!parse(text,asset)) return false;
       if(version==2) {if(!appendClip(asset)) return false;}
       else clips.push_back({id,asset});
     }
+    if(version>=4 && !(in>>enabled)) return false;
     wrapMode = static_cast<resources::AnimationWrapMode>(mode);
     return valid();
   }
@@ -135,7 +139,11 @@ inline constexpr std::array<ComponentNumber, 1> animationNumbers{{
    [](ComponentValue &v) -> float * { return &static_cast<Animation &>(v).speed; }, "speed",
    {"Reprodução", "x", "Velocidade inicial de cada clipe (AnimationState.speed); negativo toca de trás para frente"}}
 }};
-inline constexpr std::array<ComponentBoolean, 1> animationBooleans{{
+inline constexpr std::array<ComponentBoolean, 2> animationBooleans{{
+  {"enabled", "Ativa",
+   [](const ComponentValue &v) { return static_cast<const Animation &>(v).enabled; },
+   [](ComponentValue &v, bool value) { static_cast<Animation &>(v).enabled = value; },
+   {"Reprodução", "", "Desligar suspende tempo e avaliação; religar retoma os estados"}},
   {"play_automatically", "Tocar ao iniciar",
    [](const ComponentValue &v) { return static_cast<const Animation &>(v).playAutomatically; },
    [](ComponentValue &v, bool value) { static_cast<Animation &>(v).playAutomatically = value; },
@@ -192,7 +200,7 @@ inline constexpr std::array<ComponentResourceBinding, 2> animationResources{{
    }}
 }};
 inline const ComponentType Animation::descriptor{
-  "astra.animation", 3, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Animation>(); },
+  "astra.animation", 4, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Animation>(); },
   animationNumbers, animationBooleans, animationEnums, nullptr, false, {}, {}, animationResources
 };
 } // namespace ae::scene

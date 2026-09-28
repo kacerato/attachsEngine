@@ -299,6 +299,8 @@ struct AetherCompoundPartV3 {
 };
 // V3 aplica qualidade da árvore de busca, tolerância do casco e limiar de
 // arestas ativas. V2 continua disponível e encaminha os padrões acima.
+// count=0 aceita parts=nullptr e cria EmptyShape: sem colisão, com dinâmica.
+// A inércia inicial é a identidade do Jolt, escalada pela massa aplicada.
 AetherBodyHandle AetherPhysics_CreateCompoundBodyV3(AetherPhysicsWorld *world,
     const AetherBodyDescV2 *desc,const AetherCompoundPartV3 *parts,ae::u32 count,
     const AetherBodyDynamicsV1 *dynamics);

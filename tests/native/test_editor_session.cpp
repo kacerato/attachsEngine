@@ -4445,7 +4445,7 @@ AE_TEST(p02_physics_impact_resolves_shapes_and_matches_runtime_scale_rules) {
   collider->enabled=false;d.applyEntityValues(id,authored);
   AE_EXPECT_TRUE(physicsComponentImpact(d,id,*collider).empty(),"disabled shape skips execution diagnostics");
   rows=physicsComponentImpact(d,id,*body);
-  AE_EXPECT_TRUE(rows.size()==1&&rows[0].invalid,"disabled shape cannot satisfy body requirement");
+  AE_EXPECT_TRUE(rows.size()==1&&!rows[0].invalid&&rows[0].relation=="Sem colisão","disabled linked shapes leave a valid non-colliding body");
   AE_EXPECT_EQ(d.find(id)->components.find(scene::PhysicsBody::descriptor)->instanceId(),instance,"query preserves identities");
 }
 

@@ -43,7 +43,8 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     public IReadOnlyList<BehaviorFailure> Failures => _failures;
     public bool Running => _context is not null && _started;
 
-    public void Start(CompiledProject project, ISceneAccess scene, IEnumerable<BehaviorAttachment> attachments)
+    public void Start(CompiledProject project, ISceneAccess scene, IEnumerable<BehaviorAttachment> attachments,
+        bool bindComponentState = false)
     {
         if (_context is not null) throw new InvalidOperationException("A script world is already active.");
         var context = new ProjectLoadContext();
@@ -64,8 +65,8 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                 var type = assembly.GetType(schema.Name, throwOnError: true)!;
                 var instance = (Behavior?)Activator.CreateInstance(type)
                     ?? throw new InvalidOperationException("Behavior construction failed: " + schema.Name);
-                instance.Attach(scene, attachment.ObjectId, attachment.InstanceId, this);
                 instance.Enabled = attachment.Enabled;
+                instance.Attach(scene, attachment.ObjectId, attachment.InstanceId, this, bindComponentState);
                 prepared.Add(new(instance, schema, GameObject.Resolve(scene, attachment.ObjectId)));
                 if (attachment.PropertyTypes is { } authoredTypes)
                     foreach (var field in schema.Properties)
@@ -169,7 +170,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                 yield return entry.Instance;
     }
 
-    private static bool ObjectActive(Entry entry) => entry.Owner.IsAlive && entry.Owner.ActiveInHierarchy;
+    private static bool ObjectActive(Entry entry) => entry.Owner.IsAlive && entry.Instance.AttachedComponentAlive && entry.Owner.ActiveInHierarchy;
 
     private void EnsureAwake(Entry entry)
     {
@@ -178,7 +179,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         Invoke(entry, "Awake", static b => b.Awake());
     }
 
-    private bool MayRun(Entry entry) => !entry.Failed && entry.Instance.Enabled && ObjectActive(entry);
+    private bool MayRun(Entry entry) => !entry.Failed && ObjectActive(entry) && entry.Instance.Enabled;
 
     private void Deactivate(Entry entry)
     {
@@ -210,8 +211,11 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         try { action(entry.Instance); }
         catch (Exception error)
         {
-            entry.Instance.Enabled = false;
             entry.Failed = true;
+            // A falha pode ter ocorrido depois de Destroy. Não deixe uma
+            // segunda exceção, ao desligar um handle vencido, escapar do isolamento.
+            try { if (entry.Owner.IsAlive && entry.Instance.AttachedComponentAlive) entry.Instance.Enabled = false; }
+            catch (WorldException) { }
             if (_failures.Count < 1024) _failures.Add(new(entry.Instance.ObjectId, entry.Instance.InstanceId,
                 phase, error.ToString()));
         }

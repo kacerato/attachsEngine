@@ -11,6 +11,7 @@ int probeImportGltfFolder(const char *mainPath, unsigned compression, bool lods)
 int probeFolderPublish(const char *mainPath);
 int writePropertyMatrix(const char *path);
 int writeComponentApi(const char *path);
+int writeEnabledFixture(const char *path);
 int printSourceReport(const char *path);
 
 int main(int argc,char **argv) {
@@ -34,6 +35,7 @@ int main(int argc,char **argv) {
   // Relatorio da fonte (G6-A) no terminal: os mesmos numeros que a aba Malhas
   // mostra no aparelho, para conferir um arquivo sem abrir o editor.
   if(argc==3 && std::strcmp(argv[1],"--source-report")==0) return printSourceReport(argv[2]);
+  if(argc==3 && std::strcmp(argv[1],"--write-enabled-fixture")==0) return writeEnabledFixture(argv[2]);
   int failCount = 0;
   int total = 0;
   for (const auto &tc : ae::test::registry()) {

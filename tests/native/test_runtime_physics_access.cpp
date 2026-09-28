@@ -291,3 +291,25 @@ AE_TEST(runtime_gameplay_layers_persist_names_and_reciprocal_matrix) {
   GameplayLayers rejected;
   AE_EXPECT_TRUE(!rejected.read(broken), "matriz assimétrica é recusada");
 }
+
+AE_TEST(runtime_last_collider_disable_keeps_motion_and_removes_queries_until_reenabled) {
+  EditorDocument doc;const auto id=solid(doc,"Corpo",5,0,0,scene::BodyMotion::Dynamic);
+  auto values=*doc.find(id);editPhysicsBody(values)->velocityY=2;doc.applyEntityValues(id,values);
+  Fixture fx;AE_EXPECT_TRUE(fx.start(doc),"corpo com forma");
+  const auto collider=fx.world.findComponent(fx.world.handle(id),"astra.physics.collider");
+  const float origin[3]{0,0,0},direction[3]{10,0,0};QueryHit hit;
+  AE_EXPECT_TRUE(fx.physics.rayCast(origin,direction,{},hit),"forma responde antes");
+  AE_EXPECT_TRUE(fx.world.setProperty(collider,"enabled",false)==runtime::WorldStatus::Ok &&
+                 fx.physics.rebuild(fx.world,nullptr),fx.physics.error().c_str());
+  AE_EXPECT_TRUE(!fx.physics.rayCast(origin,direction,{},hit),"último colisor não participa de consultas");
+  float velocity[3]{};
+  AE_EXPECT_TRUE(fx.physics.getBodyVelocity(id,velocity) && velocity[1]>1.9f,"corpo conserva velocidade");
+  for(int i=0;i<6;++i) AE_EXPECT_TRUE(fx.physics.advance(1./60,fx.world),"simula sem colisão");
+  AE_EXPECT_TRUE(fx.world.graph().find(id)->transform.position[1]>.15f,"dinâmica continua");
+  AE_EXPECT_TRUE(fx.world.setProperty(collider,"enabled",true)==runtime::WorldStatus::Ok &&
+                 fx.physics.rebuild(fx.world,nullptr),"religa sem reiniciar Play");
+  const float shifted[3]{0,fx.world.graph().find(id)->transform.position[1],0};
+  AE_EXPECT_TRUE(fx.physics.rayCast(shifted,direction,{},hit) && hit.colliderInstance==collider.instance,"identidade e consultas retomadas");
+  values=*doc.find(id);editCollider(values)->enabled=false;doc.applyEntityValues(id,values);
+  Fixture initiallyDisabled;AE_EXPECT_TRUE(initiallyDisabled.start(doc),"também inicia com forma desligada");
+}

@@ -41,21 +41,23 @@ inline std::vector<ComponentImpactEntry> physicsComponentImpact(const runtime::S
     if(const auto *error=runtime::bodyHierarchyForPhysics(document,id)) issue(id,value.instanceId(),error);
     float world[16],frame[16];runtime::Transform pose;
     if(const auto *error=runtime::bodyFrameForPhysics(document,id,world,pose,frame)) issue(id,value.instanceId(),error);
-    std::vector<EditorEntityId> ids;document.collectSubtree(id,ids);u32 count=0;
+    std::vector<EditorEntityId> ids;document.collectSubtree(id,ids);u32 count=0,linked=0;
     for(const auto source:ids) {
-      if(!document.activeInHierarchy(source)) continue;
       const auto *object=document.find(source);
       for(usize i=0;i<object->components.size();++i) {
         const auto *component=object->components.at(i);if(&component->type()!=&scene::Collider::descriptor) continue;
         const auto &collider=static_cast<const scene::Collider&>(*component);
-        if(!collider.enabled || (collider.owner?collider.owner:source)!=id) continue;
+        if((collider.owner?collider.owner:source)!=id) continue;
+        if(runtime::referenceAccepts(document,source,scene::colliderReferences[0],collider.owner,true)) ++linked;
+        if(!collider.enabled || !document.activeInHierarchy(source)) continue;
         runtime::ObjectId owner=0;
         if(const auto *error=runtime::colliderOwnerForPhysics(document,source,collider,owner)) {issue(source,collider.instanceId(),error);continue;}
         ++count;rows.push_back({source,collider.instanceId(),"Forma vinculada",object->name});
         inspectShape(source,collider,id);
       }
     }
-    if(!count) issue(id,value.instanceId(),"Corpo sem colisores ativos vinculados");
+    if(!linked) issue(id,value.instanceId(),"Corpo sem colisores vinculados");
+    else if(!count) rows.push_back({id,value.instanceId(),"Sem colisão","Todas as formas estão desligadas; o corpo continua simulando"});
     if(count>256) issue(id,value.instanceId(),"Limite de 256 colisores por corpo excedido");
   }
   return rows;

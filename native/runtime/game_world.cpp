@@ -526,7 +526,15 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
   const auto typeId = current->type().id;
   const auto *schema = scene::findComponentSchema(typeId);
   if (!schema) return WorldStatus::UnknownComponent;
-  if (schema->propertiesInPlay == scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  // Enabled é estado compartilhado pelo componente e pela instância C#.
+  // Os campos autorados de script continuam no caminho validado de editBehavior.
+  const bool behaviorEnabled = typeId == "astra.script.behavior" && propertyId == "enabled" &&
+                               std::holds_alternative<bool>(value);
+  if (schema->propertiesInPlay == scene::PlayMutability::Never && !behaviorEnabled)
+    return WorldStatus::NotMutableInPlay;
+  if (propertyId == "enabled") if (const auto *enabled = std::get_if<bool>(&value))
+    for (const auto &property : current->type().booleans)
+      if (property.id == propertyId && property.read(*current) == *enabled) return WorldStatus::Ok;
   // A ABI transporta u64, mas o grafo usa u32. Truncar aqui poderia fazer um
   // ID inválido acertar outro objeto vivo com os mesmos 32 bits baixos.
   if (const auto *reference = std::get_if<scene::ObjectReference>(&value)) {
@@ -883,6 +891,7 @@ WorldStatus GameWorld::applyCameraLook(const ObjectHandle &h,float x,float y) {
   if(!object->components.find(scene::Camera::descriptor)) return WorldStatus::ComponentMissing;
   const auto *look=static_cast<const scene::CameraLook*>(object->components.find(scene::CameraLook::descriptor));
   if(!look) return WorldStatus::ComponentMissing;
+  if(!look->enabled || !activeInHierarchy(h)) return WorldStatus::Ok;
   Transform transform=object->transform;
   if(!scene::applyCameraLookRotation(transform.rotationDegrees,*look,x,y)) return WorldStatus::InvalidArgument;
   if(x==0&&y==0) return WorldStatus::Ok;

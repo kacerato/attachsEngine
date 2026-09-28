@@ -476,6 +476,12 @@ public readonly struct LodGroup : IComponentFacade<LodGroup>
         get => Component.GetFloat("fade_width_3");
         set => Component.SetFloat("fade_width_3", value);
     }
+    /// <summary>Ativo. Desligar libera os renderizadores do controle deste grupo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
     /// <summary>Animate Cross-fading. Troca por tempo em vez da faixa de largura</summary>
     public bool AnimateCrossFading
     {
@@ -1337,6 +1343,12 @@ public readonly struct CameraLook : IComponentFacade<CameraLook>
         get => Component.GetFloat("pitch_limit");
         set => Component.SetFloat("pitch_limit", value);
     }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
 }
 
 /// <summary>Acompanhar alvo: Posiciona a câmera após física e animação. Família Câmera · Controle.</summary>
@@ -1831,6 +1843,12 @@ public readonly struct Animation : IComponentFacade<Animation>
     {
         get => Component.GetFloat("speed");
         set => Component.SetFloat("speed", value);
+    }
+    /// <summary>Ativa. Desligar suspende tempo e avaliação; religar retoma os estados</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
     }
     /// <summary>Tocar ao iniciar. Play Automatically: o clipe padrão começa a tocar quando o Play inicia</summary>
     public bool PlayAutomatically

@@ -32,7 +32,7 @@ inline bool lodGroupViewLevel(const SceneGraph &graph, ObjectId id, const LodVie
   const auto *object = graph.find(id);
   const auto *group = object ? static_cast<const scene::LodGroup *>(object->components.find(scene::LodGroup::descriptor)) : nullptr;
   float world[16];
-  if (!group || !group->valid() || !worldMatrix(graph, id, world)) return false;
+  if (!group || !group->enabled || !group->valid() || !worldMatrix(graph, id, world)) return false;
   float scale = 0;
   for (u32 column = 0; column < 3; ++column)
     scale = std::max(scale, std::sqrt(world[column * 4] * world[column * 4] + world[column * 4 + 1] * world[column * 4 + 1] +

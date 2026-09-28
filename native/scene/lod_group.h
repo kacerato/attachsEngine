@@ -27,6 +27,7 @@ inline constexpr float LodCrossFadeAnimationSeconds = .5f;
 
 class LodGroup final : public ComponentValue {
 public:
+  bool enabled = true;
   u32 levelCount = 3;
   // Porcentagem da altura da vista. Os padrões são os da Unity para três níveis.
   std::array<float, LodGroupMaximumLevels> transitions{60, 30, 10, 5};
@@ -64,23 +65,26 @@ public:
     for (u32 i = 0; i < LodGroupMaximumLevels; ++i) out << ' ' << transitions[i] << ' ' << levels[i];
     out << ' ' << static_cast<u32>(fadeMode) << ' ' << animateCrossFading;
     for (const float width : fadeWidths) out << ' ' << width;
+    out << ' ' << enabled;
   }
   bool read(std::istream &in, u32 version) override {
     // v1 não tinha Fade Mode: lê como None, que era o único comportamento.
-    if (version < 1 || version > 2 || !(in >> levelCount >> size)) return false;
+    if (version < 1 || version > 3 || !(in >> levelCount >> size)) return false;
     for (u32 i = 0; i < LodGroupMaximumLevels; ++i)
       if (!(in >> transitions[i] >> levels[i])) return false;
     fadeMode = LodFadeMode::None;
     animateCrossFading = false;
     fadeWidths = {.2f, .2f, .2f, .2f};
     forcedLevel = 0;
+    enabled = true;
     if (version >= 2) {
       u32 mode = 0;
       if (!(in >> mode >> animateCrossFading) || mode > 1) return false;
       fadeMode = static_cast<LodFadeMode>(mode);
       for (float &width : fadeWidths) if (!(in >> width)) return false;
     }
-    return true;
+    if (version >= 3 && !(in >> enabled)) return false;
+    return valid();
   }
 };
 
@@ -142,7 +146,11 @@ inline constexpr std::array<ComponentEnum, 3> lodGroupEnums{{
    [](ComponentValue &v, u32 value) { static_cast<LodGroup &>(v).forcedLevel = value; },
    {"Execução", "", "Estado de execução: 0 automático, n força o LOD n-1", lodNever}}
 }};
-inline constexpr std::array<ComponentBoolean, 1> lodGroupBooleans{{
+inline constexpr std::array<ComponentBoolean, 2> lodGroupBooleans{{
+  {"enabled", "Ativo",
+   [](const ComponentValue &v) { return static_cast<const LodGroup &>(v).enabled; },
+   [](ComponentValue &v, bool value) { static_cast<LodGroup &>(v).enabled = value; },
+   {"Níveis", "", "Desligar libera os renderizadores do controle deste grupo"}},
   {"animate_cross_fading", "Animate Cross-fading",
    [](const ComponentValue &v) { return static_cast<const LodGroup &>(v).animateCrossFading; },
    [](ComponentValue &v, bool value) { static_cast<LodGroup &>(v).animateCrossFading = value; },
@@ -160,7 +168,7 @@ inline constexpr std::array<ComponentObjectReference, 4> lodGroupReferences{{
 #undef AE_LOD_LEVEL
 }};
 inline const ComponentType LodGroup::descriptor{
-  "astra.render.lod_group", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<LodGroup>(); },
+  "astra.render.lod_group", 3, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<LodGroup>(); },
   lodGroupNumbers, lodGroupBooleans, lodGroupEnums, nullptr, false, lodGroupReferences
 };
 

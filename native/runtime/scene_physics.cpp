@@ -92,10 +92,19 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
   const auto fail=[&](const SceneObject &entity,const std::string &reason) {error_=std::string(entity.name)+": "+reason;stop();return false;};
   // Resolve ownership before creating anything; no nearest-parent inference.
   for(auto id:ids) {
-    const auto &entity=*document.find(id);if(!document.activeInHierarchy(id)) continue;
+    const auto &entity=*document.find(id);
     for(usize i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);if(&v->type()!=&scene::Collider::descriptor) continue;
-      const auto &c=static_cast<const scene::Collider &>(*v);if(!c.enabled) continue;
+      const auto &c=static_cast<const scene::Collider &>(*v);
+      if(!c.enabled || !document.activeInHierarchy(id)) {
+        // Conserve o corpo quando todas as suas formas estão desligadas.
+        // Vínculo inválido continua diagnosticável quando a forma for ligada.
+        if(referenceAccepts(document,id,scene::colliderReferences[0],c.owner,true)) {
+          const ObjectId owner=c.owner?static_cast<ObjectId>(c.owner):id;
+          if(document.activeInHierarchy(owner)) colliders.try_emplace(owner);
+        }
+        continue;
+      }
       ObjectId owner=0;
       if(const auto *error=colliderOwnerForPhysics(document,id,c,owner)) return fail(entity,error);
       auto &parts=colliders[owner];if(parts.size()>=256) return fail(entity,"limite de 256 colisores por corpo");
@@ -110,7 +119,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     if(!body||!document.activeInHierarchy(id)) continue;
     if(const auto *error=bodyHierarchyForPhysics(document,id)) return fail(entity,error);
     auto found=colliders.find(id);
-    if(found==colliders.end()||found->second.empty()) return fail(entity,"corpo sem colisores ativos vinculados");
+    if(found==colliders.end()) return fail(entity,"corpo sem colisores vinculados");
     float world[16],bodyFrame[16];Transform transform;
     if(const auto *error=bodyFrameForPhysics(document,id,world,transform,bodyFrame)) return fail(entity,error);
     std::vector<AetherCompoundPartV3> parts;parts.reserve(found->second.size());

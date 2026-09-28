@@ -190,7 +190,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 118 | `CompareTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 119 | `AddComponent<T>` em execução | ✔ | fachada gerada | — |
 | 120 | `Destroy(componente)` | ✔ | `Component.Remove` | — |
-| 121 | Habilitar/desabilitar componentes por script | ◐ | propriedade `enabled` onde existe; falta uniforme | O1 |
+| 121 | Habilitar/desabilitar componentes por script | ✔ | [habilitação uniforme](O1A-HABILITACAO-2026-09-28.md): 12 tipos, estado C#/nativo, persistência e aceite Android | O1 |
 | 122 | `GetComponent<T>` | ✔ | fachada gerada | — |
 | 123 | Escrever propriedades por script | ✔ | | — |
 | 124 | Chamar métodos (ex. `AddForce`) | ✔ | `Physics` | — |
@@ -329,8 +329,8 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 107 |
-| ◐ parcial | 9 |
+| ✔ existe | 108 |
+| ◐ parcial | 8 |
 | ✗ falta | 96 |
 | A adaptação | 7 |
 | **Total** | **219** |
@@ -349,7 +349,7 @@ não altera seus estados nem as contagens de capacidades implementadas.
 | **I2** Tipos de campo | 9, 28–33, 42, 45–56, 88, 129 | curvas, gradientes, listas e texto são exigidos por partículas, linha, UI, áudio |
 | **I3** Janela Inspector | 57–69, 86, 89, 90, 97 | |
 | **I4** Multisseleção | 79–83, 87 | ✔ 79–83 `441092d2`; 87: texturas `df0c1538`, materiais `bd67ebce`, [ambientes e UV](I4-AMBIENTES-UV-2026-09-28.md) `9644b320` |
-| **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | 113 entregue; [O1a parcial](O1A-ATIVACAO-2026-09-28.md); [tags entregues e validadas no Android](O1A-TAGS-2026-09-28.md); faltam habilitação uniforme, static com consumidor, mensagens, Instantiate |
+| **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | 113 entregue; [O1a parcial](O1A-ATIVACAO-2026-09-28.md); [tags entregues e validadas no Android](O1A-TAGS-2026-09-28.md); [habilitação entregue](O1A-HABILITACAO-2026-09-28.md); faltam scripts dinâmicos, static com consumidor, mensagens, Instantiate |
 | **O2** Primitivas | 141, 143–148 | |
 | **O3** Hierarquia | 104–109 | ✔ `22fe9bd9` |
 | **O4** Ícones de objeto | 70–74, 76, 77 | |

@@ -10,6 +10,17 @@ namespace Aether.Tests;
 public static class AstraBehaviorTests
 {
     [Test]
+    public static void EnabledAcceptanceFixture_CompilesWithTheProjectCompiler()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "tests", "fixtures", "component-enabled")))
+            root = root.Parent;
+        Assert.True(root is not null);
+        using var project = new Project(File.ReadAllText(Path.Combine(root!.FullName, "tests", "fixtures", "component-enabled", "EnabledProbe.cs")));
+        Assert.Equal(2, project.Compile().Types.Length);
+    }
+
+    [Test]
     public static void TagsAcceptanceFixture_CompilesWithTheProjectCompiler()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
@@ -37,6 +48,23 @@ public static class AstraBehaviorTests
     private sealed class Scene : ISceneAccess
     {
         public readonly List<string> Events = [];
+        public readonly Dictionary<ulong, bool> BehaviorStates = [];
+        public int ComponentCount(ulong objectId) => objectId == 1 ? BehaviorStates.Count : 0;
+        public (ulong Instance, string TypeId) ComponentAt(ulong objectId, uint index) =>
+            objectId == 1 && index < BehaviorStates.Count
+                ? (BehaviorStates.Keys.ElementAt((int)index), ComponentIds.ScriptBehavior) : default;
+        public bool TryGetProperty(ulong objectId, ulong instanceId, string propertyId, out uint kind, out ulong bits)
+        {
+            kind = 1; bits = 0;
+            if (objectId != 1 || propertyId != "enabled" || !BehaviorStates.TryGetValue(instanceId, out var enabled)) return false;
+            bits = enabled ? 1ul : 0ul; return true;
+        }
+        public bool SetProperty(ulong objectId, ulong instanceId, string propertyId, uint kind, ulong bits)
+        {
+            if (objectId != 1 || propertyId != "enabled" || kind != 1 || !BehaviorStates.ContainsKey(instanceId)) return false;
+            BehaviorStates[instanceId] = bits != 0; return true;
+        }
+
         public Vector3 Force, Impulse, Torque, AngularImpulse;
         public int SlotWrites;
         public readonly List<string> SlotPropertyIds = [];
@@ -62,6 +90,41 @@ public static class AstraBehaviorTests
         public bool SetSlotProperty(ulong objectId, ulong instanceId, string propertyId, uint slot, uint kind, ulong bits)
         { ++SlotWrites; SlotPropertyIds.Add(propertyId); return Exists(objectId) && instanceId == 17; }
     }
+    [Test]
+    public static void Enabled_BindsNativeComponentStateToCallbacksAndSurvivesRemoval()
+    {
+        using var project = new Project("""
+            using Astra;
+            [ComponentId("test.enabled")]
+            public sealed class Probe : Behavior
+            {
+                public override void Awake() => Scene.Log(ObjectId, "awake");
+                public override void Enable() => Scene.Log(ObjectId, "enable");
+                public override void Start() => Scene.Log(ObjectId, "start");
+                public override void Update(float dt) => Scene.Log(ObjectId, "update");
+                public override void Disable() => Scene.Log(ObjectId, "disable");
+            }
+            """);
+        var scene = new Scene(); scene.BehaviorStates[10] = false;
+        using var world = new BehaviorWorld();
+        world.Start(project.Compile(), scene, [new(1, 10, "test.enabled", true, new Dictionary<string, JsonElement>())], bindComponentState: true);
+        Assert.Equal("1:awake", string.Join(',', scene.Events), "o componente nativo é a autoridade, mesmo que o snapshot inicial difira");
+        var component = GameObject.Resolve(scene, 1).Components().Single();
+        component.Enabled = true; world.Update(.01f);
+        Assert.Equal("1:awake,1:enable,1:start,1:update", string.Join(',', scene.Events));
+        var behavior = (Behavior)world.FindBehavior(1, typeof(Behavior))!;
+        behavior.Enabled = false;
+        Assert.True(!component.Enabled && !scene.BehaviorStates[10], "escrita do script chega ao mesmo componente");
+        world.Update(.01f); Assert.Equal("1:disable", scene.Events.Last());
+        scene.HierarchyActive = false; component.Enabled = true; var count = scene.Events.Count;
+        world.Update(.01f); Assert.Equal(count, scene.Events.Count, "estado local não supera pai inativo");
+        scene.HierarchyActive = true; world.Update(.01f);
+        Assert.Equal(1, scene.Events.Count(e => e == "1:start"), "retoma sem novo Start");
+        scene.BehaviorStates.Remove(10); world.Update(.01f);
+        Assert.Equal("1:disable", scene.Events.Last());
+        Assert.Equal(0, world.Failures.Count, "remoção no host não derruba despacho");
+    }
+
     private const string Source = """
         using Astra;
         using System;

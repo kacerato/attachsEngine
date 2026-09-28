@@ -212,3 +212,21 @@ AE_TEST(force_lod_wins_over_height_and_never_reaches_the_file) {
   scene::LodGroup old;
   AE_EXPECT_TRUE(old.read(v1, 1) && old.fadeMode == scene::LodFadeMode::None && old.valid(), "v1 relê sem fade");
 }
+
+AE_TEST(lod_enabled_releases_visibility_and_discards_crossfade_then_resumes) {
+  Rig rig;build(rig);setFade(rig,true);
+  runtime::LodCrossFadeClock clock;
+  runtime::lodObjectStates(rig.doc,at(2),&clock,0);
+  runtime::lodObjectStates(rig.doc,at(4),&clock,1);
+  auto values=*rig.doc.find(rig.group);
+  auto *lod=static_cast<scene::LodGroup *>(values.components.edit(scene::LodGroup::descriptor));
+  lod->enabled=false;rig.doc.applyEntityValues(rig.group,values);
+  AE_EXPECT_TRUE(runtime::lodObjectStates(rig.doc,at(4),&clock,1.2).empty() && clock.groups.empty(),"sem controle de visibilidade nem fade residual");
+  std::stringstream saved;lod->write(saved);scene::LodGroup restored;
+  AE_EXPECT_TRUE(restored.read(saved,scene::LodGroup::descriptor.version) && !restored.enabled,"estado persiste");
+  std::stringstream legacy("2 3.5 50 7 12 9 5 0 1 0");
+  AE_EXPECT_TRUE(restored.read(legacy,1) && restored.enabled,"legado continua ativo");
+  lod->enabled=true;rig.doc.applyEntityValues(rig.group,values);
+  const auto states=runtime::lodObjectStates(rig.doc,at(4),&clock,2);
+  AE_EXPECT_TRUE(stateOf(states,rig.mesh[0])->hidden && stateOf(states,rig.mesh[1])->dither==0,"retoma no nível corrente sem fade antigo");
+}

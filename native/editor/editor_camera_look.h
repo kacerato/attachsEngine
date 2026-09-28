@@ -14,6 +14,7 @@ inline bool applyCameraLook(runtime::SceneGraph &document,EditorEntityId id,floa
   const auto *settings=cameraLook(*e);if(!settings||!settings->valid()) return false;
   if(x==0&&y==0) return true;
   auto transform=e->transform;
+  if(!settings->enabled || !document.activeInHierarchy(id)) return true;
   return scene::applyCameraLookRotation(transform.rotationDegrees,*settings,x,y) && document.setTransform(id,transform);
 }
 }

@@ -110,9 +110,10 @@ public:
     cameraFollow_.reset();
     scripts_.setAnimator(&animator_);
     if(!scripts_.start(world_,physics_,input_)) {animator_.reset();physics_.stop();world_.clear();return false;}
-    // O que o Start dos scripts mudou já está na física montada acima.
-    world_.consumeInvalidation();
+    // Awake/Start executam DEPOIS da montagem inicial e podem desligar formas,
+    // alterar corpos ou destruir objetos. Publique isso antes do primeiro Update.
     resources_=&resources;
+    if(!drainCommands() || !reconcilePhysics()) {stop();return false;}
     active_=true;
     paused_=false;
     return true;

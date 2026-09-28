@@ -41,7 +41,7 @@ struct FakeRuntime {
   static bool lastContactHadNormal;
   static std::string attachments;
   static scene::ScriptSceneAccess sceneAccess;
-  static std::function<void()> onUpdate;
+  static std::function<void()> onUpdate, onStart;
 
   static void reset() {
     starts = updates = fixedUpdates = stops = triggers = contacts = timers = timerExpirations = 0;
@@ -53,12 +53,13 @@ struct FakeRuntime {
     lastContactHadNormal = false;
     attachments.clear();
     sceneAccess = {};
-    onUpdate = {};
+    onUpdate = {}; onStart = {};
   }
   static int start(const u8 *, int, const u8 *json, int length, const scene::ScriptSceneAccess *access) {
     ++starts;
     attachments.assign(reinterpret_cast<const char *>(json), static_cast<usize>(length));
     if(access) sceneAccess=*access;
+    if(onStart) onStart();
     // A ABI precisa chegar completa: um ponteiro faltando aqui é um campo que o
     // lado gerenciado usaria sem existir.
     return access && access->available() ? 0 : 1;
@@ -112,7 +113,7 @@ u32 FakeRuntime::lastContactPhase = 99;
 bool FakeRuntime::lastContactHadNormal = false;
 std::string FakeRuntime::attachments;
 scene::ScriptSceneAccess FakeRuntime::sceneAccess{};
-std::function<void()> FakeRuntime::onUpdate{};
+std::function<void()> FakeRuntime::onUpdate{}, FakeRuntime::onStart{};
 
 EditorEntityId physical(EditorDocument &doc, const char *name, float y, scene::BodyMotion motion, float halfY) {
   const auto id = doc.createEntity(doc.root(), EditorEntityKind::Folder, name);
@@ -608,4 +609,18 @@ AE_TEST(play_scene_material_written_by_code_reaches_the_draw_state) {
   // E o documento autoral continua com o material do pacote.
   play.stop();
   AE_EXPECT_TRUE(!meshMaterial(*doc.find(id)).enabled, "autoria preservada depois do Stop");
+}
+
+AE_TEST(play_enabled_collider_changed_in_start_reaches_physics_before_first_update) {
+  EditorDocument doc;EditorMapScene resources;
+  const auto id=physical(doc,"Body",0,scene::BodyMotion::Static,.5f);attachScript(doc,id,"test.enabled");
+  FakeRuntime::reset();EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/projeto");
+  FakeRuntime::onStart=[&] {
+    const auto component=play.world().findComponent(play.world().handle(id),"astra.physics.collider");
+    AE_EXPECT_TRUE(play.world().setProperty(component,"enabled",false)==runtime::WorldStatus::Ok,"Start desliga o último colisor");
+  };
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play inicia com alteração de Start");
+  const float origin[3]{0,5,0},direction[3]{0,-10,0};scene::ScriptQueryHit hit;scene::ScriptQueryFilter filter;
+  AE_EXPECT_TRUE(FakeRuntime::sceneAccess.rayCast(FakeRuntime::sceneAccess.context,origin,direction,&filter,&hit,1)==0,"primeiro Update já enxerga a alteração");
+  play.stop();FakeRuntime::reset();
 }

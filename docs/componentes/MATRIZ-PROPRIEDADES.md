@@ -128,7 +128,7 @@ Esqueleto e blend shapes da Malha. **Consumidor:** editor/editor_map_scene.cpp �
 | `quality` | Qualidade | enumeração | Skin | Automática | Automática \| 1 osso \| 2 ossos \| 4 ossos |  | editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | não |
 | `blend_shape_weight` | Peso do blend shape | número | Blend shapes |  | -1000 … 1000 | % | editor/editor_map_scene.cpp → pesos; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | sim |
 
-## LOD Group · `astra.render.lod_group` v2
+## LOD Group · `astra.render.lod_group` v3
 
 Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → visibilidade do desenho por vista. **Capacidade:** `render.lod.group` (implementada). **Invalida:** desenho.
 
@@ -143,6 +143,7 @@ Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → 
 | `fade_width_1` | Largura do fade LOD 1 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `fade_width_2` | Largura do fade LOD 2 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `fade_width_3` | Largura do fade LOD 3 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `enabled` | Ativo | booleano | Níveis | verdadeiro | verdadeiro \| falso |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
 | `animate_cross_fading` | Animate Cross-fading | booleano | Fade | falso | verdadeiro \| falso |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_count` | Níveis | enumeração | Níveis | 3 | 1 \| 2 \| 3 \| 4 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
 | `fade_mode` | Fade Mode | enumeração | Fade | Nenhum | Nenhum \| Cross Fade |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
@@ -285,7 +286,7 @@ Projeção e enquadramento. **Consumidor:** renderer/render_view.h → matriz de
 | `projection` | Projeção | enumeração | Lente | Perspectiva | Perspectiva \| Ortográfica |  | renderer/render_view.h → matriz de projeção e culling | desenho | não | não |
 | `environment_mask` | Ambientes | enumeração | Saída | Todos os ambientes | Todos os ambientes \| Ambiente 0 \| Ambiente 1 \| Ambiente 2 \| Ambiente 3 \| Ambiente 4 \| Ambiente 5 \| Ambiente 6 \| Ambiente 7 |  | renderer/scene_environment.cpp | desenho | não | não |
 
-## Olhar · `astra.camera.look` v1
+## Olhar · `astra.camera.look` v2
 
 Rotação local da câmera por entrada ou script. **Consumidor:** runtime/game_world.cpp → pose da câmera. **Invalida:** entrada.
 
@@ -294,6 +295,7 @@ Rotação local da câmera por entrada ou script. **Consumidor:** runtime/game_w
 | `yaw_sensitivity` | Sensibilidade horizontal graus/tela | número | Sensibilidade | 300 | 0 … 720 | ° | runtime/game_world.cpp → pose da câmera | entrada | não | não |
 | `pitch_sensitivity` | Sensibilidade vertical graus/tela | número | Sensibilidade | 195 | 0 … 720 | ° | runtime/game_world.cpp → pose da câmera | entrada | não | não |
 | `pitch_limit` | Limite vertical graus | número | Limites | 83 | 1 … 89 | ° | runtime/game_world.cpp → pose da câmera | entrada | não | não |
+| `enabled` | Ativo | booleano | Controle | verdadeiro | verdadeiro \| falso |  | runtime/game_world.cpp → pose da câmera | entrada | não | não |
 
 ## Acompanhar alvo · `astra.camera.follow` v1
 
@@ -407,7 +409,7 @@ Conexão, limites e motor entre corpos. **Consumidor:** runtime/scene_physics.cp
 | `motor` | Motor | enumeração | Motor | Desligado | Desligado \| Velocidade \| Posição \| Posição e velocidade |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não |
 | `connected_body` | Conectar corpo | referência | Âncoras | Escolher corpo | astra.physics.body · outro objeto |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não |
 
-## Animação · `astra.animation` v3
+## Animação · `astra.animation` v4
 
 Clipes tocados e misturados no Play. **Consumidor:** runtime/scene_animation.cpp → pose local dos nós da instância. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
 
@@ -423,6 +425,7 @@ Clipes tocados e misturados no Play. **Consumidor:** runtime/scene_animation.cpp
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
 |---|---|---|---|---|---|---|---|---|---|---|
 | `speed` | Velocidade | número | Reprodução | 1 | -10 … 10 | x | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
+| `enabled` | Ativa | booleano | Reprodução | verdadeiro | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
 | `play_automatically` | Tocar ao iniciar | booleano | Reprodução | verdadeiro | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
 | `wrap_mode` | Repetição | enumeração | Reprodução | Repetir | Uma vez \| Repetir \| Vai e volta \| Segurar no fim |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
 | `clip_count` | Quantidade de clipes | enumeração | Clipes | 0 | 0 \| 1 \| 2 \| 3 \| 4 \| 5 \| 6 \| 7 \| 8 \| 9 \| 10 \| 11 \| 12 \| 13 \| 14 \| 15 \| 16 \| 17 \| 18 \| 19 \| 20 \| 21 \| 22 \| 23 \| 24 \| 25 \| 26 \| 27 \| 28 \| 29 \| 30 \| 31 \| 32 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |

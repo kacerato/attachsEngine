@@ -422,7 +422,7 @@ public readonly struct Component
     {
         get
         {
-            if (!_object.IsAlive) return false;
+            if (_object is null || !_object.IsAlive) return false;
             var count = _scene.ComponentCount(_object.ObjectId);
             for (var index = 0u; index < count; ++index)
                 if (_scene.ComponentAt(_object.ObjectId, index).Instance == InstanceId) return true;
@@ -433,6 +433,16 @@ public readonly struct Component
     private void Check(bool ok, string operation)
     {
         if (!ok) throw new WorldException(_scene.LastStatus, operation);
+    }
+
+    /// <summary>
+    /// Estado local dos tipos que declaram a propriedade enabled no schema.
+    /// Tipos sem essa capacidade recusam a operação; não desativa o objeto.
+    /// </summary>
+    public bool Enabled
+    {
+        get => GetBool("enabled");
+        set => SetBool("enabled", value);
     }
 
     public float GetFloat(string propertyId) => Read(propertyId, 0, out var bits)

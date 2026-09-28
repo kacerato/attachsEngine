@@ -7,6 +7,12 @@
 #include "scene/environment.h"
 #include "scene/mesh_renderer.h"
 #include "scene/physics_body.h"
+#include "scene/camera.h"
+#include "scene/camera_look.h"
+#include "scene/script_behavior.h"
+#include <sstream>
+#include <fstream>
+#include "editor/editor_archive.h"
 
 using namespace ae;
 using namespace ae::editor;
@@ -603,4 +609,50 @@ AE_TEST(each_direction_of_a_conflict_explains_the_object_in_front_of_you) {
   AE_EXPECT_TRUE(recusaColisor != nullptr, "colisor e recusado");
   AE_EXPECT_TRUE(std::string(recusaColisor) != std::string(recusaPersonagem),
                  "as duas direcoes do mesmo conflito nao usam a mesma frase");
+}
+
+AE_TEST(runtime_world_enabled_controls_camera_look_and_script_property_without_unlocking_script_fields) {
+  EditorDocument doc;const auto parent=named(doc,doc.root(),"Parent"),id=named(doc,parent,"Camera");
+  auto values=*doc.find(id);values.components.add(scene::Camera::descriptor);
+  values.components.add(scene::CameraLook::descriptor);
+  auto *script=static_cast<scene::ScriptBehavior *>(values.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="test.enabled";script->source="Enabled.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,values),"dados autorados");
+  GameWorld world;AE_EXPECT_TRUE(world.load(doc),"mundo");
+  const auto camera=world.handle(id),owner=world.handle(parent);
+  const auto look=world.findComponent(camera,"astra.camera.look"),behavior=world.findComponent(camera,"astra.script.behavior");
+  AE_EXPECT_TRUE(world.setProperty(look,"enabled",false)==WorldStatus::Ok && world.applyCameraLook(camera,.1f,.1f)==WorldStatus::Ok &&
+                 world.graph().find(id)->transform.rotationDegrees[1]==0,"desabilitado não gira");
+  AE_EXPECT_TRUE(world.setProperty(look,"enabled",true)==WorldStatus::Ok && world.setActive(owner,false)==WorldStatus::Ok &&
+                 world.applyCameraLook(camera,.1f,.1f)==WorldStatus::Ok && world.graph().find(id)->transform.rotationDegrees[1]==0,"pai inativo também suspende");
+  world.setActive(owner,true);world.applyCameraLook(camera,.1f,.1f);
+  AE_EXPECT_TRUE(world.graph().find(id)->transform.rotationDegrees[1]>0,"retoma controle");
+  AE_EXPECT_TRUE(world.setProperty(behavior,"enabled",false)==WorldStatus::Ok,"estado de script aceito");
+  scene::ComponentPropertyValue read;
+  AE_EXPECT_TRUE(world.getProperty(behavior,"enabled",read)==WorldStatus::Ok && !std::get<bool>(read),"script e componente leem mesmo estado");
+  AE_EXPECT_TRUE(world.setProperty(behavior,"other",true)==WorldStatus::NotMutableInPlay,"campos não foram liberados indiscriminadamente");
+  scene::CameraLook authored;authored.enabled=false;std::stringstream saved;authored.write(saved);scene::CameraLook restored;
+  AE_EXPECT_TRUE(restored.read(saved,scene::CameraLook::descriptor.version) && !restored.enabled,"estado salvo");
+  std::stringstream legacy("300 195 83");AE_EXPECT_TRUE(restored.read(legacy,1) && restored.enabled,"v1 migra ativo");
+}
+
+// Fixture gerada com os serializers reais; evita manter payloads manualmente.
+int writeEnabledFixture(const char *path) {
+  EditorDocument doc;
+  const auto driver=named(doc,doc.root(),"Driver"),worker=named(doc,doc.root(),"Worker"),
+             body=named(doc,doc.root(),"Body"),camera=named(doc,doc.root(),"Camera");
+  for(const auto id:{driver,worker}) {
+    auto values=*doc.find(id);auto *script=static_cast<scene::ScriptBehavior *>(values.components.add(scene::ScriptBehavior::descriptor));
+    script->scriptType=id==driver?"acceptance.enabled.driver":"acceptance.enabled.worker";
+    script->source="EnabledProbe.cs";doc.applyEntityValues(id,values);
+  }
+  auto values=*doc.find(body);values.transform.position[0]=5;
+  auto *physics=editPhysicsBody(values);physics->motion=scene::BodyMotion::Dynamic;physics->gravityFactor=0;
+  editCollider(values);doc.applyEntityValues(body,values);
+  values=*doc.find(camera);values.components.add(scene::Camera::descriptor);
+  auto *look=static_cast<scene::CameraLook *>(values.components.add(scene::CameraLook::descriptor));look->enabled=false;
+  auto *animation=static_cast<scene::Animation *>(values.components.add(scene::Animation::descriptor));animation->enabled=false;
+  auto *lod=static_cast<scene::LodGroup *>(values.components.add(scene::LodGroup::descriptor));lod->enabled=false;
+  doc.applyEntityValues(camera,values);
+  std::ofstream out(path);out<<serializeEditorDocument(doc,0);return out.good()?0:1;
 }

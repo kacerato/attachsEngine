@@ -5,6 +5,7 @@
 namespace ae::scene {
 class CameraLook final : public ComponentValue {
 public:
+  bool enabled=true;
   float yawSensitivity=300,pitchSensitivity=195,pitchLimit=83;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
@@ -13,11 +14,13 @@ public:
     for(const auto &p:descriptor.numbers) {const float v=p.read(*this);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
     return true;
   }
-  void write(std::ostream &out) const override {for(const auto &p:descriptor.numbers) out<<p.read(*this)<<' ';}
+  void write(std::ostream &out) const override {for(const auto &p:descriptor.numbers) out<<p.read(*this)<<' ';out<<enabled;}
   bool read(std::istream &in,u32 version) override {
-    if(version!=1) return false;
+    if(version<1 || version>2) return false;
+    enabled=true;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
-    return true;
+    if(version>=2 && !(in>>enabled)) return false;
+    return valid();
   }
 };
 inline constexpr std::array<ComponentNumber,3> cameraLookNumbers{{
@@ -27,14 +30,19 @@ inline constexpr std::array<ComponentNumber,3> cameraLookNumbers{{
   AE_LOOK_NUMBER("pitch_limit","Limite vertical graus",pitchLimit,1,89,"Limites")
 #undef AE_LOOK_NUMBER
 }};
+inline constexpr std::array<ComponentBoolean,1> cameraLookBooleans{{
+  {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const CameraLook&>(v).enabled;},
+   [](ComponentValue &v,bool on){static_cast<CameraLook&>(v).enabled=on;},{"Controle"}}
+}};
 inline const ComponentType CameraLook::descriptor{
-  "astra.camera.look",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<CameraLook>();},cameraLookNumbers
+  "astra.camera.look",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<CameraLook>();},cameraLookNumbers,cameraLookBooleans
 };
 // Delta normalizado pela viewport. O rig pai orienta a câmera no mundo; aqui
 // só X/Y locais mudam, preservando o roll autorado.
 inline bool applyCameraLookRotation(float rotationDegrees[3],const CameraLook &settings,float x,float y) {
   if(!rotationDegrees||!settings.valid()||!std::isfinite(x)||!std::isfinite(y)) return false;
   for(u32 i=0;i<3;++i) if(!std::isfinite(rotationDegrees[i])) return false;
+  if(!settings.enabled) return true;
   const float yaw=std::remainder(rotationDegrees[1]+x*settings.yawSensitivity,360.0f);
   const float pitch=std::clamp(rotationDegrees[0]+y*settings.pitchSensitivity,-settings.pitchLimit,settings.pitchLimit);
   if(!std::isfinite(yaw)||!std::isfinite(pitch)) return false;

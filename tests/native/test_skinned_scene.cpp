@@ -141,7 +141,7 @@ AE_TEST(deformation_and_animation_components_round_trip_and_migrate_v1) {
   std::stringstream saved;
   animation.write(saved);
   scene::Animation loaded;
-  AE_EXPECT_TRUE(loaded.read(saved, 3) && loaded.clips == animation.clips && loaded.clip == run && !loaded.playAutomatically &&
+  AE_EXPECT_TRUE(loaded.read(saved, scene::Animation::descriptor.version) && loaded.clips == animation.clips && loaded.clip == run && !loaded.playAutomatically &&
                  loaded.wrapMode == resources::AnimationWrapMode::PingPong && near(loaded.speed, -.5f),
                  "lista de clipes, padrão, repetição e velocidade");
   const auto runElement=loaded.clips[1].id;
@@ -149,7 +149,7 @@ AE_TEST(deformation_and_animation_components_round_trip_and_migrate_v1) {
                  "reordenação conserva a identidade e o recurso da entrada");
   std::stringstream reordered;loaded.write(reordered);
   scene::Animation reopened;
-  AE_EXPECT_TRUE(reopened.read(reordered,3) && reopened.clips==loaded.clips,"arquivo v3 conserva ordem e IDs");
+  AE_EXPECT_TRUE(reopened.read(reordered,scene::Animation::descriptor.version) && reopened.clips==loaded.clips,"arquivo v3 conserva ordem e IDs");
   AE_EXPECT_TRUE(reopened.removeClip(runElement) && reopened.appendClip()>runElement,
                  "remoção não reutiliza identidade antiga");
   std::stringstream v2;v2<<run.text()<<" 0 2 -0.5 2 "<<walk.text()<<' '<<run.text();
@@ -701,4 +701,30 @@ AE_TEST(morph_cube_blend_shape_weights_survive_save_and_load) {
   const auto *mesh = component<scene::SkinnedMesh>(reopened.document(), cube);
   AE_EXPECT_TRUE(mesh && mesh->blendShapeWeights.size() == 2, "dois endereços de peso depois de reabrir");
   std::remove(path.c_str());
+}
+
+AE_TEST(animation_enabled_pauses_time_and_pose_then_resumes_without_restarting) {
+  EditorSession session;DeformationPublisher gpu;startSession(session,gpu);
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(test::skinnedAnimatedGlb(),"Fontes/rig.glb",{},report),"rig real importado");
+  const auto rig=named(session.document(),"Rig"),arm=named(session.document(),"Arm");
+  EditorPlayScene play;AE_EXPECT_TRUE(play.start(session.document(),session.mapScene()),"Play");
+  auto &world=play.world();const auto handle=world.findComponent(world.handle(rig),"astra.animation");
+  const auto wave=resources::animationClipGuid(report.source,"Wave",0);
+  AE_EXPECT_TRUE(play.advance(.25),"avança animação");
+  runtime::AnimationStateView before,after;
+  AE_EXPECT_TRUE(play.animator().state(rig,handle.instance,wave,before)==runtime::AnimationCommandStatus::Ok,"estado inicial");
+  const float pose=play.document().find(arm)->transform.rotationDegrees[2];
+  AE_EXPECT_TRUE(world.setProperty(handle,"enabled",false)==runtime::WorldStatus::Ok && play.advance(.25),"desliga e avança mundo");
+  AE_EXPECT_TRUE(play.animator().state(rig,handle.instance,wave,after)==runtime::AnimationCommandStatus::Ok &&
+                 after.time==before.time && near(play.document().find(arm)->transform.rotationDegrees[2],pose),"tempo e pose conservados");
+  AE_EXPECT_TRUE(world.setProperty(handle,"enabled",true)==runtime::WorldStatus::Ok && play.advance(.25),"religa");
+  AE_EXPECT_TRUE(play.animator().state(rig,handle.instance,wave,after)==runtime::AnimationCommandStatus::Ok &&
+                 near(after.time,before.time+.25f),"retoma do mesmo tempo");
+  play.stop();
+  auto values=*session.document().find(rig);auto *animation=static_cast<scene::Animation *>(values.components.edit(scene::Animation::descriptor));
+  animation->enabled=false;std::stringstream saved;animation->write(saved);scene::Animation restored;
+  AE_EXPECT_TRUE(restored.read(saved,scene::Animation::descriptor.version) && !restored.enabled,"enabled persistido");
+  std::stringstream legacy("- 1 1 1 0 1");
+  AE_EXPECT_TRUE(restored.read(legacy,3) && restored.enabled,"v3 migra ativo");
 }

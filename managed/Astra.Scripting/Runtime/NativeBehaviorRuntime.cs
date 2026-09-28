@@ -166,6 +166,8 @@ public static unsafe class NativeBehaviorRuntime
         // contrato nativo, não uma estimativa.
         private const int NameCapacity = 64;
         private const int TypeIdCapacity = 257;
+        // Consultado pelo lifecycle em cada despacho; evita alocar UTF-8 por callback.
+        private static readonly byte[] EnabledProperty = "enabled"u8.ToArray();
         private bool _active = true;
         private readonly int _ownerThread = Environment.CurrentManagedThreadId;
         private bool Accessible => _active && Environment.CurrentManagedThreadId == _ownerThread;
@@ -174,6 +176,7 @@ public static unsafe class NativeBehaviorRuntime
         private static byte[] Utf8(string text, string what)
         {
             ArgumentNullException.ThrowIfNull(text);
+            if (text == "enabled") return EnabledProperty;
             var bytes = Encoding.UTF8.GetBytes(text);
             if (bytes.Length == 0 || bytes.Length > 1024)
                 throw new ArgumentException($"{what} inválido: {text.Length} caracteres", nameof(text));
@@ -668,7 +671,7 @@ public static unsafe class NativeBehaviorRuntime
             var project = NativeCompiler.LoadApplied(directory);
             var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(new ReadOnlySpan<byte>(json, jsonLength))
                 ?? throw new InvalidDataException("Behavior attachment data is empty.");
-            _scene = new(*access); Graphics.Bind(_scene); _world = new(); _world.Start(project, _scene, attachments);
+            _scene = new(*access); Graphics.Bind(_scene); _world = new(); _world.Start(project, _scene, attachments, bindComponentState: true);
             RefreshDiagnostics(); return 0;
         }
         catch (Exception error) { StopWorld(); _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }

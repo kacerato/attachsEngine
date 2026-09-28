@@ -369,6 +369,8 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
 
   for (const auto &[owner, instance] : live) {
     if (!graph.activeInHierarchy(owner)) continue;
+    const auto *component = animationComponent(graph, owner, instance);
+    if (!component || !component->enabled) continue;
     AnimationCommandStatus status;
     auto *p = player(owner, instance, status);
     if (!p) continue;

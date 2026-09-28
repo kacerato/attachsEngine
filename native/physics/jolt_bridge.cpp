@@ -16,6 +16,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/EmptyShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
@@ -910,7 +911,7 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV1(AetherPhysicsWorld *world,
     const AetherBodyDynamicsV1 *dynamics) {
   const auto finite=[](AetherVec3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);};
   const auto unit=[](AetherQuat q){const float n=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;return std::isfinite(n)&&std::abs(n-1)<.001f;};
-  if(!world||!desc||!parts||count<1||count>256||!dynamics||dynamics->structSize<sizeof(*dynamics)||dynamics->apiVersion!=1||
+  if(!world||!desc||(count && !parts)||count>256||!dynamics||dynamics->structSize<sizeof(*dynamics)||dynamics->apiVersion!=1||
       desc->structSize<sizeof(*desc)||desc->apiVersion!=AetherBodyApiVersionV2||(desc->eventLayerMask&~3u)||
       static_cast<ae::u32>(desc->motionType)>2||!finite(desc->position)||!unit(desc->rotation)||
       !std::isfinite(desc->friction)||desc->friction<0||!std::isfinite(desc->restitution)||desc->restitution<0||desc->restitution>1||
@@ -937,13 +938,16 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV3(AetherPhysicsWorld *world,
     const AetherBodyDynamicsV1 *dynamics) {
   const auto finite=[](AetherVec3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);};
   const auto unit=[](AetherQuat q){const float n=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;return std::isfinite(n)&&std::abs(n-1)<.001f;};
-  if(!world||!desc||!parts||count<1||count>256||!dynamics||dynamics->structSize<sizeof(*dynamics)||dynamics->apiVersion!=1||
+  if(!world||!desc||(count && !parts)||count>256||!dynamics||dynamics->structSize<sizeof(*dynamics)||dynamics->apiVersion!=1||
       desc->structSize<sizeof(*desc)||desc->apiVersion!=AetherBodyApiVersionV2||(desc->eventLayerMask&~3u)||
       static_cast<ae::u32>(desc->motionType)>2||!finite(desc->position)||!unit(desc->rotation)||
       !std::isfinite(desc->friction)||desc->friction<0||!std::isfinite(desc->restitution)||desc->restitution<0||desc->restitution>1||
       !std::isfinite(dynamics->linearDamping)||dynamics->linearDamping<0||dynamics->linearDamping>10||
       !std::isfinite(dynamics->angularDamping)||dynamics->angularDamping<0||dynamics->angularDamping>10||
       !std::isfinite(dynamics->gravityFactor)||std::abs(dynamics->gravityFactor)>100||!finite(dynamics->angularVelocity)) return AetherBodyHandle_Invalid;
+  // Zero partes é um corpo real sem volume de colisão (Jolt EmptyShape).
+  // Continua recebendo gravidade, forças e juntas; consultas não o atingem.
+  if(count==0) return CreateBodyInternal(*world,*desc,{0,0,0},new JPH::EmptyShape(),dynamics);
   JPH::StaticCompoundShapeSettings compound;
   bool mesh=false;
   for(ae::u32 i=0;i<count;++i) {

@@ -1,8 +1,8 @@
 # Bloco ampliado — Objetos, scripts e prefabs
 
-Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Planejamento**, por pedido
-do usuário para incorporar os próximos blocos em um só. Nenhuma capacidade é
-marcada como implementada por este documento.
+Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Em execução**, por pedido
+do usuário para incorporar os próximos blocos em um só. Etapa 1 entregue;
+as etapas 2–12 continuam pendentes, com seus aceites abaixo.
 
 ## Escopo e precedência
 
@@ -29,12 +29,14 @@ em capacidades disponíveis.
 - O3: visibilidade/selecionabilidade da hierarquia, registrada no inventário.
 
 As entregas de ativação e tags permanecem válidas. Seus relatórios são históricos;
-a continuação vigente é a deste documento. O inventário geral permanece em
-**107 existentes, 9 parciais, 96 ausentes e 7 adaptações**, total 219.
+a continuação vigente é a deste documento. Após a etapa 1, o inventário geral está em
+**108 existentes, 8 parciais, 96 ausentes e 7 adaptações**, total 219.
 
 ## Etapas internas, em ordem de execução
 
 ### 1. Concluir habilitação por componente — O1a, item 121
+
+**Entregue em 28/09/2026:** [implementação, referências, validação e limites](O1A-HABILITACAO-2026-09-28.md).
 
 Rastrear cada estado de habilitação do schema e da API até o consumidor real.
 Definir quais tipos suportam desativação, que estado preservam e como retomam.
@@ -46,6 +48,8 @@ confirmar o efeito real, repetir sob pai inativo e conferir salvar/reabrir e
 Stop sem duplicar registros, callbacks ou recursos.
 
 ### 2. Completar scripts dinâmicos e destruição — O1b, itens 125, 139 e 140
+
+**Próxima etapa de execução.**
 
 Expor acesso a comportamento pelo tipo em GameObject; adicionar/remover
 instâncias de script durante Play, preservando identidade, campos e isolamento
