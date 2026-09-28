@@ -3760,6 +3760,59 @@ AE_TEST(project_hdri_opens_in_properties_with_preview_uses_and_recipe) {
   AE_EXPECT_TRUE(!state.environmentInspector.valid(),"voltar");
 }
 
+// Regressão (achada no aparelho): o interruptor no cabeçalho do cartão tem de
+// ganhar da área de dobrar DENTRO do cartão, não só na margem de toque fora dele.
+AE_TEST(component_header_toggle_wins_over_fold_inside_the_card) {
+  Fixture f;auto &doc=f.session.document();
+  auto value=*doc.find(f.cube);value.components.add(scene::Light::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com luz");
+  f.session.setSelection(f.cube);f.session.update();
+  u32 index=0;
+  for(u32 i=0;i<doc.find(f.cube)->components.size();++i)
+    if(&doc.find(f.cube)->components.at(i)->type()==&scene::Light::descriptor) index=i;
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentFoldBase)+index).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page) tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  UiInputRouter router;UiDrawList list;
+  list.begin(f.session.screen().surface,font().metrics(UiFontWeight::Regular));
+  buildEditorScreen(f.session.screen(),defaultTheme(),list,router);
+  float top=1e9f,bottom=-1e9f;
+  const auto route=[&](UiPoint p){const auto r=router.route({7,UiPointerPhase::Down,p,0});router.route({7,UiPointerPhase::Up,p,0});return r;};
+  for(float y=2;y<f.session.screen().surface.height;y+=2) for(float x=2;x<f.session.screen().surface.width;x+=4) {
+    const auto r=route({x,y});
+    if(r.target==UiPointerTarget::Widget && r.widgetId==widgetId(EditorWidget::ComponentFoldBase)+index) {top=std::min(top,y);bottom=std::max(bottom,y);}
+  }
+  AE_EXPECT_TRUE(top<bottom,"cabeçalho do cartão da luz");
+  bool inside=false;UiPoint toggle{};
+  for(float y=top;y<=bottom && !inside;y+=2) for(float x=2;x<f.session.screen().surface.width && !inside;x+=2) {
+    const auto r=route({x,y});
+    if(r.target==UiPointerTarget::Widget && r.widgetId==widgetId(EditorWidget::ComponentEnableBase)+index) {inside=true;toggle={x,y};}
+  }
+  AE_EXPECT_TRUE(inside,"o interruptor responde dentro do cabeçalho");
+  const auto light=[&]{return static_cast<const scene::Light *>(doc.find(f.cube)->components.find(scene::Light::descriptor));};
+  const bool before=light()->enabled;
+  f.down(8,toggle);f.up(8,toggle);f.session.update();
+  AE_EXPECT_EQ(light()->enabled,!before,"tocar no interruptor alterna, não dobra");
+}
+
+// Regressão (achada no aparelho): janelas que não bloqueiam ficam sob os
+// modais — o chip da janela focada não pode aparecer nem receber toque sobre a
+// busca, e o teclado numérico aberto por um campo dela fica por cima dela.
+AE_TEST(floating_windows_stay_under_modals) {
+  Fixture f;
+  f.session.openFocusedInspector(f.cube);
+  tapWidget(f,widgetId(EditorWidget::FocusedCollapse));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::FocusedChip)).x>=0,"chip visível no editor");
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchOpen));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::FocusedChip)).x<0,"sob a busca, o chip não recebe toque");
+  tapWidget(f,widgetId(EditorWidget::GlobalSearchClose));
+  tapWidget(f,widgetId(EditorWidget::FocusedChip));
+  // Um campo numérico da janela focada abre o teclado: a janela não o cobre.
+  auto &state=const_cast<EditorScreenState &>(f.session.screen());
+  state.numericField=widgetId(EditorWidget::MaterialNumberBase);state.numericEntity=f.cube;
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::FocusedMenu)).x<0,"o teclado numérico fica por cima da janela");
+  state.numericField=0;
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

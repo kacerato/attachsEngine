@@ -4643,14 +4643,19 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     auto more=takeRight(row,item.object?0:32);
     // Interruptor de ativo no cabeçalho, como a caixa de Behaviour.enabled da
     // Unity: só onde existe `enabled` com consumidor, ou no comportamento C#.
+    // O interruptor é registrado DEPOIS da área de dobrar o cartão: o roteador
+    // testa da última região para a primeira, e a área de dobrar cobre o
+    // cabeçalho inteiro — antes, tocar no interruptor dobrava o cartão.
+    bool enableToggle=false,enableOn=false;UiRect enableRect{};
     if(item.value && !item.object && !item.transform) {
-      bool has=script!=nullptr,on=script?script->enabled:false;
-      if(item.native) for(const auto &p:item.native->type->booleans) if(p.id=="enabled") {has=true;on=p.read(*item.value);}
-      if(has) builder.toggle(takeRight(row,48),on,widgetId(EditorWidget::ComponentEnableBase)+item.index);
+      enableToggle=script!=nullptr;enableOn=script?script->enabled:false;
+      if(item.native) for(const auto &p:item.native->type->booleans) if(p.id=="enabled") {enableToggle=true;enableOn=p.read(*item.value);}
+      if(enableToggle) enableRect=takeRight(row,48);
     }
     builder.label(row,title.c_str(),theme.color.text,theme.type.body);
     if(item.object||item.transform||item.native||script) {
       builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:32),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
+      if(enableToggle) builder.toggle(enableRect,enableOn,widgetId(EditorWidget::ComponentEnableBase)+item.index);
       if(!item.object) {
         builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
         builder.router.addRegion(more,item.transform?widgetId(EditorWidget::TransformMenu):widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
@@ -6574,8 +6579,10 @@ void buildSceneLayersPanel(ScreenBuilder &builder, const UiRect &viewport) {
   std::vector<u32> shown;
   for(u32 i=0;i<runtime::GameplayLayers::kCount;++i) if(layers.named(i) || counts[i]) shown.push_back(i);
   const float width=std::min(310.f,std::max(200.f,viewport.width-16));
+  // Altura pelo conteúdo (cabeçalho, ações, linhas e rodapé), até a do viewport.
+  const float wanted=36+6+36+26+16+38.f*static_cast<float>(std::max<usize>(1,shown.size()));
   const UiRect panel{viewport.x+std::max(8.f,std::min(276.f,viewport.width-width-8)),viewport.y+56,width,
-                     std::max(160.f,viewport.height-64)};
+                     std::clamp(wanted,160.f,std::max(160.f,viewport.height-64))};
   list.addRect(deflate(panel,UiInsets::all(-1)),theme.color.line,theme.radius.control);
   list.addRect(panel,theme.color.surface,theme.radius.control);
   router.addBlocker(panel);
@@ -7601,6 +7608,15 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(row,widgetId(actions[i]));
     }
   }
+  // Janelas que não bloqueiam o editor (Inspectors focados, histórico, camadas
+  // na vista) ficam sobre os painéis e SOB tudo que é modal: busca, teclados,
+  // menus, folhas de Adicionar e Criar e as janelas de valor. Desenhadas por
+  // último, cobriam o teclado numérico aberto por um campo delas e a busca.
+  if(state.workspace==EditorWorkspace::Scene || (state.workspace==EditorWorkspace::Play && state.playInspect))
+    buildFocusedInspectors(builder,layout);
+  if(state.undoHistory) buildUndoHistory(builder,layout);
+  if(state.sceneLayersPanel && state.document && state.workspace==EditorWorkspace::Scene)
+    buildSceneLayersPanel(builder,layout.viewport);
   // A busca global fica sob o teclado interno, que edita o campo dela.
   if(state.globalSearch) buildGlobalSearch(builder);
   if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
@@ -7803,15 +7819,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
-  if(state.workspace==EditorWorkspace::Scene || (state.workspace==EditorWorkspace::Play && state.playInspect))
-    buildFocusedInspectors(builder,layout);
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);
   if(state.colorField) buildColorWindow(builder,layout);
-  if(state.undoHistory) buildUndoHistory(builder,layout);
-  // Depois das ferramentas do viewport, para ficar por cima delas.
-  if(state.sceneLayersPanel && state.document && state.workspace==EditorWorkspace::Scene)
-    buildSceneLayersPanel(builder,layout.viewport);
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;
