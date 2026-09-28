@@ -2,6 +2,8 @@
 
 Implementação: `bd67ebce`. Continuação do item 87 do inventário, após `df0c1538`. O recorte desta entrega é **MaterialAsset**; mapas HDRI e perfis de ambiente continuam pendentes. A contagem do inventário não muda: o item 87 permanece parcial.
 
+**Atualização posterior:** as pendências de HDRI/perfis e de navegação UV descritas abaixo foram tratadas na [continuação I4 ambientes/UV](I4-AMBIENTES-UV-2026-09-28.md). Este documento preserva o recorte e a evidência da entrega inicial.
+
 ## Comportamento
 
 Em Arquivos, selecionar vários materiais abre o Inspector existente com a quantidade e o material ativo. Cada propriedade divergente mostra `—` e “Valores diferentes”. Um gesto aplica somente a propriedade editada ao conjunto, preservando as outras diferenças. Isso inclui atribuir o valor que o ativo já possui e zerar uma transformação de UV já zerada nele.

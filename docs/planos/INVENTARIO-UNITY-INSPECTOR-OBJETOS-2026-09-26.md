@@ -141,7 +141,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 84 | Instância de prefab: opções e overrides em negrito | ✗ | | P |
 | 85 | Vários prefabs (sem Select/Revert/Apply) | ✗ | | P |
 | 86 | Recurso único: importação e propriedades | ✔ | textura, modelo, material `9ce0c9fe`, HDRI com receita reimportável `e4608651` (degraus `267fd86c`), perfil de ambiente pelo esquema `586671c8`; áudio: não aplicável até existir o subsistema (bloco próprio) | I3 |
-| 87 | Vários recursos: comuns e "—" | ◐ | modo "Selecionar vários" em Arquivos; tipos com contagem para estreitar; texturas do projeto com perfil de importação comum, "—", copiar de uma e Aplicar atômico num passo de Desfazer · `df0c1538`. Materiais: campos comuns e mistos, copiar valor de um alvo, persistência e Desfazer/Refazer atômicos; janela focada preserva alvo próprio ([entrega I4](I4-MATERIAIS-2026-09-28.md)). Falta: mapas HDRI e perfis de ambiente em conjunto | I4 |
+| 87 | Vários recursos: comuns e "—" | ✔ | seleção por tipos; texturas com perfil comum e Aplicar atômico (`df0c1538`); materiais com campos mistos e histórico (`bd67ebce`); perfis de ambiente e receitas HDRI em conjunto, cópia de valor, persistência e Desfazer/Refazer atômicos (`9644b320`; [entrega I4 ambientes/UV](I4-AMBIENTES-UV-2026-09-28.md)). Tipos sem editor conjunto próprio mantêm a visão de tipos/contagem, sem propriedades fictícias | I4 |
 | 88 | Script: campos públicos/[SerializeField]; HideInInspector | ✔ | `[SerializeField]` expõe privado, `[HideInInspector]` guarda sem mostrar · `1e634f23` | I2 |
 | 89 | Ping pelo ⋮ | ✔ | ⋮ do Inspector e ⋮ da janela focada · `902b804f` | I3 |
 
@@ -329,8 +329,8 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 101 |
-| ◐ parcial | 10 |
+| ✔ existe | 102 |
+| ◐ parcial | 9 |
 | ✗ falta | 101 |
 | A adaptação | 7 |
 | **Total** | **219** |
@@ -342,7 +342,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | **I1** Inspector de componentes | 6, 7, 11, 12, 14, 15, 17, 19–27, 39, 40, 43, 127, 128 | base de toda edição; Play-edit é pré-requisito para testar os demais |
 | **I2** Tipos de campo | 9, 28–33, 42, 45–56, 88, 129 | curvas, gradientes, listas e texto são exigidos por partículas, linha, UI, áudio |
 | **I3** Janela Inspector | 57–69, 86, 89, 90, 97 | |
-| **I4** Multisseleção | 79–83, 87 | 79–83 `441092d2`; 87 em parte `df0c1538` |
+| **I4** Multisseleção | 79–83, 87 | ✔ 79–83 `441092d2`; 87: texturas `df0c1538`, materiais `bd67ebce`, [ambientes e UV](I4-AMBIENTES-UV-2026-09-28.md) `9644b320` |
 | **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | tags, static com consumidor, mensagens, Instantiate |
 | **O2** Primitivas | 141, 143–148 | |
 | **O3** Hierarquia | 104–109 | ✔ `22fe9bd9` |
