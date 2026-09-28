@@ -1812,6 +1812,9 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
 void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view query={}) {
   const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
   if(!view.slots || content.height<40) return;
+  // Material do projeto em Propriedades: sem slot nem alcance, só os campos.
+  const bool assetMode=state.materialInspector.valid();
+  if(!assetMode) {
   // Uma linha só para slot e material: "<  Slot 2/3 · Vidro · da fonte  >". O
   // centro abre a escolha do material; as setas trocam de slot. Numa tela de
   // telefone, cada linha a menos é um campo a mais visível.
@@ -1851,6 +1854,7 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
       builder.router.addRegion(create,widgetId(EditorWidget::MaterialCreateShared));
     }
   }
+  }
 
   // R4: os quatro bindings de textura vêm antes dos números, na mesma lista
   // paginada. Cada linha mostra a textura efetiva no alcance e de onde ela vem.
@@ -1861,7 +1865,8 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
   // R4: três linhas de superfície (alfa, corte, faces) depois das texturas.
   const u32 surfaceRows=3;
   // R4: sete linhas de oclusão, canais, normal, alfa e isolamento.
-  const u32 channelRows=7;
+  // Isolar na prévia vale para um slot de objeto; o recurso sozinho não tem prévia.
+  const u32 channelRows=assetMode?6:7;
   const u32 count=textureRows+surfaceRows+channelRows+static_cast<u32>(scene::meshRendererNumbers.size());
   const auto search=editorSearchKey(query);
   std::vector<u32> matches;
@@ -1974,6 +1979,47 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
   }
 }
 
+// Material do projeto em Propriedades (Unity 6000.0 Material Inspector): o
+// cartão do recurso (nome, caminho, revisão e usos na cena, com Ping a cada
+// toque) e, embaixo, os mesmos campos do alcance Compartilhado de um slot —
+// texturas e amostragem, superfície, canais e números. Toda edição muda todos
+// os slots que usam o material, pelo histórico.
+void buildTexturePicker(ScreenBuilder &builder,UiRect content);
+void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  list.addRect(panel,theme.color.surface);
+  router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets::all(theme.spacing.small));
+  auto header=takeTop(content,kPanelHeaderHeight);
+  const auto back=takeLeft(header,32);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  router.addRegion(back,widgetId(EditorWidget::MaterialInspectorClose));
+  list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::AssetsMaterial),theme.color.accent);
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},state.materialSlotView.name,theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y+half,header.width,half},
+                ("Material do projeto · rev. "+std::to_string(state.materialInspectorRevision)).c_str(),theme.color.textDim,theme.type.caption);
+  // Cartão de usos.
+  auto uses=takeTop(content,44);takeTop(content,4);
+  list.addRect(uses,theme.color.raised,theme.radius.control);
+  auto inner=deflate(uses,UiInsets{10,4,8,4});
+  const u32 objects=static_cast<u32>(state.materialInspectorObjects.size());
+  const auto ping=takeRight(inner,objects?92.f:0.f);
+  if(objects) {
+    list.addRect(centred(ping,88,28),theme.color.silhouette,theme.radius.control);
+    builder.label(ping,"Localizar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(ping,widgetId(EditorWidget::MaterialInspectorUses));
+  }
+  const std::string usage=objects?std::to_string(state.materialInspectorSlots)+(state.materialInspectorSlots==1?" slot":" slots")+" em "+
+      std::to_string(objects)+(objects==1?" objeto":" objetos"):std::string("Sem usos nesta cena");
+  builder.label({inner.x,inner.y,inner.width,inner.height*.5f},usage.c_str(),objects?theme.color.text:theme.color.textDim,theme.type.caption);
+  list.pushClip(inner);
+  builder.label({inner.x,inner.y+inner.height*.5f,inner.width,inner.height*.5f},state.materialInspectorPath.c_str(),theme.color.textMuted,theme.type.caption);
+  list.popClip();
+  if(state.texturePicker) {buildTexturePicker(builder,content);return;}
+  buildMaterialSlots(builder,content);
+}
+
 // Escolha do material de um slot: o da fonte, um do projeto, ou um novo.
 void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
@@ -2019,7 +2065,8 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   builder.router.addRegion(back,widgetId(EditorWidget::TexturePickerClose));
   builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount)]+
-                (state.materialShared?" · compartilhado":" · esta instância"),theme.color.text,theme.type.caption);
+                (state.materialInspector.valid()?" · material do projeto":state.materialShared?" · compartilhado":" · esta instância"),
+                theme.color.text,theme.type.caption);
   // R4: amostragem do binding. O conjunto de UV vale para qualquer textura;
   // repetição e filtro são o sampler da textura do projeto e não recebem toque
   // quando o binding usa a textura da fonte. Vem depois de Herdar e Sem textura:
@@ -5391,6 +5438,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     buildImportDock(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
     return;
   }
+  if (builder.state.materialInspector.valid()) {buildMaterialAssetInspector(builder, panel);return;}
   // R4: textura escolhida em Arquivos e gerenciador da pasta Texturas.
   if (builder.state.textureManager || builder.state.textureInspector) {
     // O Inspector de textura é fundo escuro com cartões por cima.

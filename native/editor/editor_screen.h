@@ -414,6 +414,9 @@ enum class EditorWidget : u32 {
   // Barra de status (Unity 6000.0 Manual/StatusBar): última mensagem do
   // console, contagens, atividade e a janela de trabalhos em segundo plano.
   StatusConsole=0xCB000000u, StatusTasks, StatusTasksClose, StatusTaskCancelBase=0xCB000100u,
+  // Inspector de material do projeto (Unity 6000.0 Material Inspector):
+  // voltar e localizar os usos na cena.
+  MaterialInspectorClose=0xCC000000u, MaterialInspectorUses,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
@@ -525,7 +528,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -1119,6 +1122,13 @@ struct EditorScreenState final {
     std::string normalFlipLabel,normalFlipOrigin,alphaSourceLabel,alphaSourceOrigin,isolateLabel;
   };
   MaterialSlotView materialSlotView;
+  // Material do projeto aberto em Propriedades (tocar num .material em
+  // Arquivos). Válido: o Inspector mostra o recurso, e os campos de material
+  // editam ele — todos os slots que o usam mudam juntos.
+  resources::AssetGuid materialInspector{};
+  std::string materialInspectorPath;
+  u32 materialInspectorRevision=0,materialInspectorSlots=0,materialInspectorUse=0;
+  std::vector<EditorEntityId> materialInspectorObjects;
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
   // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.

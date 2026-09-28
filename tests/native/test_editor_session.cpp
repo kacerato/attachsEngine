@@ -3630,6 +3630,65 @@ AE_TEST(status_bar_shows_console_and_background_tasks) {
   AE_EXPECT_TRUE(!state.backgroundPanel,"fechada");
 }
 
+// Unity 6000.0 Material Inspector: o material do projeto aberto em
+// Propriedades pelo arquivo; os campos editam o recurso (todos os usos), com
+// Desfazer; os usos na cena são localizados sem sair do material.
+AE_TEST(project_material_opens_in_properties_and_edits_every_use) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &history=f.session.history();
+  const auto root=fs::temp_directory_path()/("aether-material-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  std::string diagnostic;
+  const auto guid=f.session.createMaterialFromSlot(f.cube,0,diagnostic);
+  AE_EXPECT_TRUE(guid.valid(),diagnostic.c_str());
+  const auto *record=f.session.assets().find(guid);
+  AE_EXPECT_TRUE(record!=nullptr,"material registrado");
+  history.clear();
+  // Tocar o arquivo em Arquivos abre o material em Propriedades.
+  EditorFileEntry file;file.relativePath=record->path;file.name=record->path.substr(record->path.rfind('/')+1);
+  f.session.openProjectFile(file);f.session.update();
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.materialInspector==guid,"material em Propriedades");
+  AE_EXPECT_TRUE(state.materialInspectorSlots==1 && state.materialInspectorObjects.size()==1,"um slot de um objeto usa");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::MaterialInspectorUses)).x>=0,"Localizar usos");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::MaterialScopeInstance)).x<0,"sem alcance de instância");
+  const auto material=[&]{return f.session.findMaterialAsset(guid);};
+  // Superfície: alfa passa pelo mesmo comando do alcance Compartilhado.
+  const auto alpha=material()->surface.alphaMode;
+  revealProperty(f,widgetId(EditorWidget::MaterialAlphaCycle));
+  tapWidget(f,widgetId(EditorWidget::MaterialAlphaCycle));
+  AE_EXPECT_TRUE(material()->surface.alphaMode!=alpha,"modo de alfa do recurso mudou");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo de Desfazer");
+  // Número pelo teclado numérico.
+  revealProperty(f,widgetId(EditorWidget::MaterialNumberBase));
+  tapWidget(f,widgetId(EditorWidget::MaterialNumberBase));
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.25",true),"número aceito sem objeto");
+  scene::MeshRenderer probe;probe.material=material()->values;
+  AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[0].read(probe)-.25f)<1e-5f,"valor gravado no recurso");
+  // Textura: Sem textura na cor base (as texturas estão na primeira página).
+  while(locateWidget(f.session,widgetId(EditorWidget::PropertyPrevious)).x>=0) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
+  tapWidget(f,widgetId(EditorWidget::MaterialTextureBase));
+  AE_EXPECT_TRUE(state.texturePicker,"seletor de textura");
+  tapWidget(f,widgetId(EditorWidget::TextureUseNone));
+  AE_EXPECT_TRUE(material()->textures[0]==scene::MaterialTextureNone,"cor base sem textura no recurso");
+  // Usos: Ping sem sair do material.
+  tapWidget(f,widgetId(EditorWidget::MaterialInspectorUses));
+  AE_EXPECT_TRUE(state.pingEntity==f.cube && state.materialInspector==guid,"Ping no cubo, material continua aberto");
+  // Desfazer volta o alfa (a pilha é a do projeto).
+  AE_EXPECT_TRUE(history.undoDepth()==3,"três passos");
+  AE_EXPECT_TRUE(history.undo(f.session.document()) && history.undo(f.session.document()) && history.undo(f.session.document()),"desfazer tudo");
+  AE_EXPECT_EQ(material()->surface.alphaMode,alpha,"alfa de volta");
+  // Voltar e escolher objeto saem do material.
+  tapWidget(f,widgetId(EditorWidget::MaterialInspectorClose));
+  AE_EXPECT_TRUE(!state.materialInspector.valid(),"voltar");
+  AE_EXPECT_TRUE(f.session.openMaterialInspector(guid),"reabrir");
+  f.session.setSelection(f.cube);
+  AE_EXPECT_TRUE(!state.materialInspector.valid(),"escolher um objeto sai do material");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

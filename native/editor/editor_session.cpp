@@ -264,6 +264,8 @@ void EditorSession::setSurface(const UiRect &surface, const UiInsets &safeArea) 
 
 void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
+  // Escolher um objeto tira o material do projeto de Propriedades.
+  if(materialAssetMode()) {state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;}
   if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.propertyQuery.clear();state_.componentPage=0;state_.componentPreview=0;state_.scriptPreviewType.clear();state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
     state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
     state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
@@ -1436,7 +1438,9 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     double evaluated=0;std::string reason;
     const auto *entity=document_.find(edit.entity);
     state_.numericError=true;
-    if(!entity) return false;
+    const bool assetNumber=materialAssetMode() && edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
+        edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size();
+    if(!entity && !assetNumber) return false;
     if(!evaluateNumericExpression(value,context,evaluated,&reason) || std::abs(evaluated)>3.4e38) {
       state_.status="Expressão recusada: "+(reason.empty()?std::string("fora do alcance de um número"):reason);return false;
     }
@@ -1732,6 +1736,9 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   }
   else if(entry.name.ends_with(".aescene"))
     requestedScenePath_=files_.resolveFile(entry.relativePath);
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Material) {
+    if(!openMaterialInspector(record->guid)) state_.status="Material registrado, mas o arquivo não pôde ser lido";
+  }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Texture) {
     const auto *texture=findProjectTexture(record->guid);
     for(u32 index=0;index<textures_.size();++index)
@@ -2745,6 +2752,20 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.status=resolveImportOrphan(state_.selection,keep)?(keep?"Órfão mantido como objeto independente":"Órfão apagado"):"Nada a resolver";
       state_.importLinkMenu=false;return true;
     }
+    // Material do projeto em Propriedades.
+    if(key==widgetId(EditorWidget::MaterialInspectorClose)) {
+      state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;state_.selectedFile.clear();return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialInspectorUses)) {
+      // Cada toque revela o próximo objeto que usa o material (Ping), sem tirar o
+      // material de Propriedades.
+      const auto &users=state_.materialInspectorObjects;
+      if(users.empty()) {state_.status="Nenhum objeto da cena usa este material";return true;}
+      const u32 index=state_.materialInspectorUse%static_cast<u32>(users.size());
+      pingEntity(users[index]);state_.materialInspectorUse=index+1;
+      state_.status="Uso "+std::to_string(index+1)+" de "+std::to_string(users.size())+": "+document_.find(users[index])->name;
+      return true;
+    }
     // Material por slot (Entrega 2).
     if(key==widgetId(EditorWidget::MaterialSlotPrevious)) {if(state_.materialSlot) --state_.materialSlot;state_.propertyPage=0;return true;}
     if(key==widgetId(EditorWidget::MaterialSlotNext)) {++state_.materialSlot;state_.propertyPage=0;return true;}
@@ -2766,11 +2787,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::TextureSamplingUv) || key==widgetId(EditorWidget::TextureSamplingWrap) ||
        key==widgetId(EditorWidget::TextureSamplingFilter) || key==widgetId(EditorWidget::TextureUvReset) ||
        (key>=widgetId(EditorWidget::TextureUvStepBase) && key<widgetId(EditorWidget::TextureUvStepBase)+10)) {
-      const auto *entity=document_.find(state_.selection);
+      const auto *entity=materialAssetMode()?nullptr:document_.find(state_.selection);
       const auto *render=entity?meshRenderer(*entity):nullptr;
-      if(!render || state_.textureBinding>=scene::MaterialTextureCount) return true;
-      const bool shared=state_.materialShared;
-      const auto *asset=findMaterialAsset(render->slotMaterialAsset(state_.materialSlot));
+      if((!render && !materialAssetMode()) || state_.textureBinding>=scene::MaterialTextureCount) return true;
+      const bool shared=materialAssetMode() || state_.materialShared;
+      const auto *asset=findMaterialAsset(sharedMaterialGuid(render));
       if(shared && !asset) {state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";return true;}
       auto sampling=shared?asset->sampling[state_.textureBinding]:render->slotSampling(state_.materialSlot)[state_.textureBinding];
       if(key==widgetId(EditorWidget::TextureSamplingUv)) sampling.uvSet=static_cast<std::uint8_t>((sampling.uvSet+1)%4);
@@ -2867,11 +2888,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     // R4: modo de alfa, corte e faces, no alcance em edição.
     if(key==widgetId(EditorWidget::MaterialAlphaCycle) || key==widgetId(EditorWidget::MaterialSidesCycle) ||
        key==widgetId(EditorWidget::MaterialCutoffDown) || key==widgetId(EditorWidget::MaterialCutoffUp)) {
-      const auto *entity=document_.find(state_.selection);
+      const auto *entity=materialAssetMode()?nullptr:document_.find(state_.selection);
       const auto *render=entity?meshRenderer(*entity):nullptr;
-      if(!render) return true;
-      const bool shared=state_.materialShared;
-      const auto *asset=findMaterialAsset(render->slotMaterialAsset(state_.materialSlot));
+      if(!render && !materialAssetMode()) return true;
+      const bool shared=materialAssetMode() || state_.materialShared;
+      const auto *asset=findMaterialAsset(sharedMaterialGuid(render));
       if(shared && !asset) {state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";return true;}
       auto surface=shared?asset->surface:render->slotSurface(state_.materialSlot);
       if(key==widgetId(EditorWidget::MaterialAlphaCycle)) surface.alphaMode=static_cast<std::uint8_t>((surface.alphaMode+1)%4);
@@ -2888,11 +2909,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
        key==widgetId(EditorWidget::MaterialOcclusionStrengthUp) || key==widgetId(EditorWidget::MaterialChannelRoughness) ||
        key==widgetId(EditorWidget::MaterialChannelMetallic) || key==widgetId(EditorWidget::MaterialChannelOcclusion) ||
        key==widgetId(EditorWidget::MaterialNormalFlipCycle) || key==widgetId(EditorWidget::MaterialAlphaSourceCycle)) {
-      const auto *entity=document_.find(state_.selection);
+      const auto *entity=materialAssetMode()?nullptr:document_.find(state_.selection);
       const auto *render=entity?meshRenderer(*entity):nullptr;
-      if(!render) return true;
-      const bool shared=state_.materialShared;
-      const auto *asset=findMaterialAsset(render->slotMaterialAsset(state_.materialSlot));
+      if(!render && !materialAssetMode()) return true;
+      const bool shared=materialAssetMode() || state_.materialShared;
+      const auto *asset=findMaterialAsset(sharedMaterialGuid(render));
       if(shared && !asset) {state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";return true;}
       auto channels=shared?asset->channels:render->slotChannels(state_.materialSlot);
       const auto cycle=[](std::uint8_t value,unsigned count) {return static_cast<std::uint8_t>((value+1u)%count);};
@@ -7407,6 +7428,11 @@ void EditorSession::refreshMaterialSlotView() {
   state_.projectTextureThumbs.assign(textures_.size(),{});
   for(usize index=0;index<thumbnails_.size() && index<textures_.size();++index)
     if(thumbnails_[index].guid==textures_[index].guid) state_.projectTextureThumbs[index]=thumbnails_[index].content;
+  // Material do projeto em Propriedades: a vista vem do recurso, não de um slot.
+  if(materialAssetMode()) {
+    if(const auto *material=findMaterialAsset(state_.materialInspector)) {refreshMaterialAssetView(*material);return;}
+    state_.materialInspector={};state_.materialShared=false;state_.status="O material aberto não existe mais no projeto";
+  }
   // A textura em Propriedades usa o mesmo visualizador sem objeto selecionado.
   if(!render) {state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=state_.textureViewer && state_.textureInspector;return;}
   view.slots=render->slotCount();
@@ -7549,6 +7575,100 @@ void EditorSession::refreshMaterialSlotView() {
   }
   for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
     view.values[field]=scene::meshRendererNumbers[field].read(probe);
+}
+
+// Vista do material do projeto sozinho (Unity 6000.0 Material Inspector): o
+// que o recurso define; o que ele deixa como está vem "da fonte de cada uso".
+void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &material) {
+  auto &view=state_.materialSlotView;view={};
+  state_.materialShared=true;state_.materialPicker=false;state_.materialIsolate=0;
+  view.slots=1;view.shared=true;view.name=material.name;
+  const auto *record=assets_.find(material.guid);
+  state_.materialInspectorPath=record?record->path:std::string();
+  state_.materialInspectorRevision=material.revision;
+  // Usos: slots de objetos da cena que apontam para ele.
+  state_.materialInspectorSlots=0;state_.materialInspectorObjects.clear();
+  std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) {
+    const auto *entity=document_.find(id);const auto *render=entity?meshRenderer(*entity):nullptr;
+    if(!render) continue;
+    u32 slots=0;
+    for(u32 slot=0;slot<render->slotCount();++slot) slots+=render->slotMaterialAsset(slot)==material.guid;
+    if(slots) {state_.materialInspectorSlots+=slots;state_.materialInspectorObjects.push_back(id);}
+  }
+  const char *project="do material do projeto";const char *each="da fonte de cada uso";
+  // Superfície.
+  const auto &surface=material.surface;
+  view.alphaLabel=surface.alphaMode==scene::MaterialAlphaBlend?"Transparente":surface.alphaMode==scene::MaterialAlphaMask?"Recorte":
+                  surface.alphaMode==scene::MaterialAlphaOpaque?"Opaco":"Como a fonte";
+  view.alphaOrigin=surface.alphaMode!=scene::MaterialAlphaKeep?project:each;
+  view.cutoffEditable=surface.alphaMode==scene::MaterialAlphaMask;view.alphaCutoff=surface.alphaCutoff;
+  view.cutoffLabel=view.cutoffEditable?std::string():"só vale no modo Recorte";
+  view.sidesLabel=surface.sides==scene::MaterialSidesSingle?"Uma face":surface.sides==scene::MaterialSidesDouble?"Duas faces":"Como a fonte";
+  view.sidesOrigin=!state_.materialCulling?"sem efeito neste aparelho (sem culling dinâmico)":surface.sides!=scene::MaterialSidesKeep?project:each;
+  // Canais.
+  const auto &channels=material.channels;
+  static constexpr const char *sources[]{"Como a fonte","Sem oclusão","Canal do metal/rugosidade","Textura própria"};
+  view.occlusionLabel=sources[std::min<unsigned>(channels.occlusionSource,3u)];
+  view.occlusionOrigin=channels.occlusionSource?project:each;
+  const auto *occlusion=material.occlusionTexture.valid()?findProjectTexture(material.occlusionTexture):nullptr;
+  view.occlusionTextureLabel=occlusion?occlusion->name:material.occlusionTexture.valid()?std::string("Textura ausente"):std::string("Nenhuma");
+  char strength[16];std::snprintf(strength,sizeof(strength),"%.2f",static_cast<double>(channels.occlusionStrength>=0?channels.occlusionStrength:1.0f));
+  view.occlusionStrengthLabel=strength;
+  static constexpr const char *letters[]{"R","G","B","A"};
+  const auto channelLabel=[&](const char *prefix,std::uint8_t own,unsigned fallback) {return std::string(prefix)+letters[own?own-1u:fallback];};
+  view.channelLabels[0]=channelLabel("Rug. ",channels.roughness,1);
+  view.channelLabels[1]=channelLabel("Metal ",channels.metallic,2);
+  view.channelLabels[2]=channelLabel("Ocl. ",channels.occlusion,0);
+  view.normalFlipLabel=channels.normalFlipY==scene::MaterialToggleOn?"Y invertido (DirectX)":
+                       channels.normalFlipY?"Y como no arquivo (OpenGL)":"Como a fonte";
+  view.normalFlipOrigin=channels.normalFlipY?project:each;
+  static constexpr const char *alphaSources[]{"Como a fonte","Alfa da cor base","Ignorar alfa (opaco)","Luminância da cor base"};
+  view.alphaSourceLabel=alphaSources[std::min<unsigned>(channels.alphaSource,3u)];
+  view.alphaSourceOrigin=channels.alphaSource?project:each;
+  view.isolateLabel="Desligado";
+  // Texturas e a amostragem do binding aberto no seletor.
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+    const auto texture=material.textures[binding];
+    if(texture==scene::MaterialTextureNone) view.textureNames[binding]="Sem textura";
+    else if(texture.valid()) {
+      const auto *found=findProjectTexture(texture);
+      view.textureNames[binding]=found?found->name:std::string("Textura ausente");
+    } else view.textureNames[binding]="Textura da fonte de cada uso";
+    view.textureOrigins[binding]=texture.valid()?project:each;
+    const auto &sampling=material.sampling[binding];
+    if(sampling.overrides()) view.textureOrigins[binding]+=" · amostragem própria";
+    if(binding==state_.textureBinding) {
+      static constexpr const char *uvNames[]{"da fonte","UV 0","UV 1","Mundo (m)"};
+      static constexpr const char *wrapNames[]{"da fonte","Repetir","Limitar","Espelhar"};
+      static constexpr const char *filterNames[]{"da fonte","Linear","Próximo"};
+      state_.textureUvLabel=std::string("UV: ")+(sampling.uvSet?uvNames[sampling.uvSet]:"Herdar");
+      state_.textureWrapLabel=std::string("Rep.: ")+(sampling.wrap?wrapNames[sampling.wrap]:"Herdar");
+      state_.textureFilterLabel=std::string("Filtro: ")+(sampling.filter?filterNames[sampling.filter]:"Herdar");
+      state_.textureSamplerEditable=texture.valid() && texture!=scene::MaterialTextureNone;
+      const auto number=[](const char *format,float value) {
+        char text[32];std::snprintf(text,sizeof(text),format,static_cast<double>(value));return std::string(text);
+      };
+      state_.textureUvLabels[0]=number("Desl. U %.2f",sampling.offset[0]);
+      state_.textureUvLabels[1]=number("Desl. V %.2f",sampling.offset[1]);
+      state_.textureUvLabels[2]=number("Esc. U %.2f",sampling.scale[0]);
+      state_.textureUvLabels[3]=number("Esc. V %.2f",sampling.scale[1]);
+      state_.textureUvLabels[4]=number("Rot. %.0f°",sampling.rotation);
+    }
+  }
+  scene::MeshRenderer probe;probe.material=material.values;
+  for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
+    view.values[field]=scene::meshRendererNumbers[field].read(probe);
+}
+
+bool EditorSession::openMaterialInspector(const resources::AssetGuid &guid) {
+  if(!findMaterialAsset(guid)) return false;
+  state_.materialInspector=guid;state_.materialShared=true;state_.materialInspectorUse=0;
+  state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;
+  state_.textureInspector=false;state_.textureManager=false;state_.propertyPage=0;state_.propertyQuery.clear();
+  state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
+  refreshMaterialSlotView();
+  return true;
 }
 
 void EditorSession::publishMaterialLibrary() {
@@ -8170,10 +8290,11 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de trocar a textura.";return false;}
   // O binding logo depois dos quatro do pacote é a textura de oclusão própria.
-  if(!render || slot>=render->slotCount() || binding>scene::MaterialOcclusionTextureBinding) {diagnostic="Binding de textura inexistente.";return false;}
+  const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
+  if((!assetShared && (!render || slot>=render->slotCount())) || binding>scene::MaterialOcclusionTextureBinding) {diagnostic="Binding de textura inexistente.";return false;}
   if(texture.valid() && texture!=scene::MaterialTextureNone && !findProjectTexture(texture)) {diagnostic="Textura fora do projeto.";return false;}
   if(scope==MaterialScope::Shared) {
-    const auto guid=render->slotMaterialAsset(slot);
+    const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
     auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
     if(!guid.valid() || found==materials_.end()) {
       diagnostic="Este slot usa o material da fonte; crie um material do projeto para trocar a textura em todos os usos.";return false;
@@ -8202,10 +8323,11 @@ bool EditorSession::setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scop
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar o material.";return false;}
-  if(!render || slot>=render->slotCount()) {diagnostic="Slot de material inexistente.";return false;}
+  const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
+  if(!assetShared && (!render || slot>=render->slotCount())) {diagnostic="Slot de material inexistente.";return false;}
   if(!scene::validMaterialSurface(surface)) {diagnostic="Modo de alfa, corte ou faces inválido.";return false;}
   if(scope==MaterialScope::Shared) {
-    const auto guid=render->slotMaterialAsset(slot);
+    const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
     auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
     if(!guid.valid() || found==materials_.end()) {
       diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;
@@ -8229,10 +8351,11 @@ bool EditorSession::setSlotChannels(EditorEntityId id,u32 slot,MaterialScope sco
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar o material.";return false;}
-  if(!render || slot>=render->slotCount()) {diagnostic="Slot de material inexistente.";return false;}
+  const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
+  if(!assetShared && (!render || slot>=render->slotCount())) {diagnostic="Slot de material inexistente.";return false;}
   if(!scene::validMaterialChannels(channels)) {diagnostic="Canal, oclusão, normal ou origem do alfa inválido.";return false;}
   if(scope==MaterialScope::Shared) {
-    const auto guid=render->slotMaterialAsset(slot);
+    const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
     auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
     if(!guid.valid() || found==materials_.end()) {
       diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;
@@ -8256,10 +8379,11 @@ bool EditorSession::setSlotSampling(EditorEntityId id,u32 slot,u32 binding,Mater
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar a amostragem.";return false;}
-  if(!render || slot>=render->slotCount() || binding>=scene::MaterialTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
+  const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
+  if((!assetShared && (!render || slot>=render->slotCount())) || binding>=scene::MaterialTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
   if(!scene::validMaterialSampling(sampling)) {diagnostic="Conjunto de UV, repetição ou filtro inválido.";return false;}
   if(scope==MaterialScope::Shared) {
-    const auto guid=render->slotMaterialAsset(slot);
+    const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
     auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
     if(!guid.valid() || found==materials_.end()) {
       diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;
@@ -8633,11 +8757,12 @@ bool EditorSession::setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScop
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar o material.";return false;}
-  if(!render || slot>=render->slotCount() || field>=scene::meshRendererNumbers.size()) {diagnostic="Campo de material inexistente.";return false;}
+  const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
+  if((!assetShared && (!render || slot>=render->slotCount())) || field>=scene::meshRendererNumbers.size()) {diagnostic="Campo de material inexistente.";return false;}
   const auto &number=scene::meshRendererNumbers[field];
   if(!std::isfinite(value) || value<number.minimum || value>number.maximum) {diagnostic="Valor fora do intervalo do campo.";return false;}
   if(scope==MaterialScope::Shared) {
-    const auto guid=render->slotMaterialAsset(slot);
+    const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
     auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
     if(!guid.valid() || found==materials_.end()) {
       diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;

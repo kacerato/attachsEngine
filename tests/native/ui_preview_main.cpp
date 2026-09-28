@@ -337,6 +337,17 @@ int main(int argc, char **argv) {
     auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
+  // Material do projeto em Propriedades (a vista é a que a sessão prepara).
+  if(argc>4 && std::string(argv[4])=="material-asset") {
+    state.materialInspector=resources::assetGuidFromSeed("preview-material");state.materialShared=true;
+    auto &view=state.materialSlotView;view.slots=1;view.shared=true;view.name="Madeira envernizada";
+    state.materialInspectorPath="Materiais/Madeira envernizada.material";state.materialInspectorRevision=7;
+    state.materialInspectorSlots=5;state.materialInspectorObjects={1,2,3};
+    view.textureNames[0]="madeira-cor.png";view.textureOrigins[0]="do material do projeto";
+    view.textureNames[1]="madeira-normal.png";view.textureOrigins[1]="do material do projeto · amostragem própria";
+    view.textureNames[2]="Textura da fonte de cada uso";view.textureOrigins[2]="da fonte de cada uso";
+    view.textureNames[3]="Sem textura";view.textureOrigins[3]="do material do projeto";
+  }
   // Barra de status com mensagem do console e trabalhos; "status-tasks" abre a janela.
   if(argc>4 && std::string(argv[4]).starts_with("status")) {
     editor::EditorConsoleEntry warning;warning.severity=editor::EditorConsoleSeverity::Warning;

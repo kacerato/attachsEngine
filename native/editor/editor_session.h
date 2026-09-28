@@ -1619,6 +1619,16 @@ public:
   // Busca global: índice de arquivos do projeto (montado ao abrir, não por
   // quadro) e a aplicação de um resultado.
   void openGlobalSearch();
+  // Abre um material do projeto em Propriedades; falso se o guid não é um.
+  bool openMaterialInspector(const resources::AssetGuid &guid);
+  bool materialAssetMode() const noexcept {return state_.materialInspector.valid();}
+  // O material do projeto que o alcance Compartilhado edita: o aberto em
+  // Propriedades, ou o do slot em edição do objeto.
+  resources::AssetGuid sharedMaterialGuid(const scene::MeshRenderer *render) const {
+    if(materialAssetMode()) return state_.materialInspector;
+    return render && state_.materialSlot<render->slotCount()?render->slotMaterialAsset(state_.materialSlot):resources::AssetGuid{};
+  }
+  void refreshMaterialAssetView(const resources::MaterialAsset &material);
   // Aplica um arranjo de painéis e o guarda como o atual do projeto.
   void applyLayout(const EditorLayout &layout);
   bool openSearchResult(u32 index);
