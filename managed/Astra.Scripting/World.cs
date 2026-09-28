@@ -102,6 +102,9 @@ public static class ComponentIds
 /// mesmo callback — <see cref="IsAlive"/> passa a ser falso e qualquer operação
 /// lança <see cref="WorldException"/> em vez de acertar outra coisa.
 /// </summary>
+public enum MessageRoute { Object, Descendants, Ancestors }
+public enum MessageOptions { RequireReceiver, DontRequireReceiver }
+
 public enum ReparentPosePolicy : uint { KeepLocal, KeepWorld }
 
 public enum WorldOperationState : uint { Pending, Applied, Failed }
@@ -232,6 +235,18 @@ public sealed class GameObject : IEquatable<GameObject>
         for (var index = 0; index < count; ++index) yield return ChildAt(index);
     }
 
+    internal void PushAliveChildren(Stack<GameObject> pending)
+    {
+        Require("percorrer filhos");
+        // Destroy invalida o handle antes de retirar o slot da hierarquia no
+        // ponto seguro. Consultas devem ignorar esse slot intermediário.
+        for (var i = ChildCount - 1; i >= 0; --i)
+        {
+            var id = Scene.ChildAt(ObjectId, (uint)i);
+            if (id != 0 && Scene.Exists(id)) pending.Push(Resolve(Scene, id));
+        }
+    }
+
     /// <summary>
     /// Procura por nome na subárvore. Resolver uma vez e guardar o resultado é o
     /// uso pretendido — chamar isto todo quadro percorre a cena inteira.
@@ -259,6 +274,14 @@ public sealed class GameObject : IEquatable<GameObject>
     {
         Require("destruir objeto");
         Check(Scene.DestroyObject(ObjectId), "destruir objeto");
+    }
+
+    /// <summary>Segundos simulados do Play; pedidos repetidos conservam o menor prazo.</summary>
+    public void Destroy(double delaySeconds)
+    {
+        Require("agendar destruição");
+        if (!double.IsFinite(delaySeconds) || delaySeconds < 0) throw new ArgumentOutOfRangeException(nameof(delaySeconds));
+        Check(Scene.DestroyAfter(ObjectId, delaySeconds), "agendar destruição");
     }
 
     public WorldOperation DestroyTracked()
@@ -372,6 +395,45 @@ public sealed class GameObject : IEquatable<GameObject>
         if (instance == 0) throw new WorldException(Scene.LastStatus, "adicionar componente");
         return new Component(Scene, this, instance, typeId);
     }
+
+    internal bool BelongsTo(ISceneAccess scene) => ReferenceEquals(_scene, scene) && IsAlive;
+    private IBehaviorRegistry Behaviors
+    {
+        get { Require("acessar scripts"); return Scene.Behaviors ?? throw new WorldException(WorldStatus.NotRunning, "acessar scripts"); }
+    }
+    public T? GetBehavior<T>() where T : class => Behaviors.FindBehavior(ObjectId, typeof(T)) as T;
+    public T[] GetBehaviors<T>() where T : class => Behaviors.FindBehaviors(ObjectId, typeof(T)).OfType<T>().ToArray();
+    public T AddBehavior<T>() where T : Behavior => (T)Behaviors.AddBehavior(this, typeof(T));
+
+    /// <summary>Busca por nome exato no mundo: pré-ordem, ativos, sem a raiz sintética. O(N).</summary>
+    public GameObject? FindInWorld(string name)
+    {
+        Require("buscar objeto no mundo");
+        if (string.IsNullOrEmpty(name) || name.Contains('\0')) throw new ArgumentException("Nome inválido", nameof(name));
+        var root = this;
+        while (root.Parent is { } parent) root = parent;
+        var pending = new Stack<GameObject>();
+        root.PushAliveChildren(pending);
+        while (pending.TryPop(out var current))
+        {
+            if (!current.IsAlive || !current.ActiveInHierarchy) continue;
+            if (current.Name == name) return current;
+            current.PushAliveChildren(pending);
+        }
+        return null;
+    }
+    private static bool RequiresReceiver(MessageOptions options) => Enum.IsDefined(options)
+        ? options == MessageOptions.RequireReceiver : throw new ArgumentOutOfRangeException(nameof(options));
+    // A sobrecarga genérica preserva payload 0/bool: não o converte para opções.
+    public int SendMessage<T>(string method, T payload, MessageOptions options = MessageOptions.RequireReceiver) => SendMessage(method, (object?)payload, options);
+    public int BroadcastMessage<T>(string method, T payload, MessageOptions options = MessageOptions.RequireReceiver) => BroadcastMessage(method, (object?)payload, options);
+    public int SendMessageUpwards<T>(string method, T payload, MessageOptions options = MessageOptions.RequireReceiver) => SendMessageUpwards(method, (object?)payload, options);
+    public int SendMessage(string method, MessageOptions options = MessageOptions.RequireReceiver) => Behaviors.Message(this, method, null, false, MessageRoute.Object, RequiresReceiver(options));
+    public int SendMessage(string method, object? payload, MessageOptions options = MessageOptions.RequireReceiver) => Behaviors.Message(this, method, payload, true, MessageRoute.Object, RequiresReceiver(options));
+    public int BroadcastMessage(string method, MessageOptions options = MessageOptions.RequireReceiver) => Behaviors.Message(this, method, null, false, MessageRoute.Descendants, RequiresReceiver(options));
+    public int BroadcastMessage(string method, object? payload, MessageOptions options = MessageOptions.RequireReceiver) => Behaviors.Message(this, method, payload, true, MessageRoute.Descendants, RequiresReceiver(options));
+    public int SendMessageUpwards(string method, MessageOptions options = MessageOptions.RequireReceiver) => Behaviors.Message(this, method, null, false, MessageRoute.Ancestors, RequiresReceiver(options));
+    public int SendMessageUpwards(string method, object? payload, MessageOptions options = MessageOptions.RequireReceiver) => Behaviors.Message(this, method, payload, true, MessageRoute.Ancestors, RequiresReceiver(options));
 
     public ObjectReference AsReference()
     {

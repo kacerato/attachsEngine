@@ -45,6 +45,101 @@ public static class AstraBehaviorTests
         }
         public void Dispose() { Directory.Delete(Root, recursive: true); }
     }
+    private sealed class DynamicScene : ISceneAccess
+    {
+        private sealed class Node(ulong parent, string name)
+        {
+            public ulong Parent = parent;
+            public string Name = name;
+            public bool Active = true;
+            public ulong Next = 1;
+            public readonly Dictionary<ulong, bool> Scripts = [];
+        }
+        private readonly Dictionary<ulong, Node> _nodes = new() { [1] = new(0, "Root"), [2] = new(1, "Driver") };
+        private ulong _next = 3;
+        private double _clock;
+        private readonly Dictionary<ulong, double> _due = [];
+        private readonly HashSet<ulong> _destroyed = [];
+        public readonly List<string> Events = [];
+        public IBehaviorRegistry? Behaviors { get; set; }
+        public DynamicScene() { _nodes[2].Scripts[1] = true; _nodes[2].Next = 2; }
+        public uint WorldId => 1;
+        public uint GenerationOf(ulong id) => Exists(id) ? 1u : 0u;
+        public bool Exists(ulong id) => _nodes.ContainsKey(id) && !_destroyed.Contains(id);
+        public WorldStatus LastStatus => WorldStatus.Ok;
+        public string GetName(ulong id) => _nodes[id].Name;
+        public ulong ParentOf(ulong id) => _nodes[id].Parent;
+        public int ChildCount(ulong id) => _nodes.Count(p => p.Value.Parent == id);
+        public ulong ChildAt(ulong id, uint index)
+        {
+            var child = _nodes.Where(p => p.Value.Parent == id).ElementAt((int)index).Key;
+            return Exists(child) ? child : 0; // slot antes do flush nativo
+        }
+        public ulong FindChild(ulong id, string name, bool recursive)
+        {
+            foreach (var child in _nodes.Where(p => p.Value.Parent == id))
+            {
+                if (child.Value.Name == name) return child.Key;
+                if (recursive && FindChild(child.Key, name, true) is var found && found != 0) return found;
+            }
+            return 0;
+        }
+        public int GetActiveSelf(ulong id) => Exists(id) ? (_nodes[id].Active ? 1 : 0) : -1;
+        public int GetActive(ulong id) => !Exists(id) ? -1 : !_nodes[id].Active ? 0 : ParentOf(id) == 0 ? 1 : GetActive(ParentOf(id));
+        public bool SetActive(ulong id, bool value) { _nodes[id].Active = value; return true; }
+        public ulong CreateObject(ulong parent, string name) { var id = _next++; _nodes.Add(id, new(parent, name)); return id; }
+        public bool DestroyObject(ulong id)
+        {
+            foreach (var child in _nodes.Where(p => p.Value.Parent == id).Select(p => p.Key).ToArray()) DestroyObject(child);
+            return _destroyed.Add(id);
+        }
+        public bool DestroyAfter(ulong id, double seconds)
+        { if (seconds == 0) return DestroyObject(id); _due[id] = Math.Min(_due.GetValueOrDefault(id, double.PositiveInfinity), _clock + seconds); return true; }
+        public void Advance(double dt)
+        {
+            _clock += dt;
+            foreach (var id in _due.Where(p => p.Value <= _clock).Select(p => p.Key).ToArray()) { DestroyObject(id); _due.Remove(id); }
+        }
+        public ulong AddBehavior(ulong id, string type, string source) { var instance = _nodes[id].Next++; _nodes[id].Scripts.Add(instance, true); return instance; }
+        public bool RemoveComponent(ulong id, ulong instance) => _nodes[id].Scripts.Remove(instance);
+        public int ComponentCount(ulong id) => _nodes[id].Scripts.Count;
+        public (ulong Instance, string TypeId) ComponentAt(ulong id, uint index) => (_nodes[id].Scripts.Keys.ElementAt((int)index), ComponentIds.ScriptBehavior);
+        public bool TryGetProperty(ulong id, ulong instance, string property, out uint kind, out ulong bits)
+        {
+            kind = 1; bits = 0;
+            if (!Exists(id) || property != "enabled" || !_nodes[id].Scripts.TryGetValue(instance, out var enabled)) return false;
+            bits = enabled ? 1ul : 0ul; return true;
+        }
+        public bool SetProperty(ulong id, ulong instance, string property, uint kind, ulong bits)
+        { if (!Exists(id) || !_nodes[id].Scripts.ContainsKey(instance)) return false; _nodes[id].Scripts[instance] = bits != 0; return true; }
+        public TransformValue GetTransform(ulong id) => new(Vector3.Zero, Quaternion.Identity, Vector3.One);
+        public bool SetTransform(ulong id, TransformValue value) => Exists(id);
+        public bool SetBodyVelocity(ulong id, Vector3 value) => false;
+        public bool MoveKinematic(ulong id, Vector3 position, Quaternion rotation) => false;
+        public void Log(ulong id, string message) => Events.Add(message);
+    }
+    [Test]
+    public static void DynamicScripts_MessagesRemovalAndDelayedDestruction_RunTheAcceptanceScenario()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "tests", "fixtures", "dynamic-scripts"))) root = root.Parent;
+        Assert.True(root is not null);
+        using var project = new Project(File.ReadAllText(Path.Combine(root!.FullName, "tests", "fixtures", "dynamic-scripts", "DynamicProbe.cs")));
+        var compiled = project.Compile();
+        using var world = new BehaviorWorld(); var scene = new DynamicScene { Behaviors = world };
+        world.Start(compiled, scene, [new(2, 1, "acceptance.dynamic.driver", true, new Dictionary<string, JsonElement>())], true);
+        for (var i = 0; i < 20; ++i) { scene.Advance(.02); world.Update(.02f); world.LateUpdate(.02f); }
+        Assert.True(scene.Events.Any(e => e.StartsWith("DYNAMIC PASS")), string.Join("\n", world.Failures.Select(f => f.Message)));
+        Assert.Equal(1, world.Failures.Count, "only the deliberate receiver exception");
+        Assert.Equal("Message:Explode", world.Failures[0].Phase);
+        Assert.True(world.FindBehaviors(2, typeof(Behavior)).Count() == 1);
+        world.Dispose(); Assert.True(world.FindBehavior(2, typeof(Behavior)) is null);
+        var restarted = new DynamicScene { Behaviors = world };
+        world.Start(compiled, restarted, [new(2, 1, "acceptance.dynamic.driver", true, new Dictionary<string, JsonElement>())], true);
+        for (var i = 0; i < 20; ++i) { restarted.Advance(.02); world.Update(.02f); }
+        Assert.True(restarted.Events.Any(e => e.StartsWith("DYNAMIC PASS")), "new Play rebuilds registry and script statics");
+    }
+
     private sealed class Scene : ISceneAccess
     {
         public readonly List<string> Events = [];

@@ -32,6 +32,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         public bool Active { get; set; }
         // Desativada por exceção: não recebe Disable, que poderia falhar de novo.
         public bool Failed { get; set; }
+        public bool Retired { get; set; }
     }
     /// <summary>Eventos do aplicativo repassados aos comportamentos.</summary>
     public enum ApplicationEvent : uint { Pause = 0, Focus = 1 }
@@ -39,7 +40,10 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     private ISceneAccess? _scene;
     private readonly List<Entry> _entries = [];
     private readonly List<BehaviorFailure> _failures = [];
-    private bool _started;
+    private bool _started, _stopping, _bindComponentState;
+    private int _dispatchDepth;
+    private readonly Dictionary<Type, ScriptTypeSchema> _types = [];
+
     public IReadOnlyList<BehaviorFailure> Failures => _failures;
     public bool Running => _context is not null && _started;
 
@@ -54,6 +58,9 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             using var dll = new MemoryStream(project.Assembly, writable: false);
             using var pdb = new MemoryStream(project.Symbols, writable: false);
             var assembly = context.LoadFromStream(dll, pdb);
+            _types.Clear();
+            foreach (var schema in project.Types) _types.Add(assembly.GetType(schema.Name, throwOnError: true)!, schema);
+            _bindComponentState = bindComponentState;
             var identities = new HashSet<(ulong, ulong)>();
             foreach (var attachment in attachments)
             {
@@ -77,87 +84,128 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
             // Todas as instâncias existem antes dos callbacks. Objetos inativos
             // aguardam sua primeira ativação; Enabled=false não adia o Awake.
-            foreach (var entry in _entries) EnsureAwake(entry);
-            foreach (var entry in _entries) EnsureStarted(entry);
+            Dispatch("Awake", static b => { }, awakenOnly: true);
+            Dispatch("Start", static b => { });
         }
         catch
         {
             foreach (var entry in prepared) entry.Instance.Detach();
-            _entries.Clear(); _context = null; _scene = null; _started = false; context.Unload(); throw;
+            _entries.Clear(); _types.Clear(); _messages.Clear(); _context = null; _scene = null; _started = false; context.Unload(); throw;
         }
+    }
+    // A contagem fica fixa por despacho. Adições podem realocar a lista sem
+    // invalidar iteração; remoções só compactam fora de callbacks/reentradas.
+    private void Dispatch(string phase, Action<Behavior> action, ulong? objectId = null, bool awakenOnly = false)
+    {
+        if (!Running) return;
+        if (_dispatchDepth == 0) SweepRemoved();
+        ++_dispatchDepth;
+        try
+        {
+            for (int i = 0, count = _entries.Count; i < count; ++i)
+            {
+                var entry = _entries[i];
+                if (objectId is { } id && entry.Instance.ObjectId != id) continue;
+                if (awakenOnly) EnsureAwake(entry);
+                else if (EnsureStarted(entry)) Invoke(entry, phase, action);
+            }
+        }
+        finally { if (--_dispatchDepth == 0) SweepRemoved(); }
     }
     public void Update(float deltaTime)
     {
-        if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
-        foreach (var entry in _entries) if (EnsureStarted(entry))
-            Invoke(entry, "Update", behavior => behavior.Update(deltaTime));
+        if (float.IsFinite(deltaTime) && deltaTime >= 0) Dispatch("Update", b => b.Update(deltaTime));
     }
     public void LateUpdate(float deltaTime)
     {
-        if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
-        foreach (var entry in _entries) if (EnsureStarted(entry))
-            Invoke(entry, "LateUpdate", behavior => behavior.LateUpdate(deltaTime));
+        if (float.IsFinite(deltaTime) && deltaTime >= 0) Dispatch("LateUpdate", b => b.LateUpdate(deltaTime));
     }
-    /// <summary>Pausa ou foco do aplicativo, entregue a toda instância ativa.</summary>
-    public void Application(ApplicationEvent kind, bool value)
+    public void FixedUpdate(float deltaTime)
     {
-        if (!Running) return;
-        foreach (var entry in _entries) if (EnsureStarted(entry))
-            Invoke(entry, kind == ApplicationEvent.Pause ? "ApplicationPause" : "ApplicationFocus", behavior =>
-            {
-                if (kind == ApplicationEvent.Pause) behavior.ApplicationPause(value);
-                else behavior.ApplicationFocus(value);
-            });
+        if (float.IsFinite(deltaTime) && deltaTime > 0) Dispatch("FixedUpdate", b => b.FixedUpdate(deltaTime));
     }
-    public void FixedUpdate(float fixedDeltaTime)
+    public void Application(ApplicationEvent kind, bool value) => Dispatch(kind == ApplicationEvent.Pause ? "ApplicationPause" : "ApplicationFocus", b =>
     {
-        if (!Running || !float.IsFinite(fixedDeltaTime) || fixedDeltaTime <= 0) return;
-        foreach (var entry in _entries) if (EnsureStarted(entry))
-            Invoke(entry, "FixedUpdate", behavior => behavior.FixedUpdate(fixedDeltaTime));
-    }
+        if (kind == ApplicationEvent.Pause) b.ApplicationPause(value); else b.ApplicationFocus(value);
+    });
     public void Timer(ulong objectId, ulong instanceId, uint count)
     {
-        if (!Running || instanceId == 0 || count == 0 || _scene is null || !_scene.Exists(objectId)) return;
-        foreach (var entry in _entries)
-            if (entry.Instance.ObjectId == objectId && EnsureStarted(entry))
-                Invoke(entry, "TimerElapsed", behavior => behavior.TimerElapsed(instanceId, count));
+        if (instanceId != 0 && count != 0) Dispatch("TimerElapsed", b => b.TimerElapsed(instanceId, count), objectId);
     }
     public void Trigger(ulong sensor, ulong other, uint phase)
     {
-        if (!Running || phase > 2) return;
-        foreach (var entry in _entries)
-            if (entry.Instance.ObjectId == sensor && EnsureStarted(entry))
-                Invoke(entry, phase == 0 ? "TriggerEnter" : phase == 1 ? "TriggerStay" : "TriggerExit", behavior =>
-                {
-                    var reference = ObjectReference.Capture(_scene!, other);
-                    if (phase == 0) behavior.TriggerEnter(reference);
-                    else if (phase == 1) behavior.TriggerStay(reference);
-                    else behavior.TriggerExit(reference);
-                });
+        if (phase > 2 || _scene is null) return;
+        var reference = ObjectReference.Capture(_scene, other);
+        Dispatch(phase == 0 ? "TriggerEnter" : phase == 1 ? "TriggerStay" : "TriggerExit", b =>
+        {
+            if (phase == 0) b.TriggerEnter(reference); else if (phase == 1) b.TriggerStay(reference); else b.TriggerExit(reference);
+        }, sensor);
     }
-    /// <summary>
-    /// Entrega um contato sólido aos comportamentos de <paramref name="self"/>.
-    /// O par chega duas vezes, uma por objeto, para que nenhum dos dois precise
-    /// saber qual corpo o backend listou primeiro.
-    /// </summary>
     public void Contact(ulong self, ulong other, uint phase, Vector3? normal)
     {
-        if (!Running || phase > 2) return;
-        var collision = new Collision(ObjectReference.Capture(_scene!, other), normal);
-        foreach (var entry in _entries)
-            if (entry.Instance.ObjectId == self && EnsureStarted(entry))
-                Invoke(entry, phase == 0 ? "CollisionEnter" : phase == 1 ? "CollisionStay" : "CollisionExit", behavior =>
-                {
-                    if (phase == 0) behavior.CollisionEnter(collision);
-                    else if (phase == 1) behavior.CollisionStay(collision);
-                    else behavior.CollisionExit(collision);
-                });
+        if (phase > 2 || _scene is null) return;
+        var collision = new Collision(ObjectReference.Capture(_scene, other), normal);
+        Dispatch(phase == 0 ? "CollisionEnter" : phase == 1 ? "CollisionStay" : "CollisionExit", b =>
+        {
+            if (phase == 0) b.CollisionEnter(collision); else if (phase == 1) b.CollisionStay(collision); else b.CollisionExit(collision);
+        }, self);
     }
+    private static bool Alive(Entry entry) => !entry.Retired && entry.Instance.IsAlive;
+    private void SweepRemoved()
+    {
+        // Retire antes do callback: Destroy pode enviar mensagens ou remover outro receptor.
+        ++_dispatchDepth;
+        try
+        {
+            for (int i = 0, count = _entries.Count; i < count; ++i)
+                if (!Alive(_entries[i]) && !_entries[i].Retired) Retire(_entries[i]);
+            _entries.RemoveAll(e => e.Retired);
+        }
+        finally { --_dispatchDepth; }
+    }
+    private void Retire(Entry entry)
+    {
+        if (entry.Retired) return;
+        entry.Retired = true;
+        Deactivate(entry);
+        if (entry.Started) Invoke(entry, "Stop", static b => b.Stop());
+        if (entry.Awoken) Invoke(entry, "Destroy", static b => b.Destroy());
+        entry.Instance.Detach();
+    }
+    public Behavior AddBehavior(GameObject owner, Type type)
+    {
+        if (!Running || _stopping || _scene is null) throw new WorldException(WorldStatus.NotRunning, "adicionar script");
+        if (!owner.BelongsTo(_scene)) throw new WorldException(WorldStatus.ForeignWorld, "adicionar script");
+        if (!_types.TryGetValue(type, out var schema)) throw new WorldException(WorldStatus.UnknownComponent, "tipo de script não publicado");
+        if (_entries.Count >= 4096 || _dispatchDepth >= 32) throw new WorldException(WorldStatus.LimitReached, "adicionar script");
+        // Construtor primeiro: uma exceção não deixa componente nativo órfão.
+        var instance = (Behavior)Activator.CreateInstance(type)!;
+        var id = _scene.AddBehavior(owner.ObjectId, schema.Id, schema.File);
+        if (id == 0) throw new WorldException(_scene.LastStatus, "adicionar script");
+        var initialEnabled = instance.Enabled;
+        instance.Attach(_scene, owner.ObjectId, id, this, _bindComponentState);
+        instance.Enabled = initialEnabled;
+        var entry = new Entry(instance, schema, owner);
+        _entries.Add(entry);
+        ++_dispatchDepth;
+        try { EnsureActivated(entry); } // Start somente antes do primeiro despacho de execução.
+        finally { --_dispatchDepth; }
+        return instance;
+    }
+    public void RemoveBehavior(Behavior behavior)
+    {
+        var entry = _entries.Find(e => ReferenceEquals(e.Instance, behavior) && Alive(e));
+        if (entry is null || _scene is null) throw new WorldException(WorldStatus.ComponentMissing, "remover script");
+        if (!_scene.RemoveComponent(behavior.ObjectId, behavior.InstanceId)) throw new WorldException(_scene.LastStatus, "remover script");
+        behavior.MarkRemoved();
+        if (_dispatchDepth == 0) SweepRemoved();
+    }
+
     public object? FindBehavior(ulong objectId, Type contract)
     {
         ArgumentNullException.ThrowIfNull(contract);
         foreach (var entry in _entries)
-            if (entry.Instance.ObjectId == objectId && contract.IsInstanceOfType(entry.Instance))
+            if (Alive(entry) && entry.Instance.ObjectId == objectId && contract.IsInstanceOfType(entry.Instance))
                 return entry.Instance;
         return null;
     }
@@ -165,12 +213,81 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     public IEnumerable<object> FindBehaviors(ulong objectId, Type contract)
     {
         ArgumentNullException.ThrowIfNull(contract);
-        foreach (var entry in _entries)
-            if (entry.Instance.ObjectId == objectId && contract.IsInstanceOfType(entry.Instance))
-                yield return entry.Instance;
+        return _entries.Where(entry => Alive(entry) && entry.Instance.ObjectId == objectId && contract.IsInstanceOfType(entry.Instance))
+            .Select(entry => (object)entry.Instance).ToArray();
     }
 
-    private static bool ObjectActive(Entry entry) => entry.Owner.IsAlive && entry.Instance.AttachedComponentAlive && entry.Owner.ActiveInHierarchy;
+    private readonly Dictionary<(Type, string, bool, Type?), MethodInfo?> _messages = [];
+    private MethodInfo? MessageMethod(Type type, string method, object? payload, bool hasPayload)
+    {
+        var key = (type, method, hasPayload, payload?.GetType());
+        if (_messages.TryGetValue(key, out var cached)) return cached;
+        if (_messages.Count >= 4096) _messages.Clear();
+        for (var current = type; current is not null && current != typeof(Behavior); current = current.BaseType)
+        {
+            var candidates = current.GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(m => m.Name == method && !m.IsGenericMethod && m.ReturnType == typeof(void))
+                .Where(m =>
+                {
+                    var args = m.GetParameters();
+                    if (!hasPayload) return args.Length == 0;
+                    return args.Length == 1 && !args[0].ParameterType.IsByRef &&
+                        (payload is null ? !args[0].ParameterType.IsValueType || Nullable.GetUnderlyingType(args[0].ParameterType) is not null
+                                         : args[0].ParameterType.IsInstanceOfType(payload));
+                }).ToArray();
+            if (candidates.Length > 1) throw new AmbiguousMatchException("Mensagem ambígua: " + type.FullName + "." + method);
+            if (candidates.Length == 1) return _messages[key] = candidates[0];
+        }
+        return _messages[key] = null;
+    }
+    public int Message(GameObject target, string method, object? payload, bool hasPayload, MessageRoute route, bool requireReceiver)
+    {
+        if (!Running || _scene is null || _stopping) throw new WorldException(WorldStatus.NotRunning, "enviar mensagem");
+        if (!target.BelongsTo(_scene)) throw new WorldException(WorldStatus.ForeignWorld, "enviar mensagem");
+        if (string.IsNullOrWhiteSpace(method) || method.Length > 256 || !Enum.IsDefined(route)) throw new ArgumentException("Mensagem inválida");
+        if (_dispatchDepth >= 32) throw new WorldException(WorldStatus.LimitReached, "recursão de mensagens");
+        var objects = new List<GameObject>();
+        var pending = new Stack<GameObject>(); pending.Push(target);
+        while (pending.TryPop(out var current))
+        {
+            if (!current.IsAlive) continue;
+            if (current.ActiveInHierarchy) objects.Add(current);
+            if (route == MessageRoute.Ancestors && current.Parent is { } parent) pending.Push(parent);
+            else if (route == MessageRoute.Descendants && current.ActiveInHierarchy)
+                current.PushAliveChildren(pending);
+        }
+        // Captura antes da primeira chamada: criar outro receptor não muda a mensagem corrente.
+        var receivers = new List<(Entry Entry, MethodInfo Method)>();
+        var byOwner = _entries.Where(Alive).ToLookup(e => e.Instance.ObjectId);
+        foreach (var owner in objects)
+            foreach (var entry in byOwner[owner.ObjectId])
+                if (Alive(entry) && !entry.Failed && entry.Instance.ObjectId == owner.ObjectId &&
+                    MessageMethod(entry.Instance.GetType(), method, payload, hasPayload) is { } handler)
+                    receivers.Add((entry, handler));
+        var delivered = 0;
+        ++_dispatchDepth;
+        try
+        {
+            foreach (var receiver in receivers)
+            {
+                var entry = receiver.Entry;
+                EnsureAwake(entry);
+                if (entry.Failed || !ObjectActive(entry)) continue;
+                ++delivered;
+                Invoke(entry, "Message:" + method, b =>
+                {
+                    try { receiver.Method.Invoke(b, hasPayload ? [payload] : null); }
+                    catch (TargetInvocationException error) when (error.InnerException is not null)
+                    { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error.InnerException).Throw(); }
+                });
+            }
+        }
+        finally { if (--_dispatchDepth == 0) SweepRemoved(); }
+        if (delivered == 0 && requireReceiver) throw new MissingMethodException("Nenhum receptor ativo e compatível para: " + method);
+        return delivered;
+    }
+
+    private static bool ObjectActive(Entry entry) => Alive(entry) && entry.Owner.ActiveInHierarchy;
 
     private void EnsureAwake(Entry entry)
     {
@@ -188,7 +305,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         if (wasActive && !entry.Failed) Invoke(entry, "Disable", static b => b.Disable());
     }
 
-    private bool EnsureStarted(Entry entry)
+    private bool EnsureActivated(Entry entry)
     {
         EnsureAwake(entry);
         if (!MayRun(entry))
@@ -202,6 +319,11 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             Invoke(entry, "Enable", static b => b.Enable());
             if (!MayRun(entry)) { Deactivate(entry); return false; }
         }
+        return true;
+    }
+    private bool EnsureStarted(Entry entry)
+    {
+        if (!EnsureActivated(entry)) return false;
         if (!entry.Started) { entry.Started = true; Invoke(entry, "Start", static b => b.Start()); }
         if (!MayRun(entry)) { Deactivate(entry); return false; }
         return true;
@@ -230,7 +352,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     {
         if (!Running) return false;
         var entry = _entries.FirstOrDefault(e => e.Instance.ObjectId == objectId && e.Instance.InstanceId == instanceId);
-        if (entry is null) return false;
+        if (entry is null || !Alive(entry)) return false;
         if (edit.Properties is { Count: > 0 } properties) ApplyProperties(entry.Instance, entry.Schema, properties, _scene!);
         // Uma instância que falhou continua desligada: religá-la pelo Inspector
         // repetiria a exceção a cada quadro sem o usuário ter mudado o código.
@@ -291,14 +413,14 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     }
     public void Dispose()
     {
-        if (_context is null) return;
-        for (var i = _entries.Count - 1; i >= 0; --i)
+        if (_context is null || _stopping) return;
+        _stopping = true;
+        ++_dispatchDepth;
+        try { for (var i = _entries.Count - 1; i >= 0; --i) Retire(_entries[i]); }
+        finally
         {
-            if (_entries[i].Active && !_entries[i].Failed) Invoke(_entries[i], "Disable", static behavior => behavior.Disable());
-            if (_entries[i].Started) Invoke(_entries[i], "Stop", static behavior => behavior.Stop());
-            _entries[i].Instance.Detach();
+            --_dispatchDepth; _entries.Clear(); _types.Clear(); _messages.Clear(); _scene = null; _started = false;
+            var context = _context; _context = null; context.Unload(); _stopping = false;
         }
-        _entries.Clear(); _scene = null; _started = false;
-        var context = _context; _context = null; context.Unload();
     }
 }

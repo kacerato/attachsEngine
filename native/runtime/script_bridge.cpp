@@ -435,6 +435,19 @@ void ScriptBridge::installAccess() {
     s.lastStatus_ = s.world_->removeComponent({s.world_->handle(static_cast<ObjectId>(id)), instance});
     return s.lastStatus_ == WorldStatus::Ok;
   };
+  access_.addBehavior = [](void *c,u64 id,const u8 *type,int typeLength,const u8 *source,int sourceLength)->u64 {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(id>std::numeric_limits<ObjectId>::max() || !type || typeLength<=0 || typeLength>256 ||
+       !source || sourceLength<=0 || sourceLength>1024) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    return s.world_->addBehavior(s.world_->handle(static_cast<ObjectId>(id)),viewOf(type,typeLength),
+      viewOf(source,sourceLength),s.lastStatus_).instance;
+  };
+  access_.destroyAfter = [](void *c,u64 id,double seconds)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->destroyAfter(s.world_->handle(static_cast<ObjectId>(id)),seconds);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
   // --- consultas fisicas --------------------------------------------------
   access_.rayCast = [](void *c, const float *origin, const float *direction,
                        const scene::ScriptQueryFilter *filter, scene::ScriptQueryHit *out, int capacity) -> int {

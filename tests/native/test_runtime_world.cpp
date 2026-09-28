@@ -656,3 +656,26 @@ int writeEnabledFixture(const char *path) {
   doc.applyEntityValues(camera,values);
   std::ofstream out(path);out<<serializeEditorDocument(doc,0);return out.good()?0:1;
 }
+
+AE_TEST(runtime_dynamic_scripts_and_delayed_destroy_preserve_identity_and_session_boundaries) {
+  EditorDocument doc;const auto id=named(doc,doc.root(),"Dynamic");
+  GameWorld world;AE_EXPECT_TRUE(world.load(doc),"load");const auto h=world.handle(id);WorldStatus status;
+  const auto script=world.addBehavior(h,"test.dynamic","Probe.cs",status);
+  AE_EXPECT_TRUE(status==WorldStatus::Ok && script.instance,"real script component");
+  const auto *value=scene::scriptBehavior(world.readComponent(script));
+  AE_EXPECT_TRUE(value && value->scriptType=="test.dynamic" && value->source=="Probe.cs","metadata retained");
+  std::stringstream saved;value->write(saved);scene::ScriptBehavior restored;
+  AE_EXPECT_TRUE(restored.read(saved,1) && restored.scriptType==value->scriptType,"existing serializer supports dynamic script");
+  AE_EXPECT_TRUE(world.removeComponent(script)==WorldStatus::Ok && !world.readComponent(script),"removed script immediately unavailable");
+  const auto second=world.addBehavior(h,"test.dynamic","Probe.cs",status);
+  AE_EXPECT_TRUE(second.instance>script.instance,"identity not reused");
+  AE_EXPECT_TRUE(world.destroyAfter(h,2)==WorldStatus::Ok && world.destroyAfter(h,.5)==WorldStatus::Ok &&
+    world.destroyAfter(h,3)==WorldStatus::Ok,"shortest deadline wins");
+  AE_EXPECT_TRUE(world.destroyAfter(h,-1)==WorldStatus::InvalidArgument,"negative delay rejected");
+  world.advanceClock(.25);AE_EXPECT_TRUE(world.alive(h),"not early");
+  world.advanceClock(.25);AE_EXPECT_TRUE(!world.alive(h),"stale when deadline is reached");
+  std::vector<runtime::ObjectId> removed;world.flush(&removed);
+  AE_EXPECT_TRUE(!world.graph().exists(id) && removed.size()==1,"safe point deletes storage once");
+  world.load(doc);const auto next=world.handle(id);world.destroyAfter(next,10);world.clear();world.load(doc);
+  world.advanceClock(20);AE_EXPECT_TRUE(world.alive(world.handle(id)),"new session has no old deadlines");
+}

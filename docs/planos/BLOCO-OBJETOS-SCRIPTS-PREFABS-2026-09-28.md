@@ -1,8 +1,8 @@
 # Bloco ampliado — Objetos, scripts e prefabs
 
 Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Em execução**, por pedido
-do usuário para incorporar os próximos blocos em um só. Etapa 1 entregue;
-as etapas 2–12 continuam pendentes, com seus aceites abaixo.
+do usuário para incorporar os próximos blocos em um só. Etapas 1–3 entregues;
+as etapas 4–12 continuam pendentes, com seus aceites abaixo.
 
 ## Escopo e precedência
 
@@ -29,8 +29,8 @@ em capacidades disponíveis.
 - O3: visibilidade/selecionabilidade da hierarquia, registrada no inventário.
 
 As entregas de ativação e tags permanecem válidas. Seus relatórios são históricos;
-a continuação vigente é a deste documento. Após a etapa 1, o inventário geral está em
-**108 existentes, 8 parciais, 96 ausentes e 7 adaptações**, total 219.
+a continuação vigente é a deste documento. Após as etapas 2 e 3, o inventário geral está em
+**115 existentes, 6 parciais, 91 ausentes e 7 adaptações**, total 219.
 
 ## Etapas internas, em ordem de execução
 
@@ -49,7 +49,7 @@ Stop sem duplicar registros, callbacks ou recursos.
 
 ### 2. Completar scripts dinâmicos e destruição — O1b, itens 125, 139 e 140
 
-**Próxima etapa de execução.**
+**Entregue em 28/09/2026 junto com a etapa 3:** [implementação, contratos e validação](O1B-SCRIPTS-MENSAGENS-2026-09-28.md).
 
 Expor acesso a comportamento pelo tipo em GameObject; adicionar/remover
 instâncias de script durante Play, preservando identidade, campos e isolamento
@@ -64,6 +64,8 @@ vencidas devem falhar de forma identificável; recomeçar Play não herda filas.
 
 ### 3. Completar descoberta e mensagens — O1, itens 132–135
 
+**Entregue em 28/09/2026 junto com a etapa 2:** [implementação, contratos e validação](O1B-SCRIPTS-MENSAGENS-2026-09-28.md).
+
 Adicionar busca por nome no mundo e as capacidades de mensagem ao objeto,
 descendentes e ancestrais. Antes da implementação, registrar regras para nomes
 duplicados, receptores ausentes, assinatura/payload, objetos inativos, ordem de
@@ -76,6 +78,8 @@ somente as mensagens esperadas; um receptor que falha ou se remove não corrompe
 os demais. Busca e diagnóstico de ausência seguem o contrato documentado.
 
 ### 4. Instanciar hierarquias com referências corretas — O1c, item 138
+
+**Próxima etapa de execução; seguida pelas primitivas da etapa 5.**
 
 Implementar clonagem de objetos, filhos, componentes e campos serializados de
 scripts. Usar novas identidades e remapear referências internas; definir a

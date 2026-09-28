@@ -292,6 +292,9 @@ public interface ISceneAccess
     // --- v3: ciclo de vida --------------------------------------------------
     ulong CreateObject(ulong parent, string name) => throw new NotSupportedException();
     bool DestroyObject(ulong objectId) => throw new NotSupportedException();
+    bool DestroyAfter(ulong objectId, double seconds) => throw new NotSupportedException();
+    ulong AddBehavior(ulong objectId, string typeId, string source) => throw new NotSupportedException();
+    IBehaviorRegistry? Behaviors => null;
     bool SetParent(ulong objectId, ulong parent, uint childIndex) => throw new NotSupportedException();
     bool SetParentWithPolicy(ulong objectId, ulong parent, uint childIndex, ReparentPosePolicy policy)
         => throw new NotSupportedException();
@@ -389,6 +392,9 @@ public interface IBehaviorRegistry
 {
     /// <summary>Primeiro comportamento desse objeto atribuível ao tipo pedido.</summary>
     object? FindBehavior(ulong objectId, Type contract);
+    Behavior AddBehavior(GameObject owner, Type type);
+    void RemoveBehavior(Behavior behavior);
+    int Message(GameObject target, string method, object? payload, bool hasPayload, MessageRoute route, bool requireReceiver);
     /// <summary>Todos os comportamentos desse objeto atribuíveis ao tipo pedido.</summary>
     IEnumerable<object> FindBehaviors(ulong objectId, Type contract);
 }
@@ -400,13 +406,19 @@ public abstract class Behavior
     public ulong ObjectId { get; private set; }
     public ulong InstanceId { get; private set; }
     private bool _enabled = true;
+    private bool _removed;
+    public bool IsAlive => !_removed && _scene is not null && Object.IsAlive && AttachedComponentAlive;
+    public void Remove() => (_registry ?? throw new WorldException(WorldStatus.StaleHandle, "remover script")).RemoveBehavior(this);
+    internal void MarkRemoved() => _removed = true;
     private Component? _stateComponent;
     /// <summary>Estado local; no hospedeiro nativo lê/escreve o mesmo componente do Inspector.</summary>
     public bool Enabled
     {
-        get => _stateComponent is { } component ? component.Enabled : _enabled;
+        get => _removed ? throw new WorldException(WorldStatus.ComponentMissing, "ler script removido") :
+            _stateComponent is { } component ? component.Enabled : _enabled;
         set
         {
+            if (_removed) throw new WorldException(WorldStatus.ComponentMissing, "editar script removido");
             if (_stateComponent is { } component) component.Enabled = value;
             _enabled = value;
         }
@@ -453,10 +465,10 @@ public abstract class Behavior
     /// que um objeto interage com outro sem conhecer o tipo concreto dele.
     /// </summary>
     protected T? FindBehavior<T>(GameObject? target) where T : class =>
-        target is { IsAlive: true } ? _registry?.FindBehavior(target.ObjectId, typeof(T)) as T : null;
+        target is { IsAlive: true } && target.BelongsTo(Scene) ? _registry?.FindBehavior(target.ObjectId, typeof(T)) as T : null;
 
     protected IEnumerable<T> FindBehaviors<T>(GameObject? target) where T : class =>
-        target is { IsAlive: true } && _registry is not null
+        target is { IsAlive: true } && target.BelongsTo(Scene) && _registry is not null
             ? _registry.FindBehaviors(target.ObjectId, typeof(T)).OfType<T>()
             : [];
 
@@ -469,7 +481,7 @@ public abstract class Behavior
         if (bindComponentState)
             _stateComponent = new Component(scene, Object, instanceId, ComponentIds.ScriptBehavior);
     }
-    internal void Detach() { _stateComponent = null; _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
+    internal void Detach() { _removed = true; _stateComponent = null; _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
     // Ordem de uma sessão de Play (comparável a Unity 6000.0, Manual/execution-order):
     //   Awake  → uma vez por instância, depois que TODAS foram criadas e receberam
     //            as propriedades autoradas; roda mesmo com Enabled=false, mas
@@ -479,8 +491,10 @@ public abstract class Behavior
     //   quadro → Update, depois animação e física (FixedUpdate e contatos),
     //            depois LateUpdate, depois o acompanhamento de câmera.
     //   Disable → ao desligar Enabled ou a hierarquia, no próximo despacho de
-    //             callbacks, e no fim do Play; Stop por último.
+    //             callbacks, e no fim do Play; Stop e depois Destroy na retirada.
     // Exceção em qualquer callback desativa só aquela instância, sem Disable.
+    /// <summary>Uma vez ao remover uma instância que recebeu Awake, inclusive ao encerrar Play.</summary>
+    public virtual void Destroy() { }
     public virtual void Awake() { }
     public virtual void Enable() { }
     public virtual void Disable() { }

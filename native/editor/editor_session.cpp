@@ -8661,8 +8661,10 @@ void EditorSession::update() {
   // apagados saem; um ativo novo fora do conjunto vira seleção única.
   {
     auto &set=state_.selectionSet;
-    set.erase(std::remove_if(set.begin(),set.end(),[&](EditorEntityId id){return !document_.exists(id);}),set.end());
-    if(!document_.exists(state_.selection)) {state_.selection=set.empty()?kInvalidEntity:set.back();}
+    // Em Inspect, objetos criados por scripts só existem no mundo de execução.
+    const auto &visible=state_.document?*state_.document:document_;
+    set.erase(std::remove_if(set.begin(),set.end(),[&](EditorEntityId id){return !visible.exists(id);}),set.end());
+    if(!visible.exists(state_.selection)) {state_.selection=set.empty()?kInvalidEntity:set.back();}
     if(state_.selection==kInvalidEntity) set.clear();
     else if(!state_.isSelected(state_.selection)) set={state_.selection};
   }

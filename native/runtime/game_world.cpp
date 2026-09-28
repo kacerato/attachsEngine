@@ -62,6 +62,7 @@ void GameWorld::clear() {
   structuralRevision_ = 0;
   invalidated_ = 0;
   elapsed_ = 0;
+  delayedDestroy_.clear();
 }
 
 u32 GameWorld::subtreeInvalidation(ObjectId id) {
@@ -477,6 +478,43 @@ ComponentHandle GameWorld::addComponent(const ObjectHandle &h, std::string_view 
   return {h, createdInstance};
 }
 
+ComponentHandle GameWorld::addBehavior(const ObjectHandle &h, std::string_view typeId,
+    std::string_view source, WorldStatus &status) {
+  status=validate(h);if(status!=WorldStatus::Ok) return {};
+  scene::ScriptBehavior value;value.scriptType=typeId;value.source=source;
+  if(!value.valid() || typeId.find('\0')!=std::string_view::npos || source.find('\0')!=std::string_view::npos) {
+    status=WorldStatus::InvalidArgument;return {};
+  }
+  const auto *object=find(h);
+  if(object->components.size()>=scene::Components::MaximumCount) {status=WorldStatus::LimitReached;return {};}
+  auto *components=editComponents(h.id);
+  auto *created=static_cast<scene::ScriptBehavior *>(components->add(scene::ScriptBehavior::descriptor));
+  if(!created) {status=WorldStatus::LimitReached;return {};}
+  created->scriptType=std::move(value.scriptType);created->source=std::move(value.source);
+  ++structuralRevision_;status=WorldStatus::Ok;return {h,created->instanceId()};
+}
+
+WorldStatus GameWorld::destroyAfter(const ObjectHandle &h,double seconds) {
+  const auto status=validate(h);if(status!=WorldStatus::Ok) return status;
+  if(!std::isfinite(seconds) || seconds<0 || !std::isfinite(elapsed_+seconds)) return WorldStatus::InvalidArgument;
+  if(seconds==0) return destroyObject(h);
+  if(h.id==graph_.root()) return WorldStatus::InvalidArgument;
+  for(auto &pending:delayedDestroy_) if(pending.object.id==h.id) {
+    pending.due=std::min(pending.due,elapsed_+seconds);return WorldStatus::Ok;
+  }
+  if(delayedDestroy_.size()>=4096) return WorldStatus::LimitReached;
+  delayedDestroy_.push_back({h,elapsed_+seconds});return WorldStatus::Ok;
+}
+void GameWorld::advanceClock(double delta) {
+  if(!std::isfinite(delta) || delta<0 || !std::isfinite(elapsed_+delta)) return;
+  elapsed_+=delta;
+  std::erase_if(delayedDestroy_,[&](const DelayedDestroy &pending) {
+    if(!alive(pending.object)) return true;
+    // A fila cheia é transitória: conserve o pedido para o próximo ponto seguro.
+    return pending.due<=elapsed_ && destroyObject(pending.object)!=WorldStatus::LimitReached;
+  });
+}
+
 WorldStatus GameWorld::removeComponent(const ComponentHandle &component, u64 *operationId) {
   const auto *object = find(component.object);
   const auto status = validate(component.object);
@@ -485,12 +523,18 @@ WorldStatus GameWorld::removeComponent(const ComponentHandle &component, u64 *op
   if (!value) return WorldStatus::ComponentMissing;
   const auto *schema = scene::findComponentSchema(value->type().id);
   if (!schema) return WorldStatus::UnknownComponent;
-  if (schema->structuralInPlay == scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  if (schema->structuralInPlay == scene::PlayMutability::Never && !scene::scriptBehavior(value)) return WorldStatus::NotMutableInPlay;
   // Só bloqueia quando esta é a ÚLTIMA instância do tipo: remover um dos dois
   // colisores não quebra quem exige "um colisor".
   if (scene::componentInstanceRemovalBlockedBy(component.instance,object->components) ||
       componentRemovalReferenceUse(graph_,component.object.id,component.instance).object)
     return WorldStatus::ComponentInUse;
+  // Scripts não são consumidos por buffers nativos em execução. A remoção
+  // imediata impede reentrada de mensagem/callback na instância removida.
+  if(scene::scriptBehavior(value) && !operationId) {
+    editComponents(component.object.id)->removeInstance(component.instance);
+    ++structuralRevision_;return WorldStatus::Ok;
+  }
   if (!queue({PendingCommand::Kind::RemoveComponent, component.object.id, kInvalidObject, 0, component.instance}, operationId))
     return WorldStatus::LimitReached;
   return WorldStatus::Ok;

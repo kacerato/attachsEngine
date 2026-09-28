@@ -160,6 +160,7 @@ public:
   // Marca o objeto e a subárvore como vencidos na hora; o armazenamento sai no
   // próximo `flush()`. Handles guardados passam a ser recusados imediatamente.
   WorldStatus destroyObject(const ObjectHandle &handle, u64 *operationId = nullptr);
+  WorldStatus destroyAfter(const ObjectHandle &handle, double seconds);
   WorldStatus setParent(const ObjectHandle &handle, const ObjectHandle &parent, u32 childIndex,
                         ReparentPosePolicy posePolicy = ReparentPosePolicy::KeepLocal,
                         u64 *operationId = nullptr);
@@ -171,6 +172,7 @@ public:
   std::string_view componentTypeId(const ComponentHandle &component) const noexcept;
   const scene::ComponentValue *readComponent(const ComponentHandle &component) const noexcept;
   ComponentHandle addComponent(const ObjectHandle &handle, std::string_view typeId, WorldStatus &status);
+  ComponentHandle addBehavior(const ObjectHandle &handle, std::string_view typeId, std::string_view source, WorldStatus &status);
   WorldStatus removeComponent(const ComponentHandle &component, u64 *operationId = nullptr);
   // Tickets valem somente nesta sessão. Resultados concluídos são retidos até
   // 4096 operações rastreadas; um ticket expulso retorna OperationExpired.
@@ -232,7 +234,7 @@ public:
   u32 flush(std::vector<ObjectId> *destroyed = nullptr);
   u32 pendingCommandCount() const noexcept { return static_cast<u32>(commands_.size()); }
   double elapsedSeconds() const noexcept { return elapsed_; }
-  void advanceClock(double delta) noexcept { if (delta > 0) elapsed_ += delta; }
+  void advanceClock(double delta);
 
 private:
   struct Slot {
@@ -261,6 +263,8 @@ private:
   u64 structuralRevision_ = 0;
   u32 invalidated_ = 0;
   double elapsed_ = 0;
+  struct DelayedDestroy { ObjectHandle object; double due; };
+  std::vector<DelayedDestroy> delayedDestroy_;
 };
 
 } // namespace ae::runtime

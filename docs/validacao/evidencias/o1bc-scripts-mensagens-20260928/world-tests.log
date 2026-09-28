@@ -1,0 +1,12 @@
+AstraWorldTests
+    [32mok[0m   AnimacaoComandaClipesPorNomePelaAbiDeAnimacao
+    [32mok[0m   ComponentesSaoEnderecadosPorInstanciaEObedecemAoContrato
+    [32mok[0m   FachadaGeradaUsaOsIdsETiposDoSchema
+    [32mok[0m   HierarquiaCriaEncontraEReparenteiaObjetos
+    [32mok[0m   ReferenciaGuardadaNaoSobreviveAoStop
+    [32mok[0m   ReferenciaVenceNaDestruicaoEArmazenamentoSaiNoPontoSeguro
+    [32mok[0m   ReferenciasDeComponenteRespeitamMundoEGeracao
+    [32mok[0m   ReparentRecusaPaiDeOutroMundoMesmoComIdsIguais
+    [32mok[0m   TransformLocalEDeMundoAtravessamAApi
+
+  [32mTUDO VERDE[0m — 9 passaram, 0 falharam, 0 pulados em 57 ms

@@ -194,22 +194,22 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 122 | `GetComponent<T>` | ✔ | fachada gerada | — |
 | 123 | Escrever propriedades por script | ✔ | | — |
 | 124 | Chamar métodos (ex. `AddForce`) | ✔ | `Physics` | — |
-| 125 | `GetComponent` de script pelo tipo da classe | ◐ | `FindBehavior<T>` protegido; falta em `GameObject` | O1 |
+| 125 | `GetComponent` de script pelo tipo da classe | ✔ | `GameObject.GetBehavior<T>`/`GetBehaviors<T>`, classe ou interface; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 126 | `GetComponent` devolve nulo quando ausente | ✔ | | — |
 | 127 | Campo público de objeto no Inspector + arrastar | ✔ | campo `object` de script aceita objeto arrastado · `b96c358a` | I1 |
 | 128 | Campo de tipo componente (arrastar objeto que o tem) | ✔ | objeto sem o tipo é recusado com o motivo; instância removida aparece "ausente" · `253e3990` | I1 |
 | 129 | Array de referências | ✔ | objeto e componente por elemento, seletor por elemento · `1e634f23` | I2 |
 | 130 | Filhos pelo Transform (`childCount`, enumerar) | ✔ | `Children()`, `ChildAt` | — |
 | 131 | `Transform.Find` | ✔ | `GameObject.Find(name)` | — |
-| 132 | `BroadcastMessage` | ✗ | | O1 |
-| 133 | `SendMessage` | ✗ | | O1 |
-| 134 | `SendMessageUpwards` | ✗ | | O1 |
-| 135 | `GameObject.Find` global | ✗ | só a partir de um objeto | O1 |
+| 132 | `BroadcastMessage` | ✔ | objeto + descendentes ativos, snapshot de receptores; [contrato](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
+| 133 | `SendMessage` | ✔ | local, payload tipado, ausência/ambiguidade explícitas; [contrato](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
+| 134 | `SendMessageUpwards` | ✔ | objeto + ancestrais, isolamento de falhas; [contrato](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
+| 135 | `GameObject.Find` global | ✔ | `FindInWorld`: nome exato, ativos, primeiro em pré-ordem, sem sintaxe de caminhos; [contrato](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 136 | `FindWithTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 137 | `FindGameObjectsWithTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 138 | `Instantiate` | ✗ | | O1 |
-| 139 | `Destroy` com atraso | ✗ | | O1 |
-| 140 | `Destroy(this)` remove só o script | ◐ | remover componente de script existe; falta atalho | O1 |
+| 139 | `Destroy` com atraso | ✔ | `Destroy(segundos)`, relógio simulado, pausa/Step e descarte da fila; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
+| 140 | `Destroy(this)` remove só o script | ✔ | `Behavior.Remove`, handle vencido e lifecycle; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 141 | `CreatePrimitive` (6 tipos) | ✗ | | O2 |
 
 ## 14. Primitive objects — `PrimitiveObjects.html`
@@ -329,9 +329,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 108 |
-| ◐ parcial | 8 |
-| ✗ falta | 96 |
+| ✔ existe | 115 |
+| ◐ parcial | 6 |
+| ✗ falta | 91 |
 | A adaptação | 7 |
 | **Total** | **219** |
 
@@ -349,7 +349,7 @@ não altera seus estados nem as contagens de capacidades implementadas.
 | **I2** Tipos de campo | 9, 28–33, 42, 45–56, 88, 129 | curvas, gradientes, listas e texto são exigidos por partículas, linha, UI, áudio |
 | **I3** Janela Inspector | 57–69, 86, 89, 90, 97 | |
 | **I4** Multisseleção | 79–83, 87 | ✔ 79–83 `441092d2`; 87: texturas `df0c1538`, materiais `bd67ebce`, [ambientes e UV](I4-AMBIENTES-UV-2026-09-28.md) `9644b320` |
-| **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | 113 entregue; [O1a parcial](O1A-ATIVACAO-2026-09-28.md); [tags entregues e validadas no Android](O1A-TAGS-2026-09-28.md); [habilitação entregue](O1A-HABILITACAO-2026-09-28.md); faltam scripts dinâmicos, static com consumidor, mensagens, Instantiate |
+| **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | 113 entregue; [ativação](O1A-ATIVACAO-2026-09-28.md), [tags](O1A-TAGS-2026-09-28.md), [habilitação](O1A-HABILITACAO-2026-09-28.md), [scripts dinâmicos, destruição e mensagens](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) entregues; faltam Static com consumidor e Instantiate |
 | **O2** Primitivas | 141, 143–148 | |
 | **O3** Hierarquia | 104–109 | ✔ `22fe9bd9` |
 | **O4** Ícones de objeto | 70–74, 76, 77 | |

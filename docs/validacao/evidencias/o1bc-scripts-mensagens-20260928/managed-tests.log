@@ -1,0 +1,22 @@
+AstraBehaviorTests
+    [32mok[0m   ApplyPublicationAndCompilerDiagnostics_PreserveLastGoodGeneration
+    [32mok[0m   ColorFields_CarryUsageFlagsAndReachTheInstance
+    [32mok[0m   CompileAttachFixedTriggerStop_PreservesInstancesAndIsolatesFailure
+    [32mok[0m   ComponentField_ResolvesTheAuthoredInstanceToItsFacade
+    [32mok[0m   CurveFields_ReachTheInstanceAndEvaluateWithWrap
+    [32mok[0m   DocumentationExamples_CompileWithTheShippedApi
+    [32mok[0m   DynamicScripts_MessagesRemovalAndDelayedDestruction_RunTheAcceptanceScenario
+    [32mok[0m   EnabledAcceptanceFixture_CompilesWithTheProjectCompiler
+    [32mok[0m   Enabled_BindsNativeComponentStateToCallbacksAndSurvivesRemoval
+    [32mok[0m   GradientFields_ReachTheInstanceAndEvaluate
+    [32mok[0m   GraphicsAbiStructs_MatchTheNativeLayout
+    [32mok[0m   Lifecycle_AwakeEnableStartUpdateLateDisableStop_InUnityOrder
+    [32mok[0m   Lifecycle_InactiveHierarchyDefersAwakeAndResumesTheSameInstance
+    [32mok[0m   ListAndAttributeFields_ReachTheSchemaAndTheInstance
+    [32mok[0m   MaterialSlotAndAuthoredTextureReference_CompileThroughTheProjectCompiler
+    [32mok[0m   MaterialSlotCompositeValues_ValidateBeforeWritingAnyAxis
+    [32mok[0m   PlayModeEdit_ChangesFieldAndEnabledOfTheLiveInstance
+    [32mok[0m   SchemaTypeChangeAndDuplicateIdentity_RejectBeforeStartingWorld
+    [32mok[0m   TagsAcceptanceFixture_CompilesWithTheProjectCompiler
+
+  [32mTUDO VERDE[0m — 19 passaram, 0 falharam, 0 pulados em 9163 ms

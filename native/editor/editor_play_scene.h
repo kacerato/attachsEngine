@@ -151,7 +151,7 @@ public:
     return components && components->replaceInstance(after.instanceId(),after);
   }
   void pause(bool value) {if(active_) paused_=value;}
-  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && advanceTimers(1.0/60.0) && animate(1.0f/60.0f) && reconcilePhysics() && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() && reconcilePhysics() && cameraFollow_.advance(world_,1.0/60.0);}
+  bool step() {if(!active_ || !paused_) return false; world_.advanceClock(1.0/60.0);return runScripts(1.0f/60.0f) && advanceTimers(1.0/60.0) && animate(1.0f/60.0f) && reconcilePhysics() && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() && reconcilePhysics() && cameraFollow_.advance(world_,1.0/60.0);}
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }

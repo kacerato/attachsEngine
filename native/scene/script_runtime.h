@@ -153,7 +153,7 @@ struct ScriptRenderingState {
 };
 
 struct ScriptSceneAccess {
-  u32 version=15,size=sizeof(ScriptSceneAccess);
+  u32 version=16,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -253,6 +253,9 @@ struct ScriptSceneAccess {
   int (*setTag)(void *,u64,const u8 *,int)=nullptr;
   int (*compareTag)(void *,u64,const u8 *,int)=nullptr;
   int (*findTagged)(void *,const u8 *,int,u64 *,int,int)=nullptr;
+  // ABI v16: criação de script validado pelo catálogo C# e destruição no relógio do mundo.
+  u64 (*addBehavior)(void *,u64,const u8 *,int,const u8 *,int)=nullptr;
+  int (*destroyAfter)(void *,u64,double)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
@@ -265,7 +268,7 @@ struct ScriptSceneAccess {
            animationCommand&&getAnimationState&&setAnimationState&&animationClipAt&&
            resourceElementId&&getResourceByElementId&&setResourceByElementId&&
             appendAnimationClip&&removeAnimationClip&&moveAnimationClip&&setParentWithPolicy&&
-            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged;
+            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
@@ -274,7 +277,8 @@ static_assert(offsetof(ScriptSceneAccess,animationCommand)==offsetof(ScriptScene
 static_assert(offsetof(ScriptSceneAccess,appendAnimationClip)==offsetof(ScriptSceneAccess,setResourceByElementId)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,getActiveSelf)==offsetof(ScriptSceneAccess,queryOperation)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,getTag)==offsetof(ScriptSceneAccess,getActiveSelf)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,findTagged)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,addBehavior)==offsetof(ScriptSceneAccess,findTagged)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,destroyAfter)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 // Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.

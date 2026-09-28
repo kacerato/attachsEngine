@@ -313,7 +313,7 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
                  "instância incluída para permitir a primeira ativação");
   const auto &abi = FakeRuntime::sceneAccess;
-  AE_EXPECT_TRUE(abi.version == 15 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_TRUE(abi.version == 16 && abi.available(), "contrato ABI completo");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
   AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
   const auto revision = play.world().structuralRevision();
@@ -623,4 +623,20 @@ AE_TEST(play_enabled_collider_changed_in_start_reaches_physics_before_first_upda
   const float origin[3]{0,5,0},direction[3]{0,-10,0};scene::ScriptQueryHit hit;scene::ScriptQueryFilter filter;
   AE_EXPECT_TRUE(FakeRuntime::sceneAccess.rayCast(FakeRuntime::sceneAccess.context,origin,direction,&filter,&hit,1)==0,"primeiro Update já enxerga a alteração");
   play.stop();FakeRuntime::reset();
+}
+
+AE_TEST(play_abi_v16_dynamic_script_and_delayed_destroy_respect_pause_and_step) {
+  EditorDocument doc;const auto driver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Driver");
+  const auto target=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Target");attachScript(doc,driver,"test.driver");
+  FakeRuntime::reset();EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play");const auto &abi=FakeRuntime::sceneAccess;auto *c=abi.context;
+  const auto instance=abi.addBehavior(c,target,reinterpret_cast<const u8*>("test.dynamic"),12,reinterpret_cast<const u8*>("Probe.cs"),8);
+  AE_EXPECT_TRUE(instance && abi.componentCount(c,target)==1,"ABI installs actual component");
+  AE_EXPECT_TRUE(abi.removeComponent(c,target,instance) && abi.componentCount(c,target)==0,"ABI removes only script");
+  AE_EXPECT_TRUE(!abi.addBehavior(c,~u64(0),reinterpret_cast<const u8*>("test.dynamic"),12,reinterpret_cast<const u8*>("Probe.cs"),8),"oversized ID rejected");
+  AE_EXPECT_TRUE(abi.destroyAfter(c,target,.03),"scheduled");play.pause(true);play.advance(1);
+  AE_EXPECT_TRUE(play.world().alive(play.world().handle(target)),"pause freezes deadline");
+  AE_EXPECT_TRUE(play.step(),"first simulated step");AE_EXPECT_TRUE(play.world().alive(play.world().handle(target)),"not yet due");
+  AE_EXPECT_TRUE(play.step() && !play.world().graph().exists(target),"second step crosses deadline and drains");
+  play.stop();AE_EXPECT_TRUE(doc.exists(target) && doc.find(target)->components.size()==0,"authoring remains unchanged");
 }

@@ -1,0 +1,4 @@
+[ok] inspector_in_play_keeps_runtime_only_selection_until_stop
+[ok] inspector_in_play_edits_the_running_world_and_stop_discards_it
+
+2/2 testes passaram

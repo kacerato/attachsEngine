@@ -1319,6 +1319,31 @@ AE_TEST(dragging_asset_onto_resource_field_assigns_it) {
 // a mudança vale na hora e é descartada ao sair do Play. Aqui a edição passa
 // pelos mesmos controles da autoria, chega ao mundo de execução e ao renderer,
 // e o documento autoral nem muda de revisão.
+AE_TEST(inspector_in_play_keeps_runtime_only_selection_until_stop) {
+  Fixture f;
+  const auto revision=f.session.document().revision();
+  AE_EXPECT_TRUE(f.session.startPlay(),"Play");
+  std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"mundo iniciado");
+  tapWidget(f,widgetId(EditorWidget::PlayInspect));
+  auto &running=const_cast<runtime::SceneGraph &>(*f.session.screen().document);
+  const auto created=running.createEntity(running.root(),EditorEntityKind::Folder,"Dinâmico");
+  f.session.update();
+  if(locateWidget(f.session,hierarchyRowWidget(created)).x<0) {
+    tapWidget(f,widgetId(EditorWidget::CompactPanelMenu));
+    tapWidget(f,widgetId(EditorWidget::HierarchyToggle));
+  }
+  tapWidget(f,hierarchyRowWidget(created));
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().selection,created,"seleção de objeto exclusivo do Play persiste entre quadros");
+  AE_EXPECT_TRUE(f.session.screen().isSelected(created),"conjunto acompanha seleção ativa");
+  AE_EXPECT_TRUE(!f.session.document().exists(created),"seleção não cria objeto na autoria");
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
+  f.session.update();
+  AE_EXPECT_TRUE(!f.session.screen().isSelected(created),"Stop descarta seleção runtime");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"autoria intacta");
+}
+
 AE_TEST(inspector_in_play_edits_the_running_world_and_stop_discards_it) {
   Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
   auto value=*doc.find(f.cube);
