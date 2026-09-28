@@ -421,6 +421,9 @@ enum class EditorWidget : u32 {
   // receita (menos/mais por linha), reverter e aplicar com reimportação.
   EnvironmentInspectorClose=0xCC000100u, EnvironmentInspectorUses, EnvironmentExposureDown, EnvironmentExposureUp,
   EnvironmentRecipeRevert, EnvironmentRecipeApply, EnvironmentRecipeDownBase=0xCC000200u, EnvironmentRecipeUpBase=0xCC000210u,
+  // Perfil de ambiente do projeto em Propriedades: voltar, usos, abas por grupo
+  // do esquema e uma linha por propriedade do perfil.
+  ProfileInspectorClose=0xCC000300u, ProfileInspectorUses, ProfileGroupBase=0xCC000400u, ProfileRowBase=0xCC000500u,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
@@ -1145,6 +1148,22 @@ struct EditorScreenState final {
   u32 environmentUse=0;
   std::vector<EditorEntityId> environmentObjects;
   u32 environmentProfiles=0;
+  // Perfil de ambiente do projeto em Propriedades (Unity: Volume Profile). As
+  // linhas são as propriedades do componente Ambiente que o perfil guarda,
+  // descobertas pelo esquema; a sessão as prepara para o grupo escolhido.
+  struct ProfileRow {
+    enum class Kind : u8 { Boolean, Enum, Number, Triple, EnvironmentMap } kind=Kind::Boolean;
+    std::string_view id;
+    std::string label,value;
+    bool on=false,editable=true,color=false;
+    float rgb[3]{};
+  };
+  resources::AssetGuid profileInspector{};
+  std::string profileInspectorName,profileInspectorPath;
+  u32 profileInspectorRevision=0,profileGroup=0,profileUse=0;
+  std::vector<std::string> profileGroups;
+  std::vector<ProfileRow> profileRows;
+  std::vector<EditorEntityId> profileObjects;
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
   // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.

@@ -59,6 +59,8 @@
 #include "ui/ui_icon_atlas.h"
 #include "ui/ui_instance_builder.h"
 
+#include "scene/component_properties.h"
+
 #include <functional>
 #include <optional>
 #include <span>
@@ -824,6 +826,13 @@ public:
   }
   // Abre um mapa HDRI do projeto em Propriedades; falso se o guid não é um.
   bool openEnvironmentInspector(const resources::AssetGuid &guid);
+  // Perfil de ambiente em Propriedades; falso se o guid não é um perfil carregado.
+  bool openProfileInspector(const resources::AssetGuid &guid);
+  void refreshProfileInspector();
+  // Escreve uma propriedade do perfil aberto pelo esquema do componente
+  // Ambiente e grava o perfil (todos os ambientes que o usam), com histórico.
+  bool editProfileProperty(const EditorScreenState::ProfileRow &row,const scene::ComponentPropertyValue &value,
+                           const float *triple,const resources::AssetGuid *map,std::string &diagnostic);
   void refreshEnvironmentInspector();
   void writeEnvironmentPreview();
   std::string takeTextureReimportPath() {return std::exchange(textureReimportPath_,{});}

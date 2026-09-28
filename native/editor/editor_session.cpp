@@ -266,7 +266,7 @@ void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
   // Escolher um objeto tira o material do projeto de Propriedades.
   if(materialAssetMode()) {state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;}
-  state_.environmentInspector={};
+  state_.environmentInspector={};state_.profileInspector={};
   if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.propertyQuery.clear();state_.componentPage=0;state_.componentPreview=0;state_.scriptPreviewType.clear();state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
     state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
     state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
@@ -1441,6 +1441,27 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.numericError=true;
     const bool assetNumber=materialAssetMode() && edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
         edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size();
+    // Perfil de ambiente: número ou trio ("r g b") da linha aberta.
+    if(state_.profileInspector.valid() && edit.field>=widgetId(EditorWidget::ProfileRowBase) &&
+       edit.field<widgetId(EditorWidget::ProfileRowBase)+state_.profileRows.size()) {
+      const auto row=state_.profileRows[edit.field-widgetId(EditorWidget::ProfileRowBase)];
+      std::string diagnostic;bool applied=false;
+      if(row.id!=state_.numericProperty) return false;
+      if(row.kind==EditorScreenState::ProfileRow::Kind::Triple) {
+        std::istringstream input{std::string(value)};float rgb[3]{};
+        if(!(input>>rgb[0]>>rgb[1]>>rgb[2])) {state_.status="Digite três valores: r g b";return false;}
+        applied=editProfileProperty(row,false,rgb,nullptr,diagnostic);
+      } else {
+        double evaluated=0;std::string reason;
+        if(!evaluateNumericExpression(value,context,evaluated,&reason) || std::abs(evaluated)>3.4e38) {
+          state_.status="Expressão recusada: "+(reason.empty()?std::string("fora do alcance de um número"):reason);return false;
+        }
+        applied=editProfileProperty(row,static_cast<float>(evaluated),nullptr,nullptr,diagnostic);
+      }
+      state_.status=diagnostic;
+      if(!applied) return false;
+      state_.numericError=false;close();return true;
+    }
     if(!entity && !assetNumber) return false;
     if(!evaluateNumericExpression(value,context,evaluated,&reason) || std::abs(evaluated)>3.4e38) {
       state_.status="Expressão recusada: "+(reason.empty()?std::string("fora do alcance de um número"):reason);return false;
@@ -1739,6 +1760,9 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
     requestedScenePath_=files_.resolveFile(entry.relativePath);
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Material) {
     if(!openMaterialInspector(record->guid)) state_.status="Material registrado, mas o arquivo não pôde ser lido";
+  }
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentProfile) {
+    if(!openProfileInspector(record->guid)) state_.status="Perfil registrado, mas o arquivo não pôde ser lido";
   }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentMap) {
     if(!openEnvironmentInspector(record->guid)) state_.status="Receita HDRI salva é inválida; Reimportar recria a partir da fonte";
@@ -2755,6 +2779,54 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       const bool keep=key==widgetId(EditorWidget::ImportLinkKeep);
       state_.status=resolveImportOrphan(state_.selection,keep)?(keep?"Órfão mantido como objeto independente":"Órfão apagado"):"Nada a resolver";
       state_.importLinkMenu=false;return true;
+    }
+    // Perfil de ambiente do projeto em Propriedades.
+    if(state_.profileInspector.valid()) {
+      if(key==widgetId(EditorWidget::ProfileInspectorClose)) {state_.profileInspector={};state_.selectedFile.clear();return true;}
+      if(key==widgetId(EditorWidget::ProfileInspectorUses)) {
+        const auto &users=state_.profileObjects;
+        if(users.empty()) {state_.status="Nenhum componente Ambiente da cena usa este perfil";return true;}
+        const u32 index=state_.profileUse%static_cast<u32>(users.size());
+        pingEntity(users[index]);state_.profileUse=index+1;
+        state_.status="Uso "+std::to_string(index+1)+" de "+std::to_string(users.size())+": "+document_.find(users[index])->name;
+        return true;
+      }
+      if(key>=widgetId(EditorWidget::ProfileGroupBase) && key<widgetId(EditorWidget::ProfileGroupBase)+state_.profileGroups.size()) {
+        state_.profileGroup=key-widgetId(EditorWidget::ProfileGroupBase);state_.propertyPage=0;refreshProfileInspector();return true;
+      }
+      if(key>=widgetId(EditorWidget::ProfileRowBase) && key<widgetId(EditorWidget::ProfileRowBase)+state_.profileRows.size()) {
+        const auto row=state_.profileRows[key-widgetId(EditorWidget::ProfileRowBase)];
+        if(!row.editable) {state_.status="Sem consumidor neste aparelho ou dependente de outra opção";return true;}
+        using Kind=EditorScreenState::ProfileRow::Kind;
+        std::string diagnostic;bool applied=false;
+        if(row.kind==Kind::Boolean) applied=editProfileProperty(row,!row.on,nullptr,nullptr,diagnostic);
+        else if(row.kind==Kind::Enum) {
+          for(const auto &p:scene::Environment::descriptor.enums) if(p.id==row.id) {
+            const auto *profile=findEnvironmentProfile(state_.profileInspector);
+            scene::Environment proxy;proxy.values=profile->values;
+            const u32 current=p.read(proxy);usize next=0;
+            for(usize i=0;i<p.options.size();++i) if(p.options[i].value==current) next=(i+1)%p.options.size();
+            applied=editProfileProperty(row,p.options[next].value,nullptr,nullptr,diagnostic);
+          }
+        } else if(row.kind==Kind::EnvironmentMap) {
+          // Percorre os mapas HDRI do projeto e o ambiente padrão (sem mapa).
+          const auto *profile=findEnvironmentProfile(state_.profileInspector);
+          std::vector<resources::AssetGuid> maps{resources::AssetGuid{}};
+          for(const auto &record:assets_.records()) if(record.type==resources::AssetType::EnvironmentMap) maps.push_back(record.guid);
+          usize next=0;
+          for(usize i=0;i<maps.size();++i) if(maps[i]==profile->values.environmentMap) next=(i+1)%maps.size();
+          applied=editProfileProperty(row,false,nullptr,&maps[next],diagnostic);
+        } else {
+          // Número ou trio: o teclado numérico (trio como "r g b").
+          if(history_.isOpen()) return true;
+          state_.numericField=key;state_.numericEntity=0;state_.numericInstance=0;state_.numericProperty=std::string(row.id);
+          std::snprintf(state_.numericText,sizeof(state_.numericText),"%s",row.kind==Kind::Triple?row.value.c_str():
+                        row.value.substr(0,row.value.find(' ')).c_str());
+          state_.numericReplace=true;state_.numericError=false;return true;
+        }
+        state_.status=applied?diagnostic:diagnostic;
+        return true;
+      }
     }
     // Mapa HDRI do projeto em Propriedades.
     if(state_.environmentInspector.valid()) {
@@ -7383,6 +7455,7 @@ void EditorSession::update() {
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
   if(state_.environmentInspector.valid()) refreshEnvironmentInspector();
+  if(state_.profileInspector.valid()) refreshProfileInspector();
   state_.backgroundTasks=shellTasks_;
   if(state_.codeBuildBusy) state_.backgroundTasks.push_back({EditorBackgroundTask::Kind::CodeBuild,"Compilando scripts","C# do projeto",-1,false});
   if(state_.globalSearch) {
@@ -7705,6 +7778,7 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
 bool EditorSession::openMaterialInspector(const resources::AssetGuid &guid) {
   if(!findMaterialAsset(guid)) return false;
   state_.materialInspector=guid;state_.materialShared=true;state_.materialInspectorUse=0;state_.environmentInspector={};
+  state_.profileInspector={};
   state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;
   state_.textureInspector=false;state_.textureManager=false;state_.propertyPage=0;state_.propertyQuery.clear();
   state_.compactPanel=EditorScreenState::CompactPanel::Inspector;

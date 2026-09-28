@@ -3,6 +3,7 @@
 #include "core/sha256.h"
 #include "editor/editor_import_transaction.h"
 
+#include "scene/component_properties.h"
 #include "scene/environment.h"
 
 #include <algorithm>
@@ -198,6 +199,169 @@ void EditorSession::writeEnvironmentPreview() {
   }
   state_.environmentPreview=preview_.writeViewer(rgba,width,height,TexturePreviewChannel::Rgba,0,TexturePreviewBackground::Black);
   environmentPreviewSource_=map.get();environmentPreviewExposure_=state_.environmentExposure;
+}
+
+namespace {
+// O que o perfil guarda: o `values` do componente, com ativo e prioridade
+// normalizados (são da instância). Uma propriedade é "do perfil" quando
+// escrevê-la muda esse conteúdo — descoberto pelo esquema, sem lista paralela.
+std::string profileContent(const scene::Environment &environment) {
+  resources::EnvironmentProfile probe;probe.values=environment.values;
+  probe.values.active=true;probe.values.priority=0;probe.name="p";
+  return probe.serialize();
+}
+struct ProfileSchema {
+  std::vector<const scene::ComponentBoolean *> booleans;
+  std::vector<const scene::ComponentEnum *> enums;
+  std::vector<const scene::ComponentNumber *> numbers;
+  std::vector<const scene::ComponentTriple *> triples;
+  bool environmentMap=false;
+};
+const ProfileSchema &profileSchema() {
+  static const ProfileSchema schema=[] {
+    ProfileSchema out;
+    const auto &type=scene::Environment::descriptor;
+    scene::Environment base;const auto original=profileContent(base);
+    const auto changes=[&](auto &&write) {auto probe=base;write(probe);return profileContent(probe)!=original;};
+    for(const auto &p:type.booleans) if(p.write && changes([&](scene::Environment &e){p.write(e,!p.read(base));}))
+      out.booleans.push_back(&p);
+    for(const auto &p:type.enums) if(p.write) for(const auto &option:p.options)
+      if(option.value!=p.read(base) && changes([&](scene::Environment &e){p.write(e,option.value);})) {out.enums.push_back(&p);break;}
+    std::vector<std::string_view> channels;
+    for(const auto &t:type.triples) for(const auto &c:t.channels) channels.push_back(c);
+    for(const auto &p:type.numbers) {
+      if(!p.write || p.minimum>=p.maximum) continue;
+      const bool profile=changes([&](scene::Environment &e){auto *v=p.write(e);*v=*v==p.minimum?p.maximum:p.minimum;});
+      if(!profile) continue;
+      if(std::find(channels.begin(),channels.end(),p.id)==channels.end()) out.numbers.push_back(&p);
+    }
+    for(const auto &t:type.triples) for(const auto &c:t.channels) {
+      bool profile=false;
+      for(const auto &p:type.numbers) if(p.id==c && p.write && p.minimum<p.maximum &&
+          changes([&](scene::Environment &e){auto *v=p.write(e);*v=*v==p.minimum?p.maximum:p.minimum;})) profile=true;
+      if(profile) {out.triples.push_back(&t);break;}
+    }
+    for(const auto &binding:type.resourceBindings) if(binding.kind==resources::AssetType::EnvironmentMap && binding.write &&
+        changes([&](scene::Environment &e){binding.write(e,0,resources::assetGuidFromSeed("perfil:sonda"));})) out.environmentMap=true;
+    return out;
+  }();
+  return schema;
+}
+const scene::ComponentNumber *numberById(std::string_view id) {
+  for(const auto &p:scene::Environment::descriptor.numbers) if(p.id==id) return &p;
+  return nullptr;
+}
+}
+
+bool EditorSession::openProfileInspector(const resources::AssetGuid &guid) {
+  if(!findEnvironmentProfile(guid)) return false;
+  state_.profileInspector=guid;state_.profileGroup=0;state_.profileUse=0;state_.propertyPage=0;
+  state_.environmentInspector={};state_.materialInspector={};state_.textureInspector=false;state_.textureManager=false;
+  closeTextureViewer();
+  state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
+  refreshProfileInspector();
+  return true;
+}
+
+// Unity 6000.0 Volume Profile: o perfil sozinho, com os mesmos controles do
+// componente que o usa, só o que ele guarda.
+void EditorSession::refreshProfileInspector() {
+  const auto *profile=findEnvironmentProfile(state_.profileInspector);
+  const auto *record=assets_.find(state_.profileInspector);
+  if(!profile || !record) {state_.profileInspector={};state_.status="O perfil aberto não existe mais no projeto";return;}
+  state_.profileInspectorName=profile->name;state_.profileInspectorPath=record->path;state_.profileInspectorRevision=profile->revision;
+  state_.profileObjects.clear();
+  std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) if(const auto *entity=document_.find(id))
+    if(const auto *environment=static_cast<const scene::Environment *>(entity->components.find(scene::Environment::descriptor));
+       environment && environment->profile==profile->guid) state_.profileObjects.push_back(id);
+  scene::Environment proxy;proxy.values=profile->values;
+  const auto &schema=profileSchema();
+  // Grupos na ordem em que aparecem no esquema.
+  auto &groups=state_.profileGroups;groups.clear();
+  const auto group=[&](std::string_view name) {
+    const std::string value(name.empty()?std::string_view("Geral"):name);
+    if(std::find(groups.begin(),groups.end(),value)==groups.end()) groups.push_back(value);
+  };
+  // Ordem do esquema: os números (com os canais das cores) definem a sequência
+  // dos grupos, como nas abas do cartão do componente; depois opções e chaves.
+  for(const auto &p:scene::Environment::descriptor.numbers) {
+    bool profile=std::find(schema.numbers.begin(),schema.numbers.end(),&p)!=schema.numbers.end();
+    for(const auto *t:schema.triples) for(const auto &c:t->channels) profile|=c==p.id;
+    if(profile) group(p.presentation.group);
+  }
+  for(const auto *p:schema.enums) group(p->presentation.group);
+  for(const auto *p:schema.booleans) group(p->presentation.group);
+  if(schema.environmentMap) group("HDRI");
+  state_.profileGroup=std::min<u32>(state_.profileGroup,groups.empty()?0:static_cast<u32>(groups.size()-1));
+  const std::string current=groups.empty()?std::string():groups[state_.profileGroup];
+  const auto in=[&](std::string_view name){return (name.empty()?std::string_view("Geral"):name)==current;};
+  auto &rows=state_.profileRows;rows.clear();
+  using Row=EditorScreenState::ProfileRow;
+  const auto usable=[&](const scene::PropertyPresentation &p){return p.isEditable(proxy) && p.hasConsumer();};
+  for(const auto *p:schema.booleans) if(in(p->presentation.group) && p->presentation.isVisible(proxy)) {
+    Row row;row.kind=Row::Kind::Boolean;row.id=p->id;row.label=p->name;row.on=p->read(proxy);row.editable=usable(p->presentation);
+    rows.push_back(std::move(row));
+  }
+  for(const auto *p:schema.enums) if(in(p->presentation.group) && p->presentation.isVisible(proxy)) {
+    Row row;row.kind=Row::Kind::Enum;row.id=p->id;row.label=p->name;row.editable=usable(p->presentation);
+    const u32 value=p->read(proxy);
+    for(const auto &option:p->options) if(option.value==value) row.value=option.name;
+    rows.push_back(std::move(row));
+  }
+  for(const auto *t:schema.triples) {
+    const auto *first=numberById(t->channels[0]);
+    if(!first || !in(first->presentation.group) || !first->presentation.isVisible(proxy)) continue;
+    Row row;row.kind=Row::Kind::Triple;row.id=t->id;row.label=t->name;row.editable=usable(first->presentation);
+    row.color=t->kind==scene::ComponentTripleKind::LinearColor;
+    char text[64];
+    for(u32 axis=0;axis<3;++axis) if(const auto *c=numberById(t->channels[axis])) row.rgb[axis]=c->read(proxy);
+    std::snprintf(text,sizeof text,"%.3g  %.3g  %.3g",static_cast<double>(row.rgb[0]),static_cast<double>(row.rgb[1]),static_cast<double>(row.rgb[2]));
+    row.value=text;rows.push_back(std::move(row));
+  }
+  for(const auto *p:schema.numbers) if(in(p->presentation.group) && p->presentation.isVisible(proxy)) {
+    Row row;row.kind=Row::Kind::Number;row.id=p->id;row.label=p->name;row.editable=usable(p->presentation);
+    char text[48];std::snprintf(text,sizeof text,"%.4g",static_cast<double>(p->read(proxy)));
+    row.value=std::string(text)+(p->presentation.unit.empty()?std::string():" "+std::string(p->presentation.unit));
+    rows.push_back(std::move(row));
+  }
+  if(schema.environmentMap && current=="HDRI") {
+    Row row;row.kind=Row::Kind::EnvironmentMap;row.label="Mapa HDRI";
+    const auto *map=proxy.values.environmentMap.valid()?assets_.find(proxy.values.environmentMap):nullptr;
+    row.value=map?map->path.substr(map->path.rfind('/')+1):proxy.values.environmentMap.valid()?std::string("Mapa ausente"):std::string("Ambiente padrão");
+    rows.push_back(std::move(row));
+  }
+}
+
+bool EditorSession::editProfileProperty(const EditorScreenState::ProfileRow &row,const scene::ComponentPropertyValue &value,
+                                        const float *triple,const resources::AssetGuid *map,std::string &diagnostic) {
+  const auto *profile=findEnvironmentProfile(state_.profileInspector);
+  if(!profile) {diagnostic="Perfil indisponível.";return false;}
+  scene::Components components;
+  auto *proxy=static_cast<scene::Environment *>(components.add(scene::Environment::descriptor));
+  if(!proxy) {diagnostic="Não foi possível preparar o perfil.";return false;}
+  proxy->values=profile->values;
+  const auto typeId=scene::Environment::descriptor.id;
+  scene::ComponentPropertyStatus status=scene::ComponentPropertyStatus::UnknownProperty;
+  if(row.kind==EditorScreenState::ProfileRow::Kind::Triple && triple)
+    status=scene::setComponentTriple(components,typeId,row.id,*reinterpret_cast<const float (*)[3]>(triple));
+  else if(row.kind==EditorScreenState::ProfileRow::Kind::EnvironmentMap && map) {
+    if(map->valid()) {
+      const auto *record=assets_.find(*map);
+      if(!record || record->type!=resources::AssetType::EnvironmentMap) {diagnostic="O mapa HDRI não pertence ao projeto.";return false;}
+    }
+    for(const auto &binding:scene::Environment::descriptor.resourceBindings)
+      if(binding.kind==resources::AssetType::EnvironmentMap && binding.write) {
+        auto *edit=components.editInstance(proxy->instanceId());
+        status=edit && binding.write(*edit,0,*map)?scene::ComponentPropertyStatus::Applied:scene::ComponentPropertyStatus::InvalidValue;
+      }
+  } else status=scene::setComponentProperty(components,typeId,row.id,value);
+  if(status!=scene::ComponentPropertyStatus::Applied) {diagnostic="Valor recusado pelo componente Ambiente.";return false;}
+  const auto *edited=static_cast<const scene::Environment *>(components.find(scene::Environment::descriptor));
+  auto candidate=*profile;candidate.values=edited->values;
+  candidate.values.active=true;candidate.values.priority=0;++candidate.revision;
+  if(!commitEnvironmentProfile(candidate,diagnostic)) return false;
+  diagnostic="Perfil atualizado em todos os ambientes que o usam";return true;
 }
 
 void EditorSession::showEnvironmentImportPreview(std::string path,

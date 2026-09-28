@@ -3815,6 +3815,82 @@ AE_TEST(floating_windows_stay_under_modals) {
   state.numericField=0;
 }
 
+// Unity 6000.0 Volume Profile: o perfil em Propriedades mostra só o que ele
+// guarda (descoberto pelo esquema do Ambiente), em abas por grupo; editar muda
+// o perfil e os ambientes que o usam, com Desfazer.
+AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto root=fs::temp_directory_path()/("aether-perfil-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  const auto sky=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Tarde");
+  auto value=*doc.find(sky);
+  const auto instance=value.components.add(scene::Environment::descriptor)->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(sky,value),"ambiente");
+  std::string diagnostic;
+  const auto guid=f.session.createEnvironmentProfile(sky,instance,diagnostic);
+  AE_EXPECT_TRUE(guid.valid(),diagnostic.c_str());
+  history.clear();
+  const auto *record=f.session.assets().find(guid);
+  EditorFileEntry file;file.relativePath=record->path;file.name=record->path.substr(record->path.rfind('/')+1);
+  f.session.openProjectFile(file);f.session.update();
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.profileInspector==guid,"perfil em Propriedades");
+  AE_EXPECT_TRUE(state.profileObjects.size()==1 && state.profileObjects[0]==sky,"um ambiente usa");
+  const auto &groups=state.profileGroups;
+  AE_EXPECT_TRUE(std::find(groups.begin(),groups.end(),"Volume")==groups.end(),"forma e peso são da instância, não do perfil");
+  const auto groupOf=[&](const char *name) {
+    for(u32 i=0;i<groups.size();++i) if(groups[i]==name) return i;
+    return 0xffffffffu;
+  };
+  AE_EXPECT_TRUE(groupOf("Neblina")!=0xffffffffu && groupOf("Pós")!=0xffffffffu,"grupos do esquema");
+  const auto rowOf=[&](std::string_view id) {
+    for(u32 i=0;i<state.profileRows.size();++i) if(state.profileRows[i].id==id) return i;
+    return 0xffffffffu;
+  };
+  const auto profile=[&]{return f.session.findEnvironmentProfile(guid);};
+  const auto component=[&]{return static_cast<const scene::Environment *>(doc.find(sky)->components.find(scene::Environment::descriptor));};
+  // Grupos pelo seletor: avança até a neblina.
+  const auto goTo=[&](u32 group) {
+    for(u32 i=0;i<16 && state.profileGroup!=group;++i)
+      tapWidget(f,widgetId(EditorWidget::ProfileGroupBase)+(state.profileGroup<group?state.profileGroup+1:state.profileGroup-1));
+  };
+  goTo(groupOf("Neblina"));
+  AE_EXPECT_EQ(state.profileGroup,groupOf("Neblina"),"grupo Neblina");
+  const bool fog=profile()->values.fog;
+  AE_EXPECT_TRUE(rowOf("fog")!=0xffffffffu,"linha da neblina");
+  tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("fog"));
+  AE_EXPECT_EQ(profile()->values.fog,!fog,"perfil mudou");
+  AE_EXPECT_EQ(component()->values.fog,!fog,"o ambiente que usa o perfil mudou junto");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo");
+  // Cor da neblina pelo teclado (r g b).
+  f.session.update();
+  if(!profile()->values.fog) {tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("fog"));f.session.update();}
+  const u32 color=rowOf("fog_color");
+  AE_EXPECT_TRUE(color!=0xffffffffu,"cor da neblina visível com neblina ligada");
+  revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+color);
+  tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+color);
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.1 0.2 0.3",true),"trio aceito");
+  AE_EXPECT_TRUE(std::abs(profile()->values.fogColor[2]-.3f)<1e-5f,"cor gravada no perfil");
+  // Opção: tonemapping cicla.
+  goTo(groupOf("Pós"));
+  if(rowOf("tone_mapper")!=0xffffffffu) {
+    const auto before=profile()->values.toneMapper;
+    revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("tone_mapper"));
+    tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("tone_mapper"));
+    AE_EXPECT_TRUE(profile()->values.toneMapper!=before,"opção ciclou");
+  }
+  // Desfazer volta o perfil.
+  const auto depth=history.undoDepth();
+  for(u32 i=0;i<depth;++i) history.undo(doc);
+  AE_EXPECT_EQ(profile()->values.fog,fog,"Desfazer volta a neblina");
+  tapWidget(f,widgetId(EditorWidget::ProfileInspectorClose));
+  AE_EXPECT_TRUE(!state.profileInspector.valid(),"voltar");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

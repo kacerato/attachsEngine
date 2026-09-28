@@ -2125,6 +2125,92 @@ void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) 
   }
 }
 
+// Perfil de ambiente do projeto em Propriedades (Unity 6000.0 Volume Profile):
+// abas pelos grupos do esquema do componente Ambiente e, em cada uma, só o que
+// o perfil guarda — interruptores, opções que ciclam, cores e números pelo
+// teclado numérico, o mapa HDRI. Sem consumidor neste aparelho, a linha fica
+// apagada e não recebe toque; toda edição muda os ambientes que usam o perfil.
+void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  list.addRect(panel,theme.color.surface);
+  router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets::all(theme.spacing.small));
+  auto header=takeTop(content,kPanelHeaderHeight);
+  const auto back=takeLeft(header,32);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  router.addRegion(back,widgetId(EditorWidget::ProfileInspectorClose));
+  list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneEffects),theme.color.accent);
+  const u32 objects=static_cast<u32>(state.profileObjects.size());
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},state.profileInspectorName.c_str(),theme.color.text,theme.type.cardName);
+  const std::string sub="Perfil de ambiente · rev. "+std::to_string(state.profileInspectorRevision)+" · "+std::to_string(objects)+
+      (objects==1?" ambiente":" ambientes");
+  builder.label({header.x,header.y+half,header.width,half},sub.c_str(),theme.color.textDim,theme.type.caption);
+  // Grupo do esquema num seletor de uma linha (as abas em quebra comiam metade
+  // do Inspector estreito); Localizar ao lado.
+  {
+    auto line=takeTop(content,34);takeTop(content,6);
+    if(objects) {
+      const auto ping=takeRight(line,88);
+      list.addRect(deflate(ping,UiInsets{4,2,0,2}),theme.color.raised,theme.radius.control);
+      builder.label(deflate(ping,UiInsets{4,0,0,0}),"Localizar",theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(ping,widgetId(EditorWidget::ProfileInspectorUses));
+    }
+    const u32 groups=static_cast<u32>(state.profileGroups.size());
+    list.addRect(line,theme.color.accent,17);
+    const auto previous=takeLeft(line,34),next=takeRight(line,34);
+    builder.label(previous,"<",state.profileGroup?theme.color.accentInk:withAlpha(theme.color.accentInk,.35f),theme.type.body,UiAlign::Center);
+    builder.label(next,">",state.profileGroup+1<groups?theme.color.accentInk:withAlpha(theme.color.accentInk,.35f),theme.type.body,UiAlign::Center);
+    if(state.profileGroup) router.addRegion(previous,widgetId(EditorWidget::ProfileGroupBase)+state.profileGroup-1);
+    if(state.profileGroup+1<groups) router.addRegion(next,widgetId(EditorWidget::ProfileGroupBase)+state.profileGroup+1);
+    const std::string title=groups?state.profileGroups[state.profileGroup]+"  "+std::to_string(state.profileGroup+1)+"/"+std::to_string(groups):std::string("Sem grupos");
+    builder.label(line,title.c_str(),theme.color.accentInk,theme.type.caption,UiAlign::Center);
+  }
+  // Linhas, paginadas como o resto do Inspector.
+  const float rowHeight=40;
+  const u32 count=static_cast<u32>(state.profileRows.size());
+  const u32 perPage=std::max(1u,static_cast<u32>((content.height-28)/rowHeight));
+  const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
+  auto footer=pages>1?takeBottom(content,26):UiRect{};
+  using Kind=EditorScreenState::ProfileRow::Kind;
+  for(u32 i=page*perPage;i<count && i<(page+1)*perPage;++i) {
+    const auto &row=state.profileRows[i];
+    auto rect=takeTop(content,rowHeight);rect.height-=4;
+    const auto ink=row.editable?theme.color.text:theme.color.textFaint;
+    builder.label(takeLeft(rect,rect.width*.46f),row.label.c_str(),row.editable?theme.color.textDim:theme.color.textFaint,theme.type.caption);
+    if(row.kind==Kind::Boolean) {
+      builder.toggle(takeRight(rect,52),row.on,widgetId(EditorWidget::ProfileRowBase)+i);
+      continue;
+    }
+    list.addRect(rect,theme.color.raised,theme.radius.control);
+    auto inner=deflate(rect,UiInsets{8,0,8,0});
+    if(row.kind==Kind::Triple && row.color) {
+      const auto swatch=centred(takeLeft(inner,22),18,18);
+      const auto channel=[&](float v){return static_cast<u32>(std::clamp(std::pow(std::max(v,0.f),1/2.2f),0.f,1.f)*255+.5f);};
+      list.addRect(swatch,0xff000000u|(channel(row.rgb[2])<<16)|(channel(row.rgb[1])<<8)|channel(row.rgb[0]),4);
+      takeLeft(inner,6);
+    }
+    if(row.kind==Kind::Enum || row.kind==Kind::EnvironmentMap) {
+      const auto arrow=takeRight(inner,18);
+      builder.label(arrow,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    }
+    list.pushClip(inner);
+    builder.label(inner,row.value.c_str(),ink,row.kind==Kind::Number||row.kind==Kind::Triple?theme.type.numeric:theme.type.caption,
+                  row.kind==Kind::Number?UiAlign::Center:UiAlign::Start);
+    list.popClip();
+    if(row.editable) router.addRegion(rect,widgetId(EditorWidget::ProfileRowBase)+i);
+  }
+  if(!count) builder.label(content,"Nada deste grupo no perfil",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(pages>1) {
+    const auto previous=takeLeft(footer,36),next=takeRight(footer,36);
+    builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    if(page) router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
+    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+}
+
 // Escolha do material de um slot: o da fonte, um do projeto, ou um novo.
 void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
@@ -5550,6 +5636,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   }
   if (builder.state.materialInspector.valid()) {buildMaterialAssetInspector(builder, panel);return;}
   if (builder.state.environmentInspector.valid()) {buildEnvironmentAssetInspector(builder, panel);return;}
+  if (builder.state.profileInspector.valid()) {buildProfileAssetInspector(builder, panel);return;}
   // R4: textura escolhida em Arquivos e gerenciador da pasta Texturas.
   if (builder.state.textureManager || builder.state.textureInspector) {
     // O Inspector de textura é fundo escuro com cartões por cima.

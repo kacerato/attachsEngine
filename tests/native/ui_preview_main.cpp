@@ -337,6 +337,22 @@ int main(int argc, char **argv) {
     auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
+  // Perfil de ambiente em Propriedades.
+  if(argc>4 && std::string(argv[4])=="profile-asset") {
+    state.profileInspector=resources::assetGuidFromSeed("preview-profile");
+    state.profileInspectorName="Tarde nublada";state.profileInspectorPath="Ambientes/Tarde nublada.environment";
+    state.profileInspectorRevision=4;state.profileObjects={1,2};
+    state.profileGroups={"Geral","Atmosfera","Neblina","Exposição","Pós","Oclusão ambiente","Luz indireta","HDRI"};
+    state.profileGroup=2;
+    using Row=editor::EditorScreenState::ProfileRow;
+    Row fog;fog.kind=Row::Kind::Boolean;fog.label="Neblina";fog.on=true;
+    Row color;color.kind=Row::Kind::Triple;color.label="Cor da neblina";color.color=true;color.rgb[0]=.55f;color.rgb[1]=.6f;color.rgb[2]=.7f;
+    color.value="0.55  0.6  0.7";
+    Row density;density.kind=Row::Kind::Number;density.label="Densidade";density.value="0.02 1/m";
+    Row falloff;falloff.kind=Row::Kind::Number;falloff.label="Decaimento por altura";falloff.value="0.15 1/m";
+    Row start;start.kind=Row::Kind::Number;start.label="Início";start.value="4 m";start.editable=false;
+    state.profileRows={fog,color,density,falloff,start};
+  }
   // HDRI em Propriedades: a prévia vem de um gradiente de céu escrito no atlas.
   if(argc>4 && std::string(argv[4])=="hdri-asset") {
     state.environmentInspector=resources::assetGuidFromSeed("preview-hdri");
