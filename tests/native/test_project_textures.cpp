@@ -6,6 +6,7 @@
 #include "harness.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_session.h"
+#include "editor/editor_screen.h"
 #include "editor/editor_component_impact.h"
 #include "renderer/authoring_geometry.h"
 #include "renderer/material_override.h"
@@ -22,6 +23,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -125,6 +127,7 @@ struct Publisher {
   usize textures = 0;
   u32 rebuilds = 0;
   bool failNext = false;
+  int failIn = -1;  // falha na publicação de número `failIn` (0 = a próxima)
   std::vector<u32> samplers; // flags de sampler de cada textura publicada, na ordem da biblioteca
   std::vector<renderer::SharedAuthoringTexture> published;
 };
@@ -140,6 +143,7 @@ void start(EditorSession &session, Publisher &publisher) {
                                             std::span<const renderer::MapMaterialRecord> m,
                                             std::span<const renderer::SharedAuthoringTexture> t, EditorSession::PublishedGeometry &out) {
     if(publisher.failNext) {publisher.failNext=false;return false;}
+    if(publisher.failIn>=0 && publisher.failIn--==0) return false;
     for (const auto &texture : t) if (!texture || !texture->valid()) return false;
     ++publisher.rebuilds;
     publisher.textures = t.size();
@@ -171,6 +175,49 @@ struct Project {
   Project() { std::filesystem::create_directories(root); }
   ~Project() { std::error_code error; std::filesystem::remove_all(root, error); }
 };
+
+// Interface de verdade (fonte e ícones do produto) para tocar nos widgets.
+bool loadAsset(const char *relative, std::vector<u8> &out) {
+  std::ifstream file(std::string(AETHER_REPOSITORY_ROOT) + "/" + relative, std::ios::binary);
+  out.assign(std::istreambuf_iterator<char>(file), {});
+  return !out.empty();
+}
+const ui::UiFont &uiFont() {
+  static std::vector<u8> bytes;
+  static ui::UiFont value = [] {ui::UiFont result;if (loadAsset("assets/astra-visual/ui/astra-ui-font.aeuf", bytes)) result.load(bytes);return result;}();
+  return value;
+}
+const ui::UiIconAtlas &uiIcons() {
+  static std::vector<u8> bytes;
+  static ui::UiIconAtlas value = [] {ui::UiIconAtlas result;if (loadAsset("assets/astra-visual/ui/astra-ui-icons.aeui", bytes)) result.load(bytes);return result;}();
+  return value;
+}
+ui::UiPoint locate(EditorSession &session, u32 widget) {
+  session.update();
+  ui::UiInputRouter router;ui::UiDrawList list;
+  list.begin(session.screen().surface, uiFont().metrics(ui::UiFontWeight::Regular));
+  buildEditorScreen(session.screen(), ui::defaultTheme(), list, router);
+  for (float y = 2; y < session.screen().surface.height; y += 4)
+    for (float x = 2; x < session.screen().surface.width; x += 4) {
+      const auto routed = router.route({99, ui::UiPointerPhase::Down, {x, y}, 0});
+      router.route({99, ui::UiPointerPhase::Up, {x, y}, 0});
+      if (routed.target == ui::UiPointerTarget::Widget && routed.widgetId == widget) return {x, y};
+    }
+  return {-1, -1};
+}
+bool tap(EditorSession &session, u32 widget, bool hold = false) {
+  const auto at = locate(session, widget);
+  if (at.x < 0) return false;
+  session.handlePointer({7, ui::UiPointerPhase::Down, at, 50.0});
+  session.handlePointer({7, ui::UiPointerPhase::Up, at, 50.0 + (hold ? ui::kUiLongPressSeconds + .05 : .05)});
+  session.update();
+  return true;
+}
+u32 fileRow(EditorSession &session, std::string_view path) {
+  const auto &tree = session.screen().files->tree();
+  for (u32 i = 0; i < tree.size(); ++i) if (tree[i].relativePath == path) return widgetId(EditorWidget::FileRowBase) + i;
+  return 0;
+}
 
 std::vector<std::string> tokens(const std::string &text) {
   std::istringstream in(text);
@@ -240,6 +287,103 @@ AE_TEST(texture_import_preserves_guid_recipe_and_publishes_without_a_glb_source)
   AE_EXPECT_TRUE(session.serializeAssets()==registered&&
                  resources::sameTextureProfile(session.textureProfileFor(guid),edited),
                  "falha no replay preserva registro e perfil em memória");
+}
+
+// Unity 6000.0 Manual/InspectorManageComponents, vários assets: arquivos
+// escolhidos em Arquivos; o perfil de importação comum com "—" no que difere;
+// um toque edita o rascunho de todas; Aplicar publica todas ou nenhuma, num
+// passo de Desfazer; tipos diferentes estreitam a seleção.
+AE_TEST(files_multi_selection_edits_the_common_texture_profile_in_one_step) {
+  Project project;
+  { std::ofstream(project.root / "leia.md") << "notas"; }
+  EditorSession session;Publisher publisher;
+  session.initialize(&uiFont(), &uiIcons());
+  session.setSurface({0, 0, 1280, 720}, {});
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  resources::TextureImportLimits limits;limits.projectMaximumDimension = session.importLimits().maximumTextureDimension;
+  limits.image = session.importLimits().image;
+  const auto import = [&](const char *path, const resources::TextureProfile &profile, resources::AssetGuid &out) {
+    const auto source = png(4, 4, 120);resources::PreparedTextureImport prepared;std::string diagnostic;
+    if (!resources::prepareTextureImport(source, profile, true, EditorMapScene::DefaultTextureSampler, limits, nullptr, prepared) ||
+        !session.commitTextureImport(path, source, {}, prepared, profile, diagnostic)) return false;
+    out = session.assets().findByPath(path)->guid;
+    return true;
+  };
+  resources::TextureProfile muroProfile, pisoProfile;pisoProfile.mipmaps = false;
+  resources::AssetGuid muro, piso;
+  AE_EXPECT_TRUE(import("muro.png", muroProfile, muro) && import("piso.png", pisoProfile, piso), "duas texturas importadas");
+  session.update();
+  const auto &state = session.screen();
+
+  // Um, depois o modo, depois outro: os dois no Inspector de vários recursos.
+  AE_EXPECT_TRUE(tap(session, fileRow(session, "muro.png")), "muro escolhido");
+  AE_EXPECT_TRUE(state.textureInspector, "uma textura abre o Inspector dela");
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::FilesMultiToggle)), "modo vários");
+  AE_EXPECT_TRUE(tap(session, fileRow(session, "piso.png")), "piso somado");
+  AE_EXPECT_TRUE(tap(session, fileRow(session, "")) && tap(session, fileRow(session, "")) && state.selectedFiles.size() == 2,
+                 "pasta no modo só fecha e abre, sem trocar a seleção");
+  AE_EXPECT_EQ(state.selectedFiles.size(), usize{2}, "dois arquivos");
+  AE_EXPECT_EQ(state.selectedFile, std::string("piso.png"), "o último tocado é o ativo");
+  AE_EXPECT_TRUE(!state.textureInspector, "o Inspector de uma textura fecha");
+  using Kind = EditorScreenState::MultiAssetView::Kind;
+  AE_EXPECT_TRUE(state.multiAsset.kind == Kind::Textures && state.multiAsset.items.size() == 2, "duas texturas");
+  AE_EXPECT_TRUE(((state.multiAsset.mixed >> 2) & 1u) && state.multiAsset.fields[2] == "Mipmaps: \xE2\x80\x94", "mipmaps diferem");
+  AE_EXPECT_TRUE(!((state.multiAsset.mixed >> 1) & 1u) && state.multiAsset.fields[1] == "Tamanho: teto do projeto", "tamanho comum");
+
+  // "Definir como": toque longo no "—" e a linha de quem copiar.
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetFieldBase) + 2, true), "toque longo");
+  AE_EXPECT_TRUE(state.setValueMenu.key == "asset.tex.2" && state.setValueMenu.rows.size() == 2, "uma linha por textura");
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::SetValueRowBase) + 1), "copia do piso");
+  AE_EXPECT_TRUE(!((state.multiAsset.mixed >> 2) & 1u) && state.multiAsset.fields[2] == "Mipmaps: não", "rascunho igual ao piso");
+  AE_EXPECT_EQ(state.multiAsset.pending, 1u, "só o muro mudou");
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetRevert)), "reverter");
+  AE_EXPECT_EQ(state.multiAsset.pending, 0u, "rascunho descartado");
+
+  // Liga/desliga com "—" liga todas; o passo do tamanho parte do ativo.
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetFieldBase) + 2), "mipmaps");
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetFieldBase) + 1), "tamanho");
+  AE_EXPECT_EQ(state.multiAsset.pending, 2u, "as duas no rascunho");
+  AE_EXPECT_TRUE(resources::sameTextureProfile(session.textureProfileFor(piso), pisoProfile), "nada publicado antes de Aplicar");
+
+  // Uma recusa no meio devolve a primeira: nenhuma muda.
+  const auto registry = session.serializeAssets();
+  const u32 depth = session.history().undoDepth();
+  publisher.failIn = 1;
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetApply)), "aplicar recusado");
+  AE_EXPECT_TRUE(state.status.find("Nenhum perfil") != std::string::npos, state.status.c_str());
+  AE_EXPECT_TRUE(resources::sameTextureProfile(session.textureProfileFor(muro), muroProfile) &&
+                 resources::sameTextureProfile(session.textureProfileFor(piso), pisoProfile) && session.serializeAssets() == registry,
+                 "todas ou nenhuma");
+  AE_EXPECT_EQ(session.history().undoDepth(), depth, "sem passo no histórico");
+  AE_EXPECT_EQ(state.multiAsset.pending, 2u, "o rascunho continua");
+
+  publisher.failIn = -1;
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetApply)), "aplicar");
+  const auto applied = session.textureProfileFor(muro);
+  AE_EXPECT_TRUE(applied.mipmaps && session.textureProfileFor(piso).mipmaps && applied.maximumDimension != 0 &&
+                 session.textureProfileFor(piso).maximumDimension == applied.maximumDimension, "as duas publicadas");
+  AE_EXPECT_EQ(session.history().undoDepth(), depth + 1, "um passo");
+  AE_EXPECT_EQ(session.history().undoLabel(), std::string("Perfil de 2 texturas"), "rótulo do passo");
+  AE_EXPECT_EQ(state.multiAsset.pending, 0u, "rascunho acompanha o aplicado");
+  AE_EXPECT_TRUE(session.history().undo(session.document()), "desfazer");
+  session.update();
+  AE_EXPECT_TRUE(resources::sameTextureProfile(session.textureProfileFor(muro), muroProfile) &&
+                 resources::sameTextureProfile(session.textureProfileFor(piso), pisoProfile), "as duas voltam");
+  AE_EXPECT_TRUE((state.multiAsset.mixed >> 2) & 1u, "o \"—\" volta");
+  AE_EXPECT_TRUE(session.history().redo(session.document()), "refazer");
+  AE_EXPECT_TRUE(session.textureProfileFor(piso).mipmaps, "refeito");
+
+  // Outro tipo: só o que é comum; estreitar volta às texturas.
+  AE_EXPECT_TRUE(tap(session, fileRow(session, "leia.md")), "arquivo de texto somado");
+  AE_EXPECT_TRUE(state.multiAsset.kind == Kind::Mixed && state.multiAsset.groups.size() == 2, "tipos diferentes");
+  AE_EXPECT_TRUE(state.workspace != EditorWorkspace::Code, "somar um .md não abre o código");
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetNarrowBase) + 0), "estreitar às texturas");
+  AE_EXPECT_TRUE(state.selectedFiles.size() == 2 && state.multiAsset.kind == Kind::Textures, "só as texturas");
+  // Tirar uma deixa uma: o Inspector dela volta.
+  AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetRemoveBase) + 1), "tirar o piso");
+  AE_EXPECT_TRUE(state.selectedFiles.size() == 1 && state.selectedFile == "muro.png" && state.textureInspector, "muro sozinho");
+  AE_EXPECT_TRUE(state.multiAsset.items.empty(), "sem Inspector de vários");
 }
 
 AE_TEST(p02_shared_repair_history_persists_and_rejects_external_conflicts) {

@@ -1578,26 +1578,39 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   // Ancoradas EMBAIXO, e nao sob o cabecalho: entre o cabecalho e a lista, elas
   // empurrariam as linhas 26 pixels para baixo no mesmo toque que escolhe uma
   // -- o proximo toque cairia numa linha diferente da que o dedo mirou.
-  if(!builder.state.selectedFile.empty()) {
+  // "Selecionar vários" nasce da escolha de um (escolher um e somar outros,
+  // como Ctrl+clique da Unity) e fica na mesma faixa enquanto o modo está aceso.
+  const bool several=builder.state.selectedFiles.size()>1;
+  if(!builder.state.selectedFile.empty() || builder.state.filesMultiSelect) {
     auto actions=takeBottom(content,26);
-    const bool confirming=builder.state.pendingResourceDelete==builder.state.selectedFile;
+    auto toggle=takeLeft(actions,30);toggle.height=std::min(toggle.height,26.0f);
+    builder.iconButton(deflate(toggle,UiInsets::all(2)),UiIcon::EditorSelectBox,widgetId(EditorWidget::FilesMultiToggle),builder.state.filesMultiSelect);
     auto action=[&](UiRect rect,const char *label,EditorWidget widget,UiColor color) {
       rect=deflate(rect,UiInsets::all(2));
       builder.list.addRect(rect,theme.color.raised,theme.radius.control);
       builder.label(rect,label,color,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(rect,widgetId(widget));
     };
-    action(takeLeft(actions,actions.width*.5f),"Renomear",EditorWidget::FilesRename,theme.color.text);
-    action(actions,confirming?"Apagar mesmo assim":"Apagar",EditorWidget::FilesDelete,
-           confirming?theme.color.accent:theme.color.text);
+    if(builder.state.filesMultiSelect) {
+      const u32 count=static_cast<u32>(builder.state.selectedFiles.size());
+      action(takeRight(actions,std::min(64.0f,actions.width*.4f)),"Nada",EditorWidget::FilesSelectNone,theme.color.text);
+      builder.label(deflate(actions,UiInsets::symmetric(6,0)),
+                    count?std::to_string(count)+(count==1?" selecionado":" selecionados"):std::string("Toque para somar"),
+                    count>1?theme.color.accent:theme.color.textMuted,theme.type.caption);
+    } else {
+      const bool confirming=builder.state.pendingResourceDelete==builder.state.selectedFile;
+      action(takeLeft(actions,actions.width*.5f),"Renomear",EditorWidget::FilesRename,theme.color.text);
+      action(actions,confirming?"Apagar mesmo assim":"Apagar",EditorWidget::FilesDelete,
+             confirming?theme.color.accent:theme.color.text);
+    }
   }
-  const auto *selectedRecord=builder.state.assetRegistry?
+  const auto *selectedRecord=builder.state.assetRegistry&&!several?
       builder.state.assetRegistry->findByPath(builder.state.selectedFile):nullptr;
   // Fonte de modelo é o que o REGISTRO diz, não a extensão: um GLB, ou o
   // `.gltf` de uma fonte em pasta (S0). GLB ainda não registrado também entra,
   // para Reimportar registrá-lo. "Texturas" extrai imagens EMBUTIDAS (R4): só
   // existe no GLB — na pasta as imagens já são arquivos do projeto.
-  const bool glb=builder.state.selectedFile.ends_with(".glb");
+  const bool glb=!several && builder.state.selectedFile.ends_with(".glb");
   if(glb || (selectedRecord&&selectedRecord->type==resources::AssetType::Mesh)) {
     auto actions=takeBottom(content,36);
     const u32 count=glb?3u:2u;
@@ -1633,7 +1646,11 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     const auto &entry=entries[i];auto row=takeTop(content,rowHeight);const auto hit=row;
     if(entry.relativePath==builder.state.selectedFile) {
       builder.list.addRect(hit,code?theme.color.accentWash:withAlpha(theme.color.accent,0.18f),theme.radius.control);
-      if(code) builder.list.addRect({hit.x,hit.y,3,hit.height},theme.color.accent);
+      if(code || several) builder.list.addRect({hit.x,hit.y,3,hit.height},theme.color.accent);
+    } else if(several && builder.state.isFileSelected(entry.relativePath)) {
+      // Os outros escolhidos: realce mais leve, como na Hierarquia.
+      builder.list.addRect(hit,withAlpha(theme.color.accent,0.09f),theme.radius.control);
+      builder.list.addRect({hit.x,hit.y,3,hit.height},withAlpha(theme.color.accent,0.55f));
     }
     takeLeft(row,static_cast<float>(entry.depth)*14);
     if(code) {
@@ -5740,6 +5757,161 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
     if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::TextureManagerNext));
   }
 }
+// Vários recursos escolhidos em Arquivos (Unity 6000.0: Inspector com vários
+// assets): o que é comum, "—" no que difere, estreitar por tipo e a lista.
+void buildMultiAssetInspector(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.multiAsset;
+  using Kind=EditorScreenState::MultiAssetView::Kind;
+  const bool textures=view.kind==Kind::Textures;
+  // Cabeçalho: pilha do tipo com a contagem, título, o ativo e fechar.
+  {
+    auto header=takeTop(content,44);
+    const auto close=centred(takeRight(header,28),26,26);
+    const u32 closeWidget=widgetId(EditorWidget::FilesSelectNone);
+    builder.list.addRect(close,builder.isPressed(closeWidget)?theme.color.line:theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(close,12,12),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+    builder.router.addRegion(close,closeWidget,theme.touch.minimumTarget*.75f);
+    auto badge=takeLeft(header,40);
+    const UiRect back{badge.x+8,badge.y+6,26,26},front{badge.x+3,badge.y+11,26,26};
+    const u32 icon=view.kind==Kind::Mixed?static_cast<u32>(UiIcon::AssetsGrid):view.groups.empty()?0u:view.groups.front().icon;
+    builder.list.addRect(back,theme.color.raised,theme.radius.control);
+    builder.list.addBorder(back,theme.color.lineSoft,1.0f,theme.radius.control);
+    builder.list.addRect(front,theme.color.accentWash,theme.radius.control);
+    builder.list.addBorder(front,withAlpha(theme.color.accent,.6f),1.0f,theme.radius.control);
+    if(icon) builder.list.addImage(centred(front,15,15),icon,theme.color.accent);
+    takeLeft(header,6);
+    auto top=takeTop(header,24);
+    builder.label(top,view.title,theme.color.text,theme.type.cardName);
+    std::string active;
+    for(const auto &item:view.items) if(item.active) active=item.name;
+    builder.label(takeTop(header,16),fitMiddle(builder.list,"Ativo: "+active,header.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+  }
+  // Rodapé com Reverter e Aplicar quando há o que aplicar em conjunto.
+  if(textures) {
+    auto footer=takeBottom(content,40);
+    builder.list.addRect({footer.x,footer.y,footer.width,1},theme.color.lineSoft);
+    takeTop(footer,6);
+    auto row=takeTop(footer,30);
+    const auto revert=takeLeft(row,row.width*.36f-2);takeLeft(row,4);
+    const bool pending=view.pending>0;
+    textureAction(builder,revert,UiIcon::EditorAuthorUndo,"Reverter",widgetId(EditorWidget::MultiAssetRevert),false,pending);
+    textureAction(builder,row,UiIcon::UiCheck,pending?"Aplicar a "+std::to_string(view.pending)+(view.pending==1?" textura":" texturas"):std::string("Aplicar"),
+                  widgetId(EditorWidget::MultiAssetApply),true,pending);
+  }
+  takeTop(content,2);
+  const UiRect window=content;
+  builder.router.addRegion(window,widgetId(EditorWidget::MultiAssetScroll));
+  builder.list.pushClip(window);
+  const TextureCards cards{builder,window};
+  UiRect column{window.x,window.y-state.multiAssetScroll,window.width-5,1.0e6f};
+  const float start=column.y;
+  // Cartão simples, sem recolher: fundo, ícone, título e nota à direita.
+  const auto card=[&](UiIcon icon,const std::string &title,std::string_view note,float bodyHeight,UiColor noteColor) {
+    auto frame=takeTop(column,kTexCardHeader+bodyHeight+kTexCardPad);
+    takeTop(column,kTexCardGap);
+    builder.list.addRect(frame,theme.color.surface,theme.radius.card);
+    builder.list.addBorder(frame,theme.color.lineSoft,1.0f,theme.radius.card);
+    auto header=deflate(takeTop(frame,kTexCardHeader),UiInsets::symmetric(kTexCardPad,0));
+    builder.list.addImage(centred(takeLeft(header,16),14,14),static_cast<UiImageId>(icon),theme.color.accent);
+    takeLeft(header,6);
+    if(!note.empty()) builder.label(takeRight(header,std::min(header.width*.5f,measureTextWidth(note,builder.list.fontMetrics(),theme.type.caption)+6)),
+                                    note,noteColor,theme.type.caption,UiAlign::End);
+    builder.label(header,title,theme.color.text,kTexCardTitle);
+    return deflate(frame,UiInsets{kTexCardPad,0,kTexCardPad,kTexCardPad});
+  };
+  // Tipos: com mais de um, cada linha estreita a seleção àquele tipo. Com um
+  // tipo só, o cabeçalho já diz qual; sem edição comum, fica o aviso.
+  // Aviso quebrado em palavras na largura do cartão, sem cortar a frase.
+  const auto noteText=wrapText(builder.list,view.note,column.width-2*kTexCardPad-12-19,theme.type.caption);
+  const auto noteLines=[&](UiRect box,UiColor ink) {
+    builder.list.addRect(box,withAlpha(ink,.10f),theme.radius.control);
+    auto text=deflate(box,UiInsets{6,5,6,5});
+    builder.list.addImage(centred(takeLeft(text,14),12,12),static_cast<UiImageId>(UiIcon::UiInfo),ink);
+    takeLeft(text,5);
+    for(const auto &line:noteText) builder.label(takeTop(text,15),line,ink,theme.type.caption);
+  };
+  const float noteHeight=view.note.empty()?0.0f:10.0f+15.0f*static_cast<float>(noteText.size());
+  if(view.kind==Kind::Other) noteLines(card(UiIcon::AssetsFile,"Edição múltipla","",noteHeight,theme.color.textMuted),theme.color.warning);
+  if(view.kind==Kind::Mixed) {
+    const bool mixed=true;
+    const float row=28,gap=4;
+    auto body=card(UiIcon::AssetsGrid,"Tipos","",noteHeight+4+view.groups.size()*row+(view.groups.size()-1)*gap,theme.color.textMuted);
+    if(!view.note.empty()) {noteLines(takeTop(body,noteHeight),theme.color.accent);takeTop(body,4);}
+    for(u32 i=0;i<view.groups.size();++i) {
+      const auto &group=view.groups[i];
+      auto line=takeTop(body,row);takeTop(body,gap);
+      const u32 widget=widgetId(EditorWidget::MultiAssetNarrowBase)+i;
+      builder.list.addRect(line,mixed&&builder.isPressed(widget)?theme.color.line:theme.color.canvas,theme.radius.control);
+      auto inner=deflate(line,UiInsets::symmetric(8,0));
+      builder.list.addImage(centred(takeLeft(inner,16),14,14),group.icon,theme.color.textDim);
+      takeLeft(inner,6);
+      if(mixed) builder.list.addImage(centred(takeRight(inner,12),11,11),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textDim);
+      const std::string count=std::to_string(group.count);
+      auto pill=takeRight(inner,measureTextWidth(count,builder.list.fontMetrics(),theme.type.label)+14);
+      pill=centred(pill,pill.width,16);
+      builder.list.addRect(pill,theme.color.accentWash,8);
+      builder.label(pill,count,theme.color.accent,theme.type.label,UiAlign::Center);
+      builder.label(inner,group.label,theme.color.text,theme.type.caption);
+      if(mixed) cards.region(line,widget);
+    }
+  }
+  // Importação comum às texturas: igual mostra o valor, diferente mostra "—".
+  if(textures) {
+    constexpr u32 fields=10;
+    const float cell=textureFieldHeight(true),gap=6;
+    const u32 rows=(fields+1)/2;
+    const std::string note=view.pending?std::to_string(view.pending)+" não aplicada"+(view.pending==1?"":"s"):std::string();
+    const auto hints=view.mixed?wrapText(builder.list,"Toque longo num \xE2\x80\x94 copia o valor de uma delas",
+                                         column.width-2*kTexCardPad,theme.type.caption):std::vector<std::string>{};
+    auto body=card(UiIcon::UiSettings,"Importação",note,rows*cell+(rows-1)*gap+(hints.empty()?0.0f:6+14.0f*hints.size()),theme.color.accent);
+    const float half=(body.width-8)*.5f;
+    for(u32 i=0;i<fields;++i) {
+      const std::string &text=view.fields[i];
+      const auto split=text.find(": ");
+      const UiRect at{body.x+(i%2)*(half+8),body.y+static_cast<float>(i/2)*(cell+gap),half,cell};
+      const bool mixed=(view.mixed>>i)&1u;
+      const auto field=textureField(cards,at,split==std::string::npos?std::string_view("Perfil"):std::string_view(text).substr(0,split),
+                                    split==std::string::npos?text:text.substr(split+2),true,
+                                    widgetId(EditorWidget::MultiAssetFieldBase)+i,mixed?UiIcon::EditorAuthorMore:UiIcon::UiChevronRight);
+      // O "—" em destaque: é o que um toque longo resolve (copiar de uma delas).
+      if(mixed) builder.list.addRect({field.x,field.bottom()-2,field.width,2},withAlpha(theme.color.accent,.7f),1.0f);
+    }
+    UiRect hint{body.x,body.y+rows*cell+(rows-1)*gap+6,body.width,14};
+    for(const auto &line:hints) {builder.label(hint,line,theme.color.textMuted,theme.type.caption);hint.y+=14;}
+  }
+  // A seleção: tocar abre só aquele; o x tira da seleção.
+  {
+    const float row=34,gap=3;
+    auto body=card(UiIcon::EditorSelectBox,"Seleção ("+std::to_string(view.items.size())+")","",
+                   view.items.size()*row+(view.items.size()-1)*gap,theme.color.textMuted);
+    for(u32 i=0;i<view.items.size();++i) {
+      const auto &item=view.items[i];
+      auto line=takeTop(body,row);takeTop(body,gap);
+      const u32 widget=widgetId(EditorWidget::MultiAssetItemBase)+i,remove=widgetId(EditorWidget::MultiAssetRemoveBase)+i;
+      builder.list.addRect(line,builder.isPressed(widget)?theme.color.line:item.active?withAlpha(theme.color.accent,.14f):theme.color.canvas,theme.radius.control);
+      if(item.active) builder.list.addRect({line.x,line.y,3,line.height},theme.color.accent);
+      auto inner=deflate(line,UiInsets{8,0,2,0});
+      builder.list.addImage(centred(takeLeft(inner,18),15,15),item.icon,item.active?theme.color.accent:theme.color.textDim);
+      takeLeft(inner,6);
+      const auto x=takeRight(inner,28);
+      builder.list.addImage(centred(x,11,11),static_cast<UiImageId>(UiIcon::UiClose),builder.isPressed(remove)?theme.color.accent:theme.color.textMuted);
+      auto name=takeTop(inner,inner.height*.55f);
+      builder.label(name,fitMiddle(builder.list,item.name,name.width,theme.type.caption),theme.color.text,theme.type.caption);
+      builder.label(inner,fitMiddle(builder.list,item.detail,inner.width,theme.type.caption),theme.color.textFaint,theme.type.caption);
+      cards.region(line,widget);
+      cards.region(x,remove);
+    }
+  }
+  const float height=column.y-start;
+  builder.list.popClip();
+  if(builder.layout) {builder.layout->multiAssetContent=height;builder.layout->multiAssetWindow=window.height;}
+  if(height>window.height+1) {
+    const float thumb=std::max(24.0f,window.height*window.height/height);
+    const float travel=window.height-thumb;
+    const float offset=std::clamp(state.multiAssetScroll/(height-window.height),0.0f,1.0f)*travel;
+    builder.list.addRect({window.right()-3,window.y+offset,3,thumb},theme.color.line,1.5f);
+  }
+}
 } // namespace
 
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
@@ -5748,6 +5920,12 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     builder.list.addRect(panel, builder.theme.color.surface);
     builder.router.addBlocker(panel);
     buildImportDock(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
+    return;
+  }
+  if (builder.state.multiAsset.items.size() > 1) {
+    builder.list.addRect(panel, builder.theme.color.canvas);
+    builder.router.addBlocker(panel);
+    buildMultiAssetInspector(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
     return;
   }
   if (builder.state.materialInspector.valid()) {buildMaterialAssetInspector(builder, panel);return;}

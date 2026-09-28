@@ -458,6 +458,11 @@ enum class EditorWidget : u32 {
   HierarchyEyeBase = 0x2000'0000u,
   // Seleção pela vista por objeto (Unity: Scene picking), a mão da linha.
   HierarchyPickBase = 0xCE00'0000u,
+  // Vários recursos em Arquivos (Unity: Ctrl/Shift+clique no Project) e o
+  // Inspector deles: estreitar por tipo, campos comuns, a lista escolhida.
+  FilesMultiToggle = 0xCF00'0000u, FilesSelectNone, MultiAssetApply, MultiAssetRevert, MultiAssetScroll,
+  MultiAssetNarrowBase = 0xCF00'0100u, MultiAssetFieldBase = 0xCF00'0200u,
+  MultiAssetItemBase = 0xCF00'0300u, MultiAssetRemoveBase = 0xCF00'0400u,
   TransformFieldBase = 0x3000'0000u,  // + linha * 3 + eixo
   GizmoAxisBase = 0x4000'0000u,       // + eixo
   ComponentPreviewComposition=0x9a00'0000u,
@@ -546,7 +551,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange},{EditorWidget::FilesMultiToggle,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -679,7 +684,28 @@ struct EditorScreenState final {
   // O arquivo escolhido no painel. As ações de recurso agem sobre ele, e é o
   // painel que decide qual é — não a seleção da cena, que é outra coisa.
   std::string selectedFile;
-  bool renamingResource=false;
+  // Vários arquivos escolhidos: `selectedFile` é o ativo (o último tocado).
+  // Com o modo aceso, cada toque numa linha soma ou tira.
+  std::vector<std::string> selectedFiles;
+  bool filesMultiSelect=false;
+  bool isFileSelected(std::string_view path) const {return std::find(selectedFiles.begin(),selectedFiles.end(),path)!=selectedFiles.end();}
+  // O Inspector de vários recursos (Unity 6000.0 Manual/InspectorManageComponents,
+  // "Inspect multiple assets"): tipos presentes para estreitar, a lista e, quando
+  // todos são texturas do projeto, o perfil de importação comum com "—" no que difere.
+  struct MultiAssetView {
+    enum class Kind : u8 {Mixed, Textures, Other};
+    struct Group {std::string label;u32 count=0,icon=0;};
+    struct Item {std::string name,path,detail;u32 icon=0;bool active=false;};
+    Kind kind=Kind::Mixed;
+    std::vector<Group> groups;
+    std::vector<Item> items;
+    std::string title,note;
+    std::array<std::string,10> fields;  // "Rótulo: valor", "Rótulo: —" quando difere
+    u16 mixed=0;
+    u32 pending=0;                      // texturas cujo rascunho difere do aplicado
+  };
+  MultiAssetView multiAsset;
+  float multiAssetScroll=0;  bool renamingResource=false;
   // Apagar pede confirmação em DOIS toques, e não num diálogo. Guarda o caminho
   // que o primeiro toque recusou; o segundo, no mesmo caminho, confirma.
   std::string pendingResourceDelete;
@@ -1359,6 +1385,7 @@ struct EditorScreenLayout final {
   std::vector<u32> visibleSourceTextureRows;
   // Inspector de textura: altura rolável e quanto dela cabe na janela.
   float textureInspectorContent=0,textureInspectorWindow=0;
+  float multiAssetContent=0,multiAssetWindow=0;
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
   // a partir desta contagem.

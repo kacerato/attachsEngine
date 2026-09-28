@@ -412,6 +412,38 @@ int main(int argc, char **argv) {
                        "Intensidade das luzes","Renomear \xC2\xB7 Poste alto","Excluir \xC2\xB7 2 objetos"};
     state.undoApplied=4;
   }
+  // Vários recursos: "assets-multi" três texturas com perfil diferente em dois
+  // campos e uma pendente; "assets-mixed" tipos diferentes; "assets-other" modelos.
+  if(argc>4 && std::string(argv[4]).starts_with("assets-")) {
+    using View=editor::EditorScreenState::MultiAssetView;auto &view=state.multiAsset;
+    const std::string mode=argv[4];
+    const auto item=[](const char *name,const char *detail,ui::UiIcon icon,bool active) {
+      View::Item value;value.name=name;value.path=name;value.detail=detail;value.icon=static_cast<u32>(icon);value.active=active;return value;
+    };
+    if(mode=="assets-multi") {
+      view.kind=View::Kind::Textures;view.title="3 texturas";
+      view.groups={{"Texturas",3,static_cast<u32>(ui::UiIcon::AssetsTexture)}};
+      view.items={item("Muro_BaseColor.png","2048\xC3\x97" "2048  \xC2\xB7  Texturas/Muro",ui::UiIcon::AssetsTexture,false),
+                  item("Muro_Normal.png","2048\xC3\x97" "2048  \xC2\xB7  Texturas/Muro",ui::UiIcon::AssetsTexture,false),
+                  item("Piso_BaseColor.png","1024\xC3\x97" "1024  \xC2\xB7  Texturas/Piso",ui::UiIcon::AssetsTexture,true)};
+      view.fields={"Tipo: \xE2\x80\x94","Tamanho: até 2048 px","Mipmaps: sim","Bordas: sem halo","Anisotropia: da qualidade",
+                   "Normal Y: \xE2\x80\x94","Cobertura alfa: desligada","Corte da cobertura: 50%","Streaming de mips: sim","Prioridade: 0"};
+      view.mixed=(1u<<0)|(1u<<5);view.pending=1;
+    } else if(mode=="assets-mixed") {
+      view.kind=View::Kind::Mixed;view.title="4 recursos";
+      view.note="Tipos diferentes: só o comum aparece. Toque num tipo para estreitar.";
+      view.groups={{"Texturas",2,static_cast<u32>(ui::UiIcon::AssetsTexture)},{"Materiais",1,static_cast<u32>(ui::UiIcon::AssetsMaterial)},
+                   {"Modelos",1,static_cast<u32>(ui::UiIcon::AssetsFileMesh)}};
+      view.items={item("Muro_BaseColor.png","2048\xC3\x97" "2048  \xC2\xB7  Texturas/Muro",ui::UiIcon::AssetsTexture,false),
+                  item("Muro_Normal.png","2048\xC3\x97" "2048  \xC2\xB7  Texturas/Muro",ui::UiIcon::AssetsTexture,false),
+                  item("Muro.material","Materiais",ui::UiIcon::AssetsMaterial,true),item("Casa.glb","Modelos",ui::UiIcon::AssetsFileMesh,false)};
+    } else {
+      view.kind=View::Kind::Other;view.title="2 modelos";
+      view.note="Sem edição em conjunto para modelos. Toque num item para abri-lo sozinho.";
+      view.groups={{"Modelos",2,static_cast<u32>(ui::UiIcon::AssetsFileMesh)}};
+      view.items={item("Casa.glb","Modelos",ui::UiIcon::AssetsFileMesh,true),item("Arvore.glb","Modelos",ui::UiIcon::AssetsFileMesh,false)};
+    }
+  }
   // Multisseleção: três postes com luz (dois com corpo físico), intensidades
   // diferentes; "multi-light" abre a luz, "multi-set" o menu Definir como.
   if(argc>4 && std::string(argv[4]).starts_with("multi")) {

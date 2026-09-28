@@ -1682,6 +1682,15 @@ private:
   }
   void replicateEdit(EditorEntityId id,const EditorEntity &before,u32 depth);
   void refreshMultiEdit();
+  // Vários recursos escolhidos em Arquivos: o rascunho do perfil de cada
+  // textura até Aplicar, que publica todas ou nenhuma, num passo de Desfazer.
+  struct MultiTextureDraft {resources::AssetGuid guid;resources::TextureProfile saved,draft;};
+  std::vector<MultiTextureDraft> multiTextures_;
+  std::vector<u32> multiAssetGroups_;  // tipo de cada arquivo escolhido (índice do grupo)
+  void refreshMultiAsset();
+  void selectFiles(std::vector<std::string> paths);
+  bool applyMultiTextureProfiles();
+  static void stepTextureProfileField(resources::TextureProfile &profile,u32 field);
   bool applySetValue(u32 row);
   float dragInitialWorld_[16]{};
   void applyMultiDrag(const EditorTransform &moved,u32 axis);

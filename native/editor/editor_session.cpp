@@ -275,6 +275,59 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
 }
 
 namespace {
+// Perfil de importação de textura campo a campo, na ordem dos widgets
+// TextureProfileInterpretation…StreamingPriority: rótulo, cópia e liga/desliga,
+// comuns ao Inspector de uma textura e ao de várias.
+constexpr u32 TextureProfileFields=10;
+bool textureProfileToggle(u32 field) {return field==2||field==3||field==4||field==5||field==6||field==8;}
+std::string textureProfileFieldText(const resources::TextureProfile &profile,u32 field) {
+  static constexpr const char *interpretations[]{"Tipo: pelo uso","Tipo: cor (sRGB)","Tipo: dado (linear)","Tipo: mapa normal"};
+  switch(field) {
+    case 0: return interpretations[std::min<u32>(profile.interpretation,3u)];
+    case 1: return profile.maximumDimension?"Tamanho: até "+std::to_string(profile.maximumDimension)+" px":std::string("Tamanho: teto do projeto");
+    case 2: return profile.mipmaps?"Mipmaps: sim":"Mipmaps: não";
+    case 3: return profile.dilateEdges?"Bordas: sem halo":"Bordas: do arquivo";
+    case 4: return profile.anisotropy?"Anisotropia: da qualidade":"Anisotropia: desligada";
+    case 5: return profile.invertNormalGreen?"Normal Y: inverter (DX)":"Normal Y: manter (GL)";
+    case 6: return profile.preserveAlphaCoverage?"Cobertura alfa: preservar":"Cobertura alfa: desligada";
+    case 7: return "Corte da cobertura: "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%";
+    case 8: return profile.streamingMipmaps?"Streaming de mips: sim":"Streaming de mips: não";
+    default: return "Prioridade: "+std::to_string(profile.streamingPriority);
+  }
+}
+void copyTextureProfileField(resources::TextureProfile &to,const resources::TextureProfile &from,u32 field) {
+  switch(field) {
+    case 0: to.interpretation=from.interpretation;break;
+    case 1: to.maximumDimension=from.maximumDimension;break;
+    case 2: to.mipmaps=from.mipmaps;break;
+    case 3: to.dilateEdges=from.dilateEdges;break;
+    case 4: to.anisotropy=from.anisotropy;break;
+    case 5: to.invertNormalGreen=from.invertNormalGreen;break;
+    case 6: to.preserveAlphaCoverage=from.preserveAlphaCoverage;break;
+    case 7: to.alphaCoverageCutoff=from.alphaCoverageCutoff;break;
+    case 8: to.streamingMipmaps=from.streamingMipmaps;break;
+    default: to.streamingPriority=from.streamingPriority;break;
+  }
+}
+void setTextureProfileToggle(resources::TextureProfile &profile,u32 field,bool on) {
+  switch(field) {
+    case 2: profile.mipmaps=on;break;
+    case 3: profile.dilateEdges=on;break;
+    case 4: profile.anisotropy=on;break;
+    case 5: profile.invertNormalGreen=on;break;
+    case 6: profile.preserveAlphaCoverage=on;break;
+    case 8: profile.streamingMipmaps=on;break;
+    default: break;
+  }
+}
+// Tipos de arquivo que o Inspector de vários recursos agrupa (a ordem é a dos
+// grupos na tela).
+struct FileKind {const char *label,*plural;ui::UiIcon icon;};
+constexpr FileKind fileKinds[]{
+  {"textura","Texturas",ui::UiIcon::AssetsTexture},{"material","Materiais",ui::UiIcon::AssetsMaterial},
+  {"modelo","Modelos",ui::UiIcon::AssetsFileMesh},{"mapa HDRI","Mapas HDRI",ui::UiIcon::LightingSky},
+  {"perfil","Perfis de ambiente",ui::UiIcon::LightingSceneEffects},{"script","Scripts",ui::UiIcon::ScriptingCode},
+  {"cena","Cenas",ui::UiIcon::SceneObject},{"arquivo","Outros arquivos",ui::UiIcon::AssetsFile}};
 // Tipo de componente para casar entre objetos: o id do tipo, ou o tipo do
 // script (todos os comportamentos C# compartilham o mesmo tipo nativo).
 std::string componentKind(const scene::ComponentValue &value) {
@@ -1965,9 +2018,173 @@ void EditorSession::replicateEdit(EditorEntityId id,const EditorEntity &before,u
   }
 }
 
+void EditorSession::stepTextureProfileField(resources::TextureProfile &profile,u32 field) {
+  switch(field) {
+    case 0: profile.interpretation=static_cast<u8>((profile.interpretation+1u)%4u);break;
+    case 1: {
+      const auto &steps=resources::TextureDimensionSteps;
+      const auto current=std::find(steps.begin(),steps.end(),profile.maximumDimension);
+      profile.maximumDimension=current==steps.end()||current+1==steps.end()?steps.front():*(current+1);
+      break;
+    }
+    case 2: profile.mipmaps=!profile.mipmaps;break;
+    case 3: profile.dilateEdges=!profile.dilateEdges;break;
+    case 4: profile.anisotropy=!profile.anisotropy;break;
+    case 5: profile.invertNormalGreen=!profile.invertNormalGreen;break;
+    case 6: profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;break;
+    case 7:
+      profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
+      if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
+      break;
+    case 8: profile.streamingMipmaps=!profile.streamingMipmaps;break;
+    default: profile.streamingPriority=nextStreamingPriority(profile.streamingPriority);break;
+  }
+}
+
+void EditorSession::selectFiles(std::vector<std::string> paths) {
+  // Sem repetidos, na ordem do toque: o último é o ativo.
+  std::vector<std::string> unique;
+  for(auto &path:paths) if(std::find(unique.begin(),unique.end(),path)==unique.end()) unique.push_back(std::move(path));
+  state_.pendingResourceDelete.clear();
+  state_.selectedFiles=unique;
+  const auto single=[&](const std::string &path) {
+    // No modo de vários, sobrar um script ou uma cena não troca de área.
+    const bool leaves=path.ends_with(".cs")||path.ends_with(".json")||path.ends_with(".md")||path.ends_with(".aescene");
+    if(state_.filesMultiSelect && leaves) return false;
+    for(const auto &entry:files_.tree()) if(entry.relativePath==path) {openProjectFile(entry);return true;}
+    return false;
+  };
+  if(unique.size()==1 && single(unique.front())) return;
+  // Nenhum ou vários: os Inspectors de um recurso fecham e Propriedades mostra
+  // o conjunto (ou nada).
+  state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;
+  state_.environmentInspector={};state_.profileInspector={};
+  if(state_.textureInspector) {closeTextureViewer();state_.textureInspector=false;}
+  state_.textureManager=false;
+  state_.selectedFile=unique.empty()?std::string():unique.back();
+}
+
+void EditorSession::refreshMultiAsset() {
+  auto &paths=state_.selectedFiles;auto &view=state_.multiAsset;
+  // Coerente com o ativo, que muitas rotinas escrevem direto.
+  std::erase_if(paths,[&](const std::string &path){return !files_.exists(path);});
+  if(state_.selectedFile.empty()) paths.clear();
+  else if(!state_.isFileSelected(state_.selectedFile)) paths={state_.selectedFile};
+  if(paths.size()<2) {view={};multiTextures_.clear();multiAssetGroups_.clear();return;}
+  view.items.clear();view.groups.clear();multiAssetGroups_.clear();
+  std::array<u32,std::size(fileKinds)> counts{};
+  std::vector<resources::AssetGuid> textures;
+  for(const auto &path:paths) {
+    const auto *record=assets_.findByPath(path);
+    const auto type=record?record->type:resources::AssetType{};
+    const u32 kind=record&&type==resources::AssetType::Texture?0u:record&&type==resources::AssetType::Material?1u:
+        record&&type==resources::AssetType::Mesh?2u:record&&type==resources::AssetType::EnvironmentMap?3u:
+        record&&type==resources::AssetType::EnvironmentProfile?4u:path.ends_with(".cs")?5u:path.ends_with(".aescene")?6u:
+        (path.ends_with(".glb")||path.ends_with(".gltf"))?2u:7u;
+    ++counts[kind];multiAssetGroups_.push_back(kind);
+    EditorScreenState::MultiAssetView::Item item;
+    item.name=baseName(path);item.path=path;item.icon=static_cast<u32>(fileKinds[kind].icon);item.active=path==state_.selectedFile;
+    const auto slash=path.find_last_of('/');
+    item.detail=slash==std::string::npos?std::string("Projeto"):path.substr(0,slash);
+    if(kind==0) {
+      textures.push_back(record->guid);
+      if(const auto *texture=findProjectTexture(record->guid);texture && texture->width)
+        item.detail=std::to_string(texture->width)+"×"+std::to_string(texture->height)+"  ·  "+item.detail;
+    }
+    view.items.push_back(std::move(item));
+  }
+  u32 kinds=0,only=0;
+  for(u32 kind=0;kind<counts.size();++kind) if(counts[kind]) {
+    view.groups.push_back({fileKinds[kind].plural,counts[kind],static_cast<u32>(fileKinds[kind].icon)});
+    ++kinds;only=kind;
+  }
+  const u32 count=static_cast<u32>(paths.size());
+  view.fields={};view.mixed=0;view.pending=0;
+  if(kinds>1) {
+    view.kind=EditorScreenState::MultiAssetView::Kind::Mixed;
+    view.title=std::to_string(count)+" recursos";
+    view.note="Tipos diferentes: só o comum aparece. Toque num tipo para estreitar.";
+    multiTextures_.clear();return;
+  }
+  std::string plural=fileKinds[only].plural;
+  plural[0]=static_cast<char>(std::tolower(static_cast<unsigned char>(plural[0])));
+  view.title=std::to_string(count)+" "+(only==7?std::string("arquivos"):plural);
+  if(only!=0) {
+    // Unity: "Multi-object editing not supported" para o tipo sem editor comum.
+    view.kind=EditorScreenState::MultiAssetView::Kind::Other;
+    view.note="Sem edição em conjunto para "+plural+". Toque num item para abri-lo sozinho.";
+    multiTextures_.clear();return;
+  }
+  view.kind=EditorScreenState::MultiAssetView::Kind::Textures;
+  view.note.clear();
+  // Rascunhos: quem não mudou acompanha o aplicado (Aplicar, Desfazer, outro Inspector).
+  std::vector<MultiTextureDraft> drafts;
+  for(const auto &guid:textures) {
+    const auto saved=textureProfileFor(guid);
+    MultiTextureDraft entry{guid,saved,saved};
+    for(const auto &previous:multiTextures_) if(previous.guid==guid) {
+      entry.draft=resources::sameTextureProfile(previous.draft,previous.saved)?saved:previous.draft;
+    }
+    drafts.push_back(entry);
+  }
+  multiTextures_=std::move(drafts);
+  for(u32 field=0;field<TextureProfileFields;++field) {
+    const auto first=textureProfileFieldText(multiTextures_.front().draft,field);
+    bool same=true;
+    for(const auto &texture:multiTextures_) if(textureProfileFieldText(texture.draft,field)!=first) {same=false;break;}
+    if(same) view.fields[field]=first;
+    else {view.fields[field]=first.substr(0,first.find(": "))+": \xE2\x80\x94";view.mixed|=static_cast<u16>(1u<<field);}
+  }
+  for(const auto &texture:multiTextures_) if(!resources::sameTextureProfile(texture.draft,texture.saved)) ++view.pending;
+}
+
+bool EditorSession::applyMultiTextureProfiles() {
+  std::vector<MultiTextureDraft> changes;
+  for(const auto &texture:multiTextures_) if(!resources::sameTextureProfile(texture.draft,texture.saved)) changes.push_back(texture);
+  if(changes.empty()) return true;
+  // Todas ou nenhuma: uma recusa devolve as já publicadas ao perfil anterior.
+  const auto publish=[this](const std::vector<MultiTextureDraft> &list,bool forward,std::string &diagnostic) {
+    for(usize i=0;i<list.size();++i) {
+      if(setTextureProfile(list[i].guid,forward?list[i].draft:list[i].saved,diagnostic,false)) continue;
+      const auto *record=assets_.find(list[i].guid);
+      if(record) diagnostic=baseName(record->path)+": "+diagnostic;
+      for(usize k=i;k-->0;) {std::string ignored;setTextureProfile(list[k].guid,forward?list[k].saved:list[k].draft,ignored,false);}
+      return false;
+    }
+    return true;
+  };
+  std::string diagnostic;
+  if(!publish(changes,true,diagnostic)) {state_.status="Nenhum perfil aplicado. "+diagnostic;return false;}
+  const auto project=files_.rootPath();
+  const u32 count=static_cast<u32>(changes.size());
+  history_.recordResource("Perfil de "+std::to_string(count)+(count==1?" textura":" texturas"),
+                          [this,changes,project,publish](bool forward) {
+    if(files_.rootPath()!=project) {state_.status="Recurso do histórico indisponível neste projeto.";return false;}
+    for(const auto &texture:changes)
+      if(!assets_.find(texture.guid) || !resources::sameTextureProfile(textureProfileFor(texture.guid),forward?texture.saved:texture.draft)) {
+        state_.status="Perfil de textura mudou; histórico preservado sem sobrescrever.";return false;
+      }
+    std::string error;
+    if(!publish(changes,forward,error)) {state_.status=error;return false;}
+    state_.status=forward?"Perfis de textura refeitos":"Perfis de textura desfeitos";
+    return true;
+  });
+  state_.status="Perfil aplicado a "+std::to_string(count)+(count==1?" textura":" texturas")+" e republicado";
+  return true;
+}
+
 bool EditorSession::applySetValue(u32 row) {
   const auto &menu=state_.setValueMenu;
   if(row>=menu.rows.size()) return false;
+  // Campo do perfil comum a várias texturas: copia para o rascunho de todas.
+  if(menu.key.starts_with("asset.tex.")) {
+    const u32 field=static_cast<u32>(std::stoul(menu.key.substr(10)));const u32 index=menu.rows[row].first;
+    if(index>=multiTextures_.size() || field>=TextureProfileFields) return false;
+    const auto source=multiTextures_[index].draft;
+    for(auto &texture:multiTextures_) copyTextureProfileField(texture.draft,source,field);
+    state_.status="Valor copiado para todas; Aplicar publica";
+    return true;
+  }
   const auto *source=document_.find(menu.rows[row].first);if(!source) return false;
   const u32 depth=history_.undoDepth();u32 applied=0;
   for(const auto id:std::vector<EditorEntityId>(state_.selectionSet)) {
@@ -2738,6 +2955,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     return true;
   }
+  // Inspector de vários recursos: arrastar em qualquer ponto dele rola.
+  if(routing.dragging && state_.multiAsset.items.size()>1 && routing.widgetId>=widgetId(EditorWidget::MultiAssetApply) &&
+     routing.widgetId<widgetId(EditorWidget::FilesMultiToggle)+detail::kRange) {
+    const float limit=std::max(0.0f,layout_.multiAssetContent-layout_.multiAssetWindow);
+    state_.multiAssetScroll=std::clamp(state_.multiAssetScroll-routing.stepDelta.y,0.0f,limit);
+    return true;
+  }
   // Inspector de textura: arrastar sobre os cartões (fundo ou controle) rola a
   // janela entre o cabeçalho e o rodapé; o toque curto continua sendo toque.
   if(routing.dragging && state_.textureViewer && (state_.textureInspector||state_.selection!=kInvalidEntity)) {
@@ -3489,24 +3713,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileStreamingPriority) &&
        state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
       auto &profile=state_.textureProfileDraft;
-      if(key==widgetId(EditorWidget::TextureProfileInterpretation)) profile.interpretation=static_cast<u8>((profile.interpretation+1u)%4u);
-      else if(key==widgetId(EditorWidget::TextureProfileDimension)) {
-        const auto &steps=resources::TextureDimensionSteps;
-        const auto current=std::find(steps.begin(),steps.end(),profile.maximumDimension);
-        profile.maximumDimension=current==steps.end()||current+1==steps.end()?steps.front():*(current+1);
-      }
-      else if(key==widgetId(EditorWidget::TextureProfileMipmaps)) profile.mipmaps=!profile.mipmaps;
-      else if(key==widgetId(EditorWidget::TextureProfileEdges)) profile.dilateEdges=!profile.dilateEdges;
-      else if(key==widgetId(EditorWidget::TextureProfileAnisotropy)) profile.anisotropy=!profile.anisotropy;
-      else if(key==widgetId(EditorWidget::TextureProfileNormalGreen)) profile.invertNormalGreen=!profile.invertNormalGreen;
-      else if(key==widgetId(EditorWidget::TextureProfileCoverage)) profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;
-      else if(key==widgetId(EditorWidget::TextureProfileStreaming)) profile.streamingMipmaps=!profile.streamingMipmaps;
-      else if(key==widgetId(EditorWidget::TextureProfileStreamingPriority))
-        profile.streamingPriority=nextStreamingPriority(profile.streamingPriority);
-      else {
-        profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
-        if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
-      }
+      stepTextureProfileField(profile,key-widgetId(EditorWidget::TextureProfileInterpretation));
       state_.textureProfileDirty=!resources::sameTextureProfile(profile,state_.textureProfileSaved);
       refreshTextureViewerImage();
       return true;
@@ -4050,6 +4257,79 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     const auto key=routing.widgetId;
     if(key==widgetId(EditorWidget::FilesCollapse)) {state_.filesCollapsed=!state_.filesCollapsed;return true;}
     const u32 base=widgetId(EditorWidget::FileRowBase);
+    // Vários arquivos (Unity: Ctrl/Shift+clique no Project): um modo no toque.
+    if(key==widgetId(EditorWidget::FilesMultiToggle)) {
+      state_.filesMultiSelect=!state_.filesMultiSelect;
+      if(!state_.filesMultiSelect && state_.selectedFiles.size()>1)
+        selectFiles(state_.selectedFile.empty()?std::vector<std::string>{}:std::vector<std::string>{state_.selectedFile});
+      state_.status=state_.filesMultiSelect?"Selecionar vários: toque nos arquivos para somar ou tirar":"Seleção única em Arquivos";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::FilesSelectNone)) {selectFiles({});return true;}
+    // Inspector de vários recursos.
+    const auto &view=state_.multiAsset;
+    if(key>=widgetId(EditorWidget::MultiAssetNarrowBase) && key<widgetId(EditorWidget::MultiAssetNarrowBase)+view.groups.size()) {
+      // Unity: "Narrow the Selection" — só os arquivos daquele tipo.
+      const auto &group=view.groups[key-widgetId(EditorWidget::MultiAssetNarrowBase)];
+      std::vector<std::string> kept;
+      for(usize i=0;i<state_.selectedFiles.size() && i<multiAssetGroups_.size();++i)
+        if(fileKinds[multiAssetGroups_[i]].plural==group.label) kept.push_back(state_.selectedFiles[i]);
+      selectFiles(std::move(kept));return true;
+    }
+    if(key>=widgetId(EditorWidget::MultiAssetItemBase) && key<widgetId(EditorWidget::MultiAssetItemBase)+view.items.size()) {
+      selectFiles({view.items[key-widgetId(EditorWidget::MultiAssetItemBase)].path});return true;
+    }
+    if(key>=widgetId(EditorWidget::MultiAssetRemoveBase) && key<widgetId(EditorWidget::MultiAssetRemoveBase)+view.items.size()) {
+      auto paths=state_.selectedFiles;const auto removed=view.items[key-widgetId(EditorWidget::MultiAssetRemoveBase)].path;
+      std::erase(paths,removed);
+      // O ativo continua o ativo; tirado ele, o último da lista assume.
+      if(removed!=state_.selectedFile) if(auto found=std::find(paths.begin(),paths.end(),state_.selectedFile);found!=paths.end()) {
+        paths.erase(found);paths.push_back(state_.selectedFile);
+      }
+      selectFiles(std::move(paths));return true;
+    }
+    if(view.kind==EditorScreenState::MultiAssetView::Kind::Textures && !multiTextures_.empty()) {
+      if(key>=widgetId(EditorWidget::MultiAssetFieldBase) && key<widgetId(EditorWidget::MultiAssetFieldBase)+TextureProfileFields) {
+        const u32 field=key-widgetId(EditorWidget::MultiAssetFieldBase);
+        const bool mixed=(view.mixed>>field)&1u;
+        if(routing.heldSeconds>=ui::kUiLongPressSeconds) {
+          // Unity: clique direito › Set to Value of — de qual textura copiar.
+          if(!mixed) {state_.status="Todas já têm o mesmo valor";return true;}
+          const auto text=textureProfileFieldText(multiTextures_.front().draft,field);
+          state_.setValueMenu.key="asset.tex."+std::to_string(field);state_.setValueMenu.label=text.substr(0,text.find(": "));
+          state_.setValueMenu.rows.clear();
+          for(u32 i=0;i<multiTextures_.size();++i) {
+            const auto *record=assets_.find(multiTextures_[i].guid);
+            const auto value=textureProfileFieldText(multiTextures_[i].draft,field);
+            state_.setValueMenu.rows.push_back({i,(record?baseName(record->path):std::string("?"))+"  \xC2\xB7  "+value.substr(value.find(": ")+2)});
+          }
+          return true;
+        }
+        // O passo parte do valor da textura ativa; liga/desliga misturado liga
+        // todas (como o toggle "—" da Unity).
+        const auto *active=assets_.findByPath(state_.selectedFile);
+        auto reference=multiTextures_.front().draft;
+        for(const auto &texture:multiTextures_) if(active && texture.guid==active->guid) reference=texture.draft;
+        if(mixed && textureProfileToggle(field)) setTextureProfileToggle(reference,field,true);
+        else stepTextureProfileField(reference,field);
+        for(auto &texture:multiTextures_) copyTextureProfileField(texture.draft,reference,field);
+        return true;
+      }
+      if(key==widgetId(EditorWidget::MultiAssetRevert)) {
+        for(auto &texture:multiTextures_) texture.draft=texture.saved;
+        state_.status="Rascunho descartado";return true;
+      }
+      if(key==widgetId(EditorWidget::MultiAssetApply)) {applyMultiTextureProfiles();return true;}
+    }
+    if(state_.filesMultiSelect && key>=base && key-base<files_.tree().size()) {
+      // Pasta no modo: só abre ou fecha, sem mexer no que está escolhido.
+      if(files_.tree()[key-base].directory) {files_.toggle(key-base);return true;}
+      auto paths=state_.selectedFiles;const auto path=files_.tree()[key-base].relativePath;
+      if(const auto found=std::find(paths.begin(),paths.end(),path);found!=paths.end()) paths.erase(found);
+      else paths.push_back(path);
+      selectFiles(std::move(paths));
+      return true;
+    }
     if(key==widgetId(EditorWidget::ImportModel)) {state_.modelImportRequested=true;state_.codeFiles=false;return true;}
     if(key==widgetId(EditorWidget::ImportEnvironment)) {state_.environmentImportRequested=true;state_.codeFiles=false;return true;}
     if(key==widgetId(EditorWidget::ImportTexture)) {state_.textureImportRequested=true;state_.codeFiles=false;return true;}
@@ -4101,6 +4381,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key>=base && key-base<files_.tree().size()) {
       const auto entry=files_.tree()[key-base];
       if(entry.directory) files_.toggle(key-base);
+      else state_.selectedFiles={entry.relativePath};
       openProjectFile(entry);
       return true;
     }
@@ -6310,19 +6591,7 @@ bool EditorSession::refreshTextureViewerImage() {
   state_.textureViewerZoomLabel=std::to_string(1u<<state_.textureViewerZoom)+"× no centro";
   // R4: perfil da textura (todos os usos) e o que está na GPU.
   {
-    const auto &profile=state_.textureProfileDraft;
-    static constexpr const char *interpretations[]{"Tipo: pelo uso","Tipo: cor (sRGB)","Tipo: dado (linear)","Tipo: mapa normal"};
-    state_.textureProfileLabels[0]=interpretations[std::min<u32>(profile.interpretation,3u)];
-    state_.textureProfileLabels[1]=profile.maximumDimension?"Tamanho: até "+std::to_string(profile.maximumDimension)+" px":
-                                                            std::string("Tamanho: teto do projeto");
-    state_.textureProfileLabels[2]=profile.mipmaps?"Mipmaps: sim":"Mipmaps: não";
-    state_.textureProfileLabels[3]=profile.dilateEdges?"Bordas: sem halo":"Bordas: do arquivo";
-    state_.textureProfileLabels[4]=profile.anisotropy?"Anisotropia: da qualidade":"Anisotropia: desligada";
-    state_.textureProfileLabels[5]=profile.invertNormalGreen?"Normal Y: inverter (DX)":"Normal Y: manter (GL)";
-    state_.textureProfileLabels[6]=profile.preserveAlphaCoverage?"Cobertura alfa: preservar":"Cobertura alfa: desligada";
-    state_.textureProfileLabels[7]="Corte da cobertura: "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%";
-    state_.textureProfileLabels[8]=profile.streamingMipmaps?"Streaming de mips: sim":"Streaming de mips: não";
-    state_.textureProfileLabels[9]="Prioridade: "+std::to_string(profile.streamingPriority);
+    for(u32 field=0;field<TextureProfileFields;++field) state_.textureProfileLabels[field]=textureProfileFieldText(state_.textureProfileDraft,field);
     // O que o renderer do aparelho tem desta textura agora (S2); no host, sem GPU, diz isso.
     const auto streaming=textureStreamingLevelsOf(texture.guid);
     if(!streaming.known) {
@@ -8086,6 +8355,7 @@ void EditorSession::update() {
     state_.sceneVisibilityChanged=false;appearanceChanged_=true;saveEditorPreferences();
   }
   refreshMultiEdit();
+  refreshMultiAsset();
   refreshFocusedAsset();
   if(state_.environmentInspector.valid()) refreshEnvironmentInspector();
   if(state_.profileInspector.valid()) refreshProfileInspector();
