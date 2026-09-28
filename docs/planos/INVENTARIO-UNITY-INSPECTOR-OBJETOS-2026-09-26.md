@@ -98,7 +98,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 |---|---|---|---|---|
 | 57 | Abrir Inspector como janela ou aba | ✔ | A: painel fixo + janela focada com abas sobre o viewport (uma tela no telefone) · `cba8cc82` | I3 |
 | 58 | Vários Inspectors | ✔ | até 8 abas focadas, cada uma presa ao seu alvo · `cba8cc82` | I3 |
-| 59 | Mostra o que foi escolhido na Hierarchy, Scene ou Project | ◐ | recursos só textura/modelo | I3 |
+| 59 | Mostra o que foi escolhido na Hierarchy, Scene ou Project | ◐ | objeto, textura, modelo e material (`9ce0c9fe`); script abre no código, cena abre; falta HDRI, perfil de ambiente e mapa de entrada em Propriedades | I3 |
 | 60 | Modo Debug (campos privados e estado de execução) | ✔ | valores crus do esquema e campos de script ocultos · `902b804f` | I3 |
 | 61 | Voltar ao modo Normal | ✔ | ⋮ › Modo Normal · `902b804f` | I3 |
 
@@ -140,7 +140,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 83 | Aviso de componente sem edição múltipla | ✗ | | I4 |
 | 84 | Instância de prefab: opções e overrides em negrito | ✗ | | P |
 | 85 | Vários prefabs (sem Select/Revert/Apply) | ✗ | | P |
-| 86 | Recurso único: importação e propriedades | ◐ | textura e modelo; falta material, áudio etc. | I3 |
+| 86 | Recurso único: importação e propriedades | ◐ | textura, modelo e material do projeto `9ce0c9fe`; falta HDRI e perfil de ambiente; áudio não existe na engine (bloco próprio) | I3 |
 | 87 | Vários recursos: comuns e "—" | ✗ | | I4 |
 | 88 | Script: campos públicos/[SerializeField]; HideInInspector | ✔ | `[SerializeField]` expõe privado, `[HideInInspector]` guarda sem mostrar · `1e634f23` | I2 |
 | 89 | Ping pelo ⋮ | ✔ | ⋮ do Inspector e ⋮ da janela focada · `902b804f` | I3 |
