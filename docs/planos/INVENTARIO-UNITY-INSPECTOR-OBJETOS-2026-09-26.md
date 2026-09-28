@@ -156,7 +156,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 94 | Overlays | ◐ | barras do viewport fixas | T |
 | 95 | Inspector | ✔ | | — |
 | 96 | Project window | ✔ | Arquivos/Recursos | — |
-| 97 | Barra de status | ◐ | status no topo | I3 |
+| 97 | Barra de status | ✔ | A: sob o viewport; mensagem do console, contagens, atividade e janela de trabalhos com Cancelar; modo de otimização de código não aplicável (compilação gerenciada única) · `6dc5fe35` | I3 |
 
 ## 12. Hierarchy window — `hierarchy-reference.html` (+ D Manage GameObjects in the Hierarchy)
 
