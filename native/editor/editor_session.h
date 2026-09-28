@@ -1663,12 +1663,39 @@ private:
   resources::AssetGuid focusedAssetLoaded_{};
   bool previewSecondary_=false,modalInFocusedAsset_=false;
   std::vector<u32> focusedAssetPointers_;
+  // Gizmo na multisseleção (Unity: modo Pivot): as outras raízes selecionadas
+  // seguem o ativo — translação pelo mesmo delta no mundo, rotação pelo mesmo
+  // ângulo em torno do próprio pivô, escala pela mesma razão local.
+  struct MultiDragTarget {EditorEntityId id=0;float world[16]{};float parent[16]{};EditorTransform initial{};};
+  std::vector<MultiDragTarget> multiDrag_;
+  // Edição múltipla: a mudança feita no ativo (antes × depois) é repetida nos
+  // outros selecionados, no mesmo passo de Desfazer; e a vista que o
+  // Inspector usa para "—" e para os componentes em comum.
+  template<class F> auto withMultiEdit(F &&body) {
+    if(state_.selectionSet.size()<2 || isPlaying() || !document_.exists(state_.selection)) return body();
+    const auto id=state_.selection;const EditorEntity before=*document_.find(id);
+    const u32 depth=history_.undoDepth();
+    auto result=body();
+    replicateEdit(id,before,depth);
+    return result;
+  }
+  void replicateEdit(EditorEntityId id,const EditorEntity &before,u32 depth);
+  void refreshMultiEdit();
+  bool applySetValue(u32 row);
+  float dragInitialWorld_[16]{};
+  void applyMultiDrag(const EditorTransform &moved,u32 axis);
   void validateFocusedInspectors();
 public:
   // Ping (Unity): abre os pais, rola a Hierarquia até o objeto e pisca a linha.
   void pingEntity(EditorEntityId id);
   // Inspector focado (Unity: Properties) de um objeto ou de um componente dele.
   void openFocusedInspector(EditorEntityId entity,u64 component=0);
+  // Multisseleção. `selectedRoots` tira do conjunto quem já é descendente de
+  // outro selecionado (mover, duplicar ou apagar o pai já leva o filho).
+  void toggleSelection(EditorEntityId entity);
+  void selectEntities(std::vector<EditorEntityId> entities);
+  std::vector<EditorEntityId> selectedRoots() const;
+  const std::vector<EditorEntityId> &selectionSet() const noexcept {return state_.selectionSet;}
   // Recurso do projeto numa janela focada (Unity: Properties de um asset).
   bool openFocusedAsset(EditorScreenState::FocusedAsset kind,const resources::AssetGuid &guid);
   // Leva a cena ao ponto `applied` do histórico (quantos passos aplicados),

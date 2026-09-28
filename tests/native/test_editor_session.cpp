@@ -4009,6 +4009,133 @@ AE_TEST(color_eyedropper_requests_a_screen_sample_and_applies_it) {
   state.colorField=0;
 }
 
+// Unity 6000.0 Multi-object editing: modo "Selecionar vários" na Hierarquia,
+// componentes em comum, ocultos contados, "—" onde difere, edição no ativo
+// repetida nos outros num passo de Desfazer, "Definir como o valor de…",
+// e Excluir/Duplicar em lote.
+AE_TEST(multi_selection_edits_common_components_in_one_undo_step) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto make=[&](const char *name,float intensity,bool body)->EditorEntityId {
+    const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,name);
+    auto value=*doc.find(id);auto *light=static_cast<scene::Light *>(value.components.add(scene::Light::descriptor));
+    light->intensity=intensity;
+    if(body) value.components.add(scene::PhysicsBody::descriptor);
+    doc.applyEntityValues(id,value);
+    return id;
+  };
+  const auto a=make("Poste A",100,true),b=make("Poste B",100,true),c=make("Poste C",250,false);
+  f.session.setSelection(a);f.session.update();history.clear();
+  const auto &state=f.session.screen();
+  tapWidget(f,widgetId(EditorWidget::HierarchyMultiToggle));
+  AE_EXPECT_TRUE(state.multiSelect,"modo selecionar vários");
+  tapWidget(f,hierarchyRowWidget(b));tapWidget(f,hierarchyRowWidget(c));
+  AE_EXPECT_EQ(state.selectionSet.size(),3u,"três selecionados");
+  AE_EXPECT_EQ(state.selection,c,"o último tocado é o ativo");
+  f.session.update();
+  AE_EXPECT_EQ(state.multi.count,3u,"Inspector de 3 objetos");
+  AE_EXPECT_EQ(state.multi.hidden,1u,"o corpo físico (só em A e B) fica oculto");
+  const auto lightOf=[&](EditorEntityId id){return static_cast<const scene::Light *>(doc.find(id)->components.find(scene::Light::descriptor));};
+  const auto lightInstance=lightOf(c)->instanceId();
+  AE_EXPECT_TRUE(state.multi.isCommon(lightInstance),"a luz é comum");
+  AE_EXPECT_TRUE(state.multi.isMixed(multiKey(lightInstance,"intensity")),"intensidade diferente: traço");
+  AE_EXPECT_TRUE(!state.multi.isMixed(multiKey(lightInstance,"range")),"alcance igual");
+  AE_EXPECT_TRUE(state.multi.isMixed("name") && !state.multi.isMixed("t.00"),"nomes diferentes, posição igual");
+  // Interruptor do cabeçalho da luz: desliga as três num passo.
+  u32 lightIndex=0;
+  for(u32 i=0;i<doc.find(c)->components.size();++i) if(doc.find(c)->components.at(i)->instanceId()==lightInstance) lightIndex=i;
+  for(u32 page=0;page<8 && locateWidget(f.session,widgetId(EditorWidget::ComponentEnableBase)+lightIndex).x<0 &&
+      locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x>=0;++page) tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentEnableBase)+lightIndex);
+  AE_EXPECT_TRUE(!lightOf(a)->enabled && !lightOf(b)->enabled && !lightOf(c)->enabled,"as três luzes desligadas");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo de Desfazer");
+  AE_EXPECT_TRUE(history.undo(doc) && lightOf(a)->enabled && lightOf(b)->enabled && lightOf(c)->enabled,"Desfazer volta as três");
+  // Número pelo teclado: intensidade em todos.
+  f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+lightIndex);
+  u32 intensity=0;
+  for(u32 i=0;i<scene::Light::descriptor.numbers.size();++i) if(scene::Light::descriptor.numbers[i].id=="intensity") intensity=i;
+  const u32 field=widgetId(EditorWidget::ComponentNumberBase)+lightIndex+(intensity<<8);
+  revealProperty(f,field);
+  tapWidget(f,field);
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"500",true),"valor aceito");
+  AE_EXPECT_TRUE(lightOf(a)->intensity==500 && lightOf(b)->intensity==500 && lightOf(c)->intensity==500,"intensidade nas três");
+  f.session.update();
+  AE_EXPECT_TRUE(!state.multi.isMixed(multiKey(lightInstance,"intensity")),"agora iguais");
+  // "Definir como o valor de…": B diferente; toque longo no campo e escolher B.
+  {auto value=*doc.find(b);static_cast<scene::Light *>(value.components.edit(scene::Light::descriptor))->intensity=42;doc.applyEntityValues(b,value);}
+  f.session.update();history.clear();
+  const auto at=locateWidget(f.session,field);
+  f.session.handlePointer({160,UiPointerPhase::Down,at,80.0});
+  f.session.handlePointer({160,UiPointerPhase::Up,at,80.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  AE_EXPECT_EQ(state.setValueMenu.rows.size(),3u,"um objeto por linha");
+  u32 rowOfB=0;for(u32 i=0;i<state.setValueMenu.rows.size();++i) if(state.setValueMenu.rows[i].first==b) rowOfB=i;
+  AE_EXPECT_TRUE(state.setValueMenu.rows[rowOfB].second.find("42")!=std::string::npos,"a linha mostra o valor de B");
+  tapWidget(f,widgetId(EditorWidget::SetValueRowBase)+rowOfB);
+  AE_EXPECT_TRUE(lightOf(a)->intensity==42 && lightOf(c)->intensity==42,"todos com o valor de B");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo");
+  // Campo da transformação: X da posição em todos.
+  history.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+lightIndex);
+  f.session.update();
+  tapWidget(f,widgetId(EditorWidget::TransformFold));
+  revealProperty(f,transformFieldWidget(0,0));
+  tapWidget(f,transformFieldWidget(0,0));
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"3",true),"posição aceita");
+  AE_EXPECT_TRUE(doc.find(a)->transform.position[0]==3 && doc.find(b)->transform.position[0]==3 && doc.find(c)->transform.position[0]==3,"X=3 nos três");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo");
+  // Excluir em lote e Desfazer.
+  history.clear();
+  f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyMenu));
+  tapWidget(f,widgetId(EditorWidget::DeleteSelection));
+  AE_EXPECT_TRUE(!doc.exists(a) && !doc.exists(b) && !doc.exists(c),"três excluídos");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo");
+  AE_EXPECT_TRUE(history.undo(doc) && doc.exists(a) && doc.exists(b) && doc.exists(c),"Desfazer traz os três");
+  // Ações de conjunto: Nada, Tudo.
+  tapWidget(f,widgetId(EditorWidget::SelectNone));
+  AE_EXPECT_TRUE(state.selectionSet.empty(),"nada selecionado");
+  tapWidget(f,widgetId(EditorWidget::SelectAll));
+  AE_EXPECT_TRUE(state.selectionSet.size()>=4,"tudo selecionado");
+}
+
+// Gizmo na multisseleção (Unity: Pivot): as outras raízes seguem o ativo pelo
+// mesmo delta, num passo de Desfazer.
+AE_TEST(multi_selection_gizmo_moves_every_selected_root) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  EditorTransform start{};start.position[1]=.5f;
+  history.setTransform(doc,f.cube,start);
+  const auto other=history.createEntity(doc,doc.root(),EditorEntityKind::Folder,"Outro");
+  EditorTransform away{};away.position[0]=5;history.setTransform(doc,other,away);
+  f.session.setSelection(other);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyMultiToggle));
+  tapWidget(f,hierarchyRowWidget(f.cube));
+  AE_EXPECT_EQ(f.session.selection(),f.cube,"cubo ativo");
+  f.session.update();history.clear();
+  const UiRect view=f.session.layout().viewport;UiPoint handle{};bool found=false;
+  for(float y=view.y;y<view.bottom() && !found;y+=3) for(float x=view.x;x<view.right();x+=3) {
+    f.down(7,{x,y});const bool grabbed=f.session.screen().activeGizmoAxis!=EditorGizmoHandle::None;f.session.cancelPointers();
+    if(grabbed) {handle={x,y};found=true;break;}
+  }
+  AE_EXPECT_TRUE(found,"alça do gizmo");
+  const UiPoint centre=f.viewportCentre();
+  const float dx=handle.x-centre.x,dy=handle.y-centre.y,length=std::sqrt(dx*dx+dy*dy);
+  const auto cubeBefore=doc.find(f.cube)->transform,otherBefore=doc.find(other)->transform;
+  history.clear();
+  f.down(8,handle);
+  for(u32 step=1;step<=40;++step) f.move(8,{handle.x+dx/length*step,handle.y+dy/length*step});
+  f.up(8,{handle.x+dx/length*40,handle.y+dy/length*40});
+  const auto cubeAfter=doc.find(f.cube)->transform,otherAfter=doc.find(other)->transform;
+  float moved=0;
+  for(u32 a=0;a<3;++a) {
+    const float mine=cubeAfter.position[a]-cubeBefore.position[a],theirs=otherAfter.position[a]-otherBefore.position[a];
+    moved+=std::abs(mine);
+    AE_EXPECT_TRUE(std::abs(mine-theirs)<1e-3f,"o outro anda o mesmo delta");
+  }
+  AE_EXPECT_TRUE(moved>1e-3f,"o gizmo moveu");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo para os dois");
+  AE_EXPECT_TRUE(history.undo(doc) && doc.find(other)->transform.position[0]==5,"Desfazer volta os dois");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

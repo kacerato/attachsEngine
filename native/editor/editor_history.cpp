@@ -85,11 +85,18 @@ bool EditorHistory::record(const EditorCommand &command) {
     assignLabel(pending_.label, "Edit");
     open_ = true;
   }
-  if (!pending_.commands.empty() && canMerge(pending_.commands.back(), command)) {
-    pending_.commands.back().after = command.after;
-  } else {
-    pending_.commands.push_back(command);
-  }
+  // O mesmo gesto pode mover vários objetos (multisseleção): os comandos se
+  // intercalam por objeto. Funde com o último do MESMO objeto enquanto os de
+  // trás forem do mesmo gesto (mesmo token); fora disso, a ordem é preservada.
+  EditorCommand *target = nullptr;
+  if (command.mergeToken != kNoMerge)
+    for (usize i = pending_.commands.size(); i > 0; --i) {
+      auto &previous = pending_.commands[i - 1];
+      if (previous.kind != EditorCommandKind::ApplyValues || previous.mergeToken != command.mergeToken) break;
+      if (canMerge(previous, command)) {target = &previous;break;}
+    }
+  if (target) target->after = command.after;
+  else pending_.commands.push_back(command);
   if (implicit) commitOpenTransaction();
   return true;
 }
@@ -434,6 +441,19 @@ std::string_view describeCommand(const EditorCommand &command) {
   return "Editar componente";
 }
 } // namespace
+
+bool EditorHistory::mergeLast(u32 count, std::string_view label) {
+  if (open_ || count < 2 || count > undoStack_.size()) return false;
+  const usize first = undoStack_.size() - count;
+  for (usize i = first; i < undoStack_.size(); ++i) if (undoStack_[i].resourceReplay) return false;
+  Transaction merged;
+  assignLabel(merged.label, label);
+  for (usize i = first; i < undoStack_.size(); ++i)
+    merged.commands.insert(merged.commands.end(), undoStack_[i].commands.begin(), undoStack_[i].commands.end());
+  undoStack_.erase(undoStack_.begin() + static_cast<std::ptrdiff_t>(first), undoStack_.end());
+  undoStack_.push_back(std::move(merged));
+  return true;
+}
 
 std::string EditorHistory::describe(u32 index) const {
   if (index >= entryCount()) return {};

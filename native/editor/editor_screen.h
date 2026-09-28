@@ -405,6 +405,11 @@ enum class EditorWidget : u32 {
   // páginas e uma linha por ponto do histórico (0 = cena como abriu).
   UndoHistoryClose=0xC7000000u, UndoHistoryOrder, UndoHistoryPrevious, UndoHistoryNext,
   UndoHistoryRowBase=0xC7000100u,
+  // Multisseleção (Unity: Selection.objects): modo "Selecionar vários" na
+  // Hierarquia e ações de conjunto.
+  HierarchyMultiToggle=0xCD000000u, SelectAll, SelectChildren, SelectInvert, SelectNone,
+  // "Definir como o valor de…" (Unity: Set to Value of) — fechar e uma linha por objeto.
+  SetValueClose=0xCD000100u, SetValueRowBase=0xCD000200u,
   // Busca global (Unity 6000.0 Search): abrir na barra, campo, chips de
   // provedor, páginas e um resultado por linha.
   GlobalSearchOpen=0xC9000000u, GlobalSearchClose, GlobalSearchField, GlobalSearchPrevious, GlobalSearchNext,
@@ -539,7 +544,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -555,6 +560,9 @@ inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
 }
 inline constexpr u32 hierarchyEyeWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyEyeBase) + entity;
+}
+inline std::string multiKey(u64 instance, std::string_view property) {
+  return std::to_string(instance) + "/" + std::string(property);
 }
 inline constexpr u32 transformFieldWidget(u32 row, u32 axis) noexcept {
   return widgetId(EditorWidget::TransformFieldBase) + row * 3 + axis;
@@ -748,6 +756,28 @@ struct EditorScreenState final {
   // Camadas escondidas e não selecionáveis na vista da cena: estado do editor
   // (preferência do projeto), nunca da cena — o jogo e o Play não mudam.
   u32 hiddenLayers=0,unpickableLayers=0,sceneLayersPage=0;
+  // Multisseleção: o conjunto selecionado (inclui o ativo, `selection`). No
+  // modo "Selecionar vários" tocar numa linha ou objeto soma ou tira do conjunto.
+  std::vector<EditorEntityId> selectionSet;
+  bool multiSelect=false;
+  bool isSelected(EditorEntityId id) const {return std::find(selectionSet.begin(),selectionSet.end(),id)!=selectionSet.end();}
+  // Inspector na multisseleção (Unity 6000.0 Manual/Multi-object editing): a
+  // sessão compara os selecionados com o ativo. Chaves: "name", "visible",
+  // "castShadow", "layer", "active", "t.<linha><eixo>" e "<instância do
+  // ativo>/<propriedade>" (script: o id do campo; trio: o de cada canal).
+  struct MultiEditView {
+    u32 count=0,hidden=0;
+    std::vector<std::string> mixed;
+    std::vector<u64> common,unsupported;
+    bool isMixed(std::string_view key) const {return std::find(mixed.begin(),mixed.end(),key)!=mixed.end();}
+    bool isCommon(u64 instance) const {return std::find(common.begin(),common.end(),instance)!=common.end();}
+    bool isUnsupported(u64 instance) const {return std::find(unsupported.begin(),unsupported.end(),instance)!=unsupported.end();}
+  };
+  MultiEditView multi;
+  // "Definir como o valor de…": o campo (chave como acima) e, por objeto
+  // selecionado, o nome e o valor dele para escolher.
+  struct SetValueMenu {std::string key,label;std::vector<std::pair<EditorEntityId,std::string>> rows;};
+  SetValueMenu setValueMenu;
   // Busca global: consulta, provedor escolhido (chip), página e resultados que
   // a sessão recalcula enquanto a janela está aberta.
   bool globalSearch=false,editingGlobalSearch=false;

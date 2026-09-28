@@ -412,6 +412,29 @@ int main(int argc, char **argv) {
                        "Intensidade das luzes","Renomear \xC2\xB7 Poste alto","Excluir \xC2\xB7 2 objetos"};
     state.undoApplied=4;
   }
+  // Multisseleção: três postes com luz (dois com corpo físico), intensidades
+  // diferentes; "multi-light" abre a luz, "multi-set" o menu Definir como.
+  if(argc>4 && std::string(argv[4]).starts_with("multi")) {
+    std::vector<editor::EditorEntityId> ids;u64 lightInstance=0;
+    for(u32 i=0;i<3;++i) {
+      const char *names[]{"Poste A","Poste B","Poste C"};
+      const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,names[i]);
+      auto value=*document.find(id);auto *light=static_cast<scene::Light *>(value.components.add(scene::Light::descriptor));
+      light->intensity=i==2?250.f:100.f;
+      if(i<2) value.components.add(scene::PhysicsBody::descriptor);
+      document.applyEntityValues(id,value);ids.push_back(id);
+      if(i==2) lightInstance=static_cast<const scene::Light *>(document.find(id)->components.find(scene::Light::descriptor))->instanceId();
+    }
+    selection=ids.back();state.selectionSet=ids;state.multiSelect=true;
+    state.multi.count=3;state.multi.hidden=1;state.multi.common={lightInstance};
+    state.multi.mixed={"name",editor::multiKey(lightInstance,"intensity"),"t.00"};
+    state.componentSelection=selection;
+    if(std::string(argv[4])!="multi") state.expandedNative=lightInstance;
+    if(std::string(argv[4])=="multi-set") {
+      state.setValueMenu.key=editor::multiKey(lightInstance,"intensity");state.setValueMenu.label="Intensidade";
+      state.setValueMenu.rows={{ids[0],"Poste A  \xC2\xB7  100"},{ids[1],"Poste B  \xC2\xB7  100"},{ids[2],"Poste C  \xC2\xB7  250"}};
+    }
+  }
   // Inspectors focados: um de objeto, um só do componente de luz; ativo o de objeto.
   if(argc>4 && std::string(argv[4]).starts_with("focused")) {
     const auto lamp=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Lanterna");

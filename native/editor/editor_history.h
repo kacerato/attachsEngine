@@ -110,6 +110,11 @@ public:
   // Refazer os traria. `describe` dá o rótulo com o objeto afetado; os passos
   // implícitos ("Edit") ganham o nome do que mudou.
   u32 entryCount() const noexcept { return undoDepth() + redoDepth(); }
+  // Junta os `count` últimos passos num só, na ordem em que aconteceram: um
+  // gesto sobre vários objetos (multisseleção) vira várias operações por
+  // objeto, e Desfazer precisa voltar todas de uma vez. Recusa passos de
+  // recurso (têm reexecução própria) e transação aberta.
+  bool mergeLast(u32 count, std::string_view label);
   std::string describe(u32 index) const;
 
   void clear() noexcept;

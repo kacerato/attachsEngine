@@ -137,6 +137,17 @@ struct ScreenBuilder final {
   // Dentro da janela focada: o cabeçalho não tem cadeado nem ⋮ (a aba já é
   // presa ao alvo e a janela tem o seu próprio ⋮).
   bool focusedWindow=false;
+  // Inspector da multisseleção (o da seleção, fora de janela focada).
+  bool multiEdit=false;
+  bool mixed(std::string_view key) const {return multiEdit && state.multi.isMixed(key);}
+  // Interruptor com valores diferentes (Unity: traço no lugar do check):
+  // tocar liga em todos.
+  void mixedToggle(const UiRect &area, u32 widget, bool editable=true) {
+    const UiRect bounds{area.right() - kToggleWidth, area.y + (area.height - kToggleHeight) * 0.5f, kToggleWidth, kToggleHeight};
+    list.addRect(bounds, withAlpha(theme.color.accent, 0.14f), kToggleHeight * 0.5f);
+    list.addRect({bounds.x + bounds.width * .3f, bounds.y + bounds.height * .5f - 1.5f, bounds.width * .4f, 3}, theme.color.accent, 1.5f);
+    if(editable) router.addRegion(bounds, widget, theme.touch.minimumTarget);
+  }
 
   bool isPressed(u32 widget) const { return state.pressedWidget == widget && widget != 0; }
 
@@ -1655,9 +1666,30 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
                      widgetId(EditorWidget::HierarchyMenu));
   takeRight(header, theme.spacing.tiny);
   builder.iconButton(takeRight(header, 28.0f), UiIcon::EditorAuthorAdd, widgetId(EditorWidget::HierarchyAdd));
-  builder.label(header, "Hierarquia", theme.color.text, theme.type.cardName);
+  // No modo "Selecionar vários" o título vira a contagem.
+  const u32 selectedCount=static_cast<u32>(builder.state.selectionSet.size());
+  if(builder.state.multiSelect)
+    builder.label(header,(std::to_string(selectedCount)+(selectedCount==1?" selecionado":" selecionados")).c_str(),theme.color.accent,theme.type.cardName);
+  else builder.label(header, "Hierarquia", theme.color.text, theme.type.cardName);
 
   auto search=takeTop(content,36);
+  // Unity: Ctrl/Shift+clique. No toque, um modo ao lado da busca: aceso, cada
+  // toque na lista ou na vista soma ou tira da seleção.
+  builder.iconButton(takeRight(search,32),UiIcon::EditorSelectBox,widgetId(EditorWidget::HierarchyMultiToggle),builder.state.multiSelect);
+  takeRight(search,4);
+  if(builder.state.multiSelect) {
+    // Ações de conjunto em toda a largura, logo abaixo da busca.
+    const UiRect row=takeTop(content,30);takeTop(content,4);
+    const struct {const char *label;EditorWidget id;} actions[]{{"Tudo",EditorWidget::SelectAll},{"Filhos",EditorWidget::SelectChildren},
+                                                               {"Inverter",EditorWidget::SelectInvert},{"Nada",EditorWidget::SelectNone}};
+    const float cell=(row.width-9)/4;
+    for(u32 i=0;i<4;++i) {
+      const UiRect chip{row.x+i*(cell+3),row.y,cell,row.height};
+      builder.list.addRect(chip,theme.color.raised,theme.radius.control);
+      builder.label(chip,actions[i].label,theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(chip,widgetId(actions[i].id));
+    }
+  }
   builder.label(search,builder.state.hierarchySearch[0]?builder.state.hierarchySearch:"Pesquisar objetos...",theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::HierarchySearch));
   std::unordered_set<EditorEntityId> matches;
@@ -1705,7 +1737,13 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
 
     const UiRect row = takeTop(content, kRowHeight);
     const bool selected = builder.state.selection == frame.entity;
+    const bool secondary = !selected && builder.state.isSelected(frame.entity);
     if (selected) builder.list.addRect(row, theme.color.accent, theme.radius.thumb);
+    else if (secondary) {
+      // Selecionado, não ativo: faixa suave com a borda da cor de destaque.
+      builder.list.addRect(row, withAlpha(theme.color.accent, .22f), theme.radius.thumb);
+      builder.list.addRect({row.x,row.y+3,3,row.height-6}, theme.color.accent, 1);
+    }
     else if (builder.isPressed(hierarchyRowWidget(frame.entity)))
       builder.list.addRect(row, theme.color.raised, theme.radius.thumb);
     // Ping (Unity): a linha pisca em amarelo enquanto dura.
@@ -1773,7 +1811,9 @@ void buildTransformRow(ScreenBuilder &builder, UiRect &content, const char *name
     char buffer[16];
     std::snprintf(buffer, sizeof(buffer), "%.*f", static_cast<int>(decimals),
                   static_cast<double>(values[axis]));
-    builder.label(inner, buffer, theme.color.text, theme.type.numeric);
+    // Multisseleção com valores diferentes neste eixo: traço (Unity).
+    const bool mixed = builder.mixed("t." + std::to_string(row) + std::to_string(axis));
+    builder.label(inner, mixed ? "\xE2\x80\x94" : buffer, mixed ? theme.color.textDim : theme.color.text, theme.type.numeric);
     builder.router.addRegion(field, widget);
   }
 }
@@ -3062,12 +3102,15 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     } else if(f.kind==0) {
       const auto &property=entry.type->booleans[f.index];auto toggle=takeRight(slot,44);
       builder.label(slot,property.name,theme.color.textDim,theme.type.caption);
-      builder.toggle(toggle,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8),property.presentation.isEditable(*component));
+      if(builder.mixed(multiKey(component->instanceId(),property.id)))
+        builder.mixedToggle(toggle,widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8),property.presentation.isEditable(*component));
+      else builder.toggle(toggle,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8),property.presentation.isEditable(*component));
     } else if(f.kind==1) {
       const auto &property=entry.type->enums[f.index];
       builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
       const char *label="Valor inválido";
       for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+      if(builder.mixed(multiKey(component->instanceId(),property.id))) label="\xE2\x80\x94";
       // Aparência de lista suspensa: o toque abre as opções, não cicla às cegas.
       const bool editable=property.presentation.isEditable(*component);
       auto box=deflate(slot,UiInsets::all(2));
@@ -3083,6 +3126,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       const auto readiness=runtime::referenceReadiness(*builder.state.document,entity.id,*component,property);
       const bool warning=readiness!=runtime::ReferenceReadiness::Ready && readiness!=runtime::ReferenceReadiness::OptionalEmpty;
       std::string referenceLabel=!target?property.nullLabel:object?object->name:"Objeto ausente";
+      if(builder.mixed(multiKey(component->instanceId(),property.id))) referenceLabel="\xE2\x80\x94";
       if(readiness==runtime::ReferenceReadiness::RequiredEmpty) referenceLabel="Obrigatório · "+referenceLabel;
       else if(readiness==runtime::ReferenceReadiness::Inactive) referenceLabel+=" · inativo";
       else if(readiness==runtime::ReferenceReadiness::Incompatible && object) referenceLabel+=" · incompatível";
@@ -3125,7 +3169,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         const UiColor colors[3]={theme.color.axisX,theme.color.axisY,theme.color.axisZ};
         builder.label(takeLeft(body,13),triple.kind==scene::ComponentTripleKind::LinearColor?colorLabels[axis]:axisLabels[axis],colors[axis],theme.type.caption,UiAlign::Center);
         char value[32];std::snprintf(value,sizeof(value),"%.4g",static_cast<double>(property.read(*component)));
-        builder.label(body,value,theme.color.text,theme.type.caption,UiAlign::Center);
+        const bool mixedChannel=builder.mixed(multiKey(component->instanceId(),property.id));
+        builder.label(body,mixedChannel?"\xE2\x80\x94":value,mixedChannel?theme.color.textDim:theme.color.text,theme.type.caption,UiAlign::Center);
         if(property.presentation.isEditable(*component)) builder.router.addRegion(cell,widgetId(EditorWidget::ComponentNumberBase)+index+(channel<<8));
       }
     } else if(f.kind==2) {
@@ -3134,7 +3179,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(property.read(*component)));
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.silhouette,8);
       if(!property.presentation.unit.empty()) builder.label(takeRight(slot,24),property.presentation.unit,theme.color.textMuted,theme.type.caption,UiAlign::Center);
-      builder.label(slot,value,property.presentation.isEditable(*component)?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
+      const bool mixedNumber=builder.mixed(multiKey(component->instanceId(),property.id));
+      builder.label(slot,mixedNumber?"\xE2\x80\x94":value,!mixedNumber&&property.presentation.isEditable(*component)?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
       if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
     } else if(f.kind==9) {
       const auto &property=entry.type->slotNumbers[f.index];
@@ -4698,6 +4744,20 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       if(!known && (scene::scriptBehavior(v)||v->unresolved())) cards.push_back({nullptr,v,i});
     }
   }
+  // Multisseleção: só os componentes que todos têm (Unity 6000.0 Multi-object
+  // editing); os outros ficam ocultos, com o aviso de quantos tipos.
+  if(builder.multiEdit) {
+    std::vector<Card> common;
+    for(const auto &card:cards) if(!card.value || state.multi.isCommon(card.value->instanceId())) common.push_back(card);
+    cards=std::move(common);
+    if(state.multi.hidden) {
+      auto note=takeTop(content,30);takeTop(content,4);
+      builder.list.addRect(note,withAlpha(theme.color.warning,.12f),theme.radius.control);
+      builder.list.addImage(centred(takeLeft(note,26),14,14),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.warning);
+      builder.label(note,(std::to_string(state.multi.hidden)+(state.multi.hidden==1?" componente oculto":" componentes ocultos")+
+                          ": nem todos têm").c_str(),theme.color.warning,theme.type.caption);
+    }
+  }
   // Inspector focado num componente: só o cartão dele, sempre aberto.
   if(builder.onlyComponent) {
     std::vector<Card> only;
@@ -4764,7 +4824,8 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     builder.label(row,title.c_str(),theme.color.text,theme.type.body);
     if(item.object||item.transform||item.native||script) {
       builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:32),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
-      if(enableToggle) builder.toggle(enableRect,enableOn,widgetId(EditorWidget::ComponentEnableBase)+item.index);
+      if(enableToggle && builder.mixed(multiKey(item.value->instanceId(),"enabled"))) builder.mixedToggle(enableRect,widgetId(EditorWidget::ComponentEnableBase)+item.index);
+    else if(enableToggle) builder.toggle(enableRect,enableOn,widgetId(EditorWidget::ComponentEnableBase)+item.index);
       if(!item.object) {
         builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
         builder.router.addRegion(more,item.transform?widgetId(EditorWidget::TransformMenu):widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
@@ -4802,6 +4863,13 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
             if(page) builder.router.addRegion(prev,widgetId(EditorWidget::PropertyPrevious));
             if((page+1)*rows<3) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
           }
+        } else if(builder.multiEdit && item.value && state.multi.isUnsupported(item.value->instanceId())) {
+          // Unity: "Multi-object editing not supported" — editor por objeto.
+          auto note=takeTop(fields,std::min(fields.height,56.f));
+          builder.list.addRect(note,withAlpha(theme.color.warning,.12f),theme.radius.control);
+          builder.list.addImage(centred(takeLeft(note,30),16,16),static_cast<UiImageId>(UiIcon::UiWarning),theme.color.warning);
+          builder.label({note.x,note.y+4,note.width,note.height*.5f-4},"Edição múltipla não disponível",theme.color.warning,theme.type.caption);
+          builder.label({note.x,note.y+note.height*.5f,note.width,note.height*.5f-4},"Este componente é editado um objeto por vez",theme.color.textDim,theme.type.caption);
         } else if(item.native) buildComponentFields(builder,fields,entity,*item.native,item.index);
         else buildScriptFields(builder,fields,*script,item.index);
         builder.list.popClip();
@@ -4885,12 +4953,13 @@ void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity 
     if(row==0) {
       builder.label(takeLeft(line,line.width*.34f),"Nome",theme.color.textDim,theme.type.caption);
       builder.list.addRect(deflate(line,UiInsets::all(2)),theme.color.raised,theme.radius.control);
-      builder.label(line,entity.name,theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.label(line,builder.mixed("name")?"\xE2\x80\x94":entity.name,builder.mixed("name")?theme.color.textDim:theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(line,widgetId(EditorWidget::RenameSelection));
     } else if(row==1 || row==2) {
       auto toggle=takeRight(line,44);
       builder.label(line,row==1?"Visível":"Projetar sombra",theme.color.textDim,theme.type.caption);
-      builder.toggle(toggle,row==1?entity.visible:entity.castShadow,widgetId(row==1?EditorWidget::ToggleVisible:EditorWidget::ToggleCastShadow));
+      if(builder.mixed(row==1?"visible":"castShadow")) builder.mixedToggle(toggle,widgetId(row==1?EditorWidget::ToggleVisible:EditorWidget::ToggleCastShadow));
+      else builder.toggle(toggle,row==1?entity.visible:entity.castShadow,widgetId(row==1?EditorWidget::ToggleVisible:EditorWidget::ToggleCastShadow));
     } else if(row==3) {
       builder.label(takeLeft(line,line.width*.34f),"Camada",theme.color.textDim,theme.type.caption);
       auto previous=takeLeft(line,32),next=takeRight(line,32);
@@ -4900,7 +4969,7 @@ void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity 
       builder.router.addRegion(next,widgetId(EditorWidget::ObjectLayerNext));
       const auto layer=entity.layer%runtime::GameplayLayers::kCount;
       const auto name=state.document->layers().name(layer);
-      const std::string text=name.empty()?"Camada "+std::to_string(layer):std::string(name);
+      const std::string text=builder.mixed("layer")?std::string("\xE2\x80\x94"):name.empty()?"Camada "+std::to_string(layer):std::string(name);
       builder.label(line,text.c_str(),theme.color.text,theme.type.caption,UiAlign::Center);
     } else {
       const auto children=state.document->childrenOf(entity.id).size();
@@ -5703,15 +5772,23 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
                        builder.state.inspectorLocked ? theme.color.accentInk : theme.color.textDim);
   }
   takeRight(header, theme.spacing.tiny);
-  builder.toggle(takeRight(header, kToggleWidth + 4.0f), entity->active,
-                 widgetId(EditorWidget::InspectorActive));
+  builder.multiEdit = builder.state.multi.count > 1 && target == builder.state.selection && !builder.focusedWindow && !onlyComponent;
+  if (builder.mixed("active")) builder.mixedToggle(takeRight(header, kToggleWidth + 4.0f), widgetId(EditorWidget::InspectorActive));
+  else builder.toggle(takeRight(header, kToggleWidth + 4.0f), entity->active, widgetId(EditorWidget::InspectorActive));
   const float half = header.height * 0.5f;
+  if (builder.multiEdit) {
+    // Unity: o cabeçalho diz quantos objetos; o ativo é o de referência.
+    builder.label({header.x, header.y, header.width, half}, (std::to_string(builder.state.multi.count) + " objetos").c_str(),
+                  theme.color.text, theme.type.cardName);
+    builder.label({header.x, header.y + half, header.width, half}, (std::string("Ativo: ") + entity->name).c_str(),
+                  theme.color.accent, theme.type.caption);
+  } else
   builder.label({header.x, header.y, header.width, half}, entity->name, theme.color.text,
                 theme.type.cardName);
   // O vínculo com a fonte tem linha própria, não é card: não entra na contagem.
   // Perto do teto por objeto (a Unity não tem teto; aqui é explícito) a linha
   // passa a mostrar o limite em cor de aviso, antes de o Add recusar.
-  {
+  if (!builder.multiEdit) {
     const usize cards=entity->components.size()-(scene::importLink(entity->components)?1u:0u);
     const bool near=entity->components.size()+8>=scene::Components::MaximumCount;
     const std::string count=near?std::to_string(entity->components.size())+" de "+std::to_string(scene::Components::MaximumCount)+" componentes":
@@ -7727,6 +7804,31 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.undoHistory) buildUndoHistory(builder,layout);
   if(state.sceneLayersPanel && state.document && state.workspace==EditorWorkspace::Scene)
     buildSceneLayersPanel(builder,layout.viewport);
+  // "Definir como o valor de…" (Unity: Set to Value of): um objeto por linha,
+  // com o valor que ele tem; tocar copia para todos os selecionados.
+  if(!state.setValueMenu.key.empty()) {
+    router.addBlocker(state.surface);
+    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.55f));
+    const u32 count=static_cast<u32>(state.setValueMenu.rows.size());
+    const float width=std::min(380.f,state.surface.width-16);
+    const float height=std::min(state.surface.height-16,56.f+std::min(count,7u)*40.f);
+    const UiRect menu=centred(state.surface,width,height);
+    list.addRect(menu,theme.color.surface,theme.radius.control);
+    auto content=deflate(menu,UiInsets::all(8));
+    auto header=takeTop(content,40);
+    builder.iconButton(takeRight(header,36),UiIcon::UiClose,widgetId(EditorWidget::SetValueClose));
+    builder.label({header.x,header.y,header.width,header.height*.5f},"Definir como o valor de…",theme.color.text,theme.type.cardName);
+    builder.label({header.x,header.y+header.height*.5f,header.width,header.height*.5f},state.setValueMenu.label.c_str(),theme.color.accent,theme.type.caption);
+    for(u32 i=0;i<count && content.height>=38;++i) {
+      auto row=takeTop(content,40);row.height-=4;
+      const bool active=state.setValueMenu.rows[i].first==state.selection;
+      list.addRect(row,active?withAlpha(theme.color.accent,.16f):theme.color.raised,theme.radius.control);
+      list.pushClip(row);
+      builder.label(deflate(row,UiInsets{10,0,8,0}),state.setValueMenu.rows[i].second.c_str(),theme.color.text,theme.type.caption);
+      list.popClip();
+      router.addRegion(row,widgetId(EditorWidget::SetValueRowBase)+i);
+    }
+  }
   // A busca global fica sob o teclado interno, que edita o campo dela.
   if(state.globalSearch) buildGlobalSearch(builder);
   if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
@@ -8441,7 +8543,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       outcome.documentChanged=history.reparentKeepingWorld(document,state.reparentEntity,target);
       state.status=outcome.documentChanged?"Pai alterado":"Pai invalido ou transformacao incompativel";
       state.reparentEntity=kInvalidEntity;
-    } else {state.selection=target;state.propertyPage=0;state.routePoint=0;}
+    } else {state.selection=target;state.selectionSet={target};state.propertyPage=0;state.routePoint=0;}
     return outcome;
   }
 

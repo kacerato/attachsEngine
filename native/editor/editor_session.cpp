@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <sstream>
 #include "editor/editor_global_search.h"
+#include "scene/component_schema.h"
 #include <locale>
 #include <cstring>
 #include <cstdlib>
@@ -243,11 +244,27 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         applied=history_.applyValues(document_,request.entity,values);
       break;
     }
-    case EditorAction::Duplicate:
-      changed=history_.duplicateEntity(document_,request.entity);
-      applied=changed!=kInvalidEntity;if(applied) setSelection(changed);break;
-    case EditorAction::Remove:
-      applied=history_.destroyEntity(document_,request.entity);break;
+    case EditorAction::Duplicate: {
+      // Vários selecionados: um duplicado por raiz, um passo de Desfazer, e a
+      // seleção passa a ser as cópias (Unity: Duplicate na multisseleção).
+      const auto roots=state_.isSelected(request.entity) && state_.selectionSet.size()>1?selectedRoots():
+          std::vector<EditorEntityId>{request.entity};
+      std::vector<EditorEntityId> copies;
+      for(const auto id:roots) if(const auto copy=history_.duplicateEntity(document_,id)) copies.push_back(copy);
+      if(copies.size()>1) history_.mergeLast(static_cast<u32>(copies.size()),"Duplicar · "+std::to_string(copies.size())+" objetos");
+      applied=!copies.empty();
+      if(applied) {changed=copies.back();setSelection(changed);state_.selectionSet=copies;}
+      break;
+    }
+    case EditorAction::Remove: {
+      const auto roots=state_.isSelected(request.entity) && state_.selectionSet.size()>1?selectedRoots():
+          std::vector<EditorEntityId>{request.entity};
+      u32 removed=0;
+      for(const auto id:roots) removed+=history_.destroyEntity(document_,id);
+      if(removed>1) history_.mergeLast(removed,"Excluir · "+std::to_string(removed)+" objetos");
+      applied=removed>0;
+      break;
+    }
     case EditorAction::Reparent:
       applied=history_.reparentKeepingWorld(document_,request.entity,request.parent);break;
     case EditorAction::Undo: applied=history_.undo(document_);break;
@@ -255,6 +272,52 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
   }
   if(!document_.exists(state_.selection)) state_.selection=kInvalidEntity;
   return result(applied?EditorActionStatus::Applied:EditorActionStatus::InvalidValue,changed);
+}
+
+namespace {
+// Tipo de componente para casar entre objetos: o id do tipo, ou o tipo do
+// script (todos os comportamentos C# compartilham o mesmo tipo nativo).
+std::string componentKind(const scene::ComponentValue &value) {
+  if(const auto *script=scene::scriptBehavior(&value)) return "script:"+script->scriptType;
+  return std::string(value.type().id);
+}
+u32 componentOccurrence(const scene::Components &components,const scene::ComponentValue &value) {
+  const auto kind=componentKind(value);u32 occurrence=0;
+  for(usize i=0;i<components.size();++i) {
+    const auto *other=components.at(i);if(other==&value) break;
+    if(componentKind(*other)==kind) ++occurrence;
+  }
+  return occurrence;
+}
+const scene::ComponentValue *matchComponent(const scene::Components &components,std::string_view kind,u32 occurrence) {
+  u32 seen=0;
+  for(usize i=0;i<components.size();++i) if(componentKind(*components.at(i))==kind) {if(seen==occurrence) return components.at(i);++seen;}
+  return nullptr;
+}
+// Componentes cujo editor é por objeto (vínculo com a fonte, barra do LOD,
+// blend shapes da malha, tipo ausente): a Unity também não os edita juntos.
+bool multiEditable(const scene::ComponentValue &value) {
+  const auto &type=value.type();
+  return &type!=&scene::ImportLink::descriptor && &type!=&scene::LodGroup::descriptor &&
+         &type!=&scene::SkinnedMesh::descriptor && !value.unresolved();
+}
+std::string transformChannel(const EditorTransform &t,u32 row,u32 axis) {
+  const float v=row==0?t.position[axis]:row==1?t.rotationDegrees[axis]:t.scale[axis];
+  char text[32];std::snprintf(text,sizeof text,"%.4g",static_cast<double>(v));return text;
+}
+std::string propertyText(const scene::ComponentValue &value,std::string_view property) {
+  char text[48];
+  for(const auto &p:value.type().numbers) if(p.id==property) {std::snprintf(text,sizeof text,"%.5g",static_cast<double>(p.read(value)));return text;}
+  for(const auto &p:value.type().booleans) if(p.id==property) return p.read(value)?"ligado":"desligado";
+  for(const auto &p:value.type().enums) if(p.id==property) {
+    const u32 current=p.read(value);for(const auto &o:p.options) if(o.value==current) return o.name;
+    return std::to_string(current);
+  }
+  for(const auto &p:value.type().references) if(p.id==property) {const auto target=p.read(value);return target?"#"+std::to_string(target):"nenhum";}
+  if(const auto *script=scene::scriptBehavior(&value))
+    for(const auto &p:script->properties) if(p.id==property) return p.value;
+  return {};
+}
 }
 
 void EditorSession::setSurface(const UiRect &surface, const UiInsets &safeArea) {
@@ -271,6 +334,7 @@ void EditorSession::setSelection(EditorEntityId entity) {
     state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
     state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
   state_.selection=entity;
+  if(!state_.multiSelect || !state_.isSelected(entity)) state_.selectionSet={entity};
   // Reveal the selected object through collapsed ancestors and long lists.
   for(auto parent=document_.find(entity);parent;parent=document_.find(parent->parent)) {
     auto &collapsed=state_.collapsedEntities;
@@ -620,6 +684,16 @@ void EditorSession::handleGizmoPointer(const UiPointerRouting &routing, u32 axis
     state_.activeGizmoAxis = handle;
     dragMode_ = state_.tool;
     dragEntity_ = state_.selection;
+    std::copy(world,world+16,dragInitialWorld_);
+    multiDrag_.clear();
+    if(state_.selectionSet.size()>1) for(const auto id:selectedRoots()) {
+      if(id==dragEntity_) continue;
+      const auto *other=document_.find(id);if(!other) continue;
+      MultiDragTarget target;target.id=id;target.initial=other->transform;
+      editorTransformMatrix(EditorTransform{},target.parent);
+      if(!editorWorldMatrix(document_,id,target.world) || (other->parent && !editorWorldMatrix(document_,other->parent,target.parent))) continue;
+      multiDrag_.push_back(target);
+    }
     // Uma transação por gesto: o arraste inteiro vira UM passo de desfazer, e
     // não um por frame. É a razão de o histórico ter transações.
     gizmoTransactionOpen_ = history_.begin(state_.tool == EditorGizmoMode::Rotate ? "Rotate" :
@@ -662,13 +736,51 @@ void EditorSession::handleGizmoPointer(const UiPointerRouting &routing, u32 axis
       }
     }
     history_.setTransform(document_, dragEntity_, moved, 0x6000u + axis);
+    if(!multiDrag_.empty()) applyMultiDrag(moved,axis);
   }
 
   if (routing.released) {
     if (gizmoTransactionOpen_) history_.end();
     gizmoTransactionOpen_ = false;
+    multiDrag_.clear();
     gizmoDrag_ = EditorGizmoDrag{};
     state_.activeGizmoAxis = EditorGizmoHandle::None;
+  }
+}
+
+void EditorSession::applyMultiDrag(const EditorTransform &moved,u32 axis) {
+  float primary[16];
+  if(!editorWorldMatrix(document_,dragEntity_,primary)) return;
+  for(const auto &target:multiDrag_) {
+    EditorTransform next=target.initial;
+    bool resolved=true;
+    // Delta nulo (o toque que pega a alça) mantém a pose exata: recompor a
+    // local pela matriz de mundo traria erro de arredondamento como edição.
+    if(dragMode_==EditorGizmoMode::Translate) {
+      float world[16];std::copy(target.world,target.world+16,world);
+      float moved2=0;
+      for(u32 a=0;a<3;++a) {const float d=primary[12+a]-dragInitialWorld_[12+a];world[12+a]+=d;moved2+=d*d;}
+      resolved=moved2>1e-14f?editorLocalTransformForWorld(world,target.parent,next):true;
+    } else if(dragMode_==EditorGizmoMode::Rotate && std::abs(rotationTotalAngle_)<1e-7f) {
+      next=target.initial;
+    } else if(dragMode_==EditorGizmoMode::Rotate) {
+      // O mesmo giro do ativo, no eixo do mundo, em torno do pivô de cada um.
+      float rotated[16];std::copy(target.world,target.world+16,rotated);
+      const u32 u=(axis+1)%3,v=(axis+2)%3;
+      const float c=std::cos(rotationTotalAngle_),s=std::sin(rotationTotalAngle_);
+      for(u32 column=0;column<3;++column) {
+        rotated[column*4+u]=c*target.world[column*4+u]-s*target.world[column*4+v];
+        rotated[column*4+v]=s*target.world[column*4+u]+c*target.world[column*4+v];
+      }
+      resolved=editorLocalTransformForWorld(rotated,target.parent,next);
+    } else {
+      for(u32 a=0;a<3;++a) {
+        const float ratio=gizmoDrag_.initial.scale[a]!=0?moved.scale[a]/gizmoDrag_.initial.scale[a]:1;
+        next.scale[a]=target.initial.scale[a]*ratio;
+      }
+      resolved=isTransformValid(next);
+    }
+    if(resolved) history_.setTransform(document_,target.id,next,0x6000u+axis);
   }
 }
 
@@ -802,7 +914,8 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
     const EditorPickResult hit = pickNearest(candidates_, screenPointToRay(view_, at));
     // Tocar no vazio LIMPA a seleção. É o gesto que todo editor tem, e sem ele
     // não há como desmarcar sem selecionar outra coisa.
-    if(hit.hit) setSelection(hit.id); else state_.selection=kInvalidEntity;
+    if(state_.multiSelect) {if(hit.hit) toggleSelection(hit.id);}
+    else if(hit.hit) setSelection(hit.id); else state_.selection=kInvalidEntity;
   }
   return true;
 }
@@ -1142,6 +1255,8 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     if(!inspectorModalOpen()) modalInFocusedAsset_=false;
     return done;
   }
+  if(!state_.inspectorTarget || state_.inspectorTarget==state_.selection)
+    return withMultiEdit([&] {return completeTextEditNow(edit,text,accept);});
   return completeTextEditNow(edit,text,accept);
 }
 
@@ -1693,7 +1808,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   }
   const auto target=inspectorScopeFor(event);
   const auto run=[&] {
-    const bool consumed=inInspectorScope(target,[&] {return handlePointerNow(event);});
+    const bool consumed=inInspectorScope(target,[&] {
+      // Sem alvo próprio (travado/focado), o Inspector é o da seleção: a
+      // edição do ativo vale para todos os selecionados.
+      if(target && target!=state_.selection) return handlePointerNow(event);
+      return withMultiEdit([&] {return handlePointerNow(event);});
+    });
     // O modal que ficou aberto pertence ao Inspector que o abriu.
     if(!inspectorModalOpen()) state_.inspectorTarget=0;
     else if(target) state_.inspectorTarget=target;
@@ -1702,6 +1822,211 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   };
   if(routeToPlayMirror(event)) return inPlayMirror(run);
   return run();
+}
+
+// A vista de edição múltipla: quais componentes do ativo existem em todos,
+// quantos tipos ficaram de fora, os sem edição múltipla e os campos com
+// valores diferentes.
+void EditorSession::refreshMultiEdit() {
+  auto &view=state_.multi;view={};
+  if(state_.selectionSet.size()<2) return;
+  const auto *primary=document_.find(state_.selection);if(!primary) return;
+  view.count=static_cast<u32>(state_.selectionSet.size());
+  std::vector<const EditorEntity *> others;
+  for(const auto id:state_.selectionSet) if(id!=state_.selection) if(const auto *other=document_.find(id)) others.push_back(other);
+  const auto mixedIf=[&](bool differs,std::string key){if(differs) view.mixed.push_back(std::move(key));};
+  bool name=false,visible=false,shadow=false,layer=false,active=false;
+  bool channel[3][3]{};
+  for(const auto *other:others) {
+    name|=std::string_view(other->name)!=primary->name;visible|=other->visible!=primary->visible;
+    shadow|=other->castShadow!=primary->castShadow;layer|=other->layer!=primary->layer;active|=other->active!=primary->active;
+    for(u32 row=0;row<3;++row) for(u32 axis=0;axis<3;++axis)
+      channel[row][axis]|=transformChannel(other->transform,row,axis)!=transformChannel(primary->transform,row,axis);
+  }
+  mixedIf(name,"name");mixedIf(visible,"visible");mixedIf(shadow,"castShadow");mixedIf(layer,"layer");mixedIf(active,"active");
+  for(u32 row=0;row<3;++row) for(u32 axis=0;axis<3;++axis) mixedIf(channel[row][axis],"t."+std::to_string(row)+std::to_string(axis));
+  // Componentes: em comum quando todos têm o mesmo tipo na mesma ocorrência.
+  std::vector<std::string> kindsOutside;
+  for(usize c=0;c<primary->components.size();++c) {
+    const auto &value=*primary->components.at(c);
+    const auto kind=componentKind(value);const u32 occurrence=componentOccurrence(primary->components,value);
+    bool common=true;
+    for(const auto *other:others) common&=matchComponent(other->components,kind,occurrence)!=nullptr;
+    if(!common) {if(std::find(kindsOutside.begin(),kindsOutside.end(),kind)==kindsOutside.end()) kindsOutside.push_back(kind);continue;}
+    view.common.push_back(value.instanceId());
+    if(!multiEditable(value)) {view.unsupported.push_back(value.instanceId());continue;}
+    const auto compare=[&](std::string_view property) {
+      const auto mine=propertyText(value,property);
+      for(const auto *other:others) if(propertyText(*matchComponent(other->components,kind,occurrence),property)!=mine) {
+        view.mixed.push_back(multiKey(value.instanceId(),property));return;
+      }
+    };
+    for(const auto &p:value.type().numbers) compare(p.id);
+    for(const auto &p:value.type().booleans) compare(p.id);
+    for(const auto &p:value.type().enums) compare(p.id);
+    for(const auto &p:value.type().references) compare(p.id);
+    if(const auto *script=scene::scriptBehavior(&value)) {
+      for(const auto &p:script->properties) compare(p.id);
+      bool enabled=false;
+      for(const auto *other:others) enabled|=scene::scriptBehavior(matchComponent(other->components,kind,occurrence))->enabled!=script->enabled;
+      mixedIf(enabled,multiKey(value.instanceId(),"enabled"));
+    }
+  }
+  for(const auto *other:others) for(usize c=0;c<other->components.size();++c) {
+    const auto kind=componentKind(*other->components.at(c));
+    if(!matchComponent(primary->components,kind,componentOccurrence(other->components,*other->components.at(c))) &&
+       std::find(kindsOutside.begin(),kindsOutside.end(),kind)==kindsOutside.end()) kindsOutside.push_back(kind);
+  }
+  view.hidden=static_cast<u32>(kindsOutside.size());
+}
+
+// Repete nos outros selecionados o que mudou no ativo: campos do objeto,
+// canais da transformação (o gizmo tem o próprio caminho, relativo), e cada
+// propriedade alterada dos componentes em comum; componente acrescentado ou
+// removido no ativo é acrescentado ou removido nos outros. Tudo no mesmo passo
+// de Desfazer do gesto.
+void EditorSession::replicateEdit(EditorEntityId id,const EditorEntity &before,u32 depth) {
+  const auto *afterPtr=document_.find(id);
+  if(!afterPtr || state_.selectionSet.size()<2) return;
+  const EditorEntity after=*afterPtr;
+  const bool gizmo=gizmoTransactionOpen_ || !multiDrag_.empty();
+  u32 applied=0;
+  const bool open=history_.isOpen();
+  const std::string label=std::string(history_.undoLabel());
+  for(const auto otherId:std::vector<EditorEntityId>(state_.selectionSet)) {
+    if(otherId==id) continue;
+    const auto *other=document_.find(otherId);if(!other) continue;
+    EditorEntity values=*other;bool changed=false;
+    if(std::string_view(before.name)!=after.name) {assignEntityName(values,after.name);changed=true;}
+    const auto flag=[&](bool EditorEntity::*field){if(before.*field!=after.*field) {values.*field=after.*field;changed=true;}};
+    flag(&EditorEntity::active);flag(&EditorEntity::visible);flag(&EditorEntity::castShadow);flag(&EditorEntity::receiveShadow);flag(&EditorEntity::isStatic);
+    if(before.layer!=after.layer) {values.layer=after.layer;changed=true;}
+    if(!gizmo) for(u32 a=0;a<3;++a) {
+      if(before.transform.position[a]!=after.transform.position[a]) {values.transform.position[a]=after.transform.position[a];changed=true;}
+      if(before.transform.rotationDegrees[a]!=after.transform.rotationDegrees[a]) {values.transform.rotationDegrees[a]=after.transform.rotationDegrees[a];changed=true;}
+      if(before.transform.scale[a]!=after.transform.scale[a]) {values.transform.scale[a]=after.transform.scale[a];changed=true;}
+    }
+    // Componentes alterados e acrescentados.
+    for(usize c=0;c<after.components.size();++c) {
+      const auto &mine=*after.components.at(c);
+      const auto kind=componentKind(mine);const u32 occurrence=componentOccurrence(after.components,mine);
+      const auto *old=before.components.findInstance(mine.instanceId());
+      const auto *target=matchComponent(values.components,kind,occurrence);
+      if(!old) {
+        if(target || scene::scriptBehavior(&mine)) continue;
+        auto plan=scene::planComponentAddition(values.components,mine.type().id,false,false);
+        if(plan.ready) {values.components=std::move(plan.candidate);changed=true;}
+        continue;
+      }
+      if(!target || !multiEditable(mine)) continue;
+      auto *edit=values.components.editInstance(target->instanceId());if(!edit) continue;
+      for(const auto &p:mine.type().numbers) if(p.write && p.read(*old)!=p.read(mine)) {*p.write(*edit)=p.read(mine);changed=true;}
+      for(const auto &p:mine.type().booleans) if(p.write && p.read(*old)!=p.read(mine)) {p.write(*edit,p.read(mine));changed=true;}
+      for(const auto &p:mine.type().enums) if(p.write && p.read(*old)!=p.read(mine)) {p.write(*edit,p.read(mine));changed=true;}
+      for(const auto &p:mine.type().references) if(p.write && p.read(*old)!=p.read(mine)) {p.write(*edit,p.read(mine));changed=true;}
+      if(const auto *script=scene::scriptBehavior(&mine)) {
+        const auto *oldScript=scene::scriptBehavior(old);
+        auto replacement=*scene::scriptBehavior(target);
+        bool scriptChanged=false;
+        if(oldScript->enabled!=script->enabled) {replacement.enabled=script->enabled;scriptChanged=true;}
+        for(const auto &p:script->properties) {
+          const auto previous=std::find_if(oldScript->properties.begin(),oldScript->properties.end(),[&](const auto &q){return q.id==p.id;});
+          if(previous!=oldScript->properties.end() && previous->value==p.value) continue;
+          scriptChanged|=replacement.setProperty(p.id,p.valueType,p.value);
+        }
+        if(scriptChanged && values.components.replaceInstance(target->instanceId(),replacement)) changed=true;
+      }
+    }
+    // Removidos no ativo.
+    for(usize c=0;c<before.components.size();++c) {
+      const auto &old=*before.components.at(c);
+      if(after.components.findInstance(old.instanceId())) continue;
+      if(const auto *target=matchComponent(values.components,componentKind(old),componentOccurrence(before.components,old)))
+        if(values.components.removeInstance(target->instanceId())) changed=true;
+    }
+    if(!changed) continue;
+    // Durante um gesto contínuo (arraste de campo), os comandos ficam na
+    // transação dele e se fundem por objeto; senão, um passo por objeto,
+    // juntados ao do ativo logo abaixo.
+    if(history_.applyValues(document_,otherId,values,open?0x7A000000u:0u)) ++applied;
+  }
+  if(!open && applied) {
+    const u32 steps=history_.undoDepth()-depth;
+    if(steps>1) history_.mergeLast(steps,(label.empty()?std::string("Editar"):label)+" · "+std::to_string(applied+1)+" objetos");
+  }
+}
+
+bool EditorSession::applySetValue(u32 row) {
+  const auto &menu=state_.setValueMenu;
+  if(row>=menu.rows.size()) return false;
+  const auto *source=document_.find(menu.rows[row].first);if(!source) return false;
+  const u32 depth=history_.undoDepth();u32 applied=0;
+  for(const auto id:std::vector<EditorEntityId>(state_.selectionSet)) {
+    const auto *object=document_.find(id);if(!object || id==source->id) continue;
+    EditorEntity values=*object;bool changed=false;
+    if(menu.key.starts_with("t.") && menu.key.size()==4) {
+      const u32 r=menu.key[2]-'0',a=menu.key[3]-'0';
+      float *mine=r==0?values.transform.position:r==1?values.transform.rotationDegrees:values.transform.scale;
+      const float *theirs=r==0?source->transform.position:r==1?source->transform.rotationDegrees:source->transform.scale;
+      if(mine[a]!=theirs[a]) {mine[a]=theirs[a];changed=true;}
+    } else {
+      const auto slash=menu.key.find('/');
+      const auto instance=std::stoull(menu.key.substr(0,slash));const auto property=menu.key.substr(slash+1);
+      const auto *primary=document_.find(state_.selection);
+      const auto *reference=primary?primary->components.findInstance(instance):nullptr;if(!reference) return false;
+      const auto kind=componentKind(*reference);const u32 occurrence=componentOccurrence(primary->components,*reference);
+      const auto *from=matchComponent(source->components,kind,occurrence);
+      const auto *to=matchComponent(values.components,kind,occurrence);
+      auto *edit=to?values.components.editInstance(to->instanceId()):nullptr;
+      if(!from || !edit) continue;
+      for(const auto &p:from->type().numbers) if(p.id==property && p.write) {*p.write(*edit)=p.read(*from);changed=true;}
+      for(const auto &p:from->type().booleans) if(p.id==property && p.write) {p.write(*edit,p.read(*from));changed=true;}
+      for(const auto &p:from->type().enums) if(p.id==property && p.write) {p.write(*edit,p.read(*from));changed=true;}
+      for(const auto &p:from->type().references) if(p.id==property && p.write) {p.write(*edit,p.read(*from));changed=true;}
+    }
+    if(changed && history_.applyValues(document_,id,values)) ++applied;
+  }
+  const u32 steps=history_.undoDepth()-depth;
+  if(steps>1) history_.mergeLast(steps,"Definir valor · "+std::to_string(applied)+" objetos");
+  state_.status=applied?"Valor de "+std::string(source->name)+" aplicado aos selecionados":"Nada mudou";
+  return applied>0;
+}
+
+void EditorSession::toggleSelection(EditorEntityId entity) {
+  if(!document_.exists(entity) || entity==document_.root()) return;
+  auto &set=state_.selectionSet;
+  const auto found=std::find(set.begin(),set.end(),entity);
+  if(found!=set.end()) {
+    set.erase(found);
+    // O ativo passa a ser o último que ficou (Unity: activeObject).
+    if(state_.selection==entity) state_.selection=set.empty()?kInvalidEntity:set.back();
+  } else {
+    if(set.empty() && document_.exists(state_.selection)) set.push_back(state_.selection);
+    set.push_back(entity);state_.selection=entity;
+  }
+  state_.propertyPage=0;
+  state_.status=set.size()>1?std::to_string(set.size())+" objetos selecionados":set.empty()?"Nada selecionado":"1 objeto selecionado";
+}
+
+void EditorSession::selectEntities(std::vector<EditorEntityId> entities) {
+  entities.erase(std::remove_if(entities.begin(),entities.end(),[&](EditorEntityId id){return !document_.exists(id) || id==document_.root();}),
+                 entities.end());
+  if(entities.empty()) {state_.selection=kInvalidEntity;state_.selectionSet.clear();return;}
+  const auto active=std::find(entities.begin(),entities.end(),state_.selection)!=entities.end()?state_.selection:entities.back();
+  state_.selection=active;state_.selectionSet=std::move(entities);state_.propertyPage=0;
+  if(state_.selectionSet.size()>1) state_.multiSelect=true;
+  state_.status=std::to_string(state_.selectionSet.size())+(state_.selectionSet.size()==1?" objeto selecionado":" objetos selecionados");
+}
+
+std::vector<EditorEntityId> EditorSession::selectedRoots() const {
+  std::vector<EditorEntityId> roots;
+  for(const auto id:state_.selectionSet) {
+    bool nested=false;
+    for(auto parent=document_.find(id)?document_.find(id)->parent:kInvalidEntity;parent && !nested;parent=document_.find(parent)?document_.find(parent)->parent:kInvalidEntity)
+      nested=state_.isSelected(parent);
+    if(!nested && document_.exists(id)) roots.push_back(id);
+  }
+  return roots;
 }
 
 const EditorScreenState::FocusedInspector *EditorSession::activeFocusedAsset() const {
@@ -1994,6 +2319,59 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  // "Definir como o valor de…": modal pequeno com um objeto por linha.
+  if(!state_.setValueMenu.key.empty() && routing.tapped) {
+    const u32 key=routing.widgetId;
+    if(key>=widgetId(EditorWidget::SetValueRowBase) && key<widgetId(EditorWidget::SetValueRowBase)+state_.setValueMenu.rows.size())
+      applySetValue(key-widgetId(EditorWidget::SetValueRowBase));
+    state_.setValueMenu={};
+    return true;
+  }
+  // Toque longo num campo com valores diferentes abre o menu (Unity: clique
+  // direito › Set to Value of).
+  if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds && state_.selectionSet.size()>1 && !isPlaying()) {
+    const u32 key=routing.widgetId,operation=key&0xff000000u,low=key&0x00ffffffu;
+    const auto *entity=document_.find(state_.selection);
+    std::string field,label;
+    if(key>=widgetId(EditorWidget::TransformFieldBase) && key<widgetId(EditorWidget::TransformFieldBase)+9) {
+      const u32 row=(key-widgetId(EditorWidget::TransformFieldBase))/3,axis=(key-widgetId(EditorWidget::TransformFieldBase))%3;
+      field="t."+std::to_string(row)+std::to_string(axis);
+      label=std::string(row==0?"Posição":row==1?"Rotação":"Escala")+" "+"XYZ"[axis];
+    } else if(entity && (operation==widgetId(EditorWidget::ComponentNumberBase) || operation==widgetId(EditorWidget::ComponentBooleanBase) ||
+              operation==widgetId(EditorWidget::ComponentEnumBase) || operation==widgetId(EditorWidget::ComponentReferenceBase))) {
+      const auto *component=entity->components.at(low&0xffu);const u32 property=low>>8;
+      if(component) {
+        const auto &type=component->type();
+        const auto id=operation==widgetId(EditorWidget::ComponentNumberBase)?(property<type.numbers.size()?type.numbers[property].id:std::string_view{}):
+            operation==widgetId(EditorWidget::ComponentBooleanBase)?(property<type.booleans.size()?type.booleans[property].id:std::string_view{}):
+            operation==widgetId(EditorWidget::ComponentEnumBase)?(property<type.enums.size()?type.enums[property].id:std::string_view{}):
+            (property<type.references.size()?type.references[property].id:std::string_view{});
+        const char *name=operation==widgetId(EditorWidget::ComponentNumberBase)?(property<type.numbers.size()?type.numbers[property].name:""):
+            operation==widgetId(EditorWidget::ComponentBooleanBase)?(property<type.booleans.size()?type.booleans[property].name:""):
+            operation==widgetId(EditorWidget::ComponentEnumBase)?(property<type.enums.size()?type.enums[property].name:""):
+            (property<type.references.size()?type.references[property].name:"");
+        if(!id.empty()) {field=multiKey(component->instanceId(),id);label=name;}
+      }
+    }
+    if(!field.empty()) {
+      // O Down do campo da Transformação já abriu a transação do arraste: o
+      // toque longo não edita, então ela é descartada.
+      if(fieldWidget_==key) {history_.cancel(document_);fieldWidget_=0;}
+      if(!state_.multi.isMixed(field)) {state_.status="Todos os selecionados já têm o mesmo valor";return true;}
+      state_.setValueMenu.key=field;state_.setValueMenu.label=label;state_.setValueMenu.rows.clear();
+      // Cada objeto com o valor que tem hoje, para escolher de quem copiar.
+      const auto slash=field.find('/');
+      const scene::ComponentValue *reference=slash==std::string::npos?nullptr:entity->components.findInstance(std::stoull(field.substr(0,slash)));
+      for(const auto id:state_.selectionSet) if(const auto *object=document_.find(id)) {
+        std::string value;
+        if(field.starts_with("t.")) value=transformChannel(object->transform,field[2]-'0',field[3]-'0');
+        else if(reference) if(const auto *mine=matchComponent(object->components,componentKind(*reference),componentOccurrence(entity->components,*reference)))
+          value=propertyText(*mine,field.substr(slash+1));
+        state_.setValueMenu.rows.push_back({id,std::string(object->name)+"  \xC2\xB7  "+value});
+      }
+      return true;
+    }
+  }
   // Toque longo no cabeçalho de um componente abre o menu dele, como o clique
   // direito da Unity (Manual/UsingComponents).
   // Unity "PropertyEditor/OpenMouseOver": toque longo numa linha da Hierarquia
@@ -4439,6 +4817,36 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       applyLayout(layout);state_.status="Layout: "+layout.name;
     }
     return true;
+  }
+  // Multisseleção: modo, ações de conjunto e linhas da Hierarquia no modo.
+  if(routing.tapped) {
+    const u32 key=routing.widgetId;
+    if(key==widgetId(EditorWidget::HierarchyMultiToggle)) {
+      state_.multiSelect=!state_.multiSelect;
+      if(!state_.multiSelect && state_.selectionSet.size()>1) state_.selectionSet={state_.selection};
+      state_.status=state_.multiSelect?"Selecionar vários: toque nos objetos para somar ou tirar":"Seleção única";
+      return true;
+    }
+    std::vector<EditorEntityId> all;document_.collectSubtree(document_.root(),all);
+    all.erase(std::remove(all.begin(),all.end(),document_.root()),all.end());
+    if(key==widgetId(EditorWidget::SelectAll)) {selectEntities(all);return true;}
+    if(key==widgetId(EditorWidget::SelectNone)) {selectEntities({});return true;}
+    if(key==widgetId(EditorWidget::SelectInvert)) {
+      std::vector<EditorEntityId> inverted;
+      for(const auto id:all) if(!state_.isSelected(id)) inverted.push_back(id);
+      selectEntities(inverted);return true;
+    }
+    if(key==widgetId(EditorWidget::SelectChildren)) {
+      // Unity: Select Children — os selecionados e todos os descendentes.
+      std::vector<EditorEntityId> result;
+      for(const auto id:selectedRoots()) {std::vector<EditorEntityId> subtree;document_.collectSubtree(id,subtree);
+        for(const auto member:subtree) if(std::find(result.begin(),result.end(),member)==result.end()) result.push_back(member);}
+      selectEntities(result);return true;
+    }
+    if(state_.multiSelect && !state_.reparentEntity && key>=widgetId(EditorWidget::HierarchyRowBase) &&
+       key<widgetId(EditorWidget::HierarchyRowBase)+EditorDocument::kMaximumEntities && routing.heldSeconds<ui::kUiLongPressSeconds) {
+      toggleSelection(key-widgetId(EditorWidget::HierarchyRowBase));return true;
+    }
   }
   // Busca global: modal sobre tudo; toques fora dela não chegam ao editor.
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::GlobalSearchOpen)) {openGlobalSearch();return true;}
@@ -7630,6 +8038,16 @@ void EditorSession::update() {
   state_.assetCount=mapScene_.assetCount();
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
+  // Conjunto coerente com o ativo, que muitas rotinas ainda escrevem direto:
+  // apagados saem; um ativo novo fora do conjunto vira seleção única.
+  {
+    auto &set=state_.selectionSet;
+    set.erase(std::remove_if(set.begin(),set.end(),[&](EditorEntityId id){return !document_.exists(id);}),set.end());
+    if(!document_.exists(state_.selection)) {state_.selection=set.empty()?kInvalidEntity:set.back();}
+    if(state_.selection==kInvalidEntity) set.clear();
+    else if(!state_.isSelected(state_.selection)) set={state_.selection};
+  }
+  refreshMultiEdit();
   refreshFocusedAsset();
   if(state_.environmentInspector.valid()) refreshEnvironmentInspector();
   if(state_.profileInspector.valid()) refreshProfileInspector();
