@@ -149,7 +149,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
-| 90 | Toolbar: Play, histórico de Undo, busca, visibilidade de camadas, layouts | ◐ | Play/Undo/Redo; falta histórico visível, busca global, camadas, layouts | I3 |
+| 90 | Toolbar: Play, histórico de Undo, busca, visibilidade de camadas, layouts | ✔ | histórico (toque longo em Desfazer) `7698fcb4`; camadas nas opções do viewport (Unity 6 View Options) `6ce8459b`; busca global `40a9fb9f`; layouts no menu Cena (A: sem janelas soltas) `2a10ca75` | I3 |
 | 91 | Hierarchy | ✔ | | — |
 | 92 | Game view | ✔ | workspace Play | — |
 | 93 | Scene view 3D/2D | ◐ | falta modo 2D | S |
