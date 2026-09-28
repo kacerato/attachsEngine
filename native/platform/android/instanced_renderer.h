@@ -131,6 +131,18 @@ public:
     view=completedPreview_;success=previewCompletionSuccess_;completedPreview_={};return true;
   }
   const std::string &cameraPreviewDiagnostic() const {return previewDiagnostic_;}
+  // Conta-gotas do editor (Unity: eyedropper da janela de cor): um pixel da
+  // imagem final, depois da interface, copiado para a CPU e lido no quadro
+  // seguinte. Coordenadas da interface (as mesmas do toque). Falso quando a
+  // swapchain deste aparelho não aceita cópia (sem TRANSFER_SRC).
+  bool pixelSampleSupported() const;
+  bool requestPixelSample(float x,float y);
+  // Cor lida (bytes como exibidos, sRGB, em RGBA); uma vez por pedido.
+  bool takePixelSample(u8 (&rgba)[4]) {
+    if(!pixelSampleReady_) return false;
+    for(u32 i=0;i<4;++i) rgba[i]=pixelSampleValue_[i];
+    pixelSampleReady_=false;return true;
+  }
   const std::string &autoExposureDiagnostic() const {return autoExposureDiagnostic_;}
   void setAutoExposureSceneEpoch(u64 epoch,u32 cameraEntity=0) {
     autoExposureSceneEpoch_=epoch;autoExposureCameraEntity_=cameraEntity;
@@ -1227,6 +1239,14 @@ private:
   // levels, tightly packed via renderer::computeHzbLevelOffsets). Read one
   // frame late -- see readHzbPyramidFromPreviousFrame().
   rhi::VulkanBuffer hzbReadbackBuffer_{};
+  // Conta-gotas: buffer de 4 bytes visível à CPU, pedido pendente e cópia do
+  // quadro anterior (lida depois da espera de fence do acquire, como o HZB).
+  void recordPixelSample(u32 imageIndex);
+  void readPixelSampleFromPreviousFrame();
+  rhi::VulkanBuffer pixelSampleBuffer_{};
+  bool pixelSampleRequested_=false,pixelSampleInFlight_=false,pixelSampleReady_=false;
+  float pixelSampleUi_[2]{};
+  u8 pixelSampleValue_[4]{};
   bool hzbResourcesReady_ = false;
   renderer::HzbPyramid hzbPyramid_{};
   bool hzbPyramidValid_ = false;

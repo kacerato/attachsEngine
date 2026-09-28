@@ -820,6 +820,16 @@ public:
   std::string takeEnvironmentReimportPath() {return std::exchange(environmentReimportPath_,{});}
   // Receita escolhida no Inspector de HDRI para a reimportação pedida; sem ela
   // o shell usa a receita salva no registro.
+  // Conta-gotas: o shell pega o ponto pedido, amostra a imagem final e devolve
+  // os bytes exibidos (sRGB, RGBA); ou recusa quando o aparelho não copia.
+  bool takePixelSampleRequest(float &x,float &y) {
+    if(!pixelSampleRequest_) return false;
+    x=pixelSamplePoint_[0];y=pixelSamplePoint_[1];pixelSampleRequest_=false;return true;
+  }
+  void applyPixelSample(const u8 (&rgba)[4]);
+  void refusePixelSample(std::string_view reason) {
+    state_.colorPicking=state_.colorSampling=false;pixelSampleRequest_=false;state_.status=std::string(reason);
+  }
   bool takeEnvironmentReimportSettings(resources::EnvironmentMapImportSettings &settings) {
     if(!environmentReimportOverride_) return false;
     settings=*std::exchange(environmentReimportOverride_,std::nullopt);return true;
@@ -1323,6 +1333,7 @@ private:
   std::string reimportPath_;
   std::string environmentReimportPath_;
   std::optional<resources::EnvironmentMapImportSettings> environmentReimportOverride_;
+  bool pixelSampleRequest_=false;float pixelSamplePoint_[2]{};u32 pixelSamplePointer_=0;
   const renderer::EnvironmentMapResource *environmentPreviewSource_=nullptr;
   float environmentPreviewExposure_=0;
   std::string textureReimportPath_;

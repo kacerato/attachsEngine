@@ -3478,6 +3478,71 @@ void InstancedRenderer::recordHzbReductionPass(const platform::FreeCameraState &
   hzbReadbackRecordedThisFrame_ = true;
 }
 
+bool InstancedRenderer::pixelSampleSupported() const {
+  return swapchain_ && swapchain_->supportsTransferSource() && memoryAllocator_;
+}
+
+bool InstancedRenderer::requestPixelSample(float x,float y) {
+  if(!pixelSampleSupported() || !std::isfinite(x) || !std::isfinite(y)) return false;
+  pixelSampleUi_[0]=x;pixelSampleUi_[1]=y;pixelSampleRequested_=true;pixelSampleReady_=false;
+  return true;
+}
+
+// Depois do passe de interface a imagem está em PRESENT_SRC: vai a
+// TRANSFER_SRC, um pixel é copiado e ela volta para a apresentação.
+void InstancedRenderer::recordPixelSample(u32 imageIndex) {
+  if(!pixelSampleRequested_) return;
+  pixelSampleRequested_=false;
+  if(!pixelSampleSupported()) return;
+  if(!pixelSampleBuffer_.handle()) {
+    rhi::BufferDesc desc{};desc.sizeBytes=16;desc.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    desc.memoryClass=rhi::MemoryClass::RenderTarget;desc.cpuAccess=rhi::CpuAccess::Random;desc.preferDeviceMemory=false;
+    if(!memoryAllocator_->createBuffer(desc,&pixelSampleBuffer_) || !pixelSampleBuffer_.mappedData()) {pixelSampleBuffer_.reset();return;}
+  }
+  const VkImage image=swapchain_->image(imageIndex);
+  if(image==VK_NULL_HANDLE) return;
+  // Ponto da interface → NDC → transformação da superfície → pixel da swapchain
+  // (a mesma conta de physicalSceneViewport).
+  const auto display=swapchain_->displayExtent();
+  const float width=uiSurfaceWidth_>0?uiSurfaceWidth_:float(display.width);
+  const float height=uiSurfaceHeight_>0?uiSurfaceHeight_:float(display.height);
+  const float nx=2*pixelSampleUi_[0]/width-1,ny=2*pixelSampleUi_[1]/height-1;
+  const auto &t=swapchain_->surfaceTransform();
+  const float sx=t.xx*nx+t.xy*ny,sy=t.yx*nx+t.yy*ny;
+  const i32 px=std::clamp(static_cast<i32>((sx+1)*.5f*float(swapchain_->width())),0,static_cast<i32>(swapchain_->width())-1);
+  const i32 py=std::clamp(static_cast<i32>((sy+1)*.5f*float(swapchain_->height())),0,static_cast<i32>(swapchain_->height())-1);
+  VkImageMemoryBarrier barrier{};barrier.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.srcQueueFamilyIndex=barrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;barrier.image=image;
+  barrier.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+  barrier.oldLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;barrier.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  barrier.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+  vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&barrier);
+  VkBufferImageCopy region{};region.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+  region.imageOffset={px,py,0};region.imageExtent={1,1,1};
+  vkCmdCopyImageToBuffer(commandBuffer_,image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,pixelSampleBuffer_.handle(),1,&region);
+  barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=0;
+  vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,nullptr,0,nullptr,1,&barrier);
+  VkBufferMemoryBarrier host{};host.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;
+  host.srcQueueFamilyIndex=host.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;host.buffer=pixelSampleBuffer_.handle();host.size=VK_WHOLE_SIZE;
+  vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);
+  pixelSampleInFlight_=true;
+}
+
+void InstancedRenderer::readPixelSampleFromPreviousFrame() {
+  if(!pixelSampleInFlight_) return;
+  pixelSampleInFlight_=false;
+  if(!pixelSampleBuffer_.mappedData() || !memoryAllocator_->invalidateBuffer(pixelSampleBuffer_)) return;
+  const auto *bytes=static_cast<const u8 *>(pixelSampleBuffer_.mappedData());
+  // Formatos BGRA trocam vermelho e azul; os bytes já são os exibidos (sRGB).
+  const auto format=swapchain_->imageFormat();
+  const bool bgra=format==VK_FORMAT_B8G8R8A8_UNORM || format==VK_FORMAT_B8G8R8A8_SRGB;
+  pixelSampleValue_[0]=bgra?bytes[2]:bytes[0];pixelSampleValue_[1]=bytes[1];
+  pixelSampleValue_[2]=bgra?bytes[0]:bytes[2];pixelSampleValue_[3]=bytes[3];
+  pixelSampleReady_=true;
+}
+
 void InstancedRenderer::readHzbPyramidFromPreviousFrame() {
   hzbPyramidValid_ = false;
   if (!hzbResourcesReady_) return;
@@ -4430,6 +4495,7 @@ void InstancedRenderer::shutdown() {
   // The UI owns VMA buffers and images too. Release them before its render pass
   // and before the surface destroys the allocator/device (including resume).
   uiRenderer_.shutdown();
+  pixelSampleBuffer_.reset();pixelSampleRequested_=pixelSampleInFlight_=pixelSampleReady_=false;
   for(auto framebuffer:uiFramebuffers_) if(framebuffer) vkDestroyFramebuffer(device_,framebuffer,nullptr);
   uiFramebuffers_.clear();if(uiRenderPass_) vkDestroyRenderPass(device_,uiRenderPass_,nullptr);uiRenderPass_=VK_NULL_HANDLE;
   uiInstances_.clear();
@@ -5267,6 +5333,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // Same "safe without a new stall" reasoning as collectPrevious() above --
   // see readHzbPyramidFromPreviousFrame()'s own comment.
   readDrawCullTelemetryFromPreviousFrame();
+  readPixelSampleFromPreviousFrame();
   const bool fullSceneChanged = !pendingScene_.empty();
   const bool mapPosesChanged = pendingMapPoseCount_ != 0 || fullSceneChanged;
   const bool mapTransformsChanged = pendingMapTransformChanged_ || fullSceneChanged;
@@ -6506,6 +6573,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   beginGpuRegion(GpuPassClass::Ui);
   recordRuntimeHud(imageIndex, hud);
   recordUiOverlay(imageIndex);
+  recordPixelSample(imageIndex);
   endGpuRegion(GpuPassClass::Ui);
   // Must run after the main pass ends (depthImage_ needs its final write
   // landed, in DEPTH_STENCIL_READ_ONLY_OPTIMAL) and before submit; a no-op

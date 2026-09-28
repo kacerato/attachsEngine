@@ -341,6 +341,8 @@ enum class EditorWidget : u32 {
   // bibliotecas de amostras.
   ColorSquare=0x5f000300u, ColorHueStrip, ColorHex, ColorOriginal, ColorSwatchAdd, ColorLibraryToggle, ColorLibraryNew,
   ColorModeBase=0x5f000310u, ColorSliderBase=0x5f000320u, ColorSwatchActionBase=0x5f000340u,
+  // Conta-gotas: começar a amostrar e cancelar a amostragem.
+  ColorEyedropper=0x5f000350u, ColorPickCancel,
   ColorLibraryBase=0x5f000400u, ColorSwatchBase=0x5f000500u,
   ComponentTripleBase=0x7d000000u,
   ComponentNumberBase=0x78000000u,
@@ -969,6 +971,9 @@ struct EditorScreenState final {
   bool colorLibraryMenu=false;
   // Texto em edição na janela: 1 = hexadecimal, 2 = nome da amostra, 3 = nova biblioteca.
   u8 colorText=0;
+  // Conta-gotas (Unity: eyedropper): a janela some, o próximo toque na tela
+  // vira um pedido de amostra ao renderer; `colorSampling` enquanto a cor não volta.
+  bool colorPicking=false,colorSampling=false;
   const class EditorValueLibraries *colorLibraries=nullptr;
   // Alvo 3 da janela de cor: a parada de cor escolhida no editor de gradiente.
   // Editor de gradiente aberto (chave do campo), rascunho no formato do campo,

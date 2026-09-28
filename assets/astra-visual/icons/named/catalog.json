@@ -195,6 +195,11 @@
       "label": "A06",
       "name": "edit-points"
     },
+    "editor/eyedropper": {
+      "category": "editor",
+      "label": "Astra",
+      "name": "eyedropper"
+    },
     "editor/focus": {
       "category": "editor",
       "label": "A14",

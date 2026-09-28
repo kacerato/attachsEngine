@@ -354,8 +354,10 @@ void buildColorWindow(ScreenBuilder &builder,EditorScreenLayout &layout) {
   router.addRegion(square,widgetId(EditorWidget::ColorSquare));
   router.addRegion(hue,widgetId(EditorWidget::ColorHueStrip));
   layout.colorSquare=square;layout.colorHue=hue;
-  // Direita: original × nova, barras, hexadecimal.
+  // Direita: conta-gotas, original × nova, barras, hexadecimal.
   auto preview=takeTop(content,40);
+  builder.iconButton(takeLeft(preview,40),UiIcon::EditorEyedropper,widgetId(EditorWidget::ColorEyedropper));
+  takeLeft(preview,6);
   const auto original=takeLeft(preview,preview.width*.5f);
   float originalSrgb[3],originalBase[3],originalIntensity=0;
   splitHdr({state.colorOriginal[0],state.colorOriginal[1],state.colorOriginal[2]},originalBase,originalIntensity);
@@ -7929,7 +7931,22 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);
-  if(state.colorField) buildColorWindow(builder,layout);
+  // Amostrando: a janela de cor some para a tela real ficar visível; só a faixa
+  // de instrução (com Cancelar) fica por cima, no topo, longe do centro.
+  if(state.colorField && state.colorPicking) {
+    const float width=std::min(420.f,state.surface.width-16);
+    const UiRect bar{state.surface.x+(state.surface.width-width)*.5f,state.surface.y+6,width,40};
+    list.addRect(deflate(bar,UiInsets::all(-1)),theme.color.accent,theme.radius.control);
+    list.addRect(bar,theme.color.surface,theme.radius.control);
+    auto inner=deflate(bar,UiInsets{8,4,4,4});
+    list.addImage(centred(takeLeft(inner,28),20,20),static_cast<UiImageId>(UiIcon::EditorEyedropper),theme.color.accent);
+    const auto cancel=takeRight(inner,92);
+    list.addRect(cancel,theme.color.raised,theme.radius.control);
+    builder.label(cancel,"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(cancel,widgetId(EditorWidget::ColorPickCancel));
+    builder.label(deflate(inner,UiInsets{6,0,6,0}),state.colorSampling?"Lendo a cor da tela…":"Toque em qualquer ponto da tela",
+                  theme.color.text,theme.type.caption);
+  } else if(state.colorField) buildColorWindow(builder,layout);
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;

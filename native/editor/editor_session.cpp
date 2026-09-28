@@ -1655,6 +1655,22 @@ EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
 }
 
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
+  // Conta-gotas: todos os toques pertencem à amostragem. Cancelar pela faixa;
+  // qualquer outro ponto vira o pedido de amostra ao soltar (o quadro seguinte,
+  // sem a janela de cor, é o que se lê).
+  if(state_.colorField && state_.colorPicking) {
+    const auto routed=router_.route(event);
+    if(event.phase==UiPointerPhase::Down) {
+      if(routed.target==UiPointerTarget::Widget && routed.widgetId==widgetId(EditorWidget::ColorPickCancel)) {
+        state_.colorPicking=state_.colorSampling=false;state_.status="Amostragem cancelada";return true;
+      }
+      pixelSamplePointer_=event.pointerId+1;
+    } else if(event.phase==UiPointerPhase::Up && pixelSamplePointer_==event.pointerId+1 && !state_.colorSampling) {
+      pixelSamplePoint_[0]=event.position.x;pixelSamplePoint_[1]=event.position.y;
+      pixelSampleRequest_=true;state_.colorSampling=true;pixelSamplePointer_=0;
+    }
+    return true;
+  }
   // Toques na janela focada com aba de recurso (e nos modais que ela abriu)
   // rodam com o contexto de recurso dela.
   {
@@ -4590,6 +4606,21 @@ bool EditorSession::handleScriptArrayDrag(const UiPointerEvent &event,const UiPo
   return true;
 }
 
+// A cor exibida (sRGB de 8 bits) volta como cor linear; alfa e intensidade HDR
+// do campo ficam como estavam (a tela não tem alfa nem faixa HDR).
+void EditorSession::applyPixelSample(const u8 (&rgba)[4]) {
+  if(!state_.colorField || !state_.colorPicking) return;
+  float linear[4]{};
+  for(u32 i=0;i<3;++i) linear[i]=colorToLinear(rgba[i]/255.0f);
+  const float alpha=state_.colorAlpha,intensity=state_.colorIntensity;
+  linear[3]=alpha;
+  pickerFromLinear(linear);
+  state_.colorAlpha=alpha;state_.colorIntensity=intensity;
+  state_.colorPicking=state_.colorSampling=false;
+  char hex[16];std::snprintf(hex,sizeof hex,"#%02X%02X%02X",rgba[0],rgba[1],rgba[2]);
+  state_.status=std::string("Cor amostrada: ")+hex;
+}
+
 void EditorSession::pickerFromLinear(const float (&linearRgba)[4]) {
   float base[3],intensity=0;splitHdr({linearRgba[0],linearRgba[1],linearRgba[2]},base,intensity);
   float srgb[3];for(u32 i=0;i<3;++i) srgb[i]=colorToSrgb(base[i]);
@@ -4706,6 +4737,10 @@ bool EditorSession::handleColorWindow(const UiPointerEvent &event,const UiPointe
   else if(key>=widgetId(EditorWidget::ColorModeBase) && key<widgetId(EditorWidget::ColorModeBase)+3)
     state_.colorMode=static_cast<u8>(key-widgetId(EditorWidget::ColorModeBase));
   else if(key==widgetId(EditorWidget::ColorOriginal)) pickerFromLinear(state_.colorOriginal);
+  else if(key==widgetId(EditorWidget::ColorEyedropper)) {
+    state_.colorPicking=true;state_.colorSampling=false;pixelSampleRequest_=false;state_.colorSwatchMenu=0;state_.colorLibraryMenu=false;
+    state_.status="Toque em qualquer ponto da tela para amostrar a cor";
+  }
   else if(key==widgetId(EditorWidget::ColorHex)) state_.colorText=1;
   else if(key==widgetId(EditorWidget::ColorLibraryToggle)) {state_.colorLibraryMenu=!state_.colorLibraryMenu;state_.colorSwatchMenu=0;}
   else if(key==widgetId(EditorWidget::ColorLibraryNew)) state_.colorText=3;

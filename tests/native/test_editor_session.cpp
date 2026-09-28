@@ -3971,6 +3971,44 @@ AE_TEST(focused_window_holds_a_project_asset_beside_the_main_inspector) {
   AE_EXPECT_TRUE(state.focusedInspectors.empty(),"aba fechada");
 }
 
+// Unity 6000.0 Color Picker, eyedropper: a janela some, o toque vira pedido de
+// amostra; a cor exibida volta linear, com alfa do campo preservado.
+AE_TEST(color_eyedropper_requests_a_screen_sample_and_applies_it) {
+  Fixture f;auto &doc=f.session.document();
+  auto value=*doc.find(f.cube);value.components.add(scene::Light::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"cubo com luz");
+  f.session.setSelection(f.cube);f.session.update();
+  auto &state=const_cast<EditorScreenState &>(f.session.screen());
+  // Janela de cor aberta como um campo faria (alfa 0.5).
+  state.colorField=1;state.colorHasAlpha=true;state.colorAlpha=.5f;state.colorHue=0;state.colorSaturation=0;state.colorValue=1;
+  f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ColorEyedropper));
+  AE_EXPECT_TRUE(state.colorPicking,"modo de amostragem");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ColorApply)).x<0,"a janela some para a tela ficar visível");
+  float x=0,y=0;
+  AE_EXPECT_TRUE(!f.session.takePixelSampleRequest(x,y),"sem toque, sem pedido");
+  const UiPoint at{400,200};
+  f.down(150,at);f.up(150,at);
+  AE_EXPECT_TRUE(f.session.takePixelSampleRequest(x,y) && x==400 && y==200,"o toque vira o pedido, no ponto tocado");
+  AE_EXPECT_TRUE(state.colorSampling && state.colorPicking,"esperando a cor");
+  const u8 red[4]{255,0,0,255};
+  f.session.applyPixelSample(red);
+  AE_EXPECT_TRUE(!state.colorPicking,"amostragem terminada");
+  AE_EXPECT_TRUE(state.colorSaturation>.99f && state.colorValue>.99f && (state.colorHue<.01f || state.colorHue>.99f),"vermelho puro");
+  AE_EXPECT_EQ(state.colorAlpha,.5f,"alfa do campo preservado");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ColorApply)).x>=0,"a janela volta");
+  // Cancelar e recusa do aparelho.
+  tapWidget(f,widgetId(EditorWidget::ColorEyedropper));
+  tapWidget(f,widgetId(EditorWidget::ColorPickCancel));
+  AE_EXPECT_TRUE(!state.colorPicking && !f.session.takePixelSampleRequest(x,y),"cancelado sem pedido");
+  tapWidget(f,widgetId(EditorWidget::ColorEyedropper));
+  f.down(151,at);f.up(151,at);
+  f.session.takePixelSampleRequest(x,y);
+  f.session.refusePixelSample("sem cópia");
+  AE_EXPECT_TRUE(!state.colorPicking && state.status=="sem cópia","recusa volta à janela com o motivo");
+  state.colorField=0;
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

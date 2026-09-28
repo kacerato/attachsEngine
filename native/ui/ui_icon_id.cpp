@@ -70,6 +70,7 @@ constexpr const char *kNames[] = {
     "editor/author-undo",
     "editor/author-zoom",
     "editor/edit-points",
+    "editor/eyedropper",
     "editor/focus",
     "editor/frame-object",
     "editor/gizmo-axes",

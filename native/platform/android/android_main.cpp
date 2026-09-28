@@ -3055,6 +3055,17 @@ void android_main(android_app *app) {
           }
           shell.editorSession.setWorkStatus(text);
         }
+        // Conta-gotas: o ponto pedido vai ao renderer; a cor lida no quadro
+        // seguinte volta para a janela de cor.
+        {
+          float x=0,y=0;
+          if(shell.editorSession.takePixelSampleRequest(x,y)) {
+            if(!shell.instancedRendererReady || !shell.instancedRenderer.requestPixelSample(x,y))
+              shell.editorSession.refusePixelSample("Este aparelho não permite ler a tela para o conta-gotas");
+          }
+          ae::u8 rgba[4];
+          if(shell.instancedRendererReady && shell.instancedRenderer.takePixelSample(rgba)) shell.editorSession.applyPixelSample(rgba);
+        }
         // Barra de status: trabalhos em andamento, reafirmados a cada quadro. O
         // progresso só vai quando há medida real (recursos abertos, bytes copiados).
         {
