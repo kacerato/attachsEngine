@@ -78,6 +78,7 @@ public sealed class InstantiateProbe : Behavior
         finally { RejectClone.Reject = false; }
         Require(root.ChildCount == count, "failed field application rolls back the entire native clone");
         invalid.Destroy();
+        copy.AddBehavior<InspectionProbe>();
         Scene.Log(ObjectId, "CLONE READY: hierarchy and current fields copied");
     }
     public override void Update(float dt)
@@ -87,6 +88,17 @@ public sealed class InstantiateProbe : Behavior
         Require(receiver.Timer is { } timer && timer.Component.IsAlive, "component reference resolves in clone");
         Scene.Log(ObjectId, "CLONE PASS: hierarchy; fields; references; lifecycle; independent ownership");
         Enabled = false;
+    }
+}
+
+[ComponentId("acceptance.clone.inspection")]
+public sealed class InspectionProbe : Behavior
+{
+    [PropertyId("optional")] public List<int> Optional = null!;
+    [PropertyId("bad")] public int Bad
+    {
+        get => throw new InvalidOperationException("getter deliberado");
+        set { }
     }
 }
 

@@ -136,6 +136,30 @@ void attachScript(EditorDocument &doc, EditorEntityId id, const char *type) {
 }
 } // namespace
 
+AE_TEST(play_inspection_reads_live_fields_without_authoring_writes_and_rejects_partial_snapshots) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Inspecionado");
+  attachScript(doc,id,"test.inspection");const auto revision=doc.revision();
+  static std::string report;
+  auto api=FakeRuntime::api();
+  api.inspectFields=[](u64,u8 *out,int capacity)->int {
+    if(out && capacity>=static_cast<int>(report.size())) std::memcpy(out,report.data(),report.size());
+    return static_cast<int>(report.size());
+  };
+  play.setScriptRuntime(api,"test");AE_EXPECT_TRUE(play.start(doc,resources),"Play real com ponte de teste");
+  report="ASTRA_FIELDS 1 1 1 3 \"live\" \"int32\" 0 \"71\" \"optional\" \"array:int32\" 1 \"Nulo\" \"bad\" \"float\" 2 \"Getter falhou\"";
+  std::vector<runtime::ScriptFieldIssue> issues;
+  AE_EXPECT_TRUE(play.inspectFields(id,issues),"snapshot aceito");
+  auto script=scene::scriptBehavior(play.document().find(id)->components.at(0));
+  AE_EXPECT_TRUE(script && script->properties.size()==1 && script->properties[0].value=="71","valor atual disponível ao Inspector");
+  AE_EXPECT_TRUE(issues.size()==2 && issues[0].isNull && !issues[1].isNull,"ausência separada de erro");
+  report="ASTRA_FIELDS 1 1 1 2 \"live\" \"int32\" 0 \"99\"";
+  AE_EXPECT_TRUE(!play.inspectFields(id,issues),"snapshot incompleto recusado");
+  script=scene::scriptBehavior(play.document().find(id)->components.at(0));
+  AE_EXPECT_TRUE(script && script->properties[0].value=="71","não publica metade da leitura");
+  AE_EXPECT_TRUE(doc.revision()==revision && scene::scriptBehavior(doc.find(id)->components.at(0))->properties.empty(),"cena autoral intacta");
+}
+
 // Inspector em Play (editor/editor_play_edit.h): a diferença entre duas fotos do
 // espelho chega ao mundo pela API pública dele — o campo do script pela ABI, a
 // propriedade do corpo com o corpo recriado no solver, o objeto novo criado — e

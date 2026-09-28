@@ -100,6 +100,10 @@ if (alvo is not null)
 
 ## Persistência, limites e escopo real
 
+Atualização posterior: a lacuna de leitura automática dos campos descrita abaixo
+foi corrigida em [inspeção de scripts em Play](INSPECAO-SCRIPTS-PLAY-2026-09-28.md).
+Os demais registros e evidências deste relatório correspondem à entrega O1b original.
+
 Metadados dos scripts usam o serializer existente (tipo, arquivo, instância,
 Enabled e propriedades), sem novo formato de cena. Criações e remoções de
 Play são transitórias; salvar a cena autoral não as incorpora. Filas de atraso

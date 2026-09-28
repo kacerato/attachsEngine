@@ -1899,7 +1899,27 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   close();return true;
 }
 
+void EditorSession::refreshScriptInspection(bool force) {
+  if(!playInspecting()) {
+    scriptInspectionObject_=0;scriptInspectionTime_=-1;
+    state_.scriptInspectionEntity=0;state_.scriptFieldIssues.clear();state_.scriptInspectionError.clear();return;
+  }
+  const auto id=state_.inspectorLocked?state_.inspectorLocked:state_.selection;
+  if(!force && (playMirrorBusy_ || (id==scriptInspectionObject_ && lastWallSeconds_-scriptInspectionTime_<.25))) return;
+  scriptInspectionObject_=id;scriptInspectionTime_=lastWallSeconds_;
+  state_.scriptInspectionEntity=id;
+  state_.scriptFieldIssues.clear();state_.scriptInspectionError.clear();
+  const auto *object=playScene_.document().find(id);if(!object) return;
+  bool hasScript=false;
+  for(usize i=0;i<object->components.size();++i) hasScript|=scene::scriptBehavior(object->components.at(i))!=nullptr;
+  if(hasScript && !playScene_.inspectFields(id,state_.scriptFieldIssues)) {
+    state_.scriptFieldIssues.clear();
+    state_.scriptInspectionError="Leitura de campos indisponível · valores não atualizados";
+  }
+}
+
 void EditorSession::refreshPlayMirror() {
+  refreshScriptInspection(true);
   static_cast<runtime::SceneGraph &>(playMirror_)=playScene_.document();
   playMirrorBase_=playScene_.document();
   playHistory_.clear();
@@ -4377,6 +4397,10 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         for(const auto &type:code_.scriptTypes()) if(type.id==script->scriptType && field<type.properties.size()) {
           const auto &property=type.properties[field];
           if(!scene::scriptArrayElementType(property.valueType).empty()) {
+            for(const auto &issue:state_.scriptFieldIssues) if(issue.instance==script->instanceId() && issue.property==property.id && issue.isNull) {
+              if(setScriptArray(entity->id,script->instanceId(),property.id,property.valueType,{})) state_.expandedScriptArray=property.id;
+              return true;
+            }
             // Lista: o toque abre e fecha os elementos logo abaixo do campo.
             state_.expandedScriptArray=state_.expandedScriptArray==property.id?std::string():property.id;
             state_.scriptArraySelected=0;return true;
@@ -8616,6 +8640,7 @@ void EditorSession::refreshSkinningStatus() {
   }
 }
 void EditorSession::update() {
+  refreshScriptInspection();
   state_.document=playInspecting()?&playScene_.document():&document_;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   // Travado num objeto que deixou de existir (apagado, outra cena): volta a seguir a seleção.

@@ -1487,6 +1487,9 @@ private:
   void leavePlayMirror();
   bool routeToPlayMirror(const ui::UiPointerEvent &event);
   void refreshPlayMirror();
+  void refreshScriptInspection(bool force=false);
+  EditorEntityId scriptInspectionObject_=0;
+  double scriptInspectionTime_=-1;
   void endPlayInspect();
   void handleGizmoPointer(const ui::UiPointerRouting &routing, u32 axis);
   ViewportPointer *findViewportPointer(u32 id) noexcept;

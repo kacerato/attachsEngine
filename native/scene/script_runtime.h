@@ -310,6 +310,9 @@ struct ScriptRuntimeApi {
   // Start. Opcional: um runtime sem ela recusa a edição ao vivo pelo nome, e o
   // resto do Play segue igual.
   int (*edit)(u64,u64,const u8 *,int)=nullptr;
+  // Inspection only. Null destination captures once; second call copies that
+  // snapshot without invoking user getters again. Negative means unavailable.
+  int (*inspectFields)(u64,u8 *,int)=nullptr;
   bool available() const {
     return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact&&timer&&lateUpdate&&lifecycle;
   }

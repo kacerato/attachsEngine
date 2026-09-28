@@ -26,6 +26,7 @@
 #include "resources/environment_map_asset.h"
 #include "resources/texture_profile.h"
 #include "core/base.h"
+#include "runtime/script_inspection.h"
 #include "editor/editor_document.h"
 #include "editor/editor_filesystem.h"
 #include "editor/editor_code_workspace.h"
@@ -660,6 +661,9 @@ struct EditorScreenState final {
   const runtime::SceneGraph *document = nullptr;
   const EditorFileSystem *files=nullptr;
   const EditorCodeWorkspace *code=nullptr;
+  std::vector<runtime::ScriptFieldIssue> scriptFieldIssues;
+  EditorEntityId scriptInspectionEntity=0;
+  std::string scriptInspectionError;
   const EditorMapScene *resources=nullptr;
   const resources::AssetRegistry *assetRegistry=nullptr;
   bool codeCompilerAvailable=false,codeBuildBusy=false;

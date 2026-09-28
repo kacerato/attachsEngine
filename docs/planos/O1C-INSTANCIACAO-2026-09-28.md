@@ -61,10 +61,9 @@ reaberta contém somente Driver além da raiz.
 O cenário não possui malha: valida grafo e scripts, não rendering ou colisão de
 primitivas. Não houve benchmark de escala nem validação em portrait.
 
-**Lacuna ainda aberta:** Inspector não captura automaticamente todos os campos
-C# alterados em runtime. A clonagem já captura valores atuais; a visualização no
-Inspector continua usando os dados autorais do componente nativo. Corrigir essa
-leitura é necessário antes de declarar completa a inspeção em Play.
+**Correção posterior no mesmo dia:** a lacuna de leitura dos campos C# no
+Inspector foi tratada em [inspeção em Play](INSPECAO-SCRIPTS-PLAY-2026-09-28.md).
+As evidências acima continuam correspondendo ao APK original da clonagem.
 
 Nenhum tipo de componente novo foi contado. Inventário: 116 existentes,
 6 parciais, 90 ausentes e 7 adaptações, total 219. Etapas 5–12 continuam abertas.

@@ -7,6 +7,7 @@
 //
 // A plataforma injeta o serviço gerenciado; este arquivo não conhece CLR.
 #pragma once
+#include "runtime/script_inspection.h"
 #include "runtime/game_world.h"
 #include "runtime/input_actions.h"
 #include "runtime/scene_physics.h"
@@ -84,6 +85,7 @@ public:
   // estado e os campos em `changed` chegam à instância viva. Falso, com o motivo
   // em `diagnostics()`, quando o runtime não tem a função ou recusou o valor.
   bool editBehavior(ObjectId object,u64 instance,bool enabled,std::span<const scene::ScriptPropertyValue> changed);
+  bool inspectFields(ObjectId object,std::vector<ScriptFieldIssue> &issues);
   void stop();
   const std::string &diagnostics() const { return diagnostics_; }
   static bool hasScripts(const SceneGraph &graph);

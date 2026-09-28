@@ -183,6 +183,17 @@ public static class AstraBehaviorTests
         world.Start(project.Compile(), scene, [new(2, 1, "acceptance.clone.driver", true, new Dictionary<string, JsonElement>())], true);
         for (var i = 0; i < 5; ++i) world.Update(.02f);
         Assert.True(scene.Events.Any(e => e.StartsWith("CLONE PASS")), string.Join("\n", world.Failures.Select(f => f.Message)));
+        var copy = GameObject.Resolve(scene, 1).Find("Copy")!;
+        var fields = world.InspectFields(copy.ObjectId);
+        Assert.True(fields.Contains("\"inherited\" \"int32\" 0 \"71\""), "inspection reads current private base field");
+        Assert.True(fields.Contains("\"optional\" \"array:int32\" 1 \"Nulo\""), "null is distinct from empty list");
+        Assert.True(fields.Contains("Falha de leitura: getter deliberado"), "getter failure belongs to inspection, not lifecycle");
+        Assert.True(world.Edit(copy.ObjectId, 2, new(true, new Dictionary<string, JsonElement>
+            { ["optional"] = JsonSerializer.SerializeToElement(Array.Empty<int>()) })), "editor initializes null list");
+        Assert.True(world.InspectFields(copy.ObjectId).Contains("\"optional\" \"array:int32\" 0 \"0 \""), "empty list differs from null after edit");
+        world.Edit(copy.ObjectId, 2, new(true, new Dictionary<string, JsonElement>
+            { ["optional"] = JsonSerializer.SerializeToElement(new int[1025]) }));
+        Assert.True(world.InspectFields(copy.ObjectId).Contains("1024 elementos"), "inspection bounds runtime lists before allocating snapshots");
         Assert.Equal(0, world.Failures.Count);
     }
 

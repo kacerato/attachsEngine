@@ -206,8 +206,13 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     {
         if (value is null) return JsonSerializer.SerializeToElement<object?>(null);
         if (kind.StartsWith("array:", StringComparison.Ordinal))
+        {
+            if (value is System.Collections.ICollection { Count: > 1024 })
+                throw new InvalidDataException("Lista excede os 1024 elementos do formato serializado");
             return JsonSerializer.SerializeToElement(((System.Collections.IEnumerable)value).Cast<object?>()
                 .Select(v => CaptureValue(v, kind[6..])).ToArray());
+        }
+        if (value is string { Length: > 4096 }) throw new InvalidDataException("Texto excede o limite do campo serializado");
         if (kind == "object")
         {
             var reference = (ObjectReference)value;
@@ -222,15 +227,43 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         }
         return JsonSerializer.SerializeToElement(value, value.GetType(), FieldJson);
     }
+    private JsonElement CaptureProperty(Entry entry, ScriptPropertySchema property)
+    {
+        var member = ResolveMember(entry.Instance.GetType(), property);
+        var value = member is FieldInfo field ? field.GetValue(entry.Instance) : ((PropertyInfo)member).GetValue(entry.Instance);
+        return CaptureValue(value, property.ValueType);
+    }
+    public string InspectFields(ulong objectId)
+    {
+        if (!Running || _scene is null || !_scene.Exists(objectId)) throw new WorldException(WorldStatus.StaleHandle, "inspecionar campos");
+        var entries = _entries.Where(e => Alive(e) && e.Instance.ObjectId == objectId).ToArray();
+        var output = new System.Text.StringBuilder("ASTRA_FIELDS 1 ").Append(entries.Length).Append(' ');
+        foreach (var entry in entries)
+        {
+            output.Append(entry.Instance.InstanceId).Append(' ').Append(entry.Schema.Properties.Length).Append(' ');
+            foreach (var property in entry.Schema.Properties)
+            {
+                uint state = 0; string text;
+                try
+                {
+                    var value = CaptureProperty(entry, property);
+                    if (value.ValueKind == JsonValueKind.Null) { state = 1; text = "Nulo"; }
+                    else text = ScriptFieldSnapshot.Value(value, property.ValueType);
+                }
+                catch (Exception error) { state = 2; text = "Falha de leitura: " + error.GetBaseException().Message; }
+                if (text.Length > 256 * 1024 || text.Contains('\0')) { state = 2; text = "Valor não representável no Inspector"; }
+                output.Append(ScriptFieldSnapshot.Quote(property.Id)).Append(' ').Append(ScriptFieldSnapshot.Quote(property.ValueType))
+                    .Append(' ').Append(state).Append(' ').Append(ScriptFieldSnapshot.Quote(text)).Append(' ');
+            }
+        }
+        return output.ToString();
+    }
     private Dictionary<string, JsonElement> CaptureProperties(Entry entry)
     {
         var result = new Dictionary<string, JsonElement>();
-        var type = entry.Instance.GetType();
         foreach (var property in entry.Schema.Properties)
         {
-            var member = ResolveMember(type, property);
-            var value = member is FieldInfo field ? field.GetValue(entry.Instance) : ((PropertyInfo)member).GetValue(entry.Instance);
-            result.Add(property.Id, CaptureValue(value, property.ValueType));
+            result.Add(property.Id, CaptureProperty(entry, property));
         }
         return result;
     }

@@ -3576,12 +3576,23 @@ const EditorScriptType *scriptSchema(const EditorScreenState &state,std::string_
   if(state.code) for(const auto &type:state.code->scriptTypes()) if(type.id==id) return &type;
   return nullptr;
 }
-void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::ScriptBehavior &script,u32 index) {
+void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::ScriptBehavior &script,u32 index,EditorEntityId owner) {
   const auto &theme=builder.theme;
   // Ativo mora no interruptor do cabeçalho e "Abrir código" no menu ⋮: repetir
   // as duas aqui roubava duas das poucas linhas que o telefone tem para campos.
   const auto *schema=scriptSchema(builder.state,script.scriptType);
   if(!schema) {builder.label(content,"Tipo não resolvido; dados preservados",theme.color.textMuted,theme.type.caption);return;}
+  if(builder.state.playInspect && builder.state.scriptInspectionEntity!=owner) {
+    builder.label(content,"Selecione o objeto para ler os campos em Play",theme.color.textMuted,theme.type.caption);return;
+  }
+  if(builder.state.playInspect && !builder.state.scriptInspectionError.empty()) {
+    builder.label(content,builder.state.scriptInspectionError.c_str(),theme.color.warning,theme.type.caption);return;
+  }
+  const auto issueFor=[&](std::string_view id)->const runtime::ScriptFieldIssue* {
+    if(!builder.state.playInspect) return nullptr;
+    for(const auto &issue:builder.state.scriptFieldIssues) if(issue.instance==script.instanceId() && issue.property==id) return &issue;
+    return nullptr;
+  };
   usize orphaned=0;
   for(const auto &value:script.properties) if(std::none_of(schema->properties.begin(),schema->properties.end(),[&](const auto &property){return property.id==value.id;})) ++orphaned;
   if(orphaned) builder.label(takeTop(content,30),(std::to_string(orphaned)+" campos preservados fora do schema").c_str(),theme.color.warning,theme.type.caption);
@@ -3599,7 +3610,7 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
     const auto &property=schema->properties[field];
     if(property.hidden) continue;
     rows.push_back({Row::Field,field,0});
-    if(scene::scriptArrayElementType(property.valueType).empty() || builder.state.expandedScriptArray!=property.id) continue;
+    if(issueFor(property.id) || scene::scriptArrayElementType(property.valueType).empty() || builder.state.expandedScriptArray!=property.id) continue;
     if(const auto *value=authored(property)) scene::parseScriptArray(value->value,arrays[field]);
     rows.push_back({Row::Size,field,0});
     for(u32 element=0;element<arrays[field].size();++element) rows.push_back({Row::Element,field,element});
@@ -3681,6 +3692,13 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
       bool changedType=false;
       for(const auto &p:script.properties) if(p.id==property.id && p.valueType!=property.valueType) changedType=true;
       auto box=deflate(row,UiInsets{0,2,0,2});
+      if(const auto *issue=issueFor(property.id)) {
+        builder.label(box,issue->isNull?"Nulo · editar":issue->description.c_str(),issue->isNull?theme.color.textMuted:theme.color.warning,theme.type.caption);
+        // Null is a real value, not a zero/default. The existing field editor
+        // can explicitly initialize it; failed getters remain read-only.
+        if(issue->isNull) builder.router.addRegion(hit,widgetId(EditorWidget::ScriptFieldBase)+index+(item.field<<8));
+        continue;
+      }
       if(!element.empty()) {
         // Cabeçalho da lista: seta, contagem e o tipo dos elementos.
         std::vector<std::string> items;if(value) scene::parseScriptArray(value->value,items);
@@ -4954,7 +4972,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
           builder.label({note.x,note.y+4,note.width,note.height*.5f-4},"Edição múltipla não disponível",theme.color.warning,theme.type.caption);
           builder.label({note.x,note.y+note.height*.5f,note.width,note.height*.5f-4},"Este componente é editado um objeto por vez",theme.color.textDim,theme.type.caption);
         } else if(item.native) buildComponentFields(builder,fields,entity,*item.native,item.index);
-        else buildScriptFields(builder,fields,*script,item.index);
+        else buildScriptFields(builder,fields,*script,item.index,entity.id);
         builder.list.popClip();
       }
     } else {

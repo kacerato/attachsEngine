@@ -141,6 +141,9 @@ public:
   // Edição do Inspector com o Play rodando: aplica a fila estrutural e
   // reconstrói o que as mudanças invalidaram, mesmo com o Play pausado.
   bool commitEdits() {return active_ && drainCommands() && reconcilePhysics();}
+  bool inspectFields(runtime::ObjectId id,std::vector<runtime::ScriptFieldIssue> &issues) {
+    return active_ && scripts_.inspectFields(id,issues);
+  }
   // Campo ou estado de um comportamento vivo; o grafo do mundo passa a mostrar
   // o valor novo só depois que a instância C# o aceitou.
   bool editBehavior(runtime::ObjectId id,const scene::ScriptBehavior &after,

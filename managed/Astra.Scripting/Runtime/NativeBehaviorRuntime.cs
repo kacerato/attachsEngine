@@ -48,7 +48,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v16). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v17). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -728,6 +728,29 @@ public static unsafe class NativeBehaviorRuntime
         }
         catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
     }
+    private static byte[] _fieldSnapshot = [];
+    private static ulong _fieldSnapshotObject;
+    [UnmanagedCallersOnly]
+    public static int InspectFields(ulong objectId, byte* destination, int capacity)
+    {
+        try
+        {
+            if (_world is null) return -1;
+            if (destination == null)
+            {
+                _fieldSnapshot = Encoding.UTF8.GetBytes(_world.InspectFields(objectId));
+                _fieldSnapshotObject = objectId;
+                if (_fieldSnapshot.Length > 1024 * 1024) { _fieldSnapshot = []; return -1; }
+            }
+            else
+            {
+                if (_fieldSnapshotObject != objectId || capacity < _fieldSnapshot.Length) return -1;
+                _fieldSnapshot.CopyTo(new Span<byte>(destination, capacity));
+            }
+            return _fieldSnapshot.Length;
+        }
+        catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); _fieldSnapshot = []; return -1; }
+    }
     /// <summary>Inspector em Play: JSON {"Enabled":bool,"Properties":{id:valor}} de uma instância viva.</summary>
     [UnmanagedCallersOnly]
     public static int Edit(ulong objectId, ulong instanceId, byte* json, int jsonLength)
@@ -786,7 +809,7 @@ public static unsafe class NativeBehaviorRuntime
     private static void StopWorld()
     {
         try { _world?.Dispose(); }
-        finally { _world = null; Graphics.Unbind(); _scene?.Invalidate(); _scene = null; }
+        finally { _world = null; _fieldSnapshot = []; _fieldSnapshotObject = 0; Graphics.Unbind(); _scene?.Invalidate(); _scene = null; }
     }
     private static void RefreshDiagnostics()
     {

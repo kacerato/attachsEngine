@@ -4,6 +4,9 @@ Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Em execução**, por pedid
 do usuário para incorporar os próximos blocos em um só. Etapas 1–4 entregues;
 as etapas 5–12 continuam pendentes, com seus aceites abaixo.
 
+A lacuna de leitura dos campos C# no Inspector durante Play foi corrigida após
+a etapa 4: [contrato e validação](INSPECAO-SCRIPTS-PLAY-2026-09-28.md).
+
 ## Escopo e precedência
 
 Este passa a ser o bloco de execução atual: **O1 + O2 + O4 + P completo** do

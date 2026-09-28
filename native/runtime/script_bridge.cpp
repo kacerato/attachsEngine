@@ -976,6 +976,55 @@ bool ScriptBridge::editBehavior(ObjectId object, u64 instance, bool enabled,
   return ok;
 }
 
+bool ScriptBridge::inspectFields(ObjectId object,std::vector<ScriptFieldIssue> &issues) {
+  issues.clear();
+  if(!running_ || !world_->alive(world_->handle(object))) return false;
+  if(!api_.inspectFields) {diagnostics_="Runtime sem leitura de campos em Play";return false;}
+  const int size=api_.inspectFields(object,nullptr,0);
+  if(size<=0 || size>1024*1024) {collectDiagnostics();return false;}
+  std::string text(static_cast<usize>(size),'\0');
+  if(api_.inspectFields(object,reinterpret_cast<u8*>(text.data()),size)!=size || text.find('\0')!=std::string::npos) return false;
+  // User getters may remove their object. Validate again before touching storage.
+  if(!world_->alive(world_->handle(object))) return false;
+  std::istringstream input(text);input.imbue(std::locale::classic());
+  std::string magic;u32 version=0,count=0;
+  if(!(input>>magic>>version>>count) || magic!="ASTRA_FIELDS" || version!=1 || count>4096) return false;
+  auto components=world_->graph().find(object)->components;
+  usize expected=0;
+  for(usize i=0;i<components.size();++i) expected+=scene::scriptBehavior(components.at(i))?1:0;
+  if(count!=expected) return false;
+  std::vector<ScriptFieldIssue> preparedIssues;
+  std::vector<u64> seen;
+  for(u32 i=0;i<count;++i) {
+    u64 instance=0;u32 fields=0;
+    if(!(input>>instance>>fields) || fields>1024 || std::find(seen.begin(),seen.end(),instance)!=seen.end()) return false;
+    seen.push_back(instance);
+    const auto *source=scene::scriptBehavior(components.findInstance(instance));
+    if(!source) return false;
+    auto value=*source;std::vector<std::string> ids;
+    for(u32 f=0;f<fields;++f) {
+      scene::ScriptPropertyValue property;u32 state=0;
+      if(!(input>>std::quoted(property.id)>>std::quoted(property.valueType)>>state>>std::quoted(property.value)) || state>2 ||
+         property.id.empty() || property.id.size()>256 || property.valueType.size()>512 ||
+         std::find(ids.begin(),ids.end(),property.id)!=ids.end()) return false;
+      ids.push_back(property.id);
+      std::erase_if(value.properties,[&](const auto &p){return p.id==property.id;});
+      if(state==0 && !scene::validScriptPropertyValue(property.valueType,property.value)) {
+        state=2;property.value="Valor fora dos limites do Inspector";
+      }
+      if(state) preparedIssues.push_back({instance,property.id,property.value,state==1});
+      else if(!value.setProperty(property.id,property.valueType,property.value)) return false;
+    }
+    if(!components.replaceInstance(instance,value)) return false;
+  }
+  input>>std::ws;if(!input.eof()) return false;
+  auto *destination=world_->poseGraph().editComponents(object);
+  if(!destination) return false;
+  *destination=std::move(components);
+  issues=std::move(preparedIssues);
+  return true;
+}
+
 bool ScriptBridge::fixedUpdate(float elapsed) {
   if (!running_) return true;
   const bool ok = api_.fixedUpdate(elapsed) == 0;
