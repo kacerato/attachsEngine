@@ -3891,6 +3891,86 @@ AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
   AE_EXPECT_TRUE(!state.profileInspector.valid(),"voltar");
 }
 
+// Unity 6000.0 Properties de um asset: um recurso numa janela focada convive
+// com outro no Inspector principal; toques e teclado da janela editam o dela.
+AE_TEST(focused_window_holds_a_project_asset_beside_the_main_inspector) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto root=fs::temp_directory_path()/("aether-focado-recurso-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  std::string diagnostic;
+  const auto material=f.session.createMaterialFromSlot(f.cube,0,diagnostic);
+  AE_EXPECT_TRUE(material.valid(),diagnostic.c_str());
+  const auto sky=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Tarde");
+  auto value=*doc.find(sky);const auto instance=value.components.add(scene::Environment::descriptor)->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(sky,value),"ambiente");
+  const auto profile=f.session.createEnvironmentProfile(sky,instance,diagnostic);
+  AE_EXPECT_TRUE(profile.valid(),diagnostic.c_str());
+  history.clear();
+  const auto fileOf=[&](const resources::AssetGuid &guid) {
+    const auto *record=f.session.assets().find(guid);
+    EditorFileEntry file;file.relativePath=record->path;file.name=record->path.substr(record->path.rfind('/')+1);return file;
+  };
+  // Material em Propriedades → botão de janela.
+  f.session.openProjectFile(fileOf(material));f.session.update();
+  tapWidget(f,widgetId(EditorWidget::AssetInspectorFocus));
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.focusedInspectors.size()==1 && state.focusedInspectors[0].asset==material,"aba do material");
+  // Principal passa a mostrar o perfil; a janela continua no material.
+  f.session.openProjectFile(fileOf(profile));f.session.update();
+  AE_EXPECT_TRUE(state.profileInspector==profile && !state.materialInspector.valid(),"principal no perfil");
+  AE_EXPECT_TRUE(state.focusedAsset.materialInspector==material,"janela no material");
+  const auto inWindow=[&](u32 widget) {
+    locateWidget(f.session,widget);
+    UiInputRouter router;UiDrawList list;
+    list.begin(state.surface,font().metrics(UiFontWeight::Regular));
+    buildEditorScreen(state,defaultTheme(),list,router);
+    const auto window=f.session.layout().focusedWindow;
+    for(float y=window.y+2;y<window.bottom();y+=3) for(float x=window.x+2;x<window.right();x+=3) {
+      const auto routed=router.route({99,UiPointerPhase::Down,{x,y},0});router.route({99,UiPointerPhase::Up,{x,y},0});
+      if(routed.target==UiPointerTarget::Widget && routed.widgetId==widget) return UiPoint{x,y};
+    }
+    return UiPoint{-1,-1};
+  };
+  const auto tapAt=[&](UiPoint p){f.down(140,p);f.up(140,p);f.session.update();};
+  // Alfa do material pela janela; o perfil não muda.
+  const auto alpha=f.session.findMaterialAsset(material)->surface.alphaMode;
+  const auto profileRevision=f.session.findEnvironmentProfile(profile)->revision;
+  for(u32 page=0;page<6 && inWindow(widgetId(EditorWidget::MaterialAlphaCycle)).x<0;++page) {
+    const auto next=inWindow(widgetId(EditorWidget::PropertyNext));if(next.x<0) break;tapAt(next);
+  }
+  const auto alphaRow=inWindow(widgetId(EditorWidget::MaterialAlphaCycle));
+  AE_EXPECT_TRUE(alphaRow.x>=0,"alfa na janela");
+  tapAt(alphaRow);
+  AE_EXPECT_TRUE(f.session.findMaterialAsset(material)->surface.alphaMode!=alpha,"material editado pela janela");
+  AE_EXPECT_EQ(f.session.findEnvironmentProfile(profile)->revision,profileRevision,"o perfil do principal não muda");
+  AE_EXPECT_TRUE(state.profileInspector==profile,"principal continua no perfil");
+  // Número pelo teclado aberto na janela.
+  for(u32 page=0;page<6 && inWindow(widgetId(EditorWidget::MaterialNumberBase)).x<0;++page) {
+    const auto next=inWindow(widgetId(EditorWidget::PropertyNext));if(next.x<0) break;tapAt(next);
+  }
+  const auto numberRow=inWindow(widgetId(EditorWidget::MaterialNumberBase));
+  AE_EXPECT_TRUE(numberRow.x>=0,"número na janela");
+  tapAt(numberRow);
+  AE_EXPECT_TRUE(state.numericField==widgetId(EditorWidget::MaterialNumberBase),"teclado aberto");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.35",true),"valor aceito");
+  scene::MeshRenderer probe;probe.material=f.session.findMaterialAsset(material)->values;
+  AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[0].read(probe)-.35f)<1e-5f,"número no material da janela");
+  // Persistência: a aba de recurso volta com o projeto.
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto reaberto");
+  AE_EXPECT_TRUE(state.focusedInspectors.size()==1 && state.focusedInspectors[0].kind==EditorScreenState::FocusedAsset::Material &&
+                 state.focusedInspectors[0].asset==material,"aba do material restaurada");
+  // "<" dentro da janela fecha a aba.
+  f.session.update();
+  const auto back=inWindow(widgetId(EditorWidget::MaterialInspectorClose));
+  AE_EXPECT_TRUE(back.x>=0,"voltar na janela");
+  tapAt(back);f.session.update();
+  AE_EXPECT_TRUE(state.focusedInspectors.empty(),"aba fechada");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

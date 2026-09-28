@@ -419,7 +419,7 @@ int main(int argc, char **argv) {
     value.components.add(scene::PhysicsBody::descriptor);value.components.add(scene::Collider::descriptor);
     document.applyEntityValues(lamp,value);
     selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Outro objeto");
-    state.focusedInspectors.push_back({lamp,0});state.focusedInspectors.push_back({lamp,light->instanceId()});
+    state.focusedInspectors.push_back({lamp,0,editor::EditorScreenState::FocusedAsset::None,{},{}});state.focusedInspectors.push_back({lamp,light->instanceId(),editor::EditorScreenState::FocusedAsset::None,{},{}});
     state.focusedActive=std::string(argv[4])=="focused-component"?2:1;
     state.focusedCollapsed=std::string(argv[4])=="focused-collapsed";
     state.focusedMenu=std::string(argv[4])=="focused-menu";

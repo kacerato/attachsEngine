@@ -870,6 +870,9 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
 // o viewport: uma aba por Inspector, cada um preso ao seu objeto ou
 // componente; o cabeçalho mostra o caminho completo (o tooltip da aba na
 // Unity). ⋮ tem Ping e Fechar todas; "–" minimiza para um chip.
+void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel);
+void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel);
+void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel);
 void buildFocusedInspectors(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
   if(state.focusedInspectors.empty() || layout.viewport.isEmpty()) return;
@@ -900,8 +903,9 @@ void buildFocusedInspectors(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const float tabWidth=std::max(70.f,std::min(140.f,tabs.width/count));
   for(u32 i=0;i<count && tabs.width>=40;++i) {
     const auto &focused=state.focusedInspectors[i];
-    const auto *object=state.document->find(focused.entity);
-    std::string name=object?object->name:"Ausente";
+    const bool asset=focused.kind!=EditorScreenState::FocusedAsset::None;
+    const auto *object=asset?nullptr:state.document->find(focused.entity);
+    std::string name=asset?focused.name:object?object->name:"Ausente";
     if(object && focused.component)
       if(const auto *value=object->components.findInstance(focused.component)) {
         const auto *schema=scene::findComponentSchema(value->type().id);
@@ -921,15 +925,29 @@ void buildFocusedInspectors(ScreenBuilder &builder,EditorScreenLayout &layout) {
     router.addRegion(tab,widgetId(EditorWidget::FocusedTabBase)+i);
   }
   const auto &focused=state.focusedInspectors[active];
-  // Caminho completo do item.
-  auto path=takeTop(content,20);
-  std::string text;
-  for(const auto *up=state.document->find(focused.entity);up && up->id!=state.document->root();up=state.document->find(up->parent))
-    text=text.empty()?std::string(up->name):std::string(up->name)+" / "+text;
-  builder.label(deflate(path,UiInsets{6,0,6,0}),text.empty()?"Objeto ausente":"Cena / "+text,theme.color.textMuted,theme.type.caption);
-  builder.focusedWindow=true;
-  buildInspectorFor(builder,content,focused.entity,focused.component);
-  builder.focusedWindow=false;builder.onlyComponent=0;
+  if(focused.kind!=EditorScreenState::FocusedAsset::None) {
+    // Recurso: o mesmo Inspector de recurso, desenhado com o contexto da janela
+    // (o instantâneo trocado numa cópia do estado; o estado real não muda).
+    EditorScreenState scoped=state;
+    scoped.swapAssetInspector(scoped.focusedAsset);
+    ScreenBuilder sub{scoped,theme,list,router};
+    sub.layout=builder.layout;sub.focusedWindow=true;
+    using Kind=EditorScreenState::FocusedAsset;
+    if(focused.kind==Kind::Material && scoped.materialInspector.valid()) buildMaterialAssetInspector(sub,content);
+    else if(focused.kind==Kind::EnvironmentMap && scoped.environmentInspector.valid()) buildEnvironmentAssetInspector(sub,content);
+    else if(focused.kind==Kind::EnvironmentProfile && scoped.profileInspector.valid()) buildProfileAssetInspector(sub,content);
+    else builder.label(content,"Carregando recurso…",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  } else {
+    // Caminho completo do item.
+    auto path=takeTop(content,20);
+    std::string text;
+    for(const auto *up=state.document->find(focused.entity);up && up->id!=state.document->root();up=state.document->find(up->parent))
+      text=text.empty()?std::string(up->name):std::string(up->name)+" / "+text;
+    builder.label(deflate(path,UiInsets{6,0,6,0}),text.empty()?"Objeto ausente":"Cena / "+text,theme.color.textMuted,theme.type.caption);
+    builder.focusedWindow=true;
+    buildInspectorFor(builder,content,focused.entity,focused.component);
+    builder.focusedWindow=false;builder.onlyComponent=0;
+  }
   if(state.focusedMenu) {
     const UiRect menu{window.right()-170,window.y+34,164,80};
     list.addRect(menu,theme.color.raised,theme.radius.control);
@@ -1994,6 +2012,7 @@ void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   const auto back=takeLeft(header,32);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   router.addRegion(back,widgetId(EditorWidget::MaterialInspectorClose));
+  if(!builder.focusedWindow) builder.iconButton(takeRight(header,32),UiIcon::UiPanelRight,widgetId(EditorWidget::AssetInspectorFocus));
   list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::AssetsMaterial),theme.color.accent);
   const float half=header.height*.5f;
   builder.label({header.x,header.y,header.width,half},state.materialSlotView.name,theme.color.text,theme.type.cardName);
@@ -2033,6 +2052,7 @@ void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) 
   const auto back=takeLeft(header,32);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   router.addRegion(back,widgetId(EditorWidget::EnvironmentInspectorClose));
+  if(!builder.focusedWindow) builder.iconButton(takeRight(header,32),UiIcon::UiPanelRight,widgetId(EditorWidget::AssetInspectorFocus));
   list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneLighting),theme.color.accent);
   const auto slash=state.environmentInspectorPath.rfind('/');
   const std::string name=slash==std::string::npos?state.environmentInspectorPath:state.environmentInspectorPath.substr(slash+1);
@@ -2139,6 +2159,7 @@ void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   const auto back=takeLeft(header,32);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   router.addRegion(back,widgetId(EditorWidget::ProfileInspectorClose));
+  if(!builder.focusedWindow) builder.iconButton(takeRight(header,32),UiIcon::UiPanelRight,widgetId(EditorWidget::AssetInspectorFocus));
   list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneEffects),theme.color.accent);
   const u32 objects=static_cast<u32>(state.profileObjects.size());
   const float half=header.height*.5f;

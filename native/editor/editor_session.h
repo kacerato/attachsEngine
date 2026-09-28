@@ -1630,12 +1630,36 @@ private:
   std::vector<EditorBackgroundTask> shellTasks_;
   EditorBackgroundTask::Kind backgroundCancel_=EditorBackgroundTask::Kind::Other;
   bool focusedValidated_=false;
+  // Contexto de recurso da janela focada: aba de recurso ativa, prévia do HDRI
+  // dela (região própria do atlas) e os toques e o teclado que pertencem a ela.
+  const EditorScreenState::FocusedInspector *activeFocusedAsset() const;
+  template<class F> auto inFocusedAssetScope(F &&body) {
+    state_.swapAssetInspector(state_.focusedAsset);
+    std::swap(environmentPreviewSource_,focusedPreviewSource_);std::swap(environmentPreviewExposure_,focusedPreviewExposure_);
+    previewSecondary_=true;
+    struct Restore {EditorSession &s;~Restore() {
+      s.previewSecondary_=false;
+      std::swap(s.environmentPreviewSource_,s.focusedPreviewSource_);std::swap(s.environmentPreviewExposure_,s.focusedPreviewExposure_);
+      s.state_.swapAssetInspector(s.state_.focusedAsset);
+    }} restore{*this};
+    return body();
+  }
+  void refreshFocusedAsset();
+  const renderer::EnvironmentMapResource *focusedPreviewSource_=nullptr;
+  float focusedPreviewExposure_=0;
+  // Recurso que a janela focada já carregou: guid vazio depois disso é "fechado"
+  // ("<" dentro dela), não "aba nova".
+  resources::AssetGuid focusedAssetLoaded_{};
+  bool previewSecondary_=false,modalInFocusedAsset_=false;
+  std::vector<u32> focusedAssetPointers_;
   void validateFocusedInspectors();
 public:
   // Ping (Unity): abre os pais, rola a Hierarquia até o objeto e pisca a linha.
   void pingEntity(EditorEntityId id);
   // Inspector focado (Unity: Properties) de um objeto ou de um componente dele.
   void openFocusedInspector(EditorEntityId entity,u64 component=0);
+  // Recurso do projeto numa janela focada (Unity: Properties de um asset).
+  bool openFocusedAsset(EditorScreenState::FocusedAsset kind,const resources::AssetGuid &guid);
   // Leva a cena ao ponto `applied` do histórico (quantos passos aplicados),
   // desfazendo ou refazendo em sequência. Falso se algum passo recusar.
   bool moveHistoryTo(u32 applied);

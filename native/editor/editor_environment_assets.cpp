@@ -197,7 +197,9 @@ void EditorSession::writeEnvironmentPreview() {
     }
     rgba[i*4+3]=255;
   }
-  state_.environmentPreview=preview_.writeViewer(rgba,width,height,TexturePreviewChannel::Rgba,0,TexturePreviewBackground::Black);
+  // A janela focada escreve na região própria do atlas: as duas prévias convivem.
+  state_.environmentPreview=previewSecondary_?preview_.writeSecondaryViewer(rgba,width,height):
+      preview_.writeViewer(rgba,width,height,TexturePreviewChannel::Rgba,0,TexturePreviewBackground::Black);
   environmentPreviewSource_=map.get();environmentPreviewExposure_=state_.environmentExposure;
 }
 

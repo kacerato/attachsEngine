@@ -424,6 +424,8 @@ enum class EditorWidget : u32 {
   // Perfil de ambiente do projeto em Propriedades: voltar, usos, abas por grupo
   // do esquema e uma linha por propriedade do perfil.
   ProfileInspectorClose=0xCC000300u, ProfileInspectorUses, ProfileGroupBase=0xCC000400u, ProfileRowBase=0xCC000500u,
+  // Abre o recurso do Inspector de recurso numa janela focada.
+  AssetInspectorFocus=0xCC000600u,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
@@ -725,7 +727,13 @@ struct EditorScreenState final {
   bool inspectorDebug=false;
   // Inspectors focados (Unity 6000.0 Manual/InspectorFocused): cada um presa
   // a um objeto, ou a um componente dele (instância), sem seguir a seleção.
-  struct FocusedInspector { EditorEntityId entity=0; u64 component=0; };
+  // Um objeto (e opcionalmente um componente dele) ou um recurso do projeto:
+  // material, mapa HDRI ou perfil de ambiente (Unity: Properties de um asset).
+  enum class FocusedAsset : u8 { None, Material, EnvironmentMap, EnvironmentProfile };
+  struct FocusedInspector {
+    EditorEntityId entity=0; u64 component=0;
+    FocusedAsset kind=FocusedAsset::None; resources::AssetGuid asset{}; std::string name;
+  };
   std::vector<FocusedInspector> focusedInspectors;
   u32 focusedActive=0;       // aba visível (índice+1)
   bool focusedCollapsed=false,focusedMenu=false;
@@ -1164,6 +1172,44 @@ struct EditorScreenState final {
   std::vector<std::string> profileGroups;
   std::vector<ProfileRow> profileRows;
   std::vector<EditorEntityId> profileObjects;
+  // Contexto do Inspector de recurso (material, HDRI, perfil). A janela focada
+  // guarda o seu neste instantâneo, trocado com o principal (swapAssetInspector)
+  // enquanto ela é atualizada, desenhada e tocada: os tratadores e os
+  // desenhos leem sempre "o recurso aberto", sem saber de qual janela é.
+  struct AssetInspectorSnapshot {
+    resources::AssetGuid materialInspector{};bool materialShared=false;MaterialSlotView materialSlotView;
+    std::string materialInspectorPath;u32 materialInspectorRevision=0,materialInspectorSlots=0,materialInspectorUse=0;
+    std::vector<EditorEntityId> materialInspectorObjects;
+    bool texturePicker=false;u32 textureBinding=0;
+    std::string textureUvLabel,textureWrapLabel,textureFilterLabel,textureUvLabels[5];bool textureSamplerEditable=false;
+    resources::AssetGuid environmentInspector{};std::string environmentInspectorPath;
+    resources::EnvironmentMapImportSettings environmentDraft{},environmentSaved{};std::vector<std::string> environmentDerived;
+    ui::UiRect environmentPreview{};float environmentExposure=0;u32 environmentUse=0,environmentProfiles=0;
+    std::vector<EditorEntityId> environmentObjects;
+    resources::AssetGuid profileInspector{};std::string profileInspectorName,profileInspectorPath;
+    u32 profileInspectorRevision=0,profileGroup=0,profileUse=0;
+    std::vector<std::string> profileGroups;std::vector<ProfileRow> profileRows;std::vector<EditorEntityId> profileObjects;
+    u32 propertyPage=0;
+  };
+  AssetInspectorSnapshot focusedAsset;
+  void swapAssetInspector(AssetInspectorSnapshot &other) {
+    using std::swap;auto &o=other;
+    swap(materialInspector,o.materialInspector);swap(materialShared,o.materialShared);swap(materialSlotView,o.materialSlotView);
+    swap(materialInspectorPath,o.materialInspectorPath);swap(materialInspectorRevision,o.materialInspectorRevision);
+    swap(materialInspectorSlots,o.materialInspectorSlots);swap(materialInspectorUse,o.materialInspectorUse);
+    swap(materialInspectorObjects,o.materialInspectorObjects);swap(texturePicker,o.texturePicker);swap(textureBinding,o.textureBinding);
+    swap(textureUvLabel,o.textureUvLabel);swap(textureWrapLabel,o.textureWrapLabel);swap(textureFilterLabel,o.textureFilterLabel);
+    for(u32 i=0;i<5;++i) swap(textureUvLabels[i],o.textureUvLabels[i]);
+    swap(textureSamplerEditable,o.textureSamplerEditable);
+    swap(environmentInspector,o.environmentInspector);swap(environmentInspectorPath,o.environmentInspectorPath);
+    swap(environmentDraft,o.environmentDraft);swap(environmentSaved,o.environmentSaved);swap(environmentDerived,o.environmentDerived);
+    swap(environmentPreview,o.environmentPreview);swap(environmentExposure,o.environmentExposure);swap(environmentUse,o.environmentUse);
+    swap(environmentProfiles,o.environmentProfiles);swap(environmentObjects,o.environmentObjects);
+    swap(profileInspector,o.profileInspector);swap(profileInspectorName,o.profileInspectorName);swap(profileInspectorPath,o.profileInspectorPath);
+    swap(profileInspectorRevision,o.profileInspectorRevision);swap(profileGroup,o.profileGroup);swap(profileUse,o.profileUse);
+    swap(profileGroups,o.profileGroups);swap(profileRows,o.profileRows);swap(profileObjects,o.profileObjects);
+    swap(propertyPage,o.propertyPage);
+  }
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
   // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.

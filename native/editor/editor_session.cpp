@@ -350,6 +350,15 @@ void EditorSession::loadEditorPreferences() {
     if(!(fields>>key)) continue;
     if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
     else if(key=="undo_order" && fields>>value) state_.undoNewestFirst=value!="oldest";
+    else if(key=="focused_asset") {
+      u32 kind=0;std::string text,name;resources::AssetGuid guid;
+      if(fields>>kind>>text>>std::quoted(name) && kind>=1 && kind<=3 && resources::AssetGuid::parse(text,guid) &&
+         state_.focusedInspectors.size()<8) {
+        EditorScreenState::FocusedInspector focused;focused.kind=static_cast<EditorScreenState::FocusedAsset>(kind);
+        focused.asset=guid;focused.name=name;
+        state_.focusedInspectors.push_back(focused);focusedNames_.push_back(name);
+      }
+    }
     else if(key=="layout" || key=="layout_active") {
       // Layout salvo (com nome) ou o arranjo atual quando o projeto fechou.
       EditorLayout layout;int hv=1,iv=1,fc=0,dd=0;
@@ -370,7 +379,7 @@ void EditorSession::loadEditorPreferences() {
       // Inspector focado aberto quando o projeto fechou (Unity os restaura).
       EditorEntityId entity=0;u64 component=0;std::string name;
       if(fields>>entity>>component>>std::quoted(name) && state_.focusedInspectors.size()<8) {
-        state_.focusedInspectors.push_back({entity,component});focusedNames_.push_back(name);
+        state_.focusedInspectors.push_back({entity,component,EditorScreenState::FocusedAsset::None,{},{}});focusedNames_.push_back(name);
       }
     }
   }
@@ -396,9 +405,13 @@ void EditorSession::saveEditorPreferences() {
   active.hierarchyVisible=state_.hierarchyVisible;active.inspectorVisible=state_.inspectorVisible;
   active.filesCollapsed=state_.filesCollapsed;active.diagnosticDock=state_.diagnosticDockOpen;
   out<<"layout_active ";writeLayout(active);
-  for(u32 i=0;i<state_.focusedInspectors.size();++i)
-    out<<"focused "<<state_.focusedInspectors[i].entity<<' '<<state_.focusedInspectors[i].component<<' '
-       <<std::quoted(i<focusedNames_.size()?focusedNames_[i]:std::string())<<'\n';
+  for(u32 i=0;i<state_.focusedInspectors.size();++i) {
+    const auto &focused=state_.focusedInspectors[i];
+    if(focused.kind!=EditorScreenState::FocusedAsset::None)
+      out<<"focused_asset "<<static_cast<u32>(focused.kind)<<' '<<focused.asset.text()<<' '<<std::quoted(focused.name)<<'\n';
+    else out<<"focused "<<focused.entity<<' '<<focused.component<<' '
+            <<std::quoted(i<focusedNames_.size()?focusedNames_[i]:std::string())<<'\n';
+  }
   const std::string text=out.str();
   if(ec || !EditorImportTransaction::writeText(file,text)) state_.status="Não foi possível guardar a preferência";
 }
@@ -1123,6 +1136,12 @@ std::string_view trimmedName(std::string_view text) {
 bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view text,bool accept) {
   if(playInspecting() && playMirrorValid_ && !playMirrorOpen_ && edit.version.epoch==playMirrorEpoch_)
     return inPlayMirror([&] {return completeTextEditNow(edit,text,accept);});
+  // O teclado aberto por um campo da janela focada de recurso edita o recurso dela.
+  if(modalInFocusedAsset_) {
+    const bool done=inFocusedAssetScope([&] {return completeTextEditNow(edit,text,accept);});
+    if(!inspectorModalOpen()) modalInFocusedAsset_=false;
+    return done;
+  }
   return completeTextEditNow(edit,text,accept);
 }
 
@@ -1636,6 +1655,26 @@ EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
 }
 
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
+  // Toques na janela focada com aba de recurso (e nos modais que ela abriu)
+  // rodam com o contexto de recurso dela.
+  {
+    auto found=std::find(focusedAssetPointers_.begin(),focusedAssetPointers_.end(),event.pointerId);
+    bool assetScope=found!=focusedAssetPointers_.end();
+    if(event.phase==UiPointerPhase::Down) {
+      assetScope=inspectorModalOpen()?modalInFocusedAsset_:
+          (activeFocusedAsset() && layout_.focusedWindow.contains(event.position));
+      if(assetScope && found==focusedAssetPointers_.end()) focusedAssetPointers_.push_back(event.pointerId);
+      if(!assetScope && found!=focusedAssetPointers_.end()) {focusedAssetPointers_.erase(found);found=focusedAssetPointers_.end();}
+    }
+    if(event.phase==UiPointerPhase::Up || event.phase==UiPointerPhase::Cancel)
+      if(found!=focusedAssetPointers_.end()) focusedAssetPointers_.erase(found);
+    if(!inspectorModalOpen()) modalInFocusedAsset_=false;
+    if(assetScope) {
+      const bool consumed=inFocusedAssetScope([&] {return handlePointerNow(event);});
+      modalInFocusedAsset_=inspectorModalOpen();
+      return consumed;
+    }
+  }
   const auto target=inspectorScopeFor(event);
   const auto run=[&] {
     const bool consumed=inInspectorScope(target,[&] {return handlePointerNow(event);});
@@ -1649,6 +1688,75 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   return run();
 }
 
+const EditorScreenState::FocusedInspector *EditorSession::activeFocusedAsset() const {
+  if(state_.focusedCollapsed || state_.focusedInspectors.empty()) return nullptr;
+  const u32 active=std::min(std::max(state_.focusedActive,1u),static_cast<u32>(state_.focusedInspectors.size()))-1;
+  const auto &focused=state_.focusedInspectors[active];
+  return focused.kind!=EditorScreenState::FocusedAsset::None?&focused:nullptr;
+}
+
+bool EditorSession::openFocusedAsset(EditorScreenState::FocusedAsset kind,const resources::AssetGuid &guid) {
+  using Kind=EditorScreenState::FocusedAsset;
+  const auto *record=assets_.find(guid);
+  const bool ok=record && ((kind==Kind::Material && findMaterialAsset(guid)) ||
+      (kind==Kind::EnvironmentMap && record->type==resources::AssetType::EnvironmentMap) ||
+      (kind==Kind::EnvironmentProfile && findEnvironmentProfile(guid)));
+  if(!ok) return false;
+  for(u32 i=0;i<state_.focusedInspectors.size();++i)
+    if(state_.focusedInspectors[i].kind==kind && state_.focusedInspectors[i].asset==guid) {
+      state_.focusedActive=i+1;state_.focusedCollapsed=false;return true;
+    }
+  if(state_.focusedInspectors.size()>=8) {state_.focusedInspectors.erase(state_.focusedInspectors.begin());if(!focusedNames_.empty()) focusedNames_.erase(focusedNames_.begin());}
+  EditorScreenState::FocusedInspector focused;focused.kind=kind;focused.asset=guid;
+  focused.name=record->path.substr(record->path.rfind('/')+1);
+  state_.focusedInspectors.push_back(focused);focusedNames_.push_back(focused.name);
+  state_.focusedActive=static_cast<u32>(state_.focusedInspectors.size());
+  state_.focusedCollapsed=false;state_.focusedMenu=false;focusedValidated_=true;
+  state_.status="Propriedades de "+focused.name;
+  saveEditorPreferences();
+  return true;
+}
+
+// A aba de recurso ativa é atualizada no contexto dela: o guid do tipo certo
+// (os outros vazios) e a mesma rotina do Inspector principal. Recurso apagado,
+// ou "<" tocado dentro da janela, fecha a aba.
+void EditorSession::refreshFocusedAsset() {
+  const auto *focused=activeFocusedAsset();
+  if(!focused) return;
+  using Kind=EditorScreenState::FocusedAsset;
+  const auto kind=focused->kind;const auto guid=focused->asset;
+  bool closed=false;
+  inFocusedAssetScope([&] {
+    auto &s=state_;
+    const auto &mine=kind==Kind::Material?s.materialInspector:kind==Kind::EnvironmentMap?s.environmentInspector:s.profileInspector;
+    if(!(mine==guid) && focusedAssetLoaded_==guid) {closed=true;return;}
+    const bool fresh=!(mine==guid);
+    if(fresh) {
+      focusedAssetLoaded_=guid;
+      s.materialInspector={};s.environmentInspector={};s.profileInspector={};s.texturePicker=false;s.propertyPage=0;
+      if(kind==Kind::Material) {s.materialInspector=guid;s.materialShared=true;}
+      else if(kind==Kind::EnvironmentMap) {
+        resources::EnvironmentMapImportSettings saved;const auto *record=assets_.find(guid);
+        if(record && resources::readEnvironmentMapImportSettings(record->importerParameters,saved)) s.environmentDraft=s.environmentSaved=saved;
+        s.environmentInspector=guid;environmentPreviewSource_=nullptr;
+      } else {s.profileInspector=guid;s.profileGroup=0;}
+    }
+    if(kind==Kind::Material) refreshMaterialSlotView();
+    else if(kind==Kind::EnvironmentMap) refreshEnvironmentInspector();
+    else refreshProfileInspector();
+    const auto &after=kind==Kind::Material?s.materialInspector:kind==Kind::EnvironmentMap?s.environmentInspector:s.profileInspector;
+    closed=!(after==guid);
+  });
+  if(closed) {
+    focusedAssetLoaded_={};
+    const u32 index=std::min(std::max(state_.focusedActive,1u),static_cast<u32>(state_.focusedInspectors.size()))-1;
+    state_.focusedInspectors.erase(state_.focusedInspectors.begin()+index);
+    if(index<focusedNames_.size()) focusedNames_.erase(focusedNames_.begin()+index);
+    state_.focusedActive=state_.focusedInspectors.empty()?0:std::min<u32>(state_.focusedActive,static_cast<u32>(state_.focusedInspectors.size()));
+    saveEditorPreferences();
+  }
+}
+
 void EditorSession::openFocusedInspector(EditorEntityId entity,u64 component) {
   const auto *object=state_.document?state_.document->find(entity):nullptr;
   if(!object || entity==state_.document->root()) return;
@@ -1658,7 +1766,7 @@ void EditorSession::openFocusedInspector(EditorEntityId entity,u64 component) {
     }
   // Até oito: cada aba é uma janela da Unity, mas a tela do telefone é uma só.
   if(state_.focusedInspectors.size()>=8) {state_.focusedInspectors.erase(state_.focusedInspectors.begin());if(!focusedNames_.empty()) focusedNames_.erase(focusedNames_.begin());}
-  state_.focusedInspectors.push_back({entity,component});
+  state_.focusedInspectors.push_back({entity,component,EditorScreenState::FocusedAsset::None,{},{}});
   focusedNames_.push_back(object->name);
   state_.focusedActive=static_cast<u32>(state_.focusedInspectors.size());
   state_.focusedCollapsed=false;state_.focusedMenu=false;focusedValidated_=true;
@@ -1810,6 +1918,10 @@ void EditorSession::validateFocusedInspectors() {
   std::vector<EditorScreenState::FocusedInspector> kept;std::vector<std::string> names;
   for(u32 i=0;i<state_.focusedInspectors.size();++i) {
     const auto &focused=state_.focusedInspectors[i];
+    if(focused.kind!=EditorScreenState::FocusedAsset::None) {
+      if(assets_.find(focused.asset)) {kept.push_back(focused);names.push_back(focused.name);}
+      continue;
+    }
     const auto *object=document_.find(focused.entity);
     if(!object || (i<focusedNames_.size() && focusedNames_[i]!=object->name)) continue;
     if(focused.component && !object->components.findInstance(focused.component)) continue;
@@ -2780,6 +2892,15 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.status=resolveImportOrphan(state_.selection,keep)?(keep?"Órfão mantido como objeto independente":"Órfão apagado"):"Nada a resolver";
       state_.importLinkMenu=false;return true;
     }
+    // Recurso aberto em Propriedades → janela focada.
+    if(key==widgetId(EditorWidget::AssetInspectorFocus)) {
+      using Kind=EditorScreenState::FocusedAsset;
+      const bool ok=state_.materialInspector.valid()?openFocusedAsset(Kind::Material,state_.materialInspector):
+          state_.environmentInspector.valid()?openFocusedAsset(Kind::EnvironmentMap,state_.environmentInspector):
+          state_.profileInspector.valid()?openFocusedAsset(Kind::EnvironmentProfile,state_.profileInspector):false;
+      if(!ok) state_.status="Nada para abrir numa janela";
+      return true;
+    }
     // Perfil de ambiente do projeto em Propriedades.
     if(state_.profileInspector.valid()) {
       if(key==widgetId(EditorWidget::ProfileInspectorClose)) {state_.profileInspector={};state_.selectedFile.clear();return true;}
@@ -3473,6 +3594,19 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(height>0) state_.filePanelRatio=std::clamp(state_.filePanelRatio-routing.stepDelta.y/height,.28f,.58f);
     }
     return true;
+  }
+  // Toque longo num recurso em Arquivos: abre-o numa janela focada (Unity:
+  // Properties), sem trocar o que Propriedades mostra.
+  if(state_.files && routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds &&
+     routing.widgetId>=widgetId(EditorWidget::FileRowBase) && routing.widgetId-widgetId(EditorWidget::FileRowBase)<files_.tree().size()) {
+    const auto &entry=files_.tree()[routing.widgetId-widgetId(EditorWidget::FileRowBase)];
+    using Kind=EditorScreenState::FocusedAsset;
+    if(const auto *record=assets_.findByPath(entry.relativePath)) {
+      const Kind kind=record->type==resources::AssetType::Material?Kind::Material:
+          record->type==resources::AssetType::EnvironmentMap?Kind::EnvironmentMap:
+          record->type==resources::AssetType::EnvironmentProfile?Kind::EnvironmentProfile:Kind::None;
+      if(kind!=Kind::None && openFocusedAsset(kind,record->guid)) return true;
+    }
   }
   if(state_.files && routing.dragging && routing.widgetId>=widgetId(EditorWidget::FileRowBase)
       && routing.widgetId-widgetId(EditorWidget::FileRowBase)<files_.tree().size()) {
@@ -4175,7 +4309,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::FocusedMenu)) {state_.focusedMenu=!state_.focusedMenu;return true;}
     if(key==widgetId(EditorWidget::FocusedPing) && count) {
       state_.focusedMenu=false;
-      pingEntity(state_.focusedInspectors[std::min(std::max(state_.focusedActive,1u),count)-1].entity);return true;
+      const auto &focused=state_.focusedInspectors[std::min(std::max(state_.focusedActive,1u),count)-1];
+      // Recurso: Ping no painel Arquivos (abre as pastas e marca o arquivo).
+      if(focused.kind!=EditorScreenState::FocusedAsset::None) {
+        if(const auto *record=assets_.find(focused.asset)) {
+          state_.filesCollapsed=false;revealProjectPath(record->path);state_.selectedFile=record->path;
+        }
+      } else pingEntity(focused.entity);
+      return true;
     }
     if(key==widgetId(EditorWidget::FocusedCloseAll)) {
       state_.focusedInspectors.clear();focusedNames_.clear();state_.focusedActive=0;state_.focusedMenu=false;saveEditorPreferences();return true;
@@ -7419,7 +7560,7 @@ void EditorSession::update() {
   if(state_.inspectorLocked && !state_.document->exists(state_.inspectorLocked)) state_.inspectorLocked=0;
   // Objeto de um focado apagado: a aba fecha (depois que a cena foi conferida).
   if(focusedValidated_ && !isPlaying())
-    for(const auto &focused:state_.focusedInspectors) if(!document_.exists(focused.entity)) {validateFocusedInspectors();break;}
+    for(const auto &focused:state_.focusedInspectors) if(focused.kind==EditorScreenState::FocusedAsset::None && !document_.exists(focused.entity)) {validateFocusedInspectors();break;}
   // O campo acabou de abrir: o texto é o valor atual formatado, a base do
   // `+=` e da prévia. Fechar e abrir outro recomeça no teclado numérico.
   if(state_.numericField!=numericFieldSeen_) {
@@ -7454,6 +7595,7 @@ void EditorSession::update() {
   state_.assetCount=mapScene_.assetCount();
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
+  refreshFocusedAsset();
   if(state_.environmentInspector.valid()) refreshEnvironmentInspector();
   if(state_.profileInspector.valid()) refreshProfileInspector();
   state_.backgroundTasks=shellTasks_;

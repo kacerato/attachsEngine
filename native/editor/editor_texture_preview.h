@@ -41,6 +41,12 @@ public:
   void markClean() noexcept { dirty_ = false; }
   // Célula da miniatura `index`, em texels; vazia fora da capacidade.
   static ui::UiRect thumbnailCell(u32 index) noexcept;
+  // Região livre ao lado do visualizador (canto inferior direito): a prévia de
+  // um recurso aberto numa janela focada, sem disputar com o Inspector principal.
+  static ui::UiRect secondaryViewerRegion() noexcept {
+    return {static_cast<float>(TexturePreviewAtlasSize - TextureViewerSize), static_cast<float>(TexturePreviewAtlasSize - TextureViewerSize),
+            static_cast<float>(TextureViewerSize), static_cast<float>(TextureViewerSize)};
+  }
   static ui::UiRect viewerRegion() noexcept {
     return {0.0f, static_cast<float>(TexturePreviewAtlasSize - TextureViewerSize), static_cast<float>(TextureViewerSize),
             static_cast<float>(TextureViewerSize)};
@@ -50,6 +56,9 @@ public:
   // `zoomStep` recorta o centro da imagem em 1/2^zoomStep de cada lado.
   ui::UiRect writeViewer(std::span<const u8> rgba, u32 width, u32 height, TexturePreviewChannel channel, u8 zoomStep = 0,
                          TexturePreviewBackground background = TexturePreviewBackground::Checker);
+  ui::UiRect writeSecondaryViewer(std::span<const u8> rgba, u32 width, u32 height) {
+    return writeFitted(secondaryViewerRegion(), rgba, width, height, TexturePreviewChannel::Rgba, 0, TexturePreviewBackground::Black);
+  }
 
 private:
   ui::UiRect writeFitted(ui::UiRect area, std::span<const u8> rgba, u32 width, u32 height, TexturePreviewChannel channel,
