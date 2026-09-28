@@ -8,6 +8,8 @@
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_session.h"
+#include "core/sha256.h"
+#include "scene/environment.h"
 #include "editor/editor_scene_template.h"
 #include "harness.h"
 #include "scene/light.h"
@@ -3687,6 +3689,75 @@ AE_TEST(project_material_opens_in_properties_and_edits_every_use) {
   AE_EXPECT_TRUE(f.session.openMaterialInspector(guid),"reabrir");
   f.session.setSelection(f.cube);
   AE_EXPECT_TRUE(!state.materialInspector.valid(),"escolher um objeto sai do material");
+}
+
+// Mapa HDRI do projeto em Propriedades: prévia com exposição só de prévia,
+// usos na cena, receita em rascunho e Aplicar pela trilha de reimportação.
+AE_TEST(project_hdri_opens_in_properties_with_preview_uses_and_recipe) {
+  namespace fs=std::filesystem;
+  Fixture f;
+  const auto root=fs::temp_directory_path()/("aether-hdri-props-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  resources::EnvironmentMapImportSettings settings;
+  settings.panoramaWidth=256;settings.specularSize=64;settings.brdfSize=64;settings.specularSamples=32;settings.brdfSamples=128;
+  const std::vector<u8> source{'#','?','R','A','D','I','A','N','C','E'};
+  auto map=std::make_shared<renderer::EnvironmentMapResource>();
+  const auto chain=[](renderer::Rgba16fMipChain &c,u32 w,u32 h,u32 levels,u16 value) {
+    c.width=w;c.height=h;c.levels=levels;c.texels.assign(static_cast<usize>(c.expectedHalfCount()),value);
+  };
+  chain(map->panorama,256,128,9,0x3c00);chain(map->specular,64,64,7,0x3c00);chain(map->brdf,64,64,1,0x3c00);
+  map->sourceHash=Sha256::hex(source);
+  map->cacheKey=resources::environmentMapCacheKey(map->sourceHash,settings,{});
+  auto &description=map->description;
+  description.specularProjection=renderer::EnvironmentProjection::Octahedral;
+  description.specularWidth=64;description.specularHeight=64;description.specularMipLevels=7;
+  description.brdfWidth=64;description.brdfHeight=64;description.brdfMipLevels=1;
+  description.flags=renderer::EnvironmentMapPrefilteredGgx|renderer::EnvironmentMapSplitSumBrdf|renderer::EnvironmentMapDiffuseIrradianceSh9;
+  std::string diagnostic;
+  AE_EXPECT_TRUE(f.session.commitEnvironmentMap("Ambientes/estudio.hdr",source,{},map,settings,diagnostic),diagnostic.c_str());
+  const auto guid=f.session.environmentMaps().front().first;
+  // Um Ambiente da cena usa o mapa.
+  auto &doc=f.session.document();
+  const auto sky=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Céu");
+  auto value=*doc.find(sky);
+  auto *environment=static_cast<scene::Environment *>(value.components.add(scene::Environment::descriptor));
+  environment->values.environmentMap=guid;
+  AE_EXPECT_TRUE(doc.applyEntityValues(sky,value),"ambiente com o HDRI");
+  EditorFileEntry file;file.relativePath="Ambientes/estudio.hdr";file.name="estudio.hdr";
+  f.session.openProjectFile(file);f.session.update();
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.environmentInspector==guid,"HDRI em Propriedades");
+  AE_EXPECT_TRUE(!state.environmentPreview.isEmpty(),"prévia do panorama no atlas");
+  AE_EXPECT_TRUE(state.environmentObjects.size()==1 && state.environmentObjects[0]==sky,"um ambiente usa");
+  AE_EXPECT_TRUE(state.environmentDerived.size()==3,"panorama, reflexão e BRDF");
+  // Exposição só da prévia.
+  tapWidget(f,widgetId(EditorWidget::EnvironmentExposureUp));
+  AE_EXPECT_EQ(state.environmentExposure,.5f,"EV +0.5");
+  // Receita em rascunho: aplicar só aparece com mudança.
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::EnvironmentRecipeApply)).x<0,"sem mudança, sem aplicar");
+  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeUpBase)+0);
+  AE_EXPECT_EQ(state.environmentDraft.panoramaWidth,512u,"panorama dobra");
+  AE_EXPECT_EQ(state.environmentSaved.panoramaWidth,256u,"salvo não muda");
+  revealProperty(f,widgetId(EditorWidget::EnvironmentRecipeDownBase)+3);
+  for(u32 i=0;i<3;++i) tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeDownBase)+3);
+  AE_EXPECT_EQ(state.environmentDraft.brdfSize,16u,"BRDF até o mínimo aceito");
+  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeDownBase)+3);
+  AE_EXPECT_EQ(state.environmentDraft.brdfSize,16u,"abaixo do mínimo é recusado");
+  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeApply));
+  AE_EXPECT_TRUE(f.session.takeEnvironmentReimportPath()=="Ambientes/estudio.hdr","reimportação pedida");
+  resources::EnvironmentMapImportSettings requested;
+  AE_EXPECT_TRUE(f.session.takeEnvironmentReimportSettings(requested) && requested.panoramaWidth==512 && requested.brdfSize==16,
+                 "com a receita do rascunho");
+  // Usos: Ping sem sair.
+  tapWidget(f,widgetId(EditorWidget::EnvironmentInspectorUses));
+  AE_EXPECT_TRUE(state.pingEntity==sky && state.environmentInspector==guid,"Ping no céu");
+  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeRevert));
+  AE_EXPECT_EQ(state.environmentDraft.panoramaWidth,256u,"reverter");
+  tapWidget(f,widgetId(EditorWidget::EnvironmentInspectorClose));
+  AE_EXPECT_TRUE(!state.environmentInspector.valid(),"voltar");
 }
 
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {

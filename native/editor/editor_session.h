@@ -60,6 +60,7 @@
 #include "ui/ui_instance_builder.h"
 
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -815,6 +816,16 @@ public:
   bool takeImportCancel() {return std::exchange(state_.importCancel,false);}
   std::string takeReimportPath() {return std::exchange(reimportPath_,{});}
   std::string takeEnvironmentReimportPath() {return std::exchange(environmentReimportPath_,{});}
+  // Receita escolhida no Inspector de HDRI para a reimportação pedida; sem ela
+  // o shell usa a receita salva no registro.
+  bool takeEnvironmentReimportSettings(resources::EnvironmentMapImportSettings &settings) {
+    if(!environmentReimportOverride_) return false;
+    settings=*std::exchange(environmentReimportOverride_,std::nullopt);return true;
+  }
+  // Abre um mapa HDRI do projeto em Propriedades; falso se o guid não é um.
+  bool openEnvironmentInspector(const resources::AssetGuid &guid);
+  void refreshEnvironmentInspector();
+  void writeEnvironmentPreview();
   std::string takeTextureReimportPath() {return std::exchange(textureReimportPath_,{});}
   // O plano da grade para o quadro: política do editor, desenho do renderer.
   // Fora do workspace de cena, com a grade desligada ou em execução, ele volta
@@ -1302,6 +1313,9 @@ private:
   resources::TextureBudgetReport textureResidency_{};
   std::string reimportPath_;
   std::string environmentReimportPath_;
+  std::optional<resources::EnvironmentMapImportSettings> environmentReimportOverride_;
+  const renderer::EnvironmentMapResource *environmentPreviewSource_=nullptr;
+  float environmentPreviewExposure_=0;
   std::string textureReimportPath_;
   bool previousImportMap(const resources::AssetGuid &source, resources::ImportNodeMap &out) const;
   bool persistImportMap(const resources::AssetGuid &source);

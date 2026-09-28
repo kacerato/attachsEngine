@@ -2020,6 +2020,111 @@ void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   buildMaterialSlots(builder,content);
 }
 
+// Mapa HDRI do projeto em Propriedades (Unity 6000.0 Texture Import Settings
+// de um cubemap latitude-longitude, adaptado ao importador HDRI da Astra): a
+// prévia do panorama com exposição só de prévia, os derivados, os usos e a
+// receita de importação; Aplicar reimporta pela trilha do botão Reimportar.
+void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  list.addRect(panel,theme.color.surface);
+  router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets::all(theme.spacing.small));
+  auto header=takeTop(content,kPanelHeaderHeight);
+  const auto back=takeLeft(header,32);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  router.addRegion(back,widgetId(EditorWidget::EnvironmentInspectorClose));
+  list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneLighting),theme.color.accent);
+  const auto slash=state.environmentInspectorPath.rfind('/');
+  const std::string name=slash==std::string::npos?state.environmentInspectorPath:state.environmentInspectorPath.substr(slash+1);
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},name.c_str(),theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y+half,header.width,half},"Mapa HDRI · céu, luz difusa e reflexos",theme.color.textDim,theme.type.caption);
+  // Prévia 2:1 com exposição.
+  auto preview=takeTop(content,std::min(content.width*.5f,96.f));takeTop(content,4);
+  list.addRect(preview,theme.color.voidBlack,theme.radius.control);
+  if(!state.environmentPreview.isEmpty()) {
+    const auto &texels=state.environmentPreview;
+    const float fit=std::min(preview.width/texels.width,preview.height/texels.height);
+    const float w=texels.width*fit,h=texels.height*fit;
+    list.addPreviewImage({preview.x+(preview.width-w)*.5f,preview.y+(preview.height-h)*.5f,w,h},texels);
+  } else builder.label(preview,"Sem derivados carregados",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  {
+    const UiRect bar{preview.right()-124,preview.bottom()-30,120,26};
+    list.addRect(bar,withAlpha(theme.color.voidBlack,.75f),13);
+    auto inner=bar;
+    const auto minus=takeLeft(inner,30),plus=takeRight(inner,30);
+    builder.label(minus,"-",theme.color.text,theme.type.body,UiAlign::Center);
+    builder.label(plus,"+",theme.color.text,theme.type.body,UiAlign::Center);
+    char ev[24];std::snprintf(ev,sizeof ev,"EV %+.1f",static_cast<double>(state.environmentExposure));
+    builder.label(inner,ev,theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(minus,widgetId(EditorWidget::EnvironmentExposureDown));
+    router.addRegion(plus,widgetId(EditorWidget::EnvironmentExposureUp));
+  }
+  // Usos.
+  auto uses=takeTop(content,40);takeTop(content,4);
+  list.addRect(uses,theme.color.raised,theme.radius.control);
+  auto inner=deflate(uses,UiInsets{10,4,8,4});
+  const u32 objects=static_cast<u32>(state.environmentObjects.size());
+  if(objects) {
+    const auto ping=takeRight(inner,92);
+    list.addRect(centred(ping,88,28),theme.color.silhouette,theme.radius.control);
+    builder.label(ping,"Localizar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(ping,widgetId(EditorWidget::EnvironmentInspectorUses));
+  }
+  const std::string usage=std::to_string(objects)+(objects==1?" ambiente":" ambientes")+" · "+
+      std::to_string(state.environmentProfiles)+(state.environmentProfiles==1?" perfil":" perfis");
+  builder.label(inner,usage.c_str(),objects?theme.color.text:theme.color.textDim,theme.type.caption);
+  // Rodapé: reverter e aplicar.
+  const auto &draft=state.environmentDraft,&saved=state.environmentSaved;
+  const bool dirty=draft.panoramaWidth!=saved.panoramaWidth || draft.specularSize!=saved.specularSize ||
+      draft.specularSamples!=saved.specularSamples || draft.brdfSize!=saved.brdfSize || draft.brdfSamples!=saved.brdfSamples;
+  auto footer=takeBottom(content,36);takeBottom(content,4);
+  const float bw=(footer.width-6)/2;
+  const UiRect revert{footer.x,footer.y,bw,footer.height},apply{footer.x+bw+6,footer.y,bw,footer.height};
+  list.addRect(revert,theme.color.raised,theme.radius.control);
+  builder.label(revert,"Reverter",dirty?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+  list.addRect(apply,dirty?theme.color.accent:theme.color.raised,theme.radius.control);
+  builder.label(apply,"Aplicar e reimportar",dirty?theme.color.accentInk:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+  if(dirty) {router.addRegion(revert,widgetId(EditorWidget::EnvironmentRecipeRevert));router.addRegion(apply,widgetId(EditorWidget::EnvironmentRecipeApply));}
+  // Receita paginada como o resto do Inspector; os derivados ocupam o que
+  // sobrar depois de pelo menos duas linhas dela.
+  const float rowHeight=34;
+  const u32 derivedLines=static_cast<u32>(std::min<usize>(state.environmentDerived.size(),
+      static_cast<usize>(std::max(0.f,(content.height-2*rowHeight-26-4)/18))));
+  for(u32 i=0;i<derivedLines;++i) {
+    auto row=takeTop(content,18);
+    list.pushClip(row);builder.label(row,state.environmentDerived[i].c_str(),theme.color.textMuted,theme.type.caption);list.popClip();
+  }
+  takeTop(content,4);
+  const u32 perPage=std::max(1u,static_cast<u32>((content.height-26)/rowHeight));
+  const u32 pages=(5+perPage-1)/perPage,page=std::min(state.propertyPage,pages-1);
+  auto pager=pages>1?takeBottom(content,26):UiRect{};
+  if(pages>1) {
+    const auto previous=takeLeft(pager,36),next=takeRight(pager,36);
+    builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    if(page) router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
+    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+    builder.label(pager,("Receita "+std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+  const struct {const char *name;u32 value,saved;} recipe[]{
+    {"Panorama (largura)",draft.panoramaWidth,saved.panoramaWidth},{"Reflexão (tamanho)",draft.specularSize,saved.specularSize},
+    {"Reflexão (amostras)",draft.specularSamples,saved.specularSamples},{"BRDF (tamanho)",draft.brdfSize,saved.brdfSize},
+    {"BRDF (amostras)",draft.brdfSamples,saved.brdfSamples}};
+  for(u32 i=page*perPage;i<5 && i<(page+1)*perPage && content.height>=rowHeight;++i) {
+    auto row=takeTop(content,rowHeight);row.height-=2;
+    builder.label(takeLeft(row,row.width*.48f),recipe[i].name,theme.color.textDim,theme.type.caption);
+    list.addRect(row,theme.color.raised,theme.radius.control);
+    const auto minus=takeLeft(row,30),plus=takeRight(row,30);
+    builder.label(minus,"-",theme.color.text,theme.type.body,UiAlign::Center);
+    builder.label(plus,"+",theme.color.text,theme.type.body,UiAlign::Center);
+    router.addRegion(minus,widgetId(EditorWidget::EnvironmentRecipeDownBase)+i);
+    router.addRegion(plus,widgetId(EditorWidget::EnvironmentRecipeUpBase)+i);
+    const bool changed=recipe[i].value!=recipe[i].saved;
+    builder.label(row,std::to_string(recipe[i].value).c_str(),changed?theme.color.accent:theme.color.text,theme.type.numeric,UiAlign::Center);
+  }
+}
+
 // Escolha do material de um slot: o da fonte, um do projeto, ou um novo.
 void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
@@ -5439,6 +5544,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     return;
   }
   if (builder.state.materialInspector.valid()) {buildMaterialAssetInspector(builder, panel);return;}
+  if (builder.state.environmentInspector.valid()) {buildEnvironmentAssetInspector(builder, panel);return;}
   // R4: textura escolhida em Arquivos e gerenciador da pasta Texturas.
   if (builder.state.textureManager || builder.state.textureInspector) {
     // O Inspector de textura é fundo escuro com cartões por cima.

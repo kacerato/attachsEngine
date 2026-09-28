@@ -3000,8 +3000,10 @@ void android_main(android_app *app) {
           importRequestTaken=true;
           const auto *record=session.assets().findByPath(path);
           ae::resources::EnvironmentMapImportSettings settings;
+          // A receita editada no Inspector de HDRI vale sobre a salva no registro.
+          const bool edited=session.takeEnvironmentReimportSettings(settings);
           if(!record||record->type!=ae::resources::AssetType::EnvironmentMap||
-             !ae::resources::readEnvironmentMapImportSettings(record->importerParameters,settings))
+             (!edited && !ae::resources::readEnvironmentMapImportSettings(record->importerParameters,settings)))
             session.showImportFailure("Receita HDRI salva é inválida; a fonte foi preservada.");
           else launchEnvironmentImport({},std::move(path),settings);
         }

@@ -266,6 +266,7 @@ void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
   // Escolher um objeto tira o material do projeto de Propriedades.
   if(materialAssetMode()) {state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;}
+  state_.environmentInspector={};
   if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.propertyQuery.clear();state_.componentPage=0;state_.componentPreview=0;state_.scriptPreviewType.clear();state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
     state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
     state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
@@ -1739,6 +1740,9 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Material) {
     if(!openMaterialInspector(record->guid)) state_.status="Material registrado, mas o arquivo não pôde ser lido";
   }
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentMap) {
+    if(!openEnvironmentInspector(record->guid)) state_.status="Receita HDRI salva é inválida; Reimportar recria a partir da fonte";
+  }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Texture) {
     const auto *texture=findProjectTexture(record->guid);
     for(u32 index=0;index<textures_.size();++index)
@@ -2751,6 +2755,42 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       const bool keep=key==widgetId(EditorWidget::ImportLinkKeep);
       state_.status=resolveImportOrphan(state_.selection,keep)?(keep?"Órfão mantido como objeto independente":"Órfão apagado"):"Nada a resolver";
       state_.importLinkMenu=false;return true;
+    }
+    // Mapa HDRI do projeto em Propriedades.
+    if(state_.environmentInspector.valid()) {
+      auto &draft=state_.environmentDraft;
+      if(key==widgetId(EditorWidget::EnvironmentInspectorClose)) {state_.environmentInspector={};state_.selectedFile.clear();return true;}
+      if(key==widgetId(EditorWidget::EnvironmentExposureDown) || key==widgetId(EditorWidget::EnvironmentExposureUp)) {
+        state_.environmentExposure=std::clamp(state_.environmentExposure+(key==widgetId(EditorWidget::EnvironmentExposureUp)?.5f:-.5f),-6.0f,6.0f);
+        writeEnvironmentPreview();return true;
+      }
+      if(key==widgetId(EditorWidget::EnvironmentInspectorUses)) {
+        const auto &users=state_.environmentObjects;
+        if(users.empty()) {state_.status="Nenhum componente Ambiente da cena usa este HDRI";return true;}
+        const u32 index=state_.environmentUse%static_cast<u32>(users.size());
+        pingEntity(users[index]);state_.environmentUse=index+1;
+        state_.status="Uso "+std::to_string(index+1)+" de "+std::to_string(users.size())+": "+document_.find(users[index])->name;
+        return true;
+      }
+      // Receita: cada linha dobra ou divide por dois dentro do que o importador aceita.
+      const bool down=key>=widgetId(EditorWidget::EnvironmentRecipeDownBase) && key<widgetId(EditorWidget::EnvironmentRecipeDownBase)+5;
+      const bool up=key>=widgetId(EditorWidget::EnvironmentRecipeUpBase) && key<widgetId(EditorWidget::EnvironmentRecipeUpBase)+5;
+      if(down || up) {
+        u32 *fields[]{&draft.panoramaWidth,&draft.specularSize,&draft.specularSamples,&draft.brdfSize,&draft.brdfSamples};
+        const u32 row=key-widgetId(down?EditorWidget::EnvironmentRecipeDownBase:EditorWidget::EnvironmentRecipeUpBase);
+        auto candidate=draft;
+        u32 *field[]{&candidate.panoramaWidth,&candidate.specularSize,&candidate.specularSamples,&candidate.brdfSize,&candidate.brdfSamples};
+        *field[row]=down?*fields[row]/2:*fields[row]*2;
+        if(candidate.valid()) draft=candidate;
+        else state_.status="Fora do que o importador HDRI aceita";
+        return true;
+      }
+      if(key==widgetId(EditorWidget::EnvironmentRecipeRevert)) {draft=state_.environmentSaved;state_.status="Receita HDRI revertida";return true;}
+      if(key==widgetId(EditorWidget::EnvironmentRecipeApply)) {
+        // O shell reimporta pela mesma trilha do botão Reimportar, com esta receita.
+        environmentReimportPath_=state_.environmentInspectorPath;environmentReimportOverride_=draft;
+        state_.status="Reimportando o HDRI com a receita nova";return true;
+      }
     }
     // Material do projeto em Propriedades.
     if(key==widgetId(EditorWidget::MaterialInspectorClose)) {
@@ -7342,6 +7382,7 @@ void EditorSession::update() {
   state_.assetCount=mapScene_.assetCount();
   state_.canUndo = history_.canUndo();
   state_.canRedo = history_.canRedo();
+  if(state_.environmentInspector.valid()) refreshEnvironmentInspector();
   state_.backgroundTasks=shellTasks_;
   if(state_.codeBuildBusy) state_.backgroundTasks.push_back({EditorBackgroundTask::Kind::CodeBuild,"Compilando scripts","C# do projeto",-1,false});
   if(state_.globalSearch) {
@@ -7663,7 +7704,7 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
 
 bool EditorSession::openMaterialInspector(const resources::AssetGuid &guid) {
   if(!findMaterialAsset(guid)) return false;
-  state_.materialInspector=guid;state_.materialShared=true;state_.materialInspectorUse=0;
+  state_.materialInspector=guid;state_.materialShared=true;state_.materialInspectorUse=0;state_.environmentInspector={};
   state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;
   state_.textureInspector=false;state_.textureManager=false;state_.propertyPage=0;state_.propertyQuery.clear();
   state_.compactPanel=EditorScreenState::CompactPanel::Inspector;

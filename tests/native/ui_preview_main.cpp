@@ -337,6 +337,15 @@ int main(int argc, char **argv) {
     auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
+  // HDRI em Propriedades: a prévia vem de um gradiente de céu escrito no atlas.
+  if(argc>4 && std::string(argv[4])=="hdri-asset") {
+    state.environmentInspector=resources::assetGuidFromSeed("preview-hdri");
+    state.environmentInspectorPath="Ambientes/estudio-noturno.hdr";
+    state.environmentSaved.panoramaWidth=1024;state.environmentDraft=state.environmentSaved;state.environmentDraft.specularSamples=256;
+    state.environmentDerived={"Panorama 1024×512 · 11 níveis","Reflexão GGX 256×256 · 9 níveis","BRDF 128×128 · 7 MB derivados · irradiância SH9"};
+    state.environmentObjects={1,2};state.environmentProfiles=1;state.environmentExposure=.5f;
+    state.environmentPreview={0,512,512,256};
+  }
   // Material do projeto em Propriedades (a vista é a que a sessão prepara).
   if(argc>4 && std::string(argv[4])=="material-asset") {
     state.materialInspector=resources::assetGuidFromSeed("preview-material");state.materialShared=true;
