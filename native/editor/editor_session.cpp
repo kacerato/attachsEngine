@@ -331,7 +331,7 @@ void EditorSession::loadEditorPreferences() {
   state_.pickerAdvanced=false;
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
   state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
-  state_.hiddenLayers=0;state_.unpickableLayers=0;appearanceChanged_=true;
+  state_.hiddenLayers=0;state_.unpickableLayers=0;appearanceChanged_=true;state_.userLayouts.clear();state_.layoutsPanel=false;
   std::filesystem::path file;
   if(files_.rootPath().empty() ||
      !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),".astra/editor-preferences.astra",file)) return;
@@ -347,6 +347,21 @@ void EditorSession::loadEditorPreferences() {
     if(!(fields>>key)) continue;
     if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
     else if(key=="undo_order" && fields>>value) state_.undoNewestFirst=value!="oldest";
+    else if(key=="layout" || key=="layout_active") {
+      // Layout salvo (com nome) ou o arranjo atual quando o projeto fechou.
+      EditorLayout layout;int hv=1,iv=1,fc=0,dd=0;
+      if(key=="layout" && !(fields>>std::quoted(layout.name))) continue;
+      if(!(fields>>layout.hierarchyWidth>>layout.inspectorWidth>>hv>>iv>>fc>>dd)) continue;
+      if(!std::isfinite(layout.hierarchyWidth) || !std::isfinite(layout.inspectorWidth) ||
+         layout.hierarchyWidth<0 || layout.inspectorWidth<0) continue;
+      layout.hierarchyVisible=hv;layout.inspectorVisible=iv;layout.filesCollapsed=fc;layout.diagnosticDock=dd;
+      if(key=="layout") {if(state_.userLayouts.size()<12 && !layout.name.empty()) state_.userLayouts.push_back(layout);}
+      else {
+        state_.hierarchyWidth=layout.hierarchyWidth;state_.inspectorWidth=layout.inspectorWidth;
+        state_.hierarchyVisible=layout.hierarchyVisible;state_.inspectorVisible=layout.inspectorVisible;
+        state_.filesCollapsed=layout.filesCollapsed;state_.diagnosticDockOpen=layout.diagnosticDock;
+      }
+    }
     else if(key=="scene_layers") {u32 hidden=0,locked=0;if(fields>>hidden>>locked) {state_.hiddenLayers=hidden;state_.unpickableLayers=locked;}}
     else if(key=="focused") {
       // Inspector focado aberto quando o projeto fechou (Unity os restaura).
@@ -368,6 +383,16 @@ void EditorSession::saveEditorPreferences() {
   out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
   out<<"undo_order "<<(state_.undoNewestFirst?"newest":"oldest")<<'\n';
   out<<"scene_layers "<<state_.hiddenLayers<<' '<<state_.unpickableLayers<<'\n';
+  const auto writeLayout=[&](const EditorLayout &l) {
+    out<<l.hierarchyWidth<<' '<<l.inspectorWidth<<' '<<l.hierarchyVisible<<' '<<l.inspectorVisible<<' '
+       <<l.filesCollapsed<<' '<<l.diagnosticDock<<'\n';
+  };
+  for(const auto &layout:state_.userLayouts) {out<<"layout "<<std::quoted(layout.name)<<' ';writeLayout(layout);}
+  EditorLayout active;
+  active.hierarchyWidth=state_.hierarchyWidth;active.inspectorWidth=state_.inspectorWidth;
+  active.hierarchyVisible=state_.hierarchyVisible;active.inspectorVisible=state_.inspectorVisible;
+  active.filesCollapsed=state_.filesCollapsed;active.diagnosticDock=state_.diagnosticDockOpen;
+  out<<"layout_active ";writeLayout(active);
   for(u32 i=0;i<state_.focusedInspectors.size();++i)
     out<<"focused "<<state_.focusedInspectors[i].entity<<' '<<state_.focusedInspectors[i].component<<' '
        <<std::quoted(i<focusedNames_.size()?focusedNames_[i]:std::string())<<'\n';
@@ -849,6 +874,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.editingPropertySearch) {edit.purpose=EditorTextPurpose::PropertySearch;edit.entity=state_.selection;edit.componentInstance=state_.expandedNative;edit.text=state_.renameText;return edit;}
   if(state_.editingReferenceSearch) {edit.purpose=EditorTextPurpose::ReferenceSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingGlobalSearch) {edit.purpose=EditorTextPurpose::GlobalSearch;edit.text=state_.renameText;return edit;}
+  if(state_.namingLayout) {edit.purpose=EditorTextPurpose::LayoutName;edit.text=state_.renameText;return edit;}
   if(state_.editingPhysicsLayerName) {
     edit.purpose=EditorTextPurpose::PhysicsLayerName;edit.field=state_.physicsLayer;
     edit.text=document_.layers().name(state_.physicsLayer);return edit;
@@ -1117,7 +1143,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;state_.gradientText=0;state_.curveText=0;
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
-    state_.editingHierarchySearch=false;state_.editingCreationSearch=false;state_.editingGlobalSearch=false;
+    state_.editingHierarchySearch=false;state_.editingCreationSearch=false;state_.editingGlobalSearch=false;state_.namingLayout=false;
     cancelPointers();
   };
   if(!accept) {close();return true;}
@@ -1184,6 +1210,26 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
       saveComponentPreset(edit.entity,edit.componentInstance,std::string(text),error);
     state_.status=saved?(state_.presetRecipeNaming?"Receita salva no projeto":"Preset salvo no projeto"):error;
     if(saved) {refreshComponentPresets();close();}return saved;
+  }
+  if(edit.purpose==EditorTextPurpose::LayoutName) {
+    const auto name=trimmedName(text);
+    if(name.empty() || name.size()>32 || name.find('"')!=std::string::npos || name.find('\n')!=std::string::npos) {
+      state_.status="O nome do layout precisa ter de 1 a 32 caracteres, sem aspas";return false;
+    }
+    EditorLayout layout;layout.name=std::string(name);
+    layout.hierarchyWidth=state_.hierarchyWidth;layout.inspectorWidth=state_.inspectorWidth;
+    layout.hierarchyVisible=state_.hierarchyVisible;layout.inspectorVisible=state_.inspectorVisible;
+    layout.filesCollapsed=state_.filesCollapsed;layout.diagnosticDock=state_.diagnosticDockOpen;
+    // Mesmo nome substitui (a Unity pergunta; aqui o nome na lista já avisa).
+    bool replaced=false;
+    for(auto &existing:state_.userLayouts) if(existing.name==layout.name) {existing=layout;replaced=true;}
+    if(!replaced) {
+      if(state_.userLayouts.size()>=12) {state_.status="Limite de 12 layouts salvos";return false;}
+      state_.userLayouts.push_back(layout);
+    }
+    saveEditorPreferences();
+    state_.status=replaced?"Layout substituído: "+layout.name:"Layout salvo: "+layout.name;
+    close();return true;
   }
   if(edit.purpose==EditorTextPurpose::SceneViewName) {
     const auto name=trimmedName(text);
@@ -1591,6 +1637,14 @@ void EditorSession::openFocusedInspector(EditorEntityId entity,u64 component) {
   state_.focusedActive=static_cast<u32>(state_.focusedInspectors.size());
   state_.focusedCollapsed=false;state_.focusedMenu=false;focusedValidated_=true;
   state_.status=std::string("Propriedades de ")+object->name;
+  saveEditorPreferences();
+}
+
+void EditorSession::applyLayout(const EditorLayout &layout) {
+  state_.hierarchyWidth=layout.hierarchyWidth;state_.inspectorWidth=layout.inspectorWidth;
+  state_.hierarchyVisible=layout.hierarchyVisible;state_.inspectorVisible=layout.inspectorVisible;
+  state_.filesCollapsed=layout.filesCollapsed;state_.diagnosticDockOpen=layout.diagnosticDock;
+  state_.compactPanel=EditorScreenState::CompactPanel::Viewport;
   saveEditorPreferences();
 }
 
@@ -3383,7 +3437,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingPhysicsLayerName) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingPhysicsLayerName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -4047,6 +4101,31 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       }
       return true;
     }
+  }
+  // Layouts dos painéis.
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::LayoutsOpen)) {
+    state_.workspaceMenu=false;state_.layoutsPanel=true;return true;
+  }
+  if(state_.layoutsPanel && routing.target==UiPointerTarget::Widget) {
+    if(!routing.tapped) return true;
+    const u32 key=routing.widgetId;
+    const auto builtins=editorBuiltinLayouts(state_.surface.width);
+    if(key==widgetId(EditorWidget::LayoutsClose)) state_.layoutsPanel=false;
+    else if(key==widgetId(EditorWidget::LayoutReset)) {applyLayout(builtins[0]);state_.status="Layout padrão restaurado";}
+    else if(key==widgetId(EditorWidget::LayoutSave)) {
+      state_.namingLayout=true;std::snprintf(state_.renameText,sizeof(state_.renameText),"Layout %u",static_cast<unsigned>(state_.userLayouts.size()+1));
+    } else if(key>=widgetId(EditorWidget::LayoutBuiltinBase) && key<widgetId(EditorWidget::LayoutBuiltinBase)+builtins.size()) {
+      const auto &layout=builtins[key-widgetId(EditorWidget::LayoutBuiltinBase)];
+      applyLayout(layout);state_.status="Layout: "+layout.name;
+    } else if(key>=widgetId(EditorWidget::LayoutDeleteBase) && key<widgetId(EditorWidget::LayoutDeleteBase)+state_.userLayouts.size()) {
+      const u32 index=key-widgetId(EditorWidget::LayoutDeleteBase);
+      state_.status="Layout apagado: "+state_.userLayouts[index].name;
+      state_.userLayouts.erase(state_.userLayouts.begin()+index);saveEditorPreferences();
+    } else if(key>=widgetId(EditorWidget::LayoutUserBase) && key<widgetId(EditorWidget::LayoutUserBase)+state_.userLayouts.size()) {
+      const auto layout=state_.userLayouts[key-widgetId(EditorWidget::LayoutUserBase)];
+      applyLayout(layout);state_.status="Layout: "+layout.name;
+    }
+    return true;
   }
   // Busca global: modal sobre tudo; toques fora dela não chegam ao editor.
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::GlobalSearchOpen)) {openGlobalSearch();return true;}

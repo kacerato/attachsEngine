@@ -3552,6 +3552,53 @@ AE_TEST(global_search_finds_objects_files_and_recipes_and_opens_them) {
   AE_EXPECT_TRUE(!state.globalSearch,"fechada");
 }
 
+// Unity 6000.0 Toolbar › Layout: arranjos prontos, salvar o atual com nome,
+// aplicar, apagar, restaurar; o projeto guarda os salvos e o atual.
+AE_TEST(panel_layouts_apply_save_delete_and_restore_with_project) {
+  namespace fs=std::filesystem;
+  Fixture f;
+  const auto root=fs::temp_directory_path()/("aether-layouts-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  f.session.update();
+  const auto &state=f.session.screen();
+  tapWidget(f,widgetId(EditorWidget::ProjectMenu));
+  tapWidget(f,widgetId(EditorWidget::LayoutsOpen));
+  AE_EXPECT_TRUE(state.layoutsPanel && !state.workspaceMenu,"painel de layouts pelo menu Cena");
+  // "Só a cena" esconde os dois painéis; "Autoria" alarga o Inspector.
+  tapWidget(f,widgetId(EditorWidget::LayoutBuiltinBase)+4);
+  AE_EXPECT_TRUE(!state.hierarchyVisible && !state.inspectorVisible,"só a cena");
+  tapWidget(f,widgetId(EditorWidget::LayoutBuiltinBase)+2);
+  AE_EXPECT_TRUE(state.hierarchyVisible && state.inspectorVisible && state.inspectorWidth>=260 && state.filesCollapsed,"autoria");
+  const float authoring=state.inspectorWidth;
+  // Ajuste manual e salvar com nome.
+  auto &mutableState=const_cast<EditorScreenState &>(state);
+  mutableState.hierarchyWidth=190;mutableState.diagnosticDockOpen=true;
+  tapWidget(f,widgetId(EditorWidget::LayoutSave));
+  AE_EXPECT_TRUE(state.namingLayout,"pede o nome");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"Meu \"ruim\"",true)==false,"aspas recusadas");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"Revisão",true),"nome aceito");
+  AE_EXPECT_EQ(state.userLayouts.size(),1u,"um layout salvo");
+  AE_EXPECT_TRUE(state.userLayouts[0].hierarchyWidth==190 && state.userLayouts[0].diagnosticDock &&
+                 state.userLayouts[0].inspectorWidth==authoring,"guarda o arranjo atual");
+  // Restaurar o padrão e reaplicar o salvo.
+  tapWidget(f,widgetId(EditorWidget::LayoutReset));
+  AE_EXPECT_TRUE(state.hierarchyWidth==0 && state.inspectorWidth==0 && !state.diagnosticDockOpen && !state.filesCollapsed,"padrão");
+  tapWidget(f,widgetId(EditorWidget::LayoutUserBase));
+  AE_EXPECT_TRUE(state.hierarchyWidth==190 && state.diagnosticDockOpen,"salvo reaplicado");
+  // Reabrir o projeto: os salvos e o arranjo atual voltam.
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto reaberto");
+  AE_EXPECT_TRUE(state.userLayouts.size()==1 && state.userLayouts[0].name=="Revisão","salvo restaurado");
+  AE_EXPECT_TRUE(state.hierarchyWidth==190 && state.inspectorWidth==authoring && state.diagnosticDockOpen,"arranjo atual restaurado");
+  mutableState.layoutsPanel=true;f.session.update();
+  tapWidget(f,widgetId(EditorWidget::LayoutDeleteBase));
+  AE_EXPECT_TRUE(state.userLayouts.empty(),"apagado");
+  tapWidget(f,widgetId(EditorWidget::LayoutsClose));
+  AE_EXPECT_TRUE(!state.layoutsPanel,"fechado");
+}
+
 AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");

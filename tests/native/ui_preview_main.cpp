@@ -337,6 +337,14 @@ int main(int argc, char **argv) {
     auto value=*document.find(trigger);value.layer=8;document.applyEntityValues(trigger,value);
     state.sceneLayersPanel=true;state.hiddenLayers=1u<<8;state.unpickableLayers=1u<<3;
   }
+  // Layouts: um salvo ativo e outro salvo.
+  if(argc>4 && std::string(argv[4])=="layouts") {
+    state.layoutsPanel=true;
+    editor::EditorLayout review;review.name="Revisão";review.hierarchyWidth=190;review.diagnosticDock=true;
+    editor::EditorLayout wide;wide.name="Tablet largo";wide.inspectorWidth=340;wide.filesCollapsed=true;
+    state.userLayouts={review,wide};
+    state.hierarchyWidth=190;state.diagnosticDockOpen=true;
+  }
   // Busca global com resultados dos três provedores.
   if(argc>4 && std::string(argv[4])=="global-search") {
     state.globalSearch=true;state.globalQuery="porta";

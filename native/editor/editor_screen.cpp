@@ -1093,6 +1093,85 @@ void buildGlobalSearch(ScreenBuilder &builder) {
                                  theme.color.textDim,theme.type.caption,UiAlign::Center);
 }
 
+// Layouts dos painéis (Unity 6000.0 Toolbar › Layout): cinco arranjos prontos
+// e os salvos pelo usuário, cada um com uma miniatura do arranjo; o que
+// coincide com a tela atual vem marcado. Salvar guarda o arranjo atual com um
+// nome; o × apaga um salvo; Restaurar volta ao Padrão.
+void drawLayoutThumbnail(ScreenBuilder &builder,const UiRect &area,const EditorLayout &layout,bool on) {
+  const auto &theme=builder.theme;auto &list=builder.list;
+  list.addRect(area,theme.color.voidBlack,4);
+  auto inner=deflate(area,UiInsets::all(3));
+  const auto ink=on?theme.color.accent:theme.color.textDim;
+  const float total=builder.state.surface.width>0?builder.state.surface.width:853;
+  const auto share=[&](float width,float fallback){return (width>0?width/total:fallback)*inner.width;};
+  list.addRect(takeTop(inner,3),withAlpha(ink,.5f),1);takeTop(inner,1);
+  if(layout.hierarchyVisible) {auto h=takeLeft(inner,std::max(4.f,share(layout.hierarchyWidth,.22f)));h.width-=1;list.addRect(h,withAlpha(ink,.55f),1);}
+  if(layout.inspectorVisible) {auto i=takeRight(inner,std::max(4.f,share(layout.inspectorWidth,.26f)));i.x+=1;i.width-=1;list.addRect(i,withAlpha(ink,.55f),1);}
+  if(layout.diagnosticDock) {auto d=takeBottom(inner,inner.height*.3f);d.y+=1;list.addRect(d,withAlpha(theme.color.warning,.6f),1);}
+  list.addRect(inner,withAlpha(ink,.18f),1);
+}
+
+void buildLayoutsPanel(ScreenBuilder &builder) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  router.addBlocker(state.surface);
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.7f));
+  const float width=std::min(560.f,state.surface.width-16);
+  const UiRect window=centred(state.surface,width,std::min(380.f,state.surface.height-16));
+  list.addRect(deflate(window,UiInsets::all(-1)),theme.color.line,theme.radius.control);
+  list.addRect(window,theme.color.surface,theme.radius.control);
+  auto content=deflate(window,UiInsets::all(10));
+  auto header=takeTop(content,36);
+  builder.iconButton(takeRight(header,36),UiIcon::UiClose,widgetId(EditorWidget::LayoutsClose));
+  list.addImage(centred(takeLeft(header,28),18,18),static_cast<UiImageId>(UiIcon::UiPanelLeft),theme.color.accent);
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},"Layout dos painéis",theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y+half,header.width,half},"Arranjo da tela; fica no projeto, não na cena",theme.color.textDim,theme.type.caption);
+  takeTop(content,6);
+  auto actions=takeBottom(content,36);takeBottom(content,6);
+  EditorLayout current;
+  current.hierarchyWidth=state.hierarchyWidth;current.inspectorWidth=state.inspectorWidth;
+  current.hierarchyVisible=state.hierarchyVisible;current.inspectorVisible=state.inspectorVisible;
+  current.filesCollapsed=state.filesCollapsed;current.diagnosticDock=state.diagnosticDockOpen;
+  // Cartões: prontos numa faixa, salvos numa lista embaixo.
+  const auto builtins=editorBuiltinLayouts(state.surface.width);
+  auto grid=takeTop(content,92);takeTop(content,8);
+  const float cell=(grid.width-4*6)/5;
+  for(u32 i=0;i<builtins.size();++i) {
+    const UiRect card{grid.x+i*(cell+6),grid.y,cell,grid.height};
+    const bool on=builtins[i]==current;
+    list.addRect(card,on?withAlpha(theme.color.accent,.16f):theme.color.raised,theme.radius.control);
+    if(on) list.addRect({card.x,card.bottom()-3,card.width,3},theme.color.accent,1);
+    auto inner=deflate(card,UiInsets::all(6));
+    drawLayoutThumbnail(builder,takeTop(inner,48),builtins[i],on);
+    builder.label(deflate(inner,UiInsets{0,4,0,0}),builtins[i].name,on?theme.color.text:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(card,widgetId(EditorWidget::LayoutBuiltinBase)+i);
+  }
+  builder.label(takeTop(content,20),state.userLayouts.empty()?"Nenhum layout salvo":"Salvos",theme.color.textMuted,theme.type.caption);
+  const u32 perRow=2,rows=std::max(1u,static_cast<u32>(content.height/40));
+  for(u32 i=0;i<state.userLayouts.size() && i<rows*perRow;++i) {
+    const float w=(content.width-6)/2;
+    const UiRect row{content.x+(i%perRow)*(w+6),content.y+(i/perRow)*40,w,36};
+    const bool on=state.userLayouts[i]==current;
+    list.addRect(row,on?withAlpha(theme.color.accent,.16f):theme.color.raised,theme.radius.control);
+    auto inner=deflate(row,UiInsets{6,4,4,4});
+    drawLayoutThumbnail(builder,takeLeft(inner,44),state.userLayouts[i],on);
+    const auto remove=takeRight(inner,32);
+    list.addImage(centred(remove,14,14),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+    builder.label(deflate(inner,UiInsets{8,0,0,0}),state.userLayouts[i].name,on?theme.color.text:theme.color.textDim,theme.type.caption);
+    router.addRegion(row,widgetId(EditorWidget::LayoutUserBase)+i);
+    router.addRegion(remove,widgetId(EditorWidget::LayoutDeleteBase)+i);
+  }
+  const float bw=(actions.width-6)/2;
+  const UiRect save{actions.x,actions.y,bw,actions.height},reset{actions.x+bw+6,actions.y,bw,actions.height};
+  const bool canSave=state.userLayouts.size()<12;
+  list.addRect(save,canSave?theme.color.accent:theme.color.raised,theme.radius.control);
+  builder.label(save,canSave?"Salvar layout atual":"Limite de 12 layouts",canSave?theme.color.accentInk:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+  if(canSave) router.addRegion(save,widgetId(EditorWidget::LayoutSave));
+  list.addRect(reset,theme.color.raised,theme.radius.control);
+  builder.label(reset,"Restaurar o padrão",theme.color.text,theme.type.caption,UiAlign::Center);
+  router.addRegion(reset,widgetId(EditorWidget::LayoutReset));
+}
+
 void buildPhysicsOverlay(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto *entity=state.document->find(state.selection);
   if(!entity || state.workspace!=EditorWorkspace::Scene || state.componentSelection!=entity->id) return;
@@ -5364,7 +5443,7 @@ bool platformFieldActive(const EditorScreenState &state) {
   if (!state.platformTextInput || state.editingCode) return false;
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
-         state.editingReferenceSearch || state.editingGlobalSearch || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
+         state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
          (state.gradientField != 0 && state.gradientText != 0) || (state.curveField != 0 && state.curveText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
@@ -5374,6 +5453,7 @@ bool platformFieldActive(const EditorScreenState &state) {
 const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.presetNaming) return "Nome do preset";
   if (state.viewNaming) return state.viewRenaming ? "Novo nome da vista" : "Nome da vista";
+  if (state.namingLayout) return "Nome do layout";
   if (state.colorField != 0 && state.colorText != 0) return state.colorText == 1 ? "Hexadecimal" : "Nome";
   if (state.numericField != 0) return "Valor";
   if (state.editingInputActionName) return "Ação";
@@ -7239,7 +7319,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   // A busca global fica sob o teclado interno, que edita o campo dela.
   if(state.globalSearch) buildGlobalSearch(builder);
-  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
@@ -7334,17 +7414,18 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const u32 menuRows=4+(state.assetCount?1:0);
+    const u32 menuRows=5+(state.assetCount?1:0);
     const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 48.0f+44.0f*menuRows);
     list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Configurações do projeto","Fechar"};
-    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::WorkspaceMenuClose};
+    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Configurações do projeto","Layout dos painéis","Fechar"};
+    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
     builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
     for(u32 i=0;i<std::size(actions);++i) {
       if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
       auto row=takeTop(content,44);builder.label(row,names[i],theme.color.text,theme.type.body);router.addRegion(row,widgetId(actions[i]));
     }
   }
+  if(state.layoutsPanel) buildLayoutsPanel(builder);
   if(compact && state.compactPanelMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.6f));
     router.addBlocker(state.surface);

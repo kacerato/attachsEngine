@@ -36,6 +36,8 @@
 #include "scene/component_preset.h"
 #include "ui/ui_draw_list.h"
 #include "ui/ui_icon_id.h"
+#include <algorithm>
+#include <array>
 #include "ui/ui_input.h"
 #include "ui/ui_theme.h"
 #include <string>
@@ -405,6 +407,10 @@ enum class EditorWidget : u32 {
   // provedor, páginas e um resultado por linha.
   GlobalSearchOpen=0xC9000000u, GlobalSearchClose, GlobalSearchField, GlobalSearchPrevious, GlobalSearchNext,
   GlobalSearchProviderBase=0xC9000010u, GlobalSearchResultBase=0xC9000100u,
+  // Layouts (Unity 6000.0 Toolbar › Layout): abrir pelo menu Cena, salvar o
+  // atual, restaurar o padrão; um por linha (predefinidos e do usuário).
+  LayoutsOpen=0xCA000000u, LayoutsClose, LayoutSave, LayoutReset,
+  LayoutBuiltinBase=0xCA000100u, LayoutUserBase=0xCA000200u, LayoutDeleteBase=0xCA000300u,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,
@@ -516,7 +522,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayElementBase,kRange},{EditorWidget::ScriptArrayHandleBase,kRange},
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
-  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange}};
+  {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -563,6 +569,36 @@ struct EditorSearchResult {
 };
 
 struct EditorSearchCounts { u32 scene = 0, project = 0, create = 0; };
+
+// Arranjo dos painéis do editor (Unity: Layout). Larguras em dp; zero pede a
+// proporção padrão. Não é dado da cena: fica nas preferências do projeto.
+struct EditorLayout {
+  std::string name;
+  float hierarchyWidth = 0, inspectorWidth = 0;
+  bool hierarchyVisible = true, inspectorVisible = true, filesCollapsed = false, diagnosticDock = false;
+  bool operator==(const EditorLayout &other) const {
+    return hierarchyWidth == other.hierarchyWidth && inspectorWidth == other.inspectorWidth &&
+           hierarchyVisible == other.hierarchyVisible && inspectorVisible == other.inspectorVisible &&
+           filesCollapsed == other.filesCollapsed && diagnosticDock == other.diagnosticDock;
+  }
+};
+
+// Os cinco arranjos prontos, na largura `surface` (as larguras em dp dos
+// painéis são frações dela).
+inline std::array<EditorLayout, 5> editorBuiltinLayouts(float surface) {
+  std::array<EditorLayout, 5> layouts{};
+  layouts[0].name = "Padrão";
+  layouts[1].name = "Cena ampla";
+  layouts[1].hierarchyVisible = false;
+  layouts[2].name = "Autoria";
+  layouts[2].inspectorWidth = std::max(260.0f, surface * 0.4f);
+  layouts[2].filesCollapsed = true;
+  layouts[3].name = "Diagnóstico";
+  layouts[3].diagnosticDock = true;
+  layouts[4].name = "Só a cena";
+  layouts[4].hierarchyVisible = layouts[4].inspectorVisible = false;
+  return layouts;
+}
 
 struct EditorScreenState final {
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
@@ -686,6 +722,9 @@ struct EditorScreenState final {
   u32 globalPage=0;
   std::vector<EditorSearchResult> globalResults;
   EditorSearchCounts globalCounts;
+  // Layouts salvos pelo usuário (até 12) e o painel que os lista.
+  std::vector<EditorLayout> userLayouts;
+  bool layoutsPanel=false,namingLayout=false;
   bool sceneLayersPanel=false;
   // Ping: objeto destacado na Hierarquia até `pingUntil` (relógio `uiTime`).
   EditorEntityId pingEntity=0;

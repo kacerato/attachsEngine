@@ -66,7 +66,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -1609,6 +1609,8 @@ public:
   // Busca global: índice de arquivos do projeto (montado ao abrir, não por
   // quadro) e a aplicação de um resultado.
   void openGlobalSearch();
+  // Aplica um arranjo de painéis e o guarda como o atual do projeto.
+  void applyLayout(const EditorLayout &layout);
   bool openSearchResult(u32 index);
   // Abre um arquivo do projeto como o toque na linha do painel Arquivos.
   void openProjectFile(const EditorFileEntry &entry);
