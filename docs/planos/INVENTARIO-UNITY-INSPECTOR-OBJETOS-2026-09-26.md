@@ -133,15 +133,15 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
 | 78 | Objeto único: componentes e materiais | ✔ | | — |
-| 79 | Vários objetos: componentes em comum | ✗ | não há multisseleção | I4 |
-| 80 | Aviso de componentes ocultos na multisseleção | ✗ | | I4 |
-| 81 | Valor igual mostra; diferente mostra "—" | ✗ | | I4 |
-| 82 | Set to Value of [objeto] | ✗ | | I4 |
-| 83 | Aviso de componente sem edição múltipla | ✗ | | I4 |
+| 79 | Vários objetos: componentes em comum | A | modo "Selecionar vários" na Hierarquia e na vista (toque soma/tira, no lugar de Ctrl/Shift+clique), Tudo/Filhos/Inverter/Nada; edição replicada num passo de Desfazer; gizmo move/gira/escala todos pelo próprio pivô · `441092d2` | I4 |
+| 80 | Aviso de componentes ocultos na multisseleção | ✔ | "N componentes ocultos: nem todos têm" · `441092d2` | I4 |
+| 81 | Valor igual mostra; diferente mostra "—" | ✔ | transformação, nome, ativo, camada, números, booleanos, enums, referências e canais · `441092d2` | I4 |
+| 82 | Set to Value of [objeto] | A | toque longo no campo com "—" abre a lista de objetos com o valor de cada um · `441092d2` | I4 |
+| 83 | Aviso de componente sem edição múltipla | ✔ | vínculo com a fonte, LOD, malha com skin e script não resolvido: "Edição múltipla não disponível" · `441092d2` | I4 |
 | 84 | Instância de prefab: opções e overrides em negrito | ✗ | | P |
 | 85 | Vários prefabs (sem Select/Revert/Apply) | ✗ | | P |
 | 86 | Recurso único: importação e propriedades | ✔ | textura, modelo, material `9ce0c9fe`, HDRI com receita reimportável `e4608651` (degraus `267fd86c`), perfil de ambiente pelo esquema `586671c8`; áudio: não aplicável até existir o subsistema (bloco próprio) | I3 |
-| 87 | Vários recursos: comuns e "—" | ✗ | | I4 |
+| 87 | Vários recursos: comuns e "—" | ◐ | modo "Selecionar vários" em Arquivos; tipos com contagem para estreitar; texturas do projeto com perfil de importação comum, "—", copiar de uma e Aplicar atômico num passo de Desfazer · `df0c1538`. Falta: materiais, mapas HDRI e perfis de ambiente em conjunto (hoje declaram "sem edição em conjunto") | I4 |
 | 88 | Script: campos públicos/[SerializeField]; HideInInspector | ✔ | `[SerializeField]` expõe privado, `[HideInInspector]` guarda sem mostrar · `1e634f23` | I2 |
 | 89 | Ping pelo ⋮ | ✔ | ⋮ do Inspector e ⋮ da janela focada · `902b804f` | I3 |
 
@@ -168,12 +168,12 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 101 | Ícone de prefab de modelo | ◐ | importação tem vínculo, sem ícone próprio | P |
 | 102 | Visível | ✔ | olho | — |
 | 103 | Oculto | ✔ | | — |
-| 104 | Pai visível com filhos ocultos (marcador) | ✗ | | O3 |
-| 105 | Pai oculto com filhos visíveis (marcador) | ✗ | | O3 |
-| 106 | Selecionável na cena | ✗ | | O3 |
-| 107 | Não selecionável | ✗ | | O3 |
-| 108 | Pai selecionável com filhos não | ✗ | | O3 |
-| 109 | Pai não selecionável com filhos sim | ✗ | | O3 |
+| 104 | Pai visível com filhos ocultos (marcador) | ✔ | olho por linha, estado do editor fora da cena e do Desfazer; ponto no pai quando os filhos diferem; guardado no projeto · `22fe9bd9` | O3 |
+| 105 | Pai oculto com filhos visíveis (marcador) | A | toque longo no olho age só no objeto (Alt+clique da Unity) · `22fe9bd9` | O3 |
+| 106 | Selecionável na cena | ✔ | mão por linha · `22fe9bd9` | O3 |
+| 107 | Não selecionável | ✔ | mão riscada: toque na vista não pega, a Hierarquia seleciona · `22fe9bd9` | O3 |
+| 108 | Pai selecionável com filhos não | ✔ | marcador no pai · `22fe9bd9` | O3 |
+| 109 | Pai não selecionável com filhos sim | A | toque longo na mão age só no objeto · `22fe9bd9` | O3 |
 | 110 | Indicador de override + menu Overrides | ✗ | | P |
 | 111 | Selo + em objeto adicionado à instância | ✗ | | P |
 
@@ -329,10 +329,10 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 37 |
-| ◐ parcial | 29 |
-| ✗ falta | 149 |
-| A adaptação | 4 |
+| ✔ existe | 101 |
+| ◐ parcial | 10 |
+| ✗ falta | 101 |
+| A adaptação | 7 |
 | **Total** | **219** |
 
 ## Blocos de execução (ordem por dependência)
@@ -342,10 +342,10 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | **I1** Inspector de componentes | 6, 7, 11, 12, 14, 15, 17, 19–27, 39, 40, 43, 127, 128 | base de toda edição; Play-edit é pré-requisito para testar os demais |
 | **I2** Tipos de campo | 9, 28–33, 42, 45–56, 88, 129 | curvas, gradientes, listas e texto são exigidos por partículas, linha, UI, áudio |
 | **I3** Janela Inspector | 57–69, 86, 89, 90, 97 | |
-| **I4** Multisseleção | 79–83, 87 | |
+| **I4** Multisseleção | 79–83, 87 | 79–83 `441092d2`; 87 em parte `df0c1538` |
 | **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | tags, static com consumidor, mensagens, Instantiate |
 | **O2** Primitivas | 141, 143–148 | |
-| **O3** Hierarquia | 104–109 | |
+| **O3** Hierarquia | 104–109 | ✔ `22fe9bd9` |
 | **O4** Ícones de objeto | 70–74, 76, 77 | |
 | **P** Prefabs | 75, 84, 85, 99–101, 110, 111, 149–170 | exige identidade de recurso e overrides |
 | **S** Sprite e 2D | 93, 183–196 | backend 2D (Box2D, renderer de sprite) |
