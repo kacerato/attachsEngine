@@ -1989,11 +1989,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           value=choices[index];state_.environmentImportReprepare=true;state_.importReady=false;
           state_.importError=false;state_.importStatus="Repreparando iluminação HDRI…";return true;
         };
-        constexpr std::array<u32,4> panorama{256,512,1024,2048};
-        constexpr std::array<u32,4> specular{64,128,256,512};
-        constexpr std::array<u32,3> brdf{64,128,256};
-        constexpr std::array<u32,4> specularSamples{32,64,128,256};
-        constexpr std::array<u32,4> brdfSamples{128,256,512,1024};
+        const auto &panorama=resources::EnvironmentPanoramaSteps;
+        const auto &specular=resources::EnvironmentSpecularSizeSteps;
+        const auto &brdf=resources::EnvironmentBrdfSizeSteps;
+        const auto &specularSamples=resources::EnvironmentSpecularSampleSteps;
+        const auto &brdfSamples=resources::EnvironmentBrdfSampleSteps;
         const bool handled=step(state_.environmentImportSettings.panoramaWidth,panorama,
              EditorWidget::EnvironmentPanoramaDown,EditorWidget::EnvironmentPanoramaUp)||
         step(state_.environmentImportSettings.specularSize,specular,
@@ -2772,17 +2772,17 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         state_.status="Uso "+std::to_string(index+1)+" de "+std::to_string(users.size())+": "+document_.find(users[index])->name;
         return true;
       }
-      // Receita: cada linha dobra ou divide por dois dentro do que o importador aceita.
+      // Receita: os mesmos degraus do painel de importação.
       const bool down=key>=widgetId(EditorWidget::EnvironmentRecipeDownBase) && key<widgetId(EditorWidget::EnvironmentRecipeDownBase)+5;
       const bool up=key>=widgetId(EditorWidget::EnvironmentRecipeUpBase) && key<widgetId(EditorWidget::EnvironmentRecipeUpBase)+5;
       if(down || up) {
-        u32 *fields[]{&draft.panoramaWidth,&draft.specularSize,&draft.specularSamples,&draft.brdfSize,&draft.brdfSamples};
         const u32 row=key-widgetId(down?EditorWidget::EnvironmentRecipeDownBase:EditorWidget::EnvironmentRecipeUpBase);
-        auto candidate=draft;
-        u32 *field[]{&candidate.panoramaWidth,&candidate.specularSize,&candidate.specularSamples,&candidate.brdfSize,&candidate.brdfSamples};
-        *field[row]=down?*fields[row]/2:*fields[row]*2;
-        if(candidate.valid()) draft=candidate;
-        else state_.status="Fora do que o importador HDRI aceita";
+        u32 *fields[]{&draft.panoramaWidth,&draft.specularSize,&draft.specularSamples,&draft.brdfSize,&draft.brdfSamples};
+        const std::span<const u32> steps[]{resources::EnvironmentPanoramaSteps,resources::EnvironmentSpecularSizeSteps,
+            resources::EnvironmentSpecularSampleSteps,resources::EnvironmentBrdfSizeSteps,resources::EnvironmentBrdfSampleSteps};
+        const u32 next=resources::stepEnvironmentMapChoice(*fields[row],steps[row],up);
+        if(next==*fields[row]) state_.status=up?"Já no degrau mais alto":"Já no degrau mais baixo";
+        *fields[row]=next;
         return true;
       }
       if(key==widgetId(EditorWidget::EnvironmentRecipeRevert)) {draft=state_.environmentSaved;state_.status="Receita HDRI revertida";return true;}

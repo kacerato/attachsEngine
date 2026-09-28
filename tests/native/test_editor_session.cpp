@@ -3741,15 +3741,17 @@ AE_TEST(project_hdri_opens_in_properties_with_preview_uses_and_recipe) {
   tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeUpBase)+0);
   AE_EXPECT_EQ(state.environmentDraft.panoramaWidth,512u,"panorama dobra");
   AE_EXPECT_EQ(state.environmentSaved.panoramaWidth,256u,"salvo não muda");
+  // Os mesmos degraus do painel de importação: BRDF 64..256.
   revealProperty(f,widgetId(EditorWidget::EnvironmentRecipeDownBase)+3);
   for(u32 i=0;i<3;++i) tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeDownBase)+3);
-  AE_EXPECT_EQ(state.environmentDraft.brdfSize,16u,"BRDF até o mínimo aceito");
-  tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeDownBase)+3);
-  AE_EXPECT_EQ(state.environmentDraft.brdfSize,16u,"abaixo do mínimo é recusado");
+  AE_EXPECT_EQ(state.environmentDraft.brdfSize,64u,"BRDF no menor degrau do painel");
+  AE_EXPECT_EQ(resources::stepEnvironmentMapChoice(512,resources::EnvironmentSpecularSampleSteps,true),256u,
+               "receita fora da lista cai no degrau mais próximo, não passa do painel");
+  AE_EXPECT_EQ(resources::stepEnvironmentMapChoice(96,resources::EnvironmentSpecularSampleSteps,true),128u,"entre degraus, sobe ao próximo");
   tapWidget(f,widgetId(EditorWidget::EnvironmentRecipeApply));
   AE_EXPECT_TRUE(f.session.takeEnvironmentReimportPath()=="Ambientes/estudio.hdr","reimportação pedida");
   resources::EnvironmentMapImportSettings requested;
-  AE_EXPECT_TRUE(f.session.takeEnvironmentReimportSettings(requested) && requested.panoramaWidth==512 && requested.brdfSize==16,
+  AE_EXPECT_TRUE(f.session.takeEnvironmentReimportSettings(requested) && requested.panoramaWidth==512 && requested.brdfSize==64,
                  "com a receita do rascunho");
   // Usos: Ping sem sair.
   tapWidget(f,widgetId(EditorWidget::EnvironmentInspectorUses));

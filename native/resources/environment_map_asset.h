@@ -2,6 +2,7 @@
 
 #include "renderer/environment_map.h"
 
+#include <array>
 #include <span>
 #include <string>
 #include <string_view>
@@ -20,6 +21,26 @@ struct EnvironmentMapImportSettings final {
   u32 brdfSamples = 512;
   bool valid() const noexcept;
 };
+
+// Degraus que o editor oferece para a receita — o painel de importação e o
+// mapa HDRI em Propriedades usam os mesmos, para uma receita escolhida num
+// nunca aparecer fora da faixa do outro. Todos passam em `valid()`.
+inline constexpr std::array<u32, 4> EnvironmentPanoramaSteps{256, 512, 1024, 2048};
+inline constexpr std::array<u32, 4> EnvironmentSpecularSizeSteps{64, 128, 256, 512};
+inline constexpr std::array<u32, 3> EnvironmentBrdfSizeSteps{64, 128, 256};
+inline constexpr std::array<u32, 4> EnvironmentSpecularSampleSteps{32, 64, 128, 256};
+inline constexpr std::array<u32, 4> EnvironmentBrdfSampleSteps{128, 256, 512, 1024};
+// Próximo degrau acima/abaixo de `value`; um valor fora da lista (receita
+// antiga) cai no degrau mais próximo na direção pedida.
+inline u32 stepEnvironmentMapChoice(u32 value, std::span<const u32> steps, bool up) noexcept {
+  if (steps.empty()) return value;
+  usize index = 0;
+  while (index + 1 < steps.size() && steps[index] < value) ++index;
+  if (up) {
+    if (steps[index] <= value && index + 1 < steps.size()) ++index;
+  } else if (steps[index] >= value && index > 0) --index;
+  return steps[index];
+}
 
 struct EnvironmentMapImportLimits final {
   u64 maximumSourceBytes = 128ull << 20;
