@@ -54,6 +54,7 @@ public static class AstraBehaviorTests
             public bool Active = true;
             public ulong Next = 1;
             public readonly Dictionary<ulong, bool> Scripts = [];
+            public readonly Dictionary<ulong, string> Types = [];
         }
         private readonly Dictionary<ulong, Node> _nodes = new() { [1] = new(0, "Root"), [2] = new(1, "Driver") };
         private ulong _next = 3;
@@ -68,6 +69,7 @@ public static class AstraBehaviorTests
         public bool Exists(ulong id) => _nodes.ContainsKey(id) && !_destroyed.Contains(id);
         public WorldStatus LastStatus => WorldStatus.Ok;
         public string GetName(ulong id) => _nodes[id].Name;
+        public bool SetName(ulong id, string name) { _nodes[id].Name = name; return true; }
         public ulong ParentOf(ulong id) => _nodes[id].Parent;
         public int ChildCount(ulong id) => _nodes.Count(p => p.Value.Parent == id);
         public ulong ChildAt(ulong id, uint index)
@@ -101,9 +103,40 @@ public static class AstraBehaviorTests
             foreach (var id in _due.Where(p => p.Value <= _clock).Select(p => p.Key).ToArray()) { DestroyObject(id); _due.Remove(id); }
         }
         public ulong AddBehavior(ulong id, string type, string source) { var instance = _nodes[id].Next++; _nodes[id].Scripts.Add(instance, true); return instance; }
+        public ulong AddComponent(ulong id, string type)
+        { var instance = AddBehavior(id, type, ""); _nodes[id].Types[instance] = type; return instance; }
+        public IReadOnlyDictionary<ulong, ulong> Instantiate(ulong source, ulong parent)
+        {
+            var ids = new List<ulong>(); var pending = new Stack<ulong>(); pending.Push(source);
+            while (pending.TryPop(out var id))
+            {
+                ids.Add(id);
+                foreach (var child in _nodes.Where(p => p.Value.Parent == id && Exists(p.Key)).Reverse()) pending.Push(child.Key);
+            }
+            var mapping = new Dictionary<ulong, ulong>();
+            foreach (var id in ids)
+            {
+                var value = _nodes[id]; var copy = CreateObject(id == source ? parent : mapping[value.Parent], value.Name);
+                mapping.Add(id, copy); _nodes[copy].Active = value.Active; _nodes[copy].Next = value.Next;
+                foreach (var pair in value.Scripts) _nodes[copy].Scripts.Add(pair.Key, pair.Value);
+                foreach (var pair in value.Types) _nodes[copy].Types.Add(pair.Key, pair.Value);
+            }
+            return mapping;
+        }
+        public bool FinishInstantiation(ulong root, bool commit)
+        {
+            if (commit) return true;
+            void Erase(ulong id)
+            {
+                foreach (var child in _nodes.Where(p => p.Value.Parent == id).Select(p => p.Key).ToArray()) Erase(child);
+                _nodes.Remove(id);
+            }
+            Erase(root); return true;
+        }
         public bool RemoveComponent(ulong id, ulong instance) => _nodes[id].Scripts.Remove(instance);
         public int ComponentCount(ulong id) => _nodes[id].Scripts.Count;
-        public (ulong Instance, string TypeId) ComponentAt(ulong id, uint index) => (_nodes[id].Scripts.Keys.ElementAt((int)index), ComponentIds.ScriptBehavior);
+        public (ulong Instance, string TypeId) ComponentAt(ulong id, uint index)
+        { var instance = _nodes[id].Scripts.Keys.ElementAt((int)index); return (instance, _nodes[id].Types.GetValueOrDefault(instance, ComponentIds.ScriptBehavior)); }
         public bool TryGetProperty(ulong id, ulong instance, string property, out uint kind, out ulong bits)
         {
             kind = 1; bits = 0;
@@ -138,6 +171,19 @@ public static class AstraBehaviorTests
         world.Start(compiled, restarted, [new(2, 1, "acceptance.dynamic.driver", true, new Dictionary<string, JsonElement>())], true);
         for (var i = 0; i < 20; ++i) { restarted.Advance(.02); world.Update(.02f); }
         Assert.True(restarted.Events.Any(e => e.StartsWith("DYNAMIC PASS")), "new Play rebuilds registry and script statics");
+    }
+
+    [Test]
+    public static void Instantiate_CopiesLiveFieldsAndReferencesBeforeCallbacks()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "tests", "fixtures", "instantiate"))) root = root.Parent;
+        using var project = new Project(File.ReadAllText(Path.Combine(root!.FullName, "tests", "fixtures", "instantiate", "InstantiateProbe.cs")));
+        using var world = new BehaviorWorld(); var scene = new DynamicScene { Behaviors = world };
+        world.Start(project.Compile(), scene, [new(2, 1, "acceptance.clone.driver", true, new Dictionary<string, JsonElement>())], true);
+        for (var i = 0; i < 5; ++i) world.Update(.02f);
+        Assert.True(scene.Events.Any(e => e.StartsWith("CLONE PASS")), string.Join("\n", world.Failures.Select(f => f.Message)));
+        Assert.Equal(0, world.Failures.Count);
     }
 
     private sealed class Scene : ISceneAccess

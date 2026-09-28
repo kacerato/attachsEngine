@@ -1,8 +1,8 @@
 # Bloco ampliado — Objetos, scripts e prefabs
 
 Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Em execução**, por pedido
-do usuário para incorporar os próximos blocos em um só. Etapas 1–3 entregues;
-as etapas 4–12 continuam pendentes, com seus aceites abaixo.
+do usuário para incorporar os próximos blocos em um só. Etapas 1–4 entregues;
+as etapas 5–12 continuam pendentes, com seus aceites abaixo.
 
 ## Escopo e precedência
 
@@ -79,7 +79,7 @@ os demais. Busca e diagnóstico de ausência seguem o contrato documentado.
 
 ### 4. Instanciar hierarquias com referências corretas — O1c, item 138
 
-**Próxima etapa de execução; seguida pelas primitivas da etapa 5.**
+**Entregue em 28/09/2026:** [contrato, referências e aceite](O1C-INSTANCIACAO-2026-09-28.md).
 
 Implementar clonagem de objetos, filhos, componentes e campos serializados de
 scripts. Usar novas identidades e remapear referências internas; definir a
@@ -125,6 +125,10 @@ overrides, aplicar/reverter uma diferença, desfazer/refazer, salvar/reabrir e
 desvincular uma instância sem perder seus objetos nem referências.
 
 ### 8. Editar o prefab em isolamento e contexto — P, itens 151 e 158–170
+
+**Decisão do usuário em 28/09:** abrir a fonte em rota contextual com breadcrumb;
+voltar à cena preservando seleção e enquadramento. Fonte e instância terão
+contextos explícitos. A escolha está aprovada; sua implementação permanece pendente.
 
 Integrar abertura da fonte, navegação de ida/volta, indicação do contexto e
 inspeção dos overrides. Implementar as preferências de modo, cena de fundo,

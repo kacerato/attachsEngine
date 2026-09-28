@@ -448,6 +448,30 @@ void ScriptBridge::installAccess() {
     s.lastStatus_=s.world_->destroyAfter(s.world_->handle(static_cast<ObjectId>(id)),seconds);
     return s.lastStatus_==WorldStatus::Ok;
   };
+  access_.instantiate=[](void *c,u64 source,u64 parent,u64 *pairs,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(source>std::numeric_limits<ObjectId>::max() || parent>std::numeric_limits<ObjectId>::max() || capacity<0) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    const auto original=s.world_->handle(static_cast<ObjectId>(source));
+    const auto destination=s.world_->handle(static_cast<ObjectId>(parent));
+    if(!s.world_->alive(original) || !s.world_->alive(destination) || source==s.world_->graph().root()) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    std::vector<ObjectId> ids;s.world_->graph().collectSubtree(original.id,ids);
+    std::erase_if(ids,[&](ObjectId id) {return !s.world_->handle(id).valid();});
+    if(!pairs || static_cast<usize>(capacity)<ids.size()) {s.lastStatus_=WorldStatus::Ok;return static_cast<int>(ids.size());}
+    ObjectCloneMap mapping;
+    if(!s.world_->instantiate(original,destination,mapping,s.lastStatus_).valid()) return -1;
+    for(usize i=0;i<ids.size();++i) {pairs[2*i]=ids[i];pairs[2*i+1]=mapping.at(ids[i]);}
+    return static_cast<int>(ids.size());
+  };
+  access_.finishInstantiation=[](void *c,u64 root,int commit)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(root>std::numeric_limits<ObjectId>::max() || (commit!=0 && commit!=1)) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->finishInstantiation(s.world_->handle(static_cast<ObjectId>(root)),commit!=0);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
   // --- consultas fisicas --------------------------------------------------
   access_.rayCast = [](void *c, const float *origin, const float *direction,
                        const scene::ScriptQueryFilter *filter, scene::ScriptQueryHit *out, int capacity) -> int {

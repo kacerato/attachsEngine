@@ -1,0 +1,5 @@
+--------- beginning of main
+09-28 15:22:43.232 I/Astra.Script(30565): 2: CLONE READY: hierarchy and current fields copied
+09-28 15:22:43.242 I/Astra.Script(30565): 2: CLONE PASS: hierarchy; fields; references; lifecycle; independent ownership
+09-28 15:26:14.332 I/Astra.Script(29318): 2: CLONE READY: hierarchy and current fields copied
+09-28 15:26:14.337 I/Astra.Script(29318): 2: CLONE PASS: hierarchy; fields; references; lifecycle; independent ownership

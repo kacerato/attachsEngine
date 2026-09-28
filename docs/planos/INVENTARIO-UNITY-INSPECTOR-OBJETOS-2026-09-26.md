@@ -207,7 +207,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 135 | `GameObject.Find` global | ✔ | `FindInWorld`: nome exato, ativos, primeiro em pré-ordem, sem sintaxe de caminhos; [contrato](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 136 | `FindWithTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 137 | `FindGameObjectsWithTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
-| 138 | `Instantiate` | ✗ | | O1 |
+| 138 | `Instantiate` | ✔ | Hierarquia, campos atuais e remapeamento; [aceite](O1C-INSTANCIACAO-2026-09-28.md) | O1 |
 | 139 | `Destroy` com atraso | ✔ | `Destroy(segundos)`, relógio simulado, pausa/Step e descarte da fila; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 140 | `Destroy(this)` remove só o script | ✔ | `Behavior.Remove`, handle vencido e lifecycle; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 141 | `CreatePrimitive` (6 tipos) | ✗ | | O2 |
@@ -329,9 +329,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 115 |
+| ✔ existe | 116 |
 | ◐ parcial | 6 |
-| ✗ falta | 91 |
+| ✗ falta | 90 |
 | A adaptação | 7 |
 | **Total** | **219** |
 

@@ -63,6 +63,7 @@ void GameWorld::clear() {
   invalidated_ = 0;
   elapsed_ = 0;
   delayedDestroy_.clear();
+  unpublishedClones_.clear();
 }
 
 u32 GameWorld::subtreeInvalidation(ObjectId id) {
@@ -284,6 +285,32 @@ void GameWorld::markSubtreeStale(ObjectId id) {
   graph_.collectSubtree(id, scratch_);
   for (const ObjectId member : scratch_)
     if (member < slots_.size()) slots_[member].generation = 0;
+}
+
+ObjectHandle GameWorld::instantiate(const ObjectHandle &source,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status) {
+  mapping.clear();status=validate(source);if(status!=WorldStatus::Ok) return {};
+  status=validate(parent);if(status!=WorldStatus::Ok) return {};
+  if(source.id==graph_.root()) {status=WorldStatus::InvalidArgument;return {};}
+  if(unpublishedClones_.size()>=32) {status=WorldStatus::LimitReached;return {};}
+  const auto root=graph_.cloneSubtree(source.id,parent.id,mapping,[&](ObjectId id) {return handle(id).valid();});
+  if(!root) {status=WorldStatus::Rejected;return {};}
+  for(const auto &[original,copy]:mapping) {
+    (void)original;
+    if(copy>=slots_.size()) {slots_.resize(static_cast<usize>(copy)+1);authorities_.resize(static_cast<usize>(copy)+1,TransformAuthority::Free);}
+    slots_[copy].generation=1;authorities_[copy]=TransformAuthority::Free;
+  }
+  ++structuralRevision_;invalidated_|=subtreeInvalidation(root);
+  unpublishedClones_.push_back(root);
+  status=WorldStatus::Ok;return handle(root);
+}
+
+WorldStatus GameWorld::finishInstantiation(const ObjectHandle &root,bool commit) {
+  const auto status=validate(root);if(status!=WorldStatus::Ok) return status;
+  const auto found=std::find(unpublishedClones_.begin(),unpublishedClones_.end(),root.id);
+  if(found==unpublishedClones_.end()) return WorldStatus::InvalidArgument;
+  unpublishedClones_.erase(found);
+  if(!commit) {markSubtreeStale(root.id);graph_.destroyEntity(root.id);++structuralRevision_;}
+  return WorldStatus::Ok;
 }
 
 bool GameWorld::queue(PendingCommand command, u64 *operationId) {

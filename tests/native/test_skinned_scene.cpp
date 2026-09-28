@@ -568,7 +568,7 @@ AE_TEST(script_abi_v15_plays_blends_and_edits_clip_entries) {
   });
   AE_EXPECT_TRUE(play.start(doc, session.mapScene()), "Play com o runtime falso");
   auto &abi = AnimationRuntime::access;
-  AE_EXPECT_TRUE(abi.version == 16 && abi.available(), "ABI v16 completa");
+  AE_EXPECT_TRUE(abi.version == 17 && abi.available(), "ABI v17 completa");
   AE_EXPECT_TRUE(!abi.setParentWithPolicy(abi.context,owner,doc.root(),0,99),
                  "política de pose inválida recusada pela ABI");
   u64 ticket = 0;

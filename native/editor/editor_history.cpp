@@ -138,25 +138,11 @@ EditorEntityId EditorHistory::duplicateEntity(EditorDocument &document, EditorEn
   }
   // Resolve all clone identities before remapping references, including forward
   // references to siblings. External object references intentionally survive.
+  runtime::ObjectCloneMap mapping;
+  for(usize j=0;j<ids.size();++j) mapping.emplace(ids[j],created[j]);
   for(usize i=0;i<values.size();++i) {
     auto value=values[i];
-    for(usize c=0;c<value.components.size();++c) if(const auto *script=scene::scriptBehavior(value.components.at(c))) {
-      auto replacement=*script;
-      for(auto &p:replacement.properties) scene::remapScriptPropertyObjects(p,[&](u64 target) {
-        for(usize j=0;j<ids.size();++j) if(target==ids[j]) return static_cast<u64>(created[j]);
-        return target;
-      });
-      if(!value.components.replaceInstance(script->instanceId(),replacement)) {end();undo(document);return kInvalidEntity;}
-    }
-    for(usize c=0;c<value.components.size();++c) {
-      const auto *component=value.components.at(c);if(component->type().references.empty()) continue;
-      auto replacement=component->clone();
-      for(const auto &property:replacement->type().references) {
-        const auto target=property.read(*replacement);
-        for(usize j=0;j<ids.size();++j) if(target==ids[j]) {property.write(*replacement,created[j]);break;}
-      }
-      if(!value.components.replaceInstance(component->instanceId(),*replacement)) {end();undo(document);return kInvalidEntity;}
-    }
+    if(!runtime::remapObjectReferences(value,mapping)) {end();undo(document);return kInvalidEntity;}
     // Vínculo com a fonte importada (M08.2). Duplicar a instância inteira cria
     // OUTRA instância: mesma fonte, identidade de instância nova. Duplicar uma
     // parte solta cria um objeto independente — duas peças dizendo ser o mesmo

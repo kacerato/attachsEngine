@@ -404,6 +404,12 @@ public sealed class GameObject : IEquatable<GameObject>
     public T? GetBehavior<T>() where T : class => Behaviors.FindBehavior(ObjectId, typeof(T)) as T;
     public T[] GetBehaviors<T>() where T : class => Behaviors.FindBehaviors(ObjectId, typeof(T)).OfType<T>().ToArray();
     public T AddBehavior<T>() where T : Behavior => (T)Behaviors.AddBehavior(this, typeof(T));
+    /// <summary>Copia a hierarquia sob parent, preservando pose local. Campos serializados são copiados do estado atual.</summary>
+    public GameObject Instantiate(GameObject parent)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        return Behaviors.Instantiate(this, parent);
+    }
 
     /// <summary>Busca por nome exato no mundo: pré-ordem, ativos, sem a raiz sintética. O(N).</summary>
     public GameObject? FindInWorld(string name)

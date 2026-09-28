@@ -157,6 +157,8 @@ public:
   // Criação imediata: o handle devolvido já resolve, aceita componentes e pode
   // ser guardado. `status` explica a recusa quando o handle volta inválido.
   ObjectHandle createObject(const ObjectHandle &parent, std::string_view name, WorldStatus &status);
+  ObjectHandle instantiate(const ObjectHandle &source,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status);
+  WorldStatus finishInstantiation(const ObjectHandle &root,bool commit);
   // Marca o objeto e a subárvore como vencidos na hora; o armazenamento sai no
   // próximo `flush()`. Handles guardados passam a ser recusados imediatamente.
   WorldStatus destroyObject(const ObjectHandle &handle, u64 *operationId = nullptr);
@@ -265,6 +267,7 @@ private:
   double elapsed_ = 0;
   struct DelayedDestroy { ObjectHandle object; double due; };
   std::vector<DelayedDestroy> delayedDestroy_;
+  std::vector<ObjectId> unpublishedClones_;
 };
 
 } // namespace ae::runtime

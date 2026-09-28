@@ -201,6 +201,100 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         if (_dispatchDepth == 0) SweepRemoved();
     }
 
+    private static readonly JsonSerializerOptions FieldJson = new() { IncludeFields = true };
+    private JsonElement CaptureValue(object? value, string kind)
+    {
+        if (value is null) return JsonSerializer.SerializeToElement<object?>(null);
+        if (kind.StartsWith("array:", StringComparison.Ordinal))
+            return JsonSerializer.SerializeToElement(((System.Collections.IEnumerable)value).Cast<object?>()
+                .Select(v => CaptureValue(v, kind[6..])).ToArray());
+        if (kind == "object")
+        {
+            var reference = (ObjectReference)value;
+            if (reference.StatusIn(_scene!) == WorldStatus.ForeignWorld) throw new WorldException(WorldStatus.ForeignWorld, "copiar referência");
+            return JsonSerializer.SerializeToElement(new ObjectReference(_scene!.Exists(reference.ObjectId) ? reference.ObjectId : 0));
+        }
+        if (kind.StartsWith("component:", StringComparison.Ordinal))
+        {
+            var component = (Component)value.GetType().GetProperty("Component")!.GetValue(value)!;
+            if (component.IsAlive && !ReferenceEquals(component.Scene, _scene)) throw new WorldException(WorldStatus.ForeignWorld, "copiar componente");
+            return JsonSerializer.SerializeToElement(new { ObjectId = component.IsAlive ? component.Object.ObjectId : 0, InstanceId = component.IsAlive ? component.InstanceId : 0 });
+        }
+        return JsonSerializer.SerializeToElement(value, value.GetType(), FieldJson);
+    }
+    private Dictionary<string, JsonElement> CaptureProperties(Entry entry)
+    {
+        var result = new Dictionary<string, JsonElement>();
+        var type = entry.Instance.GetType();
+        foreach (var property in entry.Schema.Properties)
+        {
+            var member = ResolveMember(type, property);
+            var value = member is FieldInfo field ? field.GetValue(entry.Instance) : ((PropertyInfo)member).GetValue(entry.Instance);
+            result.Add(property.Id, CaptureValue(value, property.ValueType));
+        }
+        return result;
+    }
+    private static JsonElement RemapValue(JsonElement value, string kind, IReadOnlyDictionary<ulong, ulong> mapping)
+    {
+        if (value.ValueKind == JsonValueKind.Null) return value;
+        if (kind.StartsWith("array:", StringComparison.Ordinal))
+            return JsonSerializer.SerializeToElement(value.EnumerateArray().Select(v => RemapValue(v, kind[6..], mapping)).ToArray());
+        if (kind == "object" || kind.StartsWith("component:", StringComparison.Ordinal))
+        {
+            var source = value.GetProperty("ObjectId").GetUInt64();
+            var target = mapping.TryGetValue(source, out var copy) ? copy : source;
+            return kind == "object" ? JsonSerializer.SerializeToElement(new ObjectReference(target)) :
+                JsonSerializer.SerializeToElement(new { ObjectId = target, InstanceId = value.GetProperty("InstanceId").GetUInt64() });
+        }
+        return value;
+    }
+    public GameObject Instantiate(GameObject source, GameObject parent)
+    {
+        if (!Running || _stopping || _scene is null) throw new WorldException(WorldStatus.NotRunning, "instanciar");
+        if (!source.BelongsTo(_scene) || !parent.BelongsTo(_scene)) throw new WorldException(WorldStatus.ForeignWorld, "instanciar");
+        if (source.Parent is null) throw new WorldException(WorldStatus.InvalidArgument, "instanciar raiz da cena");
+        if (_dispatchDepth >= 32) throw new WorldException(WorldStatus.LimitReached, "instanciar");
+        var ids = new HashSet<ulong>(); var pending = new Stack<GameObject>(); pending.Push(source);
+        while (pending.TryPop(out var owner)) { ids.Add(owner.ObjectId); owner.PushAliveChildren(pending); }
+        var originals = _entries.Where(e => Alive(e) && ids.Contains(e.Instance.ObjectId)).ToArray();
+        if (_entries.Count + originals.Length > 4096) throw new WorldException(WorldStatus.LimitReached, "instanciar scripts");
+        // Captura serializada e construtores antes de criar qualquer objeto. Não
+        // copia caches privados, nem compartilha listas/curvas mutáveis da fonte.
+        var snapshots = originals.Select(e => (Source: e, Values: CaptureProperties(e),
+            Copy: (Behavior)Activator.CreateInstance(e.Instance.GetType())!)).ToArray();
+        var mapping = _scene.Instantiate(source.ObjectId, parent.ObjectId);
+        var root = mapping[source.ObjectId];
+        var prepared = new List<Entry>();
+        try
+        {
+            foreach (var snapshot in snapshots)
+            {
+                var original = snapshot.Source;
+                var owner = GameObject.Resolve(_scene, mapping[original.Instance.ObjectId]);
+                var instance = snapshot.Copy;
+                instance.Enabled = original.Instance.Enabled;
+                instance.Attach(_scene, owner.ObjectId, original.Instance.InstanceId, this, _bindComponentState);
+                var entry = new Entry(instance, original.Schema, owner); prepared.Add(entry);
+                var values = original.Schema.Properties.ToDictionary(p => p.Id,
+                    p => RemapValue(snapshot.Values[p.Id], p.ValueType, mapping));
+                ApplyProperties(instance, original.Schema, values, _scene);
+            }
+            if (!_scene.FinishInstantiation(root, true)) throw new WorldException(_scene.LastStatus, "publicar cópia");
+        }
+        catch
+        {
+            foreach (var entry in prepared) entry.Instance.Detach();
+            if (!_scene.FinishInstantiation(root, false)) throw new InvalidOperationException("Falha ao reverter instanciação incompleta.");
+            throw;
+        }
+        _entries.AddRange(prepared);
+        var result = GameObject.Resolve(_scene, root);
+        ++_dispatchDepth;
+        try { foreach (var entry in prepared) EnsureActivated(entry); }
+        finally { if (--_dispatchDepth == 0) SweepRemoved(); }
+        return result;
+    }
+
     public object? FindBehavior(ulong objectId, Type contract)
     {
         ArgumentNullException.ThrowIfNull(contract);
@@ -359,6 +453,18 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         if (!entry.Failed) entry.Instance.Enabled = edit.Enabled;
         return true;
     }
+    private static MemberInfo ResolveMember(Type type, ScriptPropertySchema property)
+    {
+        // The compiler walks declared members through the hierarchy. Reflection
+        // must do the same: GetField on a derived type omits private base fields.
+        // Stable IDs also avoid selecting an unrelated member that hides a name.
+        for (var current = type; current is not null && current != typeof(Behavior); current = current.BaseType)
+            foreach (var member in current.GetMember(property.Name, BindingFlags.DeclaredOnly |
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                if (member is FieldInfo or PropertyInfo && member.GetCustomAttribute<PropertyIdAttribute>()?.Id == property.Id)
+                    return member;
+        throw new InvalidOperationException("Compiled schema no longer matches its member: " + property.Id);
+    }
     private static void ApplyProperties(Behavior behavior, ScriptTypeSchema schema,
         IReadOnlyDictionary<string, JsonElement> values, ISceneAccess scene)
     {
@@ -368,11 +474,14 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         {
             if (!values.TryGetValue(property.Id, out var value)) continue;
             // Não públicos só com [SerializeField]; o compilador já recusou o resto.
-            var field = type.GetField(property.Name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var member = type.GetProperty(property.Name, BindingFlags.Instance | BindingFlags.Public);
+            var resolved = ResolveMember(type, property);
+            var field = resolved as FieldInfo;
+            var member = resolved as PropertyInfo;
             var memberType = field?.FieldType ?? member?.PropertyType
                 ?? throw new InvalidOperationException("Compiled schema no longer matches its member.");
-            var converted = property.ValueType.StartsWith("component:", StringComparison.Ordinal)
+            var converted = value.ValueKind == JsonValueKind.Null ?
+                (!memberType.IsValueType || Nullable.GetUnderlyingType(memberType) is not null ? null : throw new InvalidDataException("Null em campo de valor: " + property.Name)) :
+                property.ValueType.StartsWith("component:", StringComparison.Ordinal)
                 ? ComponentValue(scene, value, memberType, property.ValueType["component:".Length..])
                 : property.ValueType.StartsWith("array:component:", StringComparison.Ordinal)
                     ? ComponentList(scene, value, memberType, property.ValueType["array:component:".Length..])

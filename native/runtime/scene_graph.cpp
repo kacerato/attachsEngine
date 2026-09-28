@@ -1,4 +1,5 @@
 #include "runtime/scene_graph.h"
+#include "scene/script_behavior.h"
 
 #include <algorithm>
 #include <cmath>
@@ -31,6 +32,64 @@ void assignObjectName(SceneObject &object, std::string_view name) noexcept {
 }
 
 bool SceneGraph::acceptObject(const SceneObject &object) const { return object.components.valid(); }
+
+bool remapObjectReferences(SceneObject &object,const ObjectCloneMap &mapping) {
+  const auto remap=[&](u64 id)->u64 {
+    if(id>std::numeric_limits<ObjectId>::max()) return id;
+    const auto found=mapping.find(static_cast<ObjectId>(id));
+    return found==mapping.end()?id:found->second;
+  };
+  for(usize i=0;i<object.components.size();++i) {
+    const auto *component=object.components.at(i);
+    if(!scene::scriptBehavior(component) && component->type().references.empty()) continue;
+    auto copy=component->clone();
+    if(auto *script=scene::scriptBehavior(copy.get())) {
+      auto value=*script;
+      for(auto &property:value.properties) scene::remapScriptPropertyObjects(property,remap);
+      if(!object.components.replaceInstance(component->instanceId(),value)) return false;
+    } else {
+      for(const auto &property:copy->type().references) {
+        const auto old=property.read(*copy),target=remap(old);
+        if(target!=old) {
+          if(!property.write) return false;
+          property.write(*copy,target);
+        }
+      }
+      if(!object.components.replaceInstance(component->instanceId(),*copy)) return false;
+    }
+  }
+  return true;
+}
+
+ObjectId SceneGraph::cloneSubtree(ObjectId source,ObjectId parent,ObjectCloneMap &mapping,const std::function<bool(ObjectId)> &include) {
+  mapping.clear();
+  if(source==root() || !exists(source) || !exists(parent)) return kInvalidObject;
+  std::vector<ObjectId> ids;collectSubtree(source,ids);
+  if(include) std::erase_if(ids,[&](ObjectId id) {return !include(id);});
+  if(ids.empty() || ids.front()!=source) return kInvalidObject;
+  if(ids.size()>kMaximumObjects-entityCount()) return kInvalidObject;
+  std::vector<SceneObject> values;values.reserve(ids.size());
+  for(const auto id:ids) {
+    const auto &value=*find(id);
+    if(value.components.hasUnresolved() || !acceptObject(value)) return kInvalidObject;
+    values.push_back(value);
+  }
+  ObjectId createdRoot=kInvalidObject;
+  const auto rollback=[&]() {if(createdRoot) destroyEntity(createdRoot);mapping.clear();return kInvalidObject;};
+  for(usize i=0;i<values.size();++i) {
+    const auto &value=values[i];
+    if(i && !mapping.contains(value.parent)) return rollback();
+    const auto copy=createEntity(i?mapping.at(value.parent):parent,value.kind,value.name);
+    if(!copy) return rollback();
+    if(!i) createdRoot=copy;
+    mapping.emplace(value.id,copy);
+  }
+  // Todos os destinos existem antes das referências, inclusive irmãos à frente.
+  for(auto &value:values) {
+    if(!remapObjectReferences(value,mapping) || !applyEntityValues(mapping.at(value.id),value)) return rollback();
+  }
+  return createdRoot;
+}
 
 SceneGraph::SceneGraph() { reset(); }
 

@@ -10,6 +10,7 @@
 #include "scene/camera.h"
 #include "scene/camera_look.h"
 #include "scene/script_behavior.h"
+#include "scene/camera_follow.h"
 #include <sstream>
 #include <fstream>
 #include "editor/editor_archive.h"
@@ -49,6 +50,42 @@ AE_TEST(runtime_world_loads_scene_and_keeps_authoring_document_untouched) {
   AE_EXPECT_EQ(world.graph().find(child)->transform.position[1], 9.f, "mundo recebeu a pose");
   AE_EXPECT_EQ(doc.find(child)->transform.position[1], 0.f, "documento autoral intacto");
   AE_EXPECT_EQ(doc.revision(), revision, "nenhuma revisão do documento durante a execução");
+}
+
+AE_TEST(runtime_instantiation_remaps_complete_hierarchy_and_rolls_back_unpublished_copy) {
+  EditorDocument doc;
+  const auto source=named(doc,doc.root(),"Source"),child=named(doc,source,"Child"),external=named(doc,doc.root(),"External");
+  auto value=*doc.find(source);value.active=false;value.transform.position[0]=3;
+  auto *script=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="test.clone";script->source="Clone.cs";
+  script->properties={{"child","object",std::to_string(child)},{"external","object",std::to_string(external)},
+    {"component","component:astra.camera.follow",scene::scriptComponentValue(child,1)}};
+  AE_EXPECT_TRUE(doc.applyEntityValues(source,value),"fonte configurada");
+  value=*doc.find(child);auto *follow=static_cast<scene::CameraFollow*>(value.components.add(scene::CameraFollow::descriptor));
+  follow->target=source;AE_EXPECT_TRUE(doc.applyEntityValues(child,value),"referência nativa de volta ao pai");
+  const auto revision=doc.revision();GameWorld world;AE_EXPECT_TRUE(world.load(doc),"Play");
+  runtime::ObjectCloneMap mapping;WorldStatus status;
+  const auto copy=world.instantiate(world.handle(source),world.handle(doc.root()),mapping,status);
+  AE_EXPECT_TRUE(copy.valid() && mapping.size()==2 && copy.id!=source,"identidades novas para a subárvore inteira");
+  AE_EXPECT_TRUE(!world.activeSelf(copy) && world.graph().find(copy.id)->transform.position[0]==3,"atividade e pose local copiadas");
+  const auto *copied=scene::scriptBehavior(world.graph().find(copy.id)->components.at(0));
+  AE_EXPECT_TRUE(copied && copied->properties[0].value==std::to_string(mapping.at(child)) && copied->properties[1].value==std::to_string(external),"referência interna remapeada e externa preservada");
+  AE_EXPECT_TRUE(copied->properties[2].value==scene::scriptComponentValue(mapping.at(child),1),"identidade composta owner/instância remapeada");
+  const auto *copiedFollow=static_cast<const scene::CameraFollow*>(world.graph().find(mapping.at(child))->components.at(0));
+  AE_EXPECT_EQ(copiedFollow->target,static_cast<u64>(copy.id),"referência nativa aponta para cópia");
+  AE_EXPECT_TRUE(world.finishInstantiation(copy,true)==WorldStatus::Ok,"publicar");
+  AE_EXPECT_TRUE(world.destroyObject(world.handle(source))==WorldStatus::Ok && world.flush(),"destruir fonte");
+  AE_EXPECT_TRUE(world.alive(copy) && world.graph().exists(mapping.at(child)),"cópia independente");
+  const auto count=world.graph().entityCount();
+  const auto failed=world.instantiate(copy,world.handle(doc.root()),mapping,status);
+  AE_EXPECT_TRUE(failed.valid() && world.finishInstantiation(failed,false)==WorldStatus::Ok,"cancelar construção incompleta");
+  AE_EXPECT_TRUE(!world.alive(failed) && world.graph().entityCount()==count,"rollback remove toda a cópia sem fila");
+  const auto removedChild=world.graph().childrenOf(copy.id).front();
+  AE_EXPECT_TRUE(world.destroyObject(world.handle(removedChild))==WorldStatus::Ok,"filho marcado antes do ponto seguro");
+  const auto withoutRemoved=world.instantiate(copy,world.handle(doc.root()),mapping,status);
+  AE_EXPECT_TRUE(withoutRemoved.valid() && mapping.size()==1 && world.finishInstantiation(withoutRemoved,true)==WorldStatus::Ok,
+                 "clonagem não ressuscita filho aguardando remoção física");
+  AE_EXPECT_EQ(doc.revision(),revision,"cena autoral intacta");
 }
 
 AE_TEST(runtime_world_rejects_handles_from_another_play_session) {
