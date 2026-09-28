@@ -47,7 +47,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 30 | D · Curvas | ✔ | `Astra.AnimationCurve` em scripts com editor de curvas · `ff1d8e32` | I2 |
 | 31 | D · Arrays | ✔ | `T[]`/`List<T>` em campos de script; nativos seguem por slot (materiais) e lista de clipes · `1e634f23` | I2 |
 | 32 | D · Bar slider (dividir um todo em partes, ex. LOD) | ✔ | barra do LOD Group: divisores, marcador da vista, inserir/apagar nível · `89c5349e` | I2 |
-| 33 | D · Cores e gradientes | ◐ | janela de cor (SV/matiz contínuos, RGB 0–255/0–1/HSV, hex, alfa, HDR, original, amostras em bibliotecas) · `59c4a626`; `Astra.Gradient` com editor e presets · `a09ec1e9`; falta o conta-gotas (precisa ler o quadro da GPU) | I2 |
+| 33 | D · Cores e gradientes | ✔ | janela de cor (SV/matiz contínuos, RGB 0–255/0–1/HSV, hex, alfa, HDR, original, amostras em bibliotecas) · `59c4a626`; `Astra.Gradient` com editor e presets · `a09ec1e9`; conta-gotas lendo o pixel da tela na GPU · `07566b4b` | I2 |
 
 ## 3. Introduction to components — `Components.html`
 
