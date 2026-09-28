@@ -127,6 +127,9 @@ def camera_follow() -> str:
 
 
 ICONS: dict[str, str] = {
+    "scene/tag": f'''<path d="M18 24h43l49 49-37 37-49-49V24" {stroke(7)}/>
+<circle cx="43" cy="43" r="7" {stroke(5, ACCENT)}/>
+<path d="m65 58 24 24m-33-15 18 18" {stroke(5, ACCENT)}/>''',
     "physics/dynamic-sphere": physics("dynamic", "sphere"),
     "physics/dynamic-capsule": physics("dynamic", "capsule"),
     "physics/sensor-sphere": physics("sensor", "sphere"),

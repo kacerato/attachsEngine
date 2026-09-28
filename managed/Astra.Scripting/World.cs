@@ -179,6 +179,32 @@ public sealed class GameObject : IEquatable<GameObject>
         Check(Scene.SetActive(ObjectId, active), "alterar estado ativo");
     }
 
+    /// <summary>Tag do catálogo do projeto; nomes desconhecidos são recusados.</summary>
+    public string Tag
+    {
+        get { Require("ler tag"); return Scene.GetTag(ObjectId); }
+        set { Require("alterar tag"); Check(Scene.SetTag(ObjectId, value), "alterar tag"); }
+    }
+    public bool CompareTag(string tag)
+    {
+        Require("comparar tag"); var value = Scene.CompareTag(ObjectId, tag);
+        Check(value >= 0, "comparar tag"); return value == 1;
+    }
+    /// <summary>Busca global neste mundo, somente objetos ativos. Não inclui a raiz sintética.</summary>
+    public GameObject? FindWithTag(string tag)
+    {
+        Require("buscar tag"); var ids = Scene.FindTagged(tag, true);
+        return ids.Length == 0 ? null : Resolve(Scene, ids[0]);
+    }
+    /// <summary>Snapshot dos objetos ativos deste mundo com a tag; custo linear na cena.</summary>
+    public GameObject[] FindGameObjectsWithTag(string tag)
+    {
+        Require("buscar tag"); var ids = Scene.FindTagged(tag, false);
+        var result = new GameObject[ids.Length];
+        for (var i = 0; i < ids.Length; ++i) result[i] = Resolve(Scene, ids[i]);
+        return result;
+    }
+
     public GameObject? Parent
     {
         get

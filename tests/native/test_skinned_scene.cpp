@@ -510,7 +510,7 @@ AE_TEST(reimport_rebinds_missing_bones_and_translates_v1_clip_index) {
 }
 
 namespace {
-// Runtime de scripts falso: o suficiente para a ABI v14 chegar e ser usada.
+// Runtime de scripts falso: o suficiente para a ABI v15 chegar e ser usada.
 struct AnimationRuntime {
   static scene::ScriptSceneAccess access;
   static int start(const u8 *, int, const u8 *, int, const scene::ScriptSceneAccess *value) {
@@ -537,7 +537,7 @@ struct AnimationRuntime {
 scene::ScriptSceneAccess AnimationRuntime::access{};
 } // namespace
 
-AE_TEST(script_abi_v14_plays_blends_and_edits_clip_entries) {
+AE_TEST(script_abi_v15_plays_blends_and_edits_clip_entries) {
   const auto bytes = fixture("Fox.glb");
   EditorSession session;
   DeformationPublisher gpu;
@@ -568,7 +568,7 @@ AE_TEST(script_abi_v14_plays_blends_and_edits_clip_entries) {
   });
   AE_EXPECT_TRUE(play.start(doc, session.mapScene()), "Play com o runtime falso");
   auto &abi = AnimationRuntime::access;
-  AE_EXPECT_TRUE(abi.version == 14 && abi.available(), "ABI v14 completa");
+  AE_EXPECT_TRUE(abi.version == 15 && abi.available(), "ABI v15 completa");
   AE_EXPECT_TRUE(!abi.setParentWithPolicy(abi.context,owner,doc.root(),0,99),
                  "política de pose inválida recusada pela ABI");
   u64 ticket = 0;

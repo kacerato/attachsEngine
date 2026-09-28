@@ -1152,6 +1152,12 @@
       "name": "spot",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "scene/tag": {
+      "category": "scene",
+      "name": "tag",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

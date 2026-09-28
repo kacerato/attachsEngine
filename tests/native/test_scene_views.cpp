@@ -79,7 +79,7 @@ AE_TEST(scene_views_travel_in_the_scene_archive) {
   AE_EXPECT_TRUE(views.add(made("Interior",1.5f,7.25f,0.8f)),"vista autoral");
   document.setViews(views);
   const auto text = serializeEditorDocument(document,0);
-  AE_EXPECT_TRUE(text.starts_with("AETHER_EDITOR 13 "),"a versão do arquivo subiu com a seção");
+  AE_EXPECT_TRUE(text.starts_with("AETHER_EDITOR 14 "),"versão atual preserva vistas e tags");
   EditorDocument restored;
   AE_EXPECT_TRUE(deserializeEditorDocument(text,0,restored),"o arquivo abre");
   AE_EXPECT_TRUE(restored.views()==views,"a vista volta com a cena");

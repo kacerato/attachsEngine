@@ -36,6 +36,7 @@ SceneGraph::SceneGraph() { reset(); }
 
 void SceneGraph::reset() {
   layers_.reset();
+  tags_=ObjectTags{};
   input_ = InputActionMap{};
   records_.clear();
   records_.resize(1);  // posição 0 é o id inválido e nunca vive
@@ -176,7 +177,7 @@ bool SceneGraph::restoreEntity(const SceneObject &object, u32 childIndex) {
   if (object.id == kInvalidObject || object.id > kMaximumObjects || entityCount() >= kMaximumObjects) return false;
   if (exists(object.id)) return false;
   if (record(object.parent) == nullptr) return false;
-  if (!isTransformValid(object.transform) || !acceptObject(object)) return false;
+  if (!isTransformValid(object.transform) || !ObjectTags::validName(object.tag) || !acceptObject(object)) return false;
   if (object.id >= records_.size()) records_.resize(object.id + 1);
   Record &restored = records_[object.id];
   restored = Record{};
@@ -235,7 +236,7 @@ bool SceneGraph::setTransform(ObjectId id, const Transform &transform) {
 bool SceneGraph::applyEntityValues(ObjectId id, const SceneObject &values) {
   Record *found = record(id);
   if (found == nullptr) return false;
-  if (!isTransformValid(values.transform) || !acceptObject(values)) return false;
+  if (!isTransformValid(values.transform) || !ObjectTags::validName(values.tag) || !acceptObject(values)) return false;
   SceneObject &target = found->object;
   // Identidade e posição na árvore não vêm daqui: trocá-las exigiria mexer nas
   // listas de filhos, e um "aplicar valores" que reparenta em silêncio é uma
@@ -247,6 +248,7 @@ bool SceneGraph::applyEntityValues(ObjectId id, const SceneObject &values) {
   target.receiveShadow = values.receiveShadow;
   target.isStatic = values.isStatic;
   target.layer = values.layer;
+  target.tag = values.tag;
   target.components = values.components;
   target.rigidBodyEnabled = values.rigidBodyEnabled;
   std::copy(std::begin(values.rigidBody), std::end(values.rigidBody), target.rigidBody);

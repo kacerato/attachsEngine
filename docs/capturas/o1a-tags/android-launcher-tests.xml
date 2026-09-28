@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.aether.editor.shell.ProjectSceneSourceTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-09-28T15:58:05" hostname="LUCAS" time="0.156">
+  <properties/>
+  <testcase name="legacyEmptyArchiveRetainsItsPackage" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.037"/>
+  <testcase name="componentArchiveReopensWithoutPackage" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.006"/>
+  <testcase name="allNativeVersionsRouteByFingerprintIncludingInstanceArchive" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.054"/>
+  <testcase name="sparseArchiveReopensWithoutPackage" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.007"/>
+  <testcase name="legacyWithoutPublicArchiveKeepsPrivateMigrationPath" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.004"/>
+  <testcase name="newEmptyProjectHasNoPackage" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.013"/>
+  <testcase name="malformedArchiveNeverFallsBackToDemo" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.007"/>
+  <testcase name="unboundedHeaderIsRejected" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.007"/>
+  <testcase name="independentArchiveReopensWithoutPackage" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.008"/>
+  <testcase name="futureArchiveIsRejected" classname="dev.aether.editor.shell.ProjectSceneSourceTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

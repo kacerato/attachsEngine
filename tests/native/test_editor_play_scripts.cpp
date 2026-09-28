@@ -312,7 +312,7 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
                  "instância incluída para permitir a primeira ativação");
   const auto &abi = FakeRuntime::sceneAccess;
-  AE_EXPECT_TRUE(abi.version == 14 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_TRUE(abi.version == 15 && abi.available(), "contrato ABI completo");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
   AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
   const auto revision = play.world().structuralRevision();
@@ -499,6 +499,44 @@ AE_TEST(play_script_property_bridge_updates_physical_atmosphere_consumed_by_the_
   AE_EXPECT_TRUE(authored&&authored->values.sky==renderer::SkyModel::Atmosphere&&
                  authored->values.aerosolDensity==1.0f,
                  "mudança de gameplay não altera o documento autoral");
+}
+
+AE_TEST(play_tags_roundtrip_bridge_activity_and_destroy) {
+  EditorDocument doc;
+  runtime::ObjectTags tags;AE_EXPECT_TRUE(tags.add("Alvo") && tags.add("Missão"),"catálogo UTF-8");doc.setTags(tags);
+  const auto driver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Driver");
+  const auto parent=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Parent");
+  const auto child=doc.createEntity(parent,EditorEntityKind::Folder,"Child");
+  attachScript(doc,driver,"project.TagProbe");
+  auto values=*doc.find(child);values.tag="Alvo";doc.applyEntityValues(child,values);doc.setActive(parent,false);
+  EditorDocument restored;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,restored),"arquivo v14");
+  AE_EXPECT_TRUE(restored.find(child)->tag=="Alvo","atribuição persistida");restored.setTags(tags);
+  FakeRuntime::reset();EditorMapScene resources;EditorPlayScene play;
+  play.setScriptRuntime(FakeRuntime::api(),"/projeto");
+  AE_EXPECT_TRUE(play.start(restored,resources),"Play real");
+  const auto &abi=FakeRuntime::sceneAccess;auto *context=abi.context;
+  const auto *target=reinterpret_cast<const u8*>("Alvo");u64 found[2]{};
+  AE_EXPECT_EQ(abi.findTagged(context,target,4,found,2,0),0,"filho de pai inativo não encontrado");
+  AE_EXPECT_EQ(abi.compareTag(context,child,target,4),1,"comparar independe de ativação");
+  AE_EXPECT_TRUE(abi.setActive(context,parent,1)!=0,"ativar pai");
+  AE_EXPECT_EQ(abi.findTagged(context,target,4,nullptr,0,0),1,"consulta de tamanho");
+  AE_EXPECT_EQ(abi.findTagged(context,target,4,found,2,1),1,"primeiro objeto");
+  AE_EXPECT_EQ(found[0],static_cast<u64>(child),"busca atravessa outras subárvores");
+  const std::string utf8="Missão";const auto *text=reinterpret_cast<const u8*>(utf8.data());
+  AE_EXPECT_TRUE(abi.setTag(context,child,text,static_cast<int>(utf8.size()))!=0,"atribuir UTF-8");
+  u8 bytes[64]{};const auto size=abi.getTag(context,child,bytes,64);
+  AE_EXPECT_TRUE(std::string(reinterpret_cast<char*>(bytes),size)==utf8,"leitura exata");
+  AE_EXPECT_EQ(abi.findTagged(context,target,4,found,2,0),0,"troca elimina associação anterior");
+  AE_EXPECT_EQ(abi.compareTag(context,child,reinterpret_cast<const u8*>("missing"),7),-1,"tag desconhecida é erro");
+  AE_EXPECT_EQ(abi.setTag(context,child,reinterpret_cast<const u8*>("missing"),7),0,"escrita desconhecida recusada");
+  AE_EXPECT_EQ(abi.findTagged(context,reinterpret_cast<const u8*>("missing"),7,found,2,0),-1,"busca desconhecida é erro");
+  const auto h=play.world().handle(child);play.world().destroyObject(h);
+  AE_EXPECT_EQ(abi.findTagged(context,text,static_cast<int>(utf8.size()),found,2,0),0,"destruição pendente já excluída");
+  AE_EXPECT_EQ(abi.getTag(context,child,bytes,64),-1,"objeto destruído não resolve");
+  play.stop();AE_EXPECT_TRUE(restored.find(child)->tag=="Alvo","Play não altera autoria");
+  restored.setTags({});
+  AE_EXPECT_TRUE(!play.start(restored,resources),"referência sem catálogo bloqueia execução");
 }
 
 AE_TEST(play_scene_material_written_by_code_reaches_the_draw_state) {

@@ -343,6 +343,40 @@ void ScriptBridge::installAccess() {
     if (s.lastStatus_ != WorldStatus::Ok) return -1;
     return s.world_->activeSelf(handle) ? 1 : 0;
   };
+  access_.getTag=[](void *c,u64 id,u8 *out,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max() || capacity<0) {s.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    const auto h=s.world_->handle(static_cast<ObjectId>(id));s.lastStatus_=s.world_->validate(h);
+    if(s.lastStatus_!=WorldStatus::Ok) return -1;
+    const auto tag=s.world_->tagOf(h);
+    if(out && capacity>=static_cast<int>(tag.size())) std::memcpy(out,tag.data(),tag.size());
+    return static_cast<int>(tag.size());
+  };
+  access_.setTag=[](void *c,u64 id,const u8 *text,int length)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max() || !text || length<=0 || length>static_cast<int>(ObjectTags::MaximumNameBytes)) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    s.lastStatus_=s.world_->setTag(s.world_->handle(static_cast<ObjectId>(id)),viewOf(text,length));
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.compareTag=[](void *c,u64 id,const u8 *text,int length)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max() || !text || length<=0 || length>static_cast<int>(ObjectTags::MaximumNameBytes)) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    bool matches=false;s.lastStatus_=s.world_->compareTag(s.world_->handle(static_cast<ObjectId>(id)),viewOf(text,length),matches);
+    return s.lastStatus_==WorldStatus::Ok?(matches?1:0):-1;
+  };
+  access_.findTagged=[](void *c,const u8 *text,int length,u64 *out,int capacity,int firstOnly)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!text || length<=0 || length>static_cast<int>(ObjectTags::MaximumNameBytes) || capacity<0 ||
+       capacity>static_cast<int>(SceneGraph::kMaximumObjects) || (!out && capacity) || (firstOnly!=0 && firstOnly!=1)) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    u32 count=0;s.lastStatus_=s.world_->findTagged(viewOf(text,length),{out,static_cast<usize>(capacity)},count,firstOnly!=0);
+    return s.lastStatus_==WorldStatus::Ok?static_cast<int>(count):-1;
+  };
   access_.setActive = [](void *c, u64 id, int active) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
     s.lastStatus_ = s.world_->setActive(s.world_->handle(static_cast<ObjectId>(id)), active != 0);

@@ -1,0 +1,15 @@
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\math.cs(6,21): warning CS8981: O nome do tipo 'math' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\quaternion.cs(7,15): warning CS8981: O nome do tipo 'quaternion' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+
+  AstraWorldTests
+    [32mok[0m   AnimacaoComandaClipesPorNomePelaAbiDeAnimacao
+    [32mok[0m   ComponentesSaoEnderecadosPorInstanciaEObedecemAoContrato
+    [32mok[0m   FachadaGeradaUsaOsIdsETiposDoSchema
+    [32mok[0m   HierarquiaCriaEncontraEReparenteiaObjetos
+    [32mok[0m   ReferenciaGuardadaNaoSobreviveAoStop
+    [32mok[0m   ReferenciaVenceNaDestruicaoEArmazenamentoSaiNoPontoSeguro
+    [32mok[0m   ReferenciasDeComponenteRespeitamMundoEGeracao
+    [32mok[0m   ReparentRecusaPaiDeOutroMundoMesmoComIdsIguais
+    [32mok[0m   TransformLocalEDeMundoAtravessamAApi
+
+  [32mTUDO VERDE[0m — 9 passaram, 0 falharam, 0 pulados em 77 ms

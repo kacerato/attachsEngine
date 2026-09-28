@@ -9,6 +9,19 @@ namespace Aether.Tests;
 
 public static class AstraBehaviorTests
 {
+    [Test]
+    public static void TagsAcceptanceFixture_CompilesWithTheProjectCompiler()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "tests", "fixtures", "object-tags")))
+            root = root.Parent;
+        Assert.True(root is not null, "fixture de aceite no repositório");
+        var source = File.ReadAllText(Path.Combine(root!.FullName, "tests", "fixtures", "object-tags", "TagProbe.cs"));
+        using var project = new Project(source);
+        var compiled = project.Compile();
+        Assert.Equal("acceptance.tags.driver", compiled.Types.Single().Id);
+    }
+
     private sealed class Project : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "astra-behavior-" + Guid.NewGuid().ToString("N"));

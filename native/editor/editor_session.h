@@ -69,7 +69,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -103,6 +103,8 @@ public:
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
+  bool changeProjectTags(const runtime::ObjectTags &next);
+  bool assignTag(std::string_view name);
   bool saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error);
   // A receita do objeto inteiro: todos os componentes com preset portátil, na
   // ordem em que estão nele. É o que permite salvar "porta interativa" e não
@@ -1491,6 +1493,7 @@ private:
 
   const ui::UiFont *font_ = nullptr;
   const ui::UiIconAtlas *icons_ = nullptr;
+  runtime::ObjectTags projectTags_;
   EditorDocument document_;
   EditorFileSystem files_;
   EditorCodeWorkspace code_;

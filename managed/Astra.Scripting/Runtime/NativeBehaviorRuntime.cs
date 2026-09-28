@@ -48,7 +48,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v14). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v15). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -136,6 +136,10 @@ public static unsafe class NativeBehaviorRuntime
         // v14: estado ativo local, separado do estado herdado.
         public delegate* unmanaged<void*, ulong, int> GetActiveSelf;
 
+        // v15: tags e consultas globais restritas ao mundo desta sessão.
+        public delegate* unmanaged<void*, ulong, byte*, int, int> GetTag, SetTag, CompareTag;
+        public delegate* unmanaged<void*, byte*, int, ulong*, int, int, int> FindTagged;
+
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
             Generation != null && LastStatus != null && ParentOf != null && ChildCount != null && ChildAt != null &&
@@ -152,7 +156,8 @@ public static unsafe class NativeBehaviorRuntime
             AnimationCommand != null && GetAnimationState != null && SetAnimationState != null && AnimationClipAt != null &&
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
-            SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null;
+            SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -276,6 +281,42 @@ public static unsafe class NativeBehaviorRuntime
         }
         public int GetActive(ulong objectId) => Accessible ? access.GetActive(access.Context, objectId) : -1;
         public int GetActiveSelf(ulong objectId) => Accessible ? access.GetActiveSelf(access.Context, objectId) : -1;
+        public string GetTag(ulong objectId)
+        {
+            if (!Accessible) throw new WorldException(WorldStatus.NotRunning, "ler tag");
+            byte* buffer = stackalloc byte[64];
+            var size = access.GetTag(access.Context, objectId, buffer, 64);
+            if (size <= 0 || size > 63) throw new WorldException(LastStatus, "ler tag");
+            return Encoding.UTF8.GetString(buffer, size);
+        }
+        public bool SetTag(ulong objectId, string tag)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(tag, "tag");
+            fixed (byte* pointer = bytes) return access.SetTag(access.Context, objectId, pointer, bytes.Length) != 0;
+        }
+        public int CompareTag(ulong objectId, string tag)
+        {
+            if (!Accessible) return -1;
+            var bytes = Utf8(tag, "tag");
+            fixed (byte* pointer = bytes) return access.CompareTag(access.Context, objectId, pointer, bytes.Length);
+        }
+        public ulong[] FindTagged(string tag, bool firstOnly)
+        {
+            if (!Accessible) throw new WorldException(WorldStatus.NotRunning, "buscar tag");
+            var bytes = Utf8(tag, "tag");
+            fixed (byte* pointer = bytes)
+            {
+                var count = access.FindTagged(access.Context, pointer, bytes.Length, null, 0, firstOnly ? 1 : 0);
+                if (count < 0 || count > 65536) throw new WorldException(LastStatus, "buscar tag");
+                if (count == 0) return [];
+                var result = new ulong[count];
+                fixed (ulong* output = result)
+                    if (access.FindTagged(access.Context, pointer, bytes.Length, output, count, firstOnly ? 1 : 0) != count)
+                        throw new WorldException(LastStatus, "buscar tag");
+                return result;
+            }
+        }
         public bool SetActive(ulong objectId, bool active) =>
             Accessible && access.SetActive(access.Context, objectId, active ? 1 : 0) != 0;
 
@@ -621,7 +662,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 14 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 15 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

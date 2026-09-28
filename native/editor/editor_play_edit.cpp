@@ -96,6 +96,7 @@ private:
     if (std::strcmp(previous.name, next.name) != 0) record("Nome", world_.setName(handle, next.name));
     if (previous.active != next.active) record("Ativo", world_.setActive(handle, next.active));
     if (previous.layer != next.layer) record("Camada", world_.setLayer(handle, next.layer));
+    if (previous.tag != next.tag) record("Tag", world_.setTag(handle, next.tag));
     if (previous.visible != next.visible || previous.castShadow != next.castShadow ||
         previous.receiveShadow != next.receiveShadow)
       record("Visibilidade e sombras", world_.setRenderFlags(handle, next.visible, next.castShadow, next.receiveShadow));

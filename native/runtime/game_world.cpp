@@ -85,7 +85,7 @@ bool GameWorld::load(const SceneGraph &source) {
   source.collectSubtree(source.root(), ids);
   for (const ObjectId id : ids) {
     const auto *object = source.find(id);
-    if (!object || object->components.hasUnresolved()) return false;
+    if (!object || object->components.hasUnresolved() || !source.tags().contains(object->tag)) return false;
   }
   graph_ = source;
   ObjectId highest = graph_.root();
@@ -193,6 +193,39 @@ WorldStatus GameWorld::setActive(const ObjectHandle &h, bool active) {
   if (!graph_.setActive(h.id, active)) return WorldStatus::Rejected;
   ++structuralRevision_;
   if (changed) invalidated_ |= subtreeInvalidation(h.id);
+  return WorldStatus::Ok;
+}
+
+std::string_view GameWorld::tagOf(const ObjectHandle &h) const noexcept {
+  const auto *object=find(h);return object?std::string_view(object->tag):std::string_view{};
+}
+WorldStatus GameWorld::setTag(const ObjectHandle &h,std::string_view tag) {
+  const auto status=validate(h);if(status!=WorldStatus::Ok) return status;
+  if(!graph_.tags().contains(tag)) return WorldStatus::InvalidArgument;
+  auto value=*find(h);if(value.tag==tag) return WorldStatus::Ok;
+  value.tag=tag;return graph_.applyEntityValues(h.id,value)?WorldStatus::Ok:WorldStatus::Rejected;
+}
+WorldStatus GameWorld::compareTag(const ObjectHandle &h,std::string_view tag,bool &matches) const {
+  matches=false;const auto status=validate(h);if(status!=WorldStatus::Ok) return status;
+  if(!graph_.tags().contains(tag)) return WorldStatus::InvalidArgument;
+  matches=tagOf(h)==tag;return WorldStatus::Ok;
+}
+WorldStatus GameWorld::findTagged(std::string_view tag,std::span<u64> output,u32 &count,bool firstOnly) const {
+  count=0;if(!running()) return WorldStatus::NotRunning;
+  if(!graph_.tags().contains(tag)) return WorldStatus::InvalidArgument;
+  // Só visita os filhos de objetos vivos e ativos: não percorre a cadeia
+  // de ancestrais para cada candidato, nem inclui destruições pendentes.
+  std::vector<ObjectId> ids{graph_.root()};
+  for(usize cursor=0;cursor<ids.size();++cursor) {
+    const auto id=ids[cursor];
+    const auto h=handle(id);
+    if(!alive(h) || !activeSelf(h)) continue;
+    if(id!=graph_.root() && tagOf(h)==tag) {
+      if(count<output.size()) output[count]=id;
+      ++count;if(firstOnly) break;
+    }
+    for(const auto child:graph_.childrenOf(id)) ids.push_back(child);
+  }
   return WorldStatus::Ok;
 }
 

@@ -1,6 +1,7 @@
 #include "editor/editor_component_impact.h"
 #include "editor/editor_color_picker.h"
 #include "editor/editor_component_catalog.h"
+#include "editor/editor_project_tags.h"
 #include "editor/editor_collider_fit.h"
 #include "editor/editor_lod_group.h"
 #include "scene/script_behavior.h"
@@ -558,13 +559,54 @@ bool EditorSession::setProjectDirectory(const char *path) {
   state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
   state_.folderImportRequested=false;
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
+  runtime::ObjectTags tags;std::string tagError;
+  if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
   if(!files_.setRoot(path)) return false;
+  projectTags_=std::move(tags);document_.setTags(projectTags_);
+  state_.tagPicker=false;state_.editingTagName=false;state_.editingTagSearch=false;state_.tagPage=0;state_.tagQuery.clear();
   environmentBatchRequest_.clear();multiEnvironments_.clear();multiProfiles_.clear();
   environmentMaps_.clear();
   state_.presetPanel=false;state_.presetNaming=false;state_.presetChoices.clear();componentPresets_=EditorComponentPresets{};
   state_.codeRecoveryPending=code_.hasRecovery(files_);
   loadEditorPreferences();
   return true;
+}
+
+bool EditorSession::changeProjectTags(const runtime::ObjectTags &next) {
+  if(isPlaying() || playMirrorOpen_ || history_.isOpen() || files_.rootPath().empty()) {
+    state_.status="Edite o catálogo fora do Play, com um projeto aberto";return false;
+  }
+  const auto before=projectTags_;if(before==next) return true;
+  const auto project=files_.rootPath();
+  const auto apply=[this,project](const runtime::ObjectTags &expected,const runtime::ObjectTags &value) {
+    if(files_.rootPath()!=project || projectTags_!=expected) {state_.status="Catálogo do histórico não corresponde ao projeto";return false;}
+    std::string error;
+    for(const auto &name:expected.names()) if(!value.contains(name) && !projectTagUnused(project,document_,name,error)) {
+      state_.status=error;return false;
+    }
+    if(!saveProjectTags(project,expected,value,error)) {state_.status=error;return false;}
+    projectTags_=value;document_.setTags(value);state_.tagPage=0;return true;
+  };
+  if(!apply(before,next)) return false;
+  return history_.recordResource("Tags do projeto",[apply,before,next](bool forward) {
+    return forward?apply(before,next):apply(next,before);
+  });
+}
+
+bool EditorSession::assignTag(std::string_view name) {
+  if(!document_.tags().contains(name) || history_.isOpen()) return false;
+  const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+  if(!document_.find(target) || target==document_.root()) return false;
+  std::vector<EditorEntityId> targets{target};
+  if(target==state_.selection && state_.selectionSet.size()>1) targets=state_.selectionSet;
+  if(!history_.begin("Tag")) return false;
+  for(const auto id:targets) {
+    const auto *object=document_.find(id);if(!object || id==document_.root()) continue;
+    if(object->tag==name) continue;
+    auto values=*object;values.tag=name;
+    if(!history_.applyValues(document_,id,values)) {history_.cancel(document_);return false;}
+  }
+  history_.end();state_.tagPicker=false;state_.status="Tag atribuída";refreshMultiEdit();return true;
 }
 
 void EditorSession::loadEditorPreferences() {
@@ -1186,6 +1228,8 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.editingReferenceSearch) {edit.purpose=EditorTextPurpose::ReferenceSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingGlobalSearch) {edit.purpose=EditorTextPurpose::GlobalSearch;edit.text=state_.renameText;return edit;}
   if(state_.namingLayout) {edit.purpose=EditorTextPurpose::LayoutName;edit.text=state_.renameText;return edit;}
+  if(state_.editingTagName) {edit.purpose=EditorTextPurpose::TagName;edit.text=state_.renameText;return edit;}
+  if(state_.editingTagSearch) {edit.purpose=EditorTextPurpose::TagSearch;edit.text=state_.tagQuery;return edit;}
   if(state_.editingPhysicsLayerName) {
     edit.purpose=EditorTextPurpose::PhysicsLayerName;edit.field=state_.physicsLayer;
     edit.text=document_.layers().name(state_.physicsLayer);return edit;
@@ -1449,7 +1493,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   const auto close=[&] {
     state_.presetNaming=false;
     state_.viewNaming=false;state_.viewRenaming=false;
-    state_.editingPhysicsLayerName=false;
+    state_.editingPhysicsLayerName=false;state_.editingTagName=false;state_.editingTagSearch=false;
     state_.editingInputActionName=false;state_.editingInputContext=false;state_.inputEditField=0;
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
@@ -1507,6 +1551,17 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     }
     if(!ok || !history_.setInputActions(document_,map)) {state_.status="Valor ou nome inválido para a ação";return false;}
     close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::TagSearch) {
+    state_.tagQuery=std::string(text.substr(0,127));state_.tagPage=0;close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::TagName) {
+    if(edit.version.revision!=document_.revision()) {close();state_.status="Cena mudou; reabra a criação de tag";return false;}
+    auto tags=projectTags_;const auto name=trimmedName(text);
+    if(!tags.add(name)) {state_.status="Nome inválido, duplicado, acima de 63 bytes ou catálogo cheio";return false;}
+    if(!changeProjectTags(tags)) return false;
+    state_.tagQuery=std::string(name);state_.tagSelected=std::string(name);state_.tagPage=0;
+    state_.status="Tag criada no projeto; escolha-a para atribuir";close();return true;
   }
   if(edit.purpose==EditorTextPurpose::PhysicsLayerName) {
     if(edit.version.revision!=document_.revision() || isPlaying() || history_.isOpen() ||
@@ -1929,7 +1984,7 @@ void EditorSession::endPlayInspect() {
 
 bool EditorSession::inspectorModalOpen() const noexcept {
   return state_.enumPicker || state_.addingComponent || state_.referenceInstance || state_.numericField || state_.colorField ||
-         state_.gradientField || state_.curveField || state_.editingScriptInstance;
+         state_.gradientField || state_.curveField || state_.editingScriptInstance || state_.tagPicker;
 }
 
 EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
@@ -1989,11 +2044,18 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
   }
   const auto target=inspectorScopeFor(event);
+  const auto hit=router_.hitTest(event.position);
+  const u32 widget=hit.target==UiPointerTarget::Widget?hit.widgetId:0;
+  // O histórico já restaura o valor próprio de cada objeto. Replicar a
+  // diferença do primário depois de Undo destrói os valores mistos e o Redo.
+  const bool historyReplay=widget==widgetId(EditorWidget::Undo) || widget==widgetId(EditorWidget::Redo) ||
+      (widget>=widgetId(EditorWidget::UndoHistoryRowBase) &&
+       widget<=widgetId(EditorWidget::UndoHistoryRowBase)+history_.entryCount());
   const auto run=[&] {
     const bool consumed=inInspectorScope(target,[&] {
       // Sem alvo próprio (travado/focado), o Inspector é o da seleção: a
       // edição do ativo vale para todos os selecionados.
-      if(target && target!=state_.selection) return handlePointerNow(event);
+      if(historyReplay || (target && target!=state_.selection)) return handlePointerNow(event);
       return withMultiEdit([&] {return handlePointerNow(event);});
     });
     // O modal que ficou aberto pertence ao Inspector que o abriu.
@@ -2017,15 +2079,16 @@ void EditorSession::refreshMultiEdit() {
   std::vector<const EditorEntity *> others;
   for(const auto id:state_.selectionSet) if(id!=state_.selection) if(const auto *other=document_.find(id)) others.push_back(other);
   const auto mixedIf=[&](bool differs,std::string key){if(differs) view.mixed.push_back(std::move(key));};
-  bool name=false,visible=false,shadow=false,layer=false,active=false;
+  bool name=false,visible=false,shadow=false,layer=false,active=false,tag=false;
   bool channel[3][3]{};
   for(const auto *other:others) {
+    tag|=other->tag!=primary->tag;
     name|=std::string_view(other->name)!=primary->name;visible|=other->visible!=primary->visible;
     shadow|=other->castShadow!=primary->castShadow;layer|=other->layer!=primary->layer;active|=other->active!=primary->active;
     for(u32 row=0;row<3;++row) for(u32 axis=0;axis<3;++axis)
       channel[row][axis]|=transformChannel(other->transform,row,axis)!=transformChannel(primary->transform,row,axis);
   }
-  mixedIf(name,"name");mixedIf(visible,"visible");mixedIf(shadow,"castShadow");mixedIf(layer,"layer");mixedIf(active,"active");
+  mixedIf(tag,"tag");mixedIf(name,"name");mixedIf(visible,"visible");mixedIf(shadow,"castShadow");mixedIf(layer,"layer");mixedIf(active,"active");
   for(u32 row=0;row<3;++row) for(u32 axis=0;axis<3;++axis) mixedIf(channel[row][axis],"t."+std::to_string(row)+std::to_string(axis));
   // Componentes: em comum quando todos têm o mesmo tipo na mesma ocorrência.
   std::vector<std::string> kindsOutside;
@@ -2083,6 +2146,7 @@ void EditorSession::replicateEdit(EditorEntityId id,const EditorEntity &before,u
     const auto flag=[&](bool EditorEntity::*field){if(before.*field!=after.*field) {values.*field=after.*field;changed=true;}};
     flag(&EditorEntity::active);flag(&EditorEntity::visible);flag(&EditorEntity::castShadow);flag(&EditorEntity::receiveShadow);flag(&EditorEntity::isStatic);
     if(before.layer!=after.layer) {values.layer=after.layer;changed=true;}
+    if(before.tag!=after.tag && values.tag!=after.tag) {values.tag=after.tag;changed=true;}
     if(!gizmo) for(u32 a=0;a<3;++a) {
       if(before.transform.position[a]!=after.transform.position[a]) {values.transform.position[a]=after.transform.position[a];changed=true;}
       if(before.transform.rotationDegrees[a]!=after.transform.rotationDegrees[a]) {values.transform.rotationDegrees[a]=after.transform.rotationDegrees[a];changed=true;}
@@ -2717,6 +2781,28 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  if(routing.tapped) {
+    const auto key=routing.widgetId;
+    if(key==widgetId(EditorWidget::ObjectTagOpen)) {state_.tagPicker=true;state_.tagPage=0;state_.tagQuery.clear();return true;}
+    if(key==widgetId(EditorWidget::TagClose)) {state_.tagPicker=false;return true;}
+    if(key==widgetId(EditorWidget::TagNew)) {state_.editingTagName=true;state_.renameText[0]=0;return true;}
+    if(key==widgetId(EditorWidget::TagSearch)) {
+      state_.editingTagSearch=true;std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.tagQuery.c_str());return true;
+    }
+    if(key==widgetId(EditorWidget::TagPrevious)) {if(state_.tagPage) --state_.tagPage;return true;}
+    if(key==widgetId(EditorWidget::TagNext)) {++state_.tagPage;return true;}
+    if(key==widgetId(EditorWidget::TagDelete)) {
+      auto tags=projectTags_;if(tags.remove(state_.tagSelected) && changeProjectTags(tags)) {
+        state_.tagSelected="Untagged";state_.status="Tag excluída do catálogo";
+      }
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::TagRowBase) && key<widgetId(EditorWidget::TagRowBase)+runtime::ObjectTags::MaximumCount) {
+      const auto index=key-widgetId(EditorWidget::TagRowBase);const auto &names=document_.tags().names();
+      if(index<names.size()) {if(state_.tagPicker) assignTag(names[index]);else state_.tagSelected=names[index];}
+      return true;
+    }
+  }
   if(multiAssetEditing_ && state_.materialInspector.valid() && routing.tapped &&
      routing.heldSeconds>=ui::kUiLongPressSeconds && state_.setValueMenu.key.empty()) {
     const auto field=materialWidgetField(routing.widgetId,state_.textureBinding);
@@ -4635,7 +4721,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingPhysicsLayerName) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingTagName || state_.editingTagSearch || state_.editingPhysicsLayerName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -5461,10 +5547,15 @@ bool EditorSession::startPlay() {
       state_.code->catalogState()==EditorCodeCatalogState::Stale || state_.code->dirty())) return false;
   state_.workspace=EditorWorkspace::Play;state_.playPaused=false;state_.playStepRequested=false;
   preparePlay();
-  return true;
+  return playRequested_;
 }
 
 void EditorSession::preparePlay() {
+  std::vector<EditorEntityId> tagObjects;document_.collectSubtree(document_.root(),tagObjects);
+  for(const auto id:tagObjects) if(!document_.tags().contains(document_.find(id)->tag)) {
+    state_.status="Tag ausente no catálogo: "+document_.find(id)->tag;
+    state_.workspace=EditorWorkspace::Scene;playRequested_=false;return;
+  }
   state_.playHasScripts=runtime::ScriptBridge::hasScripts(document_);
   state_.playSecondaryActionLabel.clear();state_.playHudMessage.clear();
   for(const auto &action:document_.inputActions().actions()) {
@@ -6296,6 +6387,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   if(isPlaying()) return false;
   EditorDocument candidate;
   if(!loadEditorDocument(path,fingerprint,candidate)) return false;
+  candidate.setTags(projectTags_);
   // Reconciliar ANTES de conferir a extração: a cena pode trazer identidades
   // cujos slots mudaram, e a checagem tem de valer para o documento que vai
   // realmente ser adotado.
@@ -8039,6 +8131,7 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
   if(isPlaying()) return false;
   cancelPointers();
   if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
+  document_.setTags(projectTags_);
   packageFingerprint_=packageFingerprint;
   importedSources_.clear();
   state_.creationAvailable=creationAlwaysAvailable();

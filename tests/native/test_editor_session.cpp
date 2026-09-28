@@ -19,6 +19,7 @@
 #include "editor/editor_properties.h"
 #include "scene/skinned_mesh.h"
 #include "runtime/input_actions.h"
+#include "editor/editor_project_tags.h"
 
 #include <cmath>
 #include <cstdio>
@@ -50,6 +51,42 @@ AE_TEST(editor_independent_document_roundtrip_without_map_resources) {
   AE_EXPECT_TRUE(reopened.extractMap(draws) && draws.empty(),"no hidden draws");
   AE_EXPECT_TRUE(!reopened.load(path.string().c_str(),123),"different resource namespace rejected");
   AE_EXPECT_TRUE(reopened.document().entityCount()==2,"failed load preserves document");
+}
+
+AE_TEST(editor_tags_catalog_assignment_history_and_project_reopen) {
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("astra-tags-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directory(root);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code ec;fs::remove_all(path,ec);}} cleanup{root};
+  EditorSession session;session.importMap({}, {}, false);
+  AE_EXPECT_TRUE(session.setProjectDirectory(root.string().c_str()),"abrir projeto");
+  auto tags=session.document().tags();AE_EXPECT_TRUE(tags.add("Alvo"),"nova tag");
+  AE_EXPECT_TRUE(session.changeProjectTags(tags),"salvar catálogo");
+  auto &doc=session.document();const auto a=doc.createEntity(doc.root(),EditorEntityKind::Folder,"A");
+  const auto b=doc.createEntity(doc.root(),EditorEntityKind::Folder,"B");session.setSelection(a);
+  AE_EXPECT_TRUE(session.assignTag("Alvo"),"atribuir");
+  AE_EXPECT_TRUE(session.history().undo(doc) && doc.find(a)->tag=="Untagged","desfazer atribuição");
+  AE_EXPECT_TRUE(session.history().redo(doc) && doc.find(a)->tag=="Alvo","refazer atribuição");
+  // A é o primário e já tem o valor escolhido; B ainda precisa recebê-lo.
+  auto &state=const_cast<EditorScreenState&>(session.screen());state.selectionSet={a,b};state.inspectorTarget=a;
+  const auto depth=session.history().undoDepth();
+  AE_EXPECT_TRUE(session.assignTag("Alvo") && doc.find(b)->tag=="Alvo","multi aplica mesmo com primário igual");
+  AE_EXPECT_EQ(session.history().undoDepth(),depth+1,"uma transação para multisseleção");
+  AE_EXPECT_TRUE(session.history().undo(doc) && doc.find(a)->tag=="Alvo" && doc.find(b)->tag=="Untagged","undo multi preserva valores distintos");
+  const auto scene=(root/"main.aescene").string();AE_EXPECT_TRUE(session.save(scene.c_str(),0),"salvar cena");
+  auto removed=tags;removed.remove("Alvo");
+  AE_EXPECT_TRUE(!session.changeProjectTags(removed),"tag usada na cena aberta protegida");
+  state.selectionSet={a};session.assignTag("Untagged");
+  AE_EXPECT_TRUE(!session.changeProjectTags(removed),"tag usada no arquivo salvo protegida");
+  EditorSession reopened;AE_EXPECT_TRUE(reopened.setProjectDirectory(root.string().c_str()) && reopened.load(scene.c_str(),0),"reabrir projeto e cena");
+  AE_EXPECT_TRUE(reopened.document().tags().contains("Alvo") && reopened.document().find(a)->tag=="Alvo","catálogo e atribuição reaparecem");
+  AE_EXPECT_TRUE(session.save(scene.c_str(),0) && session.changeProjectTags(removed),"excluir após remover e salvar atribuições");
+  AE_EXPECT_TRUE(session.history().undo(doc) && doc.tags().contains("Alvo"),"undo restaura catálogo no disco");
+  runtime::ObjectTags disk;std::string error;AE_EXPECT_TRUE(loadProjectTags(root.string(),disk,error) && disk==tags,"catálogo persistido pelo histórico");
+  std::ofstream(root/".astra"/"tags.astra")<<"ASTRA_TAGS 1 1\n\"Externo\"\n";
+  AE_EXPECT_TRUE(!session.changeProjectTags(removed),"mudança externa não é sobrescrita");
+  std::ofstream(root/".astra"/"tags.astra")<<"corrompido";
+  AE_EXPECT_TRUE(!reopened.setProjectDirectory(root.string().c_str()),"arquivo inválido não vira catálogo vazio");
 }
 
 AE_TEST(editor_creation_availability_follows_imported_resources) {
@@ -782,6 +819,44 @@ void revealProperty(Fixture &fixture,u32 widget) {
   }
 }
 }
+AE_TEST(editor_tags_touch_creation_search_assignment_and_missing_definition) {
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("astra-tags-ui-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directory(root);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code ec;fs::remove_all(path,ec);}} cleanup{root};
+  Fixture f;auto &session=f.session;
+  AE_EXPECT_TRUE(session.setProjectDirectory(root.string().c_str()),"projeto");
+  openProjectSection(f,EditorProjectSection::Tags);
+  tapWidget(f,widgetId(EditorWidget::TagNew));
+  const auto create=session.pendingTextEdit();
+  AE_EXPECT_TRUE(create.purpose==EditorTextPurpose::TagName,"editor de nome real");
+  AE_EXPECT_TRUE(session.completeTextEdit(create,"Alvo",true),"criar pelo fluxo do teclado");session.update();
+  AE_EXPECT_TRUE(session.document().tags().contains("Alvo"),"catálogo atualizado");
+  tapWidget(f,widgetId(EditorWidget::TagSearch));
+  AE_EXPECT_TRUE(session.completeTextEdit(session.pendingTextEdit(),"Al",true),"buscar");session.update();
+  AE_EXPECT_TRUE(locateWidget(session,widgetId(EditorWidget::TagRowBase)+1).x>=0,"resultado filtrado alcançável");
+  auto &state=const_cast<EditorScreenState&>(session.screen());state.workspace=EditorWorkspace::Scene;
+  session.setSelection(f.cube);session.update();
+  tapWidget(f,widgetId(EditorWidget::ObjectFold));
+  revealProperty(f,widgetId(EditorWidget::ObjectTagOpen));tapWidget(f,widgetId(EditorWidget::ObjectTagOpen));
+  AE_EXPECT_TRUE(session.screen().tagPicker,"rota de atribuição dentro do Inspector");
+  tapWidget(f,widgetId(EditorWidget::TagRowBase)+1);
+  AE_EXPECT_TRUE(session.document().find(f.cube)->tag=="Alvo" && !session.screen().tagPicker,"toque atribui e retorna");
+  const auto other=session.document().createEntity(session.document().root(),EditorEntityKind::Folder,"Outro");
+  session.setSelection(other);state.selectionSet={f.cube,other};session.update();
+  tapWidget(f,widgetId(EditorWidget::ObjectFold));revealProperty(f,widgetId(EditorWidget::ObjectTagOpen));
+  tapWidget(f,widgetId(EditorWidget::ObjectTagOpen));tapWidget(f,widgetId(EditorWidget::TagRowBase)+1);
+  tapWidget(f,widgetId(EditorWidget::Undo));
+  AE_EXPECT_TRUE(session.document().find(f.cube)->tag=="Alvo" && session.document().find(other)->tag=="Untagged","undo por toque restaura valores distintos sem replicar");
+  tapWidget(f,widgetId(EditorWidget::Redo));
+  AE_EXPECT_TRUE(session.document().find(f.cube)->tag=="Alvo" && session.document().find(other)->tag=="Alvo","redo por toque continua disponível");
+  auto values=*session.document().find(f.cube);values.tag="Ausente";session.document().applyEntityValues(f.cube,values);
+  AE_EXPECT_TRUE(!session.startPlay() && !session.isPlaying(),"autostart recusa tag indefinida");
+  session.update();tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
+  AE_EXPECT_TRUE(!session.isPlaying(),"botão Play obedece à mesma trava");
+  AE_EXPECT_TRUE(session.importMap({}, {}, false) && session.document().tags().contains("Alvo"),"importação da biblioteca preserva catálogo do projeto");
+}
+
 AE_TEST(r3_import_lives_in_properties_and_does_not_block_the_editor) {
   Fixture fixture;
   fixture.session.beginImportPreparation();

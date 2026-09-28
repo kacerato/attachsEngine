@@ -260,6 +260,8 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
       request.purpose==ae::editor::EditorTextPurpose::ScriptName?"Nova classe C#":
       request.purpose==ae::editor::EditorTextPurpose::ResourceName?"Renomear recurso":
       request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":
+      request.purpose==ae::editor::EditorTextPurpose::TagName?"Nova tag":
+      request.purpose==ae::editor::EditorTextPurpose::TagSearch?"Buscar tag":
       request.purpose==ae::editor::EditorTextPurpose::PhysicsLayerName?"Renomear camada física":
       request.purpose==ae::editor::EditorTextPurpose::InputActionName?"Renomear ação de entrada":
       request.purpose==ae::editor::EditorTextPurpose::InputContext?"Contexto da ação":

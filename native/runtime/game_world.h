@@ -144,6 +144,10 @@ public:
   bool activeSelf(const ObjectHandle &handle) const noexcept;
   bool activeInHierarchy(const ObjectHandle &handle) const noexcept;
   WorldStatus setActive(const ObjectHandle &handle, bool active);
+  std::string_view tagOf(const ObjectHandle &handle) const noexcept;
+  WorldStatus setTag(const ObjectHandle &handle,std::string_view tag);
+  WorldStatus compareTag(const ObjectHandle &handle,std::string_view tag,bool &matches) const;
+  WorldStatus findTagged(std::string_view tag,std::span<u64> output,u32 &count,bool firstOnly=false) const;
   // Camada de gameplay (filtro de física e consultas) e flags de desenho do
   // objeto. A camada recria o corpo; as flags o renderer lê a cada quadro.
   WorldStatus setLayer(const ObjectHandle &handle, u32 layer);

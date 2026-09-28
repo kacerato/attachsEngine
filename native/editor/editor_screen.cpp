@@ -5018,13 +5018,73 @@ void buildImportLinkCard(ScreenBuilder &builder, UiRect &content) {
 // desenhos), sombra projetada (renderer) e camada (física). "Estático" e
 // "receber sombra" existem no documento mas ninguém os lê ainda; mostrá-los
 // seria prometer comportamento que não existe.
+void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  const auto &names=state.document->tags().names();
+  const auto *object=state.document->find(state.inspectorTarget?state.inspectorTarget:state.selection);
+  auto title=takeTop(content,40);
+  builder.list.addImage(centred(takeLeft(title,28),22,22),static_cast<UiImageId>(UiIcon::SceneTag),theme.color.accent);
+  if(assigning) {
+    auto back=takeRight(title,64);builder.label(back,"Voltar",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(back,widgetId(EditorWidget::TagClose));
+  }
+  builder.label(title,assigning?"Atribuir tag":"Tags do projeto",theme.color.text,theme.type.cardName);
+  std::string detail=assigning?(state.multi.count>1?std::to_string(state.multi.count)+" objetos selecionados":object?object->name:""):
+                               std::to_string(names.size()-1)+" tags · uma por objeto";
+  builder.label(takeTop(content,26),detail.c_str(),theme.color.textDim,theme.type.caption);
+  auto tools=takeTop(content,44),create=takeRight(tools,78);
+  builder.list.addRect(deflate(tools,UiInsets::all(3)),theme.color.raised,theme.radius.control);
+  builder.label(deflate(tools,UiInsets::all(9)),state.tagQuery.empty()?"Buscar tags...":state.tagQuery.c_str(),theme.color.textDim,theme.type.caption);
+  builder.router.addRegion(tools,widgetId(EditorWidget::TagSearch));
+  const bool authoring=state.workspace!=EditorWorkspace::Play && !state.playInspect;
+  builder.label(create,"+ Nova",authoring?theme.color.accent:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+  if(authoring) builder.router.addRegion(create,widgetId(EditorWidget::TagNew));
+  UiRect removal{};
+  if(!assigning) removal=takeBottom(content,44);
+  auto footer=takeBottom(content,36);
+  std::vector<u32> counts(names.size()),shown;
+  std::vector<EditorEntityId> ids;state.document->collectSubtree(state.document->root(),ids);
+  for(const auto id:ids) if(id!=state.document->root()) {
+    const auto &tag=state.document->find(id)->tag;
+    const auto it=std::find(names.begin(),names.end(),tag);if(it!=names.end()) ++counts[it-names.begin()];
+  }
+  const auto query=editorSearchKey(state.tagQuery);
+  for(u32 i=0;i<names.size();++i) if(query.empty() || editorSearchKey(names[i]).find(query)!=std::string::npos) shown.push_back(i);
+  const u32 pageSize=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/44));
+  const u32 pages=std::max(1u,static_cast<u32>((shown.size()+pageSize-1)/pageSize));
+  const u32 page=std::min(state.tagPage,pages-1);
+  if(shown.empty()) builder.label(takeTop(content,44),"Nenhuma tag encontrada",theme.color.textMuted,theme.type.caption);
+  for(u32 slot=page*pageSize;slot<shown.size() && slot<(page+1)*pageSize && content.height>=32;++slot) {
+    const auto index=shown[slot];auto row=takeTop(content,44),text=deflate(row,UiInsets::all(6));
+    const bool selected=assigning?object && !builder.mixed("tag") && object->tag==names[index]:state.tagSelected==names[index];
+    if(selected) builder.list.addRect({row.x,row.y+7,3,row.height-14},theme.color.accent,1);
+    builder.list.addRect({row.x,row.bottom()-1,row.width,1},theme.color.lineSoft);
+    auto usage=takeRight(text,82);
+    builder.label(text,index==0?"Sem tag":names[index].c_str(),selected?theme.color.accent:theme.color.text,theme.type.body);
+    const auto count=std::to_string(counts[index])+" na cena";
+    builder.label(usage,count.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::End);
+    builder.router.addRegion(row,widgetId(EditorWidget::TagRowBase)+index);
+  }
+  auto previous=takeLeft(footer,42),next=takeRight(footer,42);
+  builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.body,UiAlign::Center);
+  builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.body,UiAlign::Center);
+  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::TagPrevious));
+  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::TagNext));
+  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  if(!assigning) {
+    const bool removable=authoring && state.tagSelected!="Untagged" && state.document->tags().contains(state.tagSelected);
+    builder.label(removal,"Excluir tag sem uso",removable?theme.color.text:theme.color.textFaint,theme.type.caption);
+    if(removable) builder.router.addRegion(removal,widgetId(EditorWidget::TagDelete));
+  }
+}
+
 void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   // 0 nome, 1 visível, 2 sombra projetada (só com malha: sem desenho não há
   // sombra), 3 camada, 4 informação.
   std::vector<u32> kinds{0,1};
   if(meshRenderer(entity)) kinds.push_back(2);
-  kinds.push_back(3);kinds.push_back(4);
+  kinds.push_back(3);if(entity.id!=state.document->root()) kinds.push_back(5);kinds.push_back(4);
   const u32 rows=static_cast<u32>(kinds.size());
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/36));
   const u32 pages=(rows+perPage-1)/perPage,page=std::min(state.propertyPage,pages-1);
@@ -5054,6 +5114,13 @@ void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity 
       const auto name=state.document->layers().name(layer);
       const std::string text=builder.mixed("layer")?std::string("\xE2\x80\x94"):name.empty()?"Camada "+std::to_string(layer):std::string(name);
       builder.label(line,text.c_str(),theme.color.text,theme.type.caption,UiAlign::Center);
+    } else if(row==5) {
+      builder.label(takeLeft(line,line.width*.34f),"Tag",theme.color.textDim,theme.type.caption);
+      const bool known=state.document->tags().contains(entity.tag);
+      const std::string text=builder.mixed("tag")?"—":!known?"Ausente: "+entity.tag:entity.tag=="Untagged"?"Sem tag":entity.tag;
+      builder.list.addRect(deflate(line,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(line,text.c_str(),known?theme.color.text:theme.color.warning,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(line,widgetId(EditorWidget::ObjectTagOpen));
     } else {
       const auto children=state.document->childrenOf(entity.id).size();
       const std::string info="ID "+std::to_string(entity.id)+" · "+std::to_string(children)+(children==1?" filho":" filhos");
@@ -6016,6 +6083,10 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     return;
   }
 
+  if(builder.state.tagPicker && !onlyComponent && (!builder.state.inspectorTarget || builder.state.inspectorTarget==target)) {
+    builder.multiEdit=builder.state.multi.count>1 && target==builder.state.selection && !builder.focusedWindow;
+    buildTags(builder,content,true);return;
+  }
   UiRect header = takeTop(content, kPanelHeaderHeight);
   builder.list.addImage(centred(takeLeft(header, 26.0f), 18.0f, 18.0f),
                         static_cast<UiImageId>(iconForEntity(*entity)), theme.color.text);
@@ -6170,7 +6241,7 @@ bool platformFieldActive(const EditorScreenState &state) {
          (state.gradientField != 0 && state.gradientText != 0) || (state.curveField != 0 && state.curveText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
-         state.editingPhysicsLayerName || state.editingInputActionName || state.editingInputContext || state.inputEditField;
+         state.editingTagName || state.editingTagSearch || state.editingPhysicsLayerName || state.editingInputActionName || state.editingInputContext || state.inputEditField;
 }
 
 const char *platformFieldTitle(const EditorScreenState &state) {
@@ -6181,6 +6252,8 @@ const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.numericField != 0) return "Valor";
   if (state.editingInputActionName) return "Ação";
   if (state.editingInputContext) return "Contexto";
+  if (state.editingTagName) return "Nova tag";
+  if (state.editingTagSearch) return "Buscar tag";
   if (state.editingPhysicsLayerName) return "Camada";
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
@@ -7618,7 +7691,8 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   u32 layers=0;for(u32 i=0;i<runtime::GameplayLayers::kCount;++i) layers+=state.document->layers().named(i)?1u:0u;
   std::vector<Section> sections{
     {EditorProjectSection::Layers,UiIcon::SceneLayers,"Camadas e colisão",std::to_string(layers)+" camada(s)"},
-    {EditorProjectSection::Input,UiIcon::InputAction,"Entrada",std::to_string(state.document->inputActions().actions().size())+" ação(ões)"}};
+    {EditorProjectSection::Input,UiIcon::InputAction,"Entrada",std::to_string(state.document->inputActions().actions().size())+" ação(ões)"},
+    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-1)+" no projeto"}};
   if(waterCreationAvailable(state)) sections.push_back({EditorProjectSection::Water,UiIcon::NatureWater,"Água da cena","Superfícies e ondas"});
   if(wide) builder.label(takeTop(rail,30),"PROJETO",theme.color.textMuted,theme.type.label);
   for(const auto &section:sections) {
@@ -7637,6 +7711,7 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
     router.addRegion(cell,widgetId(EditorWidget::ProjectSectionBase)+static_cast<u32>(section.id));
   }
   switch(state.projectSection) {
+    case EditorProjectSection::Tags: buildTags(builder,content,false);break;
     case EditorProjectSection::Layers: buildPhysicsLayers(builder,content);break;
     case EditorProjectSection::Input: buildInputWorkspaceFocused(builder,content);break;
     case EditorProjectSection::Water: {
@@ -8086,7 +8161,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   // A busca global fica sob o teclado interno, que edita o campo dela.
   if(state.globalSearch) buildGlobalSearch(builder);
-  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingPhysicsLayerName)) {
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingTagName || state.editingTagSearch || state.editingPhysicsLayerName)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
@@ -8388,9 +8463,9 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   // e desliza para fora desistiu dele.
   if (!routing.tapped) return outcome;
 
-  if(widget>=widgetId(EditorWidget::ProjectSectionBase) && widget<=widgetId(EditorWidget::ProjectSectionBase)+2) {
+  if(widget>=widgetId(EditorWidget::ProjectSectionBase) && widget<=widgetId(EditorWidget::ProjectSectionBase)+3) {
     state.projectSection=static_cast<EditorProjectSection>(widget-widgetId(EditorWidget::ProjectSectionBase));
-    state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;state.propertyPage=0;
+    state.tagPage=0;state.tagQuery.clear();state.tagPicker=false;state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;state.propertyPage=0;
     // As propriedades de água moram no objeto raiz, como antes na aba avulsa.
     if(state.projectSection==EditorProjectSection::Water) state.selection=document.root();
     return outcome;
@@ -8929,7 +9004,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabLighting: state.workspaceMenu=false; state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
     case EditorWidget::TabProject:
       state.workspaceMenu=false;state.workspace=EditorWorkspace::Project;state.propertyPage=0;
-      state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;
+      state.tagPage=0;state.tagQuery.clear();state.tagPicker=false;state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;
       if(state.projectSection==EditorProjectSection::Water && !waterCreationAvailable(state)) state.projectSection=EditorProjectSection::Layers;
       if(state.projectSection==EditorProjectSection::Water) state.selection=document.root();
       break;

@@ -283,6 +283,10 @@ public interface ISceneAccess
     /// <summary>1 ativo, 0 inativo, -1 objeto indisponível.</summary>
     int GetActive(ulong objectId) => throw new NotSupportedException();
     int GetActiveSelf(ulong objectId) => throw new NotSupportedException();
+    string GetTag(ulong objectId) => throw new NotSupportedException();
+    bool SetTag(ulong objectId, string tag) => throw new NotSupportedException();
+    int CompareTag(ulong objectId, string tag) => throw new NotSupportedException();
+    ulong[] FindTagged(string tag, bool firstOnly) => throw new NotSupportedException();
     bool SetActive(ulong objectId, bool active) => throw new NotSupportedException();
 
     // --- v3: ciclo de vida --------------------------------------------------

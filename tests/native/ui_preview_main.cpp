@@ -514,6 +514,13 @@ int main(int argc, char **argv) {
   if(argc>4 && std::string(argv[4])=="river-diagnostics") {
     state.diagnosticDockOpen=true;state.console=&console;
   }
+  if(argc>4 && (std::string(argv[4])=="tag-picker" || std::string(argv[4])=="project-tags")) {
+    runtime::ObjectTags tags;tags.add("Player");tags.add("Inimigo");tags.add("Interagível");document.setTags(tags);
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Porta principal");
+    auto value=*document.find(selection);value.tag="Interagível";document.applyEntityValues(selection,value);
+    if(std::string(argv[4])=="tag-picker") state.tagPicker=true;
+    else {state.workspace=editor::EditorWorkspace::Project;state.projectSection=editor::EditorProjectSection::Tags;}
+  }
   state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
   state.document = &document;
   state.selection = selection;

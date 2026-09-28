@@ -12,6 +12,7 @@
 #pragma once
 #include "core/base.h"
 #include "runtime/gameplay_layers.h"
+#include "runtime/object_tags.h"
 #include "runtime/scene_views.h"
 #include "runtime/input_actions.h"
 #include "scene/components.h"
@@ -63,6 +64,7 @@ struct SceneObject final {
   bool receiveShadow = true;
   bool isStatic = false;
   u32 layer = 0;
+  std::string tag{ObjectTags::Untagged};
   scene::Components components{};
   bool rigidBodyEnabled = false;
   // mass, drag, collider half-extents X/Y/Z.
@@ -140,6 +142,9 @@ public:
   // o documento, são copiadas para o mundo de execução junto com a hierarquia e
   // voltam ao arquivo na gravação.
   const GameplayLayers &layers() const noexcept { return layers_; }
+  // Snapshot do catálogo do projeto; o arquivo da cena guarda só a atribuição.
+  const ObjectTags &tags() const noexcept {return tags_;}
+  void setTags(const ObjectTags &tags) {if(tags_!=tags) {tags_=tags;++revision_;}}
   void setLayers(const GameplayLayers &value) {
     if (layers_ == value) return;
     layers_ = value;
@@ -182,6 +187,7 @@ private:
 
   std::vector<Record> records_;  // indexado por id; a posição 0 nunca é usada
   GameplayLayers layers_{};
+  ObjectTags tags_{};
   SceneViews views_{};
   InputActionMap input_{};
   ObjectId rootId_ = kInvalidObject;

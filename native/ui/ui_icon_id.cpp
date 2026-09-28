@@ -157,6 +157,7 @@ constexpr const char *kNames[] = {
     "scene/object-preview",
     "scene/object-remove",
     "scene/pin",
+    "scene/tag",
     "scene/unlock",
     "scene/visibility",
     "scene/visibility-off",

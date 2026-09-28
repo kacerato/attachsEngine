@@ -185,9 +185,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 113 | `activeSelf` | ✔ | `GameObject.ActiveSelf`, ABI v14, persistência e lifecycle validados no aparelho — [entrega O1a](O1A-ATIVACAO-2026-09-28.md) | O1 |
 | 114 | `activeInHierarchy` | ✔ | | — |
 | 115 | Static (GI, Occlusion, Batching, Navigation, Reflection Probe) | ✗ | flag removida por falta de consumidor | O1 |
-| 116 | Tag | ✗ | | O1 |
+| 116 | Tag | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 117 | Layer | ✔ | camada de gameplay no Inspector | — |
-| 118 | `CompareTag` | ✗ | | O1 |
+| 118 | `CompareTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 119 | `AddComponent<T>` em execução | ✔ | fachada gerada | — |
 | 120 | `Destroy(componente)` | ✔ | `Component.Remove` | — |
 | 121 | Habilitar/desabilitar componentes por script | ◐ | propriedade `enabled` onde existe; falta uniforme | O1 |
@@ -205,8 +205,8 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 133 | `SendMessage` | ✗ | | O1 |
 | 134 | `SendMessageUpwards` | ✗ | | O1 |
 | 135 | `GameObject.Find` global | ✗ | só a partir de um objeto | O1 |
-| 136 | `FindWithTag` | ✗ | | O1 |
-| 137 | `FindGameObjectsWithTag` | ✗ | | O1 |
+| 136 | `FindWithTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
+| 137 | `FindGameObjectsWithTag` | ✔ | Catálogo, Inspector, persistência e runtime validados no Android — [tags O1a](O1A-TAGS-2026-09-28.md) | O1 |
 | 138 | `Instantiate` | ✗ | | O1 |
 | 139 | `Destroy` com atraso | ✗ | | O1 |
 | 140 | `Destroy(this)` remove só o script | ◐ | remover componente de script existe; falta atalho | O1 |
@@ -329,9 +329,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 103 |
+| ✔ existe | 107 |
 | ◐ parcial | 9 |
-| ✗ falta | 100 |
+| ✗ falta | 96 |
 | A adaptação | 7 |
 | **Total** | **219** |
 
@@ -343,7 +343,7 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | **I2** Tipos de campo | 9, 28–33, 42, 45–56, 88, 129 | curvas, gradientes, listas e texto são exigidos por partículas, linha, UI, áudio |
 | **I3** Janela Inspector | 57–69, 86, 89, 90, 97 | |
 | **I4** Multisseleção | 79–83, 87 | ✔ 79–83 `441092d2`; 87: texturas `df0c1538`, materiais `bd67ebce`, [ambientes e UV](I4-AMBIENTES-UV-2026-09-28.md) `9644b320` |
-| **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | 113 entregue; [O1a parcial](O1A-ATIVACAO-2026-09-28.md); faltam tags, habilitação uniforme, static com consumidor, mensagens, Instantiate |
+| **O1** GameObject e API | 113, 115, 116, 118, 121, 125, 132–140 | 113 entregue; [O1a parcial](O1A-ATIVACAO-2026-09-28.md); [tags entregues e validadas no Android](O1A-TAGS-2026-09-28.md); faltam habilitação uniforme, static com consumidor, mensagens, Instantiate |
 | **O2** Primitivas | 141, 143–148 | |
 | **O3** Hierarquia | 104–109 | ✔ `22fe9bd9` |
 | **O4** Ícones de objeto | 70–74, 76, 77 | |

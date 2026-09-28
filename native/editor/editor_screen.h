@@ -478,6 +478,8 @@ enum class EditorWidget : u32 {
   CreationRecipeBase=0x0800'0000u,
   // + EditorProjectSection: seção da workspace Projeto.
   ProjectSectionBase=0x0810'0000u,
+  ObjectTagOpen=0x0811'0000u, TagClose, TagNew, TagSearch, TagDelete, TagPrevious, TagNext,
+  TagRowBase=0x0812'0000u,
   PhysicsLayerPrevious=0x0820'0000u,
   PhysicsLayerNext,
   PhysicsLayerAdd,
@@ -588,7 +590,7 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 // workspace com seções; um tipo de componente ou uma lista de ajustes nunca
 // vira workspace própria — ver docs/planos/EXPANSAO-OBJETOS-COMPONENTES-API.
 enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code };
-enum class EditorProjectSection : u8 { Layers, Input, Water };
+enum class EditorProjectSection : u8 { Layers, Input, Water, Tags };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
 
@@ -732,6 +734,9 @@ struct EditorScreenState final {
   EditorProjectSection projectSection=EditorProjectSection::Layers;
   u32 physicsLayer=0,physicsMatrixPage=0;
   bool editingPhysicsLayerName=false;
+  bool tagPicker=false,editingTagName=false,editingTagSearch=false;
+  u32 tagPage=0;
+  std::string tagQuery,tagSelected="Untagged";
   u32 inputActionIndex=0,inputBindingIndex=0,inputTab=0,inputEditField=0;
   u32 inputActionPage=0,inputBindingPage=0;
   bool inputDetails=false;
