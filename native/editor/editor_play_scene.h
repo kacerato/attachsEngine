@@ -1,5 +1,7 @@
 #pragma once
 #include "editor/editor_map_scene.h"
+#include "renderer/primitive_geometry.h"
+#include "renderer/water_authoring_geometry.h"
 #include "runtime/game_world.h"
 #include "runtime/scene_physics.h"
 #include "runtime/input_actions.h"
@@ -109,6 +111,14 @@ public:
     timers_.reset();
     cameraFollow_.reset();
     scripts_.setAnimator(&animator_);
+    std::array<runtime::PrimitiveResource,6> primitives{};
+    for(u32 i=0;i<resources.assetCount();++i) {
+      const auto flags=resources.materialFlagsForAsset(i);
+      const auto type=renderer::primitiveFromFlags(flags);
+      if(scene::validPrimitive(type) && !(flags&renderer::WaterAuthoringResource))
+        primitives[static_cast<u32>(type)]={i+1,resources.assetGuid(i),resources.materialForAsset(i)};
+    }
+    scripts_.setPrimitiveLibrary(primitives);
     if(!scripts_.start(world_,physics_,input_)) {animator_.reset();physics_.stop();world_.clear();return false;}
     // Awake/Start executam DEPOIS da montagem inicial e podem desligar formas,
     // alterar corpos ou destruir objetos. Publique isso antes do primeiro Update.

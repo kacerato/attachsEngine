@@ -1,0 +1,6 @@
+[ok] primitives_runtime_creation_resolves_resources_and_real_collisions_through_abi
+[ok] m08e2_node_with_three_primitives_is_one_object_with_three_slots
+[ok] primitives_geometry_has_outward_faces_uv_frames_and_exact_dimensions
+[ok] primitives_editor_history_archive_and_resource_reordering_preserve_shapes
+
+4/4 testes passaram

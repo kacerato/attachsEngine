@@ -17,6 +17,7 @@ Python além da biblioteca padrão.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -127,6 +128,12 @@ def camera_follow() -> str:
 
 
 ICONS: dict[str, str] = {
+    "primitive/plane": f'''<path d="M16 75 64 45 112 75 64 105Z" {stroke(5)}/>
+<path d="M32 85 80 55M48 95 96 65M32 65 80 95M48 55 96 85" {stroke(2, extra='opacity=".55"')}/>
+<path d="M64 73V18m-9 10 9-10 9 10" {stroke(5, ACCENT)}/>''',
+    "primitive/quad": f'''<path d="M26 28h76v76H26Z" {stroke(5)}/>
+<path d="m26 104 76-76" {stroke(3, extra='opacity=".6"')}/>
+<path d="M64 66h49m-9-9 9 9-9 9" {stroke(5, ACCENT)}/>''',
     "scene/tag": f'''<path d="M18 24h43l49 49-37 37-49-49V24" {stroke(7)}/>
 <circle cx="43" cy="43" r="7" {stroke(5, ACCENT)}/>
 <path d="m65 58 24 24m-33-15 18 18" {stroke(5, ACCENT)}/>''',
@@ -182,10 +189,14 @@ def rasterize(executable: str, svg: Path, png: Path) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--only", nargs="+", choices=tuple(ICONS))
+    requested = parser.parse_args().only
+    selected = {name: ICONS[name] for name in requested} if requested else ICONS
     executable = browser()
     catalogue_path = NAMED / "catalog.json"
     catalogue = json.loads(catalogue_path.read_text(encoding="utf-8"))
-    for name, body in ICONS.items():
+    for name, body in selected.items():
         category, leaf = name.split("/")
         folder = NAMED / category
         folder.mkdir(parents=True, exist_ok=True)
@@ -199,7 +210,7 @@ def main() -> None:
         entry.pop("raster", None)
         catalogue["icons"][name] = entry
     catalogue_path.write_text(json.dumps(catalogue, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"{len(ICONS)} ícones gerados")
+    print(f"{len(selected)} ícones gerados")
 
 
 if __name__ == "__main__":

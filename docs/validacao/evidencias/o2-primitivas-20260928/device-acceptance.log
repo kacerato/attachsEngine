@@ -1,0 +1,4 @@
+09-28 16:20:01.106 I/Astra.Script(32231): 2: PRIMITIVE READY: six meshes, PBR materials and collision recipes
+09-28 16:20:01.458 I/Astra.Script(32231): 2: PRIMITIVE PASS: all six rendered resources resolve and all six Jolt colliders answer rays
+09-28 16:21:31.496 I/Astra.Script( 9777): 2: PRIMITIVE READY: six meshes, PBR materials and collision recipes
+09-28 16:21:31.811 I/Astra.Script( 9777): 2: PRIMITIVE PASS: all six rendered resources resolve and all six Jolt colliders answer rays

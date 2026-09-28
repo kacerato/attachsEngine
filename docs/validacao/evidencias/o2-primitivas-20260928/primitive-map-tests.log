@@ -1,0 +1,6 @@
+[ok] editor_map_import_preserves_original_matrix_and_bounds
+[ok] editor_map_mutation_undo_visibility_and_delete_reach_render_state
+[ok] editor_map_parent_transform_and_visibility_are_inherited
+[ok] editor_map_duplicate_creates_render_instance_and_undo_removes_it
+
+4/4 testes passaram

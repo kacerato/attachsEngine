@@ -10,6 +10,16 @@ namespace Aether.Tests;
 public static class AstraBehaviorTests
 {
     [Test]
+    public static void PrimitivesAcceptanceFixture_CompilesWithTheProjectCompiler()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "tests", "fixtures", "primitives"))) root = root.Parent;
+        Assert.True(root is not null);
+        using var project = new Project(File.ReadAllText(Path.Combine(root!.FullName, "tests", "fixtures", "primitives", "PrimitiveProbe.cs")));
+        Assert.Equal("acceptance.primitives", project.Compile().Types.Single().Id);
+    }
+
+    [Test]
     public static void EnabledAcceptanceFixture_CompilesWithTheProjectCompiler()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);

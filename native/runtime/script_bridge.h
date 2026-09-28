@@ -31,6 +31,7 @@ public:
   // ele também pode reconciliar campos transitórios, como o índice de malha.
   using ResourceAvailability = ComponentResourceResolver;
   void setLogSink(LogSink sink) { logSink_ = std::move(sink); }
+  void setPrimitiveLibrary(const std::array<PrimitiveResource,6> &library) {if(!running_) primitives_=library;}
   ~ScriptBridge() { stop(); }
   void configure(scene::ScriptRuntimeApi api, std::string root) {
     if (!running_) { api_ = api; root_ = std::move(root); }
@@ -109,6 +110,7 @@ private:
   const resources::AssetRegistry *assets_ = nullptr;
   const std::vector<resources::EnvironmentProfile> *environmentProfiles_ = nullptr;
   ResourceAvailability resourceAvailable_;
+  std::array<PrimitiveResource,6> primitives_{};
   RuntimeRenderingState rendering_{};
   renderer::ResolvedRenderingPolicy initialEffective_{};
   bool renderingConfigured_ = false;

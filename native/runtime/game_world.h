@@ -26,6 +26,7 @@
 // Uma thread só: todas as chamadas ocorrem na thread dona do mundo.
 #pragma once
 #include "runtime/scene_graph.h"
+#include "runtime/primitive_object.h"
 #include "runtime/transform_math.h"
 #include "scene/component_properties.h"
 #include "scene/component_schema.h"
@@ -157,6 +158,7 @@ public:
   // Criação imediata: o handle devolvido já resolve, aceita componentes e pode
   // ser guardado. `status` explica a recusa quando o handle volta inválido.
   ObjectHandle createObject(const ObjectHandle &parent, std::string_view name, WorldStatus &status);
+  ObjectHandle createPrimitive(const ObjectHandle &parent,scene::PrimitiveType type,const PrimitiveResource &resource,WorldStatus &status);
   ObjectHandle instantiate(const ObjectHandle &source,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status);
   WorldStatus finishInstantiation(const ObjectHandle &root,bool commit);
   // Marca o objeto e a subárvore como vencidos na hora; o armazenamento sai no

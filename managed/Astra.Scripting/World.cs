@@ -2,6 +2,9 @@ using System.Numerics;
 
 namespace Astra;
 
+/// <summary>Built-in geometry and its collision shape. Cylinder uses a convex 32-sided mesh.</summary>
+public enum PrimitiveType : uint { Cube, Sphere, Capsule, Cylinder, Plane, Quad }
+
 /// <summary>
 /// Por que uma chamada do mundo de execução foi recusada. Espelha
 /// <c>ae::runtime::WorldStatus</c> (native/runtime/game_world.h) por posição:
@@ -256,6 +259,16 @@ public sealed class GameObject : IEquatable<GameObject>
         Require("procurar objeto");
         var found = Scene.FindChild(ObjectId, name, recursive);
         return found == 0 ? null : Resolve(Scene, found);
+    }
+
+    /// <summary>Creates a primitive as a child, with renderer and static collision body.</summary>
+    public GameObject CreatePrimitive(PrimitiveType type)
+    {
+        Require("criar primitiva");
+        if (!Enum.IsDefined(type)) throw new ArgumentOutOfRangeException(nameof(type));
+        var created = Scene.CreatePrimitive(ObjectId, type);
+        if (created == 0) throw new WorldException(Scene.LastStatus, "criar primitiva");
+        return Resolve(Scene, created);
     }
 
     public GameObject CreateChild(string name)

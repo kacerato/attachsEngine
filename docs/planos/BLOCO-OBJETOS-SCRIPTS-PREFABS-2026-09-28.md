@@ -1,8 +1,8 @@
 # Bloco ampliado — Objetos, scripts e prefabs
 
 Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Em execução**, por pedido
-do usuário para incorporar os próximos blocos em um só. Etapas 1–4 entregues;
-as etapas 5–12 continuam pendentes, com seus aceites abaixo.
+do usuário para incorporar os próximos blocos em um só. Etapas 1–5 entregues;
+as etapas 6–12 continuam pendentes, com seus aceites abaixo.
 
 A lacuna de leitura dos campos C# no Inspector durante Play foi corrigida após
 a etapa 4: [contrato e validação](INSPECAO-SCRIPTS-PLAY-2026-09-28.md).
@@ -94,6 +94,9 @@ as referências da cópia apontam para a cópia. Modificar/destruir uma instânc
 não altera a outra nem invalida os recursos compartilhados.
 
 ### 5. Incorporar as primitivas reais — O2, itens 141 e 143–148
+
+**Entregue em 28/09/2026:** [geometria, colisão, API, editor e aceite no aparelho](O2-PRIMITIVAS-2026-09-28.md).
+Inventário após esta etapa: **123 existentes, 5 parciais, 84 ausentes e 7 adaptações** (219).
 
 Entregar esfera, cilindro, cápsula, quad e plano com geometria, normais, UVs,
 bounds e colisores adequados, preservando o cubo existente. Conectar as receitas

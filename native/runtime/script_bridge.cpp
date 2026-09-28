@@ -448,6 +448,13 @@ void ScriptBridge::installAccess() {
     s.lastStatus_=s.world_->destroyAfter(s.world_->handle(static_cast<ObjectId>(id)),seconds);
     return s.lastStatus_==WorldStatus::Ok;
   };
+  access_.createPrimitive=[](void *c,u64 parent,u32 kind)->u64 {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_) {s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    const auto type=static_cast<scene::PrimitiveType>(kind);
+    if(!scene::validPrimitive(type) || parent>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    return s.world_->createPrimitive(s.world_->handle(static_cast<ObjectId>(parent)),type,s.primitives_[kind],s.lastStatus_).id;
+  };
   access_.instantiate=[](void *c,u64 source,u64 parent,u64 *pairs,int capacity)->int {
     auto &s=*static_cast<ScriptBridge *>(c);
     if(source>std::numeric_limits<ObjectId>::max() || parent>std::numeric_limits<ObjectId>::max() || capacity<0) {

@@ -2,6 +2,7 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_map_scene.h"
 #include "renderer/water_authoring_geometry.h"
+#include "renderer/primitive_geometry.h"
 #include "physics/collision_cooking.h"
 #include <algorithm>
 #include <cmath>
@@ -19,6 +20,15 @@ resources::AssetGuid packageAssetGuid(u64 fingerprint,u32 index) {
   char seed[64];
   std::snprintf(seed,sizeof(seed),"pacote:%llu:%u",static_cast<unsigned long long>(fingerprint),index);
   return resources::assetGuidFromSeed(std::string_view(seed));
+}
+resources::AssetGuid libraryAssetGuid(u64 fingerprint,u32 index,std::span<const renderer::MapDrawRecord> draws,
+    std::span<const renderer::MapMaterialRecord> materials) {
+  const auto material=draws[index].materialIndex;
+  const auto type=renderer::primitiveFromFlags(material<materials.size()?materials[material].flags:0);
+  // Keep the legacy cube identity; the five new resources are independent of package order.
+  if(scene::validPrimitive(type) && type!=scene::PrimitiveType::Cube)
+    return resources::assetGuidFromSeed(std::string("astra:builtin:")+std::string(scene::primitiveIds[static_cast<u32>(type)])+":v1");
+  return packageAssetGuid(fingerprint,index);
 }
 void multiply(const float a[16], const float b[16], float out[16]) {
   float value[16]{};
@@ -109,7 +119,7 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
   std::vector<resources::AssetGuid> assets(draws.size());
   for(u32 index=0;index<draws.size();++index)
     assets[index]=index<identities.size() && identities[index].valid()
-        ? identities[index] : packageAssetGuid(packageFingerprint,index);
+        ? identities[index] : libraryAssetGuid(packageFingerprint,index,draws,materials);
   // Duas identidades iguais no mesmo pacote fariam `assetSlot` escolher pela
   // ordem da lista — exatamente o que a identidade existe para eliminar.
   for(u32 a=0;a<assets.size();++a) for(u32 b=0;b<a;++b) if(assets[a]==assets[b]) return false;
@@ -120,6 +130,11 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
   materials_.assign(materials.begin(),materials.end());
   assets_=std::move(assets);
   assetNames_.assign(names.begin(),names.end());
+  assetNames_.resize(draws.size());
+  for(u32 i=0;i<draws.size();++i) {
+    const auto type=renderer::primitiveFromFlags(materialFlagsForAsset(i));
+    if(assetNames_[i].empty() && scene::validPrimitive(type)) assetNames_[i]=scene::primitiveNames[static_cast<u32>(type)];
+  }
   pivots_.assign(pivots.begin(),pivots.end());
   collisionHullCache_.clear();
   reconcileAssets(document);
@@ -141,7 +156,7 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
     if(!id) return false;
     auto entity=*prepared.find(id);
     auto *render=editMeshRenderer(entity);if(!render) return false;
-    render->mesh=index+1;render->asset=packageAssetGuid(packageFingerprint,index);entity.visible=draw.lodLevel==0;
+    render->mesh=index+1;render->asset=libraryAssetGuid(packageFingerprint,index,draws,materials);entity.visible=draw.lodLevel==0;
     if(!setWaterBodyFlags(entity,true,(flags & renderer::MapMaterialWaterCameraGrid)!=0)) return false;
     if(draw.materialIndex<materials.size()) render->material=renderer::materialOverrideFrom(materials[draw.materialIndex]);
     std::copy(draw.boundsCenter,draw.boundsCenter+3,entity.transform.position);
@@ -151,9 +166,13 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
   assets_.resize(draws.size());
-  for(u32 index=0;index<draws.size();++index) assets_[index]=packageAssetGuid(packageFingerprint,index);
+  for(u32 index=0;index<draws.size();++index) assets_[index]=libraryAssetGuid(packageFingerprint,index,draws,materials);
   pivots_.clear();
-  assetNames_.clear();
+  assetNames_.assign(draws.size(),{});
+  for(u32 i=0;i<draws.size();++i) {
+    const auto type=renderer::primitiveFromFlags(materialFlagsForAsset(i));
+    if(scene::validPrimitive(type)) assetNames_[i]=scene::primitiveNames[static_cast<u32>(type)];
+  }
   collisionHullCache_.clear();
   document=std::move(prepared);
   return true;

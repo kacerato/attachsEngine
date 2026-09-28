@@ -1158,6 +1158,18 @@
       "name": "tag",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "primitive/plane": {
+      "category": "primitive",
+      "name": "plane",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "primitive/quad": {
+      "category": "primitive",
+      "name": "quad",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

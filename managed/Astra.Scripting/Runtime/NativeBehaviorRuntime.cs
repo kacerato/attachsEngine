@@ -144,6 +144,7 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, double, int> DestroyAfter;
         public delegate* unmanaged<void*, ulong, ulong, ulong*, int, int> Instantiate;
         public delegate* unmanaged<void*, ulong, int, int> FinishInstantiation;
+        public delegate* unmanaged<void*, ulong, uint, ulong> CreatePrimitive;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -162,7 +163,7 @@ public static unsafe class NativeBehaviorRuntime
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
             SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
-            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null;
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -403,6 +404,7 @@ public static unsafe class NativeBehaviorRuntime
             for (var i = 0; i < count; ++i) result.Add(pairs[2*i], pairs[2*i+1]);
             return result;
         }
+        public ulong CreatePrimitive(ulong parent, PrimitiveType type) => Accessible ? access.CreatePrimitive(access.Context, parent, (uint)type) : 0;
         public bool FinishInstantiation(ulong root, bool commit) => Accessible && access.FinishInstantiation(access.Context, root, commit ? 1 : 0) != 0;
 
         public ulong AddComponent(ulong objectId, string typeId)
@@ -694,7 +696,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 17 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 18 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

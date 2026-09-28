@@ -4,6 +4,7 @@
 #include "renderer/spatial_render_chunks.h"
 #include "renderer/environment_map.h"
 #include "renderer/water_authoring_geometry.h"
+#include "renderer/primitive_geometry.h"
 #include "renderer/texture_payload.h"
 #include "resources/image_decode.h"
 
@@ -356,7 +357,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   // cada botão cria.
   std::vector<u8> vertices;std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
-  if(!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials)) return false;
+  if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials)) return false;
   const auto vertexBase=static_cast<u32>(vertices.size()/renderer::MapVertexStride);
   const auto indexBase=static_cast<u32>(indices.size());
   const auto materialBase=static_cast<u32>(materials.size());
@@ -614,7 +615,7 @@ bool DirtRoadResources::restreamAuthoringTexture(rhi::VulkanDevice &device,rhi::
 bool DirtRoadResources::initializePrimitives(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload) {
   if(vertices_.handle()!=VK_NULL_HANDLE || !draws_.empty()) return false;
   std::vector<u8> vertices;std::vector<u32> indices;
-  if(!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws_,materials_)) return false;
+  if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws_,materials_)) return false;
   auto &allocator=device.memoryAllocator();
   rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
   buffer.sizeBytes=vertices.size();buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;

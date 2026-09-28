@@ -1,6 +1,7 @@
 #pragma once
 #include "editor/editor_screen.h"
 #include "scene/component_properties.h"
+#include "scene/primitive.h"
 #include "ui/ui_icon_id.h"
 #include <array>
 #include <span>
@@ -67,6 +68,7 @@ struct EditorCreationEntry {
   // selecionado no momento da criação. Vazio: nenhuma.
   std::string_view selectionComponent{},selectionProperty{};
   const char *searchTerms="";
+  scene::PrimitiveType primitive=scene::PrimitiveType::Count;
   bool composed() const {return action==EditorWidget::None;}
 };
 
@@ -114,7 +116,7 @@ inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água"
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,27> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,32> editorCreationCatalog{{
   {"basic.empty",EditorWidget::CreateGroup,0,"Objeto vazio","Organiza filhos e transforma o conjunto.",ui::UiIcon::EditorAuthorObject},
   {"basic.camera",EditorWidget::None,0,"Câmera","Captura a vista atual para executar a cena.",ui::UiIcon::EditorAuthorCamera,
     runtime::ObjectKind::Camera,recipe::cameraRecipe,CreationPose::EditorCamera,0,{},{},"Camera Camera3D"},
@@ -161,7 +163,17 @@ inline const std::array<EditorCreationEntry,27> editorCreationCatalog{{
   {"physics.character",EditorWidget::None,3,"Personagem","Controlador físico com cápsula própria.",ui::UiIcon::ComponentCharacter,
     runtime::ObjectKind::Folder,recipe::characterRecipe,CreationPose::ViewTarget,1,{},{},"CharacterController CharacterBody3D"},
   {"gameplay.timer",EditorWidget::None,5,"Timer","Dispara eventos para comportamentos em intervalos configuráveis.",ui::UiIcon::ComponentTimer,
-    runtime::ObjectKind::Folder,recipe::timerRecipe,CreationPose::ViewTarget,0,{},{},"Timer"}
+    runtime::ObjectKind::Folder,recipe::timerRecipe,CreationPose::ViewTarget,0,{},{},"Timer"},
+  {"geometry.sphere",EditorWidget::None,1,"Esfera","Diâmetro 1 m · colisão esférica.",ui::UiIcon::PrimitiveSphere,
+    runtime::ObjectKind::Mesh,{},CreationPose::ViewTarget,1,{},{},"Sphere",scene::PrimitiveType::Sphere},
+  {"geometry.capsule",EditorWidget::None,1,"Cápsula","Altura 2 m · colisão de cápsula.",ui::UiIcon::PrimitiveCapsule,
+    runtime::ObjectKind::Mesh,{},CreationPose::ViewTarget,1,{},{},"Capsule",scene::PrimitiveType::Capsule},
+  {"geometry.cylinder",EditorWidget::None,1,"Cilindro","Altura 2 m · colisão por casco convexo de 32 lados.",ui::UiIcon::PrimitiveCylinder,
+    runtime::ObjectKind::Mesh,{},CreationPose::ViewTarget,1,{},{},"Cylinder",scene::PrimitiveType::Cylinder},
+  {"geometry.plane",EditorWidget::None,1,"Plano","10 × 10 m em XZ · colisão triangular.",ui::UiIcon::PrimitivePlane,
+    runtime::ObjectKind::Mesh,{},CreationPose::ViewTarget,0,{},{},"Plane",scene::PrimitiveType::Plane},
+  {"geometry.quad",EditorWidget::None,1,"Quad","1 × 1 m em XY · dois triângulos com colisão.",ui::UiIcon::PrimitiveQuad,
+    runtime::ObjectKind::Mesh,{},CreationPose::ViewTarget,1,{},{},"Quad",scene::PrimitiveType::Quad}
 }};
 inline constexpr u32 kCreationRecipeRange=0x0010'0000u;
 static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(editorCreationCatalog)>><kCreationRecipeRange);
@@ -192,6 +204,7 @@ inline std::vector<u8> creationAlwaysAvailable() {
   std::vector<u8> available(editorCreationCatalog.size(),0);
   for(u32 i=0;i<editorCreationCatalog.size();++i) {
     const auto action=editorCreationCatalog[i].action;
+    if(scene::validPrimitive(editorCreationCatalog[i].primitive)) continue;
     if(action!=EditorWidget::CreateCube && action!=EditorWidget::CreateGround &&
        action!=EditorWidget::CreateFiniteWater && action!=EditorWidget::CreateOceanWater &&
        action!=EditorWidget::CreateRiverWater && action!=EditorWidget::CreateBuoyantBox &&

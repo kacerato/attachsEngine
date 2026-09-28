@@ -210,19 +210,19 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 | 138 | `Instantiate` | ✔ | Hierarquia, campos atuais e remapeamento; [aceite](O1C-INSTANCIACAO-2026-09-28.md) | O1 |
 | 139 | `Destroy` com atraso | ✔ | `Destroy(segundos)`, relógio simulado, pausa/Step e descarte da fila; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
 | 140 | `Destroy(this)` remove só o script | ✔ | `Behavior.Remove`, handle vencido e lifecycle; [entrega](O1B-SCRIPTS-MENSAGENS-2026-09-28.md) | O1 |
-| 141 | `CreatePrimitive` (6 tipos) | ✗ | | O2 |
+| 141 | `CreatePrimitive` (6 tipos) | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
 
 ## 14. Primitive objects — `PrimitiveObjects.html`
 
 | # | Função | Astra | Evidência / o que falta | Bloco |
 |---|---|---|---|---|
 | 142 | Cubo 1×1, textura repetida por face | ✔ | biblioteca | — |
-| 143 | Esfera diâmetro 1, UV esférica | ✗ | | O2 |
-| 144 | Cilindro 2×1 | ✗ | | O2 |
-| 145 | Cápsula 1×2 | ✗ | | O2 |
-| 146 | Quad 1×1 no plano XY | ✗ | | O2 |
-| 147 | Plano 10×10, 200 triângulos, XZ, uma face | ◐ | "Chão" é cubo achatado | O2 |
-| 148 | Colisor padrão em cada primitiva | ✗ | | O2 |
+| 143 | Esfera diâmetro 1, UV esférica | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
+| 144 | Cilindro 2×1 | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
+| 145 | Cápsula 1×2 | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
+| 146 | Quad 1×1 no plano XY | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
+| 147 | Plano 10×10, 200 triângulos, XZ, uma face | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
+| 148 | Colisor padrão em cada primitiva | ✔ | [O2: implementação e aceite Android](O2-PRIMITIVAS-2026-09-28.md) | O2 |
 
 ## 15. Prefabs — `Prefabs.html` (+ D subpáginas)
 
@@ -329,9 +329,9 @@ Blocos de execução no fim. Complementa o [plano de expansão](EXPANSAO-OBJETOS
 
 | Estado | Itens |
 |---|---:|
-| ✔ existe | 116 |
-| ◐ parcial | 6 |
-| ✗ falta | 90 |
+| ✔ existe | 123 |
+| ◐ parcial | 5 |
+| ✗ falta | 84 |
 | A adaptação | 7 |
 | **Total** | **219** |
 

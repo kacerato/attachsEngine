@@ -8,6 +8,8 @@
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
+#include "renderer/primitive_geometry.h"
+#include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
 #include "editor/editor_number_text.h"
 #include "editor/editor_scene_template.h"
@@ -6608,14 +6610,18 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
         " textura(s) com resolução reduzida"+(residency.withinBudget()?".":"; todas no piso e ainda acima do teto."));
   }
   // O pacote publicado é primitivas internas + biblioteca, nessa ordem. As
-  // primitivas mantêm a identidade derivada da impressão digital.
+  // O cubo mantém a identidade antiga; as demais têm GUID por tipo e versão.
   if(published.draws.size()<library.draws.size()) { diagnostic="Pacote publicado inconsistente."; return false; }
   const auto primitives=published.draws.size()-library.draws.size();
   if(outPrimitives) *outPrimitives=primitives;
   std::vector<resources::AssetGuid> identities(primitives);
   identities.insert(identities.end(),library.identities.begin(),library.identities.end());
   std::vector<std::string> names;names.reserve(published.draws.size());
-  for(usize i=0;i<primitives;++i) names.push_back("Primitiva "+std::to_string(i+1));
+  for(usize i=0;i<primitives;++i) {
+    const auto material=published.draws[i].materialIndex;
+    const auto type=renderer::primitiveFromFlags(material<published.materials.size()?published.materials[material].flags:0);
+    names.push_back(scene::validPrimitive(type)?scene::primitiveNames[static_cast<u32>(type)]:"Primitiva "+std::to_string(i+1));
+  }
   names.insert(names.end(),library.names.begin(),library.names.end());
   // Pivô: as primitivas internas mantêm a convenção do pacote (centro dos
   // limites), a geometria importada usa a origem do nó.
@@ -8161,6 +8167,9 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
   state_.creationAvailable=creationAlwaysAvailable();
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
+    const auto primitive=renderer::primitiveFromFlags(flags);
+    if(scene::validPrimitive(primitive)) for(u32 recipe=0;recipe<editorCreationCatalog.size();++recipe)
+      if(editorCreationCatalog[recipe].primitive==primitive) state_.creationAvailable[recipe]=1;
     if(flags & renderer::BoxAuthoringResource) {
       enableCreation(state_,EditorWidget::CreateCube);
       enableCreation(state_,EditorWidget::CreateGround);
@@ -8197,7 +8206,7 @@ EditorEntityId EditorSession::instantiateAsset(u32 index, EditorEntityId parent,
 
 EditorEntityId EditorSession::instantiateAssetInTransaction(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options) {
   if(!worldPosition || !mapScene_.asset(index) || !document_.exists(parent)) return kInvalidEntity;
-  EditorEntity values;auto *render=editMeshRenderer(values);if(!render) return kInvalidEntity;render->mesh=index+1;render->material=mapScene_.materialForAsset(index);
+  EditorEntity values;auto *render=editMeshRenderer(values);if(!render) return kInvalidEntity;render->mesh=index+1;render->asset=mapScene_.assetGuid(index);render->material=mapScene_.materialForAsset(index);
   float parentWorld[16],world[16];EditorTransform pose;
   std::copy(worldPosition,worldPosition+3,pose.position);editorTransformMatrix(pose,world);
   if(!editorWorldMatrix(document_,parent,parentWorld) ||
@@ -8219,8 +8228,15 @@ EditorEntityId EditorSession::instantiateAssetInTransaction(u32 index, EditorEnt
     std::copy(options->scale,options->scale+3,values.transform.scale);values.rigidBodyEnabled=options->rigidBody;
     if(!isTransformValid(values.transform)) return kInvalidEntity;
   }
+  const auto flags=mapScene_.materialFlagsForAsset(index);
+  const auto primitive=renderer::primitiveFromFlags(flags);
+  if(scene::validPrimitive(primitive) && !(flags&renderer::WaterAuthoringResource) &&
+     !runtime::configurePrimitive(values,primitive,{index+1,mapScene_.assetGuid(index),mapScene_.materialForAsset(index)})) return kInvalidEntity;
   const auto id=history_.createEntity(document_,parent,water?EditorEntityKind::Water:EditorEntityKind::Mesh,values.name);
-  if(id) {history_.applyValues(document_,id,values);setSelection(id);state_.status="Malha adicionada";}
+  if(id) {
+    if(!history_.applyValues(document_,id,values)) {history_.cancel(document_);return kInvalidEntity;}
+    setSelection(id);state_.status="Malha adicionada";
+  }
   return id;
 }
 
@@ -8417,6 +8433,16 @@ bool EditorSession::dropAssetOnField(u32 field, u32 assetIndex) {
 EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
   if(index>=editorCreationCatalog.size() || !editorCreationCatalog[index].composed()) return kInvalidEntity;
   const auto &recipe=editorCreationCatalog[index];
+  if(scene::validPrimitive(recipe.primitive)) {
+    if(isPlaying() || history_.isOpen()) return kInvalidEntity;
+    if(!document_.exists(parent)) parent=document_.root();
+    for(u32 i=0;i<mapScene_.assetCount();++i) if(renderer::primitiveFromFlags(mapScene_.materialFlagsForAsset(i))==recipe.primitive) {
+      const float position[3]{camera_.target[0],recipe.height,camera_.target[2]};
+      EditorAssetInstantiation options;options.name=recipe.name;
+      return instantiateAsset(i,parent,position,&options);
+    }
+    state_.status="A geometria desta primitiva não está na biblioteca";return kInvalidEntity;
+  }
   const auto refuse=[&](const std::string &reason) {state_.status=reason;return kInvalidEntity;};
   const auto selected=state_.selection!=document_.root() && document_.exists(state_.selection)?state_.selection:kInvalidEntity;
   // A pose "atrás da seleção" é relativa ao alvo: nascer como filho dele faria

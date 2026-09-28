@@ -322,6 +322,38 @@ AE_TEST(play_camera_follow_tracks_target_after_world_pose_changes) {
   play.stop();
 }
 
+AE_TEST(primitives_runtime_creation_resolves_resources_and_real_collisions_through_abi) {
+  std::vector<u8> vertices;std::vector<u32> indices;
+  std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials),"library");
+  EditorDocument doc;EditorMapScene resources;
+  AE_EXPECT_TRUE(resources.import(doc,draws,materials,false,vertices,indices),"resource geometry");
+  const auto driver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Driver");attachScript(doc,driver,"acceptance.primitives");
+  FakeRuntime::reset();EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play");const auto &abi=FakeRuntime::sceneAccess;
+  const auto count=play.document().entityCount();
+  AE_EXPECT_EQ(abi.createPrimitive(abi.context,doc.root(),99),u64{0},"invalid enum rejected");
+  AE_EXPECT_EQ(play.document().entityCount(),count,"failure leaves no partial object");
+  for(u32 type=0;type<6;++type) {
+    const auto id=static_cast<u32>(abi.createPrimitive(abi.context,doc.root(),type));AE_EXPECT_TRUE(id,"runtime object");
+    const auto *object=play.document().find(id);AE_EXPECT_TRUE(object,"published");
+    const auto *mesh=runtime::meshRenderer(*object);AE_EXPECT_TRUE(mesh && mesh->asset==resources.assetGuid(type),"real resource identity");
+    AE_EXPECT_TRUE(play.commitEdits(),"new collider registered at safe point");
+    const float origin[3]{0,type==5?0.f:3.f,type==5?3.f:0.f};
+    const float ray[3]{0,type==5?0.f:-6.f,type==5?-6.f:0.f};
+    scene::ScriptQueryFilter filter;scene::ScriptQueryHit hit;
+    const auto hits=abi.rayCast(abi.context,origin,ray,&filter,&hit,1);
+    // A ray exactly on the quad diagonal can report both triangles; the ABI
+    // returns the total hit count even when the output has capacity one.
+    AE_EXPECT_TRUE(hits>=1,"Jolt ray hits each new shape");
+    AE_EXPECT_EQ(hit.object,static_cast<u64>(id),"hit resolves to the primitive");
+    AE_EXPECT_EQ(abi.destroyObject(abi.context,id),1,"destroy requests removal");
+    AE_EXPECT_TRUE(play.commitEdits(),"unregister collider and render object");
+    AE_EXPECT_EQ(abi.rayCast(abi.context,origin,ray,&filter,&hit,1),0,"destroyed collider is absent");
+  }
+  play.stop();AE_EXPECT_EQ(doc.entityCount(),count,"authoring unaffected by runtime creation");
+}
+
 AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   EditorDocument doc;
   const auto parent = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Pai");
@@ -337,7 +369,7 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
                  "instância incluída para permitir a primeira ativação");
   const auto &abi = FakeRuntime::sceneAccess;
-  AE_EXPECT_TRUE(abi.version == 17 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_TRUE(abi.version == 18 && abi.available(), "contrato ABI completo");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
   AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
   const auto revision = play.world().structuralRevision();

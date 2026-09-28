@@ -138,6 +138,8 @@ constexpr const char *kNames[] = {
     "primitive/cone",
     "primitive/cube",
     "primitive/cylinder",
+    "primitive/plane",
+    "primitive/quad",
     "primitive/sphere",
     "runtime/audio",
     "runtime/camera",

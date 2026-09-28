@@ -294,6 +294,7 @@ public interface ISceneAccess
     bool DestroyObject(ulong objectId) => throw new NotSupportedException();
     bool DestroyAfter(ulong objectId, double seconds) => throw new NotSupportedException();
     ulong AddBehavior(ulong objectId, string typeId, string source) => throw new NotSupportedException();
+    ulong CreatePrimitive(ulong parent, PrimitiveType type) => throw new NotSupportedException();
     IReadOnlyDictionary<ulong, ulong> Instantiate(ulong source, ulong parent) => throw new NotSupportedException();
     bool FinishInstantiation(ulong root, bool commit) => throw new NotSupportedException();
     IBehaviorRegistry? Behaviors => null;

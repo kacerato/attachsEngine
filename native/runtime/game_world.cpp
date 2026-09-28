@@ -281,6 +281,22 @@ ObjectHandle GameWorld::createObject(const ObjectHandle &parent, std::string_vie
   return {worldId_, id, slots_[id].generation};
 }
 
+ObjectHandle GameWorld::createPrimitive(const ObjectHandle &parent,scene::PrimitiveType type,const PrimitiveResource &resource,WorldStatus &status) {
+  status=validate(parent);if(status!=WorldStatus::Ok) return {};
+  if(!scene::validPrimitive(type)) {status=WorldStatus::InvalidArgument;return {};}
+  if(!resource.mesh || !resource.asset.valid()) {status=WorldStatus::UnknownResource;return {};}
+  SceneObject values;
+  if(!configurePrimitive(values,type,resource)) {status=WorldStatus::Rejected;return {};}
+  assignObjectName(values,scene::primitiveNames[static_cast<u32>(type)]);
+  const auto id=graph_.createEntity(parent.id,ObjectKind::Mesh,values.name);
+  if(!id) {status=WorldStatus::LimitReached;return {};}
+  if(!graph_.applyEntityValues(id,values)) {graph_.destroyEntity(id);status=WorldStatus::Rejected;return {};}
+  if(id>=slots_.size()) {slots_.resize(static_cast<usize>(id)+1);authorities_.resize(static_cast<usize>(id)+1,TransformAuthority::Free);}
+  slots_[id].generation=1;authorities_[id]=TransformAuthority::Free;
+  ++structuralRevision_;invalidated_|=subtreeInvalidation(id);
+  status=WorldStatus::Ok;return handle(id);
+}
+
 void GameWorld::markSubtreeStale(ObjectId id) {
   graph_.collectSubtree(id, scratch_);
   for (const ObjectId member : scratch_)
