@@ -1,8 +1,8 @@
 # Bloco ampliado — Objetos, scripts e prefabs
 
 Data: 28/09/2026. Branch: `codex/gameplay-runtime`. **Em execução**, por pedido
-do usuário para incorporar os próximos blocos em um só. Etapas 1–5 entregues;
-as etapas 6–12 continuam pendentes, com seus aceites abaixo.
+do usuário para incorporar os próximos blocos em um só. Etapas 1–6 entregues;
+a etapa 7 está parcial e as etapas 8–12 continuam pendentes, com seus aceites abaixo.
 
 A lacuna de leitura dos campos C# no Inspector durante Play foi corrigida após
 a etapa 4: [contrato e validação](INSPECAO-SCRIPTS-PLAY-2026-09-28.md).
@@ -125,8 +125,12 @@ instâncias por ambos os caminhos, preservando dados e referências.
 ### 7. Overrides, atualização da fonte e Unpack — P, itens 84, 85, 110, 111, 154, 155 e 157
 
 **Parcial:** Unpack (155) entregue, com preservação de identidade e histórico,
-incluindo salvar/reabrir no Android. Overrides, propagação e Apply/Revert
-continuam pendentes. Inventário acumulado: **127 existentes, 5 parciais,
+incluindo salvar/reabrir no Android. Em 29/09 foi implementada a comparação com
+a fonte e a reversão seletiva de propriedades e componentes da instância,
+com validação host; o aceite deste avanço no Android permanece pendente.
+[Contrato, limites e evidências](P-OVERRIDES-SELETIVOS-2026-09-29.md).
+Propagação, Apply, operações em lote e diferenças de hierarquia continuam
+pendentes. Inventário acumulado sem nova declaração de paridade: **127 existentes, 5 parciais,
 80 ausentes e 7 adaptações** (219). O bloco ampliado permanece aberto.
 
 Representar diferenças de propriedades, componentes e objetos por identidade
@@ -229,3 +233,22 @@ ou compatibilidade serão apresentadas antes da implementação correspondente.
 Validar por build, smoke test, regressões direcionadas e cenário real; ampliar
 testes somente pelo risco encontrado. Commits continuam coesos e locais,
 preservando a orientação de não fazer push.
+
+## Critério visual e funcional reforçado em 29/09
+
+Por instrução do usuário, cada capacidade deste bloco deve apresentar o par
+**imagem oficial da Unity versionada + captura da Astra executando o cenário**.
+Mapear cada propriedade e ação visível para sua função na Astra, incluindo
+defaults, domínio, estado, persistência e efeito no runtime quando aplicável.
+Uma função só recebe equivalência comprovada depois do aceite correspondente;
+nome, botão, imagem ou compilação isolados não comprovam equivalência.
+
+Ausências aparecem na comparação, inclusive quando o restante do painel já
+funciona. Capturas host, Android e conceitos devem ser identificados
+separadamente. Nenhuma imagem de referência ou conceito representa uma função
+implementada na Astra. A adaptação para toque mantém a identidade própria,
+preservando as capacidades avaliadas. Este critério também vale para revisar
+os itens já entregues; a auditoria de todos eles ainda não foi concluída.
+
+Primeira comparação do avanço atual:
+[Unity × Astra — prefabs](../validacao/COMPARACAO-UNITY-ASTRA-PREFABS-2026-09-29.html).

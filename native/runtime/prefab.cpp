@@ -86,6 +86,7 @@ bool Prefab::capture(const SceneGraph &source,ObjectId root,resources::AssetGuid
     if(!validObject(object) || serializePrefabObject(object).size()>256*1024 ||
        !prepared.graph_.restoreEntity(object,std::numeric_limits<u32>::max())) {error="Objeto inválido ou grande demais: "+std::string(object.name);return false;}
   }
+  if(!prepared.graph_.reserveObjectIdsUntil(source.nextObjectId())) {error="Identidades do prefab esgotadas ou inválidas";return false;}
   if(prepared.write().empty()) {error="O prefab excede o limite de armazenamento";return false;}
   *this=std::move(prepared);return true;
 }
@@ -94,7 +95,7 @@ std::string Prefab::write() const {
   if(!asset_.valid() || !root_ || !graph_.exists(root_)) return {};
   std::vector<ObjectId> ids;graph_.collectSubtree(root_,ids);
   std::ostringstream out;out.imbue(std::locale::classic());
-  out<<"ASTRA_PREFAB 1 "<<asset_.text()<<' '<<root_<<' '<<ids.size()<<'\n';
+  out<<"ASTRA_PREFAB 2 "<<asset_.text()<<' '<<root_<<' '<<ids.size()<<' '<<graph_.nextObjectId()<<'\n';
   for(const auto id:ids) {
     const auto text=serializePrefabObject(*graph_.find(id));
     if(text.empty() || text.size()>256*1024) return {};
@@ -108,10 +109,13 @@ bool Prefab::read(std::string_view text,Registry registry,std::string &error) {
   error.clear();
   if(text.size()>MaximumBytes) {error="Prefab excede 32 MiB";return false;}
   std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
-  std::string magic,guid;u32 version=0,count=0;Prefab prepared;
-  if(!(in>>magic>>version>>guid>>prepared.root_>>count) || magic!="ASTRA_PREFAB" || version!=1 ||
+  std::string magic,guid;u32 version=0,count=0,next=0;Prefab prepared;
+  if(!(in>>magic>>version>>guid>>prepared.root_>>count) || magic!="ASTRA_PREFAB" || (version!=1 && version!=2) ||
      !resources::AssetGuid::parse(guid,prepared.asset_) || !prepared.asset_.valid() || !count || count>=SceneGraph::kMaximumObjects) {
     error="Cabeçalho de prefab inválido ou versão não suportada";return false;
+  }
+  if(version==2 && (!(in>>next) || next<3 || next>SceneGraph::kMaximumObjects+1)) {
+    error="Contador de identidades inválido no prefab";return false;
   }
   for(u32 i=0;i<count;++i) {
     SceneObject object;
@@ -123,6 +127,7 @@ bool Prefab::read(std::string_view text,Registry registry,std::string &error) {
   }
   in>>std::ws;
   if(!in.eof()) {error="Dados adicionais após o prefab";return false;}
+  if(version==2 && !prepared.graph_.reserveObjectIdsUntil(next)) {error="Contador de identidades anterior aos objetos do prefab";return false;}
   if(!portableReferences(prepared.graph_,prepared.root_,error)) return false;
   *this=std::move(prepared);return true;
 }

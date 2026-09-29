@@ -316,6 +316,19 @@ public:
     }
     return false;
   }
+  // Restore a removed authored instance without retargeting references to a
+  // newly allocated ID. Never replaces a live component or lowers the frontier.
+  bool restoreInstance(const ComponentValue &source,u64 id,usize index) {
+    if(!id || id==std::numeric_limits<u64>::max() || findInstance(id) ||
+       values_.size()>=MaximumCount || !source.valid()) return false;
+    for(const auto &value:values_) if(value->type().id==source.type().id &&
+       (!source.type().allowMultiple || &value->type()!=&source.type())) return false;
+    auto copy=source.clone();
+    if(!copy || &copy->type()!=&source.type() || !copy->valid()) return false;
+    copy->instanceId_=id;
+    values_.insert(values_.begin()+static_cast<std::ptrdiff_t>(std::min(index,values_.size())),std::move(copy));
+    nextId_=std::max(nextId_,id+1);return true;
+  }
   bool remove(const ComponentType &type) {
     for(auto i=values_.begin();i!=values_.end();++i) if(&(*i)->type()==&type) {
       values_.erase(i);return true;

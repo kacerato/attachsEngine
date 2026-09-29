@@ -125,6 +125,7 @@ AE_TEST(prefab_editor_publishes_asset_and_registry_then_instantiates_with_undo) 
   const auto count=session.document().entityCount();
   const auto instance=session.instantiatePrefab(asset,session.document().root(),error);
   AE_EXPECT_TRUE(instance && session.document().entityCount()==count+2,error.c_str());
+  AE_EXPECT_EQ(session.document().find(instance)->components.size(),usize{1},"resource validation does not add a renderer to an empty object");
   AE_EXPECT_TRUE(session.history().undo(session.document()) && session.document().entityCount()==count,"one undo removes whole instance");
   AE_EXPECT_TRUE(session.history().redo(session.document()) && session.document().exists(instance),"redo keeps identity");
   const auto child=session.document().childrenOf(instance).front();
@@ -178,4 +179,116 @@ AE_TEST(prefab_import_ownership_is_unique_per_instance_and_tags_protect_saved_as
   EditorDocument empty;
   AE_EXPECT_TRUE(!projectTagUnused(path.string(),empty,"PrefabOnly",error) && error.find("prefab")!=std::string::npos,"closed prefab prevents orphan tag");
   AE_EXPECT_TRUE(projectTagUnused(path.string(),empty,"Unused",error),"unrelated tag can be removed");
+}
+
+AE_TEST(prefab_identity_frontier_survives_deleted_objects_and_legacy_migration) {
+  SceneGraph graph;const auto root=graph.createEntity(graph.root(),ObjectKind::Folder,"Root");
+  const auto removed=graph.createEntity(root,ObjectKind::Folder,"Removed");
+  AE_EXPECT_TRUE(graph.destroyEntity(removed),"remove highest identity");
+  Prefab prefab,loaded;std::string error;const auto guid=resources::assetGuidFromSeed("frontier");
+  AE_EXPECT_TRUE(prefab.capture(graph,root,guid,error) && loaded.read(prefab.write(),defaultEditorComponentRegistry(),error),error.c_str());
+  auto editing=loaded.graph();
+  AE_EXPECT_TRUE(editing.createEntity(root,ObjectKind::Folder,"New")>removed,"deleted source identity is never reused after reload");
+  const auto bytes=loaded.write();const auto newline=bytes.find('\n');
+  const auto legacy="ASTRA_PREFAB 1 "+guid.text()+" "+std::to_string(root)+" 1"+bytes.substr(newline);
+  AE_EXPECT_TRUE(loaded.read(legacy,defaultEditorComponentRegistry(),error),"v1 remains readable");
+  const auto good=loaded.write();
+  for(const auto next:{root,SceneGraph::kMaximumObjects+2}) {
+    const auto bad="ASTRA_PREFAB 2 "+guid.text()+" "+std::to_string(root)+" 1 "+std::to_string(next)+bytes.substr(newline);
+    AE_EXPECT_TRUE(!loaded.read(bad,defaultEditorComponentRegistry(),error),"invalid frontier refused");
+    AE_EXPECT_EQ(loaded.write(),good,"failure is transactional");
+  }
+  AE_EXPECT_TRUE(editing.reserveObjectIdsUntil(SceneGraph::kMaximumObjects+1),"exhaust frontier without huge allocation");
+  const auto revision=editing.revision();
+  AE_EXPECT_TRUE(!editing.createEntity(root,ObjectKind::Folder,"Overflow") && editing.revision()==revision,"exhaustion never creates an unserializable object");
+}
+
+AE_TEST(prefab_selective_revert_preserves_other_overrides_references_history_and_persistence) {
+  namespace fs=std::filesystem;
+  const auto path=fs::temp_directory_path()/("astra-prefab-revert-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(path);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{path};
+  EditorSession session;AE_EXPECT_TRUE(session.setProjectDirectory(path.string().c_str()),"project");
+  Fixture f;f.configure();session.document()=f.scene;
+  std::string error;const auto asset=session.createPrefab(f.root,error);AE_EXPECT_TRUE(asset.valid(),error.c_str());
+  const auto instance=session.instantiatePrefab(asset,session.document().root(),error);
+  AE_EXPECT_TRUE(instance,error.c_str());
+  const auto child=session.document().childrenOf(instance).front();
+  auto value=*session.document().find(child);
+  auto *follow=static_cast<scene::CameraFollow*>(value.components.edit(scene::CameraFollow::descriptor));
+  follow->dampingSeconds=2;follow->offset[0]=9;
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),child,value),"local fields");
+  PrefabOverrideView view;AE_EXPECT_TRUE(session.inspectPrefabOverrides(child,view,error),error.c_str());
+  const auto row=std::find_if(view.rows.begin(),view.rows.end(),[](const auto &v){return v.field=="damping_seconds";});
+  AE_EXPECT_TRUE(row!=view.rows.end() && view.rows.size()==2,"native reference is normalized, two actual overrides");
+  const auto before=serializeEditorDocument(session.document(),7);
+  AE_EXPECT_TRUE(session.revertPrefabOverride(view,static_cast<usize>(row-view.rows.begin()),error),error.c_str());
+  const auto *result=static_cast<const scene::CameraFollow*>(session.document().find(child)->components.find(scene::CameraFollow::descriptor));
+  AE_EXPECT_TRUE(result->dampingSeconds==.2f && result->offset[0]==9 && result->target==instance,"selective revert preserves other property and remapped reference");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"undo revert");
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),7),before,"exact undo");
+  AE_EXPECT_TRUE(session.history().redo(session.document()),"redo revert");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(session.document(),7),7,reopened),"save reopen");
+  result=static_cast<const scene::CameraFollow*>(reopened.find(child)->components.find(scene::CameraFollow::descriptor));
+  AE_EXPECT_TRUE(result->dampingSeconds==.2f && result->offset[0]==9,"selective result persists");
+  value=*session.document().find(instance);value.transform.position[0]=25;
+  auto *script=static_cast<scene::ScriptBehavior*>(value.components.edit(scene::ScriptBehavior::descriptor));
+  script->setProperty("child","object","0");script->setProperty("newLocal","int32","17");
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),instance,value),"script overrides and placement");
+  AE_EXPECT_TRUE(session.inspectPrefabOverrides(instance,view,error) && view.rows.size()==2,"root placement is not a source override");
+  const auto scriptRow=std::find_if(view.rows.begin(),view.rows.end(),[](const auto &v){return v.field=="child";});
+  AE_EXPECT_TRUE(scriptRow!=view.rows.end() && session.revertPrefabOverride(view,static_cast<usize>(scriptRow-view.rows.begin()),error),error.c_str());
+  const auto *live=scene::scriptBehavior(session.document().find(instance)->components.find(scene::ScriptBehavior::descriptor));
+  AE_EXPECT_TRUE(live->properties[0].value==std::to_string(child) && live->properties.back().value=="17","script object refers to this instance; other field stays");
+  AE_EXPECT_EQ(session.document().find(instance)->transform.position[0],25.f,"root placement preserved");
+  AE_EXPECT_TRUE(session.inspectPrefabOverrides(instance,view,error) && view.rows.size()==1,"one field remains");
+  AE_EXPECT_TRUE(session.revertPrefabOverride(view,0,error),error.c_str());
+  live=scene::scriptBehavior(session.document().find(instance)->components.find(scene::ScriptBehavior::descriptor));
+  AE_EXPECT_EQ(live->properties.size(),usize{3},"local-only script field returns to constructor default by removing authored entry");
+}
+
+AE_TEST(prefab_revert_restores_component_identity_and_refuses_stale_or_dangling_edits) {
+  namespace fs=std::filesystem;
+  const auto path=fs::temp_directory_path()/("astra-prefab-guards-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(path);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{path};
+  EditorSession session;AE_EXPECT_TRUE(session.setProjectDirectory(path.string().c_str()),"project");
+  Fixture f;f.configure();session.document()=f.scene;std::string error;
+  const auto asset=session.createPrefab(f.root,error);AE_EXPECT_TRUE(asset.valid(),error.c_str());
+  auto value=*session.document().find(f.child);value.components.removeInstance(1);
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),f.child,value),"removed source component");
+  PrefabOverrideView view;AE_EXPECT_TRUE(session.inspectPrefabOverrides(f.child,view,error) && view.rows.size()==1,error.c_str());
+  AE_EXPECT_TRUE(view.rows[0].kind==PrefabOverrideKind::RemovedComponent && session.revertPrefabOverride(view,0,error),error.c_str());
+  AE_EXPECT_TRUE(session.document().find(f.child)->components.findInstance(1),"original component identity restored for existing script references");
+  value=*session.document().find(f.root);value.visible=false;
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),f.root,value),"local visibility");
+  AE_EXPECT_TRUE(session.inspectPrefabOverrides(f.root,view,error) && view.rows.size()==1,error.c_str());
+  value.active=true;AE_EXPECT_TRUE(session.history().applyValues(session.document(),f.root,value),"edit after preview");
+  const auto before=serializeEditorDocument(session.document(),7);const auto depth=session.history().undoDepth();
+  AE_EXPECT_TRUE(!session.revertPrefabOverride(view,0,error),"stale scene refused");
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),7),before,"stale preview has no mutation");
+  AE_EXPECT_EQ(session.history().undoDepth(),depth,"no history pollution");
+  AE_EXPECT_TRUE(session.inspectPrefabOverrides(f.root,view,error),error.c_str());
+  Prefab source;AE_EXPECT_TRUE(session.loadPrefab(asset,source,error),error.c_str());
+  auto changed=source.graph();value=*changed.find(f.root);runtime::assignObjectName(value,"Changed source");changed.applyEntityValues(f.root,value);
+  AE_EXPECT_TRUE(source.capture(changed,f.root,asset,error),error.c_str());
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(path/"Prefabs/Rig.prefab",source.write()),"external source edit");
+  AE_EXPECT_TRUE(!session.revertPrefabOverride(view,0,error) && error.find("fonte mudou")!=std::string::npos,"stale source refused");
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),7),before,"external edit cannot silently change preview");
+  value=*session.document().find(f.root);
+  auto *added=value.components.add(scene::CameraFollow::descriptor);AE_EXPECT_TRUE(added,"local component");
+  const auto addedId=added->instanceId();
+  auto *script=static_cast<scene::ScriptBehavior*>(value.components.edit(scene::ScriptBehavior::descriptor));
+  script->setProperty("localReference","component:astra.camera.follow",scene::scriptComponentValue(f.root,addedId));
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),f.root,value),"script refers to added component");
+  AE_EXPECT_TRUE(session.inspectPrefabOverrides(f.root,view,error),error.c_str());
+  auto removal=std::find_if(view.rows.begin(),view.rows.end(),[&](const auto &r){return r.kind==PrefabOverrideKind::AddedComponent && r.component==addedId;});
+  AE_EXPECT_TRUE(removal!=view.rows.end() && !session.revertPrefabOverride(view,static_cast<usize>(removal-view.rows.begin()),error),"removal cannot leave a dangling component reference");
+  value=*session.document().find(f.root);script=static_cast<scene::ScriptBehavior*>(value.components.edit(scene::ScriptBehavior::descriptor));
+  script->setProperty("localReference","component:astra.camera.follow","0:0");
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),f.root,value),"clear reference");
+  AE_EXPECT_TRUE(session.inspectPrefabOverrides(f.root,view,error),error.c_str());
+  removal=std::find_if(view.rows.begin(),view.rows.end(),[&](const auto &r){return r.kind==PrefabOverrideKind::AddedComponent && r.component==addedId;});
+  AE_EXPECT_TRUE(removal!=view.rows.end() && session.revertPrefabOverride(view,static_cast<usize>(removal-view.rows.begin()),error),error.c_str());
+  AE_EXPECT_TRUE(!session.document().find(f.root)->components.findInstance(addedId),"unreferenced local addition removed");
 }

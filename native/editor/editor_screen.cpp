@@ -5250,6 +5250,57 @@ void buildInspectorDebug(ScreenBuilder &builder,UiRect content,const EditorEntit
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
 }
 
+namespace {
+std::vector<std::string> wrapText(const UiDrawList &list,std::string_view text,float width,const UiTypeStyle &style);
+}
+void prefabComparisonText(ScreenBuilder &builder,UiRect rect,std::string text,UiColor color,u32 maximumLines=2) {
+  if(text.size()>256) {
+    usize end=256;while(end && (static_cast<unsigned char>(text[end])&0xc0)==0x80) --end;
+    text.resize(end);text+="…";
+  }
+  const auto lines=wrapText(builder.list,text,rect.width,builder.theme.type.caption);
+  for(u32 i=0;i<std::min<usize>(maximumLines,lines.size());++i) {
+    auto line=lines[i];if(i+1==maximumLines && lines.size()>maximumLines) line+="…";
+    builder.label(takeTop(rect,16),line,color,builder.theme.type.caption);
+  }
+}
+void buildPrefabOverrides(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.prefabOverrides;
+  auto navigation=takeTop(content,44);
+  auto back=takeLeft(navigation,76),refresh=takeRight(navigation,76);
+  builder.label(back,"< Objeto",theme.color.accent,theme.type.caption);
+  builder.router.addRegion(back,widgetId(EditorWidget::PrefabOverridesClose));
+  builder.label(refresh,"Atualizar",theme.color.accent,theme.type.caption,UiAlign::End);
+  builder.router.addRegion(refresh,widgetId(EditorWidget::PrefabOverridesRefresh));
+  builder.label(takeTop(content,28),"Diferenças da fonte",theme.color.text,theme.type.body);
+  const bool stale=state.document->revision()!=view.revision;
+  if(!view.error.empty()) {prefabComparisonText(builder,content,view.error,theme.color.warning,8);return;}
+  if(stale) prefabComparisonText(builder,takeTop(content,36),"Cena alterada — atualize para reverter",theme.color.warning);
+  else prefabComparisonText(builder,takeTop(content,36),"Propriedades e componentes deste objeto",theme.color.textDim);
+  if(view.rows.empty()) {prefabComparisonText(builder,content,"Nenhuma diferença de propriedade ou componente",theme.color.textDim);return;}
+  auto footer=takeBottom(content,44);
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/124));
+  const u32 count=static_cast<u32>(view.rows.size()),pages=(count+perPage-1)/perPage;
+  const u32 page=std::min(state.propertyPage,pages-1);
+  for(u32 i=page*perPage;i<std::min(count,(page+1)*perPage);++i) {
+    if(content.height<120) break;
+    auto row=takeTop(content,124);const auto &difference=view.rows[i];
+    auto heading=takeTop(row,44),revert=takeRight(heading,76);
+    prefabComparisonText(builder,heading,difference.label,theme.color.text);
+    builder.label(revert,"Reverter",!stale&&difference.applicable?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::End);
+    if(!stale && difference.applicable) builder.router.addRegion(revert,widgetId(EditorWidget::PrefabOverrideRevertBase)+i);
+    prefabComparisonText(builder,takeTop(row,32),"Local: "+difference.current,theme.color.text);
+    prefabComparisonText(builder,takeTop(row,32),"Fonte: "+difference.source,theme.color.textDim);
+    builder.list.addRect({row.x,row.y+row.height-1,row.width,1},theme.color.raised,0);
+  }
+  const auto previous=takeLeft(footer,44),next=takeRight(footer,44);
+  builder.label(previous,"<",theme.color.textDim,theme.type.body,UiAlign::Center);
+  builder.label(next,">",theme.color.textDim,theme.type.body,UiAlign::Center);
+  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
+  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)+" · "+std::to_string(count)+" diferenças").c_str(),theme.color.textDim,theme.type.caption,UiAlign::Center);
+}
+
 void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   auto title=takeTop(content,36),close=takeRight(title,36);
@@ -5265,6 +5316,7 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
       {"Criar filho vazio",EditorWidget::CreateChildGroup,true},
       {"Criar prefab da seleção",EditorWidget::PrefabCreate,!root && !scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},
       {"Desvincular instância de prefab",EditorWidget::PrefabUnpack,scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},
+      {"Comparar com a fonte do prefab",EditorWidget::PrefabOverrides,scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},
       {"Mover acima",EditorWidget::MoveEarlier,!root},
       {"Mover abaixo",EditorWidget::MoveLater,!root},
       {"Mudar pai",EditorWidget::ReparentSelection,!root},
@@ -6155,6 +6207,10 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     buildInspectorDebug(builder,content,*entity);
     return;
   }
+  if(builder.state.prefabOverridesOpen && builder.state.prefabOverrides.object==target &&
+     !builder.multiEdit && builder.state.workspace==EditorWorkspace::Scene && !builder.focusedWindow) {
+    buildPrefabOverrides(builder,content);return;
+  }
   if(builder.state.inspectorMenu && builder.state.workspace==EditorWorkspace::Scene) {
     buildObjectActions(builder,content,*entity);
     return;
@@ -6203,7 +6259,10 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
   takeTop(content,6);
   if(const auto *link=scene::prefabLink(entity->components)) {
     const auto *record=builder.state.assetRegistry?builder.state.assetRegistry->find(link->asset):nullptr;
-    auto row=takeTop(content,28);
+    auto row=takeTop(content,44);
+    if(!builder.multiEdit && builder.state.workspace==EditorWorkspace::Scene && !builder.focusedWindow)
+      builder.router.addRegion(row,widgetId(EditorWidget::PrefabOverrides));
+    builder.label(takeRight(row,20),">",theme.color.accent,theme.type.caption,UiAlign::Center);
     builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(UiIcon::ScenePrefab),theme.color.accent);
     builder.label(row,record?record->path:"Fonte de prefab ausente",record?theme.color.textDim:theme.color.warning,theme.type.caption);
   }
@@ -8287,6 +8346,20 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.workspace==EditorWorkspace::Project && !layout.viewport.isEmpty()) {
     router.addBlocker(layout.viewport);
     buildProjectSettings(builder,layout.viewport);
+  }
+  // Reading differences needs width. This temporary route leaves the saved
+  // panel sizes and scene camera untouched; returning restores the same layout.
+  const auto prefabTarget=state.inspectorLocked?state.inspectorLocked:state.selection;
+  if(compact && state.workspace==EditorWorkspace::Scene && state.prefabOverridesOpen &&
+     state.prefabOverrides.object==prefabTarget && state.multi.count<=1 && state.document->exists(prefabTarget)) {
+    auto surface=remaining;
+    list.addRect(surface,theme.color.surface);router.addBlocker(surface);
+    auto status=takeBottom(surface,kStatusBarHeight);buildStatusBar(builder,status);
+    auto page=deflate(surface,UiInsets::all(12));
+    auto heading=takeTop(page,36);
+    list.addImage(centred(takeLeft(heading,28),18,18),static_cast<UiImageId>(UiIcon::ScenePrefab),theme.color.accent);
+    builder.label(heading,state.document->find(prefabTarget)->name,theme.color.text,theme.type.body);
+    buildPrefabOverrides(builder,page);
   }
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);

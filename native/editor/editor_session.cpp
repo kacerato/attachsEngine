@@ -5578,12 +5578,30 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     else if(!createPrefab(state_.inspectorTarget?state_.inspectorTarget:state_.selection,error).valid()) state_.status=error;
     state_.entityMenu=false;return true;
   }
+  if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::PrefabOverrides) ||
+      routing.widgetId==widgetId(EditorWidget::PrefabOverridesRefresh))) {
+    if(state_.selectionSet.size()>1) {state_.status="Selecione um objeto para comparar com a fonte";return true;}
+    const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+    std::string error;inspectPrefabOverrides(target,state_.prefabOverrides,error);
+    state_.prefabOverridesOpen=true;state_.inspectorMenu=false;state_.inspectorDebug=false;
+    state_.propertyPage=0;if(!error.empty()) state_.status=error;return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabOverridesClose)) {
+    state_.prefabOverridesOpen=false;state_.propertyPage=0;return true;
+  }
+  if(routing.tapped && (routing.widgetId&0xff000000u)==widgetId(EditorWidget::PrefabOverrideRevertBase)) {
+    std::string error;
+    if(!revertPrefabOverride(state_.prefabOverrides,routing.widgetId&0x00ffffffu,error)) state_.status=error;
+    else {const auto target=state_.prefabOverrides.object;inspectPrefabOverrides(target,state_.prefabOverrides,error);}
+    return true;
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabUnpack)) {
     std::string error;
     if(state_.selectionSet.size()>1) state_.status="Selecione uma instância para desvincular";
     else if(!unpackPrefab(state_.inspectorTarget?state_.inspectorTarget:state_.selection,error)) state_.status=error;
-    state_.entityMenu=false;return true;
+    state_.entityMenu=false;state_.prefabOverridesOpen=false;return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::InspectorMenu)) state_.prefabOverridesOpen=false;
   const EditorPointerOutcome outcome =
       applyEditorPointer(state_, layout_, routing, document_, history_);
   if (outcome.requestPlay) preparePlay();

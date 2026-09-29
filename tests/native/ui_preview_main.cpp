@@ -16,8 +16,10 @@
 #include "editor/editor_value_library.h"
 #include "editor/editor_curve_view.h"
 #include "scene/script_behavior.h"
+#include "scene/camera_follow.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
+#include "editor/editor_session.h"
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_creation_catalog.h"
 #include "renderer/water_authoring_geometry.h"
@@ -27,6 +29,8 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <filesystem>
+#include <chrono>
 
 using namespace ae;
 
@@ -108,6 +112,7 @@ int main(int argc, char **argv) {
   }
 
   editor::EditorScreenState state{};
+  resources::AssetRegistry prefabPreviewAssets;
   editor::EditorConsole console;
   editor::EditorCodeWorkspace code;
   editor::EditorValueLibraries swatches;
@@ -520,6 +525,33 @@ int main(int argc, char **argv) {
     auto value=*document.find(selection);value.tag="Interagível";document.applyEntityValues(selection,value);
     if(std::string(argv[4])=="tag-picker") state.tagPicker=true;
     else {state.workspace=editor::EditorWorkspace::Project;state.projectSection=editor::EditorProjectSection::Tags;}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("prefab-")) {
+    // Exercise the actual source/instance comparison, not fabricated UI rows.
+    namespace fs=std::filesystem;
+    const auto path=fs::temp_directory_path()/("astra-prefab-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    if(!fs::create_directory(path)) return 1;
+    struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{path};
+    editor::EditorSession session;
+    if(!session.setProjectDirectory(path.string().c_str())) return 1;
+    selection=session.document().createEntity(session.document().root(),editor::EditorEntityKind::Folder,"Câmera de acompanhamento");
+    auto value=*session.document().find(selection);
+    auto *follow=static_cast<scene::CameraFollow*>(value.components.add(scene::CameraFollow::descriptor));
+    follow->dampingSeconds=.2f;session.document().applyEntityValues(selection,value);
+    std::string error;if(!session.createPrefab(selection,error).valid()) {std::fprintf(stderr,"%s\n",error.c_str());return 1;}
+    value=*session.document().find(selection);
+    follow=static_cast<scene::CameraFollow*>(value.components.edit(scene::CameraFollow::descriptor));
+    follow->dampingSeconds=2;follow->offset[0]=9;value.visible=false;
+    session.document().applyEntityValues(selection,value);
+    if(!session.inspectPrefabOverrides(selection,state.prefabOverrides,error)) {std::fprintf(stderr,"%s\n",error.c_str());return 1;}
+    document=session.document();history=session.history();state.prefabOverridesOpen=std::string(argv[4])!="prefab-inspector";
+    prefabPreviewAssets=session.assets();state.assetRegistry=&prefabPreviewAssets;
+    if(!state.prefabOverridesOpen) {
+      state.componentSelection=selection;
+      state.expandedNative=value.components.find(scene::CameraFollow::descriptor)->instanceId();
+    }
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(std::string(argv[4])=="prefab-overrides-stale") document.setName(selection,"Alterado depois da comparação");
   }
   state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
   state.document = &document;

@@ -142,6 +142,10 @@ public:
   // Objetos vivos, incluindo a raiz. Nao e o tamanho do vetor interno: ids nunca
   // sao reciclados, entao o vetor guarda tambem os buracos dos removidos.
   u32 entityCount() const noexcept { return aliveCount_; }
+  // Persist the allocation frontier when editing a reusable source: removed
+  // identities must not be reassigned to unrelated objects after reopening.
+  ObjectId nextObjectId() const noexcept { return nextId_; }
+  bool reserveObjectIdsUntil(ObjectId next);
   // Sobe a cada mutação aceita. É o que diz ao renderer e à UI que a extração do
   // frame anterior não vale mais, sem que ninguém precise comparar estado.
   u64 revision() const noexcept { return revision_; }

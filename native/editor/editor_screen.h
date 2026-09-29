@@ -28,6 +28,7 @@
 #include "core/base.h"
 #include "runtime/script_inspection.h"
 #include "editor/editor_document.h"
+#include "editor/editor_prefab_overrides.h"
 #include "editor/editor_filesystem.h"
 #include "editor/editor_code_workspace.h"
 #include "editor/editor_console.h"
@@ -63,6 +64,7 @@ struct EditorPresetField {
 enum class EditorWidget : u32 {
   CreationCategoryBase=0x63000000,
   CreationRowBase=0x64000000,
+  PrefabOverrideRevertBase=0xD0000000u,
   None = 0,
   FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,FilesRename,FilesDelete,
   ConsoleInfo,ConsoleWarning,ConsoleError,ConsoleClear,ConsoleCollapse,
@@ -220,6 +222,9 @@ enum class EditorWidget : u32 {
   ObjectFold, ObjectLayerPrevious, ObjectLayerNext, CreateChildGroup,
   PrefabCreate,
   PrefabUnpack,
+  PrefabOverrides,
+  PrefabOverridesClose,
+  PrefabOverridesRefresh,
   TransformMenu, TransformCopy, TransformPaste, TransformReset,
   TransformResetPosition, TransformResetRotation, TransformResetScale,
   // R3: importação no painel de Propriedades (abas, perfil e ações do perfil).
@@ -1347,6 +1352,8 @@ struct EditorScreenState final {
   u32 textureProfilePage=0;
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
+  bool prefabOverridesOpen=false;
+  PrefabOverrideView prefabOverrides;
   // Transformação copiada, para colar em outro objeto.
   bool hasTransformClipboard=false;
   EditorTransform transformClipboard{};

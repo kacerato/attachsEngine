@@ -57,7 +57,8 @@ public:
   }
   static bool write(const std::filesystem::path &path,std::span<const u8> bytes) {
     struct Input {std::span<const u8> bytes;usize offset=0;} input{bytes};
-    return platform::replaceAssetFile(path.string().c_str(),bytes.size(),[](void *context,void *data,size_t capacity) {
+    const auto utf8=path.u8string();
+    return platform::replaceAssetFile(reinterpret_cast<const char*>(utf8.c_str()),bytes.size(),[](void *context,void *data,size_t capacity) {
       auto &source=*static_cast<Input *>(context);
       const auto count=std::min(capacity,source.bytes.size()-source.offset);
       if(count) std::memcpy(data,source.bytes.data()+source.offset,count);

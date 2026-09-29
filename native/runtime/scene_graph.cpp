@@ -243,7 +243,7 @@ bool SceneGraph::detachFromParent(ObjectId id) {
 
 ObjectId SceneGraph::createEntity(ObjectId parent, ObjectKind kind, std::string_view name) {
   if (record(parent) == nullptr) return kInvalidObject;
-  if (entityCount() >= kMaximumObjects) return kInvalidObject;
+  if (entityCount() >= kMaximumObjects || nextId_ > kMaximumObjects) return kInvalidObject;
   const ObjectId id = nextId_++;
   if (id >= records_.size()) records_.resize(id + 1);
   Record &created = records_[id];
@@ -260,6 +260,12 @@ ObjectId SceneGraph::createEntity(ObjectId parent, ObjectKind kind, std::string_
   ++aliveCount_;
   ++revision_;
   return id;
+}
+
+bool SceneGraph::reserveObjectIdsUntil(ObjectId next) {
+  if(next<nextId_ || next>kMaximumObjects+1) return false;
+  if(next!=nextId_) {nextId_=next;++revision_;}
+  return true;
 }
 
 bool SceneGraph::restoreEntity(const SceneObject &object, u32 childIndex) {

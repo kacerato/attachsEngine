@@ -1181,8 +1181,11 @@ public:
   EditorEntityId createRecipe(u32 index, EditorEntityId parent);
   resources::AssetGuid createPrefab(EditorEntityId root,std::string &error);
   bool unpackPrefab(EditorEntityId selected,std::string &error);
+  bool inspectPrefabOverrides(EditorEntityId selected,PrefabOverrideView &view,std::string &error);
+  bool revertPrefabOverride(const PrefabOverrideView &view,usize row,std::string &error);
   bool loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) const;
   bool preparePrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error);
+  bool preparePrefab(const runtime::Prefab &authored,runtime::Prefab &prefab,std::string &error);
   EditorEntityId instantiatePrefab(resources::AssetGuid asset,EditorEntityId parent,std::string &error);
   // Soltar um objeto da Hierarquia ou um recurso sobre um campo do Inspector
   // (Unity: arrastar para o campo de referência). `field` é o id do widget do

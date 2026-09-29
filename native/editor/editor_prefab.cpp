@@ -120,11 +120,17 @@ bool EditorSession::loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefa
 
 bool EditorSession::preparePrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) {
   runtime::Prefab authored;if(!loadPrefab(asset,authored,error)) return false;
+  return preparePrefab(authored,prefab,error);
+}
+
+bool EditorSession::preparePrefab(const runtime::Prefab &authored,runtime::Prefab &prefab,std::string &error) {
+  error.clear();
   EditorDocument resolved;
   std::vector<EditorEntityId> ids;authored.graph().collectSubtree(authored.root(),ids);
   for(const auto id:ids) if(!resolved.restoreEntity(*authored.graph().find(id),std::numeric_limits<u32>::max())) {
     error="Valores do prefab recusados pelo editor";return false;
   }
+  if(!resolved.reserveObjectIdsUntil(authored.graph().nextObjectId())) {error="Identidades inválidas no prefab";return false;}
   mapScene_.reconcileAssets(resolved);
   const auto available=runtimeResourceResolver();
   for(const auto id:ids) {
@@ -135,7 +141,7 @@ bool EditorSession::preparePrefab(resources::AssetGuid asset,runtime::Prefab &pr
       if(!resolveComponentResources(*resolvedComponent,nullptr,error) ||
          !value.components.replaceInstance(component->instanceId(),*resolvedComponent)) return false;
     }
-    if(auto *render=editMeshRenderer(value)) for(u32 slot=0;slot<render->slotCount();++slot) {
+    if(auto *render=meshRenderer(value)?editMeshRenderer(value):nullptr) for(u32 slot=0;slot<render->slotCount();++slot) {
       if(render->slotAsset(slot).valid() && !render->slotMesh(slot)) {error="Malha do prefab indisponível: "+render->slotAsset(slot).text();return false;}
       if(!available(render->slotMaterialAsset(slot),resources::AssetType::Material,"material",slot,*render)) {
         error="Material ou textura do prefab indisponível no objeto "+std::string(value.name);return false;
@@ -143,7 +149,7 @@ bool EditorSession::preparePrefab(resources::AssetGuid asset,runtime::Prefab &pr
     }
     if(!resolved.applyEntityValues(id,value)) {error="Não foi possível resolver os recursos do prefab";return false;}
   }
-  return prefab.capture(resolved,authored.root(),asset,error);
+  return prefab.capture(resolved,authored.root(),authored.asset(),error);
 }
 
 EditorEntityId EditorSession::instantiatePrefab(resources::AssetGuid asset,EditorEntityId parent,std::string &error) {

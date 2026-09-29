@@ -467,6 +467,7 @@ add_library(aether_editor STATIC
   editor/editor_screen.cpp
   editor/editor_session.cpp
   editor/editor_prefab.cpp
+  editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
   editor/editor_texture_assets.cpp

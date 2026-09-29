@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prefabs — comparação funcional Unity × Astra</title>
+<style>
+:root{color-scheme:dark;font-family:Segoe UI,Arial,sans-serif;background:#171b20;color:#e5e9ed}
+body{max-width:1440px;margin:auto;padding:32px}h1{font-size:clamp(28px,4vw,44px);margin:12px 0}h2{font-size:24px;margin:40px 0 16px}p{max-width:950px;line-height:1.6}a{color:#a9d6ff}small,figcaption{color:#b7c0ca;line-height:1.5}.meta{color:#c4eb63;text-transform:uppercase;letter-spacing:.1em;font-size:12px}.verdict{border-left:4px solid #e8b65e;padding:12px 20px;background:#24282d}.pair{display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1.6fr);gap:24px;align-items:start}figure{margin:0}figure img{display:block;max-width:100%;height:auto;max-height:650px;object-fit:contain;object-position:left top;background:#11151a}figcaption{margin-top:10px}.reference{max-width:520px}.wide{width:100%}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.5}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #3a424b;padding:14px 12px}th{color:#c4eb63;background:#21272e}td:first-child{width:22%;font-weight:600}.partial{color:#e8b65e}.absent{color:#f2a3a3}.host{color:#a9d6ff}.scroll{overflow:auto}details{border-bottom:1px solid #3a424b;padding:16px 0}summary{cursor:pointer;font-size:18px}code{font-size:.92em}footer{margin-top:42px;border-top:1px solid #3a424b;padding-top:20px}@media(max-width:850px){body{padding:20px}.pair{grid-template-columns:1fr}th,td{min-width:140px;padding:10px}figure img{max-height:none}}
+</style>
+<header>
+<div class="meta">Astra · evidência de implementação · 29 setembro 2026</div>
+<h1>Prefabs: mesma função?</h1>
+<p>Referência: <a href="https://docs.unity.com/en-us/engine/6000.0/manual/working-with-gameobjects/prefabs/override/prefab-instance-overrides">Unity 6000.0, Override prefab instances</a>. As imagens oficiais abaixo foram examinadas na documentação. As imagens Astra vêm do executável nativo de prévia, com recurso, instância e comparação reais. Não são conceitos gerados nem capturas do Android.</p>
+<p class="verdict"><strong>Resultado: cobertura parcial.</strong> Há reversão seletiva na Astra, validada em testes host. Não há equivalência completa com o workflow de overrides da Unity. Esta primeira comparação cobre prefabs; os demais componentes do plano ainda precisam de pares próprios e cenários de aceite.</p>
+</header>
+<main>
+<h2>01 · Localizar diferenças e reverter</h2>
+<div class="pair">
+<figure><a href="https://docs.unity.com/api/media?file=/engine/6000.0/media/images/prefab-instance-inspector.png"><img class="reference" src="https://docs.unity.com/api/media?file=/engine/6000.0/media/images/prefab-instance-inspector.png" alt="Unity 6000.0: lista de overrides com ações Apply All e Revert All"></a><figcaption>Unity — imagem oficial do menu de overrides. Crédito: Unity Technologies. Clique para abrir o original.</figcaption></figure>
+<figure><a href="evidencias/p-prefab-overrides-20260929/landscape.png"><img class="wide" src="evidencias/p-prefab-overrides-20260929/landscape.png" alt="Astra: diferenças da fonte com valores locais, valores da fonte e Reverter individual"></a><figcaption>Astra — prévia host 1200 × 700. O exemplo altera visibilidade, amortecimento e offset. Componentes e valores diferentes dos exemplos Unity: a comparação aqui é do workflow, não da equivalência entre componentes.</figcaption></figure>
+</div>
+<div class="scroll"><table>
+<thead><tr><th>Capacidade da referência</th><th>Correspondência Astra</th><th>Resultado / limite</th></tr></thead>
+<tbody>
+<tr><td>Listar overrides da instância</td><td>Comparar com a fonte do prefab → Diferenças da fonte.</td><td class="partial">Parcial: somente o objeto selecionado, comparado à fonte atual. Não diferencia alteração local de alteração externa por merge de três versões.</td></tr>
+<tr><td>Reverter uma propriedade</td><td>Reverter na linha do campo refletido ou propriedade C#.</td><td class="host">Implementado e testado no host: restaura o campo e conserva outras diferenças, com Undo/Redo e serialização. Aceite físico pendente.</td></tr>
+<tr><td>Reverter componentes adicionados/removidos</td><td>Remover adição local / restaurar componente removido com sua identidade.</td><td class="partial">Implementado com recusa de referências inválidas. Mudanças estruturais na fonte exigem reconciliação ainda pendente.</td></tr>
+<tr><td>Apply / Apply All / Revert All</td><td>Sem ação correspondente neste pacote.</td><td class="absent">Ausente. Reverter individualmente não equivale a operação coletiva nem altera o recurso de origem.</td></tr>
+<tr><td>Overrides de filhos</td><td>Sem comparação de inclusão, remoção ou reparentamento de filhos.</td><td class="absent">Ausente neste comparador.</td></tr>
+<tr><td>Posição e rotação da raiz preservadas</td><td>Excluídas da lista de diferenças; escala permanece comparável.</td><td class="host">Regra implementada; posicionamento da instância protegido no teste dirigido.</td></tr>
+<tr><td>Propagar edição da fonte preservando overrides</td><td>Não há propagação neste pacote.</td><td class="absent">Pendente. Comparar a fonte atual não substitui esse sistema.</td></tr>
+</tbody></table></div>
+<h2>02 · Reconhecer a alteração no Inspector</h2>
+<div class="pair">
+<figure><a href="https://docs.unity.com/api/media?file=/engine/6000.0/media/images/prefab-instance-overrides.png"><img class="reference" src="https://docs.unity.com/api/media?file=/engine/6000.0/media/images/prefab-instance-overrides.png" alt="Unity: Inspector com marcas visuais de propriedades e componentes alterados"></a><figcaption>Unity — marcas junto às propriedades e componentes. Imagem oficial, Unity Technologies.</figcaption></figure>
+<figure><a href="evidencias/p-prefab-overrides-20260929/inspector.png"><img class="wide" src="evidencias/p-prefab-overrides-20260929/inspector.png" alt="Astra: Inspector normal de uma instância de prefab, com caminho da fonte e componente de acompanhamento"></a><figcaption>Astra — Inspector real rasterizado no host. O caminho da fonte abre a comparação; não há marcas de override junto a cada campo.</figcaption></figure>
+</div>
+<p><strong class="absent">Lacuna visual e funcional:</strong> o usuário ainda precisa abrir a comparação para identificar quais campos divergem. O vínculo ao prefab não informa quais propriedades foram modificadas. Não se atribui equivalência aos campos Health ou Box Collider da imagem Unity por existir outro componente no Inspector Astra.</p>
+<h2>03 · Reconhecer alterações na hierarquia</h2>
+<div class="pair">
+<figure><img class="reference" src="https://docs.unity.com/api/media?file=/engine/6000.0/media/images/prefab-instance-hierarchy-override.png" alt="Unity: filho adicionado à instância identificado na hierarquia"><figcaption>Unity — indicação de filho acrescentado à instância. Imagem oficial, Unity Technologies.</figcaption></figure>
+<div><p><strong class="absent">Sem equivalente comprovado na Astra.</strong> A captura do Inspector acima mostra a hierarquia atual, mas não é uma demonstração de filho adicionado com override. O comparador não oferece essa capacidade; não foi criada uma imagem que simule sua existência.</p><p>Também permanecem pendentes a edição contextual da fonte com retorno à cena, aninhamento e variantes.</p></div>
+</div>
+<h2>04 · Propriedades, ações e evidência</h2>
+<p>Os valores abaixo são do cenário Astra, não defaults atribuídos à Unity. O teste da comparação comprova o valor autoral e sua reversão; esta captura não comprova o resultado visual da câmera em Play.</p>
+<div class="scroll"><table>
+<thead><tr><th>Campo / ação Astra</th><th>Contrato observado</th><th>Persistência / validação</th></tr></thead>
+<tbody>
+<tr><td>Visível</td><td>Booleano; fonte Sim, instância Não.</td><td>Comparação autoral na prévia; resultado renderizado no aparelho ainda não capturado.</td></tr>
+<tr><td>Amortecimento</td><td>CameraFollow.dampingSeconds; fonte 0,2 s, instância 2 s.</td><td>Teste restaura só esse valor e mantém offset; Undo/Redo e reabertura da cena verificados no host.</td></tr>
+<tr><td>Offset X</td><td>Fonte 0, instância 9; unidades de cena.</td><td>Preservado quando outra propriedade é revertida. Não há comparação com um componente Unity de acompanhamento neste documento.</td></tr>
+<tr><td>Fonte ou cena mudou após abrir</td><td>Recusar uma reversão baseada em prévia obsoleta; Atualizar refaz a comparação.</td><td>Teste protege ausência de mutação parcial ou passo vazio no histórico.</td></tr>
+<tr><td>Componente sem reflexão suficiente</td><td>Linha explicitamente marcada como componente completo.</td><td>Reversão substitui todos os dados; não há promessa de granularidade por propriedade.</td></tr>
+<tr><td>Referências</td><td>IDs da fonte remapeados à instância; componente referenciado não pode ser removido sem resolver o vínculo.</td><td>Teste dirigido cobre referências a objetos/componentes e restauração da identidade.</td></tr>
+</tbody></table></div>
+<details><summary>Adaptação para toque e estado obsoleto</summary>
+<p>A comparação ocupa o corpo da tela em retrato e a região do Inspector em paisagem. Fechar devolve o contexto; não altera tamanhos salvos dos painéis. A ação individual usa alvo de toque de 44 unidades. Isso adapta o fluxo ao espaço mobile, sem copiar a aparência da Unity.</p>
+<div class="pair"><figure><img src="evidencias/p-prefab-overrides-20260929/portrait.png" alt="Astra: comparação em retrato"><figcaption>Retrato — prévia host 480 × 900.</figcaption></figure><figure><img src="evidencias/p-prefab-overrides-20260929/stale.png" alt="Astra: cena alterada, reversão desabilitada até atualizar"><figcaption>Estado obsoleto — ações desabilitadas.</figcaption></figure></div>
+</details>
+<h2>Critério para os próximos pares</h2>
+<p>Cada função deve ter imagem oficial versionada, captura Astra do mesmo cenário e uma matriz por controle: finalidade, tipo, unidade, default, intervalo, condição de uso, consumidor runtime, salvar/reabrir e resultado observado. A equivalência será atribuída a capacidades demonstradas; funções ausentes ou parcialmente executadas permanecem identificadas. A auditoria completa do plano ainda não foi realizada.</p>
+</main>
+<footer><p><strong>Validação deste pacote:</strong> build host concluído; testes prefab 9/9, import 51/51 e duplicação 10/10 (filtros podem se sobrepor); APK Android compilado em 57 s. Aparelho conectado por ADB, mas adormecido e com captura preta na tentativa de 29/09. Não há aceite visual Android deste avanço.</p><p>As imagens Unity são carregadas diretamente do site oficial e exigem rede. <a href="../planos/P-OVERRIDES-SELETIVOS-2026-09-29.md">Contrato técnico e limitações</a> · <a href="evidencias/p-prefab-overrides-20260929/prefab-tests.log">Log dos testes de prefab</a></p></footer>
+</html>

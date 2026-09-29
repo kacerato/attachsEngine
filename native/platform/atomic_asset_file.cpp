@@ -19,7 +19,14 @@ bool replaceAssetFile(const char *path, uint64_t expectedBytes, AssetRead read, 
   char temporary[1024];
   const int length = std::snprintf(temporary, sizeof(temporary), "%s.aether-tmp", path);
   if (length <= 0 || static_cast<size_t>(length) >= sizeof(temporary)) return false;
+#if defined(_WIN32)
+  wchar_t targetWide[1024],temporaryWide[1024];
+  if(!MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path,-1,targetWide,1024) ||
+     !MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,temporary,-1,temporaryWide,1024)) return false;
+  FILE *output = _wfopen(temporaryWide,L"wb");
+#else
   FILE *output = std::fopen(temporary, "wb");
+#endif
   if (output == nullptr) return false;
   char buffer[65536];
   uint64_t total = 0;
@@ -41,12 +48,18 @@ bool replaceAssetFile(const char *path, uint64_t expectedBytes, AssetRead read, 
   if (std::fclose(output) != 0) ok = false;
   if (ok) {
 #if defined(_WIN32)
-    ok = MoveFileExA(temporary, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+    ok = MoveFileExW(temporaryWide, targetWide, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 #else
     ok = std::rename(temporary, path) == 0;
 #endif
   }
-  if (!ok) std::remove(temporary);
+  if (!ok) {
+#if defined(_WIN32)
+    _wremove(temporaryWide);
+#else
+    std::remove(temporary);
+#endif
+  }
   return ok;
 }
 } // namespace ae::platform
