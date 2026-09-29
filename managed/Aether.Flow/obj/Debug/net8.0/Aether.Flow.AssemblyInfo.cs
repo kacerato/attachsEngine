@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Aether.Flow")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+28d3b9daa2d41a9026e14ccdffa124c7d1c40462")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f9d6ad4c1284ca5b049e2d9a577432445c7a42c2")]
 [assembly: System.Reflection.AssemblyProductAttribute("Aether.Flow")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Aether.Flow")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

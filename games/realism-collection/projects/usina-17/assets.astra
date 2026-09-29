@@ -1,0 +1,5 @@
+AETHER_ASSETS 1 4
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "92e8f383c92cfb99d62473864880f7098f40a8553864896887db9eb12a2c22cf" 1 "glb" 0 0
+47440f8e83bbd7de98e4ff49d0eff7d4 mesh "Assets/portable_generator.glb" "Assets/portable_generator.glb" "b6d3f1d27eaed0fd71855aefb5ceef87823aed881ceee4319c12c2b7afe999d5" 1 "glb" 0 0
+3579c6238554c949f90b9482c0924ed2 mesh "Assets/industrial_storage_cart.glb" "Assets/industrial_storage_cart.glb" "7b9a346fcb81e2dbd664f098210887dfb5f5a5b40e953a4e63d4366fad66708c" 1 "glb" 0 0
+a68aad35054c3d5dc4f4536fddf5cff5 mesh "Assets/modular_industrial_pipes_01.glb" "Assets/modular_industrial_pipes_01.glb" "da5905484c8aafd6526d4dee96e507042637b61b399eefdd53ddd6479aafdde3" 1 "glb" 0 0

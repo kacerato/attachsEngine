@@ -1,0 +1,13 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "mainScene": "scenes/main.ascene",
+  "editorScene": "scenes/editor.aescene",
+  "project": {
+    "name": "Carga Bruta",
+    "path": "C:\\Users\\donod\\Downloads\\atchengine\\games\\realism-collection\\projects\\carga-bruta",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 6
+  }
+}

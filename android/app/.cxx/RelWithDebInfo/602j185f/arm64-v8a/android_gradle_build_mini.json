@@ -64,6 +64,12 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\602j185f\\obj\\arm64-v8a\\benchmark_physics2d",
       "runtimeFiles": []
     },
+    "aether_arm_asr::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_arm_asr",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_arm_asr.a",
+      "runtimeFiles": []
+    },
     "aether_android::@6890427a1f51a3e7e1df": {
       "artifactName": "aether_android",
       "abi": "arm64-v8a",
@@ -92,6 +98,12 @@
       "artifactName": "aether_renderer",
       "abi": "arm64-v8a",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_renderer.a",
+      "runtimeFiles": []
+    },
+    "aether_fsr2::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_fsr2",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_fsr2.a",
       "runtimeFiles": []
     },
     "aether_rendergraph::@6890427a1f51a3e7e1df": {

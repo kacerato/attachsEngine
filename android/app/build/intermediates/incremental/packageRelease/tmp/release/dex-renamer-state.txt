@@ -1,4 +1,4 @@
-#Sun Sep 20 19:16:32 BRT 2026
+#Thu Sep 24 08:50:07 BRT 2026
 base.0=C\:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
 path.0=classes.dex
 renamed.0=classes.dex

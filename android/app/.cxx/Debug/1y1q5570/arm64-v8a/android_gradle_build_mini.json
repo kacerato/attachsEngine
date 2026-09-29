@@ -22,6 +22,66 @@
     "{LIST_OF_TARGETS_TO_BUILD}"
   ],
   "libraries": {
+    "aether_platform::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_platform",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_platform.a",
+      "runtimeFiles": []
+    },
+    "aether_arm_asr::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_arm_asr",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_arm_asr.a",
+      "runtimeFiles": []
+    },
+    "aether_android::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_android",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\1y1q5570\\obj\\arm64-v8a\\libaether_android.so",
+      "runtimeFiles": []
+    },
+    "aether_resources::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_resources",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_resources.a",
+      "runtimeFiles": []
+    },
+    "aether_rendergraph::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_rendergraph",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_rendergraph.a",
+      "runtimeFiles": []
+    },
+    "aether_rhi::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_rhi",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_rhi.a",
+      "runtimeFiles": []
+    },
+    "aether_native_app_glue::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_native_app_glue",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_native_app_glue.a",
+      "runtimeFiles": []
+    },
+    "aether_editor::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_editor",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_editor.a",
+      "runtimeFiles": []
+    },
+    "sqlite3::@404bef308afbc8f16dd1": {
+      "artifactName": "sqlite3",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\third_party\\sqlite\\libsqlite3.a",
+      "runtimeFiles": []
+    },
+    "benchmark_physics2d_box2d::@6890427a1f51a3e7e1df": {
+      "artifactName": "benchmark_physics2d_box2d",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\1y1q5570\\obj\\arm64-v8a\\benchmark_physics2d_box2d",
+      "runtimeFiles": []
+    },
     "aether_ui::@6890427a1f51a3e7e1df": {
       "artifactName": "aether_ui",
       "abi": "arm64-v8a",
@@ -46,12 +106,6 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_water_runtime.a",
       "runtimeFiles": []
     },
-    "aether_platform::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_platform",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_platform.a",
-      "runtimeFiles": []
-    },
     "aether_runtime::@6890427a1f51a3e7e1df": {
       "artifactName": "aether_runtime",
       "abi": "arm64-v8a",
@@ -62,12 +116,6 @@
       "artifactName": "benchmark_physics2d",
       "abi": "arm64-v8a",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\1y1q5570\\obj\\arm64-v8a\\benchmark_physics2d",
-      "runtimeFiles": []
-    },
-    "aether_android::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_android",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\1y1q5570\\obj\\arm64-v8a\\libaether_android.so",
       "runtimeFiles": []
     },
     "aether_core::@6890427a1f51a3e7e1df": {
@@ -82,10 +130,10 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_assets.a",
       "runtimeFiles": []
     },
-    "aether_resources::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_resources",
+    "aether_astcenc::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_astcenc",
       "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_resources.a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_astcenc.a",
       "runtimeFiles": []
     },
     "aether_renderer::@6890427a1f51a3e7e1df": {
@@ -94,16 +142,10 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_renderer.a",
       "runtimeFiles": []
     },
-    "aether_rendergraph::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_rendergraph",
+    "aether_fsr2::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_fsr2",
       "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_rendergraph.a",
-      "runtimeFiles": []
-    },
-    "aether_rhi::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_rhi",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_rhi.a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_fsr2.a",
       "runtimeFiles": []
     },
     "aether_transform::@6890427a1f51a3e7e1df": {
@@ -118,24 +160,6 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\third_party\\JoltPhysics\\Build\\libJolt.a",
       "runtimeFiles": []
     },
-    "aether_native_app_glue::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_native_app_glue",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_native_app_glue.a",
-      "runtimeFiles": []
-    },
-    "aether_editor::@6890427a1f51a3e7e1df": {
-      "artifactName": "aether_editor",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_editor.a",
-      "runtimeFiles": []
-    },
-    "sqlite3::@404bef308afbc8f16dd1": {
-      "artifactName": "sqlite3",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\third_party\\sqlite\\libsqlite3.a",
-      "runtimeFiles": []
-    },
     "benchmark_physics2d_jolt::@6890427a1f51a3e7e1df": {
       "artifactName": "benchmark_physics2d_jolt",
       "abi": "arm64-v8a",
@@ -146,12 +170,6 @@
       "artifactName": "aether_codecs",
       "abi": "arm64-v8a",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_codecs.a",
-      "runtimeFiles": []
-    },
-    "benchmark_physics2d_box2d::@6890427a1f51a3e7e1df": {
-      "artifactName": "benchmark_physics2d_box2d",
-      "abi": "arm64-v8a",
-      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\1y1q5570\\obj\\arm64-v8a\\benchmark_physics2d_box2d",
       "runtimeFiles": []
     }
   }

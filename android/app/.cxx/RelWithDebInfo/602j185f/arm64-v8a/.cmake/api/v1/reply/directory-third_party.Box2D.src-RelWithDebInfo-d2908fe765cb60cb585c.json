@@ -1,0 +1,106 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"third_party/Box2D/src/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 194,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 202,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 208,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 221,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"third_party/Box2D/src/libbox2d.a"
+			],
+			"targetId" : "box2d::@d5cf16edf171c907b709",
+			"targetIndex" : 22,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/box2d",
+			"exportName" : "box2dConfig",
+			"exportTargets" : 
+			[
+				{
+					"id" : "box2d::@d5cf16edf171c907b709",
+					"index" : 22
+				}
+			],
+			"paths" : 
+			[
+				"third_party/Box2D/src/CMakeFiles/Export/lib/cmake/box2d/box2dConfig.cmake"
+			],
+			"type" : "export"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "include/box2d",
+			"paths" : 
+			[
+				"third_party/Box2D/src/../include/box2d/base.h",
+				"third_party/Box2D/src/../include/box2d/box2d.h",
+				"third_party/Box2D/src/../include/box2d/collision.h",
+				"third_party/Box2D/src/../include/box2d/id.h",
+				"third_party/Box2D/src/../include/box2d/math_functions.h",
+				"third_party/Box2D/src/../include/box2d/types.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 4,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/box2d",
+			"paths" : 
+			[
+				"C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/third_party/Box2D/src/box2dConfigVersion.cmake"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "third_party/Box2D/src",
+		"source" : "third_party/Box2D/src"
+	}
+}

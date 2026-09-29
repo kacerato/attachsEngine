@@ -35,6 +35,12 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\602j185f\\obj\\arm64-v8a\\libaether_android.so",
       "runtimeFiles": []
     },
+    "aether_arm_asr::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_arm_asr",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_arm_asr.a"
+    },
     "aether_assets::@6890427a1f51a3e7e1df": {
       "toolchain": "toolchain",
       "abi": "arm64-v8a",
@@ -58,6 +64,12 @@
       "abi": "arm64-v8a",
       "artifactName": "aether_editor",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_editor.a"
+    },
+    "aether_fsr2::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_fsr2",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_fsr2.a"
     },
     "aether_native_app_glue::@6890427a1f51a3e7e1df": {
       "toolchain": "toolchain",

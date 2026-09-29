@@ -1,0 +1,5 @@
+AETHER_ASSETS 1 4
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "92e8f383c92cfb99d62473864880f7098f40a8553864896887db9eb12a2c22cf" 1 "glb" 0 0
+5d0e584c90d0ff9b04e84a272c6ff29f mesh "Assets/wooden_crate_01.glb" "Assets/wooden_crate_01.glb" "1cceffe625fd25af432027a2b67219f9fc589c94a107ee1ae16fc4fbba0b0864" 1 "glb" 0 0
+797c0189b3fd1e37c186730bf83517af mesh "Assets/rock_07.glb" "Assets/rock_07.glb" "799ef56a7c424f586c5baa6e6a77c6bacf45b440eaf2999a20095042006b428b" 1 "glb" 0 0
+eeb8a7968939eb80bff03faa687ae28f mesh "Assets/concrete_road_barrier.glb" "Assets/concrete_road_barrier.glb" "dbc5788bb54fa3646b19d127621ec2618cafb7b0b833676c157631cbb04ae695" 1 "glb" 0 0

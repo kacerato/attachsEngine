@@ -1,0 +1,118 @@
+[
+  {
+    "asset": "portable_generator",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/portable_generator",
+    "license": "CC0",
+    "sha256": "b6d3f1d27eaed0fd71855aefb5ceef87823aed881ceee4319c12c2b7afe999d5",
+    "bytes": 12452184
+  },
+  {
+    "asset": "industrial_storage_cart",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/industrial_storage_cart",
+    "license": "CC0",
+    "sha256": "7b9a346fcb81e2dbd664f098210887dfb5f5a5b40e953a4e63d4366fad66708c",
+    "bytes": 8129880
+  },
+  {
+    "asset": "modular_industrial_pipes_01",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "license": "CC0",
+    "sha256": "da5905484c8aafd6526d4dee96e507042637b61b399eefdd53ddd6479aafdde3",
+    "bytes": 16611292
+  },
+  {
+    "asset": "wooden_crate_01",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/wooden_crate_01",
+    "license": "CC0",
+    "sha256": "1cceffe625fd25af432027a2b67219f9fc589c94a107ee1ae16fc4fbba0b0864",
+    "bytes": 8283784
+  },
+  {
+    "asset": "rock_07",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/rock_07",
+    "license": "CC0",
+    "sha256": "799ef56a7c424f586c5baa6e6a77c6bacf45b440eaf2999a20095042006b428b",
+    "bytes": 6309828
+  },
+  {
+    "asset": "concrete_road_barrier",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/concrete_road_barrier",
+    "license": "CC0",
+    "sha256": "dbc5788bb54fa3646b19d127621ec2618cafb7b0b833676c157631cbb04ae695",
+    "bytes": 10969388
+  },
+  {
+    "asset": "antique_ceramic_vase_01",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/antique_ceramic_vase_01",
+    "license": "CC0",
+    "sha256": "78491964f91c50434c32ac20abd4ec2185537008b1e399bb62bb139a8c62bd26",
+    "bytes": 1163488
+  },
+  {
+    "asset": "stone_01",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/stone_01",
+    "license": "CC0",
+    "sha256": "1d2c51153c29287e8eb87e7dc67306efec25b991e39f60a803a0006fcc2e887e",
+    "bytes": 10132652
+  },
+  {
+    "asset": "concrete_cat_statue",
+    "kind": "model",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/concrete_cat_statue",
+    "license": "CC0",
+    "sha256": "33c52321507fad2e8d8722b25ee5a895784c7ad325c9bf9672e76270db8197e2",
+    "bytes": 10951980
+  },
+  {
+    "asset": "quarry_wall",
+    "kind": "surface",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/quarry_wall",
+    "license": "CC0"
+  },
+  {
+    "asset": "worn_shutter",
+    "kind": "surface",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/worn_shutter",
+    "license": "CC0"
+  },
+  {
+    "asset": "concrete_floor_02",
+    "kind": "surface",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/concrete_floor_02",
+    "license": "CC0"
+  },
+  {
+    "asset": "wood_planks",
+    "kind": "surface",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/wood_planks",
+    "license": "CC0"
+  },
+  {
+    "asset": "sandstone_blocks_05",
+    "kind": "surface",
+    "resolution": "2k",
+    "url": "https://polyhaven.com/a/sandstone_blocks_05",
+    "license": "CC0"
+  }
+]

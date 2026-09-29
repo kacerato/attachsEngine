@@ -1,0 +1,13 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "mainScene": "scenes/main.ascene",
+  "editorScene": "scenes/editor.aescene",
+  "project": {
+    "name": "Usina 17",
+    "path": "C:\\Users\\donod\\Downloads\\atchengine\\games\\realism-collection\\projects\\usina-17",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 5
+  }
+}
