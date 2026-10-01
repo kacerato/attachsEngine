@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-01",
+  "abi": 26,
+  "sceneArchive": 16,
+  "schemas": 32,
+  "managedFacades": 31,
+  "icons": 226,
+  "apkBytes": 264803027,
+  "apkSha256": "ed019cb708361e45e99002a80e15a3877da6234360d817a12d4d70ccd843a911",
+  "sdkSha256": "ca52d6eea0c3b5cc56a9626c0e7c79483ee756f65f36cca657fe12f8a75391cd",
+  "atlasSha256": "c7dece226547ed3942c206d5d9543f2b75a7f2289b4985a757ce00232a752ea7",
+  "assetsMatch": true,
+  "nativeProfilesTests": 2,
+  "nativeInputTests": 44,
+  "managedAstraTests": 54,
+  "managedFixtureTypes": 6,
+  "androidProfileQualified": false,
+  "block": "secure keyguard",
+  "apkInstalled": true,
+  "fixturePushed": true
+}

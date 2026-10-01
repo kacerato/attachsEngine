@@ -4,6 +4,8 @@
 #include <cstring>
 #include <unordered_map>
 #include "scene/joint.h"
+#include "scene/constant_force.h"
+#include "scene/physics_event_connection.h"
 #include "runtime/joint_requirements.h"
 #include "runtime/physics_requirements.h"
 namespace ae::runtime {
@@ -22,7 +24,8 @@ AetherVec3 transformPhysicsPoint(const float *m,const float *v,bool direction=fa
 void ScenePhysics::stop() {
   characters_.clear();
   if(world_) AetherPhysics_DestroyWorld(world_);
-  world_=nullptr;bindings_.clear();objects_.clear();events_.clear();accumulated_=0;jointCount_=0;
+  world_=nullptr;ownerWorldId_=0;bindings_.clear();objects_.clear();events_.clear();accumulated_=0;jointCount_=0;
+  fieldCandidates_.clear();fieldFrames_.clear();fieldRevision_=std::numeric_limits<u64>::max();
 }
 ObjectId ScenePhysics::objectForBody(AetherBodyHandle body) const {
   const auto found=objects_.find(body);
@@ -90,6 +93,30 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
   struct ColliderSource {ObjectId object;const scene::Collider *value;};
   std::unordered_map<ObjectId,std::vector<ColliderSource>> colliders;
   const auto fail=[&](const SceneObject &entity,const std::string &reason) {error_=std::string(entity.name)+": "+reason;stop();return false;};
+  for(const auto id:ids) {
+    const auto &entity=*document.find(id);
+    const auto *force=entity.components.find(scene::ConstantForce::descriptor);
+    if(!force || !document.activeInHierarchy(id)) continue;
+    const auto &value=static_cast<const scene::ConstantForce&>(*force);
+    const auto *body=physicsBody(entity);
+    if(!value.valid() || !body || (value.enabled && body->motion!=scene::BodyMotion::Dynamic))
+      return fail(entity,"Força constante ativa requer Corpo físico dinâmico no mesmo objeto");
+  }
+  for(const auto id:ids) {
+    const auto &entity=*document.find(id);
+    if(!document.activeInHierarchy(id)) continue;
+    for(usize i=0;i<entity.components.size();++i) {
+      const auto *value=entity.components.at(i);
+      if(&value->type()!=&scene::PhysicsEventConnection3D::descriptor) continue;
+      const auto &connection=static_cast<const scene::PhysicsEventConnection3D&>(*value);
+      if(!connection.enabled || connection.action==0) continue;
+      const auto *body=physicsBody(entity);const auto *collider=colliderComponent(entity);
+      if(!body || !collider || (collider->owner && collider->owner!=id))
+        return fail(entity,"Conexão física requer corpo e colisor próprio no emissor");
+      if((connection.event<3)!=body->sensor)
+        return fail(entity,"Evento de sensor requer Sensor ligado; evento de contato requer Sensor desligado no Corpo físico");
+    }
+  }
   // Resolve ownership before creating anything; no nearest-parent inference.
   for(auto id:ids) {
     const auto &entity=*document.find(id);
@@ -137,6 +164,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
         case scene::ColliderShape::Box:part.base.shape.kind=AetherShapeKind::Box;part.base.shape.boxHalfExtent={c.halfX*x,c.halfY*y,c.halfZ*z};break;
         case scene::ColliderShape::Sphere:part.base.shape.kind=AetherShapeKind::Sphere;part.base.shape.sphereRadius=c.radius*x;break;
         case scene::ColliderShape::Capsule:part.base.shape.kind=AetherShapeKind::Capsule;part.base.shape.sphereRadius=c.radius*x;part.base.shape.capsuleHalfHeight=c.halfHeight*y;break;
+        case scene::ColliderShape::Cylinder:part.base.shape.kind=AetherShapeKind::Cylinder;part.base.shape.sphereRadius=c.radius*x;part.base.shape.capsuleHalfHeight=c.halfHeight*y;break;
         case scene::ColliderShape::Mesh: {
           if(const auto *error=colliderMeshForPhysics(document,source.object,c,id)) return fail(object,error);
           if(!geometry) return fail(object,"geometria de colisão indisponível neste mundo");
@@ -155,12 +183,18 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     }
     AetherBodyDescV2 desc{};desc.structSize=sizeof(desc);desc.apiVersion=AetherBodyApiVersionV2;desc.eventLayerMask=3;
     desc.position={world[12],world[13],world[14]};desc.rotation=physicsRotation(transform);
+    u32 allowed=0;for(u32 a=0;a<3;++a){if(!body->freezePosition[a])allowed|=1u<<a;if(!body->freezeRotation[a])allowed|=1u<<(a+3);}
+    desc.allowedDOFs=allowed==63?AetherAllowedDOFs::All:static_cast<AetherAllowedDOFs>(allowed);
     desc.motionType=static_cast<AetherMotionType>(body->motion);desc.friction=body->friction;desc.restitution=body->restitution;desc.isSensor=body->sensor;
     AetherBodyDynamicsV1 dynamics{sizeof(AetherBodyDynamicsV1),1,body->linearDamping,body->angularDamping,body->gravityFactor,
       {body->angularX,body->angularY,body->angularZ},body->allowSleep?1u:0u};
     const auto handle=AetherPhysics_CreateCompoundBodyV3(world_,&desc,parts.data(),static_cast<u32>(parts.size()),&dynamics);
     if(handle==AetherBodyHandle_Invalid||(body->motion==scene::BodyMotion::Dynamic&&!AetherPhysics_SetMassV2(world_,handle,body->mass)))
       return fail(entity,"Jolt recusou a composição ou a massa (malha convexa plana não tem casco sólido)");
+    if(body->motion!=scene::BodyMotion::Static){
+      AetherBodySimulationV1 settings;settings.maxLinearVelocity=body->maxLinearVelocity;settings.maxAngularVelocity=body->maxAngularVelocity;settings.continuousCollision=body->continuousCollision;settings.velocitySteps=static_cast<u32>(body->solverVelocitySteps);
+      if(!AetherPhysics_ConfigureBodySimulationV1(world_,handle,&settings))return fail(entity,"Configuração avançada do corpo recusada");
+    }
     if(body->motion!=scene::BodyMotion::Static) AetherPhysics_SetLinearVelocity(world_,handle,{body->velocityX,body->velocityY,body->velocityZ});
     objects_.emplace(handle,id);
     gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
@@ -186,13 +220,29 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
       const Binding *a=nullptr,*b=nullptr;for(const auto &binding:bindings_) {if(binding.id==id) a=&binding;if(binding.id==joint.connectedBody) b=&binding;}
       if(!a||!b) return fail(entity,"corpo conectado à junta está inativo");
       float ma[16],mb[16];if(!worldMatrix(document,id,ma)||!worldMatrix(document,b->id,mb)) return fail(entity,"referencial da junta inválido");
-      AetherJointDescV2 desc{};desc.structSize=sizeof(desc);desc.apiVersion=AetherJointApiVersionV2;desc.kind=static_cast<AetherJointKind>(joint.kind);desc.space=AetherJointSpace::World;
+      AetherJointDescV3 extended{};extended.structSize=sizeof(extended);extended.apiVersion=3;auto &desc=extended.base;desc.structSize=sizeof(desc);desc.apiVersion=AetherJointApiVersionV2;desc.kind=static_cast<AetherJointKind>(joint.kind);desc.space=AetherJointSpace::World;
       desc.point1=transformPhysicsPoint(ma,joint.anchorA);desc.point2=transformPhysicsPoint(mb,joint.anchorB);
       desc.axis1=transformPhysicsPoint(ma,joint.axisA,true);desc.axis2=transformPhysicsPoint(mb,joint.axisB,true);
       const float units=joint.kind==scene::JointKind::Hinge?.01745329252f:1.0f;
       desc.limitsMin=joint.limitMin*units;desc.limitsMax=joint.limitMax*units;
       desc.motor={static_cast<AetherMotorState>(joint.motor),joint.motorVelocity*units,joint.motorPosition*units,joint.motorForce,joint.frequency,joint.damping};
-      if(AetherPhysics_CreateJointV2(world_,a->body,b->body,&desc)==AetherJointHandle_Invalid) return fail(entity,"Jolt recusou a junta #"+std::to_string(joint.instanceId()));
+      extended.normal1=transformPhysicsPoint(ma,joint.normalA,true);extended.normal2=transformPhysicsPoint(mb,joint.normalB,true);
+      constexpr float radians=.01745329252f;
+      extended.swingY=joint.swingY*radians;extended.swingZ=joint.swingZ*radians;extended.twistMin=joint.twistMin*radians;extended.twistMax=joint.twistMax*radians;
+      for(u32 axis=0;axis<6;++axis) {
+        const auto &input=joint.axes[axis];auto &output=extended.axes[axis];const float unit=axis<3?1.f:radians;
+        output.motion=input.motion;output.minimum=input.minimum*unit;output.maximum=input.maximum*unit;output.friction=input.friction;
+        output.motor={static_cast<AetherMotorState>(input.motor),(input.motor==1||input.motor==3)?input.velocity*unit:0.f,input.position*unit,input.force,input.frequency,input.damping};
+      }
+      auto first=a->body,second=b->body;
+      if(joint.kind==scene::JointKind::SixDOF) {
+        // Jolt drives body 2 relative to body 1. Authoring drives the OWNER
+        // relative to connectedBody; swap complete frames, never just signs
+        // (asymmetric limits and rotated frames must keep their meaning).
+        std::swap(first,second);std::swap(desc.point1,desc.point2);
+        std::swap(desc.axis1,desc.axis2);std::swap(extended.normal1,extended.normal2);
+      }
+      if(AetherPhysics_CreateJointV3(world_,first,second,&extended)==AetherJointHandle_Invalid) return fail(entity,"Jolt recusou a junta #"+std::to_string(joint.instanceId()));
       ++jointCount_;
     }
   }
@@ -207,7 +257,8 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
       const auto &ancestor=*document.find(p);const auto *body=physicsBody(ancestor);
       if(characterComponent(ancestor)||(body&&body->motion!=scene::BodyMotion::Static)) return fail(entity,"Personagem não pode herdar pose de corpo móvel");
     }
-    CharacterBinding binding{};binding.id=id;binding.eyeHeight=character->eyeHeight;
+    CharacterBinding binding{};binding.id=id;binding.instance=character->instanceId();binding.eyeHeight=character->eyeHeight;
+    binding.shapeFingerprint[0]=character->radius;binding.shapeFingerprint[1]=character->halfHeight;binding.shapeFingerprint[2]=character->eyeHeight;binding.shapeFingerprint[3]=character->slopeDegrees;
     binding.jumpSpeed=character->jumpSpeed;
     float identity[16]{};identity[0]=identity[5]=identity[10]=identity[15]=1;Transform transform;
     if(!worldMatrix(document,id,binding.world)||!localTransformForWorld(binding.world,identity,transform)) {stop();return false;}
@@ -216,15 +267,16 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     settings.radius=character->radius;settings.standingHalfHeight=character->halfHeight;
     settings.eyeHeight=character->eyeHeight;settings.movementUnitsPerSecond=character->speed;
     settings.maximumSlopeRadians=character->slopeDegrees*.01745329252f;
-    settings.gravityUnitsPerSecondSquared=9.81f;
+    settings.gravityUnitsPerSecondSquared=character->gravity;settings.stepHeight=character->stepHeight;settings.floorSnapLength=character->floorSnapLength;settings.inheritPlatformHorizontal=character->inheritPlatformHorizontal;
     binding.motor=std::make_unique<physics::CharacterMotor>();
     if(!binding.motor->initializeInWorld(world_,{binding.world[12],binding.world[13]+binding.eyeHeight,binding.world[14]},settings)) {stop();return false;}
     gameWorld.setAuthority(id,TransformAuthority::Character);
     characters_.push_back(std::move(binding));
   }
-  error_.clear();return true;
+  ownerWorldId_=gameWorld.worldId();error_.clear();return true;
 }
 bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geometry) {
+  if(ownerWorldId_!=world.worldId())return start(world,geometry);
   struct Motion {ObjectId id;AetherVec3 linear,angular;float authored[3];};
   std::vector<Motion> motions;motions.reserve(bindings_.size());
   for(const auto &binding:bindings_) {
@@ -233,6 +285,12 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
     if(!AetherPhysics_TryGetBodyVelocityV1(world_,binding.body,&motion.linear)) continue;
     AetherPhysics_TryGetBodyAngularVelocityV1(world_,binding.body,&motion.angular);
     motions.push_back(motion);
+  }
+  struct CharacterMotion {ObjectId id;u64 instance;physics::CharacterMotor::MotionState motor;float pose[16],shape[4],input[6];bool scripted;};
+  std::vector<CharacterMotion> characterMotions;characterMotions.reserve(characters_.size());
+  for(const auto&c:characters_) {
+    CharacterMotion motion{c.id,c.instance,c.motor->motionState(),{},{},{c.right,c.forward,c.yaw,c.scriptRight,c.scriptForward,c.scriptYaw},c.scriptMoveActive};
+    std::copy(c.world,c.world+16,motion.pose);std::copy(c.shapeFingerprint,c.shapeFingerprint+4,motion.shape);characterMotions.push_back(motion);
   }
   const double accumulated=accumulated_;
   if(!start(world,geometry)) return false;
@@ -244,6 +302,17 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
     AetherPhysics_SetLinearVelocity(world_,binding.body,motion.linear);
     AetherPhysics_SetBodyAngularVelocityV1(world_,binding.body,motion.angular);
     break;
+  }
+  // Preserve motion only for the same component, shape and world pose. An
+  // explicit placement or capsule edit retains the existing reset policy.
+  // Body velocities are restored first, then support is queried in the NEW world.
+  for(const auto&motion:characterMotions)for(auto&c:characters_) {
+    if(c.id!=motion.id||c.instance!=motion.instance)continue;
+    bool unchanged=true;for(u32 n=0;n<16;++n)if(std::abs(c.world[n]-motion.pose[n])>1e-4f)unchanged=false;
+    for(u32 n=0;n<4;++n)if(c.shapeFingerprint[n]!=motion.shape[n])unchanged=false;
+    if(!unchanged)break;
+    if(!c.motor->restoreMotionState(motion.motor)){error_="Não foi possível restaurar o movimento do personagem";return false;}
+    c.right=motion.input[0];c.forward=motion.input[1];c.yaw=motion.input[2];c.scriptRight=motion.input[3];c.scriptForward=motion.input[4];c.scriptYaw=motion.input[5];c.scriptMoveActive=motion.scripted;break;
   }
   return true;
 }
@@ -398,8 +467,11 @@ bool ScenePhysics::setCharacterScriptMove(ObjectId id,float right,float forward,
   }
   return false;
 }
-bool ScenePhysics::jumpCharacter(ObjectId id) {
-  for(auto &c:characters_) if(c.id==id) return c.motor->jump(c.jumpSpeed);
+bool ScenePhysics::jumpCharacter(ObjectId id,const GameWorld *world) {
+  for(auto &c:characters_) if(c.id==id) {
+    const auto*entity=world?world->graph().find(id):nullptr;const auto*settings=entity?characterComponent(*entity):nullptr;
+    return c.motor->jump(settings?settings->jumpSpeed:c.jumpSpeed);
+  }
   return false;
 }
 bool ScenePhysics::applyBodyForce(ObjectId id,const float *v,u32 kind) {
@@ -407,6 +479,17 @@ bool ScenePhysics::applyBodyForce(ObjectId id,const float *v,u32 kind) {
   for(const auto &b:bindings_) if(b.id==id) return AetherPhysics_ApplyBodyForceV1(world_,b.body,{v[0],v[1],v[2]},static_cast<AetherBodyForceKind>(kind))!=0;
   return false;
 }
+WorldStatus ScenePhysics::bodyCommand(const GameWorld &world,ObjectHandle handle,u64 instance,u32 op,AetherVec3 value,AetherVec3 point,AetherBodyStateV1 &out) {
+  if(!world.running()||!world_)return WorldStatus::NotRunning;
+  if(ownerWorldId_!=world.worldId())return WorldStatus::ForeignWorld;
+  const auto status=world.validate(handle);if(status!=WorldStatus::Ok)return status;
+  const auto *owner=world.find(handle);const auto *component=owner->components.findInstance(instance);
+  if(!component||component->type().id!=scene::PhysicsBody::descriptor.id)return WorldStatus::ComponentMissing;
+  if(!world.activeInHierarchy(handle))return WorldStatus::Rejected;
+  for(const auto &binding:bindings_)if(binding.id==handle.id)return AetherPhysics_BodyCommandV1(world_,binding.body,op,value,point,&out)?WorldStatus::Ok:WorldStatus::Rejected;
+  return WorldStatus::Rejected;
+}
+
 bool ScenePhysics::getBodyVelocity(ObjectId id,float *out) const {
   if(!out) return false;
   for(const auto &b:bindings_) if(b.id==id) {AetherVec3 v;if(!AetherPhysics_TryGetBodyVelocityV1(world_,b.body,&v)) return false;out[0]=v.x;out[1]=v.y;out[2]=v.z;return true;}
@@ -425,6 +508,7 @@ bool ScenePhysics::moveKinematic(ObjectId id,const float *v) {
     return AetherPhysics_MoveKinematicV2(world_,b.body,{v[0],v[1],v[2]},{v[3]/n,v[4]/n,v[5]/n,v[6]/n},1.0f/60.0f)!=0;
   return false;
 }
+#include "runtime/scene_physics_fields.inl"
 bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32),bool (*contact)(void *,const ContactEvent &)) {
   if(!world_ || !std::isfinite(elapsed) || elapsed<0) return false;
   constexpr double fixed=1.0/60.0;
@@ -432,7 +516,11 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
   accumulated_+=std::min(elapsed,.25);
   while(accumulated_+1e-9>=fixed) {
     if(beforeStep&&!beforeStep(context,static_cast<float>(fixed))) return false;
+    if(!applyContinuousForces(world)||!applyPhysicsFields(world,static_cast<float>(fixed))) return false;
     for(auto &c:characters_) {
+      const auto*entity=world.graph().find(c.id);const auto*settings=entity?characterComponent(*entity):nullptr;
+      if(!settings||!c.motor->configureMotion(settings->speed,settings->gravity,settings->stepHeight,settings->floorSnapLength,settings->inheritPlatformHorizontal))return false;
+      c.jumpSpeed=settings->jumpSpeed;
       const bool scripted=c.scriptMoveActive;
       const float right=scripted?c.scriptRight:c.right;
       const float forward=scripted?c.scriptForward:c.forward;
@@ -476,6 +564,49 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
   }
   return true;
 }
+bool ScenePhysics::applyContinuousForces(GameWorld &world) {
+  // Iterate existing body bindings, not every schema/object and not a new
+  // allocation per substep. Edits/removals are read after FixedUpdate's flush.
+  for(const auto &binding:bindings_) {
+    const auto *entity=world.graph().find(binding.id);
+    if(!entity || !world.activeInHierarchy(world.handle(binding.id))) continue;
+    const auto *component=entity->components.find(scene::ConstantForce::descriptor);
+    if(!component) continue;
+    const auto &f=static_cast<const scene::ConstantForce&>(*component);
+    if(!f.enabled) continue;
+    const auto *body=physicsBody(*entity);
+    if(!body || body->motion!=scene::BodyMotion::Dynamic || !f.valid()) {
+      error_=std::string(entity->name)+": Força constante ativa requer Corpo físico dinâmico";return false;
+    }
+    const bool local=f.relativeForceX!=0 || f.relativeForceY!=0 || f.relativeForceZ!=0 ||
+                     f.relativeTorqueX!=0 || f.relativeTorqueY!=0 || f.relativeTorqueZ!=0;
+    AetherQuat q{0,0,0,1};
+    if(local) {
+      AetherVec3 position;
+      if(!AetherPhysics_TryGetBodyPoseV2(world_,binding.body,&position,&q)) {
+        error_="Não foi possível ler a orientação física da Força constante";return false;
+      }
+    }
+    const auto rotate=[&](float x,float y,float z) {
+      const float tx=2*(q.y*z-q.z*y),ty=2*(q.z*x-q.x*z),tz=2*(q.x*y-q.y*x);
+      return AetherVec3{x+q.w*tx+q.y*tz-q.z*ty,y+q.w*ty+q.z*tx-q.x*tz,z+q.w*tz+q.x*ty-q.y*tx};
+    };
+    auto force=rotate(f.relativeForceX,f.relativeForceY,f.relativeForceZ);
+    force.x+=f.forceX;force.y+=f.forceY;force.z+=f.forceZ;
+    auto torque=rotate(f.relativeTorqueX,f.relativeTorqueY,f.relativeTorqueZ);
+    torque.x+=f.torqueX;torque.y+=f.torqueY;torque.z+=f.torqueZ;
+    // Zero force must not wake a resting body, whereas a nonzero force must.
+    if((force.x!=0 || force.y!=0 || force.z!=0) &&
+       !AetherPhysics_ApplyBodyForceV1(world_,binding.body,force,AetherBodyForceKind::Force)) {
+      error_="O solver recusou a força contínua";return false;
+    }
+    if((torque.x!=0 || torque.y!=0 || torque.z!=0) &&
+       !AetherPhysics_ApplyBodyForceV1(world_,binding.body,torque,AetherBodyForceKind::Torque)) {
+      error_="O solver recusou o torque contínuo";return false;
+    }
+  }
+  return true;
+}
 bool ScenePhysics::synchronizePoses(GameWorld &world) {
   auto &document=world.poseGraph();
   for(const auto &binding:bindings_) {
@@ -503,5 +634,19 @@ bool ScenePhysics::synchronizePoses(GameWorld &world) {
     if(!localTransformForWorld(c.world,parent,local)||!document.setTransform(c.id,local)) return false;
   }
   return true;
+}
+}
+
+namespace ae::runtime {
+WorldStatus ScenePhysics::characterState(const GameWorld &world,ObjectId id,physics::CharacterMotor::RuntimeState &out) const {
+  if(!world_||!world.running())return WorldStatus::NotRunning;
+  if(ownerWorldId_!=world.worldId())return WorldStatus::ForeignWorld;
+  const auto handle=world.handle(id);const auto status=world.validate(handle);if(status!=WorldStatus::Ok)return status;
+  const auto *entity=world.find(handle);const auto *component=entity->components.find(scene::Character::descriptor);
+  if(!component)return WorldStatus::ComponentMissing;
+  if(!world.activeInHierarchy(handle))return WorldStatus::ComponentUnavailable;
+  for(const auto &binding:characters_)if(binding.id==id&&binding.instance==component->instanceId())
+    return binding.motor->runtimeState(out)?WorldStatus::Ok:WorldStatus::ComponentUnavailable;
+  return WorldStatus::ComponentUnavailable;
 }
 }

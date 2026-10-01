@@ -44,6 +44,7 @@
 #include "ui/ui_theme.h"
 #include <string>
 
+namespace ae::runtime {class SceneTimers;class SceneTweens;class ScenePhysics;class GameWorld;}
 namespace ae::editor {
 class EditorMapScene;
 
@@ -65,6 +66,20 @@ enum class EditorWidget : u32 {
   CreationCategoryBase=0x63000000,
   CreationRowBase=0x64000000,
   PrefabOverrideRevertBase=0xD0000000u,
+  InspectorInspection=0xD1000000u,InspectorComponents,InspectorOverviewScroll,InspectorOverviewTransform,
+  InspectorOverviewObject,InspectorReferenceFlags,InspectorReferenceFlagsClose,InspectorComponentPrevious,InspectorComponentNext,
+  InspectorMeshLightmap,
+  InspectorOverviewOpenBase=0xD2000000u,
+  PrefabReceiveSource=0xD3000000u,
+  ComponentSlotEnumBase=0xD4000000u,
+  PrefabOverrideApplyBase=0xD5000000u,
+  ImportWave=0xD6000000u,
+  TweenRestart=0xD7000000u,TweenCancel=0xD7000001u,TweenPause=0xD7000002u,
+  PathEditorOpen=0xD8000000u,PathEditorClose,PathPointList,PathPointPrevious,PathPointNext,
+  PathPointInsert,PathPointRemove,PathPointMoveUp,PathPointMoveDown,PathPointTangents,
+  PathPointPosition,PathPointOrientation,PathPointListPrevious,PathPointListNext,PathFollowRestart,PathFollowStop,
+  PathPointSelectBase=0xD9000000u,
+  PrefabOverridesRevertAll=0xDA000000u,
   None = 0,
   FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,FilesRename,FilesDelete,
   ConsoleInfo,ConsoleWarning,ConsoleError,ConsoleClear,ConsoleCollapse,
@@ -322,9 +337,11 @@ enum class EditorWidget : u32 {
   PresetOpen=0x5E000040u, PresetClose, PresetSave, PresetApply, PresetAdd, PresetRename, PresetDelete, PresetPrevious, PresetNext,
   // Escolha por campo do preset: marcar tudo, desmarcar tudo e paginar o diff.
   PresetSelectAll, PresetSelectNone, PresetFieldsPrevious, PresetFieldsNext, PresetSaveRecipe,
+  PresetLibrary, PresetRecipeDetails, PresetRecipePrevious, PresetRecipeNext,
   PresetChoiceBase=0x5E010000u,
   // + índice da linha do diff: alterna levar ou não aquele campo.
   PresetFieldBase=0x5E020000u,
+  PresetInputBase=0x5E040000u,
   // + linha da aba Estrutura da importação: inclui ou exclui aquele nó.
   ImportNodeToggleBase=0x5E030000u,
   // Faixas próprias: o painel de impacto já dividiu números com
@@ -488,6 +505,8 @@ enum class EditorWidget : u32 {
   ProjectSectionBase=0x0810'0000u,
   ObjectTagOpen=0x0811'0000u, TagClose, TagNew, TagSearch, TagDelete, TagPrevious, TagNext,
   TagRowBase=0x0812'0000u,
+  ObjectGroupsOpen=0x0813'0000u, GroupsClose, GroupNew, GroupsPrevious, GroupsNext,
+  GroupEditBase=0x0814'0000u, GroupRemoveBase=0x0815'0000u,
   PhysicsLayerPrevious=0x0820'0000u,
   PhysicsLayerNext,
   PhysicsLayerAdd,
@@ -503,9 +522,16 @@ enum class EditorWidget : u32 {
   InputBindingNegativeCode,InputBindingScale,
   InputActionPagePrevious,InputActionPageNext,
   InputBindingPagePrevious,InputBindingPageNext,
+  InputTabResponse,InputActionEnabled,
+  InputInteractionPress,InputInteractionHold,InputInteractionTap,InputDuration,
+  InputGroupTouch,InputGroupKeyboardMouse,InputGroupGamepad,
   InputDetailsToggle,
+  InputBindingCapture,InputBindingCaptureNegative,InputBindingCaptureCancel,
   InputActionRowBase=0x0831'0000u,
   InputBindingRowBase=0x0832'0000u,
+  PlayTimeScale=0x0000'1000u,
+  TimerControlBase=0x0840'0000u, // component index * 4 + start, pause/resume, stop
+
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
@@ -526,6 +552,9 @@ inline constexpr u32 TextureInspectorSection=0x00,TextureInspectorCopy=0x10,Text
                      TextureInspectorUsersMore=0x46;
 enum TextureInspectorCard : u32 {TextureCardPreview,TextureCardProperties,TextureCardImport,TextureCardOrigin,TextureCardUsers};
 inline constexpr WidgetRange widgetRanges[]{
+  {EditorWidget::TweenRestart,0x0001'0000u},
+  {EditorWidget::TimerControlBase,0x0001'0000u},
+  {EditorWidget::PathPointSelectBase,kRange},
   {EditorWidget::HierarchyRowBase,kWideRange},{EditorWidget::HierarchyEyeBase,kWideRange},
   {EditorWidget::TransformFieldBase,kWideRange},{EditorWidget::GizmoAxisBase,kWideRange},
   {EditorWidget::NumericKeyBase,kRange},{EditorWidget::ConsoleRowBase,kRange},{EditorWidget::ImportLinkRevertBase,kRange},
@@ -547,6 +576,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},{EditorWidget::ComponentResourceBase,kRange},
   {EditorWidget::HierarchyCollapseBase,kWideRange},{EditorWidget::ComponentPreviewComposition,kRange},
   {EditorWidget::ComponentPropertySearch,kRange},
+  {EditorWidget::PrefabOverrideApplyBase,kRange},
   {EditorWidget::ComponentFieldResetBase,kWideRange},
   {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange},
   {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange},
@@ -601,6 +631,7 @@ enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code }
 enum class EditorProjectSection : u8 { Layers, Input, Water, Tags };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
+enum class EditorInspectorSurface : u8 { Inspection, Components };
 
 enum class EditorSearchProvider : u8 { All = 0, Scene, Project, Create };
 
@@ -746,17 +777,28 @@ struct EditorScreenState final {
   u32 physicsLayer=0,physicsMatrixPage=0;
   bool editingPhysicsLayerName=false;
   bool tagPicker=false,editingTagName=false,editingTagSearch=false;
+  bool groupPicker=false,editingGroupName=false;
+  EditorEntityId groupEntity=0;
+  u32 groupPage=0,groupEditSlot=0;
   u32 tagPage=0;
   std::string tagQuery,tagSelected="Untagged";
   u32 inputActionIndex=0,inputBindingIndex=0,inputTab=0,inputEditField=0;
   u32 inputActionPage=0,inputBindingPage=0;
   bool inputDetails=false;
   bool editingInputActionName=false,editingInputContext=false;
+  bool inputCapturing=false;
+  bool inputCaptureNegative=false;
+  std::string inputCapturePrompt,inputCaptureFeedback;
   bool playHasScripts=false;
   bool playFirstPerson=false,playHasCharacter=false;
   std::string playSecondaryActionLabel,playHudMessage;
   bool playPaused=false;
   bool playStepRequested=false;
+  float playTimeScale=1;
+  const runtime::ScenePhysics *characterRuntime=nullptr;
+  const runtime::GameWorld *characterWorld=nullptr;
+  const runtime::SceneTweens *tweenRuntime=nullptr;
+  const runtime::SceneTimers *timerRuntime=nullptr; // session-owned runtime inspection only
   // Hierarquia e Inspector abertos com o Play rodando (Unity: o Inspector
   // continua editável em Play e tudo volta ao sair). Mostram o mundo de
   // execução; a escrita vai ao mundo, nunca ao documento autoral.
@@ -770,6 +812,11 @@ struct EditorScreenState final {
   u32 componentReorder=0,componentReorderTarget=0;
   ui::UiPoint componentReorderPoint{};
   EditorInspectorTab tab = EditorInspectorTab::Transform;
+  // Duas rotas do mesmo alvo. Preferência editorial, nunca dado de runtime.
+  EditorInspectorSurface inspectorSurface=EditorInspectorSurface::Inspection;
+  float componentOverviewScroll=0;
+  // Pesquisa de flags da Unity: estado editorial, sem gravar bits sem consumidor.
+  bool inspectorReferenceFlags=false;
   // Diagnósticos da sessão são ferramentas editoriais, fora da cena e do Undo.
   bool diagnosticDockOpen=false;
   // Folding is editor-only, keyed by object and stable component instance identity.
@@ -990,6 +1037,15 @@ struct EditorScreenState final {
   u32 presetPage=0;
   std::vector<std::pair<u64,std::string>> presetChoices;
   std::vector<std::string> presetPreview;
+  std::vector<std::string> presetInputNames;
+  std::vector<u64> presetInputValues; // Unpublished authoring arguments, never runtime state.
+  bool presetRecipeReady=false;
+  std::string presetRecipeName,presetRecipeStatus;
+  bool presetRecipeDetails=false;
+  u32 presetRecipePage=0,presetRecipeCount=0;
+  u32 presetInputIndex=0; // 1-based active argument picker.
+  const scene::ComponentObjectReference *presetInputProperty=nullptr; // Static descriptor, not a component pointer.
+  std::vector<EditorEntityId> presetInputChoices;
   // O diff campo a campo do preset selecionado. `selected` é a escolha do autor
   // sobre LEVAR aquele campo; começa marcado no que difere e é aplicável, que é
   // o comportamento antigo de "aplicar tudo" expresso pelo mesmo caminho.
@@ -1134,6 +1190,7 @@ struct EditorScreenState final {
   std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
   bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false,folderImportRequested=false;
+  bool waveImportRequested=false;
   bool importPanel=false,importBatch=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;
   bool importEnvironment=false,importTexture=false;
   resources::EnvironmentMapImportSettings environmentImportSettings{};
@@ -1353,6 +1410,17 @@ struct EditorScreenState final {
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
   bool prefabOverridesOpen=false;
+  std::string prefabOperationStatus;
+  std::string constraintStatus;
+  bool constraintStatusWarning=false;
+  std::string audioStatus;
+  bool audioStatusWarning=false;
+  bool pathEditorOpen=false,pathPointList=false,pathTangents=false,pathOrientation=false;
+  EditorEntityId pathEntity=0;
+  u64 pathInstance=0,pathPointId=0;
+  u32 pathPointPage=0;
+  std::string pathStatus,followStatus;
+  bool pathStatusWarning=false,followStatusWarning=false;
   PrefabOverrideView prefabOverrides;
   // Transformação copiada, para colar em outro objeto.
   bool hasTransformClipboard=false;
@@ -1412,6 +1480,8 @@ struct EditorScreenLayout final {
   // Inspector de textura: altura rolável e quanto dela cabe na janela.
   float textureInspectorContent=0,textureInspectorWindow=0;
   float multiAssetContent=0,multiAssetWindow=0;
+  ui::UiRect componentOverviewWindow{};
+  float componentOverviewContent=0;
   float texturePickerContent[2]{},texturePickerWindow[2]{};
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor

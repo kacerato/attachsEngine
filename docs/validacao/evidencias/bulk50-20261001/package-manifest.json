@@ -1,0 +1,50 @@
+{
+  "counts": {
+    "components": 3,
+    "spring_properties": 21,
+    "body_properties": 10,
+    "public_runtime_api": 16,
+    "total": 50
+  },
+  "apk_sha256": "e74415a9a64cbd68f2896bf333d78667167801f2f0debe3dffe27f3a935b6880",
+  "apk_size": 265835302,
+  "packaged": [
+    {
+      "path": "assets/dotnet/Astra.Scripting.dll",
+      "sha256": "d9e88d27db55915d6ef0e896b9b88b1d60561d5a85eec97c73e8a2b452a3333c",
+      "size": 401408,
+      "matches_generated_asset": true
+    },
+    {
+      "path": "assets/dotnet/Aether.Rendering.dll",
+      "sha256": "2da2f4468f8b7ccec08d29bd9d4b89ca87278fe345ffa8695b11ee43d1558e63",
+      "size": 32256,
+      "matches_generated_asset": true
+    },
+    {
+      "path": "assets/ui/astra-ui-icons.aeui",
+      "sha256": "29c91ca8fc0fed2377a06407f9456fd9dd1c0420007e26aec99d8dd5b65b1282",
+      "size": 10446764,
+      "matches_generated_asset": true
+    }
+  ],
+  "device": {
+    "model": "25053PC47G",
+    "native_managed_commands": "BULK50 READY",
+    "position_rotation_scale_live_edits": "BULK50 PASS",
+    "play_capture": "2772x1280 landscape",
+    "scene_activity_request": "SCREEN_ORIENTATION_SENSOR_LANDSCAPE",
+    "ide_roundtrip": "not physically verified; user ended device validation",
+    "display_override_before": "fixed-to-user-rotation enabled",
+    "display_override_after": "fixed-to-user-rotation disabled",
+    "user_rotation_lock": "0 unchanged"
+  },
+  "host": {
+    "native_scenarios": 4,
+    "passed": 4,
+    "managed_abi_tests": 1,
+    "managed_passed": 1,
+    "sdk_build": "0 warnings 0 errors",
+    "probe_build": "0 warnings 0 errors"
+  }
+}

@@ -1,0 +1,1 @@
+Host Debug: 96 dynamic bodies, 32 overlapping fields, 60 fixed steps; full fields+solver+sync mean=2.709 ms p95=2.968 ms max=3.127 ms

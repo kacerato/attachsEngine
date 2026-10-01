@@ -1,0 +1,8 @@
+CHARACTER_STEP: disabled x=1.187, enabled x=5.946, max eye=1.701
+[ok] character_ground_step_height_changes_real_stair_traversal_without_replacing_capsule
+CHARACTER_SNAP: disabled eye=1.648, enabled eye=1.400
+[ok] character_ground_snap_and_zero_gravity_change_real_ledge_descent
+[ok] character_ground_inspector_creation_ime_history_and_archive
+[ok] character_ground_version_three_archive_live_motion_and_velocity_preservation
+
+4/4 testes passaram

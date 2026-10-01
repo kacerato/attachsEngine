@@ -1,0 +1,28 @@
+timer_connection
+[ok] timer_connection_editor_authors_action_and_receiver_with_real_pointer_routes
+[ok] timer_connection_roundtrip_migration_clone_and_native_activation
+[ok] timer_connection_aggregated_toggle_pending_removal_and_teardown
+
+3/3 testes passaram
+
+portrait_authoring
+[ok] portrait_authoring_panel_owns_its_pixels_and_scene_options_return_when_closed
+
+1/1 testes passaram
+
+play_timer
+[ok] play_timer_multiple_instances_pause_edit_and_roundtrip
+[ok] play_timer_tracks_runtime_add_remove_and_object_activation
+
+2/2 testes passaram
+
+generated_csharp_component_api
+[ok] generated_csharp_component_api_matches_the_schema_registry
+
+1/1 testes passaram
+
+shipped_icon
+[ok] shipped_icon_asset_loads_with_the_generated_enum
+[ok] shipped_icon_names_line_up_with_the_enum
+
+2/2 testes passaram

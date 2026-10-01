@@ -28,6 +28,9 @@
 namespace ae::runtime {
 
 enum class ActionKind : u32 { Button = 0, Axis1D = 1, Axis2D = 2 };
+enum class InputInteraction : u32 { Press, Hold, Tap };
+enum class InputPhase : u32 { Waiting, Started, Performed, Canceled, Disabled };
+enum InputDeviceGroup : u32 { InputTouch=1, InputKeyboardMouse=2, InputGamepad=4, InputAllDevices=7 };
 
 // De onde o valor bruto vem. O projeto escolhe pela fonte, não por um código de
 // dispositivo: `TouchMove` é "o manche virtual", em qualquer aparelho.
@@ -39,6 +42,8 @@ enum class InputSource : u32 {
   Key = 4,           // tecla única; `code`/`negativeCode` formam um eixo
   GamepadAxis = 5,
   GamepadButton = 6,
+  MouseButton = 7,   // 0 primary, 1 secondary, 2 middle, 3 back, 4 forward
+  MouseAxis = 8,     // 0 dx/viewport, 1 dy down/viewport, 2 horizontal scroll, 3 vertical scroll
 };
 
 struct InputBinding {
@@ -66,6 +71,10 @@ struct InputAction {
   // apagar o que o usuário configurou.
   std::string context;
   std::vector<InputBinding> bindings;
+  bool enabled = true;
+  InputInteraction interaction = InputInteraction::Press;
+  float duration = .5f; // Unscaled sampled input time; Hold minimum / Tap maximum.
+  u32 deviceGroups = InputAllDevices;
 
   bool valid() const;
 };
@@ -107,7 +116,7 @@ public:
   bool valid() const;
   bool isDefault() const;
   void write(std::ostream &out) const;
-  bool read(std::istream &in);
+  bool read(std::istream &in,u32 maximumSource=static_cast<u32>(InputSource::MouseAxis),bool allowVersioned=true);
   friend bool operator==(const InputActionMap &a, const InputActionMap &b) {
     return a.actions_ == b.actions_ && a.move_ == b.move_ && a.look_ == b.look_ && a.jump_ == b.jump_;
   }
@@ -133,12 +142,32 @@ struct InputDeviceState {
   std::vector<u32> keys;
   std::vector<u32> gamepadButtons;
   std::array<float, 8> gamepadAxes{};
+  u32 mouseButtons=0;
+  std::array<float,4> mouseAxes{};
+  // Device removal / pointer cancellation aborts interactions rather than
+  // interpreting a synthetic release as a successful tap.
+  u32 canceledDeviceGroups=0;
+  // Source-specific ownership loss; keyboard and mouse share a filtering group
+  // but losing one device must not abort an unrelated binding of the other.
+  u32 canceledSources=0; // Bit indexed by InputSource.
 };
+
+enum class InputCaptureStatus : u32 {Idle,Waiting,Completed,Cancelled};
 
 class InputService final {
 public:
   void setMap(const InputActionMap &map);
   const InputActionMap &map() const noexcept { return map_; }
+  const InputActionMap &authoredMap() const noexcept {return authoredMap_;}
+  bool binding(std::string_view action,u32 index,InputBinding &out,bool authored=false) const;
+  bool overrideBinding(std::string_view action,u32 index,const InputBinding &binding);
+  bool removeOverride(std::string_view action,u32 index);
+  void removeAllOverrides();
+  std::string exportProfile() const;
+  bool importProfile(std::string_view profile);
+  bool beginBindingCapture(std::string_view action,u32 index,InputSource source,bool negative=false,u32 cancelKey=111);
+  void cancelBindingCapture() noexcept;
+  InputCaptureStatus captureStatus() const noexcept {return captureStatus_;}
 
   // Contexto habilitado/desabilitado. Um contexto desconhecido conta como
   // habilitado: nunca silencia uma ação por engano de digitação.
@@ -150,7 +179,15 @@ public:
   void setGameplayFocus(bool focused);
   bool gameplayFocus() const noexcept { return focus_; }
 
-  void submit(const InputDeviceState &state);
+  void submit(const InputDeviceState &state,double unscaledElapsed=0);
+  bool setActionEnabled(std::string_view action,bool enabled);
+  bool restoreActionEnabled(std::string_view action);
+  bool actionEnabled(std::string_view action) const;
+  bool setDeviceGroups(u32 groups);
+  u32 deviceGroups() const noexcept {return deviceGroups_;}
+  InputPhase phase(std::string_view action) const;
+  float progress(std::string_view action) const;
+  float elapsed(std::string_view action) const;
   // Pausa, retomada e cancelamento de toque: solta tudo sem gerar "just
   // released" fantasma no quadro seguinte.
   void reset();
@@ -165,14 +202,28 @@ private:
   struct Value {
     float x = 0, y = 0;
     bool down = false, wasDown = false;
+    bool physicalDown=false,performedPulse=false;
+    double elapsed=0;
+    InputPhase phase=InputPhase::Waiting;
   };
   const Value *value(std::string_view action) const;
   float evaluate(const InputAction &action, const InputDeviceState &state, u32 axis) const;
 
-  InputActionMap map_;
+  InputActionMap map_,authoredMap_;
   std::vector<Value> values_;
+  std::vector<int> enabledOverrides_;
+  u32 deviceGroups_=InputAllDevices;
   std::vector<std::string> disabledContexts_;
   bool focus_ = true;
+  InputCaptureStatus captureStatus_=InputCaptureStatus::Idle;
+  std::string captureAction_;
+  u32 captureIndex_=0,captureCancelKey_=111;
+  InputSource captureSource_=InputSource::None;
+  bool captureNegative_=false,captureSeed_=false,captureReleaseGate_=false;
+  InputBinding captureAccepted_;
+  std::array<bool,8> captureAxisNeutral_{};
+  InputDeviceState capturePrevious_;
+  void capture(const InputDeviceState &state);
 };
 
 } // namespace ae::runtime

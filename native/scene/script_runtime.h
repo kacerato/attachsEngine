@@ -50,6 +50,9 @@ struct ScriptShapeQuery {
   float rotation[4]{0,0,0,1};
 };
 
+struct ScriptTweenState {u32 size=24,status=0;double elapsed=0;u32 flags=0,reserved=0;};
+static_assert(sizeof(ScriptTweenState)==24);
+
 struct ScriptAssetGuid { u64 high=0,low=0; };
 
 // ABI v9: animação (Animation legado da Unity). `op`: 0 Play, 1 CrossFade,
@@ -152,8 +155,44 @@ struct ScriptRenderingState {
   ScriptSceneStatistics frame{};
 };
 
+struct ScriptAudioSnapshot {
+  u32 size=sizeof(ScriptAudioSnapshot),state=0,outputRunning=0,reserved=0;
+  double cursor=0;
+};
+static_assert(sizeof(ScriptAudioSnapshot)==24);
+
+struct ScriptTimeState {
+  u32 size=sizeof(ScriptTimeState),reserved=0;
+  u64 frameCount=0;
+  double simulationTime=0,unscaledTime=0;
+  float delta=0,unscaledDelta=0,timeScale=1,frameScale=1;
+};
+static_assert(sizeof(ScriptTimeState)==48);
+struct ScriptInputBinding {
+  u32 source=0,code=0,negativeCode=0,axis=0;
+  float scale=1;u32 invert=0;
+};
+static_assert(sizeof(ScriptInputBinding)==24);
+struct ScriptInputActionState {
+  u32 size=sizeof(ScriptInputActionState),flags=0,interaction=0,deviceGroups=0,phase=0;
+  float duration=0,progress=0,elapsed=0;
+};
+static_assert(sizeof(ScriptInputActionState)==32);
+
+struct ScriptTimerState {u32 size=sizeof(ScriptTimerState),flags=0;double remaining=0;};
+static_assert(sizeof(ScriptTimerState)==16);
+
+struct ScriptNumberTweenParameters {u32 size=24,easing=0;float destination=0,duration=1;u32 flags=0,reserved=0;};
+struct ScriptNumberTweenState {u32 size=32,status=0,failure=0,flags=0;double elapsed=0;float value=0,duration=0;};
+static_assert(sizeof(ScriptNumberTweenParameters)==24&&sizeof(ScriptNumberTweenState)==32);
+struct ScriptCharacterState {u32 size=80,groundState=3,flags=0,reserved=0;float position[3]{},velocity[3]{},motorVelocity[3]{},groundVelocity[3]{},groundNormal[3]{};u32 tailReserved=0;};
+static_assert(sizeof(ScriptCharacterState)==80);
+struct ScriptFieldState {u32 size=64,flags=0;float weight=0,acceleration[3]{},windVelocity[3]{};float windDrag=0,linearDrag=0,angularDrag=0,overrideWeight=0;u32 affectedBodies=0;float affectedMass=0;u32 reserved=0;};
+static_assert(sizeof(ScriptFieldState)==64);
+struct ScriptBodyState {u32 size=48,flags=0;float linear[3]{},angular[3]{},centerOfMass[3]{};u32 reserved=0;};
+static_assert(sizeof(ScriptBodyState)==48);
 struct ScriptSceneAccess {
-  u32 version=19,size=sizeof(ScriptSceneAccess);
+  u32 version=36,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -264,8 +303,59 @@ struct ScriptSceneAccess {
   // v19: creation happens once; querying attachments never creates objects.
   u64 (*instantiatePrefab)(void *,u64,ScriptAssetGuid)=nullptr;
   int (*instantiationAttachments)(void *,u64,u8 *,int)=nullptr;
+  // v20: tripla refletida por id; os três canais são aplicados atomicamente.
+  int (*setTriple)(void *,u64,u64,const u8 *,int,const float *)=nullptr;
+  // v21: independent XY solver. command 0 get velocity, 1 set velocity,
+  // 2 force, 3 impulse, 4 torque, 5 angular impulse, 6 move kinematic.
+  // vectors have 3 floats: XY + angular degrees (torque uses scalar[0]).
+  int (*body2DCommand)(void *,u64,u32,u32,u32,const float *,float *)=nullptr;
+  // query 0 ray (translation XY), 1 circle overlap. count may exceed capacity;
+  // negative is failure. Hits use XY, Z=0; overlap has no normal.
+  int (*query2D)(void *,u32,u32,const float *,const float *,float,const ScriptQueryFilter *,ScriptQueryHit *,int)=nullptr;
+  // v22: point 0 count, 1 read by index, 2 read by identity, 3 insert before
+  // index (count appends), 4 edit by identity, 5 remove, 6 move to index.
+  // Packed values contain position XYZ and relative in/out handles XYZ.
+  // v35: 7/8 read full point by index/ID, 9/10 insert/edit full point;
+  // ten floats append roll degrees. Legacy edit 4 preserves existing roll.
+  int (*pathPointCommand)(void *,u64,u32,u32,u64,u32,u64,u32,const float *,float *,u64 *)=nullptr;
+  // Runtime 0 sample world curve (output XYZ+tangentXYZ, scalar=length),
+  // 1 restart follower, 2 stop follower, 3 progress distance, 4 playing (0/1).
+  // v35: 5 samples frame XYZ+tangentXYZ+upXYZ+rollDegrees, scalar=length.
+  int (*pathRuntimeCommand)(void *,u64,u32,u32,u64,u32,double,u32,float *,double *)=nullptr;
+  // v23: readonly observed voice, not the requested playback property.
+  int (*audioSnapshot)(void *,u64,u32,u32,u64,ScriptAudioSnapshot *)=nullptr;
+  // v24: session clock. Read/set validate world identity; frameScale remains
+  // frozen for the current frame even when requested timeScale changes.
+  int (*timeSnapshot)(void *,u32,ScriptTimeState *)=nullptr;
+  int (*setTimeScale)(void *,u32,float)=nullptr;
+  // v25: named membership, world-scoped queries and bounded enumeration.
+  // membership operation: -1 query, 0 remove, 1 add; query returns 0/1, -1 on
+  // failure. groupAt UINT_MAX with no buffer returns the membership count.
+  int (*groupMembership)(void *,u64,const u8 *,int,int)=nullptr;
+  int (*findGroup)(void *,const u8 *,int,u64 *,int,int)=nullptr;
+  int (*groupAt)(void *,u64,u32,u8 *,int)=nullptr;
+  // Binding command: effective=0, override=1, restore=2, restore all=3, authored=4.
+  int (*inputBindingCommand)(void *,const u8 *,int,u32,u32,ScriptInputBinding *)=nullptr;
+  // Profile: export=0 (size probe supported), import=1. Failure=-1.
+  int (*inputProfile)(void *,u32,const u8 *,int,u8 *,int)=nullptr;
+  int (*inputCaptureCommand)(void *,u32,const u8 *,int,u32,u32,u32,u32)=nullptr;
+  // v28: timer instance query/start/stop/pause/resume (0..4). Positive start
+  // seconds updates only the runtime interval; countdown never serializes.
+  int (*timerCommand)(void *,u64,u64,u32,float,ScriptTimerState *)=nullptr;
+  // v29: per-instance transform tween query/restart/cancel/pause/resume (0..4).
+  int (*tweenCommand)(void *,u64,u64,u32,ScriptTweenState *)=nullptr;
+  // v30: runtime numeric tracks over explicitly eligible scalar PropertyIds.
+  int (*numberTweenCreate)(void *,u64,u64,const u8 *,int,const ScriptNumberTweenParameters *,u64 *)=nullptr;
+  int (*numberTweenCommand)(void *,u64,u32,ScriptNumberTweenState *)=nullptr;
+  int (*characterSnapshot)(void *,u64,ScriptCharacterState *)=nullptr;
+  int (*bodyCommand)(void *,u64,u32,u32,u64,u32,const float *,const float *,ScriptBodyState *)=nullptr;
+  int (*fieldQuery)(void *,u64,u32,u32,u64,u32,const float *,u32,ScriptFieldState *)=nullptr;
+  // -1 reads, 0..31 writes. Return current layer, -1 on explicit status failure.
+  int (*objectLayer)(void *,u64,u32,u32,int)=nullptr;
+  // v36: action state / runtime enabled override / restore / global group read/write.
+  int (*inputActionCommand)(void *,const u8 *,int,u32,ScriptInputActionState *)=nullptr;
   bool available() const {
-    return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
+    return version==36&&size>=sizeof(ScriptSceneAccess)&&exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
            getActive&&setActive&&createObject&&destroyObject&&setParent&&componentCount&&componentAt&&
            findComponent&&addComponent&&removeComponent&&getProperty&&setProperty&&
@@ -276,7 +366,7 @@ struct ScriptSceneAccess {
            animationCommand&&getAnimationState&&setAnimationState&&animationClipAt&&
            resourceElementId&&getResourceByElementId&&setResourceByElementId&&
             appendAnimationClip&&removeAnimationClip&&moveAnimationClip&&setParentWithPolicy&&
-            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter&&instantiate&&finishInstantiation&&createPrimitive&&instantiatePrefab&&instantiationAttachments;
+            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter&&instantiate&&finishInstantiation&&createPrimitive&&instantiatePrefab&&instantiationAttachments&&setTriple&&body2DCommand&&query2D&&pathPointCommand&&pathRuntimeCommand&&audioSnapshot&&timeSnapshot&&setTimeScale&&groupMembership&&findGroup&&groupAt&&inputBindingCommand&&inputProfile&&inputCaptureCommand&&timerCommand&&tweenCommand&&numberTweenCreate&&numberTweenCommand&&characterSnapshot&&bodyCommand&&fieldQuery&&objectLayer&&inputActionCommand;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
@@ -286,7 +376,27 @@ static_assert(offsetof(ScriptSceneAccess,appendAnimationClip)==offsetof(ScriptSc
 static_assert(offsetof(ScriptSceneAccess,getActiveSelf)==offsetof(ScriptSceneAccess,queryOperation)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,getTag)==offsetof(ScriptSceneAccess,getActiveSelf)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,addBehavior)==offsetof(ScriptSceneAccess,findTagged)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,instantiationAttachments)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,setTriple)==offsetof(ScriptSceneAccess,instantiationAttachments)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,body2DCommand)==offsetof(ScriptSceneAccess,setTriple)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,pathPointCommand)==offsetof(ScriptSceneAccess,query2D)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,audioSnapshot)==offsetof(ScriptSceneAccess,pathRuntimeCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,timeSnapshot)==offsetof(ScriptSceneAccess,audioSnapshot)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,setTimeScale)==offsetof(ScriptSceneAccess,timeSnapshot)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,groupMembership)==offsetof(ScriptSceneAccess,setTimeScale)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,groupAt)==offsetof(ScriptSceneAccess,findGroup)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,inputBindingCommand)==offsetof(ScriptSceneAccess,groupAt)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,inputProfile)==offsetof(ScriptSceneAccess,inputBindingCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,inputCaptureCommand)==offsetof(ScriptSceneAccess,inputProfile)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,timerCommand)==offsetof(ScriptSceneAccess,inputCaptureCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,tweenCommand)==offsetof(ScriptSceneAccess,timerCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,numberTweenCreate)==offsetof(ScriptSceneAccess,tweenCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,numberTweenCommand)==offsetof(ScriptSceneAccess,numberTweenCreate)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,characterSnapshot)==offsetof(ScriptSceneAccess,numberTweenCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,bodyCommand)==offsetof(ScriptSceneAccess,characterSnapshot)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,fieldQuery)==offsetof(ScriptSceneAccess,bodyCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,objectLayer)==offsetof(ScriptSceneAccess,fieldQuery)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,inputActionCommand)==offsetof(ScriptSceneAccess,objectLayer)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,inputActionCommand)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 // Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.
@@ -318,6 +428,7 @@ struct ScriptRuntimeApi {
   // Inspection only. Null destination captures once; second call copies that
   // snapshot without invoking user getters again. Negative means unavailable.
   int (*inspectFields)(u64,u8 *,int)=nullptr;
+  int (*characterSnapshot)(void *,u64,ScriptCharacterState *)=nullptr;
   bool available() const {
     return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact&&timer&&lateUpdate&&lifecycle;
   }

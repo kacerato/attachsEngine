@@ -1,0 +1,35 @@
+FILTER every_registered_component
+[ok] every_registered_component_has_family_icon_and_versioned_reference
+
+1/1 testes passaram
+EXIT 0
+FILTER generated_csharp
+[ok] generated_csharp_component_api_matches_the_schema_registry
+
+1/1 testes passaram
+EXIT 0
+FILTER runtime_schema
+[ok] runtime_schema_matches_the_editor_catalog_rules
+
+1/1 testes passaram
+EXIT 0
+FILTER runtime_world_reference
+[ok] runtime_world_reference_writes_keep_full_identity_and_scope
+
+1/1 testes passaram
+EXIT 0
+FILTER shipped_icon
+[ok] shipped_icon_asset_loads_with_the_generated_enum
+[ok] shipped_icon_names_line_up_with_the_enum
+
+2/2 testes passaram
+EXIT 0
+FILTER shipped_component
+
+0/0 testes passaram
+EXIT 0
+FILTER p02_conditional_reference
+[ok] p02_conditional_reference_readiness_preserves_drafts
+
+1/1 testes passaram
+EXIT 0

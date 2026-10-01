@@ -1,0 +1,4 @@
+[ok] play_timer_multiple_instances_pause_edit_and_roundtrip
+[ok] play_timer_tracks_runtime_add_remove_and_object_activation
+
+2/2 testes passaram

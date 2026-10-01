@@ -131,7 +131,7 @@ std::size_t seedCaret=0;
 bool same(const ae::editor::EditorTextEdit &a,const ae::editor::EditorTextEdit &b) {
   return a.purpose==b.purpose && a.entity==b.entity && a.field==b.field &&
       a.version.epoch==b.version.epoch && a.version.revision==b.version.revision &&
-      a.bufferId==b.bufferId && a.bufferRevision==b.bufferRevision && a.componentInstance==b.componentInstance &&
+      a.bufferId==b.bufferId && a.bufferRevision==b.bufferRevision && a.componentInstance==b.componentInstance && a.elementId==b.elementId &&
       a.propertyId==b.propertyId && a.propertyType==b.propertyType;
 }
 }
@@ -261,6 +261,7 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
       request.purpose==ae::editor::EditorTextPurpose::ResourceName?"Renomear recurso":
       request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":
       request.purpose==ae::editor::EditorTextPurpose::TagName?"Nova tag":
+      request.purpose==ae::editor::EditorTextPurpose::GroupName?(request.field?"Renomear associação":"Associar grupo"):
       request.purpose==ae::editor::EditorTextPurpose::TagSearch?"Buscar tag":
       request.purpose==ae::editor::EditorTextPurpose::PhysicsLayerName?"Renomear camada física":
       request.purpose==ae::editor::EditorTextPurpose::InputActionName?"Renomear ação de entrada":

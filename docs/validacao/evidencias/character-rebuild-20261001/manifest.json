@@ -1,0 +1,21 @@
+{
+  "abi": 30,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 4,
+  "tween": 3,
+  "character": 3,
+  "schemas": 34,
+  "csharpFacades": 33,
+  "recipes": 57,
+  "icons": 230,
+  "apkBytes": 264872599,
+  "apkSha256": "3c629e87e8416b394ebf7918dff8f7c51ae8dddd7c2a2e8f0374b942fbb52833",
+  "sdkSha256": "a8e671c7083d18a872030a23348cd63470281ddf0d01e3dac6e308b3807b298e",
+  "atlasSha256": "244539648984c6095eba5b577608788b04b56d78db26c2775e71070127caa8fc",
+  "assetsMatch": true,
+  "deviceCharacterRebuildPass": false,
+  "install": "Performing Streamed Install\nSuccess\n",
+  "secureKeyguardShowing": true,
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/CharacterRebuild-20261001"
+}

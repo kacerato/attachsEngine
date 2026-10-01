@@ -1,0 +1,4 @@
+[ok] shipped_icon_asset_loads_with_the_generated_enum
+[ok] shipped_icon_names_line_up_with_the_enum
+
+2/2 testes passaram

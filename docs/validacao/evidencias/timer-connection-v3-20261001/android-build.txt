@@ -1,0 +1,60 @@
+
+> Task :app:publishManagedCore
+  Determinando os projetos a serem restaurados...
+  Todos os projetos estão atualizados para restauração.
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Analyzers\release\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Core\release\Aether.Core.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Scene\release\Aether.Scene.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Astra.Scripting\release\Astra.Scripting.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Rendering\release_linux-bionic-arm64\Aether.Rendering.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering-net8.0-8.0.27\
+
+> Task :app:verifyPackagedOpenSsl
+> Task :app:prepareEngineAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:dexBuilderDebug UP-TO-DATE
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeProjectDexDebug UP-TO-DATE
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:compressDebugAssets
+> Task :app:buildCMakeDebug[arm64-v8a][aether_android,aether_transform]
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:mergeDebugNativeLibs
+> Task :app:stripDebugDebugSymbols
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug
+
+BUILD SUCCESSFUL in 1m 50s
+40 actionable tasks: 10 executed, 30 up-to-date

@@ -217,6 +217,24 @@ public static class AstraWorldTests
             return true;
         }
 
+        public int TripleWrites;
+        public bool SetTriple(ulong objectId, ulong instanceId, string propertyId, Vector3 value)
+        {
+            var entry = Live(objectId);
+            if (entry is null) return Fail(WorldStatus.StaleHandle);
+            var component = entry.Components.FirstOrDefault(c => c.Instance == instanceId);
+            if (component.Instance == 0) return Fail(WorldStatus.ComponentMissing);
+            if (propertyId != "offset" || component.TypeId != CameraFollow.TypeId)
+                return Fail(WorldStatus.InvalidArgument);
+            if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z))
+                return Fail(WorldStatus.Rejected);
+            TripleWrites++;
+            component.Values["offset_x"] = (0, BitConverter.SingleToUInt32Bits(value.X));
+            component.Values["offset_y"] = (0, BitConverter.SingleToUInt32Bits(value.Y));
+            component.Values["offset_z"] = (0, BitConverter.SingleToUInt32Bits(value.Z));
+            LastStatus = WorldStatus.Ok; return true;
+        }
+
         /// <summary>O ponto seguro do mundo: só aqui o armazenamento muda.</summary>
         // v9: animação. Clipes por componente e o último comando recebido, para
         // o teste conferir o que o reprodutor C# manda pela ABI.
@@ -505,6 +523,9 @@ public static class AstraWorldTests
         var follow = target.AddComponent<CameraFollow>();
         follow.Offset = new Vector3(1, 2, 3);
         Assert.Close(2, follow.Component.GetFloat("offset_y"), 1e-6f, "tripla vira Vector3 sobre os canais");
+        Assert.Equal(1, world.TripleWrites, "um único comando para o vetor inteiro");
+        Assert.Throws<WorldException>(() => follow.Offset = new Vector3(9, float.NaN, 0), "atribuição inválida recusada");
+        Assert.Equal(new Vector3(1, 2, 3), follow.Offset, "recusa mantém os três canais anteriores");
         Assert.Throws<WorldException>(() => _ = new GameTimer(camera.Component), "fachada recusa tipo diferente");
     }
 }

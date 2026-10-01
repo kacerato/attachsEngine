@@ -104,7 +104,7 @@ resources::AssetGuid EditorSession::createPrefab(EditorEntityId root,std::string
   return guid;
 }
 
-bool EditorSession::loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) const {
+bool EditorSession::loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error,std::string *sourceText) const {
   error.clear();
   const auto *record=assets_.find(asset);
   if(!record || record->type!=resources::AssetType::Prefab) {error="Prefab não registrado no projeto";return false;}
@@ -115,6 +115,7 @@ bool EditorSession::loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefa
   runtime::Prefab prepared;
   if(!prepared.read(std::string_view(reinterpret_cast<const char*>(bytes.data()),bytes.size()),defaultEditorComponentRegistry(),error)) return false;
   if(prepared.asset()!=asset) {error="A identidade do arquivo não corresponde ao prefab registrado";return false;}
+  if(sourceText) sourceText->assign(reinterpret_cast<const char*>(bytes.data()),bytes.size());
   prefab=std::move(prepared);return true;
 }
 
@@ -149,6 +150,7 @@ bool EditorSession::preparePrefab(const runtime::Prefab &authored,runtime::Prefa
     }
     if(!resolved.applyEntityValues(id,value)) {error="Não foi possível resolver os recursos do prefab";return false;}
   }
+  mapScene_.hydrateMaterials(resolved);
   return prefab.capture(resolved,authored.root(),authored.asset(),error);
 }
 

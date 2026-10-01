@@ -1,0 +1,7 @@
+--------- beginning of main
+09-30 19:32:27.387 26711 32626 I Astra.Script: 3: PATH WAIT: finding authored Path and PathFollow; no objects will be created
+09-30 19:32:27.438 26711 32626 I Astra.Script: 3: PATH READY: path=2 instance=1 follower=3 instance=1 points=4 ids=[3,1,4,2] worldLength=16.755130167823935 middle=<-4.0273643, 0, 1.0073878> tangent=<0.31182072, 0, 0.95014095> progress=0 playing=True
+09-30 19:32:27.592 26711 32626 I Astra.Script: 3: PATH ADVANCE: progress=0.2896575927734375 playing=True pose=<2.9589367, 0, 0>
+09-30 19:32:27.593 26711 32626 I Astra.Script: 3: PATH STOP: progress=0.2896575927734375 playing=False
+09-30 19:32:27.996 26711 32626 I Astra.Script: 3: PATH RESTART: progress=0 playing=True
+09-30 19:32:28.305 26711 32626 I Astra.Script: 3: PATH PASS: ABI22 point identities/world sample/advance/Stop hold/Restart advance; progress=0.3106231689453125 playing=True

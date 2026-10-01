@@ -1,0 +1,7 @@
+[ok] session_play_time_scale_button_controls_runtime_without_authoring_history
+[ok] play_time_scale_drives_solver_timers_delayed_destroy_and_native_clock
+[ok] play_time_scale_changes_in_update_take_effect_on_next_whole_frame
+[ok] play_time_scale_unscaled_timer_persists_and_dispatches_during_simulation_freeze
+[ok] play_time_scale_unscaled_tween_migrates_persists_and_keeps_runtime_authority
+
+5/5 testes passaram

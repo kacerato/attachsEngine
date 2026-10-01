@@ -1,0 +1,66 @@
+{
+  "counts": {
+    "components": 4,
+    "semantic_properties_per_type": 10,
+    "semantic_property_entries": 40,
+    "distinct_shared_properties": 8,
+    "public_runtime_api": 6,
+    "total": 50
+  },
+  "registry": {
+    "schemas": 41,
+    "attachable_types": 40,
+    "generated_facades": 40,
+    "creation_recipes": 73,
+    "icons": 247
+  },
+  "abi": 33,
+  "field_payload_bytes": 64,
+  "body_payload_bytes_preserved": 48,
+  "apk_sha256": "b84cf00912b49e5a06c53b3eb95a1b2117f0e3d5fe0873e4911b0e48f0faed3c",
+  "apk_size": 265890057,
+  "packaged": [
+    {
+      "path": "assets/dotnet/Astra.Scripting.dll",
+      "size": 418304,
+      "sha256": "de9b0a4a95f1295ac047814f05150ceb43c1d0ed80c21c7e111bfdcce91361cf",
+      "matches_generated_asset": true
+    },
+    {
+      "path": "assets/dotnet/Aether.Rendering.dll",
+      "size": 32256,
+      "sha256": "df987aa44efaa273dbb71b5ec423319cf6967cd389fe65eae8cdb9c0b81ece23",
+      "matches_generated_asset": true
+    },
+    {
+      "path": "assets/ui/astra-ui-icons.aeui",
+      "size": 10446796,
+      "sha256": "59acdd97bc4e8c8914c9d77ca3584fc3db9c1f9da4534662b5ffa9fdb6fadb47",
+      "matches_generated_asset": true
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_android.so",
+      "size": 33155368,
+      "sha256": "d5f085525ba3207baf632fd25beed89b30714057ac51ab617393da83bedd8379"
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_transform.so",
+      "size": 7088,
+      "sha256": "917c2c72379be29a7d12644c00b423dcf96422fa4f5c07fd3220bb416d4ca5c9"
+    }
+  ],
+  "host": {
+    "new_native_scenarios_passed": 4,
+    "prior_native_regressions_passed": 4,
+    "managed_abi_tests_passed": 2,
+    "script_compile": "0 warnings 0 errors",
+    "visual_renderer": "UI software raster with actual font/atlas; not Vulkan scene"
+  },
+  "physical_device": {
+    "tested_this_package": false,
+    "installed_this_package": false,
+    "managed_probe_execution": "not executed on Android"
+  },
+  "editable_fixture": "build/acceptance/Fields50-20261001-final",
+  "performance_log": "benchmark.log"
+}

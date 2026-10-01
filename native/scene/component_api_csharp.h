@@ -115,6 +115,10 @@ inline std::string componentCSharpApi() {
          "        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, \"tipo \" + component.TypeId);\n"
          "        Component = component;\n    }\n";
     out+="    public ulong InstanceId => Component.InstanceId;\n";
+    out+="    public GameObject Object => Component.Object;\n";
+    out+="    public bool IsAlive => Component.IsAlive;\n";
+    out+="    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>\n";
+    out+="    public void Remove() => Component.Remove();\n";
     // Canais de uma tripla saem como Vector3 único; os números avulsos, um a um.
     std::vector<std::string_view> channels;
     for(const auto &triple:type.triples) for(const auto channel:triple.channels) channels.push_back(channel);
@@ -126,13 +130,10 @@ inline std::string componentCSharpApi() {
     };
     for(const auto &triple:type.triples) {
       out+=doc(triple.name,{},triple.kind==ComponentTripleKind::LinearColor?"Cor linear RGB":"");
-      out+="    public Vector3 "+pascal(triple.id)+"\n    {\n        get => new(";
-      for(u32 axis=0;axis<3;++axis) out+=std::string(axis?", ":"")+"Component.GetFloat(\""+std::string(triple.channels[axis])+"\")";
-      out+=");\n        set\n        {\n";
-      const char *fields[]{"X","Y","Z"};
-      for(u32 axis=0;axis<3;++axis)
-        out+="            Component.SetFloat(\""+std::string(triple.channels[axis])+"\", value."+fields[axis]+");\n";
-      out+="        }\n    }\n";
+      const std::string vectorType=triple.dimensions()==2?"Vector2":"Vector3";
+      out+="    public "+vectorType+" "+pascal(triple.id)+"\n    {\n        get => new(";
+      for(u32 axis=0;axis<triple.dimensions();++axis) out+=std::string(axis?", ":"")+"Component.GetFloat(\""+std::string(triple.channels[axis])+"\")";
+      out+=");\n        set => Component.Set"+vectorType+"(\""+std::string(triple.id)+"\", value);\n    }\n";
     }
     for(const auto &p:type.numbers) {
       if(p.id.empty() || std::find(channels.begin(),channels.end(),p.id)!=channels.end()) continue;

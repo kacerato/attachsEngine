@@ -1,0 +1,3 @@
+[ok] audio_script_observes_real_offline_voice_and_rejects_stale_lifetime
+
+1/1 testes passaram

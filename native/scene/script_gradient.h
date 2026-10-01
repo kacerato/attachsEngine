@@ -13,6 +13,7 @@
 #include <cmath>
 #include <iomanip>
 #include <locale>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -36,7 +37,9 @@ struct ScriptGradient {
     std::stable_sort(alphas.begin(), alphas.end(), [](const auto &a, const auto &b) { return a.time < b.time; });
   }
   bool valid(bool hdr) const {
-    if (colors.empty() || alphas.empty() || colors.size() > kMaximumKeys || alphas.size() > kMaximumKeys) return false;
+    if (static_cast<u32>(mode)>2 || colors.empty() || alphas.empty() || colors.size() > kMaximumKeys || alphas.size() > kMaximumKeys) return false;
+    for(usize i=1;i<colors.size();++i)if(colors[i-1].time>colors[i].time)return false;
+    for(usize i=1;i<alphas.size();++i)if(alphas[i-1].time>alphas[i].time)return false;
     for (const auto &key : colors) {
       if (!std::isfinite(key.time) || key.time < 0 || key.time > 1) return false;
       for (const float c : key.rgb) if (!std::isfinite(c) || c < 0 || c > (hdr ? 65504.f : 1.f)) return false;
@@ -69,6 +72,7 @@ inline bool parseScriptGradient(std::string_view text, ScriptGradient &out) {
   in >> std::ws;
   if (!in.eof()) return false;
   value.sort();
+  if(!value.valid(true))return false;
   out = std::move(value);
   return true;
 }
@@ -77,7 +81,7 @@ inline std::string scriptGradientValue(ScriptGradient value) {
   value.sort();
   std::ostringstream out;
   out.imbue(std::locale::classic());
-  out << std::setprecision(7) << static_cast<u32>(value.mode) << ' ' << value.colors.size();
+  out << std::setprecision(std::numeric_limits<float>::max_digits10) << static_cast<u32>(value.mode) << ' ' << value.colors.size();
   for (const auto &key : value.colors) out << ' ' << key.time << ' ' << key.rgb[0] << ' ' << key.rgb[1] << ' ' << key.rgb[2];
   out << ' ' << value.alphas.size();
   for (const auto &key : value.alphas) out << ' ' << key.time << ' ' << key.alpha;
@@ -106,7 +110,8 @@ inline void oklabToLinear(const float (&lab)[3], float (&c)[3]) {
 
 // Unity Gradient.Evaluate: antes da primeira parada vale a primeira, depois da
 // última vale a última; Fixed usa a parada cujo tempo é o primeiro ≥ t.
-inline void evaluateScriptGradient(const ScriptGradient &g, float t, float (&rgba)[4]) {
+inline bool tryEvaluateScriptGradient(const ScriptGradient &g, float t, float (&rgba)[4]) {
+  if(!g.valid(true) || !std::isfinite(t))return false;
   t = std::clamp(t, 0.f, 1.f);
   const auto &colors = g.colors;
   if (colors.size() == 1 || t <= colors.front().time) std::copy(colors.front().rgb, colors.front().rgb + 3, rgba);
@@ -138,6 +143,10 @@ inline void evaluateScriptGradient(const ScriptGradient &g, float t, float (&rgb
     const float span = b.time - a.time, f = span > 0 ? (t - a.time) / span : 1.f;
     rgba[3] = g.mode == GradientMode::Fixed ? b.alpha : a.alpha + (b.alpha - a.alpha) * f;
   }
+  return true;
+}
+inline void evaluateScriptGradient(const ScriptGradient &g,float t,float (&rgba)[4]) {
+  if(!tryEvaluateScriptGradient(g,t,rgba))std::fill(std::begin(rgba),std::end(rgba),std::numeric_limits<float>::quiet_NaN());
 }
 
 } // namespace ae::scene

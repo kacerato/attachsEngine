@@ -1,0 +1,8 @@
+AETHER_EDITOR 15 0 4
+1 0 0 "Cena" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1 "Untagged" GROUPS 1 0
+2 1 0 "TIME Acceptance" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.time.timer" 3 "0.100000001 1 0 0 0 0" 2 "astra.time.timer" 3 "0.100000001 1 0 1 0 0" 3 "astra.script.behavior" 1 "\"acceptance.time\" \"Scripts/TimeProbe.cs\" 1 0" "Untagged" GROUPS 1 0
+3 1 0 "Timeout emissor" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.time.timer" 3 "0.150000006 0 1 1 1 4" 2 "astra.script.behavior" 1 "\"acceptance.timer.connection\" \"Scripts/TimerConnectionProbe.cs\" 1 0" "Untagged" GROUPS 1 0
+4 3 0 "Timeout receptor" 0 0 0 0 0 0 1 1 1 0 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1 "Untagged" GROUPS 1 1 "timeout-receiver"
+LAYERS 1 "Padrão" 4294967295
+INPUT 3 "Mover" "Olhar" "Saltar" "Mover" 2 0.119999997 1 "" 2 1 0 0 0 1 0 1 0 0 1 1 0 "Olhar" 2 0 1 "" 2 2 0 0 0 1 0 2 0 0 1 1 0 "Saltar" 0 0 1 "" 1 3 0 0 0 1 0
+VIEWS 0

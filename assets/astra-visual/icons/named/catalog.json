@@ -1176,6 +1176,342 @@
       "name": "prefab",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "editor/components": {
+      "category": "editor",
+      "name": "components",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "editor/inspection": {
+      "category": "editor",
+      "name": "inspection",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "editor/prefab-receive": {
+      "category": "editor",
+      "name": "prefab-receive",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/lightmap": {
+      "category": "lighting",
+      "name": "lightmap",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/position-constraint": {
+      "category": "component",
+      "name": "position-constraint",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/rotation-constraint": {
+      "category": "component",
+      "name": "rotation-constraint",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/scale-constraint": {
+      "category": "component",
+      "name": "scale-constraint",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/aim-constraint": {
+      "category": "component",
+      "name": "aim-constraint",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/constant-force": {
+      "category": "component",
+      "name": "constant-force",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/parent-constraint": {
+      "category": "component",
+      "name": "parent-constraint",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/look-at-constraint": {
+      "category": "component",
+      "name": "look-at-constraint",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/tween-transform": {
+      "category": "component",
+      "name": "tween-transform",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/body-2d": {
+      "category": "physics",
+      "name": "body-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/collider-2d": {
+      "category": "physics",
+      "name": "collider-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/source": {
+      "category": "audio",
+      "name": "source",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/listener": {
+      "category": "audio",
+      "name": "listener",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/clip": {
+      "category": "audio",
+      "name": "clip",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/bus": {
+      "category": "audio",
+      "name": "bus",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/joint-2d": {
+      "category": "physics",
+      "name": "joint-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/constant-force-2d": {
+      "category": "physics",
+      "name": "constant-force-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "path/curve": {
+      "category": "path",
+      "name": "curve",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/path-follow": {
+      "category": "component",
+      "name": "path-follow",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "path/point": {
+      "category": "path",
+      "name": "point",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "path/tangent": {
+      "category": "path",
+      "name": "tangent",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "input/keyboard": {
+      "category": "input",
+      "name": "keyboard",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "input/gamepad": {
+      "category": "input",
+      "name": "gamepad",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "scene/groups": {
+      "category": "scene",
+      "name": "groups",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "event/timeout-connection": {
+      "category": "event",
+      "name": "timeout-connection",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "input/mouse": {
+      "category": "input",
+      "name": "mouse",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "event/physics-connection": {
+      "category": "event",
+      "name": "physics-connection",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "event/physics-connection-2d": {
+      "category": "event",
+      "name": "physics-connection-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "event/tween-completion": {
+      "category": "event",
+      "name": "tween-completion",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/character-ground": {
+      "category": "physics",
+      "name": "character-ground",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/character-platform-carry": {
+      "category": "physics",
+      "name": "character-platform-carry",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/joint-fixed": {
+      "category": "physics",
+      "name": "joint-fixed",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/joint-cone": {
+      "category": "physics",
+      "name": "joint-cone",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/joint-swing-twist": {
+      "category": "physics",
+      "name": "joint-swing-twist",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/joint-six-dof": {
+      "category": "physics",
+      "name": "joint-six-dof",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/joint-spring": {
+      "category": "physics",
+      "name": "joint-spring",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/static-cylinder": {
+      "category": "physics",
+      "name": "static-cylinder",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/dynamic-cylinder": {
+      "category": "physics",
+      "name": "dynamic-cylinder",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/sensor-cylinder": {
+      "category": "physics",
+      "name": "sensor-cylinder",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/kinematic-cylinder": {
+      "category": "physics",
+      "name": "kinematic-cylinder",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/spring-position": {
+      "category": "component",
+      "name": "spring-position",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/spring-rotation": {
+      "category": "component",
+      "name": "spring-rotation",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/spring-scale": {
+      "category": "component",
+      "name": "spring-scale",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-gravity": {
+      "category": "physics",
+      "name": "field-gravity",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-wind": {
+      "category": "physics",
+      "name": "field-wind",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-drag": {
+      "category": "physics",
+      "name": "field-drag",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-radial": {
+      "category": "physics",
+      "name": "field-radial",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-gravity-2d": {
+      "category": "physics",
+      "name": "field-gravity-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-wind-2d": {
+      "category": "physics",
+      "name": "field-wind-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-drag-2d": {
+      "category": "physics",
+      "name": "field-drag-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/field-radial-2d": {
+      "category": "physics",
+      "name": "field-radial-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "path/orientation": {
+      "category": "path",
+      "name": "orientation",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "input/response": {
+      "category": "input",
+      "name": "response",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

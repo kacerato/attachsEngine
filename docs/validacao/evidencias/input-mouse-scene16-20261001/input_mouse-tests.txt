@@ -1,0 +1,6 @@
+[ok] input_mouse_editor_named_choices_capture_cancel_history_and_runtime
+[ok] input_mouse_session_drives_camera_without_virtual_touch_and_stop_restores_authoring
+[ok] input_mouse_producer_accumulates_transients_latches_clicks_and_releases_owners
+[ok] input_mouse_scene16_persists_channels_and_legacy_read_is_transactional
+
+4/4 testes passaram

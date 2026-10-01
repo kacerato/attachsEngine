@@ -1,0 +1,7 @@
+[ok] number_tween_abi_start_controls_real_light_and_retained_callback_lifecycle
+[ok] number_tween_real_light_camera_clock_pause_cancel_and_authoring_boundary
+[ok] number_tween_rgb_easing_orthographic_lens_and_dynamic_eligibility
+NUMBER_TWEEN_HOST: 1000 frames, 256 retained / one active, 8.362 ms; not Android performance
+[ok] number_tween_eligibility_conflict_stale_session_bounded_storage_and_hot_path
+
+4/4 testes passaram

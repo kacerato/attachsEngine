@@ -1,0 +1,3 @@
+[ok] input_profiles_abi26_reads_overrides_exports_and_imports_real_play_input
+
+1/1 testes passaram

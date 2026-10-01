@@ -1,0 +1,6 @@
+[1/6] Building CXX object CMakeFiles/aether_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_prefab.cpp.obj
+[2/6] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[3/6] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[4/6] Linking CXX static library libaether_editor.a
+[5/6] Linking CXX executable aether_ui_preview.exe
+[6/6] Linking CXX executable aether_tests.exe

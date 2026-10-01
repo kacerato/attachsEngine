@@ -1,0 +1,5 @@
+[ok] tween_connection_editor_recipe_picker_enum_history_and_persistence
+[ok] tween_connection_version_three_clone_and_real_final_pose_activation
+[ok] tween_connection_fires_once_restart_rearms_cancel_infinite_and_missing_receiver
+
+3/3 testes passaram

@@ -1,0 +1,4 @@
+[ok] authored_character_roundtrips_moves_in_scene_world_and_preserves_authoring
+[ok] authored_character_jump_is_grounded_configurable_and_v1_compatible
+
+2/2 testes passaram

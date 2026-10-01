@@ -1,0 +1,50 @@
+[0/1] Re-running CMake...
+Interprocedural optimizations are turned on
+-- CMake C compiler: GNU
+-- CMake C++ compiler: GNU
+-- CMake system name: Windows
+-- CMake host system processor: AMD64
+-- Box2D on MinGW
+-- Configuring done (5.7s)
+-- Generating done (0.5s)
+-- Build files have been written to: C:/Users/donod/Downloads/atchengine/build/editor-host
+[1/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.obj
+[2/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.obj
+[3/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.obj
+[4/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.obj
+[5/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.obj
+[6/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.obj
+[7/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.obj
+[8/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.obj
+[9/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.obj
+[10/41] Building CXX object CMakeFiles/aether_ui.dir/ui/ui_icon_atlas.cpp.obj
+[11/41] Building CXX object CMakeFiles/aether_ui.dir/ui/ui_icon_id.cpp.obj
+[12/41] Building CXX object CMakeFiles/aether_ui.dir/ui/ui_instance_builder.cpp.obj
+[13/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.obj
+[14/41] Linking CXX static library libaether_runtime.a
+[15/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.obj
+[16/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.obj
+[17/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_document.cpp.obj
+[18/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.obj
+[19/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[20/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[21/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[22/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[23/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.obj
+[24/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[25/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[26/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[27/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[28/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.obj
+[29/41] Linking CXX static library libaether_ui.a
+[30/41] Building CXX object CMakeFiles/aether_rhi.dir/rhi/ui_renderer.cpp.obj
+[31/41] Linking CXX static library libaether_rhi.a
+[32/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_history.cpp.obj
+[33/41] Linking CXX static library libaether_editor.a
+[34/41] Building CXX object CMakeFiles/aether_spline_frame_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/spline_frame_family_main.cpp.obj
+[35/41] Building CXX object CMakeFiles/aether_spline_frame_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_curve3d.cpp.obj
+[36/41] Building CXX object CMakeFiles/aether_ui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/ui_preview_main.cpp.obj
+[37/41] Building CXX object CMakeFiles/aether_spline_frame_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_paths.cpp.obj
+[38/41] Building CXX object CMakeFiles/aether_spline_frame_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_script_paths.cpp.obj
+[39/41] Linking CXX executable aether_ui_preview.exe
+[40/41] Linking CXX executable aether_spline_frame_family_tests.exe

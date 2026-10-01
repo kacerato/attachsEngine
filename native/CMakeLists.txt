@@ -83,6 +83,17 @@ set(BOX2D_PROFILE OFF CACHE BOOL "" FORCE)
 set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/Box2D EXCLUDE_FROM_ALL)
 
+# P10: device output and offline DSP share the same pinned implementation.
+add_library(aether_audio_backend STATIC third_party/miniaudio/miniaudio.c)
+target_include_directories(aether_audio_backend SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniaudio)
+target_compile_definitions(aether_audio_backend PUBLIC MA_NO_MP3 MA_NO_FLAC MA_NO_RESOURCE_MANAGER)
+set_target_properties(aether_audio_backend PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(WIN32)
+  target_link_libraries(aether_audio_backend PUBLIC ole32 winmm)
+else()
+  target_link_libraries(aether_audio_backend PUBLIC ${CMAKE_DL_LIBS} m)
+endif()
+
 # --- SQLite 3.53.4 (item 1.4.5: índice de dependências) --------------------
 # Mesmo motivo de entrar antes das flags estritas da engine: warnings de código de terceiros
 # (aqui, C puro dentro de um build majoritariamente C++) não podem quebrar nossos alvos.
@@ -419,10 +430,11 @@ add_library(aether_assets STATIC
   resources/mesh_lod_build.cpp
   resources/texture_profile.cpp
   resources/texture_asset.cpp
+  resources/audio_clip.cpp
   resources/glb_images.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc)
+target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc PUBLIC aether_audio_backend)
 # aether_renderer pelo formato do pacote de mapa: a importacao produz
 # exatamente os mesmos registros de desenho e material que o cozinhador offline,
 # para que geometria importada no aparelho e geometria cozida no computador
@@ -441,15 +453,19 @@ add_library(aether_runtime STATIC
   runtime/input_actions.cpp
   runtime/transform_math.cpp
   runtime/game_world.cpp
+  runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
+  runtime/scene_physics2d.cpp
+  runtime/scene_audio.cpp
+  runtime/scene_paths.cpp
   runtime/script_bridge.cpp
   runtime/runtime_rendering_state.cpp
   runtime/scene_animation.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics)
+target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend)
 
 # --- aether_editor: documento de cena, historico, projecao e gizmo ---------
 # O modelo do EDITOR, nao o do runtime: descreve o que o usuario autorou. Ele
@@ -471,6 +487,8 @@ add_library(aether_editor STATIC
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
   editor/editor_texture_assets.cpp
+  editor/editor_audio_assets.cpp
+  editor/editor_path.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
   editor/editor_history.cpp
@@ -482,6 +500,10 @@ target_link_libraries(aether_editor PUBLIC aether_core aether_assets aether_runt
 # MinGW ("file too big"); o formato estendido so muda o objeto, nao o codigo.
 if(MINGW)
   target_compile_options(aether_editor PRIVATE -Wa,-mbig-obj)
+  # The session integration fixture instantiates the full typed component schema.
+  # COFF's default section limit is too small for its debug translation unit.
+  set_source_files_properties(${CMAKE_SOURCE_DIR}/../tests/native/test_editor_session.cpp
+    PROPERTIES COMPILE_OPTIONS "-Wa,-mbig-obj")
 endif()
 
 # --- aether_ui: layout, desenho e roteamento de toque da interface ---------
@@ -683,6 +705,13 @@ if(NOT ANDROID)
     ../tests/native/test_primitives.cpp
     ../tests/native/test_prefab.cpp
     ../tests/native/test_runtime_physics_access.cpp
+    ../tests/native/test_runtime_constraints.cpp
+    ../tests/native/test_bulk50.cpp
+    ../tests/native/test_runtime_tweens.cpp
+    ../tests/native/test_runtime_number_tweens.cpp
+    ../tests/native/test_runtime_physics2d.cpp
+    ../tests/native/test_runtime_audio.cpp
+    ../tests/native/test_script_physics2d.cpp
     ../tests/native/test_mesh_collider.cpp
     ../tests/native/test_lod_group.cpp
     ../tests/native/test_scene_views.cpp
@@ -714,6 +743,10 @@ if(NOT ANDROID)
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_highlevel_example_games.cpp
     ../tests/native/test_scene_components.cpp
+    ../tests/native/test_curve3d.cpp
+    ../tests/native/test_scene_paths.cpp
+    ../tests/native/test_script_paths.cpp
+    ../tests/native/test_script_audio.cpp
     ../tests/native/test_component_contracts.cpp
     ../tests/native/test_component_preset.cpp
     ../tests/native/test_component_recipes.cpp
@@ -805,7 +838,80 @@ if(NOT ANDROID)
   # metade do contrato: warning + flags + contadores, sem encerramento silencioso.
   # Pre-visualizacao da interface: renderiza a tela do editor em arquivo, sem GPU
   # e sem aparelho, usando o espelho de astra_ui.frag. Nao faz parte do produto.
+  # Focused package acceptance: build/run four integrated scenarios independently.
+  add_executable(aether_bulk50_tests ../tests/native/bulk50_main.cpp ../tests/native/test_bulk50.cpp)
+  target_include_directories(aether_bulk50_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_bulk50_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_bulk50_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_bulk50_tests PRIVATE -Wa,-mbig-obj)
+    set_source_files_properties(../tests/native/test_editor_map_scene.cpp PROPERTIES COMPILE_OPTIONS "-Wa,-mbig-obj")
+  endif()
+  add_executable(aether_fields50_tests ../tests/native/fields50_main.cpp ../tests/native/test_fields50.cpp)
+  target_include_directories(aether_fields50_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_fields50_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_fields50_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_fields50_tests PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
+  add_executable(aether_input_family_tests ../tests/native/input_family_main.cpp ../tests/native/test_runtime_input.cpp ../tests/native/test_input_interactions.cpp ../tests/native/test_editor_session.cpp)
+  target_include_directories(aether_input_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_input_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_input_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_input_family_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
+  add_executable(aether_spline_frame_family_tests ../tests/native/spline_frame_family_main.cpp ../tests/native/test_curve3d.cpp ../tests/native/test_scene_paths.cpp ../tests/native/test_script_paths.cpp)
+  target_include_directories(aether_spline_frame_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_spline_frame_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_spline_frame_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_spline_frame_family_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
+  add_executable(aether_family_base_tests ../tests/native/family_base_main.cpp ../tests/native/test_family_base.cpp ../tests/native/test_runtime_world.cpp)
+  add_executable(aether_prefab_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_prefab.cpp ../tests/native/test_prefab_structure.cpp)
+  add_executable(aether_curve_gradient_family_tests ../tests/native/curve_gradient_family_main.cpp ../tests/native/test_numeric_expression.cpp ../tests/native/test_editor_session.cpp)
+  add_executable(aether_audio_listener_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_runtime_audio.cpp)
+  target_include_directories(aether_audio_listener_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_audio_listener_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_audio_listener_family_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
+  target_include_directories(aether_curve_gradient_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_curve_gradient_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_curve_gradient_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_curve_gradient_family_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  add_executable(aether_recipe_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_component_recipes.cpp ../tests/native/test_component_preset.cpp ../tests/native/test_recipe_bindings.cpp)
+  target_include_directories(aether_recipe_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_recipe_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_recipe_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_recipe_family_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  target_include_directories(aether_prefab_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_prefab_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_prefab_family_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  target_include_directories(aether_family_base_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_family_base_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_family_base_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  add_executable(aether_fields2d50_tests ../tests/native/fields2d50_main.cpp ../tests/native/test_fields2d50.cpp)
+  target_include_directories(aether_fields2d50_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_fields2d50_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_fields2d50_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_fields2d50_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  if(MINGW)
+    # The preview instantiates the same full schema as the session integration fixture.
+    target_compile_options(aether_ui_preview PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(component_scene_fixture EXCLUDE_FROM_ALL ../tests/native/component_scene_fixture.cpp)
   target_link_libraries(component_scene_fixture PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   target_include_directories(aether_ui_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)

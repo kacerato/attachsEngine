@@ -29,11 +29,11 @@ public:
 };
 inline constexpr std::array<ComponentNumber,5> cameraNumbers{{
 #define AE_CAMERA_NUMBER(id,label,field,lo,hi,step,group,unit) {label,lo,hi,step,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).field;},id,{group,unit}}
-  {"Campo vertical",1,170,1,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).verticalFov;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).verticalFov;},"vertical_fov",{"Lente","°",nullptr,[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Perspective;}}},
+  {"Campo vertical",1,170,1,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).verticalFov;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).verticalFov;},"vertical_fov",{"Lente","°",nullptr,[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Perspective;}},true},
   AE_CAMERA_NUMBER("near_plane","Próximo",nearPlane,.001f,10000,.01f,"Lente","m"),
   AE_CAMERA_NUMBER("far_plane","Distante",farPlane,.01f,1000000,10,"Lente","m"),
   AE_CAMERA_NUMBER("priority","Prioridade",priority,-10000,10000,1,"Saída",""),
-  {"Meia altura",.001f,100000, .1f,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).orthographicHalfHeight;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).orthographicHalfHeight;},"orthographic_half_height",{"Lente","m","Metade da altura visível. Zoom altera esta extensão.",[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Orthographic;}}}
+  {"Meia altura",.001f,100000, .1f,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).orthographicHalfHeight;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).orthographicHalfHeight;},"orthographic_half_height",{"Lente","m","Metade da altura visível. Zoom altera esta extensão.",[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Orthographic;}},true}
 #undef AE_CAMERA_NUMBER
 }};
 inline constexpr std::array<ComponentBoolean,1> cameraBooleans{{

@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-01",
+  "abi": 25,
+  "sceneArchive": 16,
+  "timer": 3,
+  "prefab": 3,
+  "schemas": 32,
+  "managedFacades": 31,
+  "icons": 226,
+  "apk": {
+    "path": "android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+    "bytes": 253325141,
+    "sha256": "c587dd2a783935450bc0a966d0e0f0874935712b83801f8e46869cdc1f0d1fe1"
+  },
+  "sdkSha256": "8c38136bcddb8e30855f26f73ab45d598d6f201538e6b2aca23667830a81b365",
+  "atlasSha256": "c7dece226547ed3942c206d5d9543f2b75a7f2289b4985a757ce00232a752ea7",
+  "packagedAssetsMatch": true,
+  "androidMouseQualified": false,
+  "physicalMouseQualified": false,
+  "deviceBlock": "secure keyguard",
+  "hostInputTests": 42,
+  "hostMouseTests": 4,
+  "managedFixtureTypesCompiled": 5,
+  "apkInstalled": true,
+  "deviceFixturePushed": true
+}

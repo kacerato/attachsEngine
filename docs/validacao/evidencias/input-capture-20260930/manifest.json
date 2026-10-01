@@ -1,0 +1,52 @@
+{
+  "host": {
+    "input_related_tests": "38/38",
+    "atlas_tests": "2/2",
+    "capture_tests": "3/3 (included in input tests)",
+    "landscape": {
+      "size": [
+        853,
+        394
+      ],
+      "clipped": 0
+    },
+    "portrait": {
+      "size": [
+        400,
+        740
+      ],
+      "clipped": 2,
+      "note": "draw-list total; visible capture controls remain readable"
+    }
+  },
+  "android": {
+    "build": "assembleDebug passed; final rerun up-to-date",
+    "apk": "android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+    "bytes": 253308489,
+    "sha256": "8565cb37129a065ceb97b812ad3adfb99f7b950bbc3228359ad94afdea418004",
+    "sdk_matches_build": true,
+    "sdk_sha256": "3ecb7308fdc572ab0e1a74e8d2d53b2dc15d5619f21b2003b70d9752523ffe11",
+    "physical_device_validated": true,
+    "device": "25053PC47G / onyx",
+    "input_event_origin": "ADB-injected key event, not external keyboard",
+    "time_probe": "TIME PASS (native ABI24 + CLR)",
+    "input_probe": "INPUT PASS after authoring capture + save + reopen (native + CLR)",
+    "physical_gamepad_validated": false
+  },
+  "images": {
+    "after-landscape.png": "e8ee373adfd149d4673ba05d22a2087e5c1a3205448a06be3b84187b2a15ed97",
+    "after-portrait.png": "8d9d8c3499d81b55decb12ccffe3ba156cfee14784d4825d00623e051217892a",
+    "before.png": "acc07169e90a08db82e9aae984b59920fa8ee679f8c0b95ca8ff9d96eb45b071",
+    "binding-landscape.png": "c551d3051b7bafb873c1aa5330d0b43820e5c71c57550feb711e9f1de2ab4c05",
+    "concept.png": "628d09fa38bc14739bee3546019c3e9f31e7f63e7a9b5b98faccf2931e1f4ebc",
+    "device-cancelled.png": "9a726d28deb8c86ad2593f03e4d8b6b8faf66291b017bb289fa9e79101060cdc",
+    "device-captured.png": "9a726d28deb8c86ad2593f03e4d8b6b8faf66291b017bb289fa9e79101060cdc",
+    "device-capturing.png": "6f68ff4435b238bd588148e84c8ca9b30ccfc7272b329851678cc4d5ae79eeec",
+    "device-editor.png": "f5700b080f4e5c5411f3480a54fc78e54e56f8b0e615544f66d0584359509d3c",
+    "device-input-play.png": "06b55868d418076c73d3970d2fde89888b12d824a43f30c189b6b2f191c1ad11",
+    "device-play.png": "67d01230db2e32e8a7e406eb0d5369d4253f0048af153256bd68201ad63d092d",
+    "device-redo.png": "9a726d28deb8c86ad2593f03e4d8b6b8faf66291b017bb289fa9e79101060cdc",
+    "device-reopened.png": "f7ce937dc454061883b76cd282bb9aa0422b9f557249ba1a55d8f334964b26e5",
+    "device-undo.png": "87fb0929f75a0268211b69eb206d8c6353c2f864d2028a6564fbd58ca08bca5f"
+  }
+}

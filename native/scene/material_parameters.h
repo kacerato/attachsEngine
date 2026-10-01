@@ -134,6 +134,10 @@ struct MaterialParameters {
   MaterialChannels channels{};
   std::uint32_t occlusionTexture=MaterialTextureKeep;
   std::uint8_t isolate=MaterialIsolateNone;
+  std::uint32_t lightmapTexture=MaterialTextureKeep;
+  float lightmapScaleOffset[4]{1,1,0,0};
+  float lightmapIntensity=1;
+
   // Comparação por valor, não por bytes: a struct tem padding depois do bool, e
   // um memcmp acusaria diferença onde não existe nenhuma.
   friend bool operator==(const MaterialParameters &a,const MaterialParameters &b) {
@@ -145,6 +149,8 @@ struct MaterialParameters {
     for(std::uint32_t i=0;i<MaterialTextureCount;++i)
       if((a.uvTransformMask>>i)&1u)
         for(int k=0;k<6;++k) if(a.uvTransforms[i][k]!=b.uvTransforms[i][k]) return false;
+    if(a.lightmapTexture!=b.lightmapTexture || a.lightmapIntensity!=b.lightmapIntensity) return false;
+    for(unsigned i=0;i<4;++i) if(a.lightmapScaleOffset[i]!=b.lightmapScaleOffset[i]) return false;
     if(!(a.channels==b.channels) || a.occlusionTexture!=b.occlusionTexture || a.isolate!=b.isolate) return false;
     return a.alphaMode==b.alphaMode && a.sides==b.sides && a.alphaCutoff==b.alphaCutoff;
   }
@@ -157,6 +163,8 @@ inline MaterialParameters withoutResolvedTextures(MaterialParameters value) {
   for(auto &set:value.uvSets) set=MaterialUvKeep;
   value.uvTransformMask=0;
   for(auto &rows:value.uvTransforms) for(auto &entry:rows) entry=0;
+  value.lightmapTexture=MaterialTextureKeep;value.lightmapIntensity=1;
+  value.lightmapScaleOffset[0]=value.lightmapScaleOffset[1]=1;value.lightmapScaleOffset[2]=value.lightmapScaleOffset[3]=0;
   value.channels={};value.occlusionTexture=MaterialTextureKeep;value.isolate=MaterialIsolateNone;
   value.alphaMode=MaterialAlphaKeep;value.sides=MaterialSidesKeep;value.alphaCutoff=.5f;
   return value;

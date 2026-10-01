@@ -1,0 +1,6 @@
+[ok] timer_controls_editor_authors_autostart_and_controls_real_play_scheduler
+[ok] timer_controls_native_commands_pause_restart_stop_and_lifecycle
+[ok] timer_controls_abi_start_callback_snapshot_and_after_stop_rejection
+[ok] timer_controls_version_four_migrates_old_autostart_and_preserves_new_authoring
+
+4/4 testes passaram

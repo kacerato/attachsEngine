@@ -347,7 +347,17 @@ void main() {
                          base.rgb,f0,f90,metal,rough)*sunVisibility;
   color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
   mediump float nv=max(dot(n,v),0.0);
-  color+=(1-metal)*base.rgb*environmentAmbientDiffuse(n)*occlusion;
+  mediump vec3 diffuseIrradiance=environmentAmbientDiffuse(n)*occlusion;
+#ifdef OCCLUSION_MAP
+  // External lightmaps contain linear indirect irradiance E, not reflected color.
+  // Replace ambient diffuse to avoid counting indirect lighting twice; retain
+  // dynamic direct lights and environment specular. E / pi is Lambertian diffuse.
+  if(materialExtension && aetherMaterialRow(11u).x>0.5) {
+    highp vec4 lm=aetherMaterialRow(11u),uv=aetherMaterialRow(12u);
+    diffuseIrradiance=max(texture(OCCLUSION_MAP(uint(lm.y+0.5)),vUv1*uv.xy+uv.zw).rgb,vec3(0))*lm.z*0.31830988618;
+  }
+#endif
+  color+=(1-metal)*base.rgb*diffuseIrradiance;
   // Rough dielectrics carry almost no readable high-frequency reflection.
   // Skip that fetch coherently per material while retaining HDR reflections
   // on wet, polished and metallic surfaces.

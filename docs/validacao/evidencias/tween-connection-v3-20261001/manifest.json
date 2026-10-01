@@ -1,0 +1,23 @@
+{
+  "abi": 29,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 4,
+  "tween": 3,
+  "schemas": 34,
+  "csharpFacades": 33,
+  "recipes": 57,
+  "icons": 229,
+  "apkBytes": 253349617,
+  "apkSha256": "3e17bc4229ede3150ea1be52821fe9001669afe1bf0db64e58b4e9cbe1f8d667",
+  "sdkSha256": "477ef18eb5e490b8c48b5b3d52f7a393155fc91a2a5aca4be545c56b501f5aa5",
+  "atlasSha256": "43a88b8331382ef47cfa4a6ca89ddca34a22c8966596edd33f03e5f8458373f9",
+  "assetsMatch": true,
+  "hostConnections": "3/3",
+  "hostControls": "2/2",
+  "managedAstra": "54/54; twelve fixtures",
+  "deviceTweenConnectionPass": false,
+  "install": "Performing Streamed Install\nSuccess\n",
+  "secureKeyguardShowing": true,
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/TweenConnection-20261001"
+}

@@ -53,7 +53,8 @@ enum class AssetType : u32 {
   // Clipe por nós de uma fonte importada. Sub-recurso como as malhas da fonte:
   // a identidade é derivada (fonte + nome), não um registro próprio.
   AnimationClip = 9,
-  Prefab = 10 // subárvore autoral portátil, com identidade de fonte
+  Prefab = 10, // subárvore autoral portátil, com identidade de fonte
+  AudioClip = 11 // WAV validado; dados PCM consumidos pelo mundo de áudio
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

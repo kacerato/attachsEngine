@@ -1,0 +1,7 @@
+
+  CurveGradientFamilyTests
+    [32mok[0m   Curve_RuntimeEditsModesWrapExtremesAndInvalidDataHaveRealEffects
+    [32mok[0m   Gradient_MutableUnsortedStopsModesLinearHdrAndAlphaSampleWithoutAllocations
+
+  [32mTUDO VERDE[0m — 2 passaram, 0 falharam, 0 pulados em 37 ms
+

@@ -1,0 +1,11 @@
+CHARACTER_PLATFORM: axis=0 displacement=1.983 surface=1.000 state=0
+CHARACTER_PLATFORM: axis=1 displacement=2.000 surface=1.000 state=0
+[ok] character_platform_follows_kinematic_support_translation_and_reports_surface_velocity
+CHARACTER_PLATFORM_ROTATION: position=(1.095,-1.674) support=(-0.839,-0.544)
+[ok] character_platform_rotating_support_carries_capsule_with_contact_point_velocity
+CHARACTER_PLATFORM_CARRY: legacy=0.017 inherit=0.500
+[ok] character_platform_carry_horizontal_option_changes_airborne_motion_and_rebuild_state
+[ok] character_platform_fixedupdate_kinematic_abi_and_native_state_follow_real_play
+[ok] character_platform_carry_version_four_migration_history_and_live_property
+
+5/5 testes passaram

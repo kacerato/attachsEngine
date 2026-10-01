@@ -124,6 +124,8 @@ instâncias por ambos os caminhos, preservando dados e referências.
 
 ### 7. Overrides, atualização da fonte e Unpack — P, itens 84, 85, 110, 111, 154, 155 e 157
 
+**Continuação em 01/10:** o checkout já contém comparação de três vias, Apply seletivo e propagação de propriedades entre instâncias carregadas. A continuação acrescenta contrato comum de estrutura de coleções e reversão em lote no objeto comparado; veja [contrato e limites](CONTRATOS-COLECOES-2026-10-01.md). Essa atualização não equivale a Apply estrutural, merge por ElementId ou fechamento da etapa. O parágrafo abaixo registra a situação histórica de 29/09.
+
 **Parcial:** Unpack (155) entregue, com preservação de identidade e histórico,
 incluindo salvar/reabrir no Android. Em 29/09 foi implementada a comparação com
 a fonte e a reversão seletiva de propriedades e componentes da instância,

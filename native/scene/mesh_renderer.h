@@ -2,6 +2,7 @@
 #include "resources/asset_registry.h"
 #include "scene/components.h"
 #include "scene/material_parameters.h"
+#include "scene/lightmap_binding.h"
 #include <array>
 #include <vector>
 namespace ae::scene {
@@ -49,10 +50,11 @@ struct MeshSubmesh {
   SlotSampling sampling{};
   MaterialChannels channels{};
   resources::AssetGuid occlusionTexture{};
+  LightmapBinding lightmap{};
   friend bool operator==(const MeshSubmesh &a, const MeshSubmesh &b) {
     return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material &&
            a.textures == b.textures && a.surface == b.surface && a.sampling == b.sampling && a.channels == b.channels &&
-           a.occlusionTexture == b.occlusionTexture;
+           a.occlusionTexture == b.occlusionTexture && a.lightmap == b.lightmap;
   }
 };
 
@@ -93,6 +95,14 @@ public:
   // R4: canais, oclusão, normal e alfa, e a textura de oclusão própria, do slot 0.
   MaterialChannels channels{};
   resources::AssetGuid occlusionTexture{};
+  LightmapBinding lightmap{};
+  const LightmapBinding &slotLightmap(u32 slot) const noexcept {
+    static const LightmapBinding none{};
+    return slot ? (slot-1<submeshes.size()?submeshes[slot-1].lightmap:none) : lightmap;
+  }
+  LightmapBinding *editSlotLightmap(u32 slot) noexcept {
+    return slot ? (slot-1<submeshes.size()?&submeshes[slot-1].lightmap:nullptr) : &lightmap;
+  }
   const MaterialChannels &slotChannels(u32 slot) const noexcept {
     static const MaterialChannels none{};
     return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].channels : none) : channels;
@@ -161,6 +171,7 @@ public:
     for(u32 slot=0;slot<slotCount();++slot)
       for(const auto &value:slotSampling(slot)) if(!validMaterialSampling(value)) return false;
     for(u32 slot=0;slot<slotCount();++slot) if(!validMaterialChannels(slotChannels(slot))) return false;
+    for(u32 slot=0;slot<slotCount();++slot) if(!slotLightmap(slot).valid()) return false;
     return true;
   }
   void write(std::ostream &out) const override {
@@ -198,6 +209,11 @@ public:
          <<' '<<static_cast<unsigned>(value.occlusionSource)<<' '<<value.occlusionStrength<<' '<<static_cast<unsigned>(value.normalFlipY)
          <<' '<<static_cast<unsigned>(value.alphaSource)<<' '<<materialTextureToken(slotOcclusionTexture(slot));
     }
+    for(u32 slot=0;slot<slotCount();++slot) {
+      const auto &lm=slotLightmap(slot);
+      out<<' '<<guid(lm.texture)<<' '<<lm.enabled<<' '<<lm.scale[0]<<' '<<lm.scale[1]
+         <<' '<<lm.offset[0]<<' '<<lm.offset[1]<<' '<<lm.intensity;
+    }
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -208,10 +224,10 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>8 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>9 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
-    asset={};materialAsset={};textures={};surface={};sampling={};channels={};occlusionTexture={};submeshes.clear();
+    asset={};materialAsset={};textures={};surface={};sampling={};channels={};occlusionTexture={};lightmap={};submeshes.clear();
     if(version>=2) {
       std::string guid;
       if(!(in>>guid) || !parse(guid,asset)) return false;
@@ -268,6 +284,12 @@ public:
         if(!validMaterialChannels(value) || !parseMaterialTextureToken(token,*editSlotOcclusionTexture(slot))) return false;
       }
     }
+    if(version>=9) for(u32 slot=0;slot<slotCount();++slot) {
+      auto &lm=*editSlotLightmap(slot);std::string token;unsigned active=0;
+      if(!(in>>token>>active>>lm.scale[0]>>lm.scale[1]>>lm.offset[0]>>lm.offset[1]>>lm.intensity) ||
+         active>1 || !parse(token,lm.texture) || !lm.valid()) return false;
+      lm.enabled=active!=0;
+    }
     return true;
   }
 };
@@ -297,10 +319,16 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
 // A ordem importa: é a ordem em que um slot é apresentado no inspetor e no
 // relatório — malha, material compartilhado e os bindings de textura na ordem
 // do pacote de mapa, com a oclusão própria por último, como o shader lê.
+inline constexpr PropertyPresentation meshPropertyPresentation(std::string_view group) {
+  if(group=="Lightmap") return {group,"", "Lightmap externo de irradiância RGB linear em UV1; exige bindless. Sem bake interno.",
+    nullptr,nullptr,"render.gi.lightmap","editor/editor_map_scene.h -> material extension -> dirt_road_shading.glsl",
+    Invalidate::Draw|Invalidate::MaterialDescriptor|Invalidate::TextureResidency};
+  return {group};
+}
 namespace detail {
 inline u32 meshSlots(const ComponentValue &v) {return static_cast<const MeshRenderer&>(v).slotCount();}
 } // namespace detail
-inline constexpr std::array<ComponentResourceBinding,7> meshRendererResources{{
+inline constexpr std::array<ComponentResourceBinding,8> meshRendererResources{{
   {"mesh","Malha",resources::AssetType::Mesh,detail::meshSlots,
    [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotAsset(slot);},
    [](ComponentValue &v,u32 slot,resources::AssetGuid value){
@@ -327,6 +355,12 @@ inline constexpr std::array<ComponentResourceBinding,7> meshRendererResources{{
   AE_MESH_TEXTURE("texture.metallic_roughness","Metal / rugosidade",2),
   AE_MESH_TEXTURE("texture.emissive","Emissão",3),
 #undef AE_MESH_TEXTURE
+  {"texture.lightmap","Lightmap indireto (RGB linear / UV1)",resources::AssetType::Texture,detail::meshSlots,
+   [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotLightmap(slot).texture;},
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){
+     auto *target=static_cast<MeshRenderer&>(v).editSlotLightmap(slot);
+     if(!target) return false;
+     target->texture=value;return true;},meshPropertyPresentation("Lightmap")},
   {"texture.occlusion","Oclusão",resources::AssetType::Texture,detail::meshSlots,
    [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotOcclusionTexture(slot);},
    [](ComponentValue &v,u32 slot,resources::AssetGuid value){
@@ -385,7 +419,8 @@ inline constexpr std::array<ComponentEnumOption,3> materialFilterOptions{{
   {MaterialFilterKeep,"Herdar"},{MaterialFilterLinear,"Linear"},{MaterialFilterNearest,"Vizinho mais próximo"}
 }};
 
-inline constexpr std::array<ComponentSlotEnum,24> meshRendererSlotEnums{{
+inline constexpr std::array<ComponentEnumOption,2> lightmapEnabledOptions{{{0,"Desativado"},{1,"Lightmap indireto externo"}}};
+inline constexpr std::array<ComponentSlotEnum,25> meshRendererSlotEnums{{
   {"material.override","Material",materialOverrideOptions,detail::meshSlots,
    [](const ComponentValue &v,u32 slot)->u32{return static_cast<const MeshRenderer&>(v).slotMaterial(slot).enabled?1u:0u;},
    [](ComponentValue &v,u32 slot,u32 value)->bool{
@@ -394,7 +429,10 @@ inline constexpr std::array<ComponentSlotEnum,24> meshRendererSlotEnums{{
      m->enabled=value!=0;return true;},{"Cor"}},
 #define AE_SLOT_ENUM(id,label,options,group,getter,setter) {id,label,options,detail::meshSlots,\
   [](const ComponentValue &v,u32 slot)->u32{const auto &m=static_cast<const MeshRenderer&>(v);(void)m;return getter;},\
-  [](ComponentValue &v,u32 slot,u32 value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},{group}}
+  [](ComponentValue &v,u32 slot,u32 value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},meshPropertyPresentation(group)}
+  AE_SLOT_ENUM("lightmap.enabled","Receber lightmap indireto",lightmapEnabledOptions,"Lightmap",
+    m.slotLightmap(slot).enabled?1u:0u,
+    {auto *lm=m.editSlotLightmap(slot);if(!lm) return false;lm->enabled=value!=0;return true;}),
   AE_SLOT_ENUM("surface.alpha_mode","Tipo de superfície",materialAlphaModeOptions,"Superfície",
     m.slotSurface(slot).alphaMode,
     {auto *s=m.editSlotSurface(slot);if(!s) return false;s->alphaMode=static_cast<std::uint8_t>(value);return true;}),
@@ -445,10 +483,25 @@ inline constexpr std::array<ComponentSlotEnum,24> meshRendererSlotEnums{{
 #undef AE_BINDING_SAMPLING_ENUM
 #undef AE_SLOT_ENUM
 }};
-inline constexpr std::array<ComponentSlotNumber,27> meshRendererSlotNumbers{{
+inline constexpr std::array<ComponentSlotNumber,32> meshRendererSlotNumbers{{
 #define AE_SLOT_NUMBER(id,label,lo,hi,step,group,getter,setter) {id,label,lo,hi,step,detail::meshSlots,\
   [](const ComponentValue &v,u32 slot)->float{const auto &m=static_cast<const MeshRenderer&>(v);(void)m;return getter;},\
-  [](ComponentValue &v,u32 slot,float value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},{group}}
+  [](ComponentValue &v,u32 slot,float value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},meshPropertyPresentation(group)}
+  AE_SLOT_NUMBER("lightmap.scale_u","Escala U",1e-05f,1.0f,.01f,"Lightmap",
+    m.slotLightmap(slot).scale[0],
+    {auto *lm=m.editSlotLightmap(slot);if(!lm) return false;lm->scale[0]=value;return true;}),
+  AE_SLOT_NUMBER("lightmap.scale_v","Escala V",1e-05f,1.0f,.01f,"Lightmap",
+    m.slotLightmap(slot).scale[1],
+    {auto *lm=m.editSlotLightmap(slot);if(!lm) return false;lm->scale[1]=value;return true;}),
+  AE_SLOT_NUMBER("lightmap.offset_u","Deslocamento U",0.0f,1.0f,.01f,"Lightmap",
+    m.slotLightmap(slot).offset[0],
+    {auto *lm=m.editSlotLightmap(slot);if(!lm) return false;lm->offset[0]=value;return true;}),
+  AE_SLOT_NUMBER("lightmap.offset_v","Deslocamento V",0.0f,1.0f,.01f,"Lightmap",
+    m.slotLightmap(slot).offset[1],
+    {auto *lm=m.editSlotLightmap(slot);if(!lm) return false;lm->offset[1]=value;return true;}),
+  AE_SLOT_NUMBER("lightmap.intensity","Intensidade",0.0f,10000.0f,.01f,"Lightmap",
+    m.slotLightmap(slot).intensity,
+    {auto *lm=m.editSlotLightmap(slot);if(!lm) return false;lm->intensity=value;return true;}),
   AE_SLOT_NUMBER("surface.alpha_cutoff","Corte do alfa",0,1,.01f,"Superfície",
     m.slotSurface(slot).alphaCutoff,
     {auto *s=m.editSlotSurface(slot);if(!s) return false;s->alphaCutoff=value;return true;}),
@@ -527,15 +580,15 @@ inline constexpr std::array<ComponentSlotNumber,11> meshRendererSlotMaterial{{
 }};
 // As duas listas por slot viram uma só no descritor: para quem endereça
 // propriedade, "corte do alfa" e "rugosidade" são a mesma espécie de campo.
-inline const std::array<ComponentSlotNumber,38> meshRendererAllSlotNumbers=[]{
-  std::array<ComponentSlotNumber,38> all{};
+inline const std::array<ComponentSlotNumber,43> meshRendererAllSlotNumbers=[]{
+  std::array<ComponentSlotNumber,43> all{};
   usize at=0;
   for(const auto &p:meshRendererSlotNumbers) all[at++]=p;
   for(const auto &p:meshRendererSlotMaterial) all[at++]=p;
   return all;
 }();
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
+  "astra.render.mesh",9,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
   meshRendererNumbers,meshRendererBooleans,{},nullptr,false,{},{},meshRendererResources,
   meshRendererAllSlotNumbers,meshRendererSlotEnums
 };

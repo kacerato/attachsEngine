@@ -344,6 +344,7 @@ bool SceneGraph::applyEntityValues(ObjectId id, const SceneObject &values) {
   target.isStatic = values.isStatic;
   target.layer = values.layer;
   target.tag = values.tag;
+  target.groups = values.groups;
   target.components = values.components;
   target.rigidBodyEnabled = values.rigidBodyEnabled;
   std::copy(std::begin(values.rigidBody), std::end(values.rigidBody), target.rigidBody);

@@ -1,0 +1,15 @@
+  Determinando os projetos a serem restaurados...
+  Todos os projetos estão atualizados para restauração.
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Debug\net8.0\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Debug\net8.0\Aether.Core.dll
+  Aether.Flow -> C:\Users\donod\Downloads\atchengine\managed\Aether.Flow\bin\Debug\net8.0\Aether.Flow.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\bin\Debug\net8.0\Aether.Scene.dll
+CSC : error CS2012: Não é possível abrir "C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Debug\net8.0\Astra.Scripting.dll" para escrever -- "A operação solicitada não pode ser executada em um arquivo com uma seção mapeada pelo usuário aberta. : 'C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Debug\net8.0\Astra.Scripting.dll'" [C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Astra.Scripting.csproj]
+
+FALHA da compilação.
+
+CSC : error CS2012: Não é possível abrir "C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Debug\net8.0\Astra.Scripting.dll" para escrever -- "A operação solicitada não pode ser executada em um arquivo com uma seção mapeada pelo usuário aberta. : 'C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Debug\net8.0\Astra.Scripting.dll'" [C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Astra.Scripting.csproj]
+    0 Aviso(s)
+    1 Erro(s)
+
+Tempo Decorrido 00:00:24.46

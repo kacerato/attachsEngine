@@ -1,0 +1,21 @@
+{
+  "abi": 30,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 4,
+  "tween": 3,
+  "schemas": 34,
+  "csharpFacades": 33,
+  "recipes": 57,
+  "icons": 229,
+  "eligibleNumericFields": 6,
+  "apkBytes": 264856008,
+  "apkSha256": "cb76626f8bc5f7cf1f80981b5b3d45978dd24e89a2842b22d4ef1b229d990637",
+  "sdkSha256": "c7d404e49ab371bd22536468df62feea0ea0b053905fd75ecc3c85ea89ac07a6",
+  "atlasSha256": "43a88b8331382ef47cfa4a6ca89ddca34a22c8966596edd33f03e5f8458373f9",
+  "assetsMatch": true,
+  "deviceNumberTweenPass": false,
+  "install": "Performing Streamed Install\nSuccess\n",
+  "secureKeyguardShowing": true,
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/NumberTweens-20261001"
+}

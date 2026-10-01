@@ -13,6 +13,7 @@
 #include "core/base.h"
 #include "runtime/gameplay_layers.h"
 #include "runtime/object_tags.h"
+#include "runtime/object_groups.h"
 #include "runtime/scene_views.h"
 #include "runtime/input_actions.h"
 #include "scene/components.h"
@@ -67,6 +68,7 @@ struct SceneObject final {
   bool isStatic = false;
   u32 layer = 0;
   std::string tag{ObjectTags::Untagged};
+  ObjectGroups groups{};
   scene::Components components{};
   bool rigidBodyEnabled = false;
   // mass, drag, collider half-extents X/Y/Z.

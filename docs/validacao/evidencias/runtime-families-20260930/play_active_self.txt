@@ -1,0 +1,3 @@
+[ok] play_active_self_persists_and_inactive_scripts_reach_the_runtime
+
+1/1 testes passaram

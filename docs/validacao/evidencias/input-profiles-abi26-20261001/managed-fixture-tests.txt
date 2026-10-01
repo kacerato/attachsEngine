@@ -1,0 +1,6 @@
+
+  AstraBehaviorTests
+    [32mok[0m   InputTimeGroupsAndTimeoutFixtures_CompileAgainstThePublishedSdk
+
+  [32mTUDO VERDE[0m — 1 passaram, 0 falharam, 0 pulados em 1781 ms
+

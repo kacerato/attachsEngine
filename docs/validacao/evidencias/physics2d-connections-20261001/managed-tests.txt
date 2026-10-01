@@ -1,0 +1,75 @@
+
+  AstraAwaitableTests
+    [32mok[0m   AwaitablesUseNativeDispatchTimePhysicalStepsAndMainThread
+    [32mok[0m   NestedCoroutinesDisposeOnceWithReentrancyAndIsolatedFailure
+    [32mok[0m   SessionAndObjectLifecycleCancelAsyncAndRejectForeignHandles
+
+  AstraBehaviorTests
+    [32mok[0m   ApplyPublicationAndCompilerDiagnostics_PreserveLastGoodGeneration
+    [32mok[0m   ColorFields_CarryUsageFlagsAndReachTheInstance
+    [32mok[0m   CompileAttachFixedTriggerStop_PreservesInstancesAndIsolatesFailure
+    [32mok[0m   ComponentField_ResolvesTheAuthoredInstanceToItsFacade
+    [32mok[0m   CurveFields_ReachTheInstanceAndEvaluateWithWrap
+    [32mok[0m   DocumentationExamples_CompileWithTheShippedApi
+    [32mok[0m   DynamicScripts_MessagesRemovalAndDelayedDestruction_RunTheAcceptanceScenario
+    [32mok[0m   EnabledAcceptanceFixture_CompilesWithTheProjectCompiler
+    [32mok[0m   Enabled_BindsNativeComponentStateToCallbacksAndSurvivesRemoval
+    [32mok[0m   GradientFields_ReachTheInstanceAndEvaluate
+    [32mok[0m   GraphicsAbiStructs_MatchTheNativeLayout
+    [32mok[0m   InputTimeGroupsAndTimeoutFixtures_CompileAgainstThePublishedSdk
+    [32mok[0m   Instantiate_CopiesLiveFieldsAndReferencesBeforeCallbacks
+    [32mok[0m   Lifecycle_AwakeEnableStartUpdateLateDisableStop_InUnityOrder
+    [32mok[0m   Lifecycle_InactiveHierarchyDefersAwakeAndResumesTheSameInstance
+    [32mok[0m   ListAndAttributeFields_ReachTheSchemaAndTheInstance
+    [32mok[0m   MaterialSlotAndAuthoredTextureReference_CompileThroughTheProjectCompiler
+    [32mok[0m   MaterialSlotCompositeValues_ValidateBeforeWritingAnyAxis
+    [32mok[0m   PlayModeEdit_ChangesFieldAndEnabledOfTheLiveInstance
+    [32mok[0m   PrefabAcceptanceFixture_CompilesWithTheProjectCompiler
+    [32mok[0m   Prefab_BindsAuthoredFieldsBeforeAwakeAndRollsBackMissingType
+    [32mok[0m   PrimitivesAcceptanceFixture_CompilesWithTheProjectCompiler
+    [32mok[0m   SchemaTypeChangeAndDuplicateIdentity_RejectBeforeStartingWorld
+    [32mok[0m   TagsAcceptanceFixture_CompilesWithTheProjectCompiler
+
+  AstraExampleGameTests
+    [32mok[0m   JogosDeExemploCompilamComNpcEInteracaoFisica
+
+  AstraExpandedApiTests
+    [32mok[0m   AffineConversionsPreserveParentShearAndRejectSingularInverse
+    [32mok[0m   HierarchyQueriesIncludeRepeatedInstancesAndInactiveSelf
+    [32mok[0m   PoseOperationsPublishOnceAndKeepNativeOwnershipErrors
+    [32mok[0m   RandomStateReplayAndDampingBoundariesRemainStable
+
+  AstraInputProfileTests
+    [32mok[0m   ProfileFile_ReplacesAtomicallyBoundsReadsAndPreservesPreviousOnExportFailure
+
+  AstraLanguageTests
+    [32mok[0m   CompletionUsesUnsavedTypesAndReceiverAccessibility
+    [32mok[0m   DefinitionResolvesOtherOpenFileWithUtf16Columns
+    [32mok[0m   DiagnosticKeepsCompiledExcerptAfterFileChanges
+    [32mok[0m   IncrementalAnalysisDropsRemovedFilesAndReplacesChangedTrees
+    [32mok[0m   SearchUsesDraftOverDiskAndCancellation
+
+  AstraTemplateTests
+    [32mok[0m   ModeloDePortaExpoeOsCamposQueOInspectorPrecisa
+    [32mok[0m   ModelosDeComportamentoCompilamComOSchemaEsperado
+
+  AstraTimeTests
+    [32mok[0m   ClockHostWithoutSimulationControlRejectsScaleInsteadOfChangingOnlyScripts
+    [32mok[0m   EditableTimeAcceptanceFixtureCompilesWithCurrentSdk
+    [32mok[0m   NativeClockScaleAndUnscaledTimeRemainCoherentAcrossFramePhases
+    [32mok[0m   PlayRestartInvalidatesOldClockAndWorldClocksStayIsolated
+    [32mok[0m   TimePhasesAndAwaitedContinuationsUseSameWorldClock
+
+  AstraWorldTests
+    [32mok[0m   AnimacaoComandaClipesPorNomePelaAbiDeAnimacao
+    [32mok[0m   ComponentesSaoEnderecadosPorInstanciaEObedecemAoContrato
+    [32mok[0m   FachadaGeradaUsaOsIdsETiposDoSchema
+    [32mok[0m   HierarquiaCriaEncontraEReparenteiaObjetos
+    [32mok[0m   ReferenciaGuardadaNaoSobreviveAoStop
+    [32mok[0m   ReferenciaVenceNaDestruicaoEArmazenamentoSaiNoPontoSeguro
+    [32mok[0m   ReferenciasDeComponenteRespeitamMundoEGeracao
+    [32mok[0m   ReparentRecusaPaiDeOutroMundoMesmoComIdsIguais
+    [32mok[0m   TransformLocalEDeMundoAtravessamAApi
+
+  [32mTUDO VERDE[0m — 54 passaram, 0 falharam, 0 pulados em 20152 ms
+

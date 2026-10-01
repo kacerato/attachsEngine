@@ -1,0 +1,6 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_fields2d50.cpp:42: keyboard edits have real undo
+FAIL fields2d50_creation_vector2_keyboard_archive_undo_and_visuals
+PASS fields2d50_transformed_area_layers_falloff_and_invalid_tilt
+PASS fields2d50_box2d_gravity_mass_center_wind_drag_radial_and_sleep
+PASS fields2d50_actual_script_bridge_solver_isolation_live_edit_and_removal
+3/4 scenarios passed

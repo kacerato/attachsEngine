@@ -16,6 +16,7 @@
 #include "resources/texture_asset.h"
 #include "core/sha256.h"
 #include "scene/mesh_renderer.h"
+#include "scene/lightmap_uv.h"
 
 #include <algorithm>
 #include <array>
@@ -77,7 +78,7 @@ std::vector<u8> png(u32 width, u32 height, u8 red) {
   return out;
 }
 // Uma tela com cor base texturizada por uma imagem PNG embutida chamada "Pintura".
-std::vector<u8> texturedPanel(const std::vector<u8> &image, u32 minFilter = 0, u32 magFilter = 0) {
+std::vector<u8> texturedPanel(const std::vector<u8> &image, u32 minFilter = 0, u32 magFilter = 0, bool lightmapUv = false) {
   std::vector<u8> binary;
   const float positions[12]{0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
   for (float value : positions) {
@@ -105,6 +106,16 @@ std::vector<u8> texturedPanel(const std::vector<u8> &image, u32 minFilter = 0, u
       R"("materials":[{"name":"Tela","pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}],)" +
       R"("meshes":[{"name":"Tela","primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0}]}],)" +
       R"("nodes":[{"name":"Tela","mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
+  if(lightmapUv) {
+    const auto beforeImages=json.find("\"images\":");
+    const auto accessorEnd=json.rfind("],",beforeImages);
+    json.insert(accessorEnd,",{\"bufferView\":3,\"componentType\":5126,\"count\":4,\"type\":\"VEC2\"}");
+    const auto beforeAccessors=json.find("\"accessors\":");
+    const auto viewEnd=json.rfind("],",beforeAccessors);
+    json.insert(viewEnd,",{\"buffer\":0,\"byteOffset\":0,\"byteLength\":48,\"byteStride\":12}");
+    const auto position=json.find("\"POSITION\":0");
+    json.insert(position+12,",\"TEXCOORD_1\":2");
+  }
   while (json.size() % 4) json.push_back(' ');
   std::vector<u8> glb;
   putLittle(glb, 0x46546C67);
@@ -1392,4 +1403,120 @@ AE_TEST(f_source_textures_are_listed_previewed_and_lead_back_to_their_source) {
   session.cycleTextureViewerChannel();
   AE_EXPECT_EQ(state.textureViewerChannel, 1u, "os controles do visualizador valem para a textura da fonte");
   AE_EXPECT_TRUE(state.textureViewerSource && !state.textureViewerImage.isEmpty(), "e continuam na mesma textura");
+}
+
+AE_TEST(lightmap_uv_audit_distinguishes_shared_edges_overlap_invalid_data_and_budget) {
+  using scene::LightmapUvTriangle;using scene::LightmapUvStatus;
+  std::array<LightmapUvTriangle,2> quad{{{0,0,1,0,1,1},{0,0,1,1,0,1}}};
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::Valid,"adjacent triangles sharing diagonal are valid");
+  std::swap(quad[1][2],quad[1][4]);std::swap(quad[1][3],quad[1][5]);
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::Valid,"opposite winding still shares only edge");
+  quad[1]={0,0,1,1,.75f,.25f};
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::Overlap,"folded UV chart overlaps area");
+  quad[1]=quad[0];
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::Overlap,"identical charts cannot share irradiance");
+  quad[1]={0,0,1,0,.5f,0};
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::DegenerateTriangle,"absent UV or collapsed face");
+  quad[1][0]=std::numeric_limits<float>::quiet_NaN();
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::InvalidCoordinates,"nonfinite input");
+  quad[1]={0,0,1,1,-.1f,.5f};
+  AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::InvalidCoordinates,"outside atlas");
+  const std::vector<LightmapUvTriangle> large(65537,quad[0]);
+  AE_EXPECT_TRUE(scene::auditLightmapUv(large)==LightmapUvStatus::AnalysisLimit,"bounded import analysis explicit, not success");
+}
+
+AE_TEST(lightmap_external_binding_persists_resolves_and_publishes_indirect_irradiance) {
+  Project project;EditorSession session;Publisher publisher;start(session,publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"project");
+  const auto glb=texturedPanel(png(4,4,128),0,0,true);resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb,{},{},model),"import");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb,model,"Fontes/lightmap.glb","",report),report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source,report),report.diagnostic.c_str());
+  const auto object=firstMeshObject(session);AE_EXPECT_TRUE(object!=kInvalidEntity,"mesh");
+  EditorSession::TextureExtraction extraction;std::string diagnostic;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/lightmap.glb",extraction,diagnostic),diagnostic.c_str());
+  const auto texture=extraction.textures.front();
+  const auto instance=meshRenderer(*session.document().find(object))->instanceId();
+  EditorActionRequest request;request.version=session.sceneVersion();request.entity=object;
+  request.action=EditorAction::ComponentResource;request.componentInstance=instance;
+  request.componentProperty="texture.lightmap";request.componentResource=texture;
+  AE_EXPECT_EQ(session.dispatch(request).status,EditorActionStatus::Applied,"resource action publishes lightmap");
+  auto values=*session.document().find(object);auto *mesh=editMeshRenderer(values);
+  mesh->lightmap.enabled=true;mesh->lightmap.scale[0]=.5f;mesh->lightmap.offset[0]=.25f;mesh->lightmap.intensity=2;
+  AE_EXPECT_TRUE(session.history().applyValues(session.document(),object,values),"author lightmap");
+  const auto effective=effectiveMaterial(session,object);
+  AE_EXPECT_TRUE(effective.lightmapTexture!=scene::MaterialTextureKeep && effective.lightmapTexture!=renderer::InvalidMapTexture,"resolved texture");
+  AE_EXPECT_TRUE(effective.lightmapScaleOffset[0]==.5f && effective.lightmapScaleOffset[2]==.25f && effective.lightmapIntensity==2,"instance atlas region");
+  float gpu[renderer::MaterialExtensionFloats]{};
+  renderer::materialExtensionEntry(effective,0,renderer::MaterialExtensionNoTexture,gpu,7);
+  AE_EXPECT_TRUE(gpu[44]==1 && gpu[45]==7 && gpu[46]==2 && gpu[48]==.5f && gpu[50]==.25f,"GPU contract");
+  renderer::materialExtensionEntry(effective,0,renderer::MaterialExtensionNoTexture,gpu);
+  AE_EXPECT_EQ(gpu[44],0.0f,"unsupported descriptor is never sampled");
+  std::ostringstream out;mesh->write(out);scene::MeshRenderer restored;std::istringstream in(out.str());
+  AE_EXPECT_TRUE(restored.read(in,9) && restored.lightmap==mesh->lightmap,"v9 round trip");
+  std::istringstream legacy(out.str());scene::MeshRenderer old;
+  AE_EXPECT_TRUE(old.read(legacy,8) && !old.lightmap.enabled && !old.lightmap.texture.valid(),"v8 migration is disabled");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"undo");
+  AE_EXPECT_EQ(effectiveMaterial(session,object).lightmapTexture,scene::MaterialTextureKeep,"undo removes runtime contribution");
+  AE_EXPECT_TRUE(session.history().redo(session.document()),"redo");
+  AE_EXPECT_EQ(effectiveMaterial(session,object).lightmapTexture,effective.lightmapTexture,"redo restores contribution");
+  auto invalid=restored.lightmap;invalid.offset[0]=.8f;
+  AE_EXPECT_TRUE(!invalid.valid(),"atlas overflow rejected");
+  const auto path=project.root/"scenes"/"lightmap.aescene";
+  std::filesystem::create_directories(path.parent_path());
+  AE_EXPECT_TRUE(session.save(path.string().c_str(),0),"save scene");
+  EditorSession reopened;Publisher republished;start(reopened,republished);
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(project.root.string().c_str()),"reopen project");
+  AE_EXPECT_TRUE(reopened.loadAssets(session.serializeAssets()),"reopen registry");
+  reopened.anticipateSceneTextures(path.string().c_str(),0);
+  EditorSession::ModelImportReport reopenedReport;
+  AE_EXPECT_TRUE(reopened.importModel(glb,"Fontes/lightmap.glb",{},reopenedReport),reopenedReport.diagnostic.c_str());
+  AE_EXPECT_TRUE(reopened.load(path.string().c_str(),0),"reopen scene");
+  const auto live=effectiveMaterial(reopened,firstMeshObject(reopened));
+  AE_EXPECT_TRUE(live.lightmapTexture!=scene::MaterialTextureKeep && live.lightmapIntensity==2,"reopened lightmap reaches renderer");
+  bool linear=false;
+  for(const auto &published:republished.published)
+    if(published && !published->srgb && !(published->samplerFlags&renderer::AuthoringTextureRepeatU)) linear=true;
+  AE_EXPECT_TRUE(linear,"linear clamp sampler published");
+  session.initialize(&uiFont(),&uiIcons());session.setSurface({0,0,1200,700},{});session.setSelection(object);
+  const auto *selected=meshRenderer(*session.document().find(object));
+  u32 componentIndex=0,enumIndex=0;
+  for(u32 i=0;i<session.document().find(object)->components.size();++i)
+    if(session.document().find(object)->components.at(i)->instanceId()==instance) componentIndex=i;
+  for(u32 i=0;i<selected->type().slotEnums.size();++i)
+    if(selected->type().slotEnums[i].id=="lightmap.enabled") enumIndex=i;
+  AE_EXPECT_TRUE(tap(session,widgetId(EditorWidget::InspectorComponents)),"components tab");
+  AE_EXPECT_TRUE(tap(session,widgetId(EditorWidget::InspectorOverviewOpenBase)+componentIndex),"mesh inspection route");
+  AE_EXPECT_TRUE(tap(session,widgetId(EditorWidget::InspectorMeshLightmap)),"lightmap tab");
+  AE_EXPECT_TRUE(tap(session,widgetId(EditorWidget::ComponentSlotEnumBase)+componentIndex+(enumIndex<<8)),"actual lightmap checkbox is reachable");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->lightmap.enabled,"checkbox changes authoring");
+  AE_EXPECT_EQ(effectiveMaterial(session,object).lightmapTexture,scene::MaterialTextureKeep,"checkbox changes renderer extraction");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"checkbox undo");
+  AE_EXPECT_TRUE(meshRenderer(*session.document().find(object))->lightmap.enabled,"checkbox undo restores enabled");
+  AE_EXPECT_TRUE(tap(session,widgetId(EditorWidget::ComponentFieldResetBase)+componentIndex+(10u<<8)+(enumIndex<<12)),"slot enum reset is reachable");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->lightmap.enabled,"slot enum reset consumes the declared default");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"slot enum reset undo");
+  AE_EXPECT_TRUE(meshRenderer(*session.document().find(object))->lightmap.enabled,"slot enum reset undo restores authoring");
+  u32 scaleV=0;
+  for(u32 i=0;i<scene::MeshRenderer::descriptor.slotNumbers.size();++i)
+    if(scene::MeshRenderer::descriptor.slotNumbers[i].id=="lightmap.scale_v") scaleV=i;
+  AE_EXPECT_TRUE(tap(session,widgetId(EditorWidget::ComponentSlotNumberBase)+componentIndex+(scaleV<<8)),"UV pair V channel is independently reachable");
+  AE_EXPECT_EQ(session.screen().numericProperty,std::string("lightmap.scale_v"),"V field retains its own property address");
+  AE_EXPECT_TRUE(session.completeTextEdit(session.pendingTextEdit(),"0.75",true),"edit V through actual numeric editor");
+  const auto &uvEdited=meshRenderer(*session.document().find(object))->lightmap;
+  AE_EXPECT_TRUE(uvEdited.scale[0]==.5f && uvEdited.scale[1]==.75f,"UV pair changes V without overwriting U");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"UV pair undo");
+  u32 lightmapResource=0,textureRecord=0;
+  for(u32 i=0;i<scene::MeshRenderer::descriptor.resourceBindings.size();++i)
+    if(scene::MeshRenderer::descriptor.resourceBindings[i].id=="texture.lightmap") lightmapResource=i;
+  for(u32 i=0;i<session.assets().records().size();++i)
+    if(session.assets().records()[i].guid==texture) textureRecord=i;
+  const auto picker=widgetId(EditorWidget::ComponentResourceBase)+componentIndex+(lightmapResource<<8);
+  AE_EXPECT_TRUE(tap(session,picker) && tap(session,widgetId(EditorWidget::MeshClear)),"clear through actual lightmap picker");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->lightmap.texture.valid(),"picker clear removes the binding");
+  AE_EXPECT_TRUE(tap(session,picker) && tap(session,widgetId(EditorWidget::MeshChoiceBase)+textureRecord),"choose texture by project registry through picker");
+  AE_EXPECT_TRUE(meshRenderer(*session.document().find(object))->lightmap.texture==texture,"picker restores the correct resource identity");
+  const auto pickedTexture=effectiveMaterial(session,object).lightmapTexture;
+  AE_EXPECT_TRUE(pickedTexture!=scene::MaterialTextureKeep && pickedTexture!=renderer::InvalidMapTexture,"picker result reaches material extraction");
 }

@@ -26,5 +26,5 @@ private:
 // Canonical authoring snapshot used by the instance baseline. Stable component
 // instance IDs are retained; scene-specific prefab ownership is excluded.
 std::string serializePrefabObject(const SceneObject &object);
-bool deserializePrefabObject(std::istream &in,Prefab::Registry registry,SceneObject &object);
+bool deserializePrefabObject(std::istream &in,Prefab::Registry registry,SceneObject &object,bool requireGroups=false);
 } // namespace ae::runtime

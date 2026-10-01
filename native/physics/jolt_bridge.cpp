@@ -39,6 +39,11 @@
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/SliderConstraint.h>
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
+#include <Jolt/Physics/Constraints/FixedConstraint.h>
+#include <Jolt/Physics/Constraints/ConeConstraint.h>
+#include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
+#include <Jolt/Physics/Constraints/SixDOFConstraint.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 
 #include <algorithm>
 #include <cmath>
@@ -191,6 +196,12 @@ JPH::RefConst<JPH::Shape> ToJoltShape(const AetherShapeDesc &desc, ae::u64 userD
     auto result = settings.Create();
     return result.HasError() ? nullptr : result.Get();
   }
+  if(desc.kind==AetherShapeKind::Cylinder) {
+    JPH::CylinderShapeSettings settings(desc.capsuleHalfHeight,desc.sphereRadius);
+    settings.mUserData=userData;auto result=settings.Create();
+    return result.HasError()?nullptr:result.Get();
+  }
+  if(desc.kind!=AetherShapeKind::Sphere) return nullptr;
   JPH::SphereShapeSettings settings(desc.sphereRadius);
   settings.mUserData = userData;
   auto result = settings.Create();
@@ -774,7 +785,7 @@ AetherBodyHandle CreateBodyInternal(AetherPhysicsWorld &world, const AetherBodyD
 
   JPH::EAllowedDOFs allowedDOFs = ToJoltAllowedDOFs(desc.allowedDOFs);
   if (desc.motionType == AetherMotionType::Dynamic &&
-      (static_cast<ae::u8>(allowedDOFs) & 0b111) == 0) {
+      static_cast<ae::u8>(allowedDOFs) == 0) {
     return AetherBodyHandle_Invalid;
   }
 
@@ -921,11 +932,11 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV1(AetherPhysicsWorld *world,
   JPH::StaticCompoundShapeSettings compound;
   for(ae::u32 i=0;i<count;++i) {
     const auto &p=parts[i];const auto &shape=p.shape;
-    if(!finite(p.position)||!unit(p.rotation)||static_cast<ae::u32>(shape.kind)>2) return AetherBodyHandle_Invalid;
+    if(!finite(p.position)||!unit(p.rotation)||static_cast<ae::u32>(shape.kind)>3) return AetherBodyHandle_Invalid;
     if(shape.kind==AetherShapeKind::Box) {
       if(!finite(shape.boxHalfExtent)||shape.boxHalfExtent.x<=0||shape.boxHalfExtent.y<=0||shape.boxHalfExtent.z<=0) return AetherBodyHandle_Invalid;
     } else if(!std::isfinite(shape.sphereRadius)||shape.sphereRadius<=0||
-        (shape.kind==AetherShapeKind::Capsule&&(!std::isfinite(shape.capsuleHalfHeight)||shape.capsuleHalfHeight<=0))) return AetherBodyHandle_Invalid;
+        ((shape.kind==AetherShapeKind::Capsule||shape.kind==AetherShapeKind::Cylinder)&&(!std::isfinite(shape.capsuleHalfHeight)||shape.capsuleHalfHeight<=0))) return AetherBodyHandle_Invalid;
     const auto native=ToJoltShape(shape,i);if(native==nullptr) return AetherBodyHandle_Invalid;
     compound.AddShape(ToJolt(p.position),ToJolt(p.rotation),native.GetPtr(),i);
   }
@@ -956,11 +967,11 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV3(AetherPhysicsWorld *world,
        !ae::physics::validMeshCooking(p.cooking)) return AetherBodyHandle_Invalid;
     JPH::RefConst<JPH::Shape> native;
     if(p.geometry==AetherPartGeometry::Primitive) {
-      if(static_cast<ae::u32>(shape.kind)>2) return AetherBodyHandle_Invalid;
+      if(static_cast<ae::u32>(shape.kind)>3) return AetherBodyHandle_Invalid;
       if(shape.kind==AetherShapeKind::Box) {
         if(!finite(shape.boxHalfExtent)||shape.boxHalfExtent.x<=0||shape.boxHalfExtent.y<=0||shape.boxHalfExtent.z<=0) return AetherBodyHandle_Invalid;
       } else if(!std::isfinite(shape.sphereRadius)||shape.sphereRadius<=0||
-          (shape.kind==AetherShapeKind::Capsule&&(!std::isfinite(shape.capsuleHalfHeight)||shape.capsuleHalfHeight<=0))) return AetherBodyHandle_Invalid;
+          ((shape.kind==AetherShapeKind::Capsule||shape.kind==AetherShapeKind::Cylinder)&&(!std::isfinite(shape.capsuleHalfHeight)||shape.capsuleHalfHeight<=0))) return AetherBodyHandle_Invalid;
       native=ToJoltShape(shape,i);
     } else {
       const bool hull=p.geometry==AetherPartGeometry::ConvexHull;
@@ -1046,7 +1057,7 @@ ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,
     JPH::EAllowedDOFs allowedDOFs = ToJoltAllowedDOFs(desc.allowedDOFs);
     if (shape == nullptr ||
         (desc.motionType == AetherMotionType::Dynamic &&
-         (static_cast<ae::u8>(allowedDOFs) & 0b111) == 0)) {
+         static_cast<ae::u8>(allowedDOFs) == 0)) {
       rollback();
       return 0;
     }
@@ -1249,6 +1260,8 @@ ae::i32 AetherPhysics_SetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherB
   }
   world->physicsSystem.GetBodyInterface().SetAngularVelocity(JPH::BodyID(handle),ToJolt(value));return 1;
 }
+
+#include "physics/body_runtime_commands.inl"
 
 ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass) {
   if(!world || handle==AetherBodyHandle_Invalid || !std::isfinite(mass) || mass<=0 || mass>1e6f) return 0;
@@ -1532,9 +1545,9 @@ bool IsValidMotor(const AetherJointMotorDesc &motor) {
          std::isfinite(motor.springDamping) && motor.springDamping >= 0.0f;
 }
 
-bool IsValidJointDesc(const AetherJointDesc &desc) {
+bool IsValidJointDesc(const AetherJointDesc &desc, bool extended=false) {
   const ae::u32 kind = static_cast<ae::u32>(desc.kind);
-  if (kind > static_cast<ae::u32>(AetherJointKind::Distance) ||
+  if (kind > static_cast<ae::u32>(extended?AetherJointKind::Spring:AetherJointKind::Distance) ||
       !IsFinite(desc.point1) || !IsFinite(desc.point2) || !IsFinite(desc.axis1) ||
       !IsFinite(desc.axis2) || !std::isfinite(desc.limitsMin) ||
       !std::isfinite(desc.limitsMax) || !IsValidMotor(desc.motor))
@@ -1566,10 +1579,10 @@ void TransformJointFrame(const JPH::Body &reference, AetherJointDesc &desc) {
 
 AetherJointHandle CreateJointWorldSpace(AetherPhysicsWorld *world, AetherBodyHandle body1,
                                          AetherBodyHandle body2, const AetherJointDesc *desc,
-                                         AetherJointSpace inputSpace) {
+                                         AetherJointSpace inputSpace, const AetherJointDescV3 *extension=nullptr) {
   if (world == nullptr || desc == nullptr) return AetherJointHandle_Invalid;
-  if (body1 == AetherBodyHandle_Invalid || body2 == AetherBodyHandle_Invalid) return AetherJointHandle_Invalid;
-  if (!IsValidJointDesc(*desc)) return AetherJointHandle_Invalid;
+  if (body1 == body2 || body1 == AetherBodyHandle_Invalid || body2 == AetherBodyHandle_Invalid) return AetherJointHandle_Invalid;
+  if (!IsValidJointDesc(*desc,extension!=nullptr)) return AetherJointHandle_Invalid;
 
   // Constraint::Create(Body&, Body&) precisa de referências reais, não de BodyID — diferente
   // do resto desta fronteira (que opera inteiramente via BodyInterface, por BodyID). Um lock
@@ -1604,6 +1617,14 @@ AetherJointHandle CreateJointWorldSpace(AetherPhysicsWorld *world, AetherBodyHan
     else if (inputSpace == AetherJointSpace::LocalToBody2)
       TransformJointFrame(*jphBody2, worldDesc);
 
+    AetherVec3 normal1{},normal2{};
+    if(extension) {
+      normal1=extension->normal1;normal2=extension->normal2;
+      if(inputSpace!=AetherJointSpace::World) {
+        const auto rotation=(inputSpace==AetherJointSpace::LocalToBody1?jphBody1:jphBody2)->GetRotation();
+        normal1=FromJolt(rotation*ToJolt(normal1));normal2=FromJolt(rotation*ToJolt(normal2));
+      }
+    }
     const AetherJointDesc *resolved = &worldDesc;
 
     switch (resolved->kind) {
@@ -1657,6 +1678,7 @@ AetherJointHandle CreateJointWorldSpace(AetherPhysicsWorld *world, AetherBodyHan
         constraint = slider;
         break;
       }
+      case AetherJointKind::Spring:
       case AetherJointKind::Distance: {
         JPH::DistanceConstraintSettings settings;
         settings.mSpace = JPH::EConstraintSpace::WorldSpace;
@@ -1664,8 +1686,54 @@ AetherJointHandle CreateJointWorldSpace(AetherPhysicsWorld *world, AetherBodyHan
         settings.mPoint2 = JPH::RVec3(resolved->point2.x, resolved->point2.y, resolved->point2.z);
         settings.mMinDistance = resolved->limitsMin;
         settings.mMaxDistance = resolved->limitsMax;
+        if(resolved->kind==AetherJointKind::Spring)
+          settings.mLimitsSpringSettings=JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping,resolved->motor.springFrequency,resolved->motor.springDamping);
         constraint = settings.Create(*jphBody1, *jphBody2);
         break;
+      }
+      case AetherJointKind::Fixed: {
+        JPH::FixedConstraintSettings settings;
+        settings.mPoint1=JPH::RVec3(ToJolt(resolved->point1));settings.mPoint2=JPH::RVec3(ToJolt(resolved->point2));
+        settings.mAxisX1=ToJolt(resolved->axis1).Normalized();settings.mAxisX2=ToJolt(resolved->axis2).Normalized();
+        settings.mAxisY1=(ToJolt(normal1)-settings.mAxisX1*ToJolt(normal1).Dot(settings.mAxisX1)).Normalized();
+        settings.mAxisY2=(ToJolt(normal2)-settings.mAxisX2*ToJolt(normal2).Dot(settings.mAxisX2)).Normalized();
+        constraint=settings.Create(*jphBody1,*jphBody2);break;
+      }
+      case AetherJointKind::Cone: {
+        JPH::ConeConstraintSettings settings;
+        settings.mPoint1=JPH::RVec3(ToJolt(resolved->point1));settings.mPoint2=JPH::RVec3(ToJolt(resolved->point2));
+        settings.mTwistAxis1=ToJolt(resolved->axis1).Normalized();settings.mTwistAxis2=ToJolt(resolved->axis2).Normalized();
+        settings.mHalfConeAngle=extension->swingY;constraint=settings.Create(*jphBody1,*jphBody2);break;
+      }
+      case AetherJointKind::SwingTwist: {
+        JPH::SwingTwistConstraintSettings settings;
+        settings.mPosition1=JPH::RVec3(ToJolt(resolved->point1));settings.mPosition2=JPH::RVec3(ToJolt(resolved->point2));
+        settings.mTwistAxis1=ToJolt(resolved->axis1).Normalized();settings.mTwistAxis2=ToJolt(resolved->axis2).Normalized();
+        settings.mPlaneAxis1=(ToJolt(normal1)-settings.mTwistAxis1*ToJolt(normal1).Dot(settings.mTwistAxis1)).Normalized();
+        settings.mPlaneAxis2=(ToJolt(normal2)-settings.mTwistAxis2*ToJolt(normal2).Dot(settings.mTwistAxis2)).Normalized();
+        settings.mNormalHalfConeAngle=extension->swingY;settings.mPlaneHalfConeAngle=extension->swingZ;
+        settings.mTwistMinAngle=extension->twistMin;settings.mTwistMaxAngle=extension->twistMax;
+        constraint=settings.Create(*jphBody1,*jphBody2);break;
+      }
+      case AetherJointKind::SixDOF: {
+        JPH::SixDOFConstraintSettings settings;settings.mSwingType=JPH::ESwingType::Pyramid;
+        settings.mPosition1=JPH::RVec3(ToJolt(resolved->point1));settings.mPosition2=JPH::RVec3(ToJolt(resolved->point2));
+        settings.mAxisX1=ToJolt(resolved->axis1).Normalized();settings.mAxisX2=ToJolt(resolved->axis2).Normalized();
+        settings.mAxisY1=(ToJolt(normal1)-settings.mAxisX1*ToJolt(normal1).Dot(settings.mAxisX1)).Normalized();
+        settings.mAxisY2=(ToJolt(normal2)-settings.mAxisX2*ToJolt(normal2).Dot(settings.mAxisX2)).Normalized();
+        for(ae::u32 i=0;i<6;++i) {
+          const auto &a=extension->axes[i];const auto axis=static_cast<JPH::SixDOFConstraintSettings::EAxis>(i);
+          if(a.motion==0)settings.MakeFixedAxis(axis);else if(a.motion==2)settings.MakeFreeAxis(axis);else settings.SetLimitedAxis(axis,a.minimum,a.maximum);
+          settings.mMaxFriction[i]=a.friction;settings.mMotorSettings[i]=ToJoltMotorSettings(a.motor,i>=3);
+        }
+        auto *joint=static_cast<JPH::SixDOFConstraint*>(settings.Create(*jphBody1,*jphBody2));
+        for(ae::u32 i=0;i<6;++i)joint->SetMotorState(static_cast<JPH::SixDOFConstraintSettings::EAxis>(i),ToJoltMotorState(extension->axes[i].motor.state));
+        const auto *a=extension->axes;
+        joint->SetTargetVelocityCS(JPH::Vec3(a[0].motor.targetVelocity,a[1].motor.targetVelocity,a[2].motor.targetVelocity));
+        joint->SetTargetAngularVelocityCS(JPH::Vec3(a[3].motor.targetVelocity,a[4].motor.targetVelocity,a[5].motor.targetVelocity));
+        joint->SetTargetPositionCS(JPH::Vec3(a[0].motor.targetPosition,a[1].motor.targetPosition,a[2].motor.targetPosition));
+        joint->SetTargetOrientationCS(JPH::Quat::sEulerAngles(JPH::Vec3(a[3].motor.targetPosition,a[4].motor.targetPosition,a[5].motor.targetPosition)));
+        constraint=joint;break;
       }
       default:
         return AetherJointHandle_Invalid;
@@ -1719,6 +1787,30 @@ AetherJointHandle AetherPhysics_CreateJointV2(AetherPhysicsWorld *world, AetherB
   v1.limitsMax = desc->limitsMax;
   v1.motor = desc->motor;
   return CreateJointWorldSpace(world, body1, body2, &v1, desc->space);
+}
+
+AetherJointHandle AetherPhysics_CreateJointV3(AetherPhysicsWorld *world,AetherBodyHandle body1,AetherBodyHandle body2,const AetherJointDescV3 *d) {
+  if(!d||d->structSize<sizeof(*d)||d->apiVersion!=3||d->base.structSize<sizeof(d->base)||d->base.apiVersion!=2||static_cast<ae::u32>(d->base.space)>2) return AetherJointHandle_Invalid;
+  const auto &b=d->base;const auto k=b.kind;
+  if(!IsFinite(d->normal1)||!IsFinite(d->normal2))return AetherJointHandle_Invalid;
+  if(k!=AetherJointKind::Point&&k!=AetherJointKind::Distance&&k!=AetherJointKind::Spring) {
+    if(ToJolt(b.axis1).LengthSq()<1e-8f||ToJolt(b.axis2).LengthSq()<1e-8f)return AetherJointHandle_Invalid;
+  }
+  if(k==AetherJointKind::Fixed||k==AetherJointKind::SwingTwist||k==AetherJointKind::SixDOF)
+    if(ToJolt(b.axis1).Cross(ToJolt(d->normal1)).LengthSq()<1e-8f||ToJolt(b.axis2).Cross(ToJolt(d->normal2)).LengthSq()<1e-8f)return AetherJointHandle_Invalid;
+  for(float n:{d->swingY,d->swingZ})if(!std::isfinite(n)||n<0||n>kJointPi)return AetherJointHandle_Invalid;
+  if(!std::isfinite(d->twistMin)||!std::isfinite(d->twistMax)||d->twistMin< -kJointPi||d->twistMax>kJointPi||d->twistMin>d->twistMax)return AetherJointHandle_Invalid;
+  if(k!=AetherJointKind::Hinge&&k!=AetherJointKind::Slider&&b.motor.state!=AetherMotorState::Off)return AetherJointHandle_Invalid;
+  if((k==AetherJointKind::Distance||k==AetherJointKind::Spring)&&(b.limitsMin<0||b.limitsMax<b.limitsMin))return AetherJointHandle_Invalid;
+  if(k==AetherJointKind::Spring&&b.motor.springFrequency<=0)return AetherJointHandle_Invalid;
+  if(k==AetherJointKind::SixDOF)for(ae::u32 i=0;i<6;++i) {
+    const auto &a=d->axes[i];
+    if(a.motion>2||!std::isfinite(a.minimum)||!std::isfinite(a.maximum)||a.minimum>=a.maximum||!std::isfinite(a.friction)||a.friction<0||!IsValidMotor(a.motor))return AetherJointHandle_Invalid;
+    if(i>=3&&(a.minimum< -kJointPi||a.maximum>kJointPi))return AetherJointHandle_Invalid;
+    if(a.motion==0&&a.motor.state!=AetherMotorState::Off)return AetherJointHandle_Invalid;
+  }
+  AetherJointDesc base{b.kind,b.point1,b.point2,b.axis1,b.axis2,b.limitsMin,b.limitsMax,b.motor};
+  return CreateJointWorldSpace(world,body1,body2,&base,b.space,d);
 }
 
 namespace {
@@ -1867,24 +1959,21 @@ AetherVec3 AetherPhysics_GetCharacterVelocity(AetherPhysicsWorld *world, AetherC
   return FromJolt(slot->character->GetLinearVelocity());
 }
 
-void AetherPhysics_UpdateCharacter(AetherPhysicsWorld *world, AetherCharacterHandle handle, float deltaTime,
-                                    AetherVec3 gravity, AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody) {
-  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
-  if (slot == nullptr) return;
-
-  // Defaults do próprio Jolt para ExtendedUpdateSettings (ver CharacterVirtual.h) — 40cm de
-  // step-up para degraus, 50cm de stick-to-floor. Não expostos como parâmetro nesta fatia: são
-  // valores razoáveis para um personagem humano padrão: expor tudo criaria uma assinatura de
-  // função gigante para um caso de uso ainda hipotético (personagem não-humano com proporções
-  // muito diferentes) — ajustável depois se for preciso, sem quebrar ABI (adicionar um segundo
-  // AetherPhysics_UpdateCharacterEx com settings explícitos).
+void AetherPhysics_UpdateCharacter(AetherPhysicsWorld *world,AetherCharacterHandle handle,float deltaTime,
+  AetherVec3 gravity,AetherQueryLayerMask layerMask,AetherBodyHandle ignoreBody) {
+  (void)AetherPhysics_UpdateCharacterEx(world,handle,deltaTime,gravity,layerMask,ignoreBody,.4f,.5f);
+}
+int AetherPhysics_UpdateCharacterEx(AetherPhysicsWorld *world,AetherCharacterHandle handle,float deltaTime,
+  AetherVec3 gravity,AetherQueryLayerMask layerMask,AetherBodyHandle ignoreBody,float stepHeight,float floorSnapLength) {
+  CharacterSlot *slot=ResolveCharacterSlot(world,handle);
+  if(!slot||!std::isfinite(deltaTime)||deltaTime<=0||deltaTime>.1f||!std::isfinite(stepHeight)||stepHeight<0||stepHeight>10||!std::isfinite(floorSnapLength)||floorSnapLength<0||floorSnapLength>10||!std::isfinite(gravity.x)||!std::isfinite(gravity.y)||!std::isfinite(gravity.z))return 0;
   JPH::CharacterVirtual::ExtendedUpdateSettings updateSettings;
-
-  QueryLayerFilter layerFilter(layerMask);
-  QueryBodyFilter bodyFilter(ignoreBody);
-  slot->character->ExtendedUpdate(deltaTime, ToJolt(gravity), updateSettings,
-                                   world->physicsSystem.GetDefaultBroadPhaseLayerFilter(Layers::Moving),
-                                   layerFilter, bodyFilter, {}, world->tempAllocator);
+  updateSettings.mWalkStairsStepUp=JPH::Vec3(0,stepHeight,0);
+  updateSettings.mStickToFloorStepDown=JPH::Vec3(0,-floorSnapLength,0);
+  QueryLayerFilter layerFilter(layerMask);QueryBodyFilter bodyFilter(ignoreBody);
+  slot->character->ExtendedUpdate(deltaTime,ToJolt(gravity),updateSettings,
+    world->physicsSystem.GetDefaultBroadPhaseLayerFilter(Layers::Moving),layerFilter,bodyFilter,{},world->tempAllocator);
+  return 1;
 }
 
 void AetherPhysics_GetCharacterTransform(AetherPhysicsWorld *world, AetherCharacterHandle handle,
@@ -1896,6 +1985,14 @@ void AetherPhysics_GetCharacterTransform(AetherPhysicsWorld *world, AetherCharac
     *outPosition = {pos.GetX(), pos.GetY(), pos.GetZ()};
   }
   if (outRotation != nullptr) *outRotation = FromJolt(slot->character->GetRotation());
+}
+
+int AetherPhysics_RefreshCharacterContacts(AetherPhysicsWorld *world,AetherCharacterHandle handle,
+  AetherQueryLayerMask layerMask,AetherBodyHandle ignoreBody) {
+  CharacterSlot*slot=ResolveCharacterSlot(world,handle);if(!slot)return 0;
+  QueryLayerFilter layerFilter(layerMask);QueryBodyFilter bodyFilter(ignoreBody);
+  slot->character->RefreshContacts(world->physicsSystem.GetDefaultBroadPhaseLayerFilter(Layers::Moving),
+    layerFilter,bodyFilter,{},world->tempAllocator);return 1;
 }
 
 AetherCharacterGroundState AetherPhysics_GetCharacterGroundState(AetherPhysicsWorld *world, AetherCharacterHandle handle) {

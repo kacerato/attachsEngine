@@ -1,0 +1,5 @@
+[ok] path_script_abi_points_identity_sampling_runtime_control_and_stale_handles
+[ok] script_abi_v15_plays_blends_and_edits_clip_entries
+[ok] physics2d_script_abi_routes_real_solver_queries_and_rejects_stale_handles
+
+3/3 testes passaram

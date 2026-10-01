@@ -1,0 +1,4 @@
+List of devices attached
+adb-53e1eb7-cDkkst (2)._adb-tls-connect._tcp device product:onyx_global model:25053PC47G device:onyx transport_id:2
+adb-53e1eb7-cDkkst._adb-tls-connect._tcp device product:onyx_global model:25053PC47G device:onyx transport_id:1
+

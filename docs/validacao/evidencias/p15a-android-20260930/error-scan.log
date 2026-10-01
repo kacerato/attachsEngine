@@ -1,0 +1,4 @@
+Android acceptance 2026-09-30; final process PID 32653.
+Query: adb -t 1 logcat -d --pid=32653 | Select-String FATAL EXCEPTION|Fatal signal|ANR in|PATH FAIL|error CS
+Result: no matching lines in the retained buffer at inspection.
+This is a scan summary, not a complete log dump or proof of absence across the whole application.

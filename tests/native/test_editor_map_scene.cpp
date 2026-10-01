@@ -273,7 +273,7 @@ AE_TEST(editor_archive_v7_migrates_v6_and_keeps_defaults_stable) {
   for(u32 i=9;i<editorNumericProperties.size();++i)
     AE_EXPECT_EQ(editorPropertyValue(*document.find(document.root()),i),editorPropertyValue(defaults,i),"v7 omitted defaults remain compatible with v6");
   const auto sparse=serializeEditorDocument(document,0);
-  AE_EXPECT_TRUE(sparse.starts_with("AETHER_EDITOR 14 "),"write current version");
+  AE_EXPECT_TRUE(sparse.starts_with("AETHER_EDITOR 17 "),"write current version");
   AE_EXPECT_TRUE(document.find(2)->tag=="Untagged","cena antiga recebe tag padrão");
   AE_EXPECT_TRUE(sparse.size()<legacy.size()/2,"default arrays are not repeated");
   EditorDocument restored;
@@ -548,6 +548,45 @@ AE_TEST(mesh_collider_visual_uses_the_bound_resource_geometry_with_a_segment_bud
   AE_EXPECT_TRUE(found->segments.size()<=2400,"prévia respeita o teto de comandos de UI");
   for(const auto &segment:found->segments)
     AE_EXPECT_TRUE(std::abs(segment.a[0])<2&&std::abs(segment.b[0])<2,"pose antiga da primitiva não desloca o casco");
+  // Object-local component/point IDs can coincide: a locked Path inspector
+  // must highlight only its complete object+component+point address.
+  const auto first=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Path A");
+  const auto second=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Path B");
+  u64 instance=0,pointId=0;
+  for(const auto objectId:{first,second}){
+    auto object=*doc.find(objectId);object.layer=3;
+    auto *path=static_cast<scene::Path*>(object.components.add(scene::Path::descriptor));
+    resources::CurvePoint3D point;u64 allocated=0;path->insertPoint(0,point,allocated);
+    if(objectId==first){instance=path->instanceId();pointId=allocated;}
+    else AE_EXPECT_TRUE(path->instanceId()==instance&&allocated==pointId,"two Paths share local IDs");
+    doc.applyEntityValues(objectId,object);
+  }
+  const auto pathVisuals=collectComponentVisuals(doc,second,1.6f,&resources,instance,pointId,first);
+  for(const auto objectId:{first,second}){
+    const auto visual=std::find_if(pathVisuals.begin(),pathVisuals.end(),[&](const auto &v){return v.entity==objectId&&v.instance==instance;});
+    AE_EXPECT_TRUE(visual!=pathVisuals.end(),"path marker exists");
+    const auto highlights=std::count_if(visual->segments.begin(),visual->segments.end(),[](const auto &s){return s.emphasis==2;});
+    AE_EXPECT_EQ(highlights,objectId==first?3:0,"locked inspector point highlights only its actual Path object");
+  }
+  EditorScreenState state;state.document=&doc;state.selection=id;state.inspectorLocked=first;
+  state.hiddenLayers=1u<<3;
+  AE_EXPECT_TRUE(!componentVisualVisible(doc,first,state.hiddenLayers,state.sceneHidden),"hidden layer suppresses marker drawing");
+  ui::UiPointerRouting routing;routing.target=ui::UiPointerTarget::Widget;routing.tapped=true;
+  routing.widgetId=widgetId(EditorWidget::ComponentVisualBase)+first;
+  EditorHistory history;EditorScreenLayout layout;
+  applyEditorPointer(state,layout,routing,doc,history);
+  AE_EXPECT_EQ(state.selection,id,"stale marker hit cannot select hidden layer");
+  state.hiddenLayers=0;state.unpickableLayers=1u<<3;
+  applyEditorPointer(state,layout,routing,doc,history);
+  AE_EXPECT_EQ(state.selection,id,"marker does not bypass unpickable layer");
+  state.unpickableLayers=0;state.scenePickOff.push_back(first);
+  applyEditorPointer(state,layout,routing,doc,history);
+  AE_EXPECT_EQ(state.selection,id,"marker does not bypass per-object pick-off");
+  state.scenePickOff.clear();state.sceneHidden.push_back(first);
+  applyEditorPointer(state,layout,routing,doc,history);
+  AE_EXPECT_EQ(state.selection,id,"marker does not bypass per-object hidden state");
+  state.sceneHidden.clear();applyEditorPointer(state,layout,routing,doc,history);
+  AE_EXPECT_EQ(state.selection,first,"visible pickable marker still selects");
 }
 #include "editor/editor_play_scene.h"
 AE_TEST(editor_play_scene_isolates_mutations_and_restarts_from_authoring) {
@@ -883,8 +922,8 @@ AE_TEST(mesh_reference_without_identity_is_adopted_and_missing_identity_is_not_f
 }
 
 AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
-  // Um projeto salvo antes desta mudança precisa abrir. O componente é v4 (slots
-  // e texturas por slot) e a carga de v1 não pode exigir nenhum campo posterior.
+  // A carga de v1 não pode exigir identidade, slots, texturas ou lightmaps
+  // acrescentados nas versões posteriores.
   const renderer::MapDrawRecord draws[]{identityDraw(0)};
   const renderer::MapMaterialRecord materials[]{flatMaterial(1)};
   EditorDocument document;EditorMapScene scene;
@@ -892,18 +931,22 @@ AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
   const auto id=document.childrenOf(document.root())[0];
 
   auto texto=serializeEditorDocument(document,11);
-  // Rebaixa o componente para a versão 1 e corta tudo o que veio depois dela —
-  // identidade (v2), material compartilhado e contagem de slots (v3), texturas
-  // do slot (v4) —, exatamente como um arquivo gravado antes dessas mudanças.
-  const std::string alvo="\"astra.render.mesh\" 8 ";
+  // Constrói o payload legado explicitamente; não depende da cauda nem da
+  // versão atual para continuar protegendo a migração quando o formato evoluir.
+  const auto &current=*meshRenderer(*document.find(id));
+  std::ostringstream payload,legacy,currentRecord,legacyRecord;
+  payload.imbue(std::locale::classic());legacy.imbue(std::locale::classic());
+  payload<<std::setprecision(std::numeric_limits<float>::max_digits10);
+  legacy<<std::setprecision(std::numeric_limits<float>::max_digits10);
+  current.write(payload);
+  legacy<<current.mesh<<' '<<current.enabled<<' '<<current.material.enabled<<' ';
+  for(const auto &property:current.type().numbers) legacy<<property.read(current)<<' ';
+  currentRecord<<std::quoted(std::string(current.type().id))<<' '<<current.type().version<<' '<<std::quoted(payload.str());
+  legacyRecord<<std::quoted(std::string(current.type().id))<<" 1 "<<std::quoted(legacy.str());
+  const auto alvo=currentRecord.str();
   const auto posicao=texto.find(alvo);
   AE_EXPECT_TRUE(posicao!=std::string::npos,"componente encontrado no arquivo");
-  texto.replace(posicao,alvo.size(),"\"astra.render.mesh\" 1 ");
-  const auto guid=meshRenderer(*document.find(id))->asset.text();
-  const std::string cauda=" - 0 - - - - 0 0 0.5 000 000 000 000 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 0 0 -1 0 0 - ";
-  const auto comGuid=texto.find(guid+cauda);
-  AE_EXPECT_TRUE(comGuid!=std::string::npos,"identidade e caudas v3/v4 presentes no arquivo");
-  texto.erase(comGuid,guid.size()+cauda.size());
+  texto.replace(posicao,alvo.size(),legacyRecord.str());
 
   EditorDocument antigo;
   AE_EXPECT_TRUE(deserializeEditorDocument(texto,11,antigo),"arquivo v1 do componente carrega");

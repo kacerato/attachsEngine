@@ -31,24 +31,26 @@ inline void materialUvTransformEntry(const MaterialOverride &value,float out[Mat
   }
 }
 // R4: entrada completa da extensão de material por desenho: as oito linhas de
-// transformação de UV acima e mais quatro linhas, já com o padrão da fonte
+// transformação de UV acima e mais seis linhas, já com o padrão da fonte
 // resolvido (o shader não conhece "herdar"):
 //   linha 8:  força da oclusão, origem (0 nenhuma, 1 metal/rugosidade, 2 textura
 //             própria), canal da oclusão (0..3), índice bindless da textura
 //   linha 9:  canal da rugosidade, canal do metal, origem do alfa (0 cor base,
 //             1 opaco, 2 luminância), inversão Y do normal (0/1)
 //   linha 10: dado isolado na prévia (MaterialIsolate*)
-//   linha 11: reservada
-inline constexpr u32 MaterialExtensionFloats=12*4;
+//   linha 11: lightmap ativo, índice bindless, intensidade, reservado
+//   linha 12: lightmap escala UV1 xy e deslocamento zw
+//   linha 13: reservada
+inline constexpr u32 MaterialExtensionFloats=14*4;
 inline constexpr u32 MaterialExtensionNoTexture=0xFFFFFFFFu;
 inline bool needsMaterialExtension(const MaterialOverride &value) {
-  return value.uvTransformMask!=0 || value.channels.overrides() || value.isolate!=scene::MaterialIsolateNone ||
+  return (value.lightmapTexture!=scene::MaterialTextureKeep && value.lightmapTexture!=InvalidMapTexture) || value.uvTransformMask!=0 || value.channels.overrides() || value.isolate!=scene::MaterialIsolateNone ||
          (value.occlusionTexture!=scene::MaterialTextureKeep && value.occlusionTexture!=InvalidMapTexture);
 }
 // `effectiveFlags` são as flags do material depois de applyMaterialOverride;
 // `occlusionSlot` é o índice bindless da textura de oclusão, ou NoTexture.
 inline void materialExtensionEntry(const MaterialOverride &value,u32 effectiveFlags,u32 occlusionSlot,
-                                   float out[MaterialExtensionFloats]) {
+                                   float out[MaterialExtensionFloats],u32 lightmapSlot=MaterialExtensionNoTexture) {
   materialUvTransformEntry(value,out);
   const auto &channels=value.channels;
   const auto channel=[](std::uint8_t chosen,u32 fallback) {return static_cast<float>(chosen?chosen-1u:fallback);};
@@ -69,7 +71,12 @@ inline void materialExtensionEntry(const MaterialOverride &value,u32 effectiveFl
   row+=4;
   row[0]=static_cast<float>(value.isolate);row[1]=row[2]=row[3]=0;
   row+=4;
-  row[0]=row[1]=row[2]=row[3]=0;
+  row[0]=lightmapSlot==MaterialExtensionNoTexture?0.0f:1.0f;
+  row[1]=lightmapSlot==MaterialExtensionNoTexture?0.0f:static_cast<float>(lightmapSlot);
+  row[2]=value.lightmapIntensity;row[3]=0;
+  row+=4;
+  for(unsigned i=0;i<4;++i) row[i]=value.lightmapScaleOffset[i];
+  row+=4;row[0]=row[1]=row[2]=row[3]=0;
 }
 inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,const MaterialOverride &value,u32 textureBase=0) {
   auto result=source;

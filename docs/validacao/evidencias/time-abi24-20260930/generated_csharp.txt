@@ -1,0 +1,3 @@
+[ok] generated_csharp_component_api_matches_the_schema_registry
+
+1/1 testes passaram

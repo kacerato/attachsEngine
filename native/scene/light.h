@@ -102,7 +102,7 @@ inline bool lightCastsLocalShadow(const ComponentValue &v) {
   return light.kind!=LightKind::Directional && light.shadowMode!=0;
 }
 inline constexpr std::array<ComponentNumber, 12> lightNumbers{{
-#define AE_LIGHT_NUMBER(id, label, field, lo, hi, step, group, unit, visible) {label, lo, hi, step, [](const ComponentValue &v) -> const float & {return static_cast<const Light &>(v).field;}, [](ComponentValue &v) -> float * {return &static_cast<Light &>(v).field;}, id,{group,unit,nullptr,visible}}
+#define AE_LIGHT_NUMBER(id, label, field, lo, hi, step, group, unit, visible) {label, lo, hi, step, [](const ComponentValue &v) -> const float & {return static_cast<const Light &>(v).field;}, [](ComponentValue &v) -> float * {return &static_cast<Light &>(v).field;}, id,{group,unit,nullptr,visible},std::string_view(id)=="intensity"||std::string_view(id)=="color.r"||std::string_view(id)=="color.g"||std::string_view(id)=="color.b"}
   AE_LIGHT_NUMBER("color.r", "Cor R", color[0], 0, 1, .01f,"Emissão","",nullptr),
   AE_LIGHT_NUMBER("color.g", "Cor G", color[1], 0, 1, .01f,"Emissão","",nullptr),
   AE_LIGHT_NUMBER("color.b", "Cor B", color[2], 0, 1, .01f,"Emissão","",nullptr),

@@ -1,0 +1,9 @@
+# Aceite de tempo nativo — ABI24
+
+`aether_ui_preview write-time-project <diretório-novo-vazio>` publica um projeto independente editável por EditorSession, histórico e serializer reais. Recusa saída não vazia ou symlink. Lê e reserializa a cena publicada antes de aceitar a exportação. O pacote em `project/Time-20260930/` contém dois Timers autorados no mesmo objeto, intervalo 0,1 s, repetidos, inicialmente desativados, um escalado e outro com ignore_time_scale. O Behavior atual é copiado byte a byte para Scripts e associado por identidade na cena. Não cria dependências durante Play.
+
+Abrir o projeto no editor, conferir as duas instâncias e seus modos, salvar/reabrir e executar Play. O probe exige escala zero desde o primeiro quadro; ativa ambos os timers, espera no relógio não escalado e recusa avanço da simulação, disparo escalado ou FixedUpdate nesse período. Exige disparos não escalados, muda para meia velocidade, exige retomada do timer e dos passos físicos, verifica a relação dos intervalos e restaura escala 1. A Console deve registrar TIME READY → TIME FROZEN → TIME PASS. TIME FAIL desabilita a progressão e informa o contrato quebrado. Interferir no botão Tempo durante o probe altera o cenário e pode fazê-lo falhar legitimamente.
+
+A espera mede quadros aceitos, não suspensão Android. O projeto sem malha verifica lógica/Console e não serve como prova visual de movimento, física de corpos ou shader Vulkan. Pausa editorial e Step são cenários separados dos testes host. Fechar e executar Play outra vez deve repetir o fluxo com contagens zeradas.
+
+O teste EditableTimeAcceptanceFixtureCompilesWithCurrentSdk verifica a compilação pelo ProjectCompiler real. Compilar o probe não prova sua execução pela ABI nativa no dispositivo. Builds, testes nativos, C# e capturas do editor devem ser relatados separadamente da execução CLR Android. Referências oficiais e contrato em [API de tempo](../../../docs/planos/API-TIME-2026-09-30.md).

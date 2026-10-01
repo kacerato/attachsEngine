@@ -1,0 +1,15 @@
+  Determinando os projetos a serem restaurados...
+  Todos os projetos estão atualizados para restauração.
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Aether.Analyzers\debug\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Aether.Core\debug\Aether.Core.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Astra.Scripting\debug\Astra.Scripting.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Aether.Scene\debug\Aether.Scene.dll
+  Aether.Flow -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Aether.Flow\debug\Aether.Flow.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Aether.Rendering\debug\Aether.Rendering.dll
+  Aether.Tests -> C:\Users\donod\Downloads\atchengine\build\input-managed\bin\Aether.Tests\debug\Aether.Tests.dll
+
+Compilação com êxito.
+    0 Aviso(s)
+    0 Erro(s)
+
+Tempo Decorrido 00:00:06.10

@@ -1,0 +1,21 @@
+
+> Task :app:publishManagedCore
+  Determinando os projetos a serem restaurados...
+  Todos os projetos estão atualizados para restauração.
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Analyzers\release\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Core\release\Aether.Core.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Scene\release\Aether.Scene.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Astra.Scripting\release\Astra.Scripting.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Rendering\release_linux-bionic-arm64\Aether.Rendering.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering-net8.0-8.0.27\
+
+> Task :app:verifyPackagedOpenSsl
+> Task :app:prepareEngineAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:buildCMakeDebug[arm64-v8a][aether_android,aether_transform]
+> Task :app:externalNativeBuildDebug
+
+BUILD SUCCESSFUL in 7m 2s
+6 actionable tasks: 6 executed

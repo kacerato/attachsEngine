@@ -1,0 +1,11 @@
+  Determinando os projetos a serem restaurados...
+  C:\Users\donod\Downloads\atchengine\build\fields50-probe-check\Fields50Probe.csproj restaurado (em 556 ms).
+  C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Astra.Scripting.csproj restaurado (em 557 ms).
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\build\fields50-probe-artifacts\bin\Astra.Scripting\release\Astra.Scripting.dll
+  Fields50Probe -> C:\Users\donod\Downloads\atchengine\build\fields50-probe-artifacts\bin\Fields50Probe\release\Fields50Probe.dll
+
+Compilação com êxito.
+    0 Aviso(s)
+    0 Erro(s)
+
+Tempo Decorrido 00:00:05.60

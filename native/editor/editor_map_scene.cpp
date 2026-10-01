@@ -96,6 +96,18 @@ bool EditorMapScene::preparePickGeometry(std::span<const renderer::MapDrawRecord
       const auto vertex=static_cast<long long>(draw.vertexOffset)+indices[draw.firstIndex+i];
       if(vertex<0 || static_cast<u64>(vertex)>=vertexCount) return false;
     }
+    // Cache the bounded audit once per shared draw at resource publication.
+    // Large or pathological layouts are explicitly unverified, never silently
+    // called usable. UV chart padding still belongs to the external baker.
+    if(draw.indexCount/3>65536) slot.lightmapUvStatus=scene::LightmapUvStatus::AnalysisLimit;
+    else {
+      std::vector<scene::LightmapUvTriangle> uv(draw.indexCount/3);
+      for(u32 i=0;i<draw.indexCount;++i) {
+        const auto vertex=static_cast<usize>(draw.vertexOffset)+indices[draw.firstIndex+i];
+        std::memcpy(uv[i/3].data()+(i%3)*2,vertices.data()+vertex*renderer::MapVertexStride+36,2*sizeof(float));
+      }
+      slot.lightmapUvStatus=scene::auditLightmapUv(uv);
+    }
     shared.emplace(key,index);
   }
   geometry=std::move(prepared);

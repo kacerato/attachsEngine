@@ -8,7 +8,7 @@ namespace ae::scene {
 // separa a geometria física da visual sem duplicar nem alterar a fonte.
 // Com `convex` a física usa o casco convexo e aceita qualquer corpo; sem ele
 // usa os triângulos exatos e só aceita corpo estático ou cinemático.
-enum class ColliderShape : u32 { Box=0, Sphere=1, Capsule=2, Mesh=3 };
+enum class ColliderShape : u32 { Box=0, Sphere=1, Capsule=2, Mesh=3, Cylinder=4 };
 // Primitive shapes are independent of visual geometry and body motion. Capsule
 // local Y halfHeight excludes the hemispherical ends; dimensions are in local
 // scene units.
@@ -32,7 +32,7 @@ public:
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<Collider>(*this);}
   bool valid() const override {
-    if(static_cast<u32>(shape)>3 || owner>std::numeric_limits<u32>::max()) return false;
+    if(static_cast<u32>(shape)>4 || owner>std::numeric_limits<u32>::max()) return false;
     for(const auto &p:descriptor.numbers) {const float v=p.read(*this);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
     return true;
   }
@@ -44,7 +44,7 @@ public:
   bool read(std::istream &in,u32 version) override {
     // v4 acrescentou Malha/Convexo; v5 separa a malha física da visual; v6
     // acrescenta cooking autoral sem reinterpretar os dados antigos.
-    u32 kind=0;if((version<1||version>6) || !(in>>kind) || kind>(version>=4?3u:2u)) return false;
+    u32 kind=0;if((version<1||version>7) || !(in>>kind) || kind>(version>=7?4u:version>=4?3u:2u)) return false;
     shape=static_cast<ColliderShape>(kind);
     centerX=centerY=centerZ=rotationX=rotationY=rotationZ=0;owner=0;enabled=true;convex=false;collisionMesh={};
     weldVertices=true;optimizeCooking=true;hullTolerance=.001f;activeEdgeAngle=5.f;
@@ -60,8 +60,8 @@ public:
   }
 };
 inline bool colliderIsBox(const ComponentValue &v) {return static_cast<const Collider&>(v).shape==ColliderShape::Box;}
-inline bool colliderHasRadius(const ComponentValue &v) {const auto s=static_cast<const Collider&>(v).shape;return s==ColliderShape::Sphere||s==ColliderShape::Capsule;}
-inline bool colliderIsCapsule(const ComponentValue &v) {return static_cast<const Collider&>(v).shape==ColliderShape::Capsule;}
+inline bool colliderHasRadius(const ComponentValue &v) {const auto s=static_cast<const Collider&>(v).shape;return s==ColliderShape::Sphere||s==ColliderShape::Capsule||s==ColliderShape::Cylinder;}
+inline bool colliderIsCapsule(const ComponentValue &v) {const auto s=static_cast<const Collider&>(v).shape;return s==ColliderShape::Capsule||s==ColliderShape::Cylinder;}
 inline bool colliderIsMesh(const ComponentValue &v) {return static_cast<const Collider&>(v).shape==ColliderShape::Mesh;}
 inline bool colliderIsConvexMesh(const ComponentValue &v) {const auto &c=static_cast<const Collider&>(v);return c.shape==ColliderShape::Mesh&&c.convex;}
 inline bool colliderIsTriangleMesh(const ComponentValue &v) {const auto &c=static_cast<const Collider&>(v);return c.shape==ColliderShape::Mesh&&!c.convex;}
@@ -91,7 +91,7 @@ inline constexpr std::array<ComponentNumber,13> colliderNumbers{{
    [](ComponentValue &v)->float*{return &static_cast<Collider&>(v).activeEdgeAngle;},"active_edge_angle",
    {"Cozimento","°","Separa arestas de contato em superfícies com mudança de normal acima deste ângulo.",colliderIsTriangleMesh}}
 }};
-inline constexpr std::array<ComponentEnumOption,4> colliderShapeOptions{{{0,"Caixa"},{1,"Esfera"},{2,"Cápsula"},{3,"Malha"}}};
+inline constexpr std::array<ComponentEnumOption,5> colliderShapeOptions{{{0,"Caixa"},{1,"Esfera"},{2,"Cápsula"},{3,"Malha"},{4,"Cilindro"}}};
 inline constexpr std::array<ComponentEnum,1> colliderEnums{{
   {"shape","Forma",colliderShapeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Collider&>(v).shape);},
     [](ComponentValue &v,u32 value){static_cast<Collider&>(v).shape=static_cast<ColliderShape>(value);},{"Forma"}}
@@ -130,6 +130,6 @@ inline constexpr std::array<ComponentResourceBinding,1> colliderResources{{
    {"Forma","","Vazio usa a malha visual; escolha uma malha simplificada para a física",colliderIsMesh},true}
 }};
 inline const ComponentType Collider::descriptor{
-  "astra.physics.collider",6,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources
+  "astra.physics.collider",7,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources
 };
 }

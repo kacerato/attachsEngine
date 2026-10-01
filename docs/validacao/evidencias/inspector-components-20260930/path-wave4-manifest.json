@@ -1,0 +1,255 @@
+{
+  "captureCount": 22,
+  "previewSha256": "51579E7E0D7F6373300EC93409B39077A1C85BAE840CF56C2CF3B8886082F845",
+  "atlasEntries": 221,
+  "curveDrawBudget": {
+    "segments": 512,
+    "pointSegments": 384,
+    "activePointAndTangents": 11
+  },
+  "evidence": "Host executable UI; not device proof",
+  "images": [
+    {
+      "file": "path-empty-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "6C3FAD479E316347A3EBAECC640A4D669E6FFFF87497364659DDC59DBDBA83DF",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-edit-394portrait-wave4.png",
+      "size": [
+        394,
+        853
+      ],
+      "sha256": "925A7379A7C3F86A24CFA88D3611ED7CD2BB315A6E7AC3ECE342616EDF5035A1",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 6
+    },
+    {
+      "file": "path-follow-edit-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "46A7F49A1BF61B293BDB732D08A15933ABAE14DE8181965C30C819EBBC024B6B",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-edit-page2-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "629B89C3122F64275DCF2893BDC9F7045A238B1855B8E94B911297334D0E86D0",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-missing-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "F34D6CACB93690EA0B05F0DEA566D68196DC49906A3B20C56057DB19081371D0",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-1200-wave4.png",
+      "size": [
+        1200,
+        700
+      ],
+      "sha256": "FA00FEF02C01338CAD565AA43417181F4C3090AFB3F494961F33AE59A7FB0942",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "5E6532E9265E4766C2BD32449C1C4BA1B5348C00A409BBCA5FD3F4FFDBCCD8D8",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-execution-1200-wave4.png",
+      "size": [
+        1200,
+        700
+      ],
+      "sha256": "CDB283FDAF89308FF2D99F18D7E353ABF7401157DD6645004FA8CA2F94C2443C",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-execution-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "D3139AAA962DBE486A95D907432DB61D434022853C6429DA456CA3659EFC6EC0",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-execution-page2-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "C9A60FEE531353F2DC9079AA5DFC35B15897C079ADF2967E624254693CFED3A8",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-orientation-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "3D4115F320DBD5BF205CEB5C09A5BD24EFD545077B50669FF630629312E5CBC3",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-orientation-page2-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "BC0534C927183AC3A7E7E75CA254783C69801AC2D9D503C6E782D0849B2B67A4",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-page2-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "79AEF0721B0F438D7AE423F3DC7F4093CA4CE261417673C706151C12CCB5B6ED",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-follow-play-page3-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "499BD7747F7B44540413F30EAD17381D36D2BE800B4DDC4F4140AF04EBBB3B46",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-limit-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "B564F5285ADD31BF353ADD6E682C8BB54D09C1C1147C6DE3FF6AD7EBDAEB7A6D",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-list-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "E28117C1D758F2B10D29C7929F5EB36B3D84DD70940D3A33EFEFA56B18FF7400",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-points-1200-wave4.png",
+      "size": [
+        1200,
+        700
+      ],
+      "sha256": "90B5BD3070DA625D1AF92210112E19A949414198965AA5BF77CE60C746934441",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-points-394portrait-wave4.png",
+      "size": [
+        394,
+        853
+      ],
+      "sha256": "0D98E78CBBA26A369606DC42958F3F5603F184AB7B1D47E436A9D3170F3F5493",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 6
+    },
+    {
+      "file": "path-points-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "704DEC2E4BE7E771903D1991BCB24A55C59759990C01FB5F1D6CA231C8EB500D",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-summary-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "1F599683A8A7947E0E3D4EEFA2FE8E104290A9D43842E910D8A55F3C8D496201",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-tangents-1200-wave4.png",
+      "size": [
+        1200,
+        700
+      ],
+      "sha256": "BE15BA82EE1766E990E469B6E549F1AADA58BEE60FB7D4FE90D9B5E1D5BE2ED6",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    },
+    {
+      "file": "path-tangents-853-wave4.png",
+      "size": [
+        853,
+        394
+      ],
+      "sha256": "F5E753B621250477F68BC9279EE9F1F6ECDF44FAA8EA6C5012C2283C811D7787",
+      "missingGlyphs": 0,
+      "droppedInstances": 0,
+      "clippedInstances": 0
+    }
+  ]
+}

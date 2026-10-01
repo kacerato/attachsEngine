@@ -1,4 +1,10 @@
+#include "mechanisms_fixture.h"
+#include "scene/physics2d_components.h"
+#include "scene/audio.h"
+#include <sstream>
+#include <iomanip>
 #include "editor/editor_route_component.h"
+#include "editor/editor_reference_picker.h"
 // Renderiza a tela do editor em um arquivo, sem GPU e sem aparelho.
 //
 // A interface é desenhada pela engine. Sem isto, a única forma de ver se um
@@ -17,20 +23,28 @@
 #include "editor/editor_curve_view.h"
 #include "scene/script_behavior.h"
 #include "scene/camera_follow.h"
+#include "scene/animation.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
+#include "editor/editor_import_transaction.h"
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_creation_catalog.h"
 #include "renderer/water_authoring_geometry.h"
+#include "runtime/scene_tweens.h"
+#include "runtime/scene_paths.h"
+#include "scene/path.h"
+#include "scene/path_follow.h"
 #include "ui_software_raster.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <limits>
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <cmath>
 
 using namespace ae;
 
@@ -72,9 +86,332 @@ bool writePpm(const char *path, const test::UiSoftwareTarget &target) {
   return true;
 }
 
+// A genuine short mono PCM16 WAV; the fixture uses the product importer.
+bool writePreviewWave(const std::filesystem::path &path) {
+  constexpr u32 frames=4800,rate=48000;
+  std::vector<u8> bytes;
+  const auto tag=[&](const char *text){for(u32 i=0;i<4;++i) bytes.push_back(static_cast<u8>(text[i]));};
+  const auto integer=[&](u32 value,u32 count){for(u32 i=0;i<count;++i) bytes.push_back(static_cast<u8>(value>>(i*8)));};
+  tag("RIFF");integer(36+frames*2,4);tag("WAVE");tag("fmt ");integer(16,4);
+  integer(1,2);integer(1,2);integer(rate,4);integer(rate*2,4);integer(2,2);integer(16,2);
+  tag("data");integer(frames*2,4);
+  for(u32 i=0;i<frames;++i) integer(static_cast<u16>(static_cast<i16>(std::sin(double(i)*6.283185307179586*440/rate)*4000)),2);
+  auto *file=std::fopen(path.string().c_str(),"wb");if(!file) return false;
+  const bool ok=std::fwrite(bytes.data(),1,bytes.size(),file)==bytes.size();std::fclose(file);return ok;
+}
+
+// Fixture exporter, separate from rendering and never an editor product command.
+int writeRuntimeFamilyProject(const char*directory){
+ namespace fs=std::filesystem;
+ const auto fail=[](const std::string&message){std::fprintf(stderr,"Families export refused: %s\n",message.c_str());return 2;};
+ if(!directory||!directory[0])return fail("provide a new empty output directory");
+ std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+ if(ec)return fail("invalid output path");
+ if(fs::is_symlink(fs::symlink_status(root,ec)))return fail("output directory cannot be a symbolic link");
+ ec.clear();
+ if(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))return fail("output already contains files; use a new directory");
+ if(ec)return fail("cannot inspect output directory");
+ std::vector<u8>physicsSource,audioSource,wave;
+ if(!readAsset("tests/fixtures/physics2d/Physics2DProbe.cs",physicsSource)||!readAsset("tests/fixtures/audio/AudioProbe.cs",audioSource)||!readAsset("tests/fixtures/audio/astra-audio-probe.wav",wave))return fail("required current probe sources or original WAV unavailable");
+ for(const auto*folder:{"Scripts","Audio","scenes"}){fs::create_directories(root/folder,ec);if(ec)return fail("cannot create fixture folders; partial output retained");}
+ if(!editor::EditorImportTransaction::write(root/"Scripts/Physics2DProbe.cs",physicsSource)||!editor::EditorImportTransaction::write(root/"Scripts/AudioProbe.cs",audioSource)||!editor::EditorImportTransaction::write(root/"Audio/astra-audio-probe.wav",wave))return fail("cannot copy original fixture bytes; partial output retained");
+ editor::EditorSession session;
+ if(!session.setProjectDirectory(root.generic_string().c_str()))return fail("EditorSession refused project directory");
+ resources::AssetGuid clip;std::string error;
+ if(!session.importWaveClip("Audio/astra-audio-probe.wav",clip,error))return fail(error);
+ auto&document=session.document();
+ const auto bodyId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"PHY2D Body");
+ auto body=*document.find(bodyId);
+ auto*dynamic=static_cast<scene::Body2D*>(body.components.add(scene::Body2D::descriptor));
+ auto*box=static_cast<scene::Collider2D*>(body.components.add(scene::Collider2D::descriptor));
+ auto*physicsProbe=static_cast<scene::ScriptBehavior*>(body.components.add(scene::ScriptBehavior::descriptor));
+ if(!dynamic||!box||!physicsProbe)return fail("could not author Body2D fixture components");
+ dynamic->motion=scene::Body2DMotion::Dynamic;dynamic->gravityScale=0;dynamic->mass=1;dynamic->fixedRotation=true;box->halfX=.5f;box->halfY=.5f;
+ physicsProbe->scriptType="acceptance.physics2d";physicsProbe->source="Scripts/Physics2DProbe.cs";
+ if(!session.history().applyValues(document,bodyId,body))return fail("Body2D candidate rejected");
+ const auto wallId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"PHY2D Wall");auto wall=*document.find(wallId);wall.transform.position[0]=4;
+ auto*staticBody=static_cast<scene::Body2D*>(wall.components.add(scene::Body2D::descriptor));auto*wallBox=static_cast<scene::Collider2D*>(wall.components.add(scene::Collider2D::descriptor));
+ if(!staticBody||!wallBox)return fail("could not author Static wall");
+ staticBody->motion=scene::Body2DMotion::Static;wallBox->halfX=.5f;wallBox->halfY=2;
+ if(!session.history().applyValues(document,wallId,wall))return fail("wall candidate rejected");
+ const auto sourceId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"AUDIO Source");auto source=*document.find(sourceId);
+ auto*audio=static_cast<scene::AudioSource*>(source.components.add(scene::AudioSource::descriptor));auto*audioProbe=static_cast<scene::ScriptBehavior*>(source.components.add(scene::ScriptBehavior::descriptor));
+ if(!audio||!audioProbe)return fail("could not author AudioSource fixture");
+ audio->clip=clip;audio->dimension=scene::AudioDimension::Flat;audio->playback=scene::AudioPlayback::Stopped;audio->volume=.5f;audio->pitch=1;audio->loop=false;
+ audioProbe->scriptType="acceptance.audio";audioProbe->source="Scripts/AudioProbe.cs";
+ if(!session.history().applyValues(document,sourceId,source))return fail("AudioSource candidate rejected");
+ const auto listenerId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"AUDIO Listener");auto listener=*document.find(listenerId);
+ auto*audioListener=static_cast<scene::AudioListener*>(listener.components.add(scene::AudioListener::descriptor));
+ if(!audioListener)return fail("could not author AudioListener fixture");
+ audioListener->volume=1;audioListener->enabled=true;
+ if(!session.history().applyValues(document,listenerId,listener))return fail("AudioListener candidate rejected");
+ // No visual mesh or 3D physics is invented. Spatial authoring remains a UI step.
+ const auto scene=editor::serializeEditorDocument(document,0);
+ if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",scene))return fail("scene serialization publication failed");
+ std::vector<u8>savedScene;editor::EditorDocument reopened;
+ if(!editor::EditorImportTransaction::read(root/"scenes/editor.aescene",savedScene)||
+    !editor::deserializeEditorDocument(std::string_view(reinterpret_cast<const char*>(savedScene.data()),savedScene.size()),0,reopened)||
+    editor::serializeEditorDocument(reopened,0)!=scene)return fail("published scene roundtrip failed; partial output retained");
+ std::ostringstream descriptor;
+ descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"Families-ADB-20260930\",\"path\":"<<std::quoted(root.generic_string())<<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+ if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str()))return fail("project descriptor publication failed");
+ std::printf("Families project written: %s\nBody=%u Wall=%u Audio=%u AudioClip=%s\n",root.generic_string().c_str(),bodyId,wallId,sourceId,clip.text().c_str());return 0;
+}
+
+enum class AcceptanceCase {Time,Input,Groups,TimerConnection,Mouse,Profile,RuntimeCapture,PhysicsConnection,Physics2DConnection,TimerControls,TweenControls,TweenConnection,NumberTweens,CharacterGround,CharacterRebuild,CharacterState,CharacterPlatform,CharacterPlatformCarry};
+int writeTimeProject(const char *directory,AcceptanceCase acceptance=AcceptanceCase::Time) {
+ const bool includeInput=acceptance==AcceptanceCase::Input,includeGroups=acceptance==AcceptanceCase::Groups,
+ includeConnection=acceptance==AcceptanceCase::TimerConnection,includeMouse=acceptance==AcceptanceCase::Mouse,
+ includeProfile=acceptance==AcceptanceCase::Profile,includeRuntimeCapture=acceptance==AcceptanceCase::RuntimeCapture;
+ namespace fs=std::filesystem;
+ const auto fail=[](const std::string &message){std::fprintf(stderr,"Time export refused: %s\n",message.c_str());return 2;};
+ if(!directory || !directory[0])return fail("provide a new empty output directory");
+ std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+ if(ec)return fail("invalid output path");
+ if(fs::is_symlink(fs::symlink_status(root,ec)))return fail("output cannot be a symbolic link");
+ ec.clear();
+ if(fs::exists(root,ec) && (!fs::is_directory(root,ec) || !fs::is_empty(root,ec)))return fail("output already contains files");
+ if(ec)return fail("cannot inspect output");
+ std::vector<u8> source;if(!readAsset("tests/fixtures/time/TimeProbe.cs",source))return fail("current TimeProbe source unavailable");
+ for(const auto *folder:{"Scripts","scenes"}){fs::create_directories(root/folder,ec);if(ec)return fail("cannot create folders; partial output retained");}
+ if(!editor::EditorImportTransaction::write(root/"Scripts/TimeProbe.cs",source))return fail("cannot publish probe");
+ editor::EditorSession session;
+ if(!session.setProjectDirectory(root.generic_string().c_str()))return fail("project directory rejected");
+ auto &document=session.document();const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,"TIME Acceptance");
+ auto value=*document.find(id);
+ auto *scaled=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+ auto *unscaled=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+ auto *probe=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+ if(!scaled || !unscaled || !probe)return fail("cannot author timers and behavior");
+ scaled->intervalSeconds=.1f;scaled->repeat=true;scaled->enabled=false;
+ unscaled->intervalSeconds=.1f;unscaled->repeat=true;unscaled->enabled=false;unscaled->ignoreTimeScale=true;
+ probe->scriptType="acceptance.time";probe->source="Scripts/TimeProbe.cs";
+ if(includeInput) {
+   std::vector<u8> inputSource;
+   if(!readAsset("tests/fixtures/input/InputCaptureProbe.cs",inputSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/InputCaptureProbe.cs",inputSource))return fail("cannot publish input probe");
+   auto *inputProbe=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+   if(!inputProbe)return fail("cannot author input behavior");
+   inputProbe->scriptType="acceptance.input.capture";inputProbe->source="Scripts/InputCaptureProbe.cs";
+   auto actions=document.inputActions();auto action=*actions.find("Saltar");
+   action.bindings={{runtime::InputSource::Key,62}};
+   if(!actions.replace(action.id,action) || !session.history().setInputActions(document,actions))return fail("cannot author input action");
+ }
+ if(includeMouse) {
+   std::vector<u8> mouseSource;
+   if(!readAsset("tests/fixtures/input/MouseProbe.cs",mouseSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/MouseProbe.cs",mouseSource))return fail("cannot publish mouse probe");
+   auto *mouseProbe=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+   if(!mouseProbe)return fail("cannot author mouse behavior");
+   mouseProbe->scriptType="acceptance.input.mouse";mouseProbe->source="Scripts/MouseProbe.cs";
+   auto actions=document.inputActions();auto jump=*actions.find("Saltar");
+   jump.bindings={{runtime::InputSource::MouseButton,0}};
+   runtime::InputAction look;look.id="MouseLook";look.kind=runtime::ActionKind::Axis2D;look.deadzone=0;
+   look.bindings={{runtime::InputSource::MouseAxis,0,0,0},{runtime::InputSource::MouseAxis,1,0,1}};
+   runtime::InputAction wheel;wheel.id="MouseWheel";wheel.kind=runtime::ActionKind::Axis1D;wheel.deadzone=0;
+   wheel.bindings={{runtime::InputSource::MouseAxis,3}};
+   if(!actions.replace(jump.id,jump) || !actions.add(look) || !actions.add(wheel) ||
+      !session.history().setInputActions(document,actions))return fail("cannot author mouse actions");
+ }
+ if(includeProfile) {
+   std::vector<u8> profileSource;
+   if(!readAsset("tests/fixtures/input/InputProfileProbe.cs",profileSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/InputProfileProbe.cs",profileSource))return fail("cannot publish profile probe");
+   auto *profileProbe=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+   if(!profileProbe)return fail("cannot author profile behavior");
+   profileProbe->scriptType="acceptance.input.profile";profileProbe->source="Scripts/InputProfileProbe.cs";
+ }
+ if(includeRuntimeCapture) {
+   std::vector<u8> captureSource;
+   if(!readAsset("tests/fixtures/input/InputRuntimeCaptureProbe.cs",captureSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/InputRuntimeCaptureProbe.cs",captureSource))return fail("cannot publish runtime capture probe");
+   auto *captureProbe=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+   if(!captureProbe)return fail("cannot author capture behavior");
+   captureProbe->scriptType="acceptance.input.runtime-capture";captureProbe->source="Scripts/InputRuntimeCaptureProbe.cs";
+ }
+ if(includeGroups) {
+   std::vector<u8> groupsSource;
+   if(!readAsset("tests/fixtures/groups/GroupsProbe.cs",groupsSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/GroupsProbe.cs",groupsSource))return fail("cannot publish groups probe");
+   auto *groupsProbe=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+   if(!groupsProbe)return fail("cannot author groups behavior");
+   groupsProbe->scriptType="acceptance.groups";groupsProbe->source="Scripts/GroupsProbe.cs";
+   value.groups.add("guardas");value.groups.add("recebe-dano");
+   const auto child=document.createEntity(id,runtime::ObjectKind::Folder,"Guarda filho");
+   if(!child)return fail("cannot author child member");
+   auto childValue=*document.find(child);childValue.groups.add("guardas");
+   if(!session.history().applyValues(document,child,childValue))return fail("cannot author child groups");
+ }
+ if(!session.history().applyValues(document,id,value))return fail("authored candidate rejected");
+ if(includeConnection) {
+   std::vector<u8> connectionSource;
+   if(!readAsset("tests/fixtures/events/TimerConnectionProbe.cs",connectionSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/TimerConnectionProbe.cs",connectionSource))return fail("cannot publish connection probe");
+   const auto emitter=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Timeout emissor");
+   const auto receiver=document.createEntity(emitter,runtime::ObjectKind::Folder,"Timeout receptor");
+   auto receiverValue=*document.find(receiver);receiverValue.active=false;receiverValue.groups.add("timeout-receiver");
+   if(!session.history().applyValues(document,receiver,receiverValue))return fail("cannot author receiver");
+   auto emitterValue=*document.find(emitter);
+   auto *timer=static_cast<scene::Timer*>(emitterValue.components.add(scene::Timer::descriptor));
+   auto *probe=static_cast<scene::ScriptBehavior*>(emitterValue.components.add(scene::ScriptBehavior::descriptor));
+   if(!timer || !probe)return fail("cannot author timeout connection");
+   timer->intervalSeconds=.15f;timer->repeat=false;timer->ignoreTimeScale=true;timer->elapsedAction=1;timer->elapsedTarget=receiver;
+   probe->scriptType="acceptance.timer.connection";probe->source="Scripts/TimerConnectionProbe.cs";
+   if(!session.history().applyValues(document,emitter,emitterValue))return fail("cannot publish timeout connection");
+ }
+ if(acceptance==AcceptanceCase::PhysicsConnection) {
+   std::vector<u8> connectionSource;
+   if(!readAsset("tests/fixtures/events/PhysicsConnectionProbe.cs",connectionSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/PhysicsConnectionProbe.cs",connectionSource))return fail("cannot publish physics probe");
+   const auto receiver=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Luz receptora");
+   auto lamp=*document.find(receiver);lamp.active=false;lamp.groups.add("physics-event-receiver");
+   lamp.components.add(scene::Light::descriptor);lamp.transform.position[0]=2;
+   if(!session.history().applyValues(document,receiver,lamp))return fail("cannot author receiver light");
+   const auto sensor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Sensor conectado");
+   const auto incoming=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Corpo entrante");
+   auto incomingValue=*document.find(incoming);incomingValue.transform.position[1]=3;
+   auto *incomingBody=static_cast<scene::PhysicsBody*>(incomingValue.components.add(scene::PhysicsBody::descriptor));
+   auto *incomingCollider=static_cast<scene::Collider*>(incomingValue.components.add(scene::Collider::descriptor));
+   incomingBody->motion=scene::BodyMotion::Dynamic;incomingCollider->halfX=.5f;incomingCollider->halfY=.5f;incomingCollider->halfZ=.5f;
+   if(!session.history().applyValues(document,incoming,incomingValue))return fail("cannot author incoming body");
+   auto sensorValue=*document.find(sensor);
+   auto *body=static_cast<scene::PhysicsBody*>(sensorValue.components.add(scene::PhysicsBody::descriptor));
+   auto *shape=static_cast<scene::Collider*>(sensorValue.components.add(scene::Collider::descriptor));
+   auto *connection=static_cast<scene::PhysicsEventConnection3D*>(sensorValue.components.add(scene::PhysicsEventConnection3D::descriptor));
+   auto *behavior=static_cast<scene::ScriptBehavior*>(sensorValue.components.add(scene::ScriptBehavior::descriptor));
+   body->motion=scene::BodyMotion::Static;body->sensor=true;shape->halfX=8;shape->halfY=.5f;shape->halfZ=8;
+   connection->action=1;connection->receiver=receiver;connection->otherFilter=incoming;
+   behavior->scriptType="acceptance.physics.connection";behavior->source="Scripts/PhysicsConnectionProbe.cs";
+   if(!session.history().applyValues(document,sensor,sensorValue))return fail("cannot author connected sensor");
+ }
+ if(acceptance==AcceptanceCase::Physics2DConnection) {
+   std::vector<u8> connectionSource;
+   if(!readAsset("tests/fixtures/events/Physics2DConnectionProbe.cs",connectionSource) ||
+      !editor::EditorImportTransaction::write(root/"Scripts/Physics2DConnectionProbe.cs",connectionSource))return fail("cannot publish physics probe");
+   const auto receiver=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Luz receptora");
+   auto lamp=*document.find(receiver);lamp.active=false;lamp.groups.add("physics2d-event-receiver");
+   lamp.components.add(scene::Light::descriptor);lamp.transform.position[0]=2;
+   if(!session.history().applyValues(document,receiver,lamp))return fail("cannot author receiver light");
+   const auto sensor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Sensor conectado");
+   const auto incoming=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Corpo entrante");
+   auto incomingValue=*document.find(incoming);incomingValue.transform.position[1]=3;
+   auto *incomingBody=static_cast<scene::Body2D*>(incomingValue.components.add(scene::Body2D::descriptor));
+   auto *incomingCollider=static_cast<scene::Collider2D*>(incomingValue.components.add(scene::Collider2D::descriptor));
+   incomingBody->motion=scene::Body2DMotion::Dynamic;incomingCollider->halfX=.5f;incomingCollider->halfY=.5f;
+   if(!session.history().applyValues(document,incoming,incomingValue))return fail("cannot author incoming body");
+   auto sensorValue=*document.find(sensor);
+   auto *body=static_cast<scene::Body2D*>(sensorValue.components.add(scene::Body2D::descriptor));
+   auto *shape=static_cast<scene::Collider2D*>(sensorValue.components.add(scene::Collider2D::descriptor));
+   auto *connection=static_cast<scene::PhysicsEventConnection2D*>(sensorValue.components.add(scene::PhysicsEventConnection2D::descriptor));
+   auto *behavior=static_cast<scene::ScriptBehavior*>(sensorValue.components.add(scene::ScriptBehavior::descriptor));
+   body->motion=scene::Body2DMotion::Static;shape->sensor=true;shape->halfX=8;shape->halfY=.5f;
+   connection->action=1;connection->receiver=receiver;connection->otherFilter=incoming;
+   behavior->scriptType="acceptance.physics2d.connection";behavior->source="Scripts/Physics2DConnectionProbe.cs";
+   if(!session.history().applyValues(document,sensor,sensorValue))return fail("cannot author connected sensor");
+ }
+ if(acceptance==AcceptanceCase::TimerControls) {
+   std::vector<u8> controlSource;if(!readAsset("tests/fixtures/time/TimerControlProbe.cs",controlSource)||!editor::EditorImportTransaction::write(root/"Scripts/TimerControlProbe.cs",controlSource))return fail("cannot publish timer control probe");
+   const auto owner=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Timer manual");auto candidate=*document.find(owner);
+   auto *timer=static_cast<scene::Timer*>(candidate.components.add(scene::Timer::descriptor));timer->autoStart=false;timer->repeat=false;timer->ignoreTimeScale=true;timer->intervalSeconds=.1f;
+   auto *behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.timer.controls";behavior->source="Scripts/TimerControlProbe.cs";
+   if(!session.history().applyValues(document,owner,candidate))return fail("cannot publish manual timer");
+ }
+ if(acceptance==AcceptanceCase::TweenConnection) {
+   std::vector<u8> source;if(!editor::EditorImportTransaction::read(std::filesystem::path(AETHER_REPOSITORY_ROOT)/"tests/fixtures/events/TweenConnectionProbe.cs",source))return fail("cannot read tween connection fixture");
+   if(!editor::EditorImportTransaction::writeText(root/"Scripts/TweenConnectionProbe.cs",std::string(reinterpret_cast<const char*>(source.data()),source.size())))return fail("cannot publish tween connection fixture");
+   const auto owner=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Tween conectado");const auto receiver=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Luz receptora");auto lamp=*document.find(receiver);lamp.active=false;lamp.components.add(scene::Light::descriptor);document.applyEntityValues(receiver,lamp);
+   auto candidate=*document.find(owner);auto*tween=static_cast<scene::TransformTween*>(candidate.components.add(scene::TransformTween::descriptor));tween->ignoreTimeScale=true;tween->duration=.1f;tween->destination[1]=2;tween->finishedAction=1;tween->finishedTarget=receiver;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.tween.connection";behavior->source="Scripts/TweenConnectionProbe.cs";
+   if(!session.history().applyValues(document,owner,candidate))return fail("cannot publish connected tween");
+ }
+ if(acceptance==AcceptanceCase::CharacterRebuild) {
+   std::vector<u8> source;if(!readAsset("tests/fixtures/physics/CharacterRebuildProbe.cs",source)||!editor::EditorImportTransaction::write(root/"Scripts/CharacterRebuildProbe.cs",source))return fail("cannot publish character rebuild probe");
+   const auto floor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Piso");auto base=*document.find(floor);base.transform.position[1]=-.5f;auto*shape=static_cast<scene::Collider*>(base.components.add(scene::Collider::descriptor));shape->halfX=shape->halfZ=20;shape->halfY=.5f;auto*body=static_cast<scene::PhysicsBody*>(base.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;if(!document.applyEntityValues(floor,base))return fail("cannot publish real floor");
+   const auto actor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Personagem persistente");auto candidate=*document.find(actor);candidate.transform.position[1]=1;auto*character=static_cast<scene::Character*>(candidate.components.add(scene::Character::descriptor));character->speed=2;character->jumpSpeed=5;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.character.rebuild";behavior->source="Scripts/CharacterRebuildProbe.cs";
+   if(!document.applyEntityValues(actor,candidate))return fail("cannot publish character rebuild fixture");
+ }
+ if(acceptance==AcceptanceCase::CharacterState) {
+   std::vector<u8> source;if(!readAsset("tests/fixtures/physics/CharacterStateProbe.cs",source)||!editor::EditorImportTransaction::write(root/"Scripts/CharacterStateProbe.cs",source))return fail("cannot publish character state probe");
+   const auto floor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Piso");auto base=*document.find(floor);base.transform.position[1]=-.5f;auto*shape=static_cast<scene::Collider*>(base.components.add(scene::Collider::descriptor));shape->halfX=shape->halfZ=20;shape->halfY=.5f;auto*body=static_cast<scene::PhysicsBody*>(base.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;if(!document.applyEntityValues(floor,base))return fail("cannot publish real floor");
+   const auto actor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Personagem persistente");auto candidate=*document.find(actor);candidate.transform.position[1]=1;auto*character=static_cast<scene::Character*>(candidate.components.add(scene::Character::descriptor));character->speed=2;character->jumpSpeed=5;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.character.state";behavior->source="Scripts/CharacterStateProbe.cs";
+   if(!document.applyEntityValues(actor,candidate))return fail("cannot publish character state fixture");
+ }
+ if(acceptance==AcceptanceCase::CharacterPlatform) {
+   std::vector<u8> source;if(!readAsset("tests/fixtures/physics/CharacterPlatformProbe.cs",source)||!editor::EditorImportTransaction::write(root/"Scripts/CharacterPlatformProbe.cs",source))return fail("cannot publish character platform probe");
+   const auto floor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Piso");auto base=*document.find(floor);base.transform.position[1]=-.5f;auto*shape=static_cast<scene::Collider*>(base.components.add(scene::Collider::descriptor));shape->halfX=shape->halfZ=20;shape->halfY=.5f;auto*body=static_cast<scene::PhysicsBody*>(base.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Kinematic;if(!document.applyEntityValues(floor,base))return fail("cannot publish real floor");
+   const auto actor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Personagem persistente");auto candidate=*document.find(actor);candidate.transform.position[1]=1;auto*character=static_cast<scene::Character*>(candidate.components.add(scene::Character::descriptor));character->speed=2;character->jumpSpeed=5;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.character.platform";behavior->source="Scripts/CharacterPlatformProbe.cs";
+   if(!document.applyEntityValues(actor,candidate))return fail("cannot publish character platform fixture");
+ }
+ if(acceptance==AcceptanceCase::CharacterPlatformCarry) {
+   std::vector<u8> source;if(!readAsset("tests/fixtures/physics/CharacterPlatformCarryProbe.cs",source)||!editor::EditorImportTransaction::write(root/"Scripts/CharacterPlatformCarryProbe.cs",source))return fail("cannot publish character platform carry probe");
+   const auto floor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Piso");auto base=*document.find(floor);base.transform.position[1]=-.5f;auto*shape=static_cast<scene::Collider*>(base.components.add(scene::Collider::descriptor));shape->halfX=shape->halfZ=20;shape->halfY=.5f;auto*body=static_cast<scene::PhysicsBody*>(base.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Kinematic;if(!document.applyEntityValues(floor,base))return fail("cannot publish real floor");
+   const auto actor=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Personagem persistente");auto candidate=*document.find(actor);candidate.transform.position[1]=1;auto*character=static_cast<scene::Character*>(candidate.components.add(scene::Character::descriptor));character->speed=2;character->jumpSpeed=8;character->inheritPlatformHorizontal=true;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.character.platform.carry";behavior->source="Scripts/CharacterPlatformCarryProbe.cs";
+   if(!document.applyEntityValues(actor,candidate))return fail("cannot publish character platform carry fixture");
+ }
+ if(acceptance==AcceptanceCase::CharacterGround) {
+   std::vector<u8> source;if(!readAsset("tests/fixtures/physics/CharacterGroundProbe.cs",source)||!editor::EditorImportTransaction::write(root/"Scripts/CharacterGroundProbe.cs",source))return fail("cannot publish character ground probe");
+   const auto box=[&](const char*name,float x,float y,float hx,float hy,float hz){const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto value=*document.find(id);value.transform.position[0]=x;value.transform.position[1]=y;auto*shape=static_cast<scene::Collider*>(value.components.add(scene::Collider::descriptor));shape->halfX=hx;shape->halfY=hy;shape->halfZ=hz;auto*body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;return document.applyEntityValues(id,value);};
+   if(!box("Piso",0,-.5f,20,.5f,20)||!box("Degrau 30cm",3,.15f,1.5f,.15f,10))return fail("cannot publish physical stairs");
+   for(u32 index=0;index<2;++index){const auto owner=document.createEntity(document.root(),runtime::ObjectKind::Folder,index?"Degrau ligado":"Degrau desligado");auto candidate=*document.find(owner);candidate.transform.position[1]=3;candidate.transform.position[2]=index?2.f:-2.f;
+     auto*character=static_cast<scene::Character*>(candidate.components.add(scene::Character::descriptor));character->radius=.3f;character->halfHeight=.5f;character->eyeHeight=1.4f;character->speed=2;character->stepHeight=index?.4f:0;character->floorSnapLength=.5f;
+     auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.character.ground";behavior->source="Scripts/CharacterGroundProbe.cs";
+     if(!document.applyEntityValues(owner,candidate))return fail("cannot publish character");
+   }
+ }
+ if(acceptance==AcceptanceCase::NumberTweens) {
+   std::vector<u8> source;if(!readAsset("tests/fixtures/time/NumberTweenProbe.cs",source)||!editor::EditorImportTransaction::write(root/"Scripts/NumberTweenProbe.cs",source))return fail("cannot publish numeric tween probe");
+   const auto owner=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Luz interpolada");auto candidate=*document.find(owner);
+   auto*light=static_cast<scene::Light*>(candidate.components.add(scene::Light::descriptor));light->intensity=0;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.number.tween";behavior->source="Scripts/NumberTweenProbe.cs";
+   if(!session.history().applyValues(document,owner,candidate))return fail("cannot publish numeric tween light");
+ }
+ if(acceptance==AcceptanceCase::TweenControls) {
+   std::vector<u8> source;if(!editor::EditorImportTransaction::read(std::filesystem::path(AETHER_REPOSITORY_ROOT)/"tests/fixtures/time/TweenControlProbe.cs",source))return fail("cannot read tween fixture");
+   if(!editor::EditorImportTransaction::writeText(root/"Scripts/TweenControlProbe.cs",std::string(reinterpret_cast<const char*>(source.data()),source.size())))return fail("cannot publish tween fixture");
+   const auto owner=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Tween manual");auto candidate=*document.find(owner);
+   auto*tween=static_cast<scene::TransformTween*>(candidate.components.add(scene::TransformTween::descriptor));tween->autoplay=false;tween->ignoreTimeScale=true;tween->duration=.5f;tween->destination[0]=4;
+   auto*behavior=static_cast<scene::ScriptBehavior*>(candidate.components.add(scene::ScriptBehavior::descriptor));behavior->scriptType="acceptance.tween.controls";behavior->source="Scripts/TweenControlProbe.cs";
+   if(!session.history().applyValues(document,owner,candidate))return fail("cannot publish manual tween");
+ }
+ const auto scene=editor::serializeEditorDocument(document,0);
+ if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",scene))return fail("cannot publish scene");
+ std::vector<u8> saved;editor::EditorDocument reopened;
+ if(!editor::EditorImportTransaction::read(root/"scenes/editor.aescene",saved) ||
+    !editor::deserializeEditorDocument(std::string_view(reinterpret_cast<const char*>(saved.data()),saved.size()),0,reopened) ||
+    editor::serializeEditorDocument(reopened,0)!=scene)return fail("published scene roundtrip failed");
+ std::ostringstream descriptor;
+ descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(acceptance==AcceptanceCase::CharacterPlatformCarry?"CharacterPlatformCarry-20261001":acceptance==AcceptanceCase::CharacterPlatform?"CharacterPlatform-20261001":acceptance==AcceptanceCase::CharacterState?"CharacterState-20261001":acceptance==AcceptanceCase::CharacterRebuild?"CharacterRebuild-20261001":acceptance==AcceptanceCase::CharacterGround?"CharacterGround-20261001":acceptance==AcceptanceCase::NumberTweens?"NumberTweens-20261001":acceptance==AcceptanceCase::TweenConnection?"TweenConnection-20261001":acceptance==AcceptanceCase::TweenControls?"TweenControls-20261001":acceptance==AcceptanceCase::TimerControls?"TimerControls-20261001":acceptance==AcceptanceCase::Physics2DConnection?"Physics2DConnection-20261001":acceptance==AcceptanceCase::PhysicsConnection?"PhysicsConnection-20261001":includeRuntimeCapture?"RuntimeCapture-20261001":includeProfile?"InputProfile-20261001":includeMouse?"Mouse-20261001":includeConnection?"TimerConnection-20261001":includeGroups?"Groups-20261001":includeInput?"InputCapture-20261001":"Time-20260930")<<",\"path\":"<<std::quoted(root.generic_string())<<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+ if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str()))return fail("cannot publish project descriptor");
+ std::printf("Time project written: %s\nObject=%u Scaled=%llu Unscaled=%llu\n",root.generic_string().c_str(),id,
+    static_cast<unsigned long long>(scaled->instanceId()),static_cast<unsigned long long>(unscaled->instanceId()));return 0;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
+  if(argc>1&&std::string_view(argv[1])=="write-character-platform-carry-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::CharacterPlatformCarry);
+  if(argc>1&&std::string_view(argv[1])=="write-character-platform-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::CharacterPlatform);
+  if(argc>1&&std::string_view(argv[1])=="write-character-state-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::CharacterState);
+  if(argc>1&&std::string_view(argv[1])=="write-character-rebuild-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::CharacterRebuild);
+  if(argc>1&&std::string_view(argv[1])=="write-character-ground-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::CharacterGround);
+  if(argc>1&&std::string_view(argv[1])=="write-number-tweens-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::NumberTweens);
+  if(argc>1&&std::string_view(argv[1])=="write-tween-connection-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::TweenConnection);
+  if(argc>1&&std::string_view(argv[1])=="write-tween-controls-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::TweenControls);
+  if(argc>1&&std::string_view(argv[1])=="write-timer-controls-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::TimerControls);
+  if(argc>1&&std::string_view(argv[1])=="write-physics2d-connection-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Physics2DConnection);
+  if(argc>1&&std::string_view(argv[1])=="write-physics-connection-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::PhysicsConnection);
+  if(argc>1&&std::string_view(argv[1])=="write-runtime-capture-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::RuntimeCapture);
+  if(argc>1&&std::string_view(argv[1])=="write-input-profile-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Profile);
+  if(argc>1&&std::string_view(argv[1])=="write-mouse-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Mouse);
+  if(argc>1&&std::string_view(argv[1])=="write-time-project")return writeTimeProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-input-capture-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Input);
+  if(argc>1&&std::string_view(argv[1])=="write-timer-connection-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::TimerConnection);
+  if(argc>1&&std::string_view(argv[1])=="write-groups-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Groups);
+  if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);
   const char *output = argc > 1 ? argv[1] : "build/editor-preview.ppm";
   const u32 width = argc > 3 ? static_cast<u32>(std::atoi(argv[2])) : 1600;
   const u32 height = argc > 3 ? static_cast<u32>(std::atoi(argv[3])) : 900;
@@ -112,10 +449,331 @@ int main(int argc, char **argv) {
   }
 
   editor::EditorScreenState state{};
+  runtime::GameWorld characterPreviewWorld;runtime::ScenePhysics characterPreviewRuntime;
+  runtime::GameWorld timerPreviewWorld;runtime::SceneTimers timerPreviewRuntime;
+  runtime::GameWorld tweenPreviewWorld;runtime::SceneTweens tweenPreviewRuntime;
   resources::AssetRegistry prefabPreviewAssets;
   editor::EditorConsole console;
   editor::EditorCodeWorkspace code;
   editor::EditorValueLibraries swatches;
+  if(argc>4 && std::string(argv[4]).starts_with("recipe-")) {
+    namespace fs=std::filesystem;const auto path=fs::temp_directory_path()/("astra-recipe-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    if(!fs::create_directory(path))return 1;
+    struct Cleanup{fs::path path;~Cleanup(){std::error_code e;fs::remove_all(path,e);}}cleanup{path};
+    editor::EditorSession session;session.initialize(&font,&icons);session.setSurface({0,0,float(width),float(height)},{});
+    if(!session.setProjectDirectory(path.string().c_str()))return 1;
+    auto &doc=session.document();const auto source=doc.createEntity(doc.root(),editor::EditorEntityKind::Folder,"Emissor original");
+    const auto a=doc.createEntity(doc.root(),editor::EditorEntityKind::Folder,"Receptor A"),b=doc.createEntity(doc.root(),editor::EditorEntityKind::Folder,"Receptor B");
+    selection=doc.createEntity(doc.root(),editor::EditorEntityKind::Folder,"Novo emissor");auto value=*doc.find(source);
+    for(const auto target:{u64(source),u64(a),u64(b)}) {
+      auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));timer->elapsedTarget=target;timer->elapsedAction=target==a?2:1;timer->intervalSeconds=target==a?.5f:1.5f;timer->repeat=false;
+    }
+    if(!doc.applyEntityValues(source,value) || !session.openComponentPresets(source,0))return 1;
+    std::string error;if(!session.saveComponentRecipe(source,"Ativação temporizada",error))return 1;
+    session.setSelection(selection);if(!session.openComponentPresets(selection,0))return 1;
+    const auto tap=[&](u32 widget) {
+      session.update();ui::UiInputRouter routes;ui::UiDrawList draw;draw.begin(session.screen().surface,font.metrics(ui::UiFontWeight::Regular));
+      editor::buildEditorScreen(session.screen(),ui::defaultTheme(),draw,routes);
+      for(float y=2;y<height;y+=4)for(float x=2;x<width;x+=4) {
+        const auto hit=routes.route({99,ui::UiPointerPhase::Down,{x,y},0});routes.route({99,ui::UiPointerPhase::Up,{x,y},0});
+        if(hit.target==ui::UiPointerTarget::Widget && hit.widgetId==widget) {
+          session.handlePointer({77,ui::UiPointerPhase::Down,{x,y},0});session.handlePointer({77,ui::UiPointerPhase::Up,{x,y},0});session.update();return true;
+        }
+      }
+      return false;
+    };
+    if(!tap(editor::widgetId(editor::EditorWidget::PresetChoiceBase)))return 1;
+    if(std::string(argv[4])=="recipe-ready")for(u32 input=0;input<2;++input) {
+      if(!tap(editor::widgetId(editor::EditorWidget::PresetInputBase)+input))return 1;
+      const auto choices=editor::editorRecipeReferenceChoices(doc,session.screen().presetInputChoices,{});
+      const auto target=input?b:a;const auto at=std::find(choices.begin(),choices.end(),target);
+      if(at==choices.end())return 1;
+      const auto choice=editor::widgetId(editor::EditorWidget::ReferenceChoiceBase)+static_cast<u32>(at-choices.begin());
+      if(!tap(choice) && !(tap(editor::widgetId(editor::EditorWidget::ReferenceNext)) && tap(choice)))return 1;
+    }
+    if(std::string(argv[4])=="recipe-picker" && !tap(editor::widgetId(editor::EditorWidget::PresetInputBase)))return 1;
+    state=session.screen();document=doc;history=session.history();prefabPreviewAssets=session.assets();state.assetRegistry=&prefabPreviewAssets;
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("family-base-")) {
+    const auto parent=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Pai transformado");
+    editor::EditorTransform pose;pose.scale[0]=2;pose.scale[1]=3;pose.scale[2]=4;pose.rotationDegrees[1]=30;
+    if(!document.setTransform(parent,pose))return 1;
+    selection=document.createEntity(parent,editor::EditorEntityKind::Folder,"Objeto · pose local");
+    auto value=*document.find(selection);value.transform.position[0]=2;value.transform.position[1]=1;value.transform.rotationDegrees[2]=35;value.layer=7;value.groups.add("actors");
+    if(!document.applyEntityValues(selection,value))return 1;
+    state.componentSelection=selection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.expandedComponent=std::string(argv[4])=="family-base-object"?"astra.object":"astra.transform";
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("audio-")) {
+    const std::string mode=argv[4];namespace fs=std::filesystem;
+    const auto path=fs::temp_directory_path()/("astra-audio-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    if(!fs::create_directory(path)||!fs::create_directory(path/"Audio")) return 1;
+    struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{path};
+    editor::EditorSession session;if(!session.setProjectDirectory(path.string().c_str())) return 1;
+    session.setAudioOutput(runtime::SceneAudio::Output::Offline);
+    resources::AssetGuid clip;std::string error;
+    if(!writePreviewWave(path/"Audio"/"Test tone.wav")||!session.importWaveClip("Audio/Test tone.wav",clip,error)||!session.loadAudioClip(clip,error)) {
+      std::fprintf(stderr,"WAV preview: %s\n",error.c_str());return 1;
+    }
+    const auto *sourceSchema=scene::findComponentSchema("astra.audio.source"),*listenerSchema=scene::findComponentSchema("astra.audio.listener"),*busSchema=scene::findComponentSchema("astra.audio.bus");
+    if(!sourceSchema||!listenerSchema||!busSchema) return 1;
+    auto &graph=session.document();
+    const auto bus=graph.createEntity(graph.root(),editor::EditorEntityKind::Folder,"Música");
+    auto busValue=*graph.find(bus);const auto *busComponent=busValue.components.add(*busSchema->type);if(!busComponent) return 1;
+    const auto busInstance=busComponent->instanceId();if(!graph.applyEntityValues(bus,busValue)) return 1;
+    const auto listener=graph.createEntity(graph.root(),editor::EditorEntityKind::Folder,"Ouvinte principal");
+    auto listenerValue=*graph.find(listener);const auto *listenerComponent=listenerValue.components.add(*listenerSchema->type);if(!listenerComponent) return 1;
+    const auto listenerInstance=listenerComponent->instanceId();if(!graph.applyEntityValues(listener,listenerValue)) return 1;
+    const auto source=graph.createEntity(graph.root(),editor::EditorEntityKind::Folder,"Fonte sonora");
+    auto sourceValue=*graph.find(source);auto *sourceComponent=sourceValue.components.add(*sourceSchema->type);if(!sourceComponent) return 1;
+    const auto sourceInstance=sourceComponent->instanceId();
+    if(!sourceSchema->type->resourceBindings.front().write(*sourceComponent,0,clip)) return 1;
+    if(scene::setComponentProperty(sourceValue.components,sourceSchema->type->id,"bus",scene::ObjectReference{bus},sourceInstance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if((mode=="audio-source-space"||mode=="audio-source-cone")&&scene::setComponentProperty(sourceValue.components,sourceSchema->type->id,"dimension",u32{1},sourceInstance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if(!graph.applyEntityValues(source,sourceValue)) return 1;
+    selection=mode=="audio-bus"?bus:mode=="audio-listener"?listener:source;
+    state.expandedNative=mode=="audio-bus"?busInstance:mode=="audio-listener"?listenerInstance:sourceInstance;
+    document=graph;prefabPreviewAssets=session.assets();state.assetRegistry=&prefabPreviewAssets;
+    state.componentSelection=selection;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(mode=="audio-source-playback") state.componentGroup="Reprodução";
+    if(mode=="audio-source-space") state.componentGroup="Espaço";
+    if(mode=="audio-source-cone") state.componentGroup="Emissão";
+    if(mode=="audio-source-search") state.propertyQuery="volume";
+    if(mode=="audio-picker"||mode=="audio-picker-search") {
+      state.meshPicker=true;state.resourceInstance=sourceInstance;state.resourceProperty="clip";state.resourceSlot=0;
+      if(mode=="audio-picker-search") state.meshQuery="nenhum-clipe-com-este-nome";
+    }
+    if(mode=="audio-catalog") {state.addingComponent=true;state.componentQuery="Audio";}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("number-tween-")) {
+    const std::string mode=argv[4];const bool camera=mode=="number-tween-camera";
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,camera?"Lente interpolada":"Luz interpolada");auto value=*document.find(selection);
+    auto*component=value.components.add(camera?scene::Camera::descriptor:scene::Light::descriptor);const auto instance=component->instanceId();
+    if(!camera)static_cast<scene::Light*>(component)->intensity=0;
+    if(!document.applyEntityValues(selection,value))return 1;
+    runtime::GameWorld world;runtime::SceneNumberTweens tracks;u64 token=0;
+    if(!world.load(document)||tracks.create(world,{world.handle(selection),instance},camera?"vertical_fov":"intensity",camera?100.f:8.f,1,0,false,token)!=runtime::WorldStatus::Ok||!tracks.advance(world,.25,.25))return 1;
+    static_cast<runtime::SceneGraph&>(document)=world.graph();state.workspace=editor::EditorWorkspace::Play;state.playInspect=true;
+    state.componentSelection=selection;state.expandedNative=instance;state.componentGroup=camera?"Lente":"Emissão";
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+  }
+  if(argc>4 && (std::string(argv[4]).starts_with("character-ground")||std::string(argv[4]).starts_with("character-state"))) {
+    const std::string mode=argv[4];selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Personagem · chão");auto value=*document.find(selection);
+    auto*character=static_cast<scene::Character*>(value.components.add(scene::Character::descriptor));character->stepHeight=.3f;character->floorSnapLength=.2f;character->inheritPlatformHorizontal=mode=="character-state-carry";const auto instance=character->instanceId();if(!document.applyEntityValues(selection,value))return 1;
+    if(mode.starts_with("character-state")) {
+      const auto floor=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Piso");auto floorValue=*document.find(floor);floorValue.transform.position[1]=-.5f;
+      auto *body=static_cast<scene::PhysicsBody*>(floorValue.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;
+      auto *collider=static_cast<scene::Collider*>(floorValue.components.add(scene::Collider::descriptor));collider->halfX=20;collider->halfY=.5f;collider->halfZ=20;document.applyEntityValues(floor,floorValue);
+      if(!characterPreviewWorld.load(document)||!characterPreviewRuntime.start(characterPreviewWorld))return 1;
+      for(int i=0;i<120;++i)if(!characterPreviewRuntime.advance(1./60,characterPreviewWorld))return 1;
+      if(mode=="character-state-air"){characterPreviewRuntime.jumpCharacter(selection,&characterPreviewWorld);characterPreviewRuntime.advance(1./60,characterPreviewWorld);}
+      static_cast<runtime::SceneGraph&>(document)=characterPreviewWorld.graph();state.characterRuntime=&characterPreviewRuntime;state.characterWorld=&characterPreviewWorld;state.workspace=editor::EditorWorkspace::Play;state.playInspect=true;
+    }
+    state.componentSelection=selection;state.expandedNative=instance;state.componentGroup=mode=="character-ground-gravity"?"Locomoção":"Chão";
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("constant-force")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Propulsor físico");
+    auto value=*document.find(selection);
+    auto *body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));
+    body->motion=scene::BodyMotion::Dynamic;
+    const auto *schema=scene::findComponentSchema("astra.physics.constant_force");if(!schema) return 1;
+    auto *force=value.components.add(*schema->type);if(!force) return 1;
+    const auto instance=force->instanceId();
+    if(scene::setComponentProperty(value.components,schema->type->id,"force_y",12.f,instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if(!document.applyEntityValues(selection,value)) return 1;
+    state.componentSelection=selection;state.expandedNative=instance;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    if(std::string(argv[4])=="constant-force-local-torque") state.componentGroup="Torque local";
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("spring-")) {
+    const std::string mode=argv[4];
+    auto source=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Fonte · plataforma");
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Seguidor com mola");
+    auto value=*document.find(selection);
+    const auto *schema=scene::findComponentSchema(mode.starts_with("spring-rotation")?"astra.spring.rotation":mode.starts_with("spring-scale")?"astra.spring.scale":"astra.spring.position");
+    auto *c=value.components.add(*schema->type);auto instance=c->instanceId();
+    if(mode!="spring-missing"&&scene::setComponentProperty(value.components,schema->type->id,"target",scene::ObjectReference{source},instance)!=scene::ComponentPropertyStatus::Applied)return 1;
+    if(!document.applyEntityValues(selection,value))return 1;
+    state.componentSelection=selection;state.expandedNative=instance;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    if(mode.ends_with("response"))state.componentGroup="Resposta";
+    if(mode.ends_with("offset"))state.componentGroup="Ajustes";
+    if(mode=="spring-catalog"){state.addingComponent=true;state.componentQuery="Mola";}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("field-")) {
+    const std::string mode=argv[4];const scene::ComponentType *type=mode.starts_with("field-wind")?&scene::WindField::descriptor:mode.starts_with("field-drag")?&scene::DragField::descriptor:mode.starts_with("field-radial")?&scene::RadialField::descriptor:&scene::GravityField::descriptor;
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Volume físico local");auto value=*document.find(selection);auto *component=value.components.add(*type);auto instance=component->instanceId();auto *field=static_cast<scene::PhysicsFieldProperties*>(component);field->shape=mode.ends_with("sphere")?1:0;field->falloff=2;
+    if(!document.applyEntityValues(selection,value))return 1;
+    state.componentSelection=selection;state.expandedNative=instance;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.componentGroup=mode.ends_with("volume")||mode.ends_with("sphere")?"Volume":mode.ends_with("scope")?"Alcance":"Efeito";
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("field2d-")) {
+    const std::string mode=argv[4];const scene::ComponentType *type=mode.starts_with("field2d-wind")?&scene::WindField2D::descriptor:mode.starts_with("field2d-drag")?&scene::DragField2D::descriptor:mode.starts_with("field2d-radial")?&scene::RadialField2D::descriptor:&scene::GravityField2D::descriptor;
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Área física XY");auto value=*document.find(selection);auto *component=value.components.add(*type);auto instance=component->instanceId();auto *field=static_cast<scene::PhysicsFieldProperties*>(component);field->shape=mode.ends_with("circle")?1:0;field->falloff=2;
+    if(!document.applyEntityValues(selection,value))return 1;
+    state.componentSelection=selection;state.expandedNative=instance;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.componentGroup=mode.ends_with("volume")||mode.ends_with("circle")?"Volume":mode.ends_with("scope")?"Alcance":"Efeito";
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("body-simulation")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Corpo dinâmico");auto value=*document.find(selection);
+    auto *body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Dynamic;body->continuousCollision=true;body->freezeRotation[0]=true;
+    value.components.add(scene::Collider::descriptor);auto instance=body->instanceId();if(!document.applyEntityValues(selection,value))return 1;
+    state.componentSelection=selection;state.expandedNative=instance;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.componentGroup=std::string(argv[4]).ends_with("locks")?"Restrições":"Simulação";
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("constraint-")) {
+    const std::string mode=argv[4];
+    const auto source=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Fonte · plataforma móvel");
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Objeto restringido");
+    auto value=*document.find(selection);
+    const std::string_view id=mode.starts_with("constraint-parent")?"astra.constraint.parent":
+      mode.starts_with("constraint-look")?"astra.constraint.look_at":mode.starts_with("constraint-aim")?"astra.constraint.aim":"astra.constraint.position";
+    const auto *schema=scene::findComponentSchema(id);if(!schema) return 1;
+    auto *constraint=value.components.add(*schema->type);if(!constraint) return 1;
+    const auto instance=constraint->instanceId();
+    if(mode!="constraint-missing" && scene::setComponentProperty(value.components,id,"target",scene::ObjectReference{source},instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if(!document.applyEntityValues(selection,value)) return 1;
+    state.componentSelection=selection;state.expandedNative=instance;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    if(mode=="constraint-position-adjustments" || mode=="constraint-aim-adjustments") state.componentGroup="Ajustes";
+    if(mode=="constraint-parent-rotation") state.componentGroup="Rotação";
+    if(mode=="constraint-look-mira") state.componentGroup="Mira";
+    if(mode=="constraint-search") state.propertyQuery="axis";
+    if(mode=="constraint-catalog") {state.addingComponent=true;state.componentQuery="Constraint";}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("path-")) {
+    const std::string mode=argv[4];const auto pathEntity=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Curva · trilho de câmera");
+    auto value=*document.find(pathEntity);auto *path=static_cast<scene::Path*>(value.components.add(scene::Path::descriptor));if(!path)return 1;
+    const u64 pathInstance=path->instanceId();
+    const u32 count=mode=="path-limit"?128:mode=="path-empty"?0:5;
+    for(u32 n=0;n<count;++n){resources::CurvePoint3D point;point.position={float(n)*.6f,float(std::sin(n*.8f))*.5f,0};point.in={-.25f,0,0};point.out={.25f,0,0};u64 id;if(!path->insertPoint(0,point,id))return 1;}
+    const u64 selectedPoint=count?path->curve.points[count>1?1:0].id:0;
+    if(mode=="path-orientation"&&count>1)path->curve.points[1].rollDegrees=35;
+    if(!document.applyEntityValues(pathEntity,value))return 1;
+    selection=pathEntity;state.expandedNative=pathInstance;state.componentSelection=selection;state.pathInstance=pathInstance;state.pathPointId=selectedPoint;
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.pathEditorOpen=mode!="path-summary";state.pathTangents=mode=="path-tangents";state.pathOrientation=mode=="path-orientation";state.pathPointList=mode=="path-list"||mode=="path-limit";
+    if(mode=="path-tangents")state.pathStatus="";
+    if(mode.starts_with("path-follow")) {
+      const auto follower=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Seguir percurso");auto followValue=*document.find(follower);
+      auto *follow=static_cast<scene::PathFollow*>(followValue.components.add(scene::PathFollow::descriptor));if(!follow)return 1;
+      follow->target=mode=="path-follow-missing"?0:pathEntity;const auto followInstance=follow->instanceId();
+      if(!document.applyEntityValues(follower,followValue))return 1;
+      selection=follower;state.componentSelection=follower;state.expandedNative=followInstance;state.pathEditorOpen=false;
+      if(mode.find("execution")!=std::string::npos)state.componentGroup="Execução";
+      if(mode.find("orientation")!=std::string::npos)state.componentGroup="Orientação";
+      if(mode.ends_with("page2"))state.propertyPage=1;
+      if(mode.ends_with("page3"))state.propertyPage=2;
+      if(mode.ends_with("page4"))state.propertyPage=3;
+      if(mode.starts_with("path-follow-play")||mode=="path-follow-missing") {
+        runtime::GameWorld world;runtime::ScenePaths paths;if(!world.load(document))return 1;paths.advance(world,.5);
+        for(const auto &diagnostic:paths.diagnostics())if(diagnostic.object==follower){state.followStatus=runtime::ScenePaths::issueText(diagnostic.issue);state.followStatusWarning=true;}
+        double distance=0;if(state.followStatus.empty()&&paths.progress(world,follower,distance))state.followStatus="Distância mundial · "+std::to_string(distance)+" u";
+        static_cast<runtime::SceneGraph&>(document)=world.graph();state.workspace=editor::EditorWorkspace::Play;state.playInspect=true;
+      }
+    }
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("tween-")) {
+    const std::string mode=argv[4];
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Animação por destino");
+    auto value=*document.find(selection);const auto *schema=scene::findComponentSchema("astra.tween.transform");if(!schema) return 1;
+    const auto *component=value.components.add(*schema->type);if(!component) return 1;
+    const auto instance=component->instanceId();
+    if(scene::setComponentProperty(value.components,schema->type->id,"position_x",5.f,instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if(mode.starts_with("tween-play")&&scene::setComponentProperty(value.components,schema->type->id,"autoplay",false,instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if(!document.applyEntityValues(selection,value)) return 1;
+    state.componentSelection=selection;state.expandedNative=instance;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(mode=="tween-destination") state.componentGroup="Destino";
+    if(mode=="tween-repeat") state.componentGroup="Repetição";
+    if(mode=="tween-time") state.componentGroup="Tempo";
+    if(mode=="tween-search") state.propertyQuery="position";
+    if(mode=="tween-connection"||mode.starts_with("tween-play-connection")) {
+      const auto receiver=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Receptor da conclusão");document.setActive(receiver,false);auto receiverValue=*document.find(receiver);receiverValue.transform.position[0]=3;document.applyEntityValues(receiver,receiverValue);
+      auto candidate=*document.find(selection);auto*tween=static_cast<scene::TransformTween*>(candidate.components.editInstance(instance));tween->finishedAction=1;tween->finishedTarget=receiver;tween->duration=.1f;document.applyEntityValues(selection,candidate);state.componentGroup="Conexão";
+    }
+    if(mode.starts_with("tween-play")) {
+      auto &world=tweenPreviewWorld;auto &tweens=tweenPreviewRuntime;
+      if(!world.load(document)||!tweens.advance(world,0)) return 1;
+      if(mode=="tween-play-connection-missing") {
+        const auto *tween=static_cast<const scene::TransformTween*>(world.graph().find(selection)->components.findInstance(instance));
+        if(!tween||world.destroyObject(world.handle(static_cast<u32>(tween->finishedTarget)))!=runtime::WorldStatus::Ok)return 1;
+        world.flush();
+      }
+      if(!mode.starts_with("tween-play-idle")&&(!tweens.restart(world,selection,instance)||!tweens.advance(world,.25))) return 1;
+      if(mode=="tween-play-cancel"&&!tweens.cancel(world,selection,instance)) return 1;
+      if(mode=="tween-play-paused"){runtime::SceneTweens::State snapshot;if(tweens.command(world,{world.handle(selection),instance},3,snapshot)!=runtime::WorldStatus::Ok)return 1;}
+      const auto *runtimeState=tweens.state(selection,instance);if(!runtimeState) return 1;
+      state.tweenRuntime=&tweens;
+      static_cast<runtime::SceneGraph &>(document)=world.graph();
+      state.workspace=editor::EditorWorkspace::Play;state.playInspect=true;
+      if(mode.ends_with("page2")) state.propertyPage=1;
+    }
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("physics2d-")) {
+    const std::string mode=argv[4];
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Corpo XY");
+    auto value=*document.find(selection);
+    const auto *body=scene::findComponentSchema("astra.physics2d.body"),*collider=scene::findComponentSchema("astra.physics2d.collider");
+    if(!body||!collider) return 1;
+    const auto *bodyValue=value.components.add(*body->type);const auto *colliderValue=value.components.add(*collider->type);
+    if(!bodyValue||!colliderValue) return 1;
+    const bool inspectCollider=mode.starts_with("physics2d-collider");
+    auto instance=inspectCollider?colliderValue->instanceId():bodyValue->instanceId();
+    if(mode.starts_with("physics2d-joint")||mode=="physics2d-force") {
+      const auto id=mode=="physics2d-force"?"astra.physics2d.constant-force":"astra.physics2d.joint";
+      const auto *schema=scene::findComponentSchema(id);if(!schema) return 1;
+      const auto *component=value.components.add(*schema->type);if(!component) return 1;instance=component->instanceId();
+      if(mode=="physics2d-force") {
+        if(scene::setComponentProperty(value.components,id,"force_y",12.f,instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+      } else {
+        const auto connected=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Corpo conectado");
+        auto connectedValue=*document.find(connected);connectedValue.components.add(*body->type);connectedValue.components.add(*collider->type);
+        if(!document.applyEntityValues(connected,connectedValue)) return 1;
+        if(scene::setComponentProperty(value.components,id,"target",scene::ObjectReference{connected},instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+        const u32 kind=mode.find("distance")!=std::string::npos?3u:mode.find("prismatic")!=std::string::npos?2u:1u;
+        if(scene::setComponentProperty(value.components,id,"kind",kind,instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+        if(mode.find("motor")!=std::string::npos&&scene::setComponentProperty(value.components,id,"motor_enabled",true,instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+        if(mode.find("anchors")!=std::string::npos) state.componentGroup=schema->type->numbers.front().presentation.group;
+        if(mode.find("motor")!=std::string::npos) state.componentGroup="Ajustes";
+      }
+    }
+    if(mode=="physics2d-collider-capsule"&&scene::setComponentProperty(value.components,collider->type->id,"shape",u32{2},instance)!=scene::ComponentPropertyStatus::Applied) return 1;
+    if(!document.applyEntityValues(selection,value)) return 1;
+    state.componentSelection=selection;state.expandedNative=instance;state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(mode=="physics2d-body-movement") state.componentGroup="Movimento";
+    if(mode=="physics2d-collider-contact") state.componentGroup="Contato";
+    if(mode=="physics2d-search") state.propertyQuery="velocity";
+    if(mode=="physics2d-catalog") {state.addingComponent=true;state.componentQuery="2D";}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("component-surface")) {
+    const auto target=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Jogador");
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Camera,"Câmera do jogador");
+    auto value=*document.find(selection);
+    value.components.add(scene::Camera::descriptor);
+    auto *follow=static_cast<scene::CameraFollow *>(value.components.add(scene::CameraFollow::descriptor));
+    follow->target=target;const auto instance=follow->instanceId();
+    value.components.add(scene::Light::descriptor);
+    if(!document.applyEntityValues(selection,value)) return 1;
+    state.componentSelection=selection;state.expandedNative=instance;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.inspectorSurface=std::string(argv[4])=="component-surface-inspection"?
+      editor::EditorInspectorSurface::Inspection:editor::EditorInspectorSurface::Components;
+    if(std::string(argv[4])=="component-surface-scroll") state.componentOverviewScroll=100;
+    if(std::string(argv[4])=="component-surface-static") {
+      state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+      state.expandedNative=0;state.expandedComponent="astra.object";state.inspectorReferenceFlags=true;
+    }
+    if(std::string(argv[4]).starts_with("component-surface-lightmap")) {
+      auto meshValue=*document.find(selection);
+      const auto *render=meshValue.components.add(scene::MeshRenderer::descriptor);
+      if(!render||!document.applyEntityValues(selection,meshValue)) return 1;
+      state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+      state.expandedNative=render->instanceId();state.meshTab=2;
+      if(std::string(argv[4])=="component-surface-lightmap-page2") state.propertyPage=1;
+    }
+    if(std::string(argv[4])=="component-surface-catalog") {state.addingComponent=true;state.componentPreview=0;}
+  }
   if(argc>4 && std::string(argv[4]).starts_with("river")) {
     std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
     if(!renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials) || !map.import(document,draws,materials,false)) return 1;
@@ -508,9 +1166,33 @@ int main(int argc, char **argv) {
     state.focusedCollapsed=std::string(argv[4])=="focused-collapsed";
     state.focusedMenu=std::string(argv[4])=="focused-menu";
   }
+  if(argc>4 && std::string(argv[4]).starts_with("groups")) {
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Sentinela do portão");
+    auto value=*document.find(selection);
+    if(std::string(argv[4])!="groups-empty") {
+      value.groups.add("guardas");value.groups.add("recebe-dano");value.groups.add("objetivo-portao");
+      if(std::string(argv[4])=="groups-limit") for(u32 n=3;n<runtime::ObjectGroups::MaximumCount;++n)value.groups.add("grupo-"+std::to_string(n));
+      document.applyEntityValues(selection,value);
+    }
+    state.groupPicker=true;state.groupEntity=selection;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("project")) {
     state.workspace=editor::EditorWorkspace::Project;
     state.projectSection=std::string(argv[4])=="project-input"?editor::EditorProjectSection::Input:editor::EditorProjectSection::Layers;
+    if(std::string(argv[4]).starts_with("project-input-")) {
+      state.projectSection=editor::EditorProjectSection::Input;state.inputTab=1;state.inputActionIndex=2;
+      auto map=document.inputActions();auto action=map.actions()[2];action.bindings[0].source=runtime::InputSource::Key;action.bindings[0].code=62;
+      if(std::string(argv[4])=="project-input-response") {
+        state.inputTab=2;action.interaction=runtime::InputInteraction::Hold;action.duration=.5f;
+      }
+      if(std::string(argv[4]).starts_with("project-input-mouse")){action.bindings[0].source=runtime::InputSource::MouseButton;action.bindings[0].code=1;}
+      if(!map.replace(action.id,action) || !document.setInputActions(map)) return 1;
+      if(std::string(argv[4])=="project-input-capturing" || std::string(argv[4])=="project-input-mouse-capturing") {
+        state.inputCapturing=true;state.inputCapturePrompt="Pressione uma tecla";
+        if(std::string(argv[4])=="project-input-mouse-capturing")state.inputCapturePrompt="Clique um botão do mouse";
+        state.inputCaptureFeedback="Aguardando nova pressão";
+      }
+    }
   }
   if(argc>4 && std::string(argv[4])=="create-physics") {
     state.creationMenu=true;state.creationCategory=3;
@@ -526,7 +1208,73 @@ int main(int argc, char **argv) {
     if(std::string(argv[4])=="tag-picker") state.tagPicker=true;
     else {state.workspace=editor::EditorWorkspace::Project;state.projectSection=editor::EditorProjectSection::Tags;}
   }
-  if(argc>4 && std::string(argv[4]).starts_with("prefab-")) {
+  if(argc>4 && std::string(argv[4]).starts_with("mechanisms")) {
+    ae::test::MechanismsFixture fixture;if(!fixture.create())return 1;document=fixture.document;
+    const std::string mode=argv[4];selection=fixture.bodies[mode=="mechanisms-spring"?4:3];
+    const auto *joint=document.find(selection)->components.find(scene::Joint::descriptor);
+    state.componentSelection=selection;state.expandedNative=joint->instanceId();
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    state.componentGroup=mode=="mechanisms-spring"?"Motor":mode=="mechanisms-frame"?"Eixos":"Translação X";
+    if(mode=="mechanisms-focused") {
+      state.focusedInspectors.push_back({selection,joint->instanceId(),editor::EditorScreenState::FocusedAsset::None,{}, {}});state.focusedActive=1;
+      state.compactPanel=editor::EditorScreenState::CompactPanel::Viewport;
+    }
+    if(mode=="mechanisms-create") {state.creationMenu=true;state.creationCategory=3;editor::findCreationRecipe("physics.joint_six_dof",&state.creationSelection);}
+  }
+  if(argc>4 && std::string(argv[4])=="collection-overrides") {
+    namespace fs=std::filesystem;
+    const auto path=fs::temp_directory_path()/("astra-collection-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    if(!fs::create_directory(path)) return 1;
+    struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{path};
+    editor::EditorSession session;if(!session.setProjectDirectory(path.string().c_str())) return 1;
+    selection=session.document().createEntity(session.document().root(),editor::EditorEntityKind::Folder,"Sequência de animação");
+    auto value=*session.document().find(selection);
+    auto *animation=static_cast<scene::Animation*>(value.components.add(scene::Animation::descriptor));
+    animation->appendClip();const auto second=animation->appendClip();
+    if(!session.document().applyEntityValues(selection,value)) return 1;
+    std::string error;if(!session.createPrefab(selection,error).valid()) {std::fprintf(stderr,"%s\n",error.c_str());return 1;}
+    value=*session.document().find(selection);
+    animation=static_cast<scene::Animation*>(value.components.edit(scene::Animation::descriptor));
+    animation->moveClip(second,0);session.document().applyEntityValues(selection,value);
+    if(!session.inspectPrefabOverrides(selection,state.prefabOverrides,error)) return 1;
+    document=session.document();history=session.history();prefabPreviewAssets=session.assets();state.assetRegistry=&prefabPreviewAssets;
+    state.prefabOverridesOpen=true;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("prefab-structure")) {
+    namespace fs=std::filesystem;
+    const auto path=fs::temp_directory_path()/("astra-prefab-structure-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    if(!fs::create_directory(path))return 1;
+    struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}}cleanup{path};
+    editor::EditorSession session;if(!session.setProjectDirectory(path.string().c_str()))return 1;
+    selection=session.document().createEntity(session.document().root(),editor::EditorEntityKind::Folder,"Receptor temporizado");
+    auto value=*session.document().find(selection);value.components.add(scene::Timer::descriptor);
+    const auto order=value.components.add(scene::Path::descriptor)->instanceId();session.document().applyEntityValues(selection,value);
+    std::string error;const auto asset=session.createPrefab(selection,error);if(!asset.valid())return 1;
+    if(!session.instantiatePrefab(asset,session.document().root(),error))return 1;
+    value=*session.document().find(selection);u64 added=0;
+    if(std::string(argv[4])=="prefab-structure-collection") {
+      auto *path=static_cast<scene::Path*>(value.components.editInstance(order));resources::CurvePoint3D p;u64 point=0;
+      if(!path->insertPoint(0,p,point))return 1;
+      p.position[0]=5;
+      if(!path->insertPoint(0,p,point))return 1;
+    } else {
+      auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));timer->intervalSeconds=3;
+      added=timer->instanceId();value.components.moveInstance(order,0);
+    }
+    session.document().applyEntityValues(selection,value);
+    if(!session.inspectPrefabOverrides(selection,state.prefabOverrides,error))return 1;
+    state.propertyPage=std::numeric_limits<u32>::max();
+    for(u32 i=0;i<state.prefabOverrides.rows.size();++i) {
+      const auto &row=state.prefabOverrides.rows[i];
+      if((std::string(argv[4])=="prefab-structure-add" && row.component==added) ||
+         (std::string(argv[4])=="prefab-structure-order" && row.kind==editor::PrefabOverrideKind::ComponentOrder) ||
+         (std::string(argv[4])=="prefab-structure-collection" && row.component==order))state.propertyPage=i;
+    }
+    document=session.document();history=session.history();prefabPreviewAssets=session.assets();state.assetRegistry=&prefabPreviewAssets;
+    state.prefabOverridesOpen=true;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("prefab-") && !std::string(argv[4]).starts_with("prefab-structure")) {
     // Exercise the actual source/instance comparison, not fabricated UI rows.
     namespace fs=std::filesystem;
     const auto path=fs::temp_directory_path()/("astra-prefab-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -538,11 +1286,19 @@ int main(int argc, char **argv) {
     auto value=*session.document().find(selection);
     auto *follow=static_cast<scene::CameraFollow*>(value.components.add(scene::CameraFollow::descriptor));
     follow->dampingSeconds=.2f;session.document().applyEntityValues(selection,value);
-    std::string error;if(!session.createPrefab(selection,error).valid()) {std::fprintf(stderr,"%s\n",error.c_str());return 1;}
+    std::string error;const auto prefabAsset=session.createPrefab(selection,error);if(!prefabAsset.valid()) {std::fprintf(stderr,"%s\n",error.c_str());return 1;}
     value=*session.document().find(selection);
     follow=static_cast<scene::CameraFollow*>(value.components.edit(scene::CameraFollow::descriptor));
     follow->dampingSeconds=2;follow->offset[0]=9;value.visible=false;
     session.document().applyEntityValues(selection,value);
+    if(std::string(argv[4]).starts_with("prefab-merge")) {
+      runtime::Prefab source;if(!session.loadPrefab(prefabAsset,source,error)) return 1;
+      auto graph=source.graph();auto value=*graph.find(selection);
+      auto *follow=static_cast<scene::CameraFollow*>(value.components.edit(scene::CameraFollow::descriptor));
+      follow->dampingSeconds=.6f;follow->offset[1]=6;graph.applyEntityValues(selection,value);
+      if(!source.capture(graph,selection,prefabAsset,error) ||
+         !editor::EditorImportTransaction::writeText(path/editor::EditorImportTransaction::fromUtf8(session.assets().find(prefabAsset)->path),source.write())) return 1;
+    }
     if(!session.inspectPrefabOverrides(selection,state.prefabOverrides,error)) {std::fprintf(stderr,"%s\n",error.c_str());return 1;}
     document=session.document();history=session.history();state.prefabOverridesOpen=std::string(argv[4])!="prefab-inspector";
     prefabPreviewAssets=session.assets();state.assetRegistry=&prefabPreviewAssets;
@@ -552,6 +1308,12 @@ int main(int argc, char **argv) {
     }
     state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
     if(std::string(argv[4])=="prefab-overrides-stale") document.setName(selection,"Alterado depois da comparação");
+    if(std::string(argv[4]).starts_with("prefab-merge")) {
+      if(std::string(argv[4])=="prefab-merge-inherited") {
+        for(u32 i=0;i<state.prefabOverrides.rows.size();++i)
+          if(state.prefabOverrides.rows[i].origin==editor::PrefabOverrideOrigin::Inherited) {state.propertyPage=i;break;}
+      } else state.propertyPage=std::numeric_limits<u32>::max();
+    }
   }
   state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
   state.document = &document;
@@ -573,16 +1335,71 @@ int main(int argc, char **argv) {
   if(argc>4 && std::string(argv[4])=="lighting") {
     state.selection=document.root();state.workspace=editor::EditorWorkspace::Lighting;
   }
+  if(argc>4 && std::string(argv[4]).starts_with("play-time")) {
+    state.workspace=editor::EditorWorkspace::Play;
+    state.playTimeScale=std::string(argv[4])=="play-time-zero"?0:.5f;
+    state.playPaused=std::string(argv[4])=="play-time-step";
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("timer-runtime")) {
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Timer da porta");auto value=*document.find(id);
+    auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));timer->autoStart=false;timer->intervalSeconds=2;const auto instance=timer->instanceId();document.applyEntityValues(id,value);
+    if(!timerPreviewWorld.load(document))return 1;
+    runtime::SceneTimers::State snapshot;
+    if(timerPreviewRuntime.command(timerPreviewWorld,{timerPreviewWorld.handle(id),instance},1,0,snapshot)!=runtime::WorldStatus::Ok)return 1;
+    if(!timerPreviewRuntime.advance(timerPreviewWorld,.2,[](runtime::ObjectId,u64,u32){return true;}))return 1;
+    if(std::string(argv[4])=="timer-runtime-paused")timerPreviewRuntime.command(timerPreviewWorld,{timerPreviewWorld.handle(id),instance},3,0,snapshot);
+    state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Disparo";state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.workspace=editor::EditorWorkspace::Play;state.playInspect=true;state.timerRuntime=&timerPreviewRuntime;
+  }
+  if(argc>4 && (std::string(argv[4])=="timer-unscaled" || std::string(argv[4])=="timer-connection")) {
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Timer de interface");
+    auto value=*document.find(id);auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+    timer->ignoreTimeScale=true;timer->intervalSeconds=.5f;const auto instance=timer->instanceId();
+    const bool connection=std::string(argv[4])=="timer-connection";
+    if(connection) {timer->elapsedAction=1;timer->elapsedTarget=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Portão");}
+    if(!document.applyEntityValues(id,value)) return 1;
+    state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup=connection?"Conexão":"Disparo";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;
+    state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("physics-connection")) {
+    const auto receiver=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Luz do portão");
+    auto lamp=*document.find(receiver);lamp.active=false;lamp.transform.position[0]=2;lamp.components.add(scene::Light::descriptor);document.applyEntityValues(receiver,lamp);
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Sensor do portão");auto value=*document.find(id);
+    auto *body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;body->sensor=true;
+    value.components.add(scene::Collider::descriptor);
+    auto *connection=static_cast<scene::PhysicsEventConnection3D*>(value.components.add(scene::PhysicsEventConnection3D::descriptor));connection->action=1;connection->receiver=receiver;const auto instance=connection->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Conexão";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(std::string(argv[4])=="physics-connection-focused") {state.focusedInspectors.push_back({id,instance,editor::EditorScreenState::FocusedAsset::None,{},{}});state.focusedActive=1;}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("physics2d-connection")) {
+    const auto receiver=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Luz do portão");
+    auto lamp=*document.find(receiver);lamp.active=false;lamp.transform.position[0]=2;lamp.components.add(scene::Light::descriptor);document.applyEntityValues(receiver,lamp);
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Sensor do portão");auto value=*document.find(id);
+    auto *body=static_cast<scene::Body2D*>(value.components.add(scene::Body2D::descriptor));body->motion=scene::Body2DMotion::Static;
+    static_cast<scene::Collider2D*>(value.components.add(scene::Collider2D::descriptor))->sensor=true;
+    auto *connection=static_cast<scene::PhysicsEventConnection2D*>(value.components.add(scene::PhysicsEventConnection2D::descriptor));connection->action=1;connection->receiver=receiver;const auto instance=connection->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Conexão";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(std::string(argv[4])=="physics2d-connection-focused") {state.focusedInspectors.push_back({id,instance,editor::EditorScreenState::FocusedAsset::None,{},{}});state.focusedActive=1;}
+  }
   state.canUndo = history.canUndo();
   state.canRedo = history.canRedo();
 
   // Uma camera de editor olhando o objeto selecionado de cima e de lado. Sem
   // ela nao ha grade nem gizmo, e a previa mostraria a interface sobre o vazio.
   editor::EditorViewport view{};
-  const float eye[3] = {6.0f, 4.5f, -9.0f};
+  const bool pathPreview=argc>4&&std::string(argv[4]).starts_with("path-");
+  const bool fieldPreview=argc>4&&std::string(argv[4]).starts_with("field-");
+  const bool field2DPreview=argc>4&&std::string(argv[4]).starts_with("field2d-");
+  const bool characterPreview=argc>4&&(std::string(argv[4]).starts_with("character-ground")||std::string(argv[4]).starts_with("character-state"));
+  const float eye[3] = {field2DPreview||fieldPreview||characterPreview?0.f:pathPreview?1.2f:6.0f,field2DPreview?0.f:fieldPreview?5.f:characterPreview||pathPreview?1.f:4.5f,field2DPreview||fieldPreview?-16.f:characterPreview?-5.f:pathPreview?-4.f:-9.f};
   renderer::PerspectiveVisibilitySettings visibility{};
   view.frustum = renderer::buildPerspectiveFrustum(
-      eye, 0.35f, 0.42f, static_cast<float>(width) / static_cast<float>(height), visibility);
+      eye, field2DPreview||fieldPreview||characterPreview||pathPreview?0.f:.35f,field2DPreview?0.f:fieldPreview?.3f:characterPreview?0.f:pathPreview?.2f:.42f, static_cast<float>(width) / static_cast<float>(height), visibility);
   state.view = &view;
 
   ui::UiDrawList list;
@@ -595,6 +1412,7 @@ int main(int argc, char **argv) {
   editor::EditorScreenLayout layout =
       editor::buildEditorScreen(state, ui::defaultTheme(), list, router);
   view.rect = layout.viewport;
+  if(pathPreview||characterPreview||fieldPreview||field2DPreview)view.frustum=renderer::buildPerspectiveFrustum(eye,0,field2DPreview?0.f:fieldPreview?.3f:characterPreview?0.f:.2f,layout.viewport.width/layout.viewport.height,visibility);
   list.begin(state.surface, font.metrics(ui::UiFontWeight::Regular));
   router.beginFrame();
   layout = editor::buildEditorScreen(state, ui::defaultTheme(), list, router);

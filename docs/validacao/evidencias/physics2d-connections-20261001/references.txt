@@ -1,0 +1,3 @@
+[ok] every_registered_component_has_family_icon_and_versioned_reference
+
+1/1 testes passaram

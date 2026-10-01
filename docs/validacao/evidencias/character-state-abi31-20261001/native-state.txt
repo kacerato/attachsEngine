@@ -1,0 +1,4 @@
+[ok] character_state_measures_resolved_displacement_and_support_lifecycle
+[ok] character_state_abi_before_start_ground_jump_and_safe_after_stop
+
+2/2 testes passaram

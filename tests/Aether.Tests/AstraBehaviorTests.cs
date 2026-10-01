@@ -52,6 +52,20 @@ public static class AstraBehaviorTests
         Assert.Equal("acceptance.tags.driver", compiled.Types.Single().Id);
     }
 
+    [Test]
+    public static void InputTimeGroupsAndTimeoutFixtures_CompileAgainstThePublishedSdk()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while(root is not null && !File.Exists(Path.Combine(root.FullName,"tests","fixtures","events","TimerConnectionProbe.cs"))) root=root.Parent;
+        Assert.True(root is not null);
+        using var project=new Project(File.ReadAllText(Path.Combine(root!.FullName,"tests","fixtures","events","TimerConnectionProbe.cs")));
+        foreach(var path in new[]{"time/TimeProbe.cs","input/InputCaptureProbe.cs","input/MouseProbe.cs","input/InputProfileProbe.cs","input/InputRuntimeCaptureProbe.cs","groups/GroupsProbe.cs","events/PhysicsConnectionProbe.cs","events/Physics2DConnectionProbe.cs","time/TimerControlProbe.cs","time/TweenControlProbe.cs","events/TweenConnectionProbe.cs","time/NumberTweenProbe.cs","physics/CharacterGroundProbe.cs","physics/CharacterRebuildProbe.cs","physics/CharacterStateProbe.cs","physics/CharacterPlatformProbe.cs","physics/CharacterPlatformCarryProbe.cs"})
+            File.Copy(Path.Combine(root.FullName,"tests","fixtures",path),Path.Combine(project.Root,Path.GetFileName(path)));
+        var compiled=project.Compile();
+        Assert.Equal(18,compiled.Types.Length);
+        Assert.True(compiled.Types.Any(t=>t.Id=="acceptance.timer.connection"));
+    }
+
     private sealed class Project : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "astra-behavior-" + Guid.NewGuid().ToString("N"));
@@ -562,8 +576,12 @@ public static class AstraBehaviorTests
         public sealed class Jump : Behavior
         {
             [PropertyId("height")] public AnimationCurve Height = new();
-            public override void Start() =>
+            public override void Start()
+            {
                 Scene.Log(ObjectId, $"{Height.Evaluate(0.5f):0.00}|{Height.Evaluate(1.5f):0.00}|{Height.Evaluate(2.5f):0.00}");
+                Height.Keys[1].Value = 4;
+                Scene.Log(ObjectId, $"edit:{Height.Evaluate(0.5f):0.00}");
+            }
         }
         """;
 
@@ -586,7 +604,7 @@ public static class AstraBehaviorTests
                 }
             })
         })]);
-        Assert.Equal("1.00|1.00|1.00", string.Join(' ', scene.Events), "linear no meio e Loop depois do fim");
+        Assert.Equal("1.00|1.00|1.00 edit:2.00", string.Join(' ', scene.Events), "serialized field evaluates and subsequent script edits affect Linear");
     }
     private const string LifecycleSource = """
         using Astra;

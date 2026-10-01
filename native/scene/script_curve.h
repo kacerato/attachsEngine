@@ -15,6 +15,7 @@
 #include <cmath>
 #include <iomanip>
 #include <locale>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -40,7 +41,7 @@ struct ScriptCurve {
     std::stable_sort(keys.begin(), keys.end(), [](const CurveKey &a, const CurveKey &b) { return a.time < b.time; });
   }
   bool valid() const {
-    if (keys.size() > kMaximumKeys) return false;
+    if (keys.size() > kMaximumKeys || static_cast<u32>(pre)>2 || static_cast<u32>(post)>2) return false;
     for (usize i = 0; i < keys.size(); ++i) {
       const auto &k = keys[i];
       if (!std::isfinite(k.time) || !std::isfinite(k.value) || !std::isfinite(k.in) || !std::isfinite(k.out)) return false;
@@ -49,37 +50,29 @@ struct ScriptCurve {
     }
     return true;
   }
-  // Unity AnimationUtility: Auto/ClampedAuto/Linear são recalculadas sempre que
-  // a curva muda; Free e Constant guardam o que o autor pôs.
+  // Astra recalcula Auto/ClampedAuto/Linear a partir das chaves atuais.
+  // Auto difere do modo legado Unity, que exige reseleção após editar a curva.
+  // Free e Constant preservam a intenção explícita do autor.
+  double tangent(usize i,bool incoming) const {
+    const auto &k=keys[i];const auto mode=incoming?k.left:k.right;
+    const auto *previous=i?&keys[i-1]:nullptr,*next=i+1<keys.size()?&keys[i+1]:nullptr;
+    const double before=previous?(double(k.value)-previous->value)/(double(k.time)-previous->time):0;
+    const double after=next?(double(next->value)-k.value)/(double(next->time)-k.time):0;
+    const double smooth=previous&&next?(double(next->value)-previous->value)/(double(next->time)-previous->time):0;
+    if(mode==CurveTangentMode::Linear)return incoming?before:after;
+    if(mode==CurveTangentMode::Auto)return smooth;
+    if(mode==CurveTangentMode::ClampedAuto)
+      return before*after>0?std::copysign(std::min(std::abs(smooth),3*std::min(std::abs(before),std::abs(after))),smooth):0;
+    if(!incoming && !k.broken && k.left==CurveTangentMode::Free && k.right==CurveTangentMode::Free)return k.in;
+    return incoming?k.in:k.out;
+  }
   void updateTangents() {
-    const usize n = keys.size();
-    for (usize i = 0; i < n; ++i) {
-      auto &k = keys[i];
-      const CurveKey *previous = i ? &keys[i - 1] : nullptr, *next = i + 1 < n ? &keys[i + 1] : nullptr;
-      const float toPrevious = previous ? (k.value - previous->value) / std::max(1e-6f, k.time - previous->time) : 0;
-      const float toNext = next ? (next->value - k.value) / std::max(1e-6f, next->time - k.time) : 0;
-      float smooth = 0;
-      if (previous && next) smooth = (next->value - previous->value) / std::max(1e-6f, next->time - previous->time);
-      // ClampedAuto não passa do valor dos vizinhos: extremo local fica plano
-      // e a inclinação é limitada para a Hermite não sobrar (Fritsch–Carlson).
-      float clamped = 0;
-      if (previous && next && toPrevious * toNext > 0) {
-        clamped = smooth;
-        const float limit = 3.f * std::min(std::abs(toPrevious), std::abs(toNext));
-        if (std::abs(clamped) > limit) clamped = std::copysign(limit, clamped);
-      }
-      const auto side = [&](CurveTangentMode mode, bool incoming, float current) {
-        switch (mode) {
-          case CurveTangentMode::Auto: return smooth;
-          case CurveTangentMode::ClampedAuto: return clamped;
-          case CurveTangentMode::Linear: return incoming ? toPrevious : toNext;
-          default: return current;
-        }
-      };
-      k.in = side(k.left, true, k.in);
-      k.out = side(k.right, false, k.out);
-      // Lados alinhados (não quebrada) com modo livre: a saída acompanha a entrada.
-      if (!k.broken && k.left == CurveTangentMode::Free && k.right == CurveTangentMode::Free) k.out = k.in;
+    if(!valid())return;
+    const double limit=std::numeric_limits<float>::max();
+    for(usize i=0;i<keys.size();++i) {
+      const double incoming=tangent(i,true),outgoing=tangent(i,false);
+      keys[i].in=static_cast<float>(std::clamp(incoming,-limit,limit));
+      keys[i].out=static_cast<float>(std::clamp(outgoing,-limit,limit));
     }
   }
 };
@@ -111,7 +104,7 @@ inline bool parseScriptCurve(std::string_view text, ScriptCurve &out) {
 inline std::string scriptCurveValue(const ScriptCurve &curve) {
   std::ostringstream out;
   out.imbue(std::locale::classic());
-  out << std::setprecision(7) << static_cast<u32>(curve.pre) << ' ' << static_cast<u32>(curve.post) << ' ' << curve.keys.size();
+  out << std::setprecision(std::numeric_limits<float>::max_digits10) << static_cast<u32>(curve.pre) << ' ' << static_cast<u32>(curve.post) << ' ' << curve.keys.size();
   for (const auto &k : curve.keys)
     out << ' ' << k.time << ' ' << k.value << ' ' << k.in << ' ' << k.out << ' ' << static_cast<u32>(k.left) << ' '
         << static_cast<u32>(k.right) << ' ' << (k.broken ? 1 : 0);
@@ -119,31 +112,38 @@ inline std::string scriptCurveValue(const ScriptCurve &curve) {
 }
 
 // Unity AnimationCurve.Evaluate. Curva vazia vale 0; uma chave, o valor dela.
-inline float evaluateScriptCurve(const ScriptCurve &curve, float time) {
+inline bool tryEvaluateScriptCurve(const ScriptCurve &curve, float time,float &result) {
+  if(!curve.valid() || !std::isfinite(time))return false;
   const auto &keys = curve.keys;
-  if (keys.empty()) return 0;
-  if (keys.size() == 1) return keys[0].value;
-  const float start = keys.front().time, end = keys.back().time, length = end - start;
-  if (time < start || time > end) {
-    const auto mode = time < start ? curve.pre : curve.post;
-    if (mode == CurveWrapMode::Clamp || length <= 0) time = std::clamp(time, start, end);
+  if(keys.empty()){result=0;return true;}
+  if(keys.size()==1){result=keys[0].value;return true;}
+  double sample=time;
+  const double start = keys.front().time, end = keys.back().time, length = end - start;
+  if (sample < start || sample > end) {
+    const auto mode = sample < start ? curve.pre : curve.post;
+    if (mode == CurveWrapMode::Clamp) sample = std::clamp(sample, start, end);
     else {
-      float local = std::fmod(time - start, 2 * length);
+      double local = std::fmod(sample - start, 2 * length);
       if (local < 0) local += 2 * length;
       if (mode == CurveWrapMode::Loop) local = std::fmod(local, length);
       else if (local > length) local = 2 * length - local;
-      time = start + local;
+      sample = start + local;
     }
   }
   usize i = 1;
-  while (i < keys.size() - 1 && keys[i].time < time) ++i;
+  while (i < keys.size() - 1 && keys[i].time < sample) ++i;
   const auto &a = keys[i - 1], &b = keys[i];
-  if (a.right == CurveTangentMode::Constant || b.left == CurveTangentMode::Constant) return time >= b.time ? b.value : a.value;
-  const float dt = b.time - a.time;
-  if (dt <= 0) return b.value;
-  const float s = (time - a.time) / dt, s2 = s * s, s3 = s2 * s;
-  const float h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
-  return h00 * a.value + h10 * dt * a.out + h01 * b.value + h11 * dt * b.in;
+  if(a.right==CurveTangentMode::Constant || b.left==CurveTangentMode::Constant){result=sample>=b.time?b.value:a.value;return true;}
+  const double dt = double(b.time) - a.time;
+  const double s = (sample - a.time) / dt, s2 = s * s, s3 = s2 * s;
+  const double h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+  const double value=h00*a.value+h10*dt*curve.tangent(i-1,false)+h01*b.value+h11*dt*curve.tangent(i,true);
+  const double limit=std::numeric_limits<float>::max();
+  result=static_cast<float>(std::clamp(value,-limit,limit));return true;
+}
+inline float evaluateScriptCurve(const ScriptCurve &curve,float time) {
+  float result=std::numeric_limits<float>::quiet_NaN();
+  tryEvaluateScriptCurve(curve,time,result);return result;
 }
 
 // Presets de fábrica (Unity: "Add Factory Presets To Current Library").

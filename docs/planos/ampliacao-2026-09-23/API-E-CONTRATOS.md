@@ -2,6 +2,8 @@
 
 ## Modelo público proposto
 
+**Avanço em 01/10:** Path e Animation declaram identidade, ordem e fronteira de alocação pelo contrato comum `ComponentType.collections`. Presets e Apply seletivo de prefab recusam endereços posicionais incompatíveis; reversão em lote valida o candidato completo e registra um Undo. Isso não implementa merge por ElementId nem operações estruturais genéricas. [Implementação e evidências](../CONTRATOS-COLECOES-2026-10-01.md). A [matriz gerada](../../componentes/MATRIZ-PROPRIEDADES.md) reúne contagem do registro, fachadas, criação, dependências, referência oficial, consumidor e propriedades; não substitui os aceites de runtime e aparelho.
+
 Preservar os objetos e componentes Astra. A API de alto nível deve oferecer descoberta, leitura, escrita e operações com tipos C# coerentes, enquanto a representação nativa conserva IDs persistentes e armazenamento apropriado. A organização inspirada em nodes serve à autoria e às composições, sem acrescentar uma SceneTree Godot concorrente ao SceneGraph Astra.
 
 | Conceito | Contrato observado | Ampliação proposta | Aceite |

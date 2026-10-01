@@ -41,6 +41,39 @@ include CMakeFiles/rules.ninja
 
 cmake_ninja_workdir = C$:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/
 # =============================================================================
+# Object build statements for STATIC_LIBRARY target aether_audio_backend
+
+
+#############################################
+# Order-only phony target for aether_audio_backend
+
+build cmake_object_order_depends_target_aether_audio_backend: phony || CMakeFiles/aether_audio_backend.dir
+
+build CMakeFiles/aether_audio_backend.dir/third_party/miniaudio/miniaudio.c.o: C_COMPILER__aether_audio_backend_Debug C$:/Users/donod/Downloads/atchengine/native/third_party/miniaudio/miniaudio.c || cmake_object_order_depends_target_aether_audio_backend
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_audio_backend.dir\third_party\miniaudio\miniaudio.c.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -fno-limit-debug-info  -fPIC
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_audio_backend.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_audio_backend.dir\third_party\miniaudio
+
+
+# =============================================================================
+# Link build statements for STATIC_LIBRARY target aether_audio_backend
+
+
+#############################################
+# Link the static library libaether_audio_backend.a
+
+build libaether_audio_backend.a: C_STATIC_LIBRARY_LINKER__aether_audio_backend_Debug CMakeFiles/aether_audio_backend.dir/third_party/miniaudio/miniaudio.c.o
+  LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -fno-limit-debug-info
+  OBJECT_DIR = CMakeFiles\aether_audio_backend.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_FILE = libaether_audio_backend.a
+  TARGET_PDB = aether_audio_backend.a.dbg
+
+# =============================================================================
 # Object build statements for STATIC_LIBRARY target aether_codecs
 
 
@@ -1243,181 +1276,189 @@ build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_Debug CMa
 #############################################
 # Order-only phony target for aether_assets
 
-build cmake_object_order_depends_target_aether_assets: phony || cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph
+build cmake_object_order_depends_target_aether_assets: phony || cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_audio_backend cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph
 
 build CMakeFiles/aether_assets.dir/resources/asset_registry.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/asset_registry.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\asset_registry.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/json_reader.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/json_reader.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\json_reader.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/gltf_import.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/gltf_import.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_import.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/texture_compression.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/texture_compression.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\texture_compression.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/skeletal_animation.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/skeletal_animation.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\skeletal_animation.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/import_node_map.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/import_node_map.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_node_map.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/material_asset.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/material_asset.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\material_asset.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/environment_profile.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/environment_profile.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\environment_profile.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/environment_map_asset.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/environment_map_asset.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\environment_map_asset.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/image_decode.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/image_decode.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\image_decode.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/gltf_codecs.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/gltf_codecs.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_codecs.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/gltf_package.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/gltf_package.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_package.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/gltf_folder_source.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/gltf_folder_source.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_folder_source.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/import_cache.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/import_cache.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_cache.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/import_report.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/import_report.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_report.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/texture_budget.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/texture_budget.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\texture_budget.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/import_profile.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/import_profile.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_profile.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/mesh_derived.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/mesh_derived.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\mesh_derived.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/mesh_lod_build.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/mesh_lod_build.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\mesh_lod_build.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/texture_profile.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/texture_profile.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\texture_profile.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/texture_asset.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/texture_asset.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\texture_asset.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/audio_clip.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/audio_clip.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\audio_clip.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
 build CMakeFiles/aether_assets.dir/resources/glb_images.cpp.o: CXX_COMPILER__aether_assets_Debug C$:/Users/donod/Downloads/atchengine/native/resources/glb_images.cpp || cmake_object_order_depends_target_aether_assets
-  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0 -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_assets.dir\resources\glb_images.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/astc-encoder -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
 
@@ -1429,7 +1470,7 @@ build CMakeFiles/aether_assets.dir/resources/glb_images.cpp.o: CXX_COMPILER__aet
 #############################################
 # Link the static library libaether_assets.a
 
-build libaether_assets.a: CXX_STATIC_LIBRARY_LINKER__aether_assets_Debug CMakeFiles/aether_assets.dir/resources/asset_registry.cpp.o CMakeFiles/aether_assets.dir/resources/json_reader.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_import.cpp.o CMakeFiles/aether_assets.dir/resources/texture_compression.cpp.o CMakeFiles/aether_assets.dir/resources/skeletal_animation.cpp.o CMakeFiles/aether_assets.dir/resources/import_node_map.cpp.o CMakeFiles/aether_assets.dir/resources/material_asset.cpp.o CMakeFiles/aether_assets.dir/resources/environment_profile.cpp.o CMakeFiles/aether_assets.dir/resources/environment_map_asset.cpp.o CMakeFiles/aether_assets.dir/resources/image_decode.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_codecs.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_package.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_folder_source.cpp.o CMakeFiles/aether_assets.dir/resources/import_cache.cpp.o CMakeFiles/aether_assets.dir/resources/import_report.cpp.o CMakeFiles/aether_assets.dir/resources/texture_budget.cpp.o CMakeFiles/aether_assets.dir/resources/import_profile.cpp.o CMakeFiles/aether_assets.dir/resources/mesh_derived.cpp.o CMakeFiles/aether_assets.dir/resources/mesh_lod_build.cpp.o CMakeFiles/aether_assets.dir/resources/texture_profile.cpp.o CMakeFiles/aether_assets.dir/resources/texture_asset.cpp.o CMakeFiles/aether_assets.dir/resources/glb_images.cpp.o || libaether_astcenc.a libaether_codecs.a libaether_core.a libaether_renderer.a libaether_rendergraph.a
+build libaether_assets.a: CXX_STATIC_LIBRARY_LINKER__aether_assets_Debug CMakeFiles/aether_assets.dir/resources/asset_registry.cpp.o CMakeFiles/aether_assets.dir/resources/json_reader.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_import.cpp.o CMakeFiles/aether_assets.dir/resources/texture_compression.cpp.o CMakeFiles/aether_assets.dir/resources/skeletal_animation.cpp.o CMakeFiles/aether_assets.dir/resources/import_node_map.cpp.o CMakeFiles/aether_assets.dir/resources/material_asset.cpp.o CMakeFiles/aether_assets.dir/resources/environment_profile.cpp.o CMakeFiles/aether_assets.dir/resources/environment_map_asset.cpp.o CMakeFiles/aether_assets.dir/resources/image_decode.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_codecs.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_package.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_folder_source.cpp.o CMakeFiles/aether_assets.dir/resources/import_cache.cpp.o CMakeFiles/aether_assets.dir/resources/import_report.cpp.o CMakeFiles/aether_assets.dir/resources/texture_budget.cpp.o CMakeFiles/aether_assets.dir/resources/import_profile.cpp.o CMakeFiles/aether_assets.dir/resources/mesh_derived.cpp.o CMakeFiles/aether_assets.dir/resources/mesh_lod_build.cpp.o CMakeFiles/aether_assets.dir/resources/texture_profile.cpp.o CMakeFiles/aether_assets.dir/resources/texture_asset.cpp.o CMakeFiles/aether_assets.dir/resources/audio_clip.cpp.o CMakeFiles/aether_assets.dir/resources/glb_images.cpp.o || libaether_astcenc.a libaether_audio_backend.a libaether_codecs.a libaether_core.a libaether_renderer.a libaether_rendergraph.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info
   OBJECT_DIR = CMakeFiles\aether_assets.dir
   POST_BUILD = cd .
@@ -1444,82 +1485,125 @@ build libaether_assets.a: CXX_STATIC_LIBRARY_LINKER__aether_assets_Debug CMakeFi
 #############################################
 # Order-only phony target for aether_runtime
 
-build cmake_object_order_depends_target_aether_runtime: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph
+build cmake_object_order_depends_target_aether_runtime: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_audio_backend cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_box2d
 
 build CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_graph.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_graph.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/prefab.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\prefab.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/input_actions.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/input_actions.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\input_actions.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/transform_math.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\transform_math.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/game_world.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\game_world.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_runtime.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
+
+build CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/game_world_paths.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\game_world_paths.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_lights.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_lights.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_environment.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_environment.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_physics.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_physics.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_runtime.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
+
+build CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_physics2d.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_physics2d.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_runtime.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
+
+build CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_audio.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_audio.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_runtime.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
+
+build CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_paths.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_paths.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/script_bridge.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\script_bridge.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/runtime_rendering_state.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/runtime_rendering_state.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\runtime_rendering_state.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
 build CMakeFiles/aether_runtime.dir/runtime/scene_animation.cpp.o: CXX_COMPILER__aether_runtime_Debug C$:/Users/donod/Downloads/atchengine/native/runtime/scene_animation.cpp || cmake_object_order_depends_target_aether_runtime
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_animation.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
@@ -1531,7 +1615,7 @@ build CMakeFiles/aether_runtime.dir/runtime/scene_animation.cpp.o: CXX_COMPILER_
 #############################################
 # Link the static library libaether_runtime.a
 
-build libaether_runtime.a: CXX_STATIC_LIBRARY_LINKER__aether_runtime_Debug CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.o CMakeFiles/aether_runtime.dir/runtime/input_actions.cpp.o CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.o CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.o CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.o CMakeFiles/aether_runtime.dir/runtime/runtime_rendering_state.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_animation.cpp.o || libaether_assets.a libaether_astcenc.a libaether_codecs.a libaether_core.a libaether_physics.a libaether_renderer.a libaether_rendergraph.a third_party/JoltPhysics/Build/libJolt.a
+build libaether_runtime.a: CXX_STATIC_LIBRARY_LINKER__aether_runtime_Debug CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.o CMakeFiles/aether_runtime.dir/runtime/input_actions.cpp.o CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.o CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.o CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.o CMakeFiles/aether_runtime.dir/runtime/runtime_rendering_state.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_animation.cpp.o || libaether_assets.a libaether_astcenc.a libaether_audio_backend.a libaether_codecs.a libaether_core.a libaether_physics.a libaether_renderer.a libaether_rendergraph.a third_party/Box2D/src/libbox2dd.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   POST_BUILD = cd .
@@ -1546,124 +1630,165 @@ build libaether_runtime.a: CXX_STATIC_LIBRARY_LINKER__aether_runtime_Debug CMake
 #############################################
 # Order-only phony target for aether_editor
 
-build cmake_object_order_depends_target_aether_editor: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui
+build cmake_object_order_depends_target_aether_editor: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_audio_backend cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui cmake_object_order_depends_target_box2d
 
 build CMakeFiles/aether_editor.dir/editor/editor_code_workspace.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_code_workspace.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_code_workspace.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_filesystem.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_filesystem.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_filesystem.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_archive.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_archive.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_map_scene.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_map_scene.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_camera.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_camera.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_camera.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_document.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_document.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_document.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_gizmo.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_gizmo.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_screen.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_screen.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_session.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_session.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_prefab.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_prefab.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_editor.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
+
+build CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_prefab_overrides.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_prefab_overrides.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_play_edit.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_play_edit.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_environment_assets.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_environment_assets.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_texture_assets.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_texture_assets.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_editor.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
+
+build CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_audio_assets.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_audio_assets.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
+  OBJECT_DIR = CMakeFiles\aether_editor.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
+
+build CMakeFiles/aether_editor.dir/editor/editor_path.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_path.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+  DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_path.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_texture_preview.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_texture_preview.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_texture_preview.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_import_reconcile.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_import_reconcile.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_history.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_history.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_history.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
 build CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o: CXX_COMPILER__aether_editor_Debug C$:/Users/donod/Downloads/atchengine/native/editor/editor_view.cpp || cmake_object_order_depends_target_aether_editor
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_view.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
@@ -1675,7 +1800,7 @@ build CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o: CXX_COMPILER__aethe
 #############################################
 # Link the static library libaether_editor.a
 
-build libaether_editor.a: CXX_STATIC_LIBRARY_LINKER__aether_editor_Debug CMakeFiles/aether_editor.dir/editor/editor_code_workspace.cpp.o CMakeFiles/aether_editor.dir/editor/editor_filesystem.cpp.o CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.o CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.o CMakeFiles/aether_editor.dir/editor/editor_camera.cpp.o CMakeFiles/aether_editor.dir/editor/editor_document.cpp.o CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.o CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.o CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.o CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.o CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.o CMakeFiles/aether_editor.dir/editor/editor_texture_preview.cpp.o CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.o CMakeFiles/aether_editor.dir/editor/editor_history.cpp.o CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o || libaether_assets.a libaether_astcenc.a libaether_codecs.a libaether_core.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_runtime.a libaether_ui.a third_party/JoltPhysics/Build/libJolt.a
+build libaether_editor.a: CXX_STATIC_LIBRARY_LINKER__aether_editor_Debug CMakeFiles/aether_editor.dir/editor/editor_code_workspace.cpp.o CMakeFiles/aether_editor.dir/editor/editor_filesystem.cpp.o CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.o CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.o CMakeFiles/aether_editor.dir/editor/editor_camera.cpp.o CMakeFiles/aether_editor.dir/editor/editor_document.cpp.o CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.o CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.o CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.o CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.o CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.o CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.o CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.o CMakeFiles/aether_editor.dir/editor/editor_path.cpp.o CMakeFiles/aether_editor.dir/editor/editor_texture_preview.cpp.o CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.o CMakeFiles/aether_editor.dir/editor/editor_history.cpp.o CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o || libaether_assets.a libaether_astcenc.a libaether_audio_backend.a libaether_codecs.a libaether_core.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_runtime.a libaether_ui.a third_party/Box2D/src/libbox2dd.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   POST_BUILD = cd .
@@ -1980,197 +2105,197 @@ build libaether_native_app_glue.a: C_STATIC_LIBRARY_LINKER__aether_native_app_gl
 #############################################
 # Order-only phony target for aether_android
 
-build cmake_object_order_depends_target_aether_android: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_arm_asr cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_editor cmake_object_order_depends_target_aether_fsr2 cmake_object_order_depends_target_aether_native_app_glue cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_rhi cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui cmake_object_order_depends_target_aether_water_runtime
+build cmake_object_order_depends_target_aether_android: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_arm_asr cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_astcenc cmake_object_order_depends_target_aether_audio_backend cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_editor cmake_object_order_depends_target_aether_fsr2 cmake_object_order_depends_target_aether_native_app_glue cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_rhi cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui cmake_object_order_depends_target_aether_water_runtime cmake_object_order_depends_target_box2d
 
 build CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_main.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_main.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_runtime_controls.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_runtime_controls.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_runtime_controls.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_editor_text_input.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_editor_text_input.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_model_picker.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_model_picker.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_model_picker.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_external_links.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_external_links.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_external_links.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_texture_loader.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_texture_loader.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/dirt_road_resources.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\dirt_road_resources.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_launch_options.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_launch_options.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_performance.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_performance.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_thermal_monitor.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_thermal_monitor.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_frame_profiler.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_frame_profiler.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_frame_pacer.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_frame_pacer.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_swappy_scheduler.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_swappy_scheduler.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_swappy_scheduler.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_window.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_window.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_paths.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_paths.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_vulkan_surface.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_vulkan_surface.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/android_triangle_renderer.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_triangle_renderer.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/instanced_renderer.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\instanced_renderer.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/instanced_renderer_water.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/instanced_renderer_water.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\instanced_renderer_water.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/material_preview_resources.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\material_preview_resources.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/dotnet_host.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\dotnet_host.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/dotnet_assets.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\dotnet_assets.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/astc_encode_probe.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\astc_encode_probe.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
 build CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o: CXX_COMPILER__aether_android_Debug C$:/Users/donod/Downloads/atchengine/native/platform/android/water_spectral_probe.cpp || cmake_object_order_depends_target_aether_android
-  DEFINES = -Daether_android_EXPORTS
+  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\water_spectral_probe.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
-  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
 
@@ -2182,10 +2307,10 @@ build CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o:
 #############################################
 # Link the shared library C:\Users\donod\Downloads\atchengine\android\app\build\intermediates\cxx\Debug\1y1q5570\obj\arm64-v8a\libaether_android.so
 
-build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_android.so: CXX_SHARED_LIBRARY_LINKER__aether_android_Debug CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o CMakeFiles/aether_android.dir/platform/android/android_runtime_controls.cpp.o CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o CMakeFiles/aether_android.dir/platform/android/android_model_picker.cpp.o CMakeFiles/aether_android.dir/platform/android/android_external_links.cpp.o CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o CMakeFiles/aether_android.dir/platform/android/android_swappy_scheduler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer_water.cpp.o CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o | libaether_core.a libaether_editor.a libaether_platform.a libaether_renderer.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a libaether_physics.a libaether_water_runtime.a libaether_runtime.a libaether_assets.a libaether_codecs.a libaether_astcenc.a libaether_ui.a libaether_arm_asr.a libaether_fsr2.a libaether_renderer.a libaether_rendergraph.a libaether_physics.a libaether_core.a third_party/JoltPhysics/Build/libJolt.a || libaether_arm_asr.a libaether_assets.a libaether_astcenc.a libaether_codecs.a libaether_core.a libaether_editor.a libaether_fsr2.a libaether_native_app_glue.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_rhi.a libaether_runtime.a libaether_ui.a libaether_water_runtime.a third_party/JoltPhysics/Build/libJolt.a
+build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_android.so: CXX_SHARED_LIBRARY_LINKER__aether_android_Debug CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o CMakeFiles/aether_android.dir/platform/android/android_runtime_controls.cpp.o CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o CMakeFiles/aether_android.dir/platform/android/android_model_picker.cpp.o CMakeFiles/aether_android.dir/platform/android/android_external_links.cpp.o CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o CMakeFiles/aether_android.dir/platform/android/android_swappy_scheduler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer_water.cpp.o CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o | libaether_core.a libaether_editor.a libaether_platform.a libaether_renderer.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a libaether_physics.a libaether_water_runtime.a libaether_runtime.a libaether_assets.a libaether_codecs.a libaether_astcenc.a libaether_audio_backend.a third_party/Box2D/src/libbox2dd.a libaether_ui.a libaether_arm_asr.a libaether_fsr2.a libaether_renderer.a libaether_rendergraph.a libaether_physics.a libaether_core.a third_party/JoltPhysics/Build/libJolt.a || libaether_arm_asr.a libaether_assets.a libaether_astcenc.a libaether_audio_backend.a libaether_codecs.a libaether_core.a libaether_editor.a libaether_fsr2.a libaether_native_app_glue.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_rhi.a libaether_runtime.a libaether_ui.a libaether_water_runtime.a third_party/Box2D/src/libbox2dd.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info
   LINK_FLAGS = -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments    -uANativeActivity_onCreate -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -pthread
-  LINK_LIBRARIES = libaether_core.a  libaether_editor.a  libaether_platform.a  libaether_renderer.a  libaether_rhi.a  libaether_native_app_glue.a  -landroid  -llog  -lvulkan  -ldl  C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a  libaether_physics.a  libaether_water_runtime.a  libaether_runtime.a  libaether_assets.a  libaether_codecs.a  libaether_astcenc.a  libaether_ui.a  libaether_arm_asr.a  libaether_fsr2.a  -lvulkan  libaether_renderer.a  libaether_rendergraph.a  libaether_physics.a  libaether_core.a  -pthread  third_party/JoltPhysics/Build/libJolt.a  -latomic -lm
+  LINK_LIBRARIES = libaether_core.a  libaether_editor.a  libaether_platform.a  libaether_renderer.a  libaether_rhi.a  libaether_native_app_glue.a  -landroid  -llog  -lvulkan  -ldl  C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a  libaether_physics.a  libaether_water_runtime.a  libaether_runtime.a  libaether_assets.a  libaether_codecs.a  libaether_astcenc.a  libaether_audio_backend.a  -lm  third_party/Box2D/src/libbox2dd.a  libaether_ui.a  libaether_arm_asr.a  libaether_fsr2.a  -lvulkan  -ldl  libaether_renderer.a  libaether_rendergraph.a  libaether_physics.a  libaether_core.a  -pthread  third_party/JoltPhysics/Build/libJolt.a  -latomic -lm
   OBJECT_DIR = CMakeFiles\aether_android.dir
   POST_BUILD = cd .
   PRE_LINK = cd .
@@ -4209,6 +4334,8 @@ build aether_assets: phony libaether_assets.a
 
 build aether_astcenc: phony libaether_astcenc.a
 
+build aether_audio_backend: phony libaether_audio_backend.a
+
 build aether_codecs: phony libaether_codecs.a
 
 build aether_core: phony libaether_core.a
@@ -4267,7 +4394,7 @@ build sqlite3: phony third_party/sqlite/libsqlite3.a
 #############################################
 # Folder: C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a
 
-build all: phony libaether_codecs.a libaether_astcenc.a libaether_arm_asr.a libaether_fsr2.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_transform.so libaether_core.a libaether_platform.a libaether_rendergraph.a libaether_renderer.a libaether_assets.a libaether_runtime.a libaether_editor.a libaether_ui.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_android.so libaether_physics.a libaether_water_runtime.a libaether_resources.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/benchmark_physics2d C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/benchmark_physics2d_jolt C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/benchmark_physics2d_box2d
+build all: phony libaether_audio_backend.a libaether_codecs.a libaether_astcenc.a libaether_arm_asr.a libaether_fsr2.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_transform.so libaether_core.a libaether_platform.a libaether_rendergraph.a libaether_renderer.a libaether_assets.a libaether_runtime.a libaether_editor.a libaether_ui.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_android.so libaether_physics.a libaether_water_runtime.a libaether_resources.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/benchmark_physics2d C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/benchmark_physics2d_jolt C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/benchmark_physics2d_box2d
 
 # =============================================================================
 

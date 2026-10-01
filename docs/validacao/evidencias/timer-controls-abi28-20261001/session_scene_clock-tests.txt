@@ -1,0 +1,4 @@
+[ok] session_scene_clock_is_frozen_until_play
+[ok] session_scene_clock_ignores_a_wall_clock_jump
+
+2/2 testes passaram

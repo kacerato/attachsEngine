@@ -1,3 +1,4 @@
+#include "scene/path.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_color_picker.h"
 #include "editor/editor_component_catalog.h"
@@ -151,23 +152,30 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         runtime::AnimationClipView clipView;
         if(binding->kind==resources::AssetType::AnimationClip&&!mapScene_.findClip(request.componentResource,clipView)) break;
       } else if(!binding->inheritable && !binding->none.valid() &&
-                binding->kind!=resources::AssetType::AnimationClip) break;
+                binding->kind!=resources::AssetType::AnimationClip && binding->id!="texture.lightmap") break;
       const auto authored=request.componentResource.valid()?request.componentResource:
           binding->inheritable?resources::AssetGuid{}:binding->none;
       auto values=*entity;auto *candidate=values.components.editInstance(request.componentInstance);
-      if(candidate&&binding->write(*candidate,request.componentResourceSlot,authored)) {
-        if(binding->kind==resources::AssetType::EnvironmentProfile&&authored.valid()) {
-          auto *environment=&candidate->type()==&scene::Environment::descriptor?
-              static_cast<scene::Environment*>(candidate):nullptr;
-          const auto *profile=findEnvironmentProfile(authored);
-          if(!environment||!profile) break;
-          environment->values=resources::applyEnvironmentProfile(environment->values,*profile);
-          if(environment->values.environmentMap.valid()&&
-             !findEnvironmentMap(environment->values.environmentMap)) break;
+      if(!candidate||!binding->write(*candidate,request.componentResourceSlot,authored)) break;
+      if(binding->kind==resources::AssetType::EnvironmentProfile&&authored.valid()) {
+        auto *environment=&candidate->type()==&scene::Environment::descriptor?
+            static_cast<scene::Environment*>(candidate):nullptr;
+        const auto *profile=findEnvironmentProfile(authored);
+        if(!environment||!profile) break;
+        environment->values=resources::applyEnvironmentProfile(environment->values,*profile);
+        if(environment->values.environmentMap.valid()&&
+           !findEnvironmentMap(environment->values.environmentMap)) break;
+      }
+      if(candidate&&candidate->valid()) {
+        if(binding->kind==resources::AssetType::Texture && authored.valid() &&
+           !decodeProjectTexture(authored,binding->id!="texture.lightmap",
+             binding->id=="texture.lightmap"?EditorMapScene::samplerFlags(scene::lightmapSampling()):EditorMapScene::DefaultTextureSampler)) break;
+        applied=history_.applyValues(document_,request.entity,values);
+        if(applied && binding->kind==resources::AssetType::Texture) {
+          std::string diagnostic;
+          if(!ensureTexturesPublished(diagnostic)) reportProblem(EditorConsoleSeverity::Warning,"Publicação da textura pendente: "+diagnostic);
         }
       }
-      if(candidate&&candidate->valid())
-        applied=history_.applyValues(document_,request.entity,values);
       break;
     }
     case EditorAction::AddComponent: {
@@ -560,11 +568,13 @@ bool EditorSession::setProjectDirectory(const char *path) {
   state_.console=&console_;
   closeImportPreview();state_.importAccept=false;state_.importCancel=false;
   state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
-  state_.folderImportRequested=false;
+  state_.folderImportRequested=false;state_.waveImportRequested=false;
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   runtime::ObjectTags tags;std::string tagError;
   if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
   if(!files_.setRoot(path)) return false;
+  audioClips_.clear();
+  playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},audioOutput_);
   projectTags_=std::move(tags);document_.setTags(projectTags_);
   state_.tagPicker=false;state_.editingTagName=false;state_.editingTagSearch=false;state_.tagPage=0;state_.tagQuery.clear();
   environmentBatchRequest_.clear();multiEnvironments_.clear();multiProfiles_.clear();
@@ -616,6 +626,7 @@ void EditorSession::loadEditorPreferences() {
   state_.pickerAdvanced=false;
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
   state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
+  state_.inspectorSurface=EditorInspectorSurface::Inspection;state_.componentOverviewScroll=0;
   state_.hiddenLayers=0;state_.unpickableLayers=0;appearanceChanged_=true;state_.userLayouts.clear();state_.layoutsPanel=false;
   state_.sceneHidden.clear();state_.scenePickOff.clear();sceneHiddenNames_.clear();scenePickOffNames_.clear();
   std::filesystem::path file;
@@ -633,6 +644,8 @@ void EditorSession::loadEditorPreferences() {
     if(!(fields>>key)) continue;
     if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
     else if(key=="undo_order" && fields>>value) state_.undoNewestFirst=value!="oldest";
+    else if(key=="inspector_surface" && fields>>value)
+      state_.inspectorSurface=value=="components"?EditorInspectorSurface::Components:EditorInspectorSurface::Inspection;
     else if(key=="focused_asset") {
       u32 kind=0;std::string text,name;resources::AssetGuid guid;
       if(fields>>kind>>text>>std::quoted(name) && kind>=1 && kind<=3 && resources::AssetGuid::parse(text,guid) &&
@@ -681,6 +694,7 @@ void EditorSession::saveEditorPreferences() {
   std::ostringstream out;
   out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
   out<<"undo_order "<<(state_.undoNewestFirst?"newest":"oldest")<<'\n';
+  out<<"inspector_surface "<<(state_.inspectorSurface==EditorInspectorSurface::Components?"components":"inspection")<<'\n';
   out<<"scene_layers "<<state_.hiddenLayers<<' '<<state_.unpickableLayers<<'\n';
   // Visibilidade e seleção por objeto: o id e o nome (a cena reaberta confere).
   for(const auto id:state_.sceneHidden) if(const auto *e=document_.find(id)) out<<"scene_hidden "<<id<<' '<<std::quoted(std::string(e->name))<<'\n';
@@ -707,6 +721,7 @@ void EditorSession::saveEditorPreferences() {
 }
 
 void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
+  playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},audioOutput_);
   playScene_.setScriptRuntime(api,files_.rootPath());
   playScene_.setScriptResourceAvailability(runtimeResourceResolver());
   playScene_.setPrefabLoader([this](resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) {
@@ -724,6 +739,7 @@ runtime::ComponentResourceResolver EditorSession::runtimeResourceResolver() {
       runtime::AnimationClipView view;
       return !guid.valid() || mapScene_.findClip(guid,view);
     }
+    if(type==resources::AssetType::AudioClip) {std::string error;return !guid.valid() || bool(loadAudioClip(guid,error));}
     auto *render=&candidate.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer *>(&candidate):nullptr;
     if(!render||slot>=render->slotCount()) return false;
     const auto ensure=[&](const std::vector<UsedTexture> &required) {
@@ -802,6 +818,10 @@ runtime::ComponentResourceResolver EditorSession::runtimeResourceResolver() {
         return false;
       if(required.empty()) return false;
       return ensure(required);
+    }
+    if(type==resources::AssetType::Texture && propertyId=="texture.lightmap") {
+      if(!guid.valid()) return true;
+      return ensure({{guid,false,false,EditorMapScene::samplerFlags(scene::lightmapSampling())}});
     }
     if(type==resources::AssetType::Material&&(guid==scene::MaterialTextureNone||!guid.valid()))
       return ensure(slotTextures());
@@ -1235,6 +1255,10 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.editingGlobalSearch) {edit.purpose=EditorTextPurpose::GlobalSearch;edit.text=state_.renameText;return edit;}
   if(state_.namingLayout) {edit.purpose=EditorTextPurpose::LayoutName;edit.text=state_.renameText;return edit;}
   if(state_.editingTagName) {edit.purpose=EditorTextPurpose::TagName;edit.text=state_.renameText;return edit;}
+  if(state_.editingGroupName) {
+    edit.purpose=EditorTextPurpose::GroupName;edit.entity=state_.groupEntity;
+    edit.field=state_.groupEditSlot;edit.text=state_.renameText;return edit;
+  }
   if(state_.editingTagSearch) {edit.purpose=EditorTextPurpose::TagSearch;edit.text=state_.tagQuery;return edit;}
   if(state_.editingPhysicsLayerName) {
     edit.purpose=EditorTextPurpose::PhysicsLayerName;edit.field=state_.physicsLayer;
@@ -1249,7 +1273,8 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     else if(state_.editingInputContext) {edit.purpose=EditorTextPurpose::InputContext;edit.text=action.context;}
     else {
       edit.purpose=EditorTextPurpose::InputNumber;edit.field=state_.inputEditField;
-      if(edit.field==widgetId(EditorWidget::InputDeadzone)) edit.text=std::to_string(action.deadzone);
+      if(edit.field==widgetId(EditorWidget::InputDuration)) edit.text=std::to_string(action.duration);
+      else if(edit.field==widgetId(EditorWidget::InputDeadzone)) edit.text=std::to_string(action.deadzone);
       else if(edit.field==widgetId(EditorWidget::InputSensitivity)) edit.text=std::to_string(action.sensitivity);
       else if(state_.inputBindingIndex<action.bindings.size()) {
         const auto &binding=action.bindings[state_.inputBindingIndex];
@@ -1265,6 +1290,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     edit.purpose=EditorTextPurpose::Number;edit.entity=state_.numericEntity;
     edit.field=state_.numericField;edit.text=state_.numericText;
     edit.componentInstance=state_.numericInstance;edit.propertyId=state_.numericProperty;
+    if(numericPathPointId_ && (edit.field&0xff000000u)==widgetId(EditorWidget::ComponentSlotNumberBase)){edit.elementId=numericPathPointId_;edit.version=numericPathVersion_;}
     if((edit.field&0xff000000u)==widgetId(EditorWidget::ComponentTripleBase)) edit.propertyType="triple";
     else if(state_.numericExpression) edit.propertyType="expression";
   } else {
@@ -1287,7 +1313,7 @@ bool EditorSession::updateTextDraftNow(const EditorTextEdit &edit,std::string_vi
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
      current.entity!=edit.entity || current.componentInstance!=edit.componentInstance ||
-     current.field!=edit.field || current.propertyType!=edit.propertyType || edit.version.epoch!=sceneEpoch_) return false;
+     current.field!=edit.field || current.elementId!=edit.elementId || current.propertyType!=edit.propertyType || edit.version.epoch!=sceneEpoch_) return false;
   // O mesmo teto que a ponte aplica. Um rascunho maior que o campo aceita não é
   // rascunho: é um commit que vai ser recusado no fim, depois de o usuário ter
   // digitado tudo.
@@ -1487,6 +1513,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     if(!inspectorModalOpen()) modalInFocusedAsset_=false;
     return done;
   }
+  if(edit.elementId || edit.purpose==EditorTextPurpose::GroupName) return completeTextEditNow(edit,text,accept);
   if(!state_.inspectorTarget || state_.inspectorTarget==state_.selection)
     return withMultiEdit([&] {return completeTextEditNow(edit,text,accept);});
   return completeTextEditNow(edit,text,accept);
@@ -1495,11 +1522,12 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
 bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_view text,bool accept) {
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
-     current.entity!=edit.entity || current.field!=edit.field || edit.version.epoch!=sceneEpoch_) return false;
+     current.entity!=edit.entity || current.field!=edit.field || current.elementId!=edit.elementId || edit.version.epoch!=sceneEpoch_) return false;
   const auto close=[&] {
     state_.presetNaming=false;
     state_.viewNaming=false;state_.viewRenaming=false;
     state_.editingPhysicsLayerName=false;state_.editingTagName=false;state_.editingTagSearch=false;
+    state_.editingGroupName=false;
     state_.editingInputActionName=false;state_.editingInputContext=false;state_.inputEditField=0;
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
@@ -1510,12 +1538,13 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
     state_.editingScriptElement=0;state_.editingScriptArraySize=false;state_.colorText=0;state_.gradientText=0;state_.curveText=0;
-    state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
+    state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();numericPathPointId_=0;state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
     state_.editingHierarchySearch=false;state_.editingCreationSearch=false;state_.editingGlobalSearch=false;state_.namingLayout=false;
     cancelPointers();
   };
   if(!accept) {close();return true;}
+  if(edit.elementId && playMirrorOpen_){close();state_.status="Edição de pontos indisponível em Play";return false;}
   if(edit.purpose==EditorTextPurpose::InputActionName || edit.purpose==EditorTextPurpose::InputContext ||
      edit.purpose==EditorTextPurpose::InputNumber) {
     if(edit.version.revision!=document_.revision() || isPlaying() || history_.isOpen() ||
@@ -1547,7 +1576,8 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
       } else {
         const float parsed=std::strtof(buffer.c_str(),&end);
         if(end!=buffer.c_str() && *end=='\0' && std::isfinite(parsed)) {
-          if(edit.field==widgetId(EditorWidget::InputDeadzone)) action.deadzone=parsed;
+          if(edit.field==widgetId(EditorWidget::InputDuration)) action.duration=parsed;
+          else if(edit.field==widgetId(EditorWidget::InputDeadzone)) action.deadzone=parsed;
           else if(edit.field==widgetId(EditorWidget::InputSensitivity)) action.sensitivity=parsed;
           else if(edit.field==widgetId(EditorWidget::InputBindingScale) && edit.componentInstance<action.bindings.size())
             action.bindings[edit.componentInstance].scale=parsed;
@@ -1557,6 +1587,23 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     }
     if(!ok || !history_.setInputActions(document_,map)) {state_.status="Valor ou nome inválido para a ação";return false;}
     close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::GroupName) {
+    const auto *object=document_.find(edit.entity);
+    if(!object || edit.version.revision!=document_.revision() || history_.isOpen() ||
+       !state_.groupPicker || state_.groupEntity!=edit.entity) {
+      close();state_.status="Objeto mudou; reabra o grupo";return false;
+    }
+    const auto name=trimmedName(text);auto value=*object;
+    if(edit.field) {
+      if(edit.field>value.groups.names().size()) {close();return false;}
+      const auto previous=value.groups.names()[edit.field-1];
+      if(previous!=name && value.groups.contains(name)) {state_.status="Este objeto já pertence ao grupo";return false;}
+      value.groups.remove(previous);
+    }
+    if(!value.groups.add(name)) {state_.status="Nome inválido, acima de 63 bytes ou limite de 32 grupos";return false;}
+    if(value.groups!=object->groups && !history_.applyValues(document_,edit.entity,value)) return false;
+    close();state_.status="Grupos atualizados";return true;
   }
   if(edit.purpose==EditorTextPurpose::TagSearch) {
     state_.tagQuery=std::string(text.substr(0,127));state_.tagPage=0;close();return true;
@@ -1800,10 +1847,13 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
       // Commas are decimal separators; channels are separated by spaces or semicolons.
       std::replace(value.begin(),value.end(),',','.');
       float channels[3]{};std::istringstream input(value);input.imbue(std::locale::classic());
-      const bool parsed=static_cast<bool>(input>>channels[0]>>channels[1]>>channels[2]);input>>std::ws;
       const auto *entity=document_.find(edit.entity);
-      if(!entity||!parsed||!input.eof()||current.componentInstance!=edit.componentInstance||current.propertyId!=edit.propertyId) return false;
+      if(!entity||current.componentInstance!=edit.componentInstance||current.propertyId!=edit.propertyId) return false;
       auto values=*entity;const auto *component=values.components.findInstance(edit.componentInstance);
+      const scene::ComponentTriple *tuple=nullptr;if(component)for(const auto &t:component->type().triples)if(t.id==edit.propertyId)tuple=&t;
+      if(!tuple)return false;
+      for(u32 axis=0;axis<tuple->dimensions();++axis)if(!(input>>channels[axis]))return false;
+      input>>std::ws;if(!input.eof())return false;
       if(!component || scene::setComponentTriple(values.components,component->type().id,edit.propertyId,channels,edit.componentInstance)!=scene::ComponentPropertyStatus::Applied) return false;
       if(!history_.applyValues(document_,edit.entity,values)) return false;
       close();return true;
@@ -1871,7 +1921,14 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
        edit.field<widgetId(EditorWidget::ComponentSlotNumberBase)+0x01000000u) {
       const auto *component=entity->components.findInstance(edit.componentInstance);
       if(current.componentInstance!=edit.componentInstance || current.propertyId!=edit.propertyId || !component) return false;
-      const u32 slot=((edit.field-widgetId(EditorWidget::ComponentSlotNumberBase))>>16)&0xffu;
+      u32 slot=((edit.field-widgetId(EditorWidget::ComponentSlotNumberBase))>>16)&0xffu;
+      if(component->type().id=="astra.path"){
+        if(!edit.elementId||current.elementId!=edit.elementId)return false;
+        const auto&points=static_cast<const scene::Path*>(component)->curve.points;
+        const auto found=std::find_if(points.begin(),points.end(),[&](const auto&p){return p.id==edit.elementId;});
+        if(found==points.end())return false;
+        slot=static_cast<u32>(found-points.begin());
+      }
       auto values=*entity;
       if(scene::setComponentSlotProperty(values.components,component->type().id,edit.propertyId,slot,number,
                                          edit.componentInstance)!=scene::ComponentPropertyStatus::Applied ||
@@ -1980,7 +2037,8 @@ bool EditorSession::routeToPlayMirror(const UiPointerEvent &event) {
     const auto hit=router_.hitTest(event.position);
     const bool game=hit.target==UiPointerTarget::Viewport || layout_.topBar.contains(event.position) ||
         (hit.target==UiPointerTarget::Widget && (hit.widgetId==widgetId(EditorWidget::JumpCharacter) ||
-                                                 hit.widgetId==widgetId(EditorWidget::PlaySecondaryAction)));
+                                                 hit.widgetId==widgetId(EditorWidget::PlaySecondaryAction) || hit.widgetId==widgetId(EditorWidget::PathFollowRestart) || hit.widgetId==widgetId(EditorWidget::PathFollowStop) || (hit.widgetId>=widgetId(EditorWidget::TweenRestart)&&hit.widgetId<widgetId(EditorWidget::TweenRestart)+0x10000u) ||
+                                                 (hit.widgetId>=widgetId(EditorWidget::TimerControlBase)&&hit.widgetId<widgetId(EditorWidget::TimerControlBase)+0x10000u)));
     if(game) return false;
     if(found==playEditPointers_.end()) playEditPointers_.push_back(event.pointerId);
     if(!playMirrorValid_ || !playMirrorBusy_) refreshPlayMirror();
@@ -2077,11 +2135,22 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   const bool historyReplay=widget==widgetId(EditorWidget::Undo) || widget==widgetId(EditorWidget::Redo) ||
       (widget>=widgetId(EditorWidget::UndoHistoryRowBase) &&
        widget<=widgetId(EditorWidget::UndoHistoryRowBase)+history_.entryCount());
+  bool pathSlot=false;
+  if(widget>=widgetId(EditorWidget::ComponentSlotNumberBase)&&widget<widgetId(EditorWidget::ComponentSlotNumberBase)+0x01000000u){
+    const auto*object=document_.find(target?target:state_.selection);const u32 type=(widget-widgetId(EditorWidget::ComponentSlotNumberBase))&0xffu;
+    pathSlot=object&&type<object->components.size()&&object->components.at(type)->type().id=="astra.path";
+  }
   const auto run=[&] {
+    if((widget>=widgetId(EditorWidget::TimerControlBase)&&widget<widgetId(EditorWidget::TimerControlBase)+0x10000u)||(widget>=widgetId(EditorWidget::TweenRestart)&&widget<widgetId(EditorWidget::TweenRestart)+0x10000u)) {
+      // Runtime commands bypass the authored-value mirror, but retain the touched
+      // Inspector's owner even for objects created only in the running world.
+      const auto previous=state_.inspectorTarget;state_.inspectorTarget=target?target:state_.selection;
+      const bool consumed=handlePointerNow(event);state_.inspectorTarget=previous;return consumed;
+    }
     const bool consumed=inInspectorScope(target,[&] {
       // Sem alvo próprio (travado/focado), o Inspector é o da seleção: a
       // edição do ativo vale para todos os selecionados.
-      if(historyReplay || (target && target!=state_.selection)) return handlePointerNow(event);
+      if(historyReplay || pathSlot || (widget>=widgetId(EditorWidget::PathEditorOpen)&&widget<widgetId(EditorWidget::PathPointSelectBase)+128u) || (target && target!=state_.selection)) return handlePointerNow(event);
       return withMultiEdit([&] {return handlePointerNow(event);});
     });
     // O modal que ficou aberto pertence ao Inspector que o abriu.
@@ -2136,6 +2205,18 @@ void EditorSession::refreshMultiEdit() {
     for(const auto &p:value.type().booleans) compare(p.id);
     for(const auto &p:value.type().enums) compare(p.id);
     for(const auto &p:value.type().references) compare(p.id);
+    const auto compareSlots=[&](const auto &properties) {
+      for(const auto &p:properties) if(p.read) for(u32 slot=0;slot<p.slotCount(value);++slot) {
+        for(const auto *other:others) {
+          const auto *target=matchComponent(other->components,kind,occurrence);
+          if(slot>=p.slotCount(*target)||p.read(*target,slot)!=p.read(value,slot)) {
+            view.mixed.push_back(multiKey(value.instanceId(),std::string(p.id)+"@"+std::to_string(slot)));break;
+          }
+        }
+      }
+    };
+    compareSlots(value.type().slotNumbers);compareSlots(value.type().slotEnums);compareSlots(value.type().resourceBindings);
+
     if(const auto *script=scene::scriptBehavior(&value)) {
       for(const auto &p:script->properties) compare(p.id);
       bool enabled=false;
@@ -2196,6 +2277,15 @@ void EditorSession::replicateEdit(EditorEntityId id,const EditorEntity &before,u
       for(const auto &p:mine.type().booleans) if(p.write && p.read(*old)!=p.read(mine)) {p.write(*edit,p.read(mine));changed=true;}
       for(const auto &p:mine.type().enums) if(p.write && p.read(*old)!=p.read(mine)) {p.write(*edit,p.read(mine));changed=true;}
       for(const auto &p:mine.type().references) if(p.write && p.read(*old)!=p.read(mine)) {p.write(*edit,p.read(mine));changed=true;}
+      const auto copySlots=[&](const auto &properties) {
+        for(const auto &p:properties) if(p.read&&p.write) {
+          const u32 count=std::min({p.slotCount(*old),p.slotCount(mine),p.slotCount(*edit)});
+          for(u32 slot=0;slot<count;++slot) if(p.read(*old,slot)!=p.read(mine,slot))
+            changed|=p.write(*edit,slot,p.read(mine,slot));
+        }
+      };
+      copySlots(mine.type().slotNumbers);copySlots(mine.type().slotEnums);copySlots(mine.type().resourceBindings);
+
       if(const auto *script=scene::scriptBehavior(&mine)) {
         const auto *oldScript=scene::scriptBehavior(old);
         auto replacement=*scene::scriptBehavior(target);
@@ -2678,6 +2768,11 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   if(entry.directory && (entry.relativePath=="Texturas" || entry.relativePath.starts_with("Texturas/")))
     openTextureManager(entry.relativePath=="Texturas"?std::string():entry.relativePath);
   if(entry.directory) return;
+  if(entry.name.ends_with(".wav")) {
+    resources::AssetGuid asset;std::string error;
+    if(!importWaveClip(entry.relativePath,asset,error))state_.status=error;
+    return;
+  }
   if(entry.name.ends_with(".cs") || entry.name.ends_with(".json") || entry.name.ends_with(".md")) {
     state_.code=&code_;
     if(code_.open(files_,entry.relativePath)) {state_.workspace=EditorWorkspace::Code;state_.codeFiles=false;}
@@ -2799,7 +2894,7 @@ void EditorSession::pingEntity(EditorEntityId id) {
 }
 
 bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
-  if(event.phase==UiPointerPhase::Cancel) playTouches_.cancel();
+  if(event.phase==UiPointerPhase::Cancel) {playTouches_.cancel();cancelPlayButtons();}
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) {
     // O campo do sistema tem o foco; só o botão "Expressão" da barra responde,
     // trocando o teclado numérico pelo de texto sem perder o que foi digitado.
@@ -2812,9 +2907,101 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  if(event.phase==UiPointerPhase::Down) {
+    const auto old=std::find_if(playButtonPointers_.begin(),playButtonPointers_.end(),[&](const auto&p){return p.first==event.pointerId;});
+    if(old!=playButtonPointers_.end()) {playButtonPointers_.erase(old);playButtonCanceled_|=runtime::InputTouch;}
+  }
+  if(routing.target==ui::UiPointerTarget::Widget &&
+     (routing.widgetId==widgetId(EditorWidget::JumpCharacter)||routing.widgetId==widgetId(EditorWidget::PlaySecondaryAction))) {
+    const u32 mask=routing.widgetId==widgetId(EditorWidget::JumpCharacter)?1u:2u;
+    if(event.phase==UiPointerPhase::Down && isPlaying()&&!state_.playPaused&&gameplayInputFocused()) {
+      playButtonPointers_.erase(std::remove_if(playButtonPointers_.begin(),playButtonPointers_.end(),
+          [&](const auto&p){return p.first==event.pointerId;}),playButtonPointers_.end());
+      playButtonPointers_.emplace_back(event.pointerId,mask);
+      if(mask==1)jumpPressed_=true;else secondaryPressed_=true;
+    }
+    if(routing.released) {
+      playButtonPointers_.erase(std::remove_if(playButtonPointers_.begin(),playButtonPointers_.end(),
+          [&](const auto&p){return p.first==event.pointerId;}),playButtonPointers_.end());
+      if(event.phase==UiPointerPhase::Cancel){playButtonCanceled_|=runtime::InputTouch;jumpPressed_=secondaryPressed_=false;}
+    }
+    return true;
+  }
+  if(inputCapture_ && !validateInputCapture()) cancelInputBindingCapture();
+  if(state_.inputCapturing) {
+    if(!routing.tapped) return true;
+    cancelInputBindingCapture();
+    if(routing.widgetId==widgetId(EditorWidget::InputBindingCaptureCancel)) return true;
+  }
   if(routing.tapped) {
     const auto key=routing.widgetId;
+    if(key>=widgetId(EditorWidget::TimerControlBase)&&key<widgetId(EditorWidget::TimerControlBase)+0x10000u) {
+      if(!playScene_.active()||!playInspecting())return true;
+      const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+      const auto *entity=playScene_.document().find(target);const auto offset=key-widgetId(EditorWidget::TimerControlBase);
+      const auto *component=entity?entity->components.at(offset/4):nullptr;
+      if(!component||&component->type()!=&scene::Timer::descriptor||offset%4>2)return true;
+      const auto *current=playScene_.timers().state(target,component->instanceId());
+      const u32 operation=offset%4==0?1u:offset%4==2?2u:(current&&current->paused?4u:3u);
+      runtime::SceneTimers::State result;const auto status=playScene_.timerCommand(target,component->instanceId(),operation,0,result);
+      state_.status=status==runtime::WorldStatus::Ok?(operation==1?"Timer iniciado":operation==2?"Timer parado":operation==3?"Timer pausado":"Timer retomado"):"Comando de timer recusado";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::InputBindingCode) && state_.workspace==EditorWorkspace::Project && state_.projectSection==EditorProjectSection::Input) {
+      auto map=document_.inputActions();const auto &actions=map.actions();
+      if(state_.inputActionIndex<actions.size()) {
+        auto action=actions[state_.inputActionIndex];
+        if(state_.inputBindingIndex<action.bindings.size()) {
+          auto &binding=action.bindings[state_.inputBindingIndex];
+          const u32 count=binding.source==runtime::InputSource::MouseButton?5u:binding.source==runtime::InputSource::MouseAxis?4u:0u;
+          if(count) {
+            if(history_.isOpen())return true;
+            binding.code=(binding.code+1)%count;
+            if(map.replace(action.id,action) && history_.setInputActions(document_,map))state_.status="Canal do mouse atualizado";
+            return true;
+          }
+        }
+      }
+    }
+    if(key==widgetId(EditorWidget::InputBindingCapture) || key==widgetId(EditorWidget::InputBindingCaptureNegative)) {
+      beginInputBindingCapture(key==widgetId(EditorWidget::InputBindingCaptureNegative));return true;
+    }
+    if(key==widgetId(EditorWidget::PlayTimeScale)) {
+      constexpr float scales[]{0,.25f,.5f,1,2,4};
+      const float current=playScene_.active()?playScene_.world().clock().scale():1.f;
+      float next=0;for(float scale:scales) if(scale>current){next=scale;break;}
+      if(!setPlayTimeScale(next)) state_.status="Tempo indisponível: inicie a execução da cena";
+      return true;
+    }
     if(key==widgetId(EditorWidget::ObjectTagOpen)) {state_.tagPicker=true;state_.tagPage=0;state_.tagQuery.clear();return true;}
+    if(key==widgetId(EditorWidget::ObjectGroupsOpen)) {
+      const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+      if(document_.find(target)) {state_.groupPicker=true;state_.groupEntity=target;state_.groupPage=0;state_.tagPicker=false;}
+      return true;
+    }
+    if(key==widgetId(EditorWidget::GroupsClose)) {state_.groupPicker=false;state_.editingGroupName=false;return true;}
+    if(key==widgetId(EditorWidget::GroupsPrevious)) {if(state_.groupPage) --state_.groupPage;return true;}
+    if(key==widgetId(EditorWidget::GroupsNext)) {++state_.groupPage;return true;}
+    if(key==widgetId(EditorWidget::GroupNew)) {
+      if(document_.find(state_.groupEntity)) {state_.editingGroupName=true;state_.groupEditSlot=0;state_.renameText[0]=0;}
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::GroupEditBase) && key<widgetId(EditorWidget::GroupEditBase)+runtime::ObjectGroups::MaximumCount) {
+      const auto index=key-widgetId(EditorWidget::GroupEditBase);const auto *object=document_.find(state_.groupEntity);
+      if(state_.groupPicker && object && index<object->groups.names().size()) {
+        state_.groupEditSlot=index+1;state_.editingGroupName=true;
+        std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",object->groups.names()[index].c_str());
+      }
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::GroupRemoveBase) && key<widgetId(EditorWidget::GroupRemoveBase)+runtime::ObjectGroups::MaximumCount) {
+      const auto index=key-widgetId(EditorWidget::GroupRemoveBase);const auto *object=document_.find(state_.groupEntity);
+      if(state_.groupPicker && object && index<object->groups.names().size() && !history_.isOpen()) {
+        auto value=*object;const auto name=value.groups.names()[index];value.groups.remove(name);
+        if(history_.applyValues(document_,object->id,value)) state_.status="Associação removida: "+name;
+      }
+      return true;
+    }
     if(key==widgetId(EditorWidget::TagClose)) {state_.tagPicker=false;return true;}
     if(key==widgetId(EditorWidget::TagNew)) {state_.editingTagName=true;state_.renameText[0]=0;return true;}
     if(key==widgetId(EditorWidget::TagSearch)) {
@@ -2995,6 +3182,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   if(cameraGestureOpen_ && routing.target==UiPointerTarget::Widget) finishCameraGesture(false);
+  if(!state_.numericField && handlePathEditorInput(event,routing)) return true;
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
   if(state_.curveField && !state_.numericField) return handleCurveEditor(event,routing);
@@ -3286,6 +3474,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.texturePickerScroll=std::clamp(state_.texturePickerScroll-routing.stepDelta.y,0.f,limit);return true;
     }
   }
+  // A aba de componentes usa arraste para navegar, não para reordenar por
+  // acidente. A ordem continua disponível pelo menu de cada componente.
+  if(routing.dragging && state_.inspectorSurface==EditorInspectorSurface::Components &&
+     layout_.componentOverviewWindow.contains(routing.start)) {
+    const float limit=std::max(0.f,layout_.componentOverviewContent-layout_.componentOverviewWindow.height);
+    state_.componentOverviewScroll=std::clamp(state_.componentOverviewScroll-routing.stepDelta.y,0.f,limit);
+    return true;
+  }
   // Inspector de vários recursos: arrastar em qualquer ponto dele rola.
   if(routing.dragging && state_.multiAsset.items.size()>1 && routing.widgetId>=widgetId(EditorWidget::MultiAssetApply) &&
      routing.widgetId<widgetId(EditorWidget::FilesMultiToggle)+detail::kRange) {
@@ -3317,13 +3513,21 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(openComponentPresets(state_.selection,fromAdd?0:state_.nativeMenu) && fromAdd) state_.addingComponent=false;
       return true;
     }
-    if(state_.presetPanel && ((presetKey>=widgetId(EditorWidget::PresetClose)&&presetKey<=widgetId(EditorWidget::PresetSaveRecipe)) ||
+    if(state_.presetPanel && ((presetKey>=widgetId(EditorWidget::PresetClose)&&presetKey<=widgetId(EditorWidget::PresetRecipeNext)) ||
         (presetKey>=widgetId(EditorWidget::PresetChoiceBase)&&presetKey<widgetId(EditorWidget::PresetChoiceBase)+256) ||
-        (presetKey>=widgetId(EditorWidget::PresetFieldBase)&&presetKey<widgetId(EditorWidget::PresetFieldBase)+4096))) {
+        (presetKey>=widgetId(EditorWidget::PresetFieldBase)&&presetKey<widgetId(EditorWidget::PresetFieldBase)+4096) ||
+        (presetKey>=widgetId(EditorWidget::PresetInputBase)&&presetKey<widgetId(EditorWidget::PresetInputBase)+256))) {
       if(state_.selection!=state_.presetEntity || state_.presetEpoch!=sceneEpoch_) {state_.presetPanel=false;return true;}
       if(presetKey==widgetId(EditorWidget::PresetClose)) {state_.presetPanel=false;state_.presetNaming=false;return true;}
+      if(presetKey==widgetId(EditorWidget::PresetLibrary)) {state_.presetSelected=0;state_.presetInputValues.clear();refreshComponentPresets();return true;}
+      if(presetKey==widgetId(EditorWidget::PresetRecipeDetails)) {state_.presetRecipeDetails=!state_.presetRecipeDetails;state_.presetRecipePage=0;return true;}
+      if(presetKey==widgetId(EditorWidget::PresetRecipePrevious)) {if(state_.presetRecipePage)--state_.presetRecipePage;return true;}
+      if(presetKey==widgetId(EditorWidget::PresetRecipeNext)) {++state_.presetRecipePage;return true;}
       if(presetKey==widgetId(EditorWidget::PresetPrevious)) {if(state_.presetPage) --state_.presetPage;return true;}
       if(presetKey==widgetId(EditorWidget::PresetNext)) {if((state_.presetPage+1)*4<state_.presetChoices.size()) ++state_.presetPage;return true;}
+      if(presetKey>=widgetId(EditorWidget::PresetInputBase)&&presetKey<widgetId(EditorWidget::PresetInputBase)+256) {
+        openRecipeInput(presetKey-widgetId(EditorWidget::PresetInputBase));return true;
+      }
       // Escolha por campo: marcar, desmarcar e paginar o diff não tocam a cena.
       if(presetKey>=widgetId(EditorWidget::PresetFieldBase)) {
         const auto index=presetKey-widgetId(EditorWidget::PresetFieldBase);
@@ -3355,7 +3559,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       }
       if(presetKey>=widgetId(EditorWidget::PresetChoiceBase)) {
         const auto index=presetKey-widgetId(EditorWidget::PresetChoiceBase);
-        if(index<state_.presetChoices.size()) {state_.presetSelected=state_.presetChoices[index].first;state_.presetDeleteConfirm=false;refreshComponentPresets();}
+        if(index<state_.presetChoices.size()) {state_.presetSelected=state_.presetChoices[index].first;state_.presetDeleteConfirm=false;state_.presetInputValues.clear();state_.presetRecipeDetails=false;state_.presetRecipePage=0;refreshComponentPresets();}
         return true;
       }
       std::string error;
@@ -3367,7 +3571,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       // Uma receita não tem "aplicar valores" e "adicionar" separados: ela
       // resolve os dois de uma vez, componente a componente, na transação.
       const bool applied=state_.presetSelectedIsRecipe?
-        applyComponentRecipe(state_.presetSelected,state_.presetEntity,{state_.presetEpoch,state_.presetRevision},error):
+        applyComponentRecipe(state_.presetSelected,state_.presetEntity,{state_.presetEpoch,state_.presetRevision},state_.presetInputValues,error):
         applyComponentPreset(state_.presetSelected,state_.presetEntity,state_.presetInstance,
           {state_.presetEpoch,state_.presetRevision},presetKey==widgetId(EditorWidget::PresetAdd),error);
       state_.status=error;if(applied) {state_.presetPanel=false;state_.nativeMenu=0;state_.addingComponent=false;}return true;
@@ -3602,7 +3806,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       } else state_.status="A hierarquia não permite alinhar esta pose sem shear";
       return true;
     }
-    if(key==widgetId(EditorWidget::ReferenceClose)) {state_.referenceInstance=0;return true;}
+    if(key==widgetId(EditorWidget::ReferenceClose)) {state_.referenceInstance=0;state_.presetInputIndex=0;state_.presetInputProperty=nullptr;return true;}
     if(key==widgetId(EditorWidget::ReferencePrevious)) {if(state_.referencePage) --state_.referencePage;return true;}
     if(key==widgetId(EditorWidget::ReferenceNext)) {++state_.referencePage;return true;}
     if(key==widgetId(EditorWidget::ReferenceModeToggle)) {
@@ -3627,16 +3831,16 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::ReferenceClear)||(key>=widgetId(EditorWidget::ReferenceChoiceBase)&&key<widgetId(EditorWidget::ReferenceChoiceBase)+0x01000000u)||
        key==widgetId(EditorWidget::ReferenceAssign)||(key>=widgetId(EditorWidget::ReferenceResultBase)&&key<widgetId(EditorWidget::ReferenceResultBase)+0x10000u)) {
-      const auto *entity=document_.find(state_.selection);if(!entity||!state_.referenceInstance) return true;
+      const auto *entity=document_.find(state_.presetInputIndex?state_.presetEntity:state_.selection);if(!entity||!state_.referenceInstance) return true;
       const auto scriptReference=editorScriptReference(state_.referenceScriptType);
-      const auto *property=state_.referenceScript?&scriptReference:editorReferenceProperty(*entity,state_.referenceInstance,state_.referenceProperty);
+      const auto *property=state_.presetInputIndex?state_.presetInputProperty:state_.referenceScript?&scriptReference:editorReferenceProperty(*entity,state_.referenceInstance,state_.referenceProperty);
       if(!property) {state_.referenceInstance=0;return true;}
       u64 target=0;
       if(key==widgetId(EditorWidget::ReferenceAssign) ||
          (key>=widgetId(EditorWidget::ReferenceResultBase)&&key<widgetId(EditorWidget::ReferenceResultBase)+0x10000u)) {
         // Avançado: o primeiro toque destaca (painel de inspeção); o segundo
         // toque ou "Escolher" atribui — só quando o campo aceita o objeto.
-        const auto results=editorAdvancedReferenceResults(document_,entity->id,*property,state_.referenceQuery,state_.referenceTypeFilter);
+        const auto results=state_.presetInputIndex?editorRecipeReferenceResults(document_,entity->id,state_.presetInputChoices,state_.referenceQuery,state_.referenceTypeFilter):editorAdvancedReferenceResults(document_,entity->id,*property,state_.referenceQuery,state_.referenceTypeFilter);
         const EditorReferenceResult *chosen=nullptr;
         if(key==widgetId(EditorWidget::ReferenceAssign)) {
           for(const auto &result:results) if(result.id==state_.referenceHighlight) chosen=&result;
@@ -3650,9 +3854,19 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         if(!chosen->compatible) {state_.status="O campo recusa este objeto";return true;}
         target=chosen->id;state_.referenceHighlight=0;
       } else if(key!=widgetId(EditorWidget::ReferenceClear)) {
-        const auto choices=editorReferenceChoices(document_,entity->id,*property,state_.referenceQuery);const auto index=key-widgetId(EditorWidget::ReferenceChoiceBase);
+        auto choices=state_.presetInputIndex?editorRecipeReferenceChoices(document_,state_.presetInputChoices,state_.referenceQuery):editorReferenceChoices(document_,entity->id,*property,state_.referenceQuery);
+        const auto index=key-widgetId(EditorWidget::ReferenceChoiceBase);
         if(index>=choices.size()) return true;
         target=choices[index];
+      }
+      if(state_.presetInputIndex) {
+        const auto index=state_.presetInputIndex-1;
+        if(state_.presetEpoch!=sceneEpoch_ || state_.presetRevision!=document_.revision() || index>=state_.presetInputValues.size() ||
+           (target && std::find(state_.presetInputChoices.begin(),state_.presetInputChoices.end(),target)==state_.presetInputChoices.end())) {
+          state_.status="Entrada de receita incompatível ou cena alterada";return true;
+        }
+        state_.presetInputValues[index]=target;state_.referenceInstance=0;state_.presetInputIndex=0;state_.presetInputProperty=nullptr;
+        refreshComponentPresets();state_.status="Entrada da receita preparada; cena preservada";return true;
       }
       // Como na Unity, pôr objetos no LOD 0 recalcula os limites do grupo. Vai
       // num comando só com a referência: um Desfazer volta os dois.
@@ -3732,7 +3946,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       const auto *component=entity->components.at(type);
       if(field>=component->type().triples.size()) return true;
       const auto &triple=component->type().triples[field];float values[3]{};
-      for(u32 axis=0;axis<3;++axis) {
+      for(u32 axis=0;axis<triple.dimensions();++axis) {
         bool found=false;
         for(const auto &p:component->type().numbers) if(p.id==triple.channels[axis]) {
           if(!p.presentation.isEditable(*component)) return true;
@@ -3741,7 +3955,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         if(!found) return true;
       }
       state_.numericField=key;state_.numericEntity=entity->id;state_.numericInstance=component->instanceId();state_.numericProperty=triple.id;
-      std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g %.9g %.9g",static_cast<double>(values[0]),static_cast<double>(values[1]),static_cast<double>(values[2]));
+      if(triple.dimensions()==2)std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g %.9g",static_cast<double>(values[0]),static_cast<double>(values[1]));
+      else std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g %.9g %.9g",static_cast<double>(values[0]),static_cast<double>(values[1]),static_cast<double>(values[2]));
       state_.numericReplace=true;state_.numericError=false;return true;
     }
     if(key>=widgetId(EditorWidget::ComponentNumberBase) && key<widgetId(EditorWidget::ComponentNumberBase)+0x01000000u) {
@@ -3775,7 +3990,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(bindingIndex>=component->type().resourceBindings.size()) return true;
       const auto &binding=component->type().resourceBindings[bindingIndex];
       if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile&&
-          binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip)||
+          binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::Texture)||
          slot>=binding.slotCount(*component)||
          !binding.presentation.isEditable(*component)) return true;
       state_.resourceInstance=component->instanceId();state_.resourceProperty=std::string(binding.id);state_.resourceSlot=slot;
@@ -3803,6 +4018,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       case 4:if(field<type.references.size()) add(type.references[field].id,scene::FieldKind::Reference);break;
       case 5:if(field<type.triples.size()) for(const auto channel:type.triples[field].channels) add(channel,scene::FieldKind::Number);break;
       case 9:if(field<type.slotNumbers.size()) add(type.slotNumbers[field].id,scene::FieldKind::SlotNumber,slot);break;
+      case 10:if(field<type.slotEnums.size()) add(type.slotEnums[field].id,scene::FieldKind::SlotEnum,slot);break;
       default:return true;
       }
       if(fields.empty()) return true;
@@ -4225,7 +4441,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           if(component) for(const auto &candidate:component->type().resourceBindings)
             if(candidate.id==state_.resourceProperty) {binding=&candidate;break;}
           if(binding&&(binding->kind==resources::AssetType::EnvironmentProfile||
-                      binding->kind==resources::AssetType::EnvironmentMap)) {
+                      binding->kind==resources::AssetType::EnvironmentMap||binding->kind==resources::AssetType::Texture||binding->kind==resources::AssetType::AudioClip)) {
             const auto index=request.property-1;
             if(index>=assets_.records().size()) return true;
             request.componentResource=assets_.records()[index].guid;
@@ -4541,16 +4757,6 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     return true;
   }
-  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::JumpCharacter)) {
-    // O toque no botão alimenta o dispositivo; quem traduz isso em salto é o
-    // mapa de ações, no próximo quadro de Play.
-    if(isPlaying()&&!state_.playPaused) jumpPressed_=true;
-    return true;
-  }
-  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PlaySecondaryAction)) {
-    if(isPlaying()&&!state_.playPaused) secondaryPressed_=true;
-    return true;
-  }
   if(routing.widgetId==widgetId(EditorWidget::FilesSplitter)) {
     if(routing.dragging && !state_.filesCollapsed) {
       const float height=layout_.hierarchyPanel.height+layout_.filesPanel.height;
@@ -4594,6 +4800,29 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     const auto maximum=files_.tree().size()>visible?files_.tree().size()-visible:0;
     state_.fileScrollOffset=std::min(state_.fileScrollOffset,static_cast<float>(maximum)*row);
     state_.fileScroll=static_cast<u32>(state_.fileScrollOffset/row);
+    return true;
+  }
+  if(routing.tapped && (routing.widgetId>=widgetId(EditorWidget::TweenRestart)&&routing.widgetId<widgetId(EditorWidget::TweenRestart)+0x10000u)) {
+    if(!isPlaying()||!playScene_.active()) return false;
+    auto &world=playScene_.world();
+    const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+    const u32 key=routing.widgetId-widgetId(EditorWidget::TweenRestart);
+    const auto *object=world.find(world.handle(target));
+    if(!object||key/4>=object->components.size()||key%4==3)return false;
+    const auto component=runtime::ComponentHandle{world.handle(target),object->components.at(key/4)->instanceId()};
+    const auto *value=world.readComponent(component);
+    if(!value||value->type().id!=scene::TransformTween::descriptor.id) return false;
+    const bool restart=key%4==0;
+    const auto *live=playScene_.tweens().state(target,component.instance);
+    const u32 operation=restart?1:key%4==1?2:live&&live->paused?4:3;
+    runtime::SceneTweens::State snapshot;
+    const bool accepted=playScene_.tweens().command(world,component,operation,snapshot)==runtime::WorldStatus::Ok;
+    state_.status=accepted?(operation==3?"Tween pausado":operation==4?"Tween retomado":restart?"Tween reiniciado no mundo Play":"Tween cancelado; pose atual preservada"):"Tween indisponível no mundo Play";
+    return accepted;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportWave)) {
+    if(isPlaying() || history_.isOpen()) return false;
+    state_.waveImportRequested=true;state_.codeFiles=false;state_.creationMenu=false;
     return true;
   }
   if(routing.tapped && state_.files && !history_.isOpen() && !isPlaying()) {
@@ -4737,6 +4966,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(state_.draggingAsset && event.pointerId!=assetPointer_) return true;
   if(state_.draggingEntity && event.pointerId!=hierarchyPointer_) return true;
   if(isPlaying() && routing.target==UiPointerTarget::Viewport) {
+    if(event.device==UiPointerDevice::Mouse) return false;
     const auto *controlled=document_.find(state_.selection);
     const auto view=sceneCameraPose();const auto *cameraEntity=document_.find(view.entity);
     const bool canLook=cameraEntity&&cameraLook(*cameraEntity);
@@ -4761,7 +4991,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingTagName || state_.editingTagSearch || state_.editingPhysicsLayerName) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingTagName || state_.editingTagSearch || state_.editingGroupName || state_.editingPhysicsLayerName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -5582,6 +5812,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       routing.widgetId==widgetId(EditorWidget::PrefabOverridesRefresh))) {
     if(state_.selectionSet.size()>1) {state_.status="Selecione um objeto para comparar com a fonte";return true;}
     const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+    state_.prefabOperationStatus.clear();
     std::string error;inspectPrefabOverrides(target,state_.prefabOverrides,error);
     state_.prefabOverridesOpen=true;state_.inspectorMenu=false;state_.inspectorDebug=false;
     state_.propertyPage=0;if(!error.empty()) state_.status=error;return true;
@@ -5589,10 +5820,45 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabOverridesClose)) {
     state_.prefabOverridesOpen=false;state_.propertyPage=0;return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabReceiveSource)) {
+    std::string error;
+    if(!refreshPrefabInstance(state_.prefabOverrides,error)) state_.status=error;
+    else {const auto target=state_.prefabOverrides.object;inspectPrefabOverrides(target,state_.prefabOverrides,error);state_.propertyPage=0;}
+    return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabOverridesRevertAll)) {
+    std::vector<usize> rows;
+    for(usize i=0;i<state_.prefabOverrides.rows.size();++i) rows.push_back(i);
+    std::string error;const auto target=state_.prefabOverrides.object;
+    if(!revertPrefabOverrides(state_.prefabOverrides,rows,error)) {
+      state_.status=error;state_.prefabOperationStatus=error;
+    } else {
+      inspectPrefabOverrides(target,state_.prefabOverrides,error);state_.propertyPage=0;
+      state_.prefabOperationStatus=error.empty()?"Diferenças revertidas neste objeto · Desfazer restaura o lote":error;
+    }
+    return true;
+  }
   if(routing.tapped && (routing.widgetId&0xff000000u)==widgetId(EditorWidget::PrefabOverrideRevertBase)) {
     std::string error;
     if(!revertPrefabOverride(state_.prefabOverrides,routing.widgetId&0x00ffffffu,error)) state_.status=error;
     else {const auto target=state_.prefabOverrides.object;inspectPrefabOverrides(target,state_.prefabOverrides,error);}
+    return true;
+  }
+  if(routing.tapped && (routing.widgetId&0xff000000u)==widgetId(EditorWidget::PrefabOverrideApplyBase)) {
+    const auto row=routing.widgetId&0x00ffffffu;
+    std::string error;PrefabApplyReport report;
+    const bool conflict=row<state_.prefabOverrides.rows.size() &&
+      state_.prefabOverrides.rows[row].origin==PrefabOverrideOrigin::Conflict;
+    const auto target=state_.prefabOverrides.object;
+    if(!applyPrefabOverride(state_.prefabOverrides,row,conflict,error,&report)) {
+      state_.prefabOperationStatus=error;state_.status=error;
+    } else {
+      state_.prefabOperationStatus="Fonte atualizada · "+std::to_string(report.instances)+" instâncias · "+
+        std::to_string(report.propagatedFields)+" campos herdados · "+std::to_string(report.conflicts)+" conflitos preservados";
+      const auto published=state_.prefabOperationStatus;
+      inspectPrefabOverrides(target,state_.prefabOverrides,error);
+      state_.prefabOperationStatus=error.empty()?published:published+" · "+error;
+    }
     return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PrefabUnpack)) {
@@ -5602,14 +5868,123 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     state_.entityMenu=false;state_.prefabOverridesOpen=false;return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::InspectorMenu)) state_.prefabOverridesOpen=false;
+  const auto previousSurface=state_.inspectorSurface;
   const EditorPointerOutcome outcome =
       applyEditorPointer(state_, layout_, routing, document_, history_);
+  if(previousSurface!=state_.inspectorSurface) saveEditorPreferences();
   if (outcome.requestPlay) preparePlay();
   if(!isPlaying()) {jumpPressed_=false;secondaryPressed_=false;}
   return outcome.consumed;
 }
 
+bool EditorSession::inputBindingCaptureActive() const noexcept {
+  return inputCapture_.has_value() && state_.inputCapturing &&
+      state_.workspace==EditorWorkspace::Project && state_.projectSection==EditorProjectSection::Input;
+}
+
+void EditorSession::cancelInputBindingCapture() {
+  inputCapture_.reset();state_.inputCapturing=false;state_.inputCaptureNegative=false;state_.inputCapturePrompt.clear();state_.inputCaptureFeedback.clear();
+}
+
+bool EditorSession::validateInputCapture() {
+  if(!inputBindingCaptureActive()) return false;
+  const auto &capture=*inputCapture_;const auto version=sceneVersion();
+  const auto &actions=document_.inputActions().actions();
+  return version.epoch==capture.version.epoch && version.revision==capture.version.revision &&
+      files_.rootPath()==capture.project && document_.inputActions()==capture.before &&
+      state_.inputActionIndex<actions.size() && actions[state_.inputActionIndex].id==capture.action &&
+      state_.inputBindingIndex==capture.binding && !history_.isOpen();
+}
+
+bool EditorSession::beginInputBindingCapture(bool negative) {
+  cancelInputBindingCapture();
+  if(state_.workspace!=EditorWorkspace::Project || state_.projectSection!=EditorProjectSection::Input ||
+     history_.isOpen() || pendingTextEdit().purpose!=EditorTextPurpose::None) {
+    state_.status="Finalize o campo atual e abra o mapa de entrada para capturar";return false;
+  }
+  const auto &actions=document_.inputActions().actions();
+  if(state_.inputActionIndex>=actions.size()) return false;
+  const auto &action=actions[state_.inputActionIndex];
+  if(state_.inputBindingIndex>=action.bindings.size()) return false;
+  const auto source=action.bindings[state_.inputBindingIndex].source;
+  if((source!=runtime::InputSource::Key && source!=runtime::InputSource::GamepadButton && source!=runtime::InputSource::GamepadAxis && source!=runtime::InputSource::MouseButton) ||
+     (negative && (source!=runtime::InputSource::Key || action.kind==runtime::ActionKind::Button))) {
+    state_.status="A captura exige Tecla, Botão mouse, Botão gamepad ou Eixo gamepad";return false;
+  }
+  InputCapture capture;capture.version=sceneVersion();capture.before=document_.inputActions();
+  capture.project=files_.rootPath();capture.action=action.id;capture.binding=state_.inputBindingIndex;capture.negative=negative;
+  inputCapture_=std::move(capture);state_.inputCapturing=true;state_.inputCaptureNegative=negative;
+  state_.inputCapturePrompt=source==runtime::InputSource::Key?
+      negative?"Pressione a tecla negativa":"Pressione uma tecla":
+      source==runtime::InputSource::GamepadButton?"Pressione um botão":source==runtime::InputSource::MouseButton?"Clique um botão do mouse":"Mova o eixo do gamepad";
+  state_.inputCaptureFeedback=source==runtime::InputSource::GamepadAxis?"Solte o eixo antes de mover":"Aguardando nova pressão";
+  state_.status="Capturando · "+action.id;return true;
+}
+
+bool EditorSession::commitInputCapture(u32 code,bool invert) {
+  if(!validateInputCapture()) {cancelInputBindingCapture();state_.status="Captura cancelada: a autoria mudou";return false;}
+  auto map=inputCapture_->before;auto action=*map.find(inputCapture_->action);auto &binding=action.bindings[inputCapture_->binding];
+  if(binding.source==runtime::InputSource::Key) {
+    if(code==(inputCapture_->negative?binding.code:binding.negativeCode) && code) {
+      state_.status="Use teclas diferentes para as duas direções";state_.inputCaptureFeedback=state_.status;return false;
+    }
+    if(inputCapture_->negative) binding.negativeCode=code;else binding.code=code;
+  } else {
+    binding.code=code;if(binding.source==runtime::InputSource::GamepadAxis) binding.invert=invert;
+  }
+  const auto name=action.id;
+  if(!map.replace(name,action) || !history_.setInputActions(document_,map)) {
+    cancelInputBindingCapture();state_.status="O vínculo capturado foi recusado";return false;
+  }
+  cancelInputBindingCapture();state_.status="Vínculo capturado · "+name+" · código "+std::to_string(code);return true;
+}
+
+bool EditorSession::captureInputKey(u32 code,bool gamepad,bool down,bool repeated) {
+  if(!inputCapture_) return false;
+  if(!validateInputCapture()) {cancelInputBindingCapture();return false;}
+  if(down && !gamepad && (code==4 || code==111)) {cancelInputBindingCapture();state_.status="Captura cancelada";return true;}
+  if(repeated) {state_.inputCaptureFeedback="Solte a tecla antes de pressionar";return true;}
+  if(!down || !code || code>65535 || code==3 || code==24 || code==25 || code==26) return true;
+  const auto &action=*inputCapture_->before.find(inputCapture_->action);
+  const auto source=action.bindings[inputCapture_->binding].source;
+  if(source==(gamepad?runtime::InputSource::GamepadButton:runtime::InputSource::Key)) commitInputCapture(code,false);
+  else state_.inputCaptureFeedback="Entrada de outra fonte ignorada";
+  return true;
+}
+
+bool EditorSession::captureInputMouseButton(u32 code,bool down,UiPoint position) {
+  if(!inputCapture_) return false;
+  if(!validateInputCapture()) {cancelInputBindingCapture();return false;}
+  if(!down || code>=5) return true;
+  const auto hit=router_.hitTest(position);
+  if(code==0 && hit.target==UiPointerTarget::Widget && hit.widgetId==widgetId(EditorWidget::InputBindingCaptureCancel)) {
+    cancelInputBindingCapture();state_.status="Captura cancelada";return true;
+  }
+  const auto &action=*inputCapture_->before.find(inputCapture_->action);
+  if(action.bindings[inputCapture_->binding].source==runtime::InputSource::MouseButton)commitInputCapture(code,false);
+  else state_.inputCaptureFeedback="Entrada de outra fonte ignorada";
+  return true;
+}
+
+bool EditorSession::captureInputAxes(const std::array<float,8> &axes) {
+  if(!inputCapture_) return false;
+  if(!validateInputCapture()) {cancelInputBindingCapture();return false;}
+  const auto &action=*inputCapture_->before.find(inputCapture_->action);
+  if(action.bindings[inputCapture_->binding].source!=runtime::InputSource::GamepadAxis) return true;
+  u32 selected=8;float magnitude=.65f;bool heldBeforeArm=false;
+  for(u32 i=0;i<axes.size();++i) {
+    if(!std::isfinite(axes[i]) || std::abs(axes[i])>1.01f) continue;
+    if(std::abs(axes[i])<.2f) inputCapture_->neutralAxes|=1u<<i;
+    if(!(inputCapture_->neutralAxes&(1u<<i)) && std::abs(axes[i])>.65f) heldBeforeArm=true;
+    if((inputCapture_->neutralAxes&(1u<<i)) && std::abs(axes[i])>magnitude) {selected=i;magnitude=std::abs(axes[i]);}
+  }
+  if(selected<axes.size()) commitInputCapture(selected,axes[selected]<0);
+  else state_.inputCaptureFeedback=heldBeforeArm || !inputCapture_->neutralAxes?"Solte o eixo antes de mover":"Mova o eixo com mais força";
+  return true;
+}
+
 bool EditorSession::startPlay() {
+  cancelInputBindingCapture();
   if(isPlaying()) return true;
   // As mesmas travas do botão Play: fonte compilando ou não publicada.
   if(state_.codeBuildBusy) return false;
@@ -5621,6 +5996,8 @@ bool EditorSession::startPlay() {
 }
 
 void EditorSession::preparePlay() {
+  if(playScene_.active()) {endPlayInspect();playScene_.stop();runtimeTextures_.clear();}
+  state_.playTimeScale=1;
   std::vector<EditorEntityId> tagObjects;document_.collectSubtree(document_.root(),tagObjects);
   for(const auto id:tagObjects) if(!document_.tags().contains(document_.find(id)->tag)) {
     state_.status="Tag ausente no catálogo: "+document_.find(id)->tag;
@@ -6398,6 +6775,7 @@ void EditorSession::cancelPointers() {
   finishCameraGesture(true);
   playTouches_.cancel();
   jumpPressed_=false;secondaryPressed_=false;
+  cancelPlayButtons();
   state_.draggingAsset=false;
   state_.draggingEntity=kInvalidEntity;
   router_.cancelAllPointers();
@@ -6477,7 +6855,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   mapScene_.hydrateMaterials(candidate);
   cancelPointers();document_=std::move(candidate);history_.clear();
   state_.cameraViewEntity=0;state_.cameraPiloting=false;state_.componentGroup.clear();
-  sceneEpoch_=nextSceneEpoch();cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
+  sceneEpoch_=nextSceneEpoch();state_.groupPicker=false;state_.editingGroupName=false;state_.groupEntity=0;cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
   // R4: a cena aberta pode usar texturas do projeto que a biblioteca atual ainda
   // não publicou.
   anticipatedTextures_.clear();
@@ -7046,6 +7424,14 @@ void EditorSession::anticipateSceneTextures(const char *path,u64 fingerprint) {
     const auto *entity=scene.find(id);
     const auto *render=entity?meshRenderer(*entity):nullptr;
     if(!render) continue;
+    for(u32 slot=0;slot<render->slotCount();++slot) {
+      const auto guid=render->slotLightmap(slot).texture;
+      if(guid.valid()) {
+        const UsedTexture item{guid,false,false,EditorMapScene::samplerFlags(scene::lightmapSampling())};
+        if(std::find(anticipatedTextures_.begin(),anticipatedTextures_.end(),item)==anticipatedTextures_.end())
+          anticipatedTextures_.push_back(item);
+      }
+    }
     for(u32 slot=0;slot<render->slotCount();++slot)
       for(u32 binding=0;binding<=scene::MaterialOcclusionTextureBinding;++binding) {
         // Mesma resolução da extração: textura e amostragem da instância, senão do
@@ -8231,7 +8617,7 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
     state_.projectSection=EditorProjectSection::Layers;
   state_.creationCategory=0;state_.creationSelection=0;state_.creationScroll=0;
 
-  sceneEpoch_=nextSceneEpoch();cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
+  sceneEpoch_=nextSceneEpoch();state_.groupPicker=false;state_.editingGroupName=false;state_.groupEntity=0;cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
   history_.clear();
   state_.selection = kInvalidEntity;
   state_.hierarchyScroll = 0;
@@ -8503,7 +8889,16 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
     if(scene::setComponentProperty(values.components,initial.component,initial.property,initial.value)!=
        scene::ComponentPropertyStatus::Applied)
       return refuse(std::string(recipe.name)+": valor inicial recusado ("+std::string(initial.property)+")");
-  if(!recipe.selectionComponent.empty() && selected!=kInvalidEntity &&
+  if(!recipe.pathPoints.empty()){
+    auto*c=values.components.edit(scene::Path::descriptor);
+    if(!c)return refuse("Receita de caminho sem componente Path");
+    auto&path=*static_cast<scene::Path*>(c);
+    for(const auto&point:recipe.pathPoints){u64 allocated=0;if(!path.insertPoint(0,point,allocated))return refuse("Receita contém pontos inválidos ou excede limite 128");}
+    if(!path.valid())return refuse("Curva inicial inválida");
+  }
+  const bool selectedJointBody=recipe.selectionComponent!="astra.physics.joint" ||
+    (document_.find(selected)&&runtime::physicsBody(*document_.find(selected)));
+  if(!recipe.selectionComponent.empty() && selected!=kInvalidEntity && selectedJointBody &&
      scene::setComponentProperty(values.components,recipe.selectionComponent,recipe.selectionProperty,
                                  scene::ObjectReference{selected})!=scene::ComponentPropertyStatus::Applied)
     return refuse(std::string(recipe.name)+": o objeto selecionado não é um alvo aceito");
@@ -8547,6 +8942,12 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
     }
   assignEntityName(values,recipe.name);
   float parentWorld[16],objectWorld[16];editorTransformMatrix(values.transform,objectWorld);
+  if(recipe.anchor2DAtCreation) {
+    auto *joint=static_cast<scene::Joint2D*>(values.components.edit(scene::Joint2D::descriptor));
+    if(!joint || !joint->worldAnchor) return refuse("Receita de âncora 2D inválida");
+    joint->anchorBX=objectWorld[12];joint->anchorBY=objectWorld[13];
+    if(!joint->valid()) return refuse("Âncora fora dos limites suportados");
+  }
   if(!editorWorldMatrix(document_,parent,parentWorld) ||
      !editorLocalTransformForWorld(objectWorld,parentWorld,values.transform))
     return refuse("Não foi possível criar objeto neste pai");
@@ -8556,6 +8957,17 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
     history_.cancel(document_);return refuse("Não foi possível criar objeto");
   }
   history_.end();setSelection(id);
+  if(!recipe.authoringComponent.empty()) {
+    if(const auto *component=document_.find(id)->components.find(recipe.authoringComponent)) {
+      state_.componentSelection=id;state_.expandedNative=component->instanceId();
+      state_.expandedComponent.clear();state_.componentGroup.clear();state_.propertyPage=0;
+      state_.inspectorSurface=EditorInspectorSurface::Inspection;
+      state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
+    }
+  }
+  if(!recipe.pathPoints.empty()){
+    refreshPathEditorState();state_.pathEditorOpen=true;state_.pathPointList=false;
+  }
   state_.status=std::string("Objeto criado: ")+recipe.name;
   return id;
 }
@@ -8710,8 +9122,13 @@ void EditorSession::refreshSkinningStatus() {
   }
 }
 void EditorSession::update() {
+  if(inputCapture_ && !validateInputCapture()) cancelInputBindingCapture();
   refreshScriptInspection();
   state_.document=playInspecting()?&playScene_.document():&document_;
+  state_.characterRuntime=playInspecting()&&playScene_.active()?&playScene_.physics():nullptr;
+  state_.characterWorld=playInspecting()&&playScene_.active()?&playScene_.world():nullptr;
+  state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;
+  state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   // Travado num objeto que deixou de existir (apagado, outra cena): volta a seguir a seleção.
   if(state_.inspectorLocked && !state_.document->exists(state_.inspectorLocked)) state_.inspectorLocked=0;
@@ -8722,6 +9139,7 @@ void EditorSession::update() {
   // `+=` e da prévia. Fechar e abrir outro recomeça no teclado numérico.
   if(state_.numericField!=numericFieldSeen_) {
     numericFieldSeen_=state_.numericField;state_.numericExpression=false;
+    if((state_.numericField&0xff000000u)!=widgetId(EditorWidget::ComponentSlotNumberBase))numericPathPointId_=0;
     std::string text=state_.numericText;
     if(text.find('.')==std::string::npos) std::replace(text.begin(),text.end(),',','.');
     char *stop=nullptr;const double value=std::strtod(text.c_str(),&stop);
@@ -8736,10 +9154,45 @@ void EditorSession::update() {
   // As leituras que o Inspector mostra vêm do objeto que ELE mostra (travado
   // ou a seleção), não necessariamente do que está selecionado na cena.
   inInspectorScope(state_.inspectorLocked,[&] {
+    refreshPathEditorState();
     refreshImportLinkView();
     refreshMaterialSlotView();
     refreshLodStatus();
     refreshSkinningStatus();
+    state_.constraintStatus.clear();state_.constraintStatusWarning=false;
+    state_.audioStatus.clear();state_.audioStatusWarning=false;
+    const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
+    const auto inspected=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+    const auto *object=graph.find(inspected);
+    if(object)for(usize i=0;i<object->components.size();++i){
+      const auto *c=object->components.at(i);
+      if(c->type().id=="astra.audio.source"){
+        state_.audioStatus="Pedido salvo · estado real em Play";
+        if(isPlaying()&&playScene_.active()){
+          const auto *diagnostic=playScene_.audio().diagnostic(object->id,c->instanceId());
+          state_.audioStatus=diagnostic?diagnostic->message:"Aguardando avaliação de áudio";
+          state_.audioStatusWarning=diagnostic&&diagnostic->state>=runtime::SceneAudio::State::MissingClip;
+        }
+      }
+    }
+    bool hasConstraint=false,enabled=false;
+    if(object) for(usize i=0;i<object->components.size();++i) {
+      const auto *value=object->components.at(i);
+      if(!value->type().id.starts_with("astra.constraint.")&&!value->type().id.starts_with("astra.spring.")) continue;
+      hasConstraint=true;
+      for(const auto &p:value->type().booleans) if(p.id=="enabled") enabled|=p.read(*value);
+    }
+    if(hasConstraint) {
+      state_.constraintStatus=isPlaying()?(enabled?"Avaliação em Play · após animação e física":"Constraints desativadas"):
+        "Autoria · a fonte será avaliada em Play";
+      if(isPlaying()&&playScene_.active()) for(const auto &diagnostic:playScene_.constraints().diagnostics()) {
+        if(diagnostic.object!=inspected) continue;
+        if(!state_.constraintStatusWarning) state_.constraintStatus.clear();
+        else state_.constraintStatus+=" · ";
+        state_.constraintStatus+=runtime::SceneConstraints::issueText(diagnostic.issue);
+        state_.constraintStatusWarning=true;
+      }
+    }
     return true;
   });
   // R4: miniaturas nascem uma por atualização enquanto o seletor está aberto.
@@ -9170,7 +9623,7 @@ void EditorSession::refreshTexturePanels() {
       bool uses=false;
       for(u32 slot=0;slot<render->slotCount() && !uses;++slot)
         uses=std::find(render->slotTextures(slot).begin(),render->slotTextures(slot).end(),guid)!=render->slotTextures(slot).end() ||
-             render->slotOcclusionTexture(slot)==guid;
+             render->slotOcclusionTexture(slot)==guid || render->slotLightmap(slot).texture==guid;
       if(!uses) continue;
       state_.textureUserLabels.push_back(std::string("Objeto: ")+entity->name);
       state_.textureUserEntities.push_back(id);
@@ -9548,6 +10001,8 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
         add(mapScene_.slotTexture(*render,slot,binding),binding,mapScene_.slotSampling(*render,slot,binding));
     for(u32 slot=0;slot<render->slotCount();++slot)
       add(mapScene_.slotOcclusionTexture(*render,slot),2,mapScene_.slotSampling(*render,slot,2));
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      add(render->slotLightmap(slot).texture,2,scene::lightmapSampling());
   }
 }
 
@@ -10394,6 +10849,8 @@ bool EditorSession::openComponentPresets(EditorEntityId entity,u64 instance) {
   std::string error;if(!componentPresets_.load(files_.rootPath(),error)) {state_.status=error;return false;}
   state_.presetPanel=true;state_.presetEntity=entity;state_.presetInstance=instance;
   state_.presetSelected=0;state_.presetPage=0;state_.presetDeleteConfirm=false;state_.presetNaming=false;
+  state_.presetInputValues.clear();state_.presetInputIndex=0;state_.presetInputProperty=nullptr;
+  state_.presetRecipeDetails=false;state_.presetRecipePage=0;
   state_.presetRenaming=false;state_.presetRecipeNaming=false;
   state_.impactInstance=0;refreshComponentPresets();return true;
 }
@@ -10401,6 +10858,7 @@ bool EditorSession::openComponentPresets(EditorEntityId entity,u64 instance) {
 void EditorSession::refreshComponentPresets() {
   state_.presetChoices.clear();state_.presetPreview.clear();state_.presetFields.clear();state_.presetFieldPage=0;
   state_.presetEpoch=sceneEpoch_;state_.presetRevision=document_.revision();state_.presetSelectedIsRecipe=false;
+  state_.presetInputNames.clear();state_.presetRecipeReady=false;
   const auto *object=document_.find(state_.presetEntity);const auto *source=object?object->components.findInstance(state_.presetInstance):nullptr;
   if(!object||(state_.presetInstance&&!source)) {state_.presetPanel=false;return;}
   // Com um componente em contexto, a lista mostra o que serve NELE. Sem
@@ -10414,14 +10872,16 @@ void EditorSession::refreshComponentPresets() {
   const auto *record=componentPresets_.find(state_.presetSelected);
   state_.presetSelectedIsRecipe=record&&record->recipe();
   if(state_.presetSelectedIsRecipe) {
+    state_.presetRecipeName=record->name;state_.presetRecipeCount=static_cast<u32>(record->entries.size());
+    state_.presetInputNames=record->inputs;state_.presetInputValues.resize(record->inputs.size());
     // Receita: o preview responde o que vai ser ADICIONADO, o que vai ser
     // ATUALIZADO e o que a receita exige e não traz. Sem essa terceira linha, o
     // autor descobre o requisito externo só quando a transação inteira falha.
-    std::string recipeError;auto values=componentPresets_.instantiateAll(state_.presetSelected,recipeError);
-    if(values.empty()) {state_.presetPreview.push_back(recipeError);return;}
+    std::string recipeError;auto values=componentPresets_.instantiateAll(state_.presetSelected,recipeError,0,{},true);
+    if(values.empty()) {state_.presetPreview.push_back(recipeError);state_.presetRecipeStatus=recipeError;return;}
     for(const auto &value:values) {
       const auto *schema=scene::findComponentSchema(value->type().id);
-      const bool present=object->components.find(value->type().id)!=nullptr;
+      const bool present=!value->type().allowMultiple && object->components.find(value->type().id)!=nullptr;
       state_.presetPreview.push_back(std::string(present?"Atualizar: ":"Adicionar: ")+(schema?schema->name:std::string(value->type().id).c_str()));
     }
     for(const auto &value:values) {
@@ -10433,7 +10893,11 @@ void EditorSession::refreshComponentPresets() {
         if(!satisfied) state_.presetPreview.push_back(std::string("Exige e não traz: ")+rule.message);
       }
     }
-    state_.presetPreview.push_back("Referências de cena deste objeto são preservadas");
+    EditorEntity candidate;
+    state_.presetRecipeReady=prepareComponentRecipe(state_.presetSelected,object->id,state_.presetInputValues,candidate,recipeError);
+    state_.presetRecipeStatus=state_.presetRecipeReady?"Alvos preparados; aplicar grava uma transação":recipeError;
+    if(std::any_of(record->entries.begin(),record->entries.end(),[](const auto &e){return std::any_of(e.references.begin(),e.references.end(),[](const auto &r){return !r.input;});}))
+      state_.presetPreview.push_back("Referências próprias serão remapeadas ao destino");
     return;
   }
   std::string error;auto preset=componentPresets_.instantiate(state_.presetSelected,error);
@@ -10518,6 +10982,7 @@ bool EditorSession::resolveComponentResources(scene::ComponentValue &value,const
         if(!mapScene_.findClip(asset,view)) {error="Clipe do recurso não está carregado";return false;}
         continue;
       }
+      if(binding.kind==resources::AssetType::AudioClip && !loadAudioClip(asset,error)) return false;
       if(binding.kind==resources::AssetType::EnvironmentProfile && !findEnvironmentProfile(asset)) {
         error="Perfil de ambiente do recurso não está carregado";return false;
       }
@@ -10547,6 +11012,29 @@ bool EditorSession::resolveComponentResources(scene::ComponentValue &value,const
   return true;
 }
 
+bool EditorSession::openRecipeInput(u32 index) {
+  const auto *record=componentPresets_.find(state_.presetSelected);const auto *object=document_.find(state_.presetEntity);
+  if(!record || !object || index>=record->inputs.size() || state_.presetEpoch!=sceneEpoch_ || state_.presetRevision!=document_.revision())return false;
+  std::string error;auto values=componentPresets_.instantiateAll(record->id,error,0,{},true);
+  if(values.empty()){state_.status=error;return false;}
+  auto candidate=*object;std::vector<const scene::ComponentObjectReference*> properties;
+  for(usize i=0;i<values.size();++i) {
+    const auto &value=*values[i];const auto *existing=candidate.components.find(value.type().id);u64 target=0;
+    if(existing && !value.type().allowMultiple)target=existing->instanceId();
+    else {auto plan=scene::planComponentAddition(candidate.components,value.type().id);if(!plan.ready){state_.status=plan.error;return false;}target=plan.requestedInstance;candidate.components=std::move(plan.candidate);}
+    if(!candidate.components.replaceInstance(target,value))return false;
+    for(const auto &binding:record->entries[i].references)if(binding.input==index+1)
+      for(const auto &property:value.type().references)if(property.id==binding.property)properties.push_back(&property);
+  }
+  if(properties.empty()){state_.status="Entrada de receita sem endereço válido";return false;}
+  auto checked=document_;if(!checked.applyEntityValues(object->id,candidate))return false;
+  state_.presetInputChoices=editorReferenceChoices(checked,object->id,*properties.front(),{});
+  std::erase_if(state_.presetInputChoices,[&](auto id){return std::any_of(properties.begin(),properties.end(),[&](const auto *p){return !editorReferenceAccepts(checked,object->id,*p,id,true);});});
+  state_.presetInputIndex=index+1;state_.presetInputProperty=properties.front();state_.componentSelection=object->id;
+  state_.referenceInstance=std::numeric_limits<u64>::max();state_.referenceScript=false;state_.referencePage=0;state_.referenceQuery.clear();state_.referenceHighlight=0;
+  return true;
+}
+
 bool EditorSession::saveComponentRecipe(EditorEntityId entity,std::string name,std::string &error) {
   if(isPlaying()||history_.isOpen()) {error="Conclua a edição antes de salvar preset";return false;}
   const auto *object=document_.find(entity);
@@ -10564,16 +11052,30 @@ bool EditorSession::saveComponentRecipe(EditorEntityId entity,std::string name,s
       *mesh.editSlotMesh(slot)=0;
     }
   }
-  return componentPresets_.captureRecipe(std::move(name),components,error);
+  return componentPresets_.captureRecipe(std::move(name),components,error,entity);
 }
 
 bool EditorSession::applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::string &error) {
+  return applyComponentRecipe(preset,entity,expected,{},error);
+}
+bool EditorSession::applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::span<const u64> inputs,std::string &error) {
   if(isPlaying()||history_.isOpen()||expected.epoch!=sceneEpoch_||expected.revision!=document_.revision()) {error="Cena alterada; selecione novamente o preset";return false;}
+  EditorEntity candidate;
+  if(!prepareComponentRecipe(preset,entity,inputs,candidate,error))return false;
+  const auto before=document_.find(entity)->components.size();
+  if(!history_.applyValues(document_,entity,candidate)) {error="Não foi possível aplicar a receita";return false;}
+  state_.propertyPage=0;appearanceChanged_=true;
+  error="Receita aplicada: "+std::to_string(candidate.components.size()-before)+" componentes adicionados; valores e alvos disponíveis em Desfazer";
+  std::string publication;if(!ensureTexturesPublished(publication)) error+="; publicação pendente: "+publication;
+  return true;
+}
+bool EditorSession::prepareComponentRecipe(u64 preset,EditorEntityId entity,std::span<const u64> inputs,EditorEntity &candidate,std::string &error) {
   const auto *object=document_.find(entity);
   if(!object) {error="Objeto ausente";return false;}
-  auto values=componentPresets_.instantiateAll(preset,error);
+  auto values=componentPresets_.instantiateAll(preset,error,entity,inputs);
   if(values.empty()) return false;
-  auto candidate=*object;u32 added=0,updated=0;
+  const auto *recipe=componentPresets_.find(preset);
+  candidate=*object;usize part=0;std::vector<u64> authoredOrder;
   for(auto &value:values) {
     if(!resolveComponentResources(*value,nullptr,error)) return false;
     const auto *existing=candidate.components.find(value->type().id);
@@ -10582,21 +11084,29 @@ bool EditorSession::applyComponentRecipe(u64 preset,EditorEntityId entity,Editor
       target=existing->instanceId();
       // O que é da CENA fica na cena: um preset nunca carrega ObjectId, então a
       // referência já escolhida neste objeto é preservada em vez de zerada.
-      for(const auto &p:value->type().references) if(p.read&&p.write) p.write(*value,p.read(*existing));
-      ++updated;
+      for(const auto &p:value->type().references) if(p.read&&p.write &&
+          std::none_of(recipe->entries[part].references.begin(),recipe->entries[part].references.end(),[&](const auto &r){return r.property==p.id;}))p.write(*value,p.read(*existing));
     } else {
       auto plan=scene::planComponentAddition(candidate.components,value->type().id);
       if(!plan.ready) {error=plan.error;return false;}
       target=plan.requestedInstance;candidate.components=std::move(plan.candidate);
-      ++added;
     }
-    if(!value->valid()||!editorReferencesAccept(document_,entity,*value)) {error="Referências ou valores incompatíveis";return false;}
+    if(!value->valid()) {error="Valores incompatíveis";return false;}
     if(!candidate.components.replaceInstance(target,*value)) {error="Não foi possível preparar a receita";return false;}
+    authoredOrder.push_back(target);
+    ++part;
   }
-  if(!history_.applyValues(document_,entity,candidate)) {error="Não foi possível aplicar a receita";return false;}
-  state_.propertyPage=0;appearanceChanged_=true;
-  error="Receita aplicada: "+std::to_string(added)+" adicionados e "+std::to_string(updated)+" atualizados; disponível em Desfazer";
-  std::string publication;if(!ensureTexturesPublished(publication)) error+="; publicação pendente: "+publication;
+  std::vector<usize> slots;std::vector<u64> desired;
+  for(usize i=0;i<candidate.components.size();++i) {
+    const auto id=candidate.components.at(i)->instanceId();desired.push_back(id);
+    if(std::find(authoredOrder.begin(),authoredOrder.end(),id)!=authoredOrder.end())slots.push_back(i);
+  }
+  if(slots.size()!=authoredOrder.size()){error="Identidade ambígua na receita";return false;}
+  for(usize i=0;i<slots.size();++i)desired[slots[i]]=authoredOrder[i];
+  for(usize i=0;i<desired.size();++i)if(!candidate.components.moveInstance(desired[i],i))return false;
+  auto checked=document_;
+  if(!checked.applyEntityValues(entity,candidate)){error="Composição inválida";return false;}
+  for(usize i=0;i<candidate.components.size();++i)if(!editorReferencesAccept(checked,entity,*candidate.components.at(i))) {error="Referências incompatíveis com a composição final";return false;}
   return true;
 }
 

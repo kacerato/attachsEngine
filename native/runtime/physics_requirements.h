@@ -29,6 +29,8 @@ inline const char *colliderPoseForPhysics(const SceneGraph &graph,ObjectId id,
   if((collider.shape==scene::ColliderShape::Sphere||collider.shape==scene::ColliderShape::Capsule) &&
      (std::abs(x-y)>1e-4f*x||std::abs(x-z)>1e-4f*x))
     return "Esfera e cápsula requerem escala global uniforme";
+  if(collider.shape==scene::ColliderShape::Cylinder&&std::abs(x-z)>1e-4f*x)
+    return "Cilindro requer escalas X e Z iguais";
   return nullptr;
 }
 // O que a forma Malha exige além da pose. Um recurso de colisão explícito vence

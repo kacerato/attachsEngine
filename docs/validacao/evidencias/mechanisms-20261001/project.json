@@ -1,0 +1,12 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "project": {
+    "name": "Mecanismos-20261001-Aceite",
+    "path": "/storage/emulated/0/Android/data/dev.aether.editor/files/Projetos/Mecanismos-20261001-Aceite",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 0
+  },
+  "editorScene": "scenes/editor.aescene"
+}

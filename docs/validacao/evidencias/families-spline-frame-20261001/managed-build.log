@@ -1,0 +1,17 @@
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Debug\net8.0\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Debug\net8.0\Aether.Core.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\bin\Debug\net8.0\Aether.Scene.dll
+  Aether.Flow -> C:\Users\donod\Downloads\atchengine\managed\Aether.Flow\bin\Debug\net8.0\Aether.Flow.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Debug\net8.0\Astra.Scripting.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Debug\net8.0\Aether.Rendering.dll
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\SplineFrameApiTests.cs(41,104): error CS1503: Argumento 2: não é possível converter de "double" para "float" [C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\Aether.Tests.csproj]
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\SplineFrameApiTests.cs(54,221): error CS1503: Argumento 2: não é possível converter de "double" para "float" [C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\Aether.Tests.csproj]
+
+FALHA da compilação.
+
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\SplineFrameApiTests.cs(41,104): error CS1503: Argumento 2: não é possível converter de "double" para "float" [C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\Aether.Tests.csproj]
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\SplineFrameApiTests.cs(54,221): error CS1503: Argumento 2: não é possível converter de "double" para "float" [C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\Aether.Tests.csproj]
+    0 Aviso(s)
+    2 Erro(s)
+
+Tempo Decorrido 00:00:05.36

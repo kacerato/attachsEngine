@@ -403,6 +403,7 @@ std::string_view describeCommand(const EditorCommand &command) {
   if (a.components.size() > b.components.size()) return "Remover componente";
   if (a.layer != b.layer) return "Camada";
   if (a.tag != b.tag) return "Tag";
+  if (a.groups != b.groups) return "Grupos";
   if (a.visible != b.visible || a.castShadow != b.castShadow || a.receiveShadow != b.receiveShadow ||
       a.isStatic != b.isStatic) return "Renderização";
   return "Editar componente";

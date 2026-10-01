@@ -86,6 +86,9 @@ struct ComponentNumber {
   // Empty is reserved for legacy fields without a reflected public contract.
   std::string_view id{};
   PropertyPresentation presentation{};
+  // Opt-in for independently valid numeric writes with a per-frame consumer.
+  // Structural/rebuild properties and coupled tuples must keep this false.
+  bool tweenable=false;
 };
 struct ComponentBoolean {
   std::string_view id;
@@ -204,12 +207,24 @@ struct ComponentResourceBinding {
   }
 };
 
-enum class ComponentTripleKind { Vector, LinearColor };
+enum class ComponentTripleKind { Vector, LinearColor, Vector2 };
+// Persistent collection structure is distinct from positional property slots.
+// Consumers can check portability without knowing concrete component classes.
+struct ComponentCollection {
+  std::string_view id;
+  u32 (*size)(const ComponentValue &)=nullptr;
+  u64 (*elementId)(const ComponentValue &,u32)=nullptr;
+  u64 (*nextId)(const ComponentValue &)=nullptr;
+  // Advance a retirement boundary without changing element identity or order.
+  bool (*reserveIdsUntil)(ComponentValue &,u64)=nullptr;
+};
 struct ComponentTriple {
   std::string_view id;
   const char *name;
   std::string_view channels[3];
   ComponentTripleKind kind=ComponentTripleKind::Vector;
+  // Fixed three-float transport; Vector2 has exactly two persisted channels.
+  u32 dimensions() const noexcept {return kind==ComponentTripleKind::Vector2?2:3;}
 };
 // Descriptors have static lifetime. IDs and versions are archive contracts;
 // pointer identity is only a checked, process-local type token (no RTTI).
@@ -230,7 +245,29 @@ struct ComponentType {
   // Propriedades que existem uma vez POR SLOT, não uma por componente.
   std::span<const ComponentSlotNumber> slotNumbers{};
   std::span<const ComponentSlotEnum> slotEnums{};
+  std::span<const ComponentCollection> collections{};
 };
+inline bool sameComponentCollectionStructure(const ComponentValue &a,const ComponentValue &b) {
+  if(&a.type()!=&b.type()) return false;
+  for(const auto &collection:a.type().collections) {
+    if(!collection.size || !collection.elementId || !collection.nextId) return false;
+    const auto count=collection.size(a);
+    if(count!=collection.size(b) || collection.nextId(a)!=collection.nextId(b)) return false;
+    for(u32 slot=0;slot<count;++slot)
+      if(collection.elementId(a,slot)!=collection.elementId(b,slot)) return false;
+  }
+  return true;
+}
+inline bool preserveComponentCollectionIdentityFloor(ComponentValue &candidate,const ComponentValue &previous) {
+  if(&candidate.type()!=&previous.type())return false;
+  for(const auto &collection:candidate.type().collections) {
+    if(!collection.nextId)return false;
+    const auto floor=collection.nextId(previous);
+    if(collection.nextId(candidate)>=floor)continue;
+    if(!collection.reserveIdsUntil || !collection.reserveIdsUntil(candidate,floor) || collection.nextId(candidate)<floor)return false;
+  }
+  return candidate.valid();
+}
 enum class UnknownComponentPolicy { Reject, Preserve };
 // An unavailable type is authored data, never a successfully loaded behavior.
 // Own both ID and payload; cloning must rebuild the descriptor's string view.

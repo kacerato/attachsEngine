@@ -32,7 +32,7 @@ namespace ae::scene {
 // estáveis porque a UI guarda a família escolhida; família sem tipo registrado
 // simplesmente não aparece.
 enum class ComponentFamily : u32 {
-  Logic, Rendering, Lighting, Camera, Physics3D, Animation, Count
+  Logic, Rendering, Lighting, Camera, Physics3D, Animation, Physics2D, Audio, Count
 };
 inline constexpr const char *componentFamilyName(ComponentFamily family) {
   switch (family) {
@@ -42,6 +42,8 @@ inline constexpr const char *componentFamilyName(ComponentFamily family) {
   case ComponentFamily::Camera: return "Câmera";
   case ComponentFamily::Physics3D: return "Física 3D";
   case ComponentFamily::Animation: return "Animação";
+  case ComponentFamily::Physics2D: return "Física 2D";
+  case ComponentFamily::Audio: return "Áudio";
   case ComponentFamily::Count: break;
   }
   return "";
@@ -56,6 +58,8 @@ inline constexpr std::string_view componentFamilyIcon(ComponentFamily family) {
   case ComponentFamily::Camera: return "runtime/camera";
   case ComponentFamily::Physics3D: return "physics/dynamic-sphere";
   case ComponentFamily::Animation: return "runtime/play";
+  case ComponentFamily::Physics2D: return "physics/body-2d";
+  case ComponentFamily::Audio: return "audio/source";
   case ComponentFamily::Count: break;
   }
   return "";
@@ -115,6 +119,10 @@ struct ComponentSchema {
 #include "scene/schemas/camera.h"
 #include "scene/schemas/physics3d.h"
 #include "scene/schemas/animation.h"
+#include "scene/schemas/physics2d.h"
+#include "scene/schemas/audio.h"
+#include "scene/schemas/path.h"
+#include "scene/schemas/path_follow.h"
 
 namespace ae::scene {
 namespace detail {
@@ -128,7 +136,8 @@ constexpr auto joinComponentSchemas(const std::array<ComponentSchema, Sizes> &..
 } // namespace detail
 
 inline constexpr auto componentSchemas = detail::joinComponentSchemas(
-    logicSchemas, renderingSchemas, lightingSchemas, cameraSchemas, physics3dSchemas, animationSchemas);
+    logicSchemas, renderingSchemas, lightingSchemas, cameraSchemas, physics3dSchemas, animationSchemas,
+    physics2dSchemas, audioSchemas, pathSchemas, pathFollowSchemas);
 
 // Identidade é o contrato do arquivo: dois registros com o mesmo id tornariam a
 // leitura ambígua, e a leitura recusa ambiguidade em vez de escolher pela ordem.

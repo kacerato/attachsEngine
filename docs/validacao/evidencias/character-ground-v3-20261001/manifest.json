@@ -1,0 +1,23 @@
+{
+  "abi": 30,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 4,
+  "tween": 3,
+  "character": 3,
+  "schemas": 34,
+  "csharpFacades": 33,
+  "recipes": 57,
+  "icons": 230,
+  "eligibleNumericFields": 6,
+  "newCharacterFields": 3,
+  "apkBytes": 253359929,
+  "apkSha256": "318bb6aa47340e5023349450fb27628303fc802562e49043a40107c82f6cf198",
+  "sdkSha256": "a8e671c7083d18a872030a23348cd63470281ddf0d01e3dac6e308b3807b298e",
+  "atlasSha256": "244539648984c6095eba5b577608788b04b56d78db26c2775e71070127caa8fc",
+  "assetsMatch": true,
+  "deviceCharacterGroundPass": false,
+  "install": "Performing Streamed Install\nSuccess\n",
+  "secureKeyguardShowing": true,
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/CharacterGround-20261001"
+}

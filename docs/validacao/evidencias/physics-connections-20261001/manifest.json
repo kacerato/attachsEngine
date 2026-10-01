@@ -1,0 +1,21 @@
+{
+  "abi": 27,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 3,
+  "schemas": 33,
+  "csharpFacades": 32,
+  "recipes": 55,
+  "icons": 227,
+  "apkBytes": 264819357,
+  "apkSha256": "b1d5a4611084e61b181c4b2d4e0cd62af016784366d800b0a17648af3116c3c5",
+  "sdkSha256": "90b8521b306ef73d1f03f66f384ced0f294de55cbc72a36ac28cc244d7ec0bb6",
+  "atlasSha256": "ef7c2a679585c4326f8591080bcd36a5065a6885c476c695cf8aa236ee1b217c",
+  "assetsMatch": true,
+  "install": "Performing Streamed Install\nSuccess",
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/PhysicsConnection-20261001",
+  "secureKeyguardShowing": true,
+  "hostPhysicsConnections": "4/4",
+  "managedAstra": "54/54; eight fixtures",
+  "devicePhysicsConnectionPass": false
+}

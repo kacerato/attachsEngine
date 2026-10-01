@@ -58,7 +58,7 @@ public struct QueryFilter
     }
 }
 
-public enum QueryShapeKind : uint { Box = 0, Sphere = 1, Capsule = 2 }
+public enum QueryShapeKind : uint { Box = 0, Sphere = 1, Capsule = 2, Cylinder = 3 }
 
 /// <summary>A forma varrida ou sobreposta por uma consulta.</summary>
 public struct ShapeQuery
@@ -75,6 +75,8 @@ public struct ShapeQuery
         new() { Kind = QueryShapeKind.Box, HalfExtent = halfExtent, Radius = halfExtent.X, HalfHeight = halfExtent.Y, Rotation = rotation ?? Quaternion.Identity };
     public static ShapeQuery Capsule(float radius, float halfHeight, Quaternion? rotation = null) =>
         new() { Kind = QueryShapeKind.Capsule, Radius = radius, HalfHeight = halfHeight, HalfExtent = new(radius), Rotation = rotation ?? Quaternion.Identity };
+    public static ShapeQuery Cylinder(float radius, float halfHeight, Quaternion? rotation = null) =>
+        new() { Kind = QueryShapeKind.Cylinder, Radius = radius, HalfHeight = halfHeight, HalfExtent = new(radius), Rotation = rotation ?? Quaternion.Identity };
 }
 
 /// <summary>

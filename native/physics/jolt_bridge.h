@@ -56,6 +56,7 @@ enum class AetherShapeKind : ae::u32 {
   // já é genérico o bastante e ShapeCastClosest/OverlapShape (4.1.4) também passam
   // a poder variar cápsulas de graça, sem mudança de ABI adicional.
   Capsule = 2,
+  Cylinder = 3, // radius + capsuleHalfHeight, local Y, flat ends
 };
 
 struct AetherShapeDesc {
@@ -137,6 +138,19 @@ struct AetherBodyDynamicsV1 {
   AetherVec3 angularVelocity;
   ae::u32 allowSleeping;
 };
+
+// Additive body settings; frozen dynamics V1 retains its layout.
+struct AetherBodySimulationV1 {
+  ae::u32 size=24,version=1;
+  float maxLinearVelocity=500,maxAngularVelocity=47.12389f;
+  ae::u32 continuousCollision=0,velocitySteps=0;
+};
+struct AetherBodyStateV1 {
+  ae::u32 size=48,flags=0; // 1 active, 2 dynamic, 4 kinematic, 8 sleeping
+  AetherVec3 linear{},angular{},centerOfMass{};
+  ae::u32 reserved=0;
+};
+static_assert(sizeof(AetherBodyStateV1)==48);
 
 // Opaco de propósito — o layout real (PhysicsSystem, alocador temporário, job
 // system, filtros de camada) vive só em jolt_bridge.cpp.
@@ -371,7 +385,13 @@ ae::i32 AetherPhysics_TryGetBodyVelocityV1(AetherPhysicsWorld *world,AetherBodyH
 // corpo no solver sem parar o que ele estava fazendo.
 ae::i32 AetherPhysics_TryGetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *out);
 ae::i32 AetherPhysics_SetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 value);
+ae::i32 AetherPhysics_ConfigureBodySimulationV1(AetherPhysicsWorld *,AetherBodyHandle,const AetherBodySimulationV1 *);
+// 0 snapshot, 1 angular velocity, 2 wake, 3 sleep, 4 force at position,
+// 5 impulse at position, 6 velocity pair, 7 linear change, 8 angular change,
+// 9 point velocity (returned in state.linear). Positions in world space.
+ae::i32 AetherPhysics_BodyCommandV1(AetherPhysicsWorld *,AetherBodyHandle,ae::u32,AetherVec3,AetherVec3,AetherBodyStateV1 *);
 ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass);
+ae::i32 AetherPhysics_GetBodyFieldStateV1(AetherPhysicsWorld *,AetherBodyHandle,float *,float *,AetherVec3 *);
 // Body-origin pose (not centre of mass). A stale/destroyed handle returns zero
 // and leaves outputs untouched; read under one body lock.
 ae::i32 AetherPhysics_TryGetBodyPoseV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
@@ -594,6 +614,11 @@ enum class AetherJointKind : ae::u32 {
   Hinge = 1,
   Slider = 2,
   Distance = 3,
+  Fixed = 4,
+  Cone = 5,
+  SwingTwist = 6,
+  SixDOF = 7,
+  Spring = 8,
 };
 
 /// Estado de motor — mesmo conjunto de JPH::EMotorState, reinterpretado como uint32 na
@@ -678,6 +703,22 @@ struct AetherJointDescV2 {
   AetherJointMotorDesc motor;
 };
 
+// V1/V2 remain frozen. V3 adds complete constraint frames and independent
+// six-axis limits/drives. All angular values at this boundary are radians.
+struct AetherJointAxisV3 {
+  ae::u32 motion; // 0 locked, 1 limited, 2 free
+  float minimum, maximum, friction;
+  AetherJointMotorDesc motor;
+};
+constexpr ae::u32 AetherJointApiVersionV3 = 3;
+struct AetherJointDescV3 {
+  ae::u32 structSize, apiVersion;
+  AetherJointDescV2 base;
+  AetherVec3 normal1, normal2;
+  float swingY, swingZ, twistMin, twistMax;
+  AetherJointAxisV3 axes[6];
+};
+
 using AetherJointHandle = ae::u32;
 constexpr AetherJointHandle AetherJointHandle_Invalid = 0xFFFFFFFFu;
 
@@ -698,6 +739,8 @@ AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBod
 /// min=[-pi,0], max=[0,+pi] são recusados, nunca truncados silenciosamente.
 AetherJointHandle AetherPhysics_CreateJointV2(AetherPhysicsWorld *world, AetherBodyHandle body1,
                                                AetherBodyHandle body2, const AetherJointDescV2 *desc);
+AetherJointHandle AetherPhysics_CreateJointV3(AetherPhysicsWorld *world, AetherBodyHandle body1,
+                                               AetherBodyHandle body2, const AetherJointDescV3 *desc);
 
 /// Remove e destrói a junta. Handle passa a ser inválido depois desta chamada. É seguro (e
 /// necessário) destruir uma junta antes de destruir os corpos que ela conecta — mas destruir
@@ -797,6 +840,14 @@ AetherVec3 AetherPhysics_GetCharacterVelocity(AetherPhysicsWorld *world, AetherC
 /// rígido próprio, ou para ignorar objetos "fantasma".
 void AetherPhysics_UpdateCharacter(AetherPhysicsWorld *world, AetherCharacterHandle handle, float deltaTime,
                                     AetherVec3 gravity, AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody);
+
+// Explicit world-Y distances. Zero disables the corresponding Jolt algorithm.
+// Returns 0 for invalid handle, distances, gravity or timestep without advancing.
+int AetherPhysics_UpdateCharacterEx(AetherPhysicsWorld *world,AetherCharacterHandle handle,float deltaTime,
+  AetherVec3 gravity,AetherQueryLayerMask layerMask,AetherBodyHandle ignoreBody,float stepHeight,float floorSnapLength);
+// Reacquire support against the current world, without integrating a timestep.
+int AetherPhysics_RefreshCharacterContacts(AetherPhysicsWorld *world,AetherCharacterHandle handle,
+  AetherQueryLayerMask layerMask,AetherBodyHandle ignoreBody);
 
 void AetherPhysics_GetCharacterTransform(AetherPhysicsWorld *world, AetherCharacterHandle handle,
                                           AetherVec3 *outPosition, AetherQuat *outRotation);

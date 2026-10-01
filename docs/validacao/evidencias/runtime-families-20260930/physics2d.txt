@@ -1,0 +1,10 @@
+[ok] physics2d_script_abi_routes_real_solver_queries_and_rejects_stale_handles
+[ok] physics2d_real_fall_contacts_queries_and_depth_preservation
+[ok] physics2d_mass_impulse_live_rebuild_capsule_and_serialization
+[ok] physics2d_sensor_events_layer_masks_and_kinematic_target
+[ok] physics2d_rejects_tilt_and_nonuniform_round_geometry
+[ok] physics2d_joint_modes_real_constraints_motor_limits_and_remap
+[ok] physics2d_constant_force_live_local_orientation_and_zero_sleep
+[ok] physics2d_editor_recipe_history_archive_play_edit_destroy_stop
+
+8/8 testes passaram

@@ -1,9 +1,13 @@
+#include "runtime/scene_physics.h"
+#include "runtime/scene_timers.h"
+#include "runtime/scene_tweens.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_color_picker.h"
 #include "editor/editor_numeric_expression.h"
 #include "editor/editor_value_library.h"
 #include "editor/editor_curve_view.h"
 #include <sstream>
+#include <iomanip>
 #include "scene/script_behavior.h"
 #include "scene/prefab_link.h"
 #include "editor/editor_water_body_component.h"
@@ -120,7 +124,12 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(runtime::lightComponent(entity)) return UiIcon::EditorAuthorSun;
   if(runtime::characterComponent(entity)) return UiIcon::ComponentCharacter;
   if(runtime::physicsBody(entity)) return UiIcon::ComponentPhysics;
-  if(entity.components.find(scene::Timer::descriptor)) return UiIcon::ComponentTimer;
+  if(entity.components.find(scene::PhysicsEventConnection2D::descriptor))return UiIcon::EventPhysicsConnection2d;
+  if(entity.components.find(scene::PhysicsEventConnection3D::descriptor))return UiIcon::EventPhysicsConnection;
+  if(const auto *timer=static_cast<const scene::Timer*>(entity.components.find(scene::Timer::descriptor)))
+    return timer->elapsedAction!=0 ? UiIcon::EventTimeoutConnection : UiIcon::ComponentTimer;
+  if(const auto *tween=static_cast<const scene::TransformTween*>(entity.components.find(scene::TransformTween::descriptor)))
+    return tween->finishedAction!=0?UiIcon::EventTweenCompletion:UiIcon::ComponentTweenTransform;
   return iconForKind(entity.kind);
 }
 
@@ -154,13 +163,13 @@ struct ScreenBuilder final {
   bool isPressed(u32 widget) const { return state.pressedWidget == widget && widget != 0; }
 
   void iconButton(const UiRect &bounds, UiIcon icon, u32 widget, bool active = false,
-                  UiColor tint = 0xFFFFFFFF) {
+                  UiColor tint = 0xFFFFFFFF, bool editable = true) {
     const UiColor background = active ? theme.color.accent
                                       : (isPressed(widget) ? theme.color.line : theme.color.raised);
     list.addRect(bounds, background, theme.radius.control);
     list.addImage(centred(bounds, kIconSize, kIconSize), static_cast<UiImageId>(icon),
                   active ? theme.color.accentInk : tint);
-    router.addRegion(bounds, widget, theme.touch.minimumTarget);
+    if(editable) router.addRegion(bounds, widget, theme.touch.minimumTarget);
   }
 
   void toggle(const UiRect &area, bool on, u32 widget, bool editable=true) {
@@ -173,6 +182,15 @@ struct ScreenBuilder final {
     list.addRect({knobX, bounds.y + 2.5f, knob, knob}, on ? theme.color.accent : theme.color.track,
                  knob * 0.5f);
     if(editable) router.addRegion(bounds, widget, theme.touch.minimumTarget);
+  }
+
+  void checkbox(const UiRect &area,bool on,u32 widget,bool editable=true,bool mixedValue=false) {
+    const auto box=centred(area,18,18);
+    list.addRect(box,on&&editable?theme.color.accent:theme.color.canvas,2);
+    list.addBorder(box,editable?theme.color.textDim:theme.color.textFaint,1,2);
+    if(mixedValue) list.addRect({box.x+4,box.y+8,10,2},theme.color.text,1);
+    else if(on) list.addImage(deflate(box,UiInsets::all(3)),static_cast<UiImageId>(UiIcon::UiCheck),editable?theme.color.accentInk:theme.color.textFaint);
+    if(editable) router.addRegion(area,widget,theme.touch.minimumTarget);
   }
 
   void label(const UiRect &bounds, std::string_view text, UiColor colour,
@@ -227,7 +245,11 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
       if(enabled) builder.router.addRegion(rect,widgetId(id),theme.touch.minimumTarget);
       takeRight(content,theme.spacing.small);
     };
-    control("Passo",EditorWidget::StepPlay,builder.state.playPaused);
+    if(builder.state.playPaused) control("Passo",EditorWidget::StepPlay,true);
+    else {
+      char speed[32];std::snprintf(speed,sizeof(speed),"Tempo %.2gx",double(builder.state.playTimeScale));
+      control(speed,EditorWidget::PlayTimeScale,true,builder.state.playTimeScale!=1);
+    }
     control(builder.state.playPaused?"Retomar":"Pausar",EditorWidget::PausePlay,true);
     control("Inspecionar",EditorWidget::PlayInspect,true,builder.state.playInspect);
   } else {
@@ -880,6 +902,7 @@ void buildCurveEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   }
 }
 
+
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
 // Inspectors focados (Unity 6000.0 Manual/InspectorFocused) numa janela sobre
 // o viewport: uma aba por Inspector, cada um preso ao seu objeto ou
@@ -1373,11 +1396,12 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
 
   if(state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
-    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources);
+    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative);
     for(const auto &v:visuals) {
+      if(!componentVisualVisible(*state.document,v.entity,state.hiddenLayers,state.sceneHidden))continue;
       const auto color=v.enabled?theme.color.accent:theme.color.textMuted;
       for(const auto &line:v.segments) {
-        UiPoint a,b;if(projectSegmentToScreen(*state.view,line.a,line.b,a,b)) builder.list.addLine(a,b,color,1.3f);
+        UiPoint a,b;if(projectSegmentToScreen(*state.view,line.a,line.b,a,b)) builder.list.addLine(a,b,line.emphasis==2?theme.color.text:line.emphasis==1?theme.color.axisY:color,line.emphasis?2.f:1.3f);
       }
       if(!v.marker) continue;
       const auto p=projectWorldToScreen(*state.view,v.origin);
@@ -1386,7 +1410,9 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       if(v.markerIndex) builder.list.addLine(p.screen,{icon.x+14,icon.y+14},theme.color.textMuted,1);
       builder.list.addRect(icon,withAlpha(theme.color.surface,.9f),8);
       builder.list.addImage(deflate(icon,UiInsets::all(3)),static_cast<UiImageId>(v.icon),v.enabled?0xffffffff:theme.color.textMuted);
-      if(v.entity<0x01000000u) builder.router.addRegion(icon,widgetId(EditorWidget::ComponentVisualBase)+v.entity,32);
+      if(v.entity<0x01000000u&&componentVisualSelectable(*state.document,v.entity,
+          state.hiddenLayers,state.unpickableLayers,state.sceneHidden,state.scenePickOff))
+        builder.router.addRegion(icon,widgetId(EditorWidget::ComponentVisualBase)+v.entity,32);
     }
   }
   // Collider outlines now share the component visual registry. Joint anchors
@@ -1538,6 +1564,8 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
       ++index;
     }
     header=takeTop(content,44);
+    builder.iconButton(takeRight(header,34),UiIcon::AudioClip,widgetId(EditorWidget::ImportWave),false,
+      builder.state.workspace==EditorWorkspace::Play?theme.color.textMuted:0xffffffff,builder.state.workspace!=EditorWorkspace::Play);
     builder.iconButton(takeRight(header,34),UiIcon::AssetsTexture,widgetId(EditorWidget::ImportTexture));
     builder.iconButton(takeRight(header,34),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
     builder.iconButton(takeRight(header,34),UiIcon::AssetsFolderOpen,widgetId(EditorWidget::ImportFolder));
@@ -1551,6 +1579,8 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   } else {
     builder.router.addRegion(header,widgetId(EditorWidget::FilesCollapse));
     builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
+    builder.iconButton(takeRight(header,28),UiIcon::AudioClip,widgetId(EditorWidget::ImportWave),false,
+      builder.state.workspace==EditorWorkspace::Play?theme.color.textMuted:0xffffffff,builder.state.workspace!=EditorWorkspace::Play);
     builder.iconButton(takeRight(header,28),UiIcon::AssetsTexture,widgetId(EditorWidget::ImportTexture));
     builder.iconButton(takeRight(header,28),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
     builder.iconButton(takeRight(header,28),UiIcon::AssetsFolderOpen,widgetId(EditorWidget::ImportFolder));
@@ -1915,6 +1945,10 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
   const auto &type=component.type();
   collect(type.numbers);collect(type.booleans);collect(type.enums);
   collect(type.references);collect(type.resourceBindings);collect(type.slotNumbers);
+  if(type.id==std::string_view{"astra.physics2d.joint"}) {
+    const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   return groups;
 }
 
@@ -2949,21 +2983,183 @@ void buildTextureExpanded(ScreenBuilder &builder,const UiRect &area) {
 
 // Descriptor fields are addressed by stable instance/property IDs on edit.
 // Widget indices exist only for one rendered frame, never in the scene archive.
+// A collection is a route, never a stack of 128 property groups. Numeric
+// addresses retain the slot ABI; the session pins point identity while editing.
+void buildPathPoints(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,const scene::Path &path,u32 index) {
+  const auto &s=builder.state;const auto &t=builder.theme;const auto &points=path.curve.points;
+  const bool authoring=s.workspace!=EditorWorkspace::Play;
+  auto heading=takeTop(content,36);
+  builder.iconButton(takeLeft(heading,36),UiIcon::UiArrowLeft,widgetId(EditorWidget::PathEditorClose));
+  builder.label(heading,"Pontos · Path",t.color.text,t.type.body);
+  const auto at=std::find_if(points.begin(),points.end(),[&](const auto&p){return p.id==s.pathPointId;});
+  const bool valid=at!=points.end();const u32 current=valid?static_cast<u32>(at-points.begin()):0;
+  auto nav=takeTop(content,40);
+  builder.iconButton(takeLeft(nav,36),UiIcon::UiChevronLeft,widgetId(EditorWidget::PathPointPrevious),false,t.color.textDim,valid&&current>0);
+  builder.iconButton(takeRight(nav,36),UiIcon::UiChevronRight,widgetId(EditorWidget::PathPointNext),false,t.color.textDim,valid&&current+1<points.size());
+  const auto listHit=nav;
+  builder.list.addImage(centred(takeLeft(nav,22),16,16),static_cast<UiImageId>(UiIcon::PathPoint),t.color.accent);
+  builder.list.addImage(centred(takeRight(nav,18),12,12),static_cast<UiImageId>(UiIcon::UiChevronDown),t.color.textDim);
+  const std::string title=valid?std::to_string(current+1)+" / "+std::to_string(points.size())+" · #"+std::to_string(at->id):"Vazio · 0 / 128";
+  builder.label(nav,title,t.color.text,t.type.caption,UiAlign::Center);
+  builder.router.addRegion(listHit,widgetId(EditorWidget::PathPointList));
+  if(s.pathPointList) {
+    auto footer=takeBottom(content,36);
+    const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/40));
+    const u32 pages=std::max(1u,(static_cast<u32>(points.size())+perPage-1)/perPage),page=std::min(s.pathPointPage,pages-1);
+    builder.iconButton(takeLeft(footer,36),UiIcon::UiChevronLeft,widgetId(EditorWidget::PathPointListPrevious),false,t.color.textDim,page>0);
+    builder.iconButton(takeRight(footer,36),UiIcon::UiChevronRight,widgetId(EditorWidget::PathPointListNext),false,t.color.textDim,page+1<pages);
+    builder.label(footer,std::to_string(page+1)+" / "+std::to_string(pages),t.color.textDim,t.type.caption,UiAlign::Center);
+    for(u32 n=page*perPage;n<points.size()&&n<(page+1)*perPage;++n) {
+      auto row=takeTop(content,40);if(points[n].id==s.pathPointId)builder.list.addRect(row,withAlpha(t.color.accent,.12f));
+      builder.list.addImage(centred(takeLeft(row,26),16,16),static_cast<UiImageId>(UiIcon::PathPoint),t.color.accent);
+      builder.label(row,"Ponto "+std::to_string(n+1)+" · #"+std::to_string(points[n].id),t.color.text,t.type.caption);
+      builder.router.addRegion({row.x-26,row.y,row.width+26,row.height},widgetId(EditorWidget::PathPointSelectBase)+n);
+    }
+    return;
+  }
+  if(!s.pathOrientation){
+  auto actions=takeTop(content,40);const float width=actions.width/4;
+  const UiIcon icons[]{UiIcon::ComponentAdd,UiIcon::UiRemove,UiIcon::UiChevronUp,UiIcon::UiChevronDown};
+  const EditorWidget ids[]{EditorWidget::PathPointInsert,EditorWidget::PathPointRemove,EditorWidget::PathPointMoveUp,EditorWidget::PathPointMoveDown};
+  const bool enabled[]{authoring&&points.size()<resources::Curve3D::MaximumPoints,authoring&&valid,authoring&&valid&&current>0,authoring&&valid&&current+1<points.size()};
+  for(u32 a=0;a<4;++a)builder.iconButton(takeLeft(actions,width),icons[a],widgetId(ids[a]),false,t.color.textDim,enabled[a]);
+  }
+  auto modes=takeTop(content,40);const float modeWidth=modes.width/3;
+  const char*modeLabels[]{"Posição","Tangentes","Orientação"};
+  const UiIcon modeIcons[]{UiIcon::PathPoint,UiIcon::PathTangent,UiIcon::PathOrientation};
+  const EditorWidget modeWidgets[]{EditorWidget::PathPointPosition,EditorWidget::PathPointTangents,EditorWidget::PathPointOrientation};
+  const u32 selectedMode=s.pathOrientation?2:s.pathTangents?1:0;
+  for(u32 n=0;n<3;++n){
+    auto cell=takeLeft(modes,modeWidth);const auto hit=cell;const auto color=n==selectedMode?t.color.accent:t.color.textDim;
+    builder.list.addImage(centred(takeTop(cell,18),14,14),static_cast<UiImageId>(modeIcons[n]),color);
+    builder.label(cell,modeLabels[n],color,t.type.caption,UiAlign::Center);builder.router.addRegion(hit,widgetId(modeWidgets[n]));
+  }
+  if(s.pathOrientation){
+    if(valid){
+      auto row=takeTop(content,40);builder.label(takeLeft(row,row.width*.5f),"Roll do ponto",t.color.textDim,t.type.caption);
+      const auto hit=row;char number[32];std::snprintf(number,sizeof(number),"%.4g°",static_cast<double>(at->rollDegrees));builder.label(row,number,t.color.text,t.type.caption,UiAlign::Center);
+      if(authoring)builder.router.addRegion(hit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+(9u<<8)+(current<<16));
+    }
+    builder.label(takeTop(content,20),"Up inicial da curva · local",t.color.textDim,t.type.caption);
+    auto row=takeTop(content,40);const float width=row.width/3;const UiColor colors[]{t.color.axisX,t.color.axisY,t.color.axisZ};
+    for(u32 axis=0;axis<3;++axis){const auto hit=takeLeft(row,width);auto cell=deflate(hit,UiInsets::all(2));builder.list.addRect(cell,t.color.silhouette,4);builder.label(takeLeft(cell,12),axis==0?"X":axis==1?"Y":"Z",colors[axis],t.type.caption,UiAlign::Center);char number[24];std::snprintf(number,sizeof(number),"%.4g",static_cast<double>(path.curve.up[axis]));builder.label(cell,number,t.color.text,t.type.caption,UiAlign::Center);if(authoring)builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(axis<<8));}
+  }else if(valid) {
+    const u32 start=s.pathTangents?3:0,end=s.pathTangents?9:3;
+    for(u32 field=start;field<end;field+=3) {
+      auto row=takeTop(content,40);builder.label(takeLeft(row,48),field==0?"Local":field==3?"Entrada":"Saída",t.color.textDim,t.type.caption);
+      const float cellWidth=row.width/3;const UiColor colors[]{t.color.axisX,t.color.axisY,t.color.axisZ};
+      for(u32 axis=0;axis<3;++axis) {
+        const auto hit=takeLeft(row,cellWidth);auto cell=deflate(hit,UiInsets::all(2));builder.list.addRect(cell,t.color.silhouette,4);
+        builder.label(takeLeft(cell,12),axis==0?"X":axis==1?"Y":"Z",colors[axis],t.type.caption,UiAlign::Center);
+        char number[24];std::snprintf(number,sizeof(number),"%.4g",static_cast<double>(path.type().slotNumbers[field+axis].read(path,current)));
+        builder.label(cell,number,t.color.text,t.type.caption,UiAlign::Center);
+        if(authoring)builder.router.addRegion(hit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+((field+axis)<<8)+(current<<16));
+      }
+    }
+  }
+  const std::string note=s.pathOrientation?"Up não nulo · roll contínuo em graus":!s.pathStatus.empty()?s.pathStatus:s.pathTangents?"Offsets locais relativos ao ponto":"Coordenadas locais · até 128 pontos";
+  builder.label(takeTop(content,20),fitMiddle(builder.list,note,content.width,t.type.caption),s.pathStatusWarning?t.color.warning:t.color.textMuted,t.type.caption);
+  (void)entity;
+}
+
 void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,
                           const EditorComponentEntry &entry,u32 index) {
   const auto &theme=builder.theme;
   const auto *component=entity.components.at(index);if(!component || &component->type()!=entry.type) return;
   const auto &state=builder.state;
+  if(entry.type==&scene::Timer::descriptor && state.timerRuntime && !builder.multiEdit && content.height>=52) {
+    const auto *live=state.timerRuntime->state(entity.id,component->instanceId());
+    const auto &timer=static_cast<const scene::Timer&>(*component);
+    const bool running=live&&live->running,paused=live&&live->paused;
+    auto row=takeTop(content,44);const auto base=widgetId(EditorWidget::TimerControlBase)+index*4;
+    builder.iconButton(takeRight(row,36),UiIcon::RuntimeStop,base+2);
+    builder.iconButton(takeRight(row,36),paused?UiIcon::RuntimePlay:UiIcon::RuntimePause,base+1,paused);
+    builder.iconButton(takeRight(row,36),running?UiIcon::RuntimeRestart:UiIcon::RuntimePlay,base);
+    char remaining[48];std::snprintf(remaining,sizeof(remaining),"%.2f s",running?std::max(0.0,live->remaining):0);
+    builder.label(takeTop(row,22),remaining,theme.color.text,theme.type.body);
+    const char *status=!live?"Aguardando quadro":paused||state.playPaused?"Pausado":!timer.enabled?"Desabilitado":!state.document->activeInHierarchy(entity.id)?"Inativo":live->completed?"Concluído":running?"Restante":"Parado";
+    builder.label(row,status,theme.color.textDim,theme.type.caption);
+    auto bar=takeTop(content,4);builder.list.addRect(bar,theme.color.line,1);
+    if(running){const auto fraction=std::clamp(static_cast<float>(live->remaining/timer.intervalSeconds),0.f,1.f);builder.list.addRect({bar.x,bar.y,bar.width*fraction,bar.height},paused?theme.color.textDim:theme.color.accent,1);}
+    takeTop(content,4);
+  }
+  if(entry.type==&scene::Path::descriptor) {
+    const auto &path=static_cast<const scene::Path&>(*component);
+    auto row=takeTop(content,40);builder.label(row,std::to_string(path.curve.points.size())+" pontos · Bézier local",theme.color.textDim,theme.type.caption);
+    row=takeTop(content,40);builder.checkbox(takeLeft(row,36),path.curve.closed,widgetId(EditorWidget::ComponentBooleanBase)+index,state.workspace!=EditorWorkspace::Play);
+    builder.label(row,"Fechar caminho",theme.color.text,theme.type.caption);
+    row=takeTop(content,40);builder.list.addImage(centred(takeLeft(row,32),20,20),static_cast<UiImageId>(UiIcon::PathPoint),theme.color.accent);
+    builder.label(row,state.workspace==EditorWorkspace::Play?"Pontos · autoria em Edit":"Editar pontos",state.workspace==EditorWorkspace::Play?theme.color.textMuted:theme.color.text,theme.type.body);
+    if(state.workspace!=EditorWorkspace::Play)builder.router.addRegion({row.x-32,row.y,row.width+32,row.height},widgetId(EditorWidget::PathEditorOpen));
+    return;
+  }
+  if(entry.type==&scene::PathFollow::descriptor) {
+    const bool commands=state.workspace==EditorWorkspace::Play&&state.componentGroup=="Execução";
+    auto note=takeTop(content,commands?40.f:20.f);
+    const auto searchHit=takeRight(note,24);builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+    if(commands) {
+      builder.iconButton(takeRight(note,36),UiIcon::RuntimeStop,widgetId(EditorWidget::PathFollowStop));
+      builder.iconButton(takeRight(note,36),UiIcon::RuntimeRestart,widgetId(EditorWidget::PathFollowRestart));
+    }
+    builder.label(note,fitMiddle(builder.list,state.followStatus.empty()?std::string{"Estado real no Play"}:state.followStatus,note.width,theme.type.caption),state.followStatusWarning?theme.color.warning:theme.color.textDim,theme.type.caption);
+  }
   const std::string_view searchText=state.editingPropertySearch?std::string_view(state.renameText):std::string_view(state.propertyQuery);
   const auto search=editorSearchKey(searchText);
-  const bool searching=!search.empty();
-  auto searchRow=takeTop(content,34),clear=takeRight(searchRow,32);
-  builder.list.addRect(searchRow,theme.color.raised,theme.radius.control);
-  builder.label(searchRow,searchText.empty()?"Buscar propriedade":searchText,searchText.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
-  builder.router.addRegion(searchRow,widgetId(EditorWidget::ComponentPropertySearch));
-  if(!searchText.empty()) {
-    builder.label(clear,"×",theme.color.textDim,theme.type.body,UiAlign::Center);
-    builder.router.addRegion(clear,widgetId(EditorWidget::ComponentPropertySearchClear));
+  const bool character=entry.type==&scene::Character::descriptor;
+  const bool compactCharacter=character&&content.height<220;
+  const bool searching=!search.empty()||(compactCharacter&&state.editingPropertySearch);
+  const bool mesh=entry.type==&scene::MeshRenderer::descriptor;
+  const bool constantForce=entry.type->id==std::string_view{"astra.physics.constant_force"};
+  const bool tween=entry.type->id==std::string_view{"astra.tween.transform"};
+  const bool audio=std::string_view(entry.type->id).starts_with("astra.audio.");
+  const bool audioSource=entry.type->id==std::string_view{"astra.audio.source"};
+  if((std::string_view(entry.type->id).starts_with("astra.constraint.")||std::string_view(entry.type->id).starts_with("astra.spring."))&&!state.constraintStatus.empty())
+    builder.label(takeTop(content,20),fitMiddle(builder.list,state.constraintStatus,content.width,theme.type.caption),state.constraintStatusWarning?theme.color.warning:theme.color.textDim,theme.type.caption);
+  if(constantForce&&!searching) {
+    auto note=takeTop(content,20);const auto searchHit=takeRight(note,24);
+    builder.label(note,"Requer Corpo físico dinâmico",theme.color.textMuted,theme.type.caption);
+    builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+  }
+  if(tween&&searching) {
+    const auto *live=state.tweenRuntime?state.tweenRuntime->state(entity.id,component->instanceId()):nullptr;
+    const std::string status=live?(live->paused?"Pausado":runtime::SceneTweens::statusText(live->status)):"Destino local · início em Play";
+    builder.label(takeTop(content,20),fitMiddle(builder.list,status,content.width,theme.type.caption),live&&live->status>=runtime::SceneTweens::Status::Authority?theme.color.warning:theme.color.textDim,theme.type.caption);
+  }
+  if(character&&!searching&&!state.editingPropertySearch&&state.characterRuntime&&state.characterWorld) {
+    physics::CharacterMotor::RuntimeState observed;const auto status=state.characterRuntime->characterState(*state.characterWorld,entity.id,observed);
+    if(status==runtime::WorldStatus::Ok) {
+      const char *names[]{"No chão","Rampa íngreme","Sem apoio","No ar"};const auto ground=static_cast<u32>(observed.groundState);
+      auto supportRow=takeTop(content,20);
+      if(static_cast<const scene::Character&>(*component).inheritPlatformHorizontal){const auto mark=takeRight(supportRow,20);builder.list.addImage(centred(mark,14,14),static_cast<UiImageId>(UiIcon::PhysicsCharacterPlatformCarry),theme.color.accent);}
+      if(compactCharacter) {
+        std::ostringstream compact;compact<<(ground<4?names[ground]:"Apoio desconhecido");
+        if(observed.hasMeasuredStep)compact<<std::fixed<<std::setprecision(1)<<" · v "<<observed.velocity.x<<" / "<<observed.velocity.y<<" / "<<observed.velocity.z<<" m/s";else compact<<" · sem passo";
+        builder.label(supportRow,fitMiddle(builder.list,compact.str(),supportRow.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+      } else {
+        builder.label(supportRow,ground<4?names[ground]:"Apoio desconhecido",theme.color.textDim,theme.type.caption);
+      std::ostringstream line;if(observed.hasMeasuredStep)line<<std::fixed<<std::setprecision(2)<<"Vel. medida · "<<observed.velocity.x<<" / "<<observed.velocity.y<<" / "<<observed.velocity.z<<" m/s";else line<<"Aguardando passo físico";
+      builder.label(takeTop(content,20),fitMiddle(builder.list,line.str(),content.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+      }
+    } else builder.label(takeTop(content,20),runtime::worldStatusMessage(status),theme.color.warning,theme.type.caption);
+  }
+  if(audio&&!searching) {
+    auto note=takeTop(content,20);const auto searchHit=takeRight(note,24);
+    const auto status=state.audioStatus.empty()?std::string_view{audioSource?"Pedido salvo · estado no Play":"Estado real no Play"}:std::string_view{state.audioStatus};
+    builder.label(note,fitMiddle(builder.list,std::string(status),note.width,theme.type.caption),state.audioStatusWarning?theme.color.warning:theme.color.textMuted,theme.type.caption);
+    builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+  }
+  if((!character&&!constantForce&&!audio&&!tween&&entry.type!=&scene::PathFollow::descriptor&&(!mesh||state.meshTab!=2))||searching||state.editingPropertySearch) {
+    auto searchRow=takeTop(content,34),clear=takeRight(searchRow,32);
+    builder.list.addRect(searchRow,theme.color.raised,theme.radius.control);
+    builder.label(searchRow,searchText.empty()?"Buscar propriedade":searchText,searchText.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
+    builder.router.addRegion(searchRow,widgetId(EditorWidget::ComponentPropertySearch));
+    if(!searchText.empty()) {
+      builder.label(clear,"×",theme.color.textDim,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(clear,widgetId(EditorWidget::ComponentPropertySearchClear));
+    }
   }
   // An attached singleton is not an error. Show actual unmet requirements,
   // rather than the Add menu's "already exists" state on its own inspector.
@@ -2983,25 +3179,48 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   }
   if(!searching && entry.type==&scene::Joint::descriptor) {
     const auto &j=static_cast<const scene::Joint &>(*component);
-    builder.label(takeTop(content,28),j.kind==scene::JointKind::Hinge?"Limites/alvo: graus · velocidade: graus/s":"Âncoras e limites: unidades de cena",theme.color.textMuted,theme.type.caption);
+    builder.label(takeTop(content,28),j.kind==scene::JointKind::Hinge?"Limites/alvo: graus · velocidade: graus/s":j.kind==scene::JointKind::SixDOF?"Translação: u · rotação: graus":"Âncoras locais aos corpos",theme.color.textMuted,theme.type.caption);
   }
-  const bool mesh=entry.type==&scene::MeshRenderer::descriptor;
   if(mesh && !searching) {
-    auto tabs=takeTop(content,36);const float width=tabs.width*.5f;
-    for(u32 i=0;i<2;++i) {
+    auto tabs=takeTop(content,36);const float width=tabs.width/3;
+    for(u32 i=0;i<3;++i) {
       auto tab=deflate(takeLeft(tabs,width),UiInsets::all(2));const bool selected=builder.state.meshTab==i;
       builder.list.addRect(tab,selected?theme.color.accent:theme.color.raised,theme.radius.control);
-      builder.label(tab,i?"Material":"Geometria",selected?theme.color.accentInk:theme.color.textDim,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(tab,widgetId(i?EditorWidget::MeshMaterialTab:EditorWidget::MeshGeometryTab));
+      const char *names[]{"Geometria","Material","Lightmap"};
+      const EditorWidget actions[]{EditorWidget::MeshGeometryTab,EditorWidget::MeshMaterialTab,EditorWidget::InspectorMeshLightmap};
+      builder.label(tab,names[i],selected?theme.color.accentInk:theme.color.textDim,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(tab,widgetId(actions[i]));
     }
   }
   // A aba Material é por SLOT, com alcance explícito; não é mais a lista de
   // números do componente, que só alcançava o primeiro slot.
-  if(mesh && builder.state.meshTab) {buildMaterialSlots(builder,content,searchText);return;}
+  if(mesh && builder.state.meshTab==1) {buildMaterialSlots(builder,content,searchText);return;}
+  if(mesh && builder.state.meshTab==2 && !searching) {
+    const auto note=takeTop(content,34);
+    auto firstLine=UiRect{note.x,note.y,note.width,17};
+    const auto search=takeRight(firstLine,24);
+    builder.list.addImage(centred(search,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+    builder.router.addRegion({search.x,note.y,search.width,note.height},widgetId(EditorWidget::ComponentPropertySearch));
+    builder.label(firstLine,"RGB linear · indireto · UV1",theme.color.textMuted,theme.type.caption);
+    const auto &render=static_cast<const scene::MeshRenderer &>(*component);
+    u32 invalid=0;std::string firstDiagnostic;
+    for(u32 slot=0;slot<render.slotCount();++slot) {
+      const auto asset=render.slotMesh(slot);
+      const bool usable=asset&&state.resources&&state.resources->lightmapUvUsable(asset-1);
+      if(!usable) {
+        ++invalid;
+        if(firstDiagnostic.empty()) firstDiagnostic=asset&&state.resources?state.resources->lightmapUvDiagnostic(asset-1):"Geometria ausente";
+      }
+    }
+    const std::string diagnostic=invalid?firstDiagnostic+(invalid>1?" · "+std::to_string(invalid)+" slots":"")+" · sem bake":"Bindless · sem bake / unwrap";
+    builder.label({note.x,note.y+17,note.width,17},fitMiddle(builder.list,diagnostic,note.width,theme.type.caption),invalid?theme.color.warning:theme.color.textMuted,theme.type.caption);
+  }
   // Malha já navega entre Geometria e o editor de Material por slot acima.
   // As abas refletidas repetiriam esses nomes sem acrescentar controles.
-  const auto groups=mesh?std::vector<std::string_view>{}:componentGroups(*component);
-  std::string_view group=mesh?std::string_view{"Geometria"}:std::string_view{builder.state.componentGroup};
+  const auto groups=mesh?std::vector<std::string_view>{}:constantForce?
+    std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*component);
+  std::string_view group=mesh?std::string_view{builder.state.meshTab==2?"Lightmap":"Geometria"}:std::string_view{builder.state.componentGroup};
+  if(constantForce) {if(group=="Torque mundo") group="Força mundo";else if(group=="Torque local") group="Força local";}
   if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
   if(groups.size()>1 && !searching) {
     // Componentes extensos (Ambiente, materiais futuros) não espremem seis
@@ -3020,23 +3239,68 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         const u32 i=first+column;
         auto tab=deflate(takeLeft(rowTabs,width),UiInsets::all(3));const bool active=group==groups[i];
         if(active) {builder.list.addRect(tab,theme.color.raised,8);builder.list.addRect({tab.x+9,tab.bottom()-2,std::max(0.f,tab.width-18),2},theme.color.accent,1);}
-        builder.label(tab,groups[i],active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        const auto name=audioSource?(groups[i]=="Reprodução"?std::string_view{"Tocar"}:groups[i]=="Emissão"?std::string_view{"Cone"}:groups[i]):
+          entry.type->id==std::string_view{"astra.physics2d.joint"}&&groups[i]=="Anchors"?std::string_view{"Âncoras"}:groups[i];
+        const auto jointTabName=entry.type==&scene::Joint::descriptor&&groups[i].starts_with("Translação ")?std::string("Mov ")+std::string(groups[i].substr(std::string_view("Translação ").size())):
+          entry.type==&scene::Joint::descriptor&&groups[i].starts_with("Rotação ")?std::string("Rot ")+std::string(groups[i].substr(std::string_view("Rotação ").size())):
+          entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&name=="Motor"?std::string("Mola"):std::string(name);
+        builder.label(tab,constantForce?(i==0?std::string_view{"Mundo"}:std::string_view{"Local"}):std::string_view(jointTabName),active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
         builder.router.addRegion(tab,widgetId(EditorWidget::ComponentGroupBase)+i);
       }
       first+=count;
     }
     takeTop(content,6);
   }
-  const auto show=[&](const scene::PropertyPresentation &p) {return p.isVisible(*component)&&(searching||p.group.empty()||p.group==group);};
-  struct Field {u32 kind,index,slot=0;}; // 0 bool, 1 enum, 2 number, 3 action, 4 object ref, 5 triple, 6 resource, 7 collider insight, 8 volume insight, 9 slot number
+  if(tween&&!searching) {
+    const auto *live=state.tweenRuntime?state.tweenRuntime->state(entity.id,component->instanceId()):nullptr;
+    const bool actions=group=="Tempo"&&state.workspace==EditorWorkspace::Play&&state.tweenRuntime;
+    auto note=takeTop(content,20);const auto searchHit=takeRight(note,24);
+    builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
+    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+    const auto status=live?std::string{!static_cast<const scene::TransformTween*>(component)->enabled?"Desabilitado":!state.document->activeInHierarchy(entity.id)?"Inativo":live->paused||state.playPaused?"Pausado":runtime::SceneTweens::statusText(live->status)}:std::string{"Destino local · início em Play"};
+    const bool warning=live&&live->status>=runtime::SceneTweens::Status::Authority;
+    builder.label(note,fitMiddle(builder.list,status,note.width,theme.type.caption),warning?theme.color.warning:theme.color.textDim,theme.type.caption);
+    if(group=="Conexão") {
+      auto connection=takeTop(content,24);builder.list.addImage(centred(takeLeft(connection,24),16,16),static_cast<UiImageId>(UiIcon::EventTweenCompletion),theme.color.accent);
+      const bool failed=live&&live->connectionInvoked&&live->connectionStatus!=runtime::WorldStatus::Ok;
+      const char *text=failed?"Receptor indisponível":live&&live->connectionInvoked?"Conexão aplicada":"Após todos os ciclos finitos";
+      builder.label(connection,fitMiddle(builder.list,text,connection.width,theme.type.caption),failed?theme.color.warning:theme.color.textDim,theme.type.caption);
+    }
+    if(actions) {
+      auto row=takeTop(content,44);
+      builder.iconButton(takeRight(row,36),UiIcon::RuntimeStop,widgetId(EditorWidget::TweenCancel)+index*4);
+      builder.iconButton(takeRight(row,36),live&&live->paused?UiIcon::RuntimePlay:UiIcon::RuntimePause,widgetId(EditorWidget::TweenPause)+index*4,live&&live->paused);
+      builder.iconButton(takeRight(row,36),UiIcon::RuntimeRestart,widgetId(EditorWidget::TweenRestart)+index*4);
+      char elapsed[48];std::snprintf(elapsed,sizeof(elapsed),"%.2f s",live?live->elapsed:0);
+      builder.label(takeTop(row,22),elapsed,theme.color.text,theme.type.body);
+      builder.label(row,"Decorrido",theme.color.textDim,theme.type.caption);
+      takeTop(content,4);
+    }
+  }
+  const auto show=[&](const scene::PropertyPresentation &p) {
+    if(!p.isVisible(*component)) return false;
+    // Lightmap é uma rota própria. Propriedades sem grupo do material e da
+    // geometria não podem inflar essa rota nem esconder o binding principal.
+    if(mesh&&builder.state.meshTab==2&&!searching) return p.group=="Lightmap";
+    if(constantForce&&!searching) return group=="Força mundo"?(p.group=="Força mundo"||p.group=="Torque mundo"):
+      (p.group=="Força local"||p.group=="Torque local");
+    return searching||p.group.empty()||p.group==group;
+  };
+  struct Field {u32 kind,index,slot=0,second=~u32{0};}; // 11: par por slot; 12: binding/habilitação; 13: canais booleanos XYZ.
   std::vector<Field> fields;
   if(!searching && entry.type==&scene::Collider::descriptor && group=="Cozimento") fields.push_back({7,0});
   if(!searching && entry.type==&scene::Environment::descriptor && group=="Volume") fields.push_back({8,0});
-  if(!mesh || !builder.state.meshTab || searching) {
-    for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)) fields.push_back({0,i});
+  if(!mesh || builder.state.meshTab!=1 || searching) {
+    for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)&&
+      !((constantForce||tween||audio||entry.type==&scene::PathFollow::descriptor||std::string_view(entry.type->id).starts_with("astra.physics2d."))&&!searching&&entry.type->booleans[i].id=="enabled")) fields.push_back({0,i});
     for(u32 i=0;i<entry.type->enums.size();++i) {
       if(!show(entry.type->enums[i].presentation)) continue;
       fields.push_back({1,i});
+    }
+    for(u32 i=0;i<entry.type->slotEnums.size();++i) {
+      const auto &property=entry.type->slotEnums[i];
+      if(!show(property.presentation)) continue;
+      for(u32 slot=0;slot<property.slotCount(*component)&&slot<256;++slot) fields.push_back({10,i,slot});
     }
   }
   // Barra dividida do LOD Group antes dos objetos de cada nível, como na Unity.
@@ -3047,17 +3311,18 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   // superfície, canais e amostragem no mesmo contexto.
   for(u32 i=0;i<entry.type->resourceBindings.size();++i) {
     const auto &binding=entry.type->resourceBindings[i];
-    if((mesh&&!searching)||(binding.kind!=resources::AssetType::Mesh&&
+    const bool lightmap=binding.kind==resources::AssetType::Texture&&binding.id=="texture.lightmap";
+    if((mesh&&!searching&&!lightmap)||(binding.kind!=resources::AssetType::Mesh&&!lightmap&&
              binding.kind!=resources::AssetType::EnvironmentProfile&&
              binding.kind!=resources::AssetType::EnvironmentMap&&
-             binding.kind!=resources::AssetType::AnimationClip)||!show(binding.presentation)) continue;
+             binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip)||!show(binding.presentation)) continue;
     for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
   }
   if(mesh && !builder.state.meshTab && !searching) {
     fields.push_back({3,widgetId(EditorWidget::MeshChoose)});
     fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
   } else {
-    if(mesh && !searching) fields.push_back({3,widgetId(EditorWidget::MaterialRestore)});
+    if(mesh && builder.state.meshTab==1 && !searching) fields.push_back({3,widgetId(EditorWidget::MaterialRestore)});
     // Ajustar escolhe a primitiva que contém a malha; com a forma Malha a forma
     // já É a malha, e o botão só trocaria a escolha do autor por uma caixa.
     if(!searching && entry.type==&EditorCollider::descriptor && group=="Forma" && meshAsset(entity) &&
@@ -3072,19 +3337,20 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     if(!searching && entry.type==&scene::Animation::descriptor && group=="Clipes" &&
        static_cast<const scene::Animation &>(*component).clips.size()<scene::Animation::MaximumClips)
       fields.push_back({3,widgetId(EditorWidget::ComponentClipAdd)});
-    for(u32 i=0;!mesh&&i<entry.type->numbers.size();++i) {
+    for(u32 i=0;(!mesh||builder.state.meshTab==2||searching)&&i<entry.type->numbers.size();++i) {
       if(!show(entry.type->numbers[i].presentation)) continue;
       bool grouped=false;
       for(u32 t=0;t<entry.type->triples.size();++t) {
         const auto &triple=entry.type->triples[t];
         bool complete=true;
-        for(const auto channel:triple.channels) {
+        for(u32 axis=0;axis<triple.dimensions();++axis) {
+          const auto channel=triple.channels[axis];
           bool found=false;
           for(const auto &p:entry.type->numbers) if(p.id==channel && show(p.presentation)) found=true;
           complete=complete&&found;
         }
         if(!complete) continue;
-        for(u32 axis=0;axis<3;++axis) if(entry.type->numbers[i].id==triple.channels[axis]) {
+        for(u32 axis=0;axis<triple.dimensions();++axis) if(entry.type->numbers[i].id==triple.channels[axis]) {
           grouped=true;if(axis==0) fields.push_back({5,t});
         }
       }
@@ -3096,6 +3362,154 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       for(u32 slot=0;slot<property.slotCount(*component) && slot<256;++slot) fields.push_back({9,i,slot});
     }
   }
+  if((std::string_view(entry.type->id).starts_with("astra.constraint.")||std::string_view(entry.type->id).starts_with("astra.spring."))&&!searching) {
+    u32 enabled=~u32{0},source=~u32{0};
+    for(const auto &field:fields) {
+      if(field.kind==0&&entry.type->booleans[field.index].id=="enabled") enabled=field.index;
+      if(field.kind==4&&entry.type->references[field.index].id=="target") source=field.index;
+    }
+    if(enabled!=~u32{0}&&source!=~u32{0}) {
+      std::erase_if(fields,[&](const Field &field){return field.kind==0&&field.index==enabled;});
+      for(auto &field:fields) if(field.kind==4&&field.index==source) {field.kind=14;field.second=enabled;}
+    }
+    // Os eixos são uma máscara de canais, não três páginas de liga/desliga.
+    // Cada caixa conserva o setter, estado misto e reset do booleano refletido.
+    constexpr std::string_view axisSets[2][3]{{"axis_x","axis_y","axis_z"},{"rotation_x","rotation_y","rotation_z"}};
+    for(const auto &names:axisSets) {
+    u32 axes[3]{~u32{0},~u32{0},~u32{0}};
+    for(const auto &field:fields) if(field.kind==0)
+      for(u32 axis=0;axis<3;++axis) if(entry.type->booleans[field.index].id==names[axis]) axes[axis]=field.index;
+    if(std::all_of(std::begin(axes),std::end(axes),[](u32 i){return i!=~u32{0};})) {
+      std::vector<Field> compact;
+      for(auto field:fields) {
+        if(field.kind==0&&field.index==axes[0]) {field.kind=13;field.second=axes[1];field.slot=axes[2];}
+        else if(field.kind==0&&(field.index==axes[1]||field.index==axes[2])) continue;
+        compact.push_back(field);
+      }
+      fields=std::move(compact);
+    }
+    }
+  }
+  if(std::string_view(entry.type->id).starts_with("astra.physics2d.")&&!searching) {
+    constexpr std::string_view pairs[][2]{{"velocity_x","velocity_y"},{"half_x","half_y"},{"offset_x","offset_y"},
+      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"}};
+    for(const auto &names:pairs) {
+      u32 channels[2]{~u32{0},~u32{0}};
+      for(const auto &field:fields) if(field.kind==2)
+        for(u32 axis=0;axis<2;++axis) if(entry.type->numbers[field.index].id==names[axis]) channels[axis]=field.index;
+      if(channels[0]==~u32{0}||channels[1]==~u32{0}) continue;
+      std::erase_if(fields,[&](const Field &field){return field.kind==2&&field.index==channels[1];});
+      for(auto &field:fields) if(field.kind==2&&field.index==channels[0]) {field.kind=16;field.second=channels[1];}
+    }
+  }
+  if(tween&&!searching) {
+    if(group=="Tempo") {
+      for(u32 pair=0;pair<2;++pair) {
+        u32 number=~u32{0},companion=~u32{0};const u32 companionKind=pair?0u:1u;
+        for(const auto &field:fields) {
+          if(field.kind==2&&entry.type->numbers[field.index].id==(pair?"delay":"duration")) number=field.index;
+          if(field.kind==companionKind&&(pair?entry.type->booleans[field.index].id=="autoplay":entry.type->enums[field.index].id=="easing")) companion=field.index;
+        }
+        if(number==~u32{0}||companion==~u32{0}) continue;
+        std::erase_if(fields,[&](const Field &field){return field.kind==companionKind&&field.index==companion;});
+        for(auto &field:fields) if(field.kind==2&&field.index==number) {field.kind=pair?19u:18u;field.second=companion;}
+      }
+    }
+    constexpr std::string_view channels[]{"position","rotation","scale"};
+    for(const auto channel:channels) {
+      u32 enabled=~u32{0},triple=~u32{0};
+      for(const auto &field:fields) {
+        if(field.kind==0&&entry.type->booleans[field.index].id==channel) enabled=field.index;
+        if(field.kind==5&&entry.type->triples[field.index].id==std::string(channel)+"_destination") triple=field.index;
+      }
+      if(enabled==~u32{0}||triple==~u32{0}) continue;
+      std::erase_if(fields,[&](const Field &field){return field.kind==0&&field.index==enabled;});
+      for(auto &field:fields) if(field.kind==5&&field.index==triple) {field.kind=17;field.second=enabled;}
+    }
+    const auto rank=[&](const Field &field) {
+      if(field.kind==2) {const auto id=entry.type->numbers[field.index].id;if(id=="duration") return 0;if(id=="delay") return 2;}
+      if(field.kind==1&&entry.type->enums[field.index].id=="easing") return 1;
+      if(field.kind==0&&entry.type->booleans[field.index].id=="autoplay") return 3;
+      return 4;
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
+  if(audio&&!searching) {
+    if(entry.type->id==std::string_view{"astra.audio.bus"}) {
+      u32 mute=~u32{0},solo=~u32{0};
+      for(const auto &field:fields) if(field.kind==0) {
+        const auto id=entry.type->booleans[field.index].id;if(id=="mute") mute=field.index;if(id=="solo") solo=field.index;
+      }
+      if(mute!=~u32{0}&&solo!=~u32{0}) {
+        std::erase_if(fields,[&](const Field &field){return field.kind==0&&field.index==solo;});
+        for(auto &field:fields) if(field.kind==0&&field.index==mute) {field.kind=15;field.second=solo;}
+      }
+    }
+    const auto rank=[&](const Field &field) {
+      if(entry.type->id==std::string_view{"astra.audio.bus"}&&field.kind==4) return 0;
+      if(field.kind==6) return 0;
+      if(field.kind==2&&entry.type->numbers[field.index].id=="volume") return 1;
+      if(field.kind==1) return 2;
+      if(field.kind==15) return 2;
+      return 3;
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
+  if(entry.type==&scene::PathFollow::descriptor&&!searching&&group=="Percurso") {
+    const auto rank=[](const Field &field){return field.kind==4?0:field.kind==1?1:2;};
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field&a,const Field&b){return rank(a)<rank(b);});
+  }
+  if(entry.type==&scene::PathFollow::descriptor&&!searching) {
+    if(group=="Percurso") {
+      u32 initial=~u32{0},advance=~u32{0};
+      for(const auto&f:fields)if(f.kind==2){const auto id=entry.type->numbers[f.index].id;if(id=="progress_distance")initial=f.index;else if(id=="speed"||id=="duration")advance=f.index;}
+      if(initial!=~u32{0}&&advance!=~u32{0}){std::erase_if(fields,[&](const Field&f){return f.kind==2&&f.index==advance;});for(auto&f:fields)if(f.kind==2&&f.index==initial){f.kind=21;f.second=advance;}}
+    } else if(group=="Orientação") {
+      u32 channels[3]{~u32{0},~u32{0},~u32{0}};constexpr std::string_view ids[]{"offset_x","offset_y","offset_z"};
+      for(const auto&f:fields)if(f.kind==2)for(u32 a=0;a<3;++a)if(entry.type->numbers[f.index].id==ids[a])channels[a]=f.index;
+      if(channels[0]!=~u32{0}&&channels[1]!=~u32{0}&&channels[2]!=~u32{0}){std::erase_if(fields,[&](const Field&f){return f.kind==2&&(f.index==channels[1]||f.index==channels[2]);});for(auto&f:fields)if(f.kind==2&&f.index==channels[0]){f.kind=20;f.second=channels[1];f.slot=channels[2];}}
+    } else if(group=="Execução") {
+      u32 autoplay=~u32{0},loop=~u32{0};for(const auto&f:fields)if(f.kind==0){const auto id=entry.type->booleans[f.index].id;if(id=="autoplay")autoplay=f.index;else if(id=="loop")loop=f.index;}
+      if(autoplay!=~u32{0}&&loop!=~u32{0}){std::erase_if(fields,[&](const Field&f){return f.kind==0&&f.index==loop;});for(auto&f:fields)if(f.kind==0&&f.index==autoplay){f.kind=15;f.second=loop;}}
+    }
+  }
+  if(entry.type->id==std::string_view{"astra.physics2d.joint"}&&!searching&&group=="Conexão") {
+    const auto rank=[](const Field &field){return field.kind==1?0:field.kind==4?1:2;};
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
+  if(mesh&&state.meshTab==2&&!searching) {
+    // Compor controles de um mesmo recurso evita sete linhas escalares. Os
+    // endereços individuais continuam os do schema e dos widgets já existentes.
+    std::vector<Field> compact;
+    for(auto field:fields) {
+      if(field.kind==10&&entry.type->slotEnums[field.index].id=="lightmap.enabled"&&entry.type->slotEnums[field.index].options.size()==2) {
+        const bool paired=std::any_of(fields.begin(),fields.end(),[&](const Field &other){
+          return other.kind==6&&other.slot==field.slot&&entry.type->resourceBindings[other.index].id=="texture.lightmap";
+        });
+        if(paired) continue;
+      }
+      if(field.kind==6&&entry.type->resourceBindings[field.index].id=="texture.lightmap") {
+        for(const auto &other:fields) if(other.kind==10&&other.slot==field.slot&&entry.type->slotEnums[other.index].id=="lightmap.enabled"&&entry.type->slotEnums[other.index].options.size()==2) {
+          field.kind=12;field.second=other.index;break;
+        }
+      }
+      if(field.kind==9) {
+        const auto id=entry.type->slotNumbers[field.index].id;
+        const bool first=id=="lightmap.scale_u"||id=="lightmap.offset_u";
+        const bool second=id=="lightmap.scale_v"||id=="lightmap.offset_v";
+        const auto mate=id=="lightmap.scale_u"?"lightmap.scale_v":id=="lightmap.offset_u"?"lightmap.offset_v":
+                        id=="lightmap.scale_v"?"lightmap.scale_u":"lightmap.offset_u";
+        if(first||second) for(const auto &other:fields) if(other.kind==9&&other.slot==field.slot&&entry.type->slotNumbers[other.index].id==mate) {
+          if(second) field.kind=~u32{0};else {field.kind=11;field.second=other.index;}
+          break;
+        }
+      }
+      if(field.kind!=~u32{0}) compact.push_back(field);
+    }
+    fields=std::move(compact);
+    // Cada slot fica junto: receber/textura → escala → deslocamento → intensidade.
+    std::stable_sort(fields.begin(),fields.end(),[](const Field &a,const Field &b){return a.slot<b.slot;});
+  }
   if(searching) {
     const auto matches=[&](std::string_view name,std::string_view id,std::string_view propertyGroup) {
       return editorSearchKey(std::string(name)+" "+std::string(id)+" "+std::string(propertyGroup)).find(search)!=std::string::npos;
@@ -3103,6 +3517,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     std::erase_if(fields,[&](const Field &field) {
       switch(field.kind) {
       case 0: {const auto &p=entry.type->booleans[field.index];return !matches(p.name,p.id,p.presentation.group);}
+      case 10: {const auto &p=entry.type->slotEnums[field.index];return !matches(p.name,p.id,p.presentation.group);}
       case 1: {const auto &p=entry.type->enums[field.index];return !matches(p.name,p.id,p.presentation.group);}
       case 2: {const auto &p=entry.type->numbers[field.index];return !matches(p.name,p.id,p.presentation.group);}
       case 4: {const auto &p=entry.type->references[field.index];return !matches(p.name,p.id,p.presentation.group);}
@@ -3141,6 +3556,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     case 4:add(entry.type->references[field.index].id,scene::FieldKind::Reference);break;
     case 5:for(const auto channel:entry.type->triples[field.index].channels) add(channel,scene::FieldKind::Number);break;
     case 9:add(entry.type->slotNumbers[field.index].id,scene::FieldKind::SlotNumber,field.slot);break;
+    case 10:add(entry.type->slotEnums[field.index].id,scene::FieldKind::SlotEnum,field.slot);break;
     default:break;
     }
     return addresses;
@@ -3190,6 +3606,119 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       builder.list.addImage(centred(takeLeft(slot,26),18,18),static_cast<UiImageId>(warning?UiIcon::UiWarning:UiIcon::UiInfo),
                             warning?theme.color.warning:theme.color.accent);
       builder.label(slot,summary.c_str(),warning?theme.color.warning:theme.color.text,theme.type.caption);
+    } else if(f.kind==13) {
+      builder.label(takeLeft(slot,46),std::string_view(entry.type->booleans[f.index].id).starts_with("rotation_")?"Rotação":"Eixos",theme.color.textMuted,theme.type.caption);
+      const float width=slot.width/3;
+      const u32 fieldsByAxis[]{f.index,f.second,f.slot};const char *names[]{"X","Y","Z"};
+      for(u32 axis=0;axis<3;++axis) {
+        auto cell=takeLeft(slot,width);const auto field=fieldsByAxis[axis];const auto &property=entry.type->booleans[field];
+        builder.label(takeLeft(cell,12),names[axis],theme.color.textDim,theme.type.caption);
+        if(!resetFields({0,field}).empty()) {
+          const auto resetHit=takeRight(cell,18);
+          builder.list.addImage(centred(resetHit,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(field<<12));
+        }
+        builder.checkbox(cell,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(field<<8),
+                         property.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),property.id)));
+      }
+    } else if(f.kind==20||f.kind==21) {
+      const bool triple=f.kind==20;
+      if(triple)builder.label(takeLeft(slot,36),"Frame",theme.color.textDim,theme.type.caption);
+      const u32 channels[]{f.index,f.second,f.slot};const u32 count=triple?3u:2u;const float width=slot.width/count;
+      for(u32 a=0;a<count;++a){auto cell=takeLeft(slot,width);const u32 field=channels[a];const auto&p=entry.type->numbers[field];
+        if(!resetFields({2,field}).empty()){const auto reset=takeRight(cell,triple?16.f:20.f);builder.list.addImage(centred(reset,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);builder.router.addRegion(reset,widgetId(EditorWidget::ComponentFieldResetBase)+index+(2u<<8)+(field<<12));}
+        const auto hit=cell;builder.list.addRect(deflate(cell,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
+        const std::string label=triple?(a==0?"X (u)":a==1?"Y (u)":"Z (u)"):(a==0?"Inicial (u)":p.id=="speed"?"Vel. (u/s)":"Duração (s)");
+        builder.label(takeTop(cell,17),label,theme.color.textDim,theme.type.caption,UiAlign::Center);
+        char value[24];std::snprintf(value,sizeof(value),"%.4g",static_cast<double>(p.read(*component)));const bool mixed=builder.mixed(multiKey(component->instanceId(),p.id));
+        builder.label(cell,mixed?"—":value,theme.color.text,theme.type.caption,UiAlign::Center);if(p.presentation.isEditable(*component))builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(field<<8));
+      }
+    } else if(f.kind==15) {
+      const float width=slot.width*.5f;const u32 channels[]{f.index,f.second};
+      for(const auto field:channels) {
+        auto cell=takeLeft(slot,width);const auto &property=entry.type->booleans[field];
+        const auto check=takeRight(cell,32);
+        if(!resetFields({0,field}).empty()) {
+          const auto resetHit=takeRight(cell,18);
+          builder.list.addImage(centred(resetHit,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(field<<12));
+        }
+        const std::string name=entry.type==&scene::PathFollow::descriptor?(property.id=="autoplay"?"Auto":"Repetir"):std::string{property.name};
+        builder.label(cell,fitMiddle(builder.list,name,cell.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+        builder.checkbox(check,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(field<<8),
+                         property.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),property.id)));
+      }
+    } else if(f.kind==18||f.kind==19) {
+      const auto &number=entry.type->numbers[f.index];
+      builder.label(takeLeft(slot,42),f.kind==18?"Duração":"Atraso",theme.color.textDim,theme.type.caption);
+      auto numeric=takeLeft(slot,66);
+      const auto resetOne=[&](UiRect &area,u32 kind,u32 field) {
+        if(resetFields({kind,field}).empty()) return;
+        const auto resetHit=takeRight(area,20);
+        builder.list.addImage(centred(resetHit,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+        builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(kind<<8)+(field<<12));
+      };
+      resetOne(numeric,2,f.index);
+      builder.list.addRect(deflate(numeric,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
+      char text[32];std::snprintf(text,sizeof(text),"%.3g s",static_cast<double>(number.read(*component)));
+      const bool mixedNumber=builder.mixed(multiKey(component->instanceId(),number.id));
+      builder.label(numeric,mixedNumber?"—":text,theme.color.text,theme.type.caption,UiAlign::Center);
+      if(number.presentation.isEditable(*component)) builder.router.addRegion(numeric,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
+      if(f.kind==18) {
+        const auto &property=entry.type->enums[f.second];resetOne(slot,1,f.second);
+        const auto enumHit=slot;auto box=deflate(slot,UiInsets::all(2));
+        builder.list.addRect(box,theme.color.raised,theme.radius.control);
+        builder.list.addImage(centred(takeRight(box,16),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
+        const char *label="Inválido";for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+        if(builder.mixed(multiKey(component->instanceId(),property.id))) label="—";
+        builder.label(box,label,theme.color.text,theme.type.caption,UiAlign::Center);
+        if(property.presentation.isEditable(*component)) builder.router.addRegion(enumHit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.second<<8));
+      } else {
+        const auto &property=entry.type->booleans[f.second];resetOne(slot,0,f.second);
+        const auto check=takeLeft(slot,32);
+        builder.checkbox(check,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.second<<8),
+                         property.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),property.id)));
+        builder.label(slot,"Auto",theme.color.textDim,theme.type.caption);
+      }
+    } else if(f.kind==16) {
+      const auto id=entry.type->numbers[f.index].id;
+      const char *title=id=="velocity_x"?"Vel. (m/s)":id=="half_x"?"Meia dim. (m)":id=="force_x"?"Mundo (N)":
+        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":"Centro (m)";
+      builder.label(takeLeft(slot,std::min(72.f,slot.width*.34f)),title,theme.color.textDim,theme.type.caption);
+      const float width=slot.width*.5f;
+      const u32 channels[]{f.index,f.second};const char *names[]{"X","Y"};
+      for(u32 axis=0;axis<2;++axis) {
+        auto cell=takeLeft(slot,width);const auto field=channels[axis];const auto &property=entry.type->numbers[field];
+        builder.label(takeLeft(cell,13),names[axis],axis?theme.color.axisY:theme.color.axisX,theme.type.caption);
+        if(!resetFields({2,field}).empty()) {
+          const auto resetHit=takeRight(cell,20);
+          builder.list.addImage(centred(resetHit,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(2u<<8)+(field<<12));
+        }
+        const auto hit=cell;builder.list.addRect(deflate(cell,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
+        char value[32];std::snprintf(value,sizeof(value),"%.4g",static_cast<double>(property.read(*component)));
+        const bool mixed=builder.mixed(multiKey(component->instanceId(),property.id));
+        builder.label(cell,mixed?"—":value,mixed?theme.color.textDim:theme.color.text,theme.type.caption,UiAlign::Center);
+        if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(field<<8));
+      }
+    } else if(f.kind==10) {
+      const auto &property=entry.type->slotEnums[f.index];
+      const auto widget=widgetId(EditorWidget::ComponentSlotEnumBase)+index+(f.index<<8)+(f.slot<<16);
+      const bool editable=property.write&&!property.options.empty()&&property.presentation.isEditable(*component);
+      const u32 current=property.read(*component,f.slot);
+      const bool mixed=builder.mixed(multiKey(component->instanceId(),std::string(property.id)+"@"+std::to_string(f.slot)));
+      const std::string name=std::string(property.name)+" · "+std::to_string(f.slot+1);
+      if(property.options.size()==2) {
+        auto check=takeRight(slot,32);
+        builder.label(slot,name,theme.color.textDim,theme.type.caption);
+        builder.checkbox(check,current==property.options[1].value,widget,editable,mixed);
+      } else {
+        builder.label(takeLeft(slot,slot.width*.48f),name,theme.color.textDim,theme.type.caption);
+        const char *value="Valor inválido";
+        for(const auto &option:property.options) if(option.value==current) value=option.name;
+        builder.label(slot,mixed?"—":value,editable?theme.color.text:theme.color.textMuted,theme.type.caption);
+        if(editable) builder.router.addRegion(hit,widget);
+      }
     } else if(f.kind==0) {
       const auto &property=entry.type->booleans[f.index];auto toggle=takeRight(slot,44);
       builder.label(slot,property.name,theme.color.textDim,theme.type.caption);
@@ -3210,8 +3739,24 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(editable) builder.list.addImage(centred(chevron,10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
       builder.label(deflate(box,UiInsets{8,0,0,0}),label,editable?theme.color.text:theme.color.textMuted,theme.type.caption);
       if(editable) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
-    } else if(f.kind==4) {
+    } else if(f.kind==4||f.kind==14) {
       const auto &property=entry.type->references[f.index];const auto target=property.read(*component);
+      if(f.kind==14) {
+        const auto &enabled=entry.type->booleans[f.second];const auto check=takeLeft(slot,32);
+        builder.checkbox(check,enabled.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.second<<8),
+                         enabled.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),enabled.id)));
+        if(!resetFields({0,f.second}).empty()) {
+          const auto resetHit=takeLeft(slot,18);
+          builder.list.addImage(centred(resetHit,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(f.second<<12));
+        }
+        if(!resetFields({4,f.index}).empty()) {
+          const auto resetHit=takeRight(slot,20);
+          builder.list.addImage(centred(resetHit,12,12),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(4u<<8)+(f.index<<12));
+        }
+      }
+      const auto referenceHit=slot;
       builder.label(takeTop(slot,17),property.name,theme.color.textMuted,theme.type.caption);
       const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
       const auto readiness=runtime::referenceReadiness(*builder.state.document,entity.id,*component,property);
@@ -3221,12 +3766,27 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(readiness==runtime::ReferenceReadiness::RequiredEmpty) referenceLabel="Obrigatório · "+referenceLabel;
       else if(readiness==runtime::ReferenceReadiness::Inactive) referenceLabel+=" · inativo";
       else if(readiness==runtime::ReferenceReadiness::Incompatible && object) referenceLabel+=" · incompatível";
-      builder.label(slot,referenceLabel,warning?theme.color.warning:theme.color.text,theme.type.caption);
       builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
-      if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentReferenceBase)+index+(f.index<<8));
-    } else if(f.kind==5) {
+      builder.label(slot,fitMiddle(builder.list,referenceLabel,slot.width,theme.type.caption),warning?theme.color.warning:theme.color.text,theme.type.caption);
+      if(property.presentation.isEditable(*component)) builder.router.addRegion(referenceHit,widgetId(EditorWidget::ComponentReferenceBase)+index+(f.index<<8));
+    } else if(f.kind==5||f.kind==17) {
       const auto &triple=entry.type->triples[f.index];
-      auto title=takeLeft(slot,slot.width*.30f);
+      if(f.kind==17&&!resetFields({5,f.index}).empty()) {
+        const auto resetHit=takeRight(slot,30);
+        builder.list.addImage(centred(resetHit,18,18),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+        builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(5u<<8)+(f.index<<12));
+      }
+      auto title=takeLeft(slot,f.kind==17?58.f:slot.width*(constantForce?.34f:.30f));
+      if(f.kind==17) {
+        const auto &enabled=entry.type->booleans[f.second];
+        builder.checkbox(takeLeft(title,24),enabled.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.second<<8),
+                         enabled.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),enabled.id)));
+        if(!resetFields({0,f.second}).empty()) {
+          const auto resetHit=takeRight(title,12);
+          builder.list.addImage(centred(resetHit,10,10),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(f.second<<12));
+        }
+      }
       builder.router.addRegion(title,widgetId(EditorWidget::ComponentTripleBase)+index+(f.index<<8));
       if(triple.kind==scene::ComponentTripleKind::LinearColor) {
         u32 color=0xff000000u;
@@ -3240,15 +3800,17 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         builder.router.addRegion(swatch,widgetId(EditorWidget::ComponentColorBase)+index+(f.index<<8));
       }
       std::string groupTitle=triple.name;
+      if(f.kind==17) groupTitle=triple.id==std::string_view{"position_destination"}?"Pos":triple.id==std::string_view{"rotation_destination"}?"Rot":"Esc";
+      if(constantForce) groupTitle=std::string_view(triple.id).find("torque")!=std::string_view::npos?"Torque":"Força";
       std::string_view unit;bool firstUnit=true,consistentUnit=true;
       for(const auto channel:triple.channels) for(const auto &p:entry.type->numbers) if(p.id==channel) {
         if(firstUnit) {unit=p.presentation.unit;firstUnit=false;}
         else if(unit!=p.presentation.unit) consistentUnit=false;
       }
-      if(consistentUnit && !unit.empty()) groupTitle+=" ("+std::string(unit)+")";
+      if(f.kind!=17&&consistentUnit && !unit.empty()) groupTitle+=" ("+std::string(unit)+")";
       builder.label(title,groupTitle,theme.color.textDim,theme.type.caption);
-      const float cellWidth=slot.width/3;
-      for(u32 axis=0;axis<3;++axis) {
+      const float cellWidth=slot.width/triple.dimensions();
+      for(u32 axis=0;axis<triple.dimensions();++axis) {
         u32 channel=0;
         while(channel<entry.type->numbers.size() && entry.type->numbers[channel].id!=triple.channels[axis]) ++channel;
         if(channel==entry.type->numbers.size()) continue;
@@ -3273,6 +3835,30 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       const bool mixedNumber=builder.mixed(multiKey(component->instanceId(),property.id));
       builder.label(slot,mixedNumber?"\xE2\x80\x94":value,!mixedNumber&&property.presentation.isEditable(*component)?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
       if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
+    } else if(f.kind==11) {
+      const auto id=entry.type->slotNumbers[f.index].id;
+      std::string name=id=="lightmap.scale_u"?"Escala UV":"Desloc. UV";
+      if(entry.type->slotNumbers[f.index].slotCount(*component)>1) name+=" · "+std::to_string(f.slot+1);
+      builder.label(takeLeft(slot,std::min(74.f,slot.width*.34f)),name,theme.color.textDim,theme.type.caption);
+      const float width=slot.width*.5f;
+      for(u32 axis=0;axis<2;++axis) {
+        const u32 field=axis?f.second:f.index;
+        const auto &property=entry.type->slotNumbers[field];
+        auto cell=takeLeft(slot,width);const auto valueHit=cell;
+        const auto key=multiKey(component->instanceId(),std::string(property.id)+"@"+std::to_string(f.slot));
+        const bool editable=property.write&&property.presentation.isEditable(*component);
+        builder.list.addRect(deflate(cell,UiInsets::all(2)),theme.color.silhouette,4);
+        builder.label(takeLeft(cell,16),axis?"V":"U",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        const auto reset=resetFields({9,field,f.slot});
+        auto resetHit=reset.empty()?UiRect{}:takeRight(cell,20);
+        char value[24];std::snprintf(value,sizeof(value),"%.4g",static_cast<double>(property.read(*component,f.slot)));
+        builder.label(cell,builder.mixed(key)?"—":value,editable?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
+        if(editable) builder.router.addRegion(valueHit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+(field<<8)+(f.slot<<16));
+        if(!resetHit.isEmpty()) {
+          builder.list.addImage(centred(resetHit,14,14),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(resetHit,widgetId(EditorWidget::ComponentFieldResetBase)+index+(9u<<8)+(field<<12)+(f.slot<<20));
+        }
+      }
     } else if(f.kind==9) {
       const auto &property=entry.type->slotNumbers[f.index];
       // O endereço tem nome quando a fonte dá (alvo de blend shape); senão, a posição.
@@ -3285,12 +3871,21 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.silhouette,8);
       if(!property.presentation.unit.empty()) builder.label(takeRight(slot,24),property.presentation.unit,theme.color.textMuted,theme.type.caption,UiAlign::Center);
       const bool editable=property.write&&property.presentation.isEditable(*component);
-      builder.label(slot,value,editable?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
+      const bool mixed=builder.mixed(multiKey(component->instanceId(),std::string(property.id)+"@"+std::to_string(f.slot)));
+      builder.label(slot,mixed?"—":value,editable?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
       if(editable) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+(f.index<<8)+(f.slot<<16));
-    } else if(f.kind==6) {
+    } else if(f.kind==6||f.kind==12) {
       const auto &binding=entry.type->resourceBindings[f.index];const auto asset=binding.at(*component,f.slot);
       const bool clipEntry=entry.type==&scene::Animation::descriptor && binding.id=="clips";
       auto pickerHit=hit;
+      UiRect enabledHit{},enabledReset{};
+      if(f.kind==12) {
+        enabledHit=takeLeft(slot,36);
+        pickerHit.x=slot.x;pickerHit.width=slot.width;
+        if(!resetFields({10,f.second,f.slot}).empty()) {
+          enabledReset=takeRight(slot,24);pickerHit.width-=24;
+        }
+      }
       if(clipEntry) {
         const auto encoded=index+(f.index<<8)+(f.slot<<16);
         auto remove=takeRight(slot,32),down=takeRight(slot,32),up=takeRight(slot,32);
@@ -3303,13 +3898,14 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         builder.router.addRegion(remove,widgetId(EditorWidget::ComponentClipRemoveBase)+encoded);
       }
       std::string name=binding.name;
+      if(f.kind==12) name="Receber lightmap indireto";
       if(binding.slotCount(*component)>1) name+=" · "+std::to_string(f.slot+1);
       builder.label(takeTop(slot,17),name.c_str(),theme.color.textMuted,theme.type.caption);
       std::string value;
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
-              binding.kind==resources::AssetType::AnimationClip?"Nenhum clipe":
+              binding.kind==resources::AssetType::AnimationClip||binding.kind==resources::AssetType::AudioClip?"Nenhum clipe":
               binding.inheritable?"Herdar malha visual":"Sem recurso";
       } else value=asset.text().substr(0,8);
       if(binding.kind==resources::AssetType::AnimationClip && asset.valid() && builder.state.resources) {
@@ -3322,10 +3918,22 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         value=name.empty()?"Malha "+std::to_string(resolved):std::string(name);
       }
       if(const auto *record=builder.state.assetRegistry?builder.state.assetRegistry->find(asset):nullptr) value=record->path;
-      builder.label(slot,value.c_str(),theme.color.text,theme.type.caption);
+      if(builder.mixed(multiKey(component->instanceId(),std::string(binding.id)+"@"+std::to_string(f.slot)))) value="—";
       builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
+      builder.label(slot,fitMiddle(builder.list,value,slot.width,theme.type.caption),theme.color.text,theme.type.caption);
       if(binding.presentation.isEditable(*component))
         builder.router.addRegion(pickerHit,widgetId(EditorWidget::ComponentResourceBase)+index+(f.index<<8)+(f.slot<<16));
+      if(f.kind==12) {
+        const auto &property=entry.type->slotEnums[f.second];
+        const bool mixed=builder.mixed(multiKey(component->instanceId(),std::string(property.id)+"@"+std::to_string(f.slot)));
+        builder.checkbox(enabledHit,property.read(*component,f.slot)==property.options[1].value,
+            widgetId(EditorWidget::ComponentSlotEnumBase)+index+(f.second<<8)+(f.slot<<16),
+            property.write&&property.presentation.isEditable(*component),mixed);
+        if(!enabledReset.isEmpty()) {
+          builder.list.addImage(centred(enabledReset,14,14),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
+          builder.router.addRegion(enabledReset,widgetId(EditorWidget::ComponentFieldResetBase)+index+(10u<<8)+(f.second<<12)+(f.slot<<20));
+        }
+      }
     } else if(f.index==widgetId(EditorWidget::MeshChoose)) {
       builder.list.addImage(centred(takeRight(slot,30),22,22),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.text);
       const auto ref=meshAsset(entity);const auto text=ref?"Malha "+std::to_string(ref):"Escolher malha";
@@ -3420,17 +4028,27 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   const auto selectedResource=resourceBinding?resourceBinding->at(*resourceComponent,state.resourceSlot):resources::AssetGuid{};
   auto title=takeTop(content,36),back=takeLeft(title,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);builder.router.addRegion(back,widgetId(EditorWidget::MeshPickerClose));
+  if(resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip) {
+    const auto import=takeRight(title,68);
+    builder.list.addRect(deflate(import,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    const bool editable=state.workspace!=EditorWorkspace::Play;
+    builder.label(import,editable?"+ WAV":"Em Edit",editable?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(editable) builder.router.addRegion(import,widgetId(EditorWidget::ImportWave));
+  }
   builder.label(title,resourceBinding?resourceBinding->name:"Geometria",theme.color.text,theme.type.body);
   auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.meshQuery.empty()?
       (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":
        resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::Texture?"Buscar textura":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip?"Buscar WAV":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AnimationClip?"Buscar clipe":"Buscar malha"):
       state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
   if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
-                       resourceBinding->kind==resources::AssetType::EnvironmentMap)) {
+                       resourceBinding->kind==resources::AssetType::EnvironmentMap||
+                       resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip)) {
     if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
       const auto action=deflate(takeTop(content,40),UiInsets::all(2));
       builder.list.addRect(action,theme.color.accent,theme.radius.control);
@@ -3439,17 +4057,19 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::EnvironmentProfileUpdate:
                                                  EditorWidget::EnvironmentProfileCreate));
     }
-    std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);
+    std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);u32 resourceCount=0;
     if(state.assetRegistry) for(u32 i=0;i<state.assetRegistry->records().size();++i) {
       const auto &record=state.assetRegistry->records()[i];
       if(record.type!=resourceBinding->kind) continue;
+      ++resourceCount;
       if(query.empty()||editorSearchKey(record.path).find(query)!=std::string::npos) matches.push_back(i);
     }
     const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-34)/50));
     const u32 pages=std::max(1u,(static_cast<u32>(matches.size())+perPage-1)/perPage);
     const u32 page=std::min(state.meshPage,pages-1);
     auto clear=takeTop(content,34);builder.label(clear,
-        resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":"Sem mapa HDRI",
+        resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":
+        resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":"Sem mapa HDRI",
         theme.color.textDim,theme.type.caption);
     builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
     for(u32 row=page*perPage;row<matches.size()&&row<(page+1)*perPage;++row) {
@@ -3457,14 +4077,17 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       auto slot=takeTop(content,50);const auto hit=slot;
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       if(selectedResource==record.guid) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
-      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(UiIcon::LightingSun),0xffffffff);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:UiIcon::LightingSun),0xffffffff);
       const auto slash=record.path.find_last_of('/');const auto name=record.path.substr(slash==std::string::npos?0:slash+1);
       builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
       builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
       builder.router.addRegion(hit,widgetId(EditorWidget::MeshChoiceBase)+index);
     }
-    if(matches.empty()) builder.label(content,resourceBinding->kind==resources::AssetType::EnvironmentProfile?
-        "Nenhum perfil no projeto":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
+    if(matches.empty()) builder.label(content,resourceCount&& !query.empty()?
+        (resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV corresponde à busca":"Nenhum recurso corresponde à busca"):
+        resourceBinding->kind==resources::AssetType::EnvironmentProfile?
+        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::Texture?
+        "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
     if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
@@ -3794,7 +4417,7 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
   // Inspector só diz que ela está aberta.
   if(state.pickerAdvanced) {builder.label(content,"Seletor de objeto aberto",theme.color.textMuted,theme.type.caption,UiAlign::Center);return;}
   const auto scriptReference=editorScriptReference(state.referenceScriptType);
-  const auto *property=state.referenceScript?&scriptReference:editorReferenceProperty(entity,state.referenceInstance,state.referenceProperty);
+  const auto *property=state.presetInputIndex?state.presetInputProperty:state.referenceScript?&scriptReference:editorReferenceProperty(entity,state.referenceInstance,state.referenceProperty);
   const auto *requiredSchema=property&&!property->requiredType.empty()?scene::findComponentSchema(property->requiredType):nullptr;
   auto header=takeTop(content,36),back=takeLeft(header,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);builder.router.addRegion(back,widgetId(EditorWidget::ReferenceClose));
@@ -3815,7 +4438,7 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
   builder.router.addRegion(search,widgetId(EditorWidget::ReferenceSearch));
   auto clear=takeTop(content,34);builder.label(clear,property->nullLabel,theme.color.textDim,theme.type.caption);builder.router.addRegion(clear,widgetId(EditorWidget::ReferenceClear));
   auto footer=takeBottom(content,32),previous=takeLeft(footer,36),next=takeRight(footer,36);
-  const auto choices=editorReferenceChoices(*state.document,entity.id,*property,state.referenceQuery);
+  const auto choices=state.presetInputIndex?editorRecipeReferenceChoices(*state.document,state.presetInputChoices,state.referenceQuery):editorReferenceChoices(*state.document,entity.id,*property,state.referenceQuery);
   const u32 visible=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/48));
   const u32 pages=std::max(1u,(static_cast<u32>(choices.size())+visible-1)/visible),page=std::min(state.referencePage,pages-1);
   for(u32 i=page*visible;i<choices.size()&&i<(page+1)*visible;++i) {
@@ -3851,7 +4474,7 @@ void buildAdvancedReferencePicker(ScreenBuilder &builder) {
   const auto *entity=state.document?state.document->find(state.inspectorTarget?state.inspectorTarget:state.selection):nullptr;
   if(!entity) return;
   const auto scriptReference=editorScriptReference(state.referenceScriptType);
-  const auto *propertyPointer=state.referenceScript?&scriptReference:editorReferenceProperty(*entity,state.referenceInstance,state.referenceProperty);
+  const auto *propertyPointer=state.presetInputIndex?state.presetInputProperty:state.referenceScript?&scriptReference:editorReferenceProperty(*entity,state.referenceInstance,state.referenceProperty);
   if(!propertyPointer) return;
   const auto &property=*propertyPointer;
   const auto *required=property.requiredType.empty()?nullptr:scene::findComponentSchema(property.requiredType);
@@ -3900,7 +4523,7 @@ void buildAdvancedReferencePicker(ScreenBuilder &builder) {
   takeTop(content,8);
   // Direita: painel de inspeção.
   auto inspection=takeRight(content,std::min(230.f,content.width*.38f));takeRight(content,10);
-  const auto results=editorAdvancedReferenceResults(*state.document,entity->id,property,state.referenceQuery,state.referenceTypeFilter);
+  const auto results=state.presetInputIndex?editorRecipeReferenceResults(*state.document,entity->id,state.presetInputChoices,state.referenceQuery,state.referenceTypeFilter):editorAdvancedReferenceResults(*state.document,entity->id,property,state.referenceQuery,state.referenceTypeFilter);
   const EditorReferenceResult *highlighted=nullptr;
   for(const auto &result:results) if(result.id==state.referenceHighlight) highlighted=&result;
   list.addRect(inspection,theme.color.silhouette,theme.radius.control);
@@ -4223,7 +4846,9 @@ void buildComponentSheet(ScreenBuilder &builder,const EditorEntity &entity) {
   // larga; só ícone no telefone. Rola pelo arraste quando não cabe — o plano
   // leva a 18 famílias, que nenhuma altura de telefone mostra de uma vez.
   const bool wide=width>=900;
-  auto rail=takeLeft(content,wide?150.f:48.f);takeLeft(content,10);
+  // Mesmo no telefone landscape a folha tem largura para nomes. O trilho só
+  // de ícones escondia as famílias e obrigava descobrir cada uma por tentativa.
+  auto rail=takeLeft(content,wide?150.f:width>=720?128.f:48.f);takeLeft(content,10);
   if(query.empty()) {
     struct RailItem {u32 value;UiIcon icon;const char *caption;};
     std::vector<RailItem> items{{0,UiIcon::AssetsGrid,"Todos"}};
@@ -4669,13 +5294,69 @@ void buildEnumPicker(ScreenBuilder &builder) {
   builder.list.popClip();
 }
 
-void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity) {
+namespace {
+std::vector<std::string> wrapText(const UiDrawList &list,std::string_view text,float width,const UiTypeStyle &style);
+}
+void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity, bool addInHeader=false) {
+  if(builder.state.presetInputIndex && builder.state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
   if(builder.state.presetPanel && builder.state.presetEntity==entity.id) {
     const auto &state=builder.state;const auto &theme=builder.theme;
-    const auto button=[&](UiRect rect,const char *label,EditorWidget id) {
+    const auto button=[&](UiRect rect,const char *label,EditorWidget id,bool enabled=true) {
       const auto inset=deflate(rect,UiInsets::all(3));builder.list.addRect(inset,theme.color.raised,theme.radius.control);
-      builder.label(inset,label,theme.color.text,theme.type.caption,UiAlign::Center);builder.router.addRegion(rect,widgetId(id));
+      builder.label(inset,label,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);if(enabled)builder.router.addRegion(rect,widgetId(id));
     };
+    if(state.presetSelectedIsRecipe) {
+      const bool wide=content.width>=600;
+      auto navigation=takeTop(content,36);
+      if(wide) {
+        button(takeRight(navigation,130),state.presetDeleteConfirm?"Confirmar exclusão":"Excluir receita",EditorWidget::PresetDelete);
+        button(takeRight(navigation,110),"Renomear",EditorWidget::PresetRename);
+        navigation=takeLeft(navigation,std::min(260.f,navigation.width));
+      }
+      button(navigation,"<  Biblioteca de receitas",EditorWidget::PresetLibrary);
+      auto heading=takeTop(content,wide?32.f:28.f);
+      if(wide) {
+        auto destination=takeRight(heading,heading.width*.42f);
+        builder.label(destination,fitMiddle(builder.list,std::string("Destino · ")+entity.name,destination.width,theme.type.caption),theme.color.textDim,theme.type.caption,UiAlign::End);
+      }
+      builder.label(heading,fitMiddle(builder.list,state.presetRecipeName,heading.width,theme.type.body),theme.color.text,theme.type.body);
+      if(!wide)builder.label(takeTop(content,24),fitMiddle(builder.list,std::string("Destino · ")+entity.name,content.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+      button(takeBottom(content,46),"Aplicar composição e alvos",EditorWidget::PresetApply,state.presetRecipeReady);
+      if(!wide) {
+        auto actions=takeBottom(content,36);button(takeLeft(actions,actions.width*.5f),"Renomear",EditorWidget::PresetRename);
+        button(actions,state.presetDeleteConfirm?"Confirmar exclusão":"Excluir receita",EditorWidget::PresetDelete);
+      }
+      for(const auto &line:wrapText(builder.list,state.presetRecipeStatus,content.width,theme.type.caption)) {
+        if(content.height<(wide?95.f:130.f))break;
+        builder.label(takeTop(content,20),line,state.presetRecipeReady?theme.color.accent:theme.color.warning,theme.type.caption);
+      }
+      const auto section=takeTop(content,38);
+      builder.label(section,(state.presetRecipeDetails?"‹ Alvos da receita":"Composição · "+std::to_string(state.presetRecipeCount)+" componentes ›"),theme.color.accent,theme.type.caption);
+      builder.router.addRegion(section,widgetId(EditorWidget::PresetRecipeDetails));
+      const u32 count=state.presetRecipeDetails?static_cast<u32>(state.presetPreview.size()):static_cast<u32>(state.presetInputNames.size());
+      const float rowHeight=state.presetRecipeDetails?34.f:54.f;
+      auto pager=takeBottom(content,wide && count*rowHeight<=content.height?0.f:32.f);
+      const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/rowHeight));
+      const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.presetRecipePage,pages-1);
+      if(!count)builder.label(content,"Sem alvos externos · referências próprias vão ao destino",theme.color.textMuted,theme.type.caption);
+      for(u32 i=page*perPage;i<count && i<(page+1)*perPage;++i) {
+        auto row=takeTop(content,rowHeight);const auto hit=row;
+        if(state.presetRecipeDetails)builder.label(row,state.presetPreview[i],theme.color.textDim,theme.type.caption);
+        else {
+          builder.list.addImage(centred(takeLeft(row,28),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorObject),theme.color.accent);
+          auto name=wide?takeLeft(row,row.width*.5f):takeTop(row,23);
+          builder.label(name,fitMiddle(builder.list,state.presetInputNames[i],name.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+          const auto target=i<state.presetInputValues.size()?state.presetInputValues[i]:0;
+          const auto *object=target && target<=std::numeric_limits<EditorEntityId>::max()?state.document->find(static_cast<EditorEntityId>(target)):nullptr;
+          builder.label(row,fitMiddle(builder.list,object?object->name:"Escolher objeto ›",row.width,theme.type.body),object?theme.color.text:theme.color.accent,theme.type.body);
+          builder.router.addRegion(hit,widgetId(EditorWidget::PresetInputBase)+i);
+        }
+      }
+      if(page)button(takeLeft(pager,36),"<",EditorWidget::PresetRecipePrevious);
+      if(page+1<pages)button(takeRight(pager,36),">",EditorWidget::PresetRecipeNext);
+      if(!pager.isEmpty())builder.label(pager,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      return;
+    }
     button(takeTop(content,36),"<  Presets do projeto",EditorWidget::PresetClose);
     auto actions=takeTop(content,40);const auto save=takeLeft(actions,actions.width*.5f);
     if(state.presetInstance) button(save,"Salvar atual",EditorWidget::PresetSave);
@@ -4831,7 +5512,11 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
   if(same && state.textureViewer && meshRenderer(entity)) {buildTextureViewer(builder,content);return;}
   if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
-  if(!builder.onlyComponent) {
+  const bool detailFocused=same && (!state.expandedComponent.empty() || state.expandedNative || state.expandedScript ||
+                                    state.nativeMenu || state.scriptMenu || state.transformMenu);
+  // Em landscape curto, o Add permanece na faixa das abas; o rodapé não
+  // rouba a única linha editável do componente focado.
+  if(!builder.onlyComponent && !addInHeader) {
     auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
     builder.list.addRect(button,theme.color.raised,theme.radius.control);
     builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
@@ -4859,7 +5544,9 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     std::vector<Card> common;
     for(const auto &card:cards) if(!card.value || state.multi.isCommon(card.value->instanceId())) common.push_back(card);
     cards=std::move(common);
-    if(state.multi.hidden) {
+    // Durante a edição focada, priorize os campos: o cabeçalho já identifica
+    // a multisseleção e a aba Componentes mantém o diagnóstico do conjunto.
+    if(state.multi.hidden && !detailFocused) {
       auto note=takeTop(content,30);takeTop(content,4);
       builder.list.addRect(note,withAlpha(theme.color.warning,.12f),theme.radius.control);
       builder.list.addImage(centred(takeLeft(note,26),14,14),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.warning);
@@ -4917,8 +5604,16 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       }
     }
     builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
-    builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
+    UiRect previousComponent{},nextComponent{};
+    const bool componentNavigation=open&&!builder.onlyComponent&&!builder.focusedWindow;
+    if(componentNavigation) {
+      previousComponent=takeLeft(row,24);nextComponent=takeLeft(row,24);
+      builder.list.addImage(centred(previousComponent,12,12),static_cast<UiImageId>(UiIcon::UiChevronLeft),theme.color.textDim);
+      builder.list.addImage(centred(nextComponent,12,12),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textDim);
+    } else builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
     auto more=takeRight(row,item.object?0:32);
+    const bool characterSearch=open&&item.native&&item.native->type==&scene::Character::descriptor;
+    const auto characterSearchHit=characterSearch?takeRight(row,40):UiRect{};
     // Interruptor de ativo no cabeçalho, como a caixa de Behaviour.enabled da
     // Unity: só onde existe `enabled` com consumidor, ou no comportamento C#.
     // O interruptor é registrado DEPOIS da área de dobrar o cartão: o roteador
@@ -4930,15 +5625,20 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       if(item.native) for(const auto &p:item.native->type->booleans) if(p.id=="enabled") {enableToggle=true;enableOn=p.read(*item.value);}
       if(enableToggle) enableRect=takeRight(row,48);
     }
-    builder.label(row,title.c_str(),theme.color.text,theme.type.body);
+    builder.label(row,fitMiddle(builder.list,title,row.width,theme.type.body),theme.color.text,theme.type.body);
     if(item.object||item.transform||item.native||script) {
       builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:32),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
-      if(enableToggle && builder.mixed(multiKey(item.value->instanceId(),"enabled"))) builder.mixedToggle(enableRect,widgetId(EditorWidget::ComponentEnableBase)+item.index);
-    else if(enableToggle) builder.toggle(enableRect,enableOn,widgetId(EditorWidget::ComponentEnableBase)+item.index);
+      if(componentNavigation) {
+        builder.router.addRegion(previousComponent,widgetId(EditorWidget::InspectorComponentPrevious));
+        builder.router.addRegion(nextComponent,widgetId(EditorWidget::InspectorComponentNext));
+      }
+      if(enableToggle) builder.checkbox(enableRect,enableOn,widgetId(EditorWidget::ComponentEnableBase)+item.index,true,
+                                       builder.mixed(multiKey(item.value->instanceId(),"enabled")));
       if(!item.object) {
         builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
         builder.router.addRegion(more,item.transform?widgetId(EditorWidget::TransformMenu):widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
       }
+      if(characterSearch){builder.list.addImage(centred(characterSearchHit,16,16),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textDim);builder.router.addRegion(characterSearchHit,widgetId(EditorWidget::ComponentPropertySearch));}
       if(menu && item.transform) {
         // Unity: copiar, colar e redefinir moram no próprio card da transformação.
         const struct {const char *label;EditorWidget widget;bool enabled;} rows[]{
@@ -5106,11 +5806,47 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
 
 void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
+  if(state.inspectorReferenceFlags) {
+    auto back=takeTop(content,32);
+    builder.label(back,"‹  Objeto / Static",theme.color.accent,theme.type.caption);
+    builder.router.addRegion(back,widgetId(EditorWidget::InspectorReferenceFlagsClose));
+    // Unity 6000.0 StaticEditorFlags. Estas caixas são inventário de referência,
+    // não bits autorais: cada consumidor precisa existir antes da habilitação.
+    struct Flag {const char *name;const char *reason;};
+    const Flag flags[]{
+      {"Contribute GI","Indisponível · bake e associação GI"},
+      {"Occluder Static","Indisponível · bake de oclusão"},
+      {"Batching Static","Indisponível · bake de geometria"},
+      {"Navigation Static","Legado Unity · sem bake de navegação"},
+      {"Occludee Static","Indisponível · dados de oclusão"},
+      {"Off Mesh Link Generation","Legado Unity · sem links de navegação"},
+      {"Reflection Probe Static","Indisponível · bake de reflexão"}
+    };
+    constexpr u32 count=static_cast<u32>(std::size(flags));
+    auto pager=takeBottom(content,28);
+    const u32 fits=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/48));
+    const u32 pages=(count+fits-1)/fits,page=std::min(state.propertyPage,pages-1);
+    for(u32 i=page*fits;i<count&&i<(page+1)*fits&&content.height>=44;++i) {
+      auto row=takeTop(content,48);
+      builder.checkbox(takeLeft(row,28),false,0,false);
+      builder.label(takeTop(row,22),flags[i].name,theme.color.textDim,theme.type.caption);
+      builder.label(row,fitMiddle(builder.list,flags[i].reason,row.width,theme.type.caption),theme.color.warning,theme.type.caption);
+    }
+    if(pages>1) {
+      const auto previous=takeLeft(pager,32),next=takeRight(pager,32);
+      builder.list.addImage(centred(previous,14,14),static_cast<UiImageId>(UiIcon::UiChevronLeft),page?theme.color.text:theme.color.textFaint);
+      builder.list.addImage(centred(next,14,14),static_cast<UiImageId>(UiIcon::UiChevronRight),page+1<pages?theme.color.text:theme.color.textFaint);
+      if(page) builder.router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
+      if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+      builder.label(pager,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    }
+    return;
+  }
   // 0 nome, 1 visível, 2 sombra projetada (só com malha: sem desenho não há
   // sombra), 3 camada, 4 informação.
   std::vector<u32> kinds{0,1};
   if(meshRenderer(entity)) kinds.push_back(2);
-  kinds.push_back(3);if(entity.id!=state.document->root()) kinds.push_back(5);kinds.push_back(4);
+  kinds.push_back(3);if(entity.id!=state.document->root()) kinds.push_back(5);kinds.push_back(7);kinds.push_back(6);kinds.push_back(4);
   const u32 rows=static_cast<u32>(kinds.size());
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/36));
   const u32 pages=(rows+perPage-1)/perPage,page=std::min(state.propertyPage,pages-1);
@@ -5147,6 +5883,13 @@ void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity 
       builder.list.addRect(deflate(line,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       builder.label(line,text.c_str(),known?theme.color.text:theme.color.warning,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(line,widgetId(EditorWidget::ObjectTagOpen));
+    } else if(row==7) {
+      builder.list.addImage(centred(takeLeft(line,26),18,18),static_cast<UiImageId>(UiIcon::SceneGroups),theme.color.accent);
+      builder.label(line,("Grupos · "+std::to_string(entity.groups.names().size())+"  ›").c_str(),theme.color.text,theme.type.caption);
+      builder.router.addRegion(line,widgetId(EditorWidget::ObjectGroupsOpen));
+    } else if(row==6) {
+      builder.label(line,"Static · referência Unity  ›",theme.color.textDim,theme.type.caption);
+      builder.router.addRegion(line,widgetId(EditorWidget::InspectorReferenceFlags));
     } else {
       const auto children=state.document->childrenOf(entity.id).size();
       const std::string info="ID "+std::to_string(entity.id)+" · "+std::to_string(children)+(children==1?" filho":" filhos");
@@ -5266,32 +6009,85 @@ void prefabComparisonText(ScreenBuilder &builder,UiRect rect,std::string text,Ui
 }
 void buildPrefabOverrides(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.prefabOverrides;
-  auto navigation=takeTop(content,44);
+  auto navigation=takeTop(content,36);
   auto back=takeLeft(navigation,76),refresh=takeRight(navigation,76);
   builder.label(back,"< Objeto",theme.color.accent,theme.type.caption);
   builder.router.addRegion(back,widgetId(EditorWidget::PrefabOverridesClose));
-  builder.label(refresh,"Atualizar",theme.color.accent,theme.type.caption,UiAlign::End);
+  builder.label(refresh,"Ler fonte",theme.color.accent,theme.type.caption,UiAlign::End);
   builder.router.addRegion(refresh,widgetId(EditorWidget::PrefabOverridesRefresh));
-  builder.label(takeTop(content,28),"Diferenças da fonte",theme.color.text,theme.type.body);
+  const auto *object=state.document->find(view.object);
+  const auto *sourceAsset=state.assetRegistry?state.assetRegistry->find(view.asset):nullptr;
+  const std::string title=std::string(object?object->name:"Objeto indisponível")+" → "+
+                        (sourceAsset?sourceAsset->path:"Fonte de prefab indisponível");
+  builder.label(takeTop(content,24),fitMiddle(builder.list,title,content.width,theme.type.body),theme.color.text,theme.type.body);
   const bool stale=state.document->revision()!=view.revision;
   if(!view.error.empty()) {prefabComparisonText(builder,content,view.error,theme.color.warning,8);return;}
-  if(stale) prefabComparisonText(builder,takeTop(content,36),"Cena alterada — atualize para reverter",theme.color.warning);
-  else prefabComparisonText(builder,takeTop(content,36),"Propriedades e componentes deste objeto",theme.color.textDim);
+  if(view.hasSourceChanges) {
+    const auto hit=navigation;auto receive=navigation;
+    builder.list.addImage(centred(takeLeft(receive,26),18,18),static_cast<UiImageId>(UiIcon::EditorPrefabReceive),stale?theme.color.textMuted:theme.color.accent);
+    builder.label(receive,"Receber fonte",stale?theme.color.textMuted:theme.color.accent,theme.type.caption,UiAlign::Start);
+    if(!stale) builder.router.addRegion(hit,widgetId(EditorWidget::PrefabReceiveSource));
+  }
+  if(stale) prefabComparisonText(builder,takeTop(content,32),"Comparação antiga · Ler fonte antes de aplicar/reverter",theme.color.warning);
+  else if(!state.prefabOperationStatus.empty()) prefabComparisonText(builder,takeTop(content,32),state.prefabOperationStatus,theme.color.warning);
+  else prefabComparisonText(builder,takeTop(content,32),"Aplicar: fonte + instâncias herdadas · Reverter: só esta instância",theme.color.textDim);
   if(view.rows.empty()) {prefabComparisonText(builder,content,"Nenhuma diferença de propriedade ou componente",theme.color.textDim);return;}
-  auto footer=takeBottom(content,44);
-  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/124));
+  if(view.rows.size()>1) {
+    auto batch=takeTop(content,44);
+    const bool enabled=!stale&&std::all_of(view.rows.begin(),view.rows.end(),[](const auto &row){return row.applicable;});
+    const std::string label="Reverter "+std::to_string(view.rows.size())+" diferenças deste objeto";
+    builder.label(batch,fitMiddle(builder.list,label,batch.width,theme.type.caption),enabled?theme.color.accent:theme.color.textMuted,theme.type.caption);
+    if(enabled) builder.router.addRegion(batch,widgetId(EditorWidget::PrefabOverridesRevertAll));
+  }
+  auto footer=takeBottom(content,36);
+  constexpr float rowHeight=160;
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/rowHeight));
   const u32 count=static_cast<u32>(view.rows.size()),pages=(count+perPage-1)/perPage;
   const u32 page=std::min(state.propertyPage,pages-1);
   for(u32 i=page*perPage;i<std::min(count,(page+1)*perPage);++i) {
-    if(content.height<120) break;
-    auto row=takeTop(content,124);const auto &difference=view.rows[i];
-    auto heading=takeTop(row,44),revert=takeRight(heading,76);
+    if(content.height<rowHeight) break;
+    auto row=takeTop(content,rowHeight);const auto rowBounds=row;const auto &difference=view.rows[i];
+    const bool collection=difference.kind==PrefabOverrideKind::Component && difference.current.find("\nPróximo ID livre:")!=std::string::npos;
+    auto heading=takeTop(row,collection?20.f:24.f);
     prefabComparisonText(builder,heading,difference.label,theme.color.text);
-    builder.label(revert,"Reverter",!stale&&difference.applicable?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::End);
-    if(!stale && difference.applicable) builder.router.addRegion(revert,widgetId(EditorWidget::PrefabOverrideRevertBase)+i);
-    prefabComparisonText(builder,takeTop(row,32),"Local: "+difference.current,theme.color.text);
-    prefabComparisonText(builder,takeTop(row,32),"Fonte: "+difference.source,theme.color.textDim);
-    builder.list.addRect({row.x,row.y+row.height-1,row.width,1},theme.color.raised,0);
+    const auto origin=difference.origin;
+    const std::string status=collection?(origin==PrefabOverrideOrigin::Inherited?"Herdado · componente completo":origin==PrefabOverrideOrigin::Conflict?"Conflito · componente completo":"Local · componente completo"):
+        origin==PrefabOverrideOrigin::Inherited?"Herdado · fonte alterada":
+        std::string(origin==PrefabOverrideOrigin::Conflict?"Conflito · base: ":"Local · base: ")+difference.baseline;
+    prefabComparisonText(builder,takeTop(row,collection?16.f:24.f),status,origin==PrefabOverrideOrigin::Conflict?theme.color.warning:theme.color.accent,1);
+    auto actions=takeBottom(row,40);auto explanation=takeBottom(row,collection?18.f:24.f);
+    if(origin!=PrefabOverrideOrigin::Inherited) {
+      const auto apply=deflate(takeRight(actions,actions.width*.5f),UiInsets{4,2,0,2});
+      const bool enabled=!stale&&difference.applyable;
+      builder.list.addRect(apply,enabled?withAlpha(origin==PrefabOverrideOrigin::Conflict?theme.color.warning:theme.color.accent,.16f):theme.color.raised,theme.radius.control);
+      builder.label(apply,origin==PrefabOverrideOrigin::Conflict?"Substituir fonte":"Aplicar fonte",
+                    enabled?(origin==PrefabOverrideOrigin::Conflict?theme.color.warning:theme.color.accent):theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(enabled) builder.router.addRegion(apply,widgetId(EditorWidget::PrefabOverrideApplyBase)+i);
+    }
+    const auto revert=deflate(actions,UiInsets{0,2,4,2});
+    builder.list.addRect(revert,theme.color.raised,theme.radius.control);
+    builder.label(revert,origin==PrefabOverrideOrigin::Inherited?"Receber nesta instância":origin==PrefabOverrideOrigin::Conflict?"Usar fonte aqui":"Reverter aqui",
+                  !stale&&difference.applicable?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(!stale&&difference.applicable) builder.router.addRegion(revert,widgetId(EditorWidget::PrefabOverrideRevertBase)+i);
+    const std::string reason=!difference.applyable&&!difference.applyReason.empty()?difference.applyReason:
+      collection?"Aplicar substitui estrutura e valores do componente inteiro":
+      origin==PrefabOverrideOrigin::Conflict?"Substituir publica o valor local sobre a fonte atual":
+      origin==PrefabOverrideOrigin::Inherited?"Receber preserva os outros overrides locais":"Aplicar publica somente este endereço";
+    prefabComparisonText(builder,explanation,reason,!difference.applyable&&origin!=PrefabOverrideOrigin::Inherited?theme.color.warning:theme.color.textMuted,1);
+    if(row.width>=580) {
+      const float width=row.width/3;
+      const char *names[]{"Base salva","Instância atual","Fonte atual"};
+      const std::string *values[]{&difference.baseline,&difference.current,&difference.source};
+      for(u32 column=0;column<3;++column) {
+        auto cell=takeLeft(row,width);takeRight(cell,12);
+        builder.label(takeTop(cell,18),names[column],theme.color.textMuted,theme.type.caption);
+        prefabComparisonText(builder,cell,*values[column],column==1?theme.color.text:theme.color.textDim,collection?3u:1u);
+      }
+    } else {
+      prefabComparisonText(builder,takeTop(row,24),"Instância: "+difference.current,theme.color.text,1);
+      prefabComparisonText(builder,takeTop(row,24),"Fonte: "+difference.source,theme.color.textDim,1);
+    }
+    builder.list.addRect({rowBounds.x,rowBounds.y+rowBounds.height-1,rowBounds.width,1},theme.color.raised,0);
   }
   const auto previous=takeLeft(footer,44),next=takeRight(footer,44);
   builder.label(previous,"<",theme.color.textDim,theme.type.body,UiAlign::Center);
@@ -6113,6 +6909,84 @@ void buildMultiAssetInspector(ScreenBuilder &builder,UiRect content) {
 } // namespace
 
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
+// Hierarchy → Inspector → Components → campo / Add Component. A lista conserva
+// todos os componentes do alvo enquanto a inspeção detalhada usa sua própria rota.
+// Referência: Unity 6000.0 Manual/UsingComponents; identidade é a instância real.
+void buildComponentOverview(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  auto add=takeBottom(content,44);takeBottom(content,6);
+  const auto addHit=add;
+  builder.list.addRect(add,theme.color.raised,theme.radius.control);
+  builder.list.addImage(centred(takeLeft(add,36),22,22),static_cast<UiImageId>(UiIcon::ComponentAdd));
+  builder.label(add,"Add Component",theme.color.text,theme.type.body);
+  builder.router.addRegion(addHit,widgetId(EditorWidget::AddComponentMenu));
+  // Os campos universais precedem os componentes na Unity. Dê a eles uma
+  // entrada explícita: antes só apareciam como um cartão de outra página.
+  auto object=takeTop(content,36);const auto objectHit=object;
+  builder.list.addImage(centred(takeLeft(object,28),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorObject),theme.color.textDim);
+  builder.label(takeRight(object,20),"›",theme.color.textMuted,theme.type.body,UiAlign::Center);
+  builder.label(object,"Objeto · Tag / Layer / Static",theme.color.textDim,theme.type.caption);
+  builder.router.addRegion(objectHit,widgetId(EditorWidget::InspectorOverviewObject));
+  if(builder.multiEdit && state.multi.hidden) {
+    builder.label(takeTop(content,30),std::to_string(state.multi.hidden)+" componentes não comuns",theme.color.warning,theme.type.caption);
+  }
+  std::vector<u32> indices;
+  for(u32 i=0;i<entity.components.size();++i) {
+    const auto *value=entity.components.at(i);
+    if(value->type().id=="astra.prefab.link" || value->type().id=="astra.import.link") continue;
+    if(builder.multiEdit && !state.multi.isCommon(value->instanceId())) continue;
+    indices.push_back(i);
+  }
+  constexpr float rowHeight=64;
+  const float total=(indices.size()+1)*rowHeight;
+  const auto window=content;
+  const float offset=std::clamp(state.componentOverviewScroll,0.f,std::max(0.f,total-window.height));
+  if(builder.layout) {builder.layout->componentOverviewWindow=window;builder.layout->componentOverviewContent=total;}
+  builder.router.addRegion(window,widgetId(EditorWidget::InspectorOverviewScroll));
+  builder.list.pushClip(window);
+  const auto region=[&](UiRect area,u32 widget) {const auto hit=intersect(area,window);if(!hit.isEmpty()) builder.router.addRegion(hit,widget);};
+  for(u32 row=0;row<=indices.size();++row) {
+    UiRect line{window.x,window.y+row*rowHeight-offset,window.width,rowHeight};
+    if(intersect(line,window).isEmpty()) continue;
+    const auto hit=line;line=deflate(line,UiInsets{4,5,4,5});
+    const auto *value=row?entity.components.at(indices[row-1]):nullptr;
+    const auto *entry=value?findEditorComponent(value->type().id):nullptr;
+    const auto *script=value?scene::scriptBehavior(value):nullptr;
+    const auto *schema=script?scriptSchema(state,script->scriptType):nullptr;
+    const bool inspectable=!value || (!value->unresolved() && (entry || script));
+    const auto icon=row?(entry?entry->icon:UiIcon::ScriptingCode):UiIcon::EditorAuthorMove;
+    builder.list.addImage(centred(takeLeft(line,34),24,24),static_cast<UiImageId>(icon));
+    const auto next=takeRight(line,22);
+    if(inspectable) builder.list.addImage(centred(next,14,14),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textMuted);
+    else builder.list.addImage(centred(next,16,16),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.warning);
+    bool enabled=false,on=false;
+    if(script) {enabled=true;on=script->enabled;}
+    else if(entry) for(const auto &p:entry->type->booleans) if(p.id=="enabled") {enabled=true;on=p.read(*value);}
+    const auto check=enabled?takeRight(line,34):UiRect{};
+    std::string title=row?(entry?entry->name:schema?schema->name:script?script->scriptType:std::string(value->type().id)):"Transform";
+    std::string detail=row?(entry?std::string(scene::componentFamilyName(entry->schema->family))+" / "+std::string(entry->schema->subfamily):script?"Script C#":"Dados preservados · indisponível"):"Position · Rotation · Scale";
+    bool missing=value&&value->unresolved();
+    if(entry) for(const auto &requirement:entry->schema->requirements) if(!entity.components.find(requirement.typeId)) {detail=requirement.message;missing=true;break;}
+    builder.label(takeTop(line,29),title,theme.color.text,theme.type.body);
+    builder.label(line,fitMiddle(builder.list,detail,line.width,theme.type.caption),missing?theme.color.warning:theme.color.textMuted,theme.type.caption);
+    if(inspectable) region(hit,widgetId(row?EditorWidget::InspectorOverviewOpenBase:EditorWidget::InspectorOverviewTransform)+(row?indices[row-1]:0));
+    if(enabled) {
+      const auto box=centred(check,18,18);builder.list.addRect(box,on?theme.color.accent:theme.color.canvas,2);
+      builder.list.addBorder(box,theme.color.textDim,1,2);
+      if(builder.mixed(multiKey(value->instanceId(),"enabled"))) builder.list.addRect({box.x+4,box.y+8,10,2},theme.color.text,1);
+      else if(on) builder.list.addImage(deflate(box,UiInsets::all(3)),static_cast<UiImageId>(UiIcon::UiCheck),theme.color.accentInk);
+      region(check,widgetId(EditorWidget::ComponentEnableBase)+indices[row-1]);
+    }
+    builder.list.addRect({window.x,hit.bottom()-1,window.width,1},theme.color.lineSoft);
+  }
+  builder.list.popClip();
+  if(total>window.height && window.height>0) {
+    const float height=std::max(24.f,window.height*window.height/total);
+    builder.list.addRect({window.right()-3,window.y+offset/(total-window.height)*(window.height-height),3,height},theme.color.textFaint,1);
+  }
+}
+
+
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   if (builder.state.importPanel) {
     builder.list.addRect(panel, builder.theme.color.surface);
@@ -6149,6 +7023,49 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
 // Inspector de um alvo: o principal (travado ou a seleção) ou um focado. Com
 // `onlyComponent`, só o cartão daquela instância, aberto (Unity: Properties de
 // um componente).
+void buildObjectGroups(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &theme=builder.theme;
+  auto header=takeTop(content,44);
+  builder.iconButton(takeLeft(header,44),UiIcon::UiChevronLeft,widgetId(EditorWidget::GroupsClose));
+  builder.label(header,"Grupos",theme.color.text,theme.type.cardName);
+  takeTop(content,theme.spacing.small);
+  auto context=takeTop(content,36);
+  builder.list.addImage(centred(takeLeft(context,28),20,20),static_cast<UiImageId>(UiIcon::SceneGroups),theme.color.accent);
+  builder.label(context,fitMiddle(builder.list,entity.name,context.width,theme.type.body),theme.color.text,theme.type.body);
+  auto help=takeTop(content,36);
+  builder.label(help,"Associações deste objeto",theme.color.textDim,theme.type.caption);
+  auto add=takeTop(content,44);
+  builder.list.addRect(add,theme.color.raised,theme.radius.control);
+  const bool groupLimit=entity.groups.names().size()>=runtime::ObjectGroups::MaximumCount;
+  builder.label(add,groupLimit?"Limite de 32 associações":"+ Associar grupo",groupLimit?theme.color.textMuted:theme.color.accent,theme.type.body,UiAlign::Center);
+  if(entity.groups.names().size()<runtime::ObjectGroups::MaximumCount)
+    builder.router.addRegion(add,widgetId(EditorWidget::GroupNew));
+  takeTop(content,theme.spacing.small);
+  builder.list.addRect(takeTop(content,1),theme.color.lineSoft);
+  takeTop(content,theme.spacing.small);
+  const auto &names=entity.groups.names();
+  if(names.empty()) {
+    builder.label(content,"Nenhuma associação",theme.color.textMuted,theme.type.body,UiAlign::Center);
+    return;
+  }
+  auto footer=takeBottom(content,32);
+  const u32 fits=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/48));
+  const u32 pages=(static_cast<u32>(names.size())+fits-1)/fits;
+  const u32 page=std::min(builder.state.groupPage,pages-1);
+  for(u32 i=page*fits;i<names.size() && i<(page+1)*fits && content.height>=44;++i) {
+    auto row=takeTop(content,48);auto remove=takeRight(row,44);
+    builder.iconButton(remove,UiIcon::UiRemove,widgetId(EditorWidget::GroupRemoveBase)+i);
+    builder.label(row,fitMiddle(builder.list,names[i],row.width,theme.type.body),theme.color.text,theme.type.body);
+    builder.router.addRegion(row,widgetId(EditorWidget::GroupEditBase)+i);
+  }
+  if(pages>1) {
+    auto back=takeLeft(footer,44),next=takeRight(footer,44);
+    if(page) builder.iconButton(back,UiIcon::UiChevronLeft,widgetId(EditorWidget::GroupsPrevious));
+    if(page+1<pages) builder.iconButton(next,UiIcon::UiChevronRight,widgetId(EditorWidget::GroupsNext));
+  }
+  builder.label(footer,std::to_string(names.size())+" / 32 associações",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent) {
   const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(target);
@@ -6156,6 +7073,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
   builder.router.addBlocker(panel);
   UiRect content = deflate(panel, UiInsets::all(theme.spacing.small));
   builder.onlyComponent = onlyComponent;
+  bool addInHeader=false;
 
   if (entity == nullptr) {
     builder.label(content, "Nada selecionado", theme.color.textMuted, theme.type.body,
@@ -6166,6 +7084,9 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
   if(builder.state.tagPicker && !onlyComponent && (!builder.state.inspectorTarget || builder.state.inspectorTarget==target)) {
     builder.multiEdit=builder.state.multi.count>1 && target==builder.state.selection && !builder.focusedWindow;
     buildTags(builder,content,true);return;
+  }
+  if(builder.state.groupPicker && !onlyComponent && builder.state.groupEntity==target) {
+    buildObjectGroups(builder,content,*entity);return;
   }
   UiRect header = takeTop(content, kPanelHeaderHeight);
   builder.list.addImage(centred(takeLeft(header, 26.0f), 18.0f, 18.0f),
@@ -6179,8 +7100,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
   }
   takeRight(header, theme.spacing.tiny);
   builder.multiEdit = builder.state.multi.count > 1 && target == builder.state.selection && !builder.focusedWindow && !onlyComponent;
-  if (builder.mixed("active")) builder.mixedToggle(takeRight(header, kToggleWidth + 4.0f), widgetId(EditorWidget::InspectorActive));
-  else builder.toggle(takeRight(header, kToggleWidth + 4.0f), entity->active, widgetId(EditorWidget::InspectorActive));
+  builder.checkbox(takeRight(header,28),entity->active,widgetId(EditorWidget::InspectorActive),true,builder.mixed("active"));
   const float half = header.height * 0.5f;
   if (builder.multiEdit) {
     // Unity: o cabeçalho diz quantos objetos; o ativo é o de referência.
@@ -6189,7 +7109,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.label({header.x, header.y + half, header.width, half}, (std::string("Ativo: ") + entity->name).c_str(),
                   theme.color.accent, theme.type.caption);
   } else
-  builder.label({header.x, header.y, header.width, half}, entity->name, theme.color.text,
+  builder.label({header.x, header.y, header.width, half}, fitMiddle(builder.list,entity->name,header.width,theme.type.cardName), theme.color.text,
                 theme.type.cardName);
   // O vínculo com a fonte tem linha própria, não é card: não entra na contagem.
   // Perto do teto por objeto (a Unity não tem teto; aqui é explícito) a linha
@@ -6203,9 +7123,35 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
                   near?theme.color.warning:theme.color.textDim, theme.type.label);
   }
 
+  if(!onlyComponent && !builder.focusedWindow && builder.state.workspace!=EditorWorkspace::Lighting) {
+    auto tabs=takeTop(content,42);takeTop(content,6);
+    addInHeader=builder.state.inspectorSurface==EditorInspectorSurface::Inspection && content.height<300 && !builder.state.addingComponent;
+    if(addInHeader)
+      builder.iconButton(takeRight(tabs,36),UiIcon::ComponentAdd,widgetId(EditorWidget::AddComponentMenu));
+    const float width=tabs.width*.5f;
+    const char *names[]{"Inspeção","Componentes"};
+    const UiIcon icons[]{UiIcon::EditorInspection,UiIcon::EditorComponents};
+    const EditorWidget actions[]{EditorWidget::InspectorInspection,EditorWidget::InspectorComponents};
+    for(u32 i=0;i<2;++i) {
+      auto tab=takeLeft(tabs,width);const bool active=static_cast<u32>(builder.state.inspectorSurface)==i;
+      const auto text=tab;
+      if(tab.width>=120) builder.list.addImage(centred(takeLeft(tab,26),16,16),static_cast<UiImageId>(icons[i]),active?theme.color.accent:theme.color.textMuted);
+      builder.label(tab,names[i],active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(active) builder.list.addRect({text.x,text.bottom()-3,text.width,3},theme.color.accent);
+      builder.router.addRegion(text,widgetId(actions[i]));
+    }
+  }
   if(builder.state.inspectorDebug && !builder.state.inspectorMenu) {
     buildInspectorDebug(builder,content,*entity);
     return;
+  }
+  if(builder.state.pathEditorOpen) {
+    const auto *path=entity->components.findInstance(builder.state.pathInstance);
+    if(path&&&path->type()==&scene::Path::descriptor) {
+      for(u32 n=0;n<entity->components.size();++n)if(entity->components.at(n)==path) {
+        buildPathPoints(builder,content,*entity,static_cast<const scene::Path&>(*path),n);return;
+      }
+    }
   }
   if(builder.state.prefabOverridesOpen && builder.state.prefabOverrides.object==target &&
      !builder.multiEdit && builder.state.workspace==EditorWorkspace::Scene && !builder.focusedWindow) {
@@ -6219,6 +7165,12 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.label(takeTop(content,38),"Ambiente",theme.color.text,theme.type.body);
     buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Environment);
     return;
+  }
+  if(builder.state.inspectorSurface==EditorInspectorSurface::Components && !onlyComponent && !builder.focusedWindow) {
+    if(builder.state.addingComponent && builder.state.componentSelection==entity->id) {
+      buildComponents(builder,content,*entity,addInHeader);return;
+    }
+    buildComponentOverview(builder,content,*entity);return;
   }
   if(entity->kind==EditorEntityKind::Water) {
     UiRect tabs=takeTop(content,40);
@@ -6267,7 +7219,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.label(row,record?record->path:"Fonte de prefab ausente",record?theme.color.textDim:theme.color.warning,theme.type.caption);
   }
   buildImportLinkCard(builder,content);
-  buildComponents(builder,content,*entity);
+  buildComponents(builder,content,*entity,addInHeader);
 }
 
 void buildSplitter(ScreenBuilder &builder, const UiRect &bounds, EditorWidget widget) {
@@ -7485,6 +8437,14 @@ void buildPhysicsLayers(ScreenBuilder &builder,UiRect area) {
   }
 }
 
+std::string inputBindingCodeLabel(const runtime::InputBinding &binding) {
+  constexpr const char *buttons[]={"Principal","Secundário","Meio","Voltar","Avançar"};
+  constexpr const char *axes[]={"X direita","Y abaixo","Scroll horizontal","Scroll vertical"};
+  if(binding.source==runtime::InputSource::MouseButton && binding.code<5)return buttons[binding.code];
+  if(binding.source==runtime::InputSource::MouseAxis && binding.code<4)return axes[binding.code];
+  return std::to_string(binding.code);
+}
+
 void buildInputWorkspaceFocused(ScreenBuilder &builder,UiRect area) {
   const auto &state=builder.state;const auto &theme=builder.theme;
   auto &list=builder.list;auto &router=builder.router;
@@ -7508,261 +8468,155 @@ void buildInputWorkspaceFocused(ScreenBuilder &builder,UiRect area) {
     list.popClip();
     router.addRegion(row,widgetId(widget),theme.touch.minimumTarget);
   };
-  if(content.width<700.0f) {
-    auto header=takeTop(content,48),add=takeRight(header,92);
-    builder.label(header,"MAPA DE ENTRADA",theme.color.text,theme.type.cardName);
-    button(add,"+ Ação",EditorWidget::InputActionAdd,
-           actions.size()<runtime::InputActionMap::kMaximumActions,
-           actions.size()<runtime::InputActionMap::kMaximumActions);
-    if(actions.empty()) {
-      builder.label(content,"Crie uma ação para configurar as entradas do jogo.",
-                    theme.color.textDim,theme.type.body);
-      return;
-    }
-    const u32 selected=std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1));
-    const auto &action=actions[selected];
-    auto navigation=takeTop(content,52),previous=takeLeft(navigation,48),next=takeRight(navigation,48);
-    button(previous,"<",EditorWidget::InputActionPrevious);
-    button(next,">",EditorWidget::InputActionNext);
-    builder.label(navigation,(action.id+" · "+std::to_string(selected+1)+"/"+
-                              std::to_string(actions.size())).c_str(),
-                  theme.color.accent,theme.type.body,UiAlign::Center);
-    auto tabs=takeTop(content,46),actionTab=takeLeft(tabs,tabs.width*.5f);
-    button(actionTab,"Ação",EditorWidget::InputTabAction,state.inputTab==0);
-    button(tabs,"Vínculos",EditorWidget::InputTabBinding,state.inputTab==1);
-    takeTop(content,10);
-    if(state.inputTab==0) {
-      const char *types[]={"Botão","Eixo 1D","Eixo 2D"};
-      field(content,"Tipo",types[static_cast<u32>(action.kind)],EditorWidget::InputActionKind);
-      field(content,"Nome",action.id,EditorWidget::InputActionRename);
-      field(content,"Contexto",action.context.empty()?"Sempre ativo":action.context,
-            EditorWidget::InputActionContext);
-      if(action.kind!=runtime::ActionKind::Button) {
-        char value[36];std::snprintf(value,sizeof(value),"%.3g",static_cast<double>(action.deadzone));
-        field(content,"Zona morta",value,EditorWidget::InputDeadzone);
-        std::snprintf(value,sizeof(value),"%.3g",static_cast<double>(action.sensitivity));
-        field(content,"Sensibilidade",value,EditorWidget::InputSensitivity);
+  const auto captureField=[&](UiRect &column,std::string_view title,EditorWidget editWidget,EditorWidget captureWidget) {
+    auto row=takeTop(column,44),edit=takeLeft(row,row.width*.5f);
+    button(edit,title,editWidget);button(row,captureWidget==EditorWidget::InputBindingCaptureNegative?"Capturar -":"Capturar",captureWidget);
+  };
+  if(state.inputCapturing) {
+    auto title=takeTop(content,48),cancel=takeRight(title,std::min(120.f,title.width*.4f));
+    button(cancel,"Cancelar · Esc",EditorWidget::InputBindingCaptureCancel);
+    builder.label(title,"CAPTURAR",theme.color.accent,theme.type.cardName);
+    UiIcon sourceIcon=UiIcon::InputKeyboard;std::string current;
+    if(state.inputActionIndex<actions.size()) {
+      const auto &action=actions[state.inputActionIndex];
+      builder.label(takeTop(content,36),(action.id+"  /  vínculo "+std::to_string(state.inputBindingIndex+1)).c_str(),theme.color.text,theme.type.cardName);
+      if(state.inputBindingIndex<action.bindings.size()) {
+        const auto &binding=action.bindings[state.inputBindingIndex];
+        sourceIcon=binding.source==runtime::InputSource::Key?UiIcon::InputKeyboard:binding.source==runtime::InputSource::MouseButton?UiIcon::InputMouse:UiIcon::InputGamepad;
+        current=binding.source==runtime::InputSource::Key?"Teclado":binding.source==runtime::InputSource::GamepadAxis?"Eixo gamepad":binding.source==runtime::InputSource::MouseButton?"Botão mouse":"Botão gamepad";
+        current+=" · atual "+(binding.source==runtime::InputSource::MouseButton?inputBindingCodeLabel(binding):std::to_string(state.inputCaptureNegative?binding.negativeCode:binding.code));
+        if(state.inputCaptureNegative)current+=" · negativo";
       }
-      auto roles=takeTop(content,46),move=takeLeft(roles,roles.width/3),look=takeLeft(roles,roles.width*.5f);
-      const auto &map=state.document->inputActions();
-      button(move,"Mover",EditorWidget::InputRoleMove,map.moveAction()==action.id,
-             action.kind==runtime::ActionKind::Axis2D);
-      button(look,"Olhar",EditorWidget::InputRoleLook,map.lookAction()==action.id,
-             action.kind==runtime::ActionKind::Axis2D);
-      button(roles,"Saltar",EditorWidget::InputRoleJump,map.jumpAction()==action.id,
-             action.kind==runtime::ActionKind::Button);
-      takeTop(content,12);
-      button(takeTop(content,44),"Remover ação",EditorWidget::InputActionRemove);
-    } else {
-      auto bindingNav=takeTop(content,48),addBinding=takeRight(bindingNav,110);
-      auto nextBinding=takeRight(bindingNav,48),previousBinding=takeLeft(bindingNav,48);
-      button(previousBinding,"<",EditorWidget::InputBindingPrevious);
-      button(nextBinding,">",EditorWidget::InputBindingNext);
-      button(addBinding,"+ Vínculo",EditorWidget::InputBindingAdd,
-             action.bindings.size()<runtime::InputActionMap::kMaximumBindings,
-             action.bindings.size()<runtime::InputActionMap::kMaximumBindings);
-      builder.label(bindingNav,(std::to_string(action.bindings.empty()?0:
-          std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1))+1)+"/"+
-          std::to_string(action.bindings.size())).c_str(),
-          theme.color.accent,theme.type.caption,UiAlign::Center);
-      if(action.bindings.empty()) return;
-      const auto &binding=action.bindings[std::min(state.inputBindingIndex,
-                                            static_cast<u32>(action.bindings.size()-1))];
-      constexpr const char *sources[]={"Nenhuma","Manche touch","Olhar touch","Botão touch",
-                                       "Tecla","Eixo gamepad","Botão gamepad"};
-      field(content,"Fonte",sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource);
-      if(!state.inputDetails) {
-        if(action.kind==runtime::ActionKind::Axis2D)
-          field(content,"Eixo",std::to_string(binding.axis),EditorWidget::InputBindingAxis);
-        if(action.kind!=runtime::ActionKind::Button)
-          field(content,"Inverter",binding.invert?"Sim":"Não",EditorWidget::InputBindingInvert);
-      } else {
-        if(binding.source==runtime::InputSource::TouchButton || binding.source==runtime::InputSource::Key ||
-           binding.source==runtime::InputSource::GamepadAxis || binding.source==runtime::InputSource::GamepadButton)
-          field(content,"Código",std::to_string(binding.code),EditorWidget::InputBindingCode);
-        if(binding.source==runtime::InputSource::Key && action.kind!=runtime::ActionKind::Button)
-          field(content,"Código negativo",std::to_string(binding.negativeCode),
-                EditorWidget::InputBindingNegativeCode);
-        char value[36];std::snprintf(value,sizeof(value),"%.3g",static_cast<double>(binding.scale));
-        field(content,"Escala",value,EditorWidget::InputBindingScale);
-      }
-      takeTop(content,8);
-      button(takeTop(content,44),state.inputDetails?"< Básico":"Avançado >",
-             EditorWidget::InputDetailsToggle);
-      takeTop(content,8);
-      button(takeTop(content,44),"Remover vínculo",EditorWidget::InputBindingRemove);
     }
+    list.addRect(takeTop(content,1),theme.color.raised);
+    takeTop(content,std::min(24.f,content.height*.05f));
+    auto focus=takeTop(content,std::min(94.f,content.height*.27f));
+    list.addImage(centred(focus,48,48),static_cast<UiImageId>(sourceIcon),0xffffffff);
+    builder.label(takeTop(content,44),state.inputCapturePrompt,theme.color.text,theme.type.title,UiAlign::Center);
+    builder.label(takeTop(content,30),state.inputCaptureFeedback,theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.label(takeTop(content,34),current,theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(takeTop(content,28),"Escape ou Voltar cancela.",theme.color.textMuted,theme.type.caption,UiAlign::Center);
     return;
   }
-  const float railWidth=std::clamp(content.width*.265f,180.0f,310.0f);
-  UiRect rail=takeLeft(content,railWidth);
-  const UiRect separator=takeLeft(content,2);
-  list.addRect(separator,theme.color.line);
-  content=deflate(content,UiInsets{12,0,4,0});
-  auto railHeader=takeTop(rail,52),add=takeRight(railHeader,86);
-  builder.label(railHeader,"AÇÕES",theme.color.textDim,theme.type.caption);
-  button(add,"+ Ação",EditorWidget::InputActionAdd,
-         actions.size()<runtime::InputActionMap::kMaximumActions,
-         actions.size()<runtime::InputActionMap::kMaximumActions);
-  auto railFooter=takeBottom(rail,40);
-  const u32 actionPageSize=std::max(1u,std::min(8u,static_cast<u32>(std::max(0.0f,rail.height)/46.0f)));
-  const u32 actionPages=std::max(1u,(static_cast<u32>(actions.size())+actionPageSize-1)/actionPageSize);
-  const u32 actionPage=std::min(state.inputActionPage,actionPages-1);
-  if(actions.empty()) builder.label(rail,"Nenhuma ação. Toque em + Ação.",theme.color.textDim,theme.type.caption);
-  for(u32 i=actionPage*actionPageSize;i<std::min(static_cast<u32>(actions.size()),(actionPage+1)*actionPageSize);++i) {
-    auto row=takeTop(rail,46);
-    const bool selected=i==state.inputActionIndex;
-    list.addRect(row,selected?theme.color.raised:theme.color.surface,2);
-    if(selected) list.addRect({row.x,row.y,3,row.height},theme.color.accent);
-    auto inner=deflate(row,UiInsets::symmetric(7,2));
-    auto icon=takeLeft(inner,33);
-    list.addImage(centred(icon,27,27),static_cast<UiImageId>(UiIcon::InputAction),0xffffffff);
-    const auto &item=actions[i];
-    list.pushClip(inner);
-    builder.label(takeTop(inner,23),item.id,selected?theme.color.text:theme.color.textDim,theme.type.caption);
-    const char *types[]={"Botão","Eixo 1D","Eixo 2D"};
-    const std::string detail=std::string(types[static_cast<u32>(item.kind)])+" · "+std::to_string(item.bindings.size())+" vínculos";
-    builder.label(inner,detail,theme.color.textMuted,theme.type.caption);
-    list.popClip();
-    router.addRegion(row,widgetId(EditorWidget::InputActionRowBase)+i,theme.touch.minimumTarget);
+
+  const bool wide=content.width>=700;
+  if(wide) {
+    auto rail=takeLeft(content,std::clamp(content.width*.27f,180.f,250.f));
+    list.addRect(takeLeft(content,1),theme.color.line);takeLeft(content,12);
+    auto heading=takeTop(rail,44),add=takeRight(heading,86);
+    builder.label(heading,"AÇÕES",theme.color.textDim,theme.type.caption);
+    button(add,"+ Ação",EditorWidget::InputActionAdd,false,actions.size()<runtime::InputActionMap::kMaximumActions);
+    auto footer=takeBottom(rail,40);
+    const u32 pageSize=std::max(1u,std::min(8u,static_cast<u32>(std::max(0.f,rail.height)/48)));
+    const u32 pages=std::max(1u,(static_cast<u32>(actions.size())+pageSize-1)/pageSize),page=std::min(state.inputActionPage,pages-1);
+    for(u32 i=page*pageSize;i<std::min(static_cast<u32>(actions.size()),(page+1)*pageSize);++i) {
+      auto row=takeTop(rail,48),text=deflate(row,UiInsets::all(6));
+      const bool selected=i==state.inputActionIndex;
+      list.addRect(row,selected?theme.color.raised:theme.color.surface);
+      if(selected)list.addRect({row.x,row.y,3,row.height},theme.color.accent);
+      list.addImage(centred(takeLeft(text,34),26,26),static_cast<UiImageId>(UiIcon::InputAction),0xffffffff);
+      builder.label(takeTop(text,20),actions[i].id,theme.color.text,theme.type.caption);
+      const char*types[]={"Botão","Eixo 1D","Eixo 2D"};
+      builder.label(text,types[static_cast<u32>(actions[i].kind)],theme.color.textMuted,theme.type.caption);
+      router.addRegion(row,widgetId(EditorWidget::InputActionRowBase)+i,theme.touch.minimumTarget);
+    }
+    if(pages>1) {
+      auto previous=takeLeft(footer,42),next=takeRight(footer,42);
+      button(previous,"<",EditorWidget::InputActionPagePrevious,false,page>0);
+      button(next,">",EditorWidget::InputActionPageNext,false,page+1<pages);
+      builder.label(footer,std::to_string(page+1)+"/"+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    } else builder.label(footer,std::to_string(actions.size())+" / 64 ações",theme.color.textMuted,theme.type.caption,UiAlign::Center);
   }
-  if(actionPages>1) {
-    auto previous=takeLeft(railFooter,43),next=takeRight(railFooter,43);
-    if(actionPage) button(previous,"<",EditorWidget::InputActionPagePrevious);
-    if(actionPage+1<actionPages) button(next,">",EditorWidget::InputActionPageNext);
-    builder.label(railFooter,(std::to_string(actionPage+1)+"/"+std::to_string(actionPages)).c_str(),
-                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
-  } else builder.label(railFooter,(std::to_string(actions.size())+" / 64 ações").c_str(),
-                       theme.color.textMuted,theme.type.caption,UiAlign::Center);
-  if(actions.empty()) {
-    builder.label(content,"Crie ações para associar toque, teclado ou controle ao jogo.",
-                  theme.color.textDim,theme.type.body);
+  auto title=takeTop(content,44);
+  if(!wide) {
+    button(takeLeft(title,40),"<",EditorWidget::InputActionPrevious,false,!actions.empty());
+    button(takeRight(title,40),">",EditorWidget::InputActionNext,false,!actions.empty());
+    button(takeRight(title,66),"+ Ação",EditorWidget::InputActionAdd,false,actions.size()<runtime::InputActionMap::kMaximumActions);
+  } else list.addImage(centred(takeLeft(title,36),28,28),static_cast<UiImageId>(UiIcon::InputAction),0xffffffff);
+  if(actions.empty()){builder.label(title,"Crie uma ação",theme.color.text,theme.type.body);return;}
+  const auto &action=actions[std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1))];
+  builder.label(title,action.id,theme.color.text,theme.type.cardName);
+  auto tabs=takeTop(content,44);const float tabWidth=tabs.width/3;
+  button(takeLeft(tabs,tabWidth),"Ação",EditorWidget::InputTabAction,state.inputTab==0);
+  button(takeLeft(tabs,tabWidth),"Vínculos",EditorWidget::InputTabBinding,state.inputTab==1);
+  button(tabs,"Resposta",EditorWidget::InputTabResponse,state.inputTab==2);
+  takeTop(content,6);
+  if(state.inputTab==2) {
+    auto enabled=takeTop(content,40),icon=takeRight(enabled,40);
+    list.addImage(centred(icon,28,28),static_cast<UiImageId>(UiIcon::InputResponse),0xffffffff);
+    field(enabled,"Habilitada",action.enabled?"Sim":"Não",EditorWidget::InputActionEnabled);
+    if(action.kind==runtime::ActionKind::Button) {
+      auto choice=takeTop(content,44);const float w=choice.width/3;
+      button(takeLeft(choice,w),"Pressionar",EditorWidget::InputInteractionPress,action.interaction==runtime::InputInteraction::Press);
+      button(takeLeft(choice,w),"Segurar",EditorWidget::InputInteractionHold,action.interaction==runtime::InputInteraction::Hold);
+      button(choice,"Tocar",EditorWidget::InputInteractionTap,action.interaction==runtime::InputInteraction::Tap);
+      if(action.interaction!=runtime::InputInteraction::Press) {
+        char duration[40];std::snprintf(duration,sizeof(duration),"%.3g s",static_cast<double>(action.duration));
+        field(content,action.interaction==runtime::InputInteraction::Hold?"Tempo mínimo":"Prazo máximo",duration,EditorWidget::InputDuration);
+      }
+    }
+    builder.label(takeTop(content,24),"GRUPOS DE DISPOSITIVOS",theme.color.textDim,theme.type.caption);
+    auto groups=takeTop(content,44);const float w=groups.width/3;
+    button(takeLeft(groups,w),"Touch",EditorWidget::InputGroupTouch,(action.deviceGroups&runtime::InputTouch)!=0);
+    button(takeLeft(groups,w),"Teclado / mouse",EditorWidget::InputGroupKeyboardMouse,(action.deviceGroups&runtime::InputKeyboardMouse)!=0);
+    button(groups,"Gamepad",EditorWidget::InputGroupGamepad,(action.deviceGroups&runtime::InputGamepad)!=0);
+    const char*note=action.deviceGroups==0?"Nenhuma fonte autorizada para esta ação":
+      action.interaction==runtime::InputInteraction::Hold?"Executa após o tempo mínimo pressionado":
+      action.interaction==runtime::InputInteraction::Tap?"Executa ao soltar dentro do prazo":"Responde enquanto o controle estiver ativo";
+    builder.label(takeTop(content,24),note,theme.color.textMuted,theme.type.caption);
     return;
   }
-  const u32 selected=std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1));
-  const auto &action=actions[selected];
-  auto title=takeTop(content,60),rename=takeRight(title,92);
-  button(rename,"Renomear",EditorWidget::InputActionRename);
-  auto mark=takeLeft(title,49);
-  list.addImage(centred(mark,40,40),static_cast<UiImageId>(UiIcon::InputAction),0xffffffff);
-  list.pushClip(title);
-  builder.label(takeTop(title,30),action.id,theme.color.text,theme.type.cardName);
-  builder.label(title,(std::to_string(selected+1)+"/"+std::to_string(actions.size())+" ações · "+
-                      std::to_string(action.bindings.size())+" vínculos").c_str(),
-                theme.color.textDim,theme.type.caption);
-  list.popClip();
-  takeTop(content,8);
-  const float middleWidth=std::max(230.0f,content.width*.54f);
-  UiRect middle=takeLeft(content,middleWidth);
-  takeLeft(content,10);
-  UiRect properties=content;
-  list.addRect({properties.x-6,properties.y,1,properties.height},theme.color.line);
-  builder.label(takeTop(middle,28),"TIPO E PAPEL",theme.color.textDim,theme.type.caption);
-  const char *types[]={"Botão","Eixo 1D","Eixo 2D"};
-  field(middle,"Tipo",std::string(types[static_cast<u32>(action.kind)])+"  >",EditorWidget::InputActionKind);
-  auto roles=takeTop(middle,48);
-  const float roleWidth=roles.width/3;
-  const auto &map=state.document->inputActions();
-  button(takeLeft(roles,roleWidth),"Mover",
-         EditorWidget::InputRoleMove,map.moveAction()==action.id,
-         action.kind==runtime::ActionKind::Axis2D);
-  button(takeLeft(roles,roleWidth),"Olhar",
-         EditorWidget::InputRoleLook,map.lookAction()==action.id,
-         action.kind==runtime::ActionKind::Axis2D);
-  button(roles,"Saltar",
-         EditorWidget::InputRoleJump,map.jumpAction()==action.id,
-         action.kind==runtime::ActionKind::Button);
-  takeTop(middle,12);
-  auto bindingHeader=takeTop(middle,40),addBinding=takeRight(bindingHeader,110);
-  builder.label(bindingHeader,"VÍNCULOS",theme.color.textDim,theme.type.caption);
-  button(addBinding,"+ Vínculo",EditorWidget::InputBindingAdd,
-         action.bindings.size()<runtime::InputActionMap::kMaximumBindings,
-         action.bindings.size()<runtime::InputActionMap::kMaximumBindings);
-  auto bindingFooter=takeBottom(middle,38);
-  const u32 bindingPageSize=std::max(1u,std::min(4u,static_cast<u32>(std::max(0.0f,middle.height)/54.0f)));
-  const u32 bindingPages=std::max(1u,(static_cast<u32>(action.bindings.size())+bindingPageSize-1)/bindingPageSize);
-  const u32 bindingPage=std::min(state.inputBindingPage,bindingPages-1);
-  constexpr const char *sources[]={"Nenhuma","Manche touch","Olhar touch","Botão touch",
-                                   "Tecla","Eixo gamepad","Botão gamepad"};
-  if(action.bindings.empty()) builder.label(middle,"Nenhum vínculo. Adicione uma fonte de entrada.",
-                                            theme.color.textDim,theme.type.caption);
-  for(u32 i=bindingPage*bindingPageSize;
-      i<std::min(static_cast<u32>(action.bindings.size()),(bindingPage+1)*bindingPageSize);++i) {
-    auto row=takeTop(middle,54);
-    const bool active=i==state.inputBindingIndex;
-    list.addRect(row,active?theme.color.raised:theme.color.silhouette,2);
-    if(active) list.addRect({row.x,row.y,3,row.height},theme.color.accent);
-    auto inner=deflate(row,UiInsets::symmetric(7,3));
-    auto glyph=takeLeft(inner,35);
-    list.addImage(centred(glyph,28,28),static_cast<UiImageId>(UiIcon::InputBinding),0xffffffff);
-    const auto &binding=action.bindings[i];
-    list.pushClip(inner);
-    builder.label(takeTop(inner,23),sources[static_cast<u32>(binding.source)],
-                  active?theme.color.text:theme.color.textDim,theme.type.caption);
-    std::string detail;
-    if(binding.source==runtime::InputSource::TouchMove ||
-       binding.source==runtime::InputSource::TouchLook)
-      detail=action.kind==runtime::ActionKind::Axis2D?
-        std::string("Eixo ")+(binding.axis?"Y":"X"):"Gestos na tela";
-    else if(binding.source==runtime::InputSource::Key)
-      detail="Tecla "+std::to_string(binding.code);
-    else if(binding.source==runtime::InputSource::TouchButton ||
-            binding.source==runtime::InputSource::GamepadButton)
-      detail="Botão "+std::to_string(binding.code);
-    else if(binding.source==runtime::InputSource::GamepadAxis)
-      detail="Eixo "+std::to_string(binding.code);
-    else detail="Sem fonte";
-    builder.label(inner,detail,theme.color.textMuted,theme.type.caption);
-    list.popClip();
-    router.addRegion(row,widgetId(EditorWidget::InputBindingRowBase)+i,theme.touch.minimumTarget);
-  }
-  if(bindingPages>1) {
-    auto previous=takeLeft(bindingFooter,43),next=takeRight(bindingFooter,43);
-    if(bindingPage) button(previous,"<",EditorWidget::InputBindingPagePrevious);
-    if(bindingPage+1<bindingPages) button(next,">",EditorWidget::InputBindingPageNext);
-    builder.label(bindingFooter,(std::to_string(bindingPage+1)+"/"+std::to_string(bindingPages)).c_str(),
-                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
-  }
-  builder.label(takeTop(properties,30),"AÇÃO",theme.color.textDim,theme.type.caption);
-  field(properties,"Contexto",action.context.empty()?"Sempre ativo":action.context,
-        EditorWidget::InputActionContext);
-  if(action.kind!=runtime::ActionKind::Button) {
-    char number[36];std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.deadzone));
-    field(properties,"Zona morta",number,EditorWidget::InputDeadzone);
-    std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.sensitivity));
-    field(properties,"Sensibilidade",number,EditorWidget::InputSensitivity);
-  }
-  takeTop(properties,14);
-  auto section=takeTop(properties,32);
-  list.addImage(centred(takeLeft(section,29),24,24),static_cast<UiImageId>(UiIcon::InputBinding),0xffffffff);
-  builder.label(section,"VÍNCULO SELECIONADO",theme.color.textDim,theme.type.caption);
-  if(!action.bindings.empty()) {
-    const auto &binding=action.bindings[std::min(state.inputBindingIndex,
-                                          static_cast<u32>(action.bindings.size()-1))];
-    field(properties,"Fonte",sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource);
-    if(!state.inputDetails) {
-      if(action.kind==runtime::ActionKind::Axis2D)
-        field(properties,"Eixo",std::to_string(binding.axis),EditorWidget::InputBindingAxis);
-      if(action.kind!=runtime::ActionKind::Button)
-        field(properties,"Inverter",binding.invert?"Sim":"Não",EditorWidget::InputBindingInvert);
-    } else {
-      if(binding.source==runtime::InputSource::TouchButton || binding.source==runtime::InputSource::Key ||
-         binding.source==runtime::InputSource::GamepadAxis || binding.source==runtime::InputSource::GamepadButton)
-        field(properties,"Código",std::to_string(binding.code),EditorWidget::InputBindingCode);
-      if(binding.source==runtime::InputSource::Key && action.kind!=runtime::ActionKind::Button)
-        field(properties,"Código negativo",std::to_string(binding.negativeCode),
-              EditorWidget::InputBindingNegativeCode);
-      char scale[36];std::snprintf(scale,sizeof(scale),"%.3g",static_cast<double>(binding.scale));
-      field(properties,"Escala",scale,EditorWidget::InputBindingScale);
+  if(state.inputTab==0) {
+    auto primary=content,secondary=content;const bool columns=wide;
+    if(columns){primary=takeLeft(content,content.width*.52f);takeLeft(content,8);secondary=content;}
+    const char*types[]={"Botão","Eixo 1D","Eixo 2D"};
+    field(primary,"Tipo",types[static_cast<u32>(action.kind)],EditorWidget::InputActionKind);
+    field(primary,"Nome",action.id,EditorWidget::InputActionRename);
+    field(primary,"Contexto",action.context.empty()?"Sempre ativo":action.context,EditorWidget::InputActionContext);
+    if(!columns)secondary=primary;
+    if(action.kind!=runtime::ActionKind::Button) {
+      char number[40];std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.deadzone));
+      field(secondary,"Zona morta",number,EditorWidget::InputDeadzone);
+      std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.sensitivity));
+      field(secondary,"Sensibilidade",number,EditorWidget::InputSensitivity);
     }
-    takeTop(properties,8);
-    button(takeTop(properties,38),state.inputDetails?"< Ajustes básicos":"Ajustes avançados >",
-           EditorWidget::InputDetailsToggle);
-  } else builder.label(takeTop(properties,42),"Adicione um vínculo para editar.",
-                       theme.color.textMuted,theme.type.caption);
-  auto removal=takeBottom(properties,42),removeAction=takeLeft(removal,removal.width*.5f);
-  button(removeAction,"Remover ação",EditorWidget::InputActionRemove);
-  if(!action.bindings.empty()) button(removal,"Remover vínculo",EditorWidget::InputBindingRemove);
+    auto roles=takeTop(secondary,44);const float w=roles.width/3;const auto&map=state.document->inputActions();
+    button(takeLeft(roles,w),"Mover",EditorWidget::InputRoleMove,map.moveAction()==action.id,action.kind==runtime::ActionKind::Axis2D);
+    button(takeLeft(roles,w),"Olhar",EditorWidget::InputRoleLook,map.lookAction()==action.id,action.kind==runtime::ActionKind::Axis2D);
+    button(roles,"Saltar",EditorWidget::InputRoleJump,map.jumpAction()==action.id,action.kind==runtime::ActionKind::Button);
+    button(takeTop(columns?primary:secondary,44),"Remover ação",EditorWidget::InputActionRemove);
+    return;
+  }
+  auto navigation=takeTop(content,44),previous=takeLeft(navigation,40),next=takeRight(navigation,40),add=takeRight(navigation,100);
+  button(previous,"<",EditorWidget::InputBindingPrevious,false,!action.bindings.empty());
+  button(next,">",EditorWidget::InputBindingNext,false,!action.bindings.empty());
+  button(add,"+ Vínculo",EditorWidget::InputBindingAdd,false,action.bindings.size()<runtime::InputActionMap::kMaximumBindings);
+  const u32 index=action.bindings.empty()?0:std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1));
+  builder.label(navigation,action.bindings.empty()?"Nenhum vínculo":std::to_string(index+1)+"/"+std::to_string(action.bindings.size()),theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(action.bindings.empty())return;
+  const auto&binding=action.bindings[index];auto primary=content,secondary=content;
+  if(wide){primary=takeLeft(content,content.width*.58f);takeLeft(content,8);secondary=content;}
+  constexpr const char*sources[]={"Nenhuma","Manche touch","Olhar touch","Botão touch","Tecla","Eixo gamepad","Botão gamepad","Botão mouse","Eixo mouse"};
+  const bool capture=binding.source==runtime::InputSource::Key||binding.source==runtime::InputSource::GamepadButton||binding.source==runtime::InputSource::GamepadAxis||binding.source==runtime::InputSource::MouseButton;
+  if(capture)captureField(primary,sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource,EditorWidget::InputBindingCapture);
+  else field(primary,"Fonte",sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource);
+  if(!state.inputDetails) {
+    if(binding.source==runtime::InputSource::MouseButton||binding.source==runtime::InputSource::MouseAxis)
+      field(primary,binding.source==runtime::InputSource::MouseAxis?"Canal":"Botão",inputBindingCodeLabel(binding),EditorWidget::InputBindingCode);
+    if(action.kind==runtime::ActionKind::Axis2D)field(primary,"Eixo",binding.axis?"Y":"X",EditorWidget::InputBindingAxis);
+    if(action.kind!=runtime::ActionKind::Button)field(primary,"Inverter",binding.invert?"Sim":"Não",EditorWidget::InputBindingInvert);
+  } else {
+    if(binding.source==runtime::InputSource::Key||binding.source==runtime::InputSource::TouchButton||capture||binding.source==runtime::InputSource::MouseAxis)
+      field(primary,binding.source==runtime::InputSource::MouseAxis?"Canal":"Código",inputBindingCodeLabel(binding),EditorWidget::InputBindingCode);
+    if(binding.source==runtime::InputSource::Key&&action.kind!=runtime::ActionKind::Button)
+      captureField(primary,"Negativo: "+std::to_string(binding.negativeCode),EditorWidget::InputBindingNegativeCode,EditorWidget::InputBindingCaptureNegative);
+    char number[40];std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(binding.scale));
+    field(primary,"Escala",number,EditorWidget::InputBindingScale);
+  }
+  if(!wide)secondary=primary;
+  button(takeTop(secondary,44),state.inputDetails?"< Básico":"Avançado >",EditorWidget::InputDetailsToggle);
+  button(takeTop(secondary,44),"Remover vínculo",EditorWidget::InputBindingRemove);
+
 }
 
 // Configurações do projeto: uma workspace, seções à esquerda.
@@ -7848,6 +8702,13 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // No Play os painéis só existem quando o usuário pede para inspecionar.
   const bool panelsAllowed = state.workspace != EditorWorkspace::Project &&
       (state.workspace != EditorWorkspace::Play || state.playInspect);
+  const auto *inspectionObject=state.document->find(state.inspectorLocked?state.inspectorLocked:state.inspectorTarget?state.inspectorTarget:state.selection);
+  const auto *inspectionValue=inspectionObject?inspectionObject->components.findInstance(state.expandedNative):nullptr;
+  const bool mechanismPortrait=compact && available<600.f && state.surface.height>state.surface.width &&
+      panelsAllowed && state.compactPanel==EditorScreenState::CompactPanel::Inspector && inspectionValue &&
+      (&inspectionValue->type()==&scene::Joint::descriptor ||
+       (&inspectionValue->type()==&scene::Collider::descriptor &&
+        static_cast<const scene::Collider&>(*inspectionValue).shape==scene::ColliderShape::Cylinder));
   float hierarchyWidth = state.hierarchyVisible && panelsAllowed
       ? (state.hierarchyWidth > 0.0f ? state.hierarchyWidth : available * 0.24f)
       : 0.0f;
@@ -7983,7 +8844,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     layout.hierarchyRowCount =
         buildHierarchy(builder, layout.hierarchyPanel, layout.hierarchyVisibleRows);
   if(!layout.filesPanel.isEmpty()) buildFiles(builder,layout.filesPanel);
-  if (!layout.inspectorPanel.isEmpty()) buildInspector(builder, layout.inspectorPanel);
+  if (!layout.inspectorPanel.isEmpty() && !mechanismPortrait) buildInspector(builder, layout.inspectorPanel);
   layout.componentPage=builder.componentPage;
   if(!compact && !layout.filesPanel.isEmpty()) {
     // A área de toque ultrapassa a linha visual, acima dos bloqueadores dos painéis.
@@ -8024,6 +8885,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // por isso fica ao lado dos controles de câmera, não escondido num menu.
   // Fica DEPOIS de Lighting/Effects (+104..+220): no mesmo lugar, o botão de
   // Lighting cobria este e ele não aparecia no aparelho.
+  if(layout.viewport.width>=324.f) {
   builder.iconButton({layout.viewport.x + 228.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
   // Unity 6 põe as camadas visíveis nas View Options do Scene view; o olho
@@ -8031,10 +8893,12 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   builder.iconButton({layout.viewport.x + 276.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::SceneVisibility,
                      widgetId(EditorWidget::SceneLayersOpen), state.sceneLayersPanel || state.hiddenLayers || state.unpickableLayers);
+  }
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);
   if(compact) {
-    const UiRect button{layout.viewport.x+104,layout.viewport.y+56,100,40};
+    const float panelX=std::min(104.f,std::max(8.f,layout.viewport.width-48.f));
+    const UiRect button{layout.viewport.x+panelX,layout.viewport.y+56,std::min(100.f,layout.viewport.width-panelX-8.f),40};
     list.addRect(button,theme.color.raised,theme.radius.control);
     builder.label(button,"Painéis",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(button,widgetId(EditorWidget::CompactPanelMenu));
@@ -8044,6 +8908,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     // Unity 6 agrupa Lighting e Effects no topo do Scene View. Aqui a mesma
     // organização controla o renderer editorial real; a seta abre as partes
     // que a Astra já consome (céu, neblina e pós).
+    // Secondary scene options belong to the full viewport. An authoring panel
+    // must never be painted over or receive their hit regions in portrait.
+    if(layout.viewport.width>=324.f) {
     const float optionsX=layout.viewport.x+104.0f;
     const UiRect lighting{optionsX,layout.viewport.y+8.0f,40.0f,40.0f};
     const UiRect effects{optionsX+48.0f,layout.viewport.y+8.0f,40.0f,40.0f};
@@ -8070,6 +8937,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       row(panel.y+6.0f,UiIcon::LightingSky,"Sky",EditorWidget::SceneSkyToggle,state.sceneSky);
       row(panel.y+45.0f,UiIcon::LightingFog,"Fog",EditorWidget::SceneFogToggle,state.sceneFog);
       row(panel.y+84.0f,UiIcon::LightingPostProcessing,"Post Processing",EditorWidget::ScenePostToggle,state.scenePost);
+    }
     }
     if(state.cameraViewEntity) {
       const auto *cameraEntity=state.document->find(state.cameraViewEntity);
@@ -8135,9 +9003,10 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     }
     const UiIcon icons[]={UiIcon::EditorAuthorOrbit,UiIcon::EditorAuthorPan,UiIcon::EditorAuthorZoom};
     const EditorWidget actions[]={EditorWidget::NavigationOrbit,EditorWidget::NavigationPan,EditorWidget::NavigationZoom};
-    const float width=std::min(64.0f,(layout.viewport.width-(compact?112:16))/3);
+    const bool narrowViewport=compact && layout.viewport.width<324.f;
+    const float width=std::min(64.0f,(layout.viewport.width-(compact&&!narrowViewport?112:16))/3);
     for(u32 i=0;i<3;++i) {
-      const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-(compact?44:76),width-2,36};
+      const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-(narrowViewport?88:compact?44:76),width-2,narrowViewport?40.f:36.f};
       const bool active=static_cast<u32>(state.navigation)==i;
       list.addRect(cell,active?theme.color.accent:theme.color.raised,theme.radius.control);
       list.addImage(centred(cell,20.0f,20.0f),static_cast<UiImageId>(icons[i]),active?theme.color.accentInk:theme.color.text);
@@ -8350,16 +9219,24 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // Reading differences needs width. This temporary route leaves the saved
   // panel sizes and scene camera untouched; returning restores the same layout.
   const auto prefabTarget=state.inspectorLocked?state.inspectorLocked:state.selection;
-  if(compact && state.workspace==EditorWorkspace::Scene && state.prefabOverridesOpen &&
+  if((compact || layout.inspectorPanel.width<380 || layout.inspectorPanel.height<520) &&
+     state.workspace==EditorWorkspace::Scene && state.prefabOverridesOpen &&
      state.prefabOverrides.object==prefabTarget && state.multi.count<=1 && state.document->exists(prefabTarget)) {
     auto surface=remaining;
     list.addRect(surface,theme.color.surface);router.addBlocker(surface);
     auto status=takeBottom(surface,kStatusBarHeight);buildStatusBar(builder,status);
     auto page=deflate(surface,UiInsets::all(12));
-    auto heading=takeTop(page,36);
-    list.addImage(centred(takeLeft(heading,28),18,18),static_cast<UiImageId>(UiIcon::ScenePrefab),theme.color.accent);
-    builder.label(heading,state.document->find(prefabTarget)->name,theme.color.text,theme.type.body);
     buildPrefabOverrides(builder,page);
+  }
+  const bool recipeExpanded=(compact || layout.inspectorPanel.height<520) &&
+      state.workspace==EditorWorkspace::Scene && state.presetPanel && state.presetSelectedIsRecipe &&
+      state.presetEntity==prefabTarget && state.multi.count<=1 && state.document->exists(prefabTarget);
+  if(recipeExpanded) {
+    // Preparation and its existing object picker temporarily share this route.
+    // Saved panel geometry and scene camera remain owned by the scene workspace.
+    router.addBlocker(remaining);list.addRect(remaining,theme.color.surface);
+    auto page=deflate(remaining,UiInsets::all(12));
+    buildComponents(builder,page,*state.document->find(prefabTarget));
   }
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
@@ -8373,6 +9250,18 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
       auto row=takeTop(content,44);builder.label(row,names[i],theme.color.text,theme.type.body);router.addRegion(row,widgetId(actions[i]));
     }
+  }
+  // A contextual surface, not a second Inspector implementation. Draw after
+  // viewport tools and block their hit regions, but before property pickers and
+  // keyboards. Keeping the underlying viewport valid avoids zero-size render
+  // targets and lets the existing navigation return without losing camera state.
+  if(mechanismPortrait && !recipeExpanded) {
+    layout.inspectorPanel=remaining;
+    router.addBlocker(remaining);list.addRect(remaining,theme.color.surface);
+    auto content=remaining;auto navigation=takeTop(content,44);
+    builder.label(deflate(navigation,UiInsets::symmetric(12,0)),"< Voltar ao viewport",theme.color.text,theme.type.body);
+    router.addRegion(navigation,widgetId(EditorWidget::CompactViewport),theme.touch.minimumTarget);
+    buildInspector(builder,content);layout.componentPage=builder.componentPage;
   }
   if(state.layoutsPanel) buildLayoutsPanel(builder);
   if(state.backgroundPanel) buildBackgroundTasks(builder,layout);
@@ -8570,6 +9459,40 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   // e desliza para fora desistiu dele.
   if (!routing.tapped) return outcome;
 
+  if(widget>=widgetId(EditorWidget::ComponentSlotEnumBase)&&widget<widgetId(EditorWidget::ComponentSlotEnumBase)+0x01000000u) {
+    const auto *entity=document.find(state.selection);
+    const u32 encoded=widget-widgetId(EditorWidget::ComponentSlotEnumBase);
+    const u32 index=encoded&0xffu,field=(encoded>>8)&0xffu,slot=(encoded>>16)&0xffu;
+    const auto *component=entity&&index<entity->components.size()?entity->components.at(index):nullptr;
+    if(!component||field>=component->type().slotEnums.size()) return outcome;
+    const auto &property=component->type().slotEnums[field];
+    if(!property.write||!property.read||slot>=property.slotCount(*component)||property.options.empty()||!property.presentation.isEditable(*component)) return outcome;
+    usize selected=0;
+    for(usize i=0;i<property.options.size();++i) if(property.options[i].value==property.read(*component,slot)) {selected=(i+1)%property.options.size();break;}
+    if(property.options.size()==2 && state.multi.count>1 && state.multi.isMixed(multiKey(component->instanceId(),std::string(property.id)+"@"+std::to_string(slot)))) selected=1;
+    auto candidate=*entity;
+    if(scene::setComponentSlotProperty(candidate.components,component->type().id,property.id,slot,property.options[selected].value,component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
+      state.status="Valor por slot recusado pelo componente";return outcome;
+    }
+    outcome.documentChanged=history.applyValues(document,state.selection,candidate);
+    return outcome;
+  }
+
+  if(widget>=widgetId(EditorWidget::InspectorOverviewOpenBase) && widget<widgetId(EditorWidget::InspectorOverviewOpenBase)+detail::kRange) {
+    const auto target=state.inspectorLocked?state.inspectorLocked:state.selection;
+    const auto *entity=document.find(target);
+    const auto index=widget-widgetId(EditorWidget::InspectorOverviewOpenBase);
+    if(!entity || index>=entity->components.size()) return outcome;
+    const auto *component=entity->components.at(index);
+    if(component->unresolved() || scene::prefabLink(entity->components)==component || scene::importLink(entity->components)==component) return outcome;
+    state.inspectorSurface=EditorInspectorSurface::Inspection;state.componentSelection=target;
+    state.expandedComponent.clear();state.nativeMenu=0;state.scriptMenu=0;
+    state.expandedNative=scene::scriptBehavior(component)?0:component->instanceId();
+    state.expandedScript=scene::scriptBehavior(component)?component->instanceId():0;
+    state.propertyPage=0;state.scriptPropertyPage=0;state.propertyQuery.clear();
+    return outcome;
+  }
+
   if(widget>=widgetId(EditorWidget::ProjectSectionBase) && widget<=widgetId(EditorWidget::ProjectSectionBase)+3) {
     state.projectSection=static_cast<EditorProjectSection>(widget-widgetId(EditorWidget::ProjectSectionBase));
     state.tagPage=0;state.tagQuery.clear();state.tagPicker=false;state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;state.propertyPage=0;
@@ -8664,8 +9587,8 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         (state.inputActionIndex+1)%actions.size():(state.inputActionIndex+actions.size()-1)%actions.size();
       state.inputBindingIndex=0;state.inputBindingPage=0;return outcome;
     }
-    if(widget==widgetId(EditorWidget::InputTabAction) || widget==widgetId(EditorWidget::InputTabBinding)) {
-      state.inputTab=widget==widgetId(EditorWidget::InputTabBinding)?1u:0u;state.inputDetails=false;return outcome;
+    if(widget==widgetId(EditorWidget::InputTabAction) || widget==widgetId(EditorWidget::InputTabBinding) || widget==widgetId(EditorWidget::InputTabResponse)) {
+      state.inputTab=widget==widgetId(EditorWidget::InputTabResponse)?2u:widget==widgetId(EditorWidget::InputTabBinding)?1u:0u;state.inputDetails=false;return outcome;
     }
     if(widget==widgetId(EditorWidget::InputActionRename)) {
       state.editingInputActionName=true;std::snprintf(state.renameText,sizeof(state.renameText),"%s",original.id.c_str());return outcome;
@@ -8679,12 +9602,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         state.inputBindingIndex=0;state.inputActionPage=0;state.inputBindingPage=0;}
       return outcome;
     }
-    if(widget==widgetId(EditorWidget::InputDeadzone) || widget==widgetId(EditorWidget::InputSensitivity) ||
+    if(widget==widgetId(EditorWidget::InputDuration) || widget==widgetId(EditorWidget::InputDeadzone) || widget==widgetId(EditorWidget::InputSensitivity) ||
        widget==widgetId(EditorWidget::InputBindingCode) || widget==widgetId(EditorWidget::InputBindingNegativeCode) ||
        widget==widgetId(EditorWidget::InputBindingScale)) {
       state.inputEditField=widget;state.numericField=widget;state.numericReplace=true;
       std::string initial;
-      if(widget==widgetId(EditorWidget::InputDeadzone)) initial=std::to_string(original.deadzone);
+      if(widget==widgetId(EditorWidget::InputDuration)) initial=std::to_string(original.duration);
+      else if(widget==widgetId(EditorWidget::InputDeadzone)) initial=std::to_string(original.deadzone);
       else if(widget==widgetId(EditorWidget::InputSensitivity)) initial=std::to_string(original.sensitivity);
       else if(!original.bindings.empty()) {
         const auto &binding=original.bindings[std::min(state.inputBindingIndex,static_cast<u32>(original.bindings.size()-1))];
@@ -8714,8 +9638,15 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       return outcome;
     }
     auto action=original;
-    if(widget==widgetId(EditorWidget::InputActionKind)) {
+    if(widget==widgetId(EditorWidget::InputActionEnabled))action.enabled=!action.enabled;
+    else if(widget>=widgetId(EditorWidget::InputInteractionPress)&&widget<=widgetId(EditorWidget::InputInteractionTap)) {
+      if(action.kind!=runtime::ActionKind::Button)return outcome;
+      action.interaction=static_cast<runtime::InputInteraction>(widget-widgetId(EditorWidget::InputInteractionPress));
+    } else if(widget>=widgetId(EditorWidget::InputGroupTouch)&&widget<=widgetId(EditorWidget::InputGroupGamepad)) {
+      action.deviceGroups^=1u<<(widget-widgetId(EditorWidget::InputGroupTouch));
+    } else if(widget==widgetId(EditorWidget::InputActionKind)) {
       action.kind=static_cast<runtime::ActionKind>((static_cast<u32>(action.kind)+1)%3);
+      if(action.kind!=runtime::ActionKind::Button)action.interaction=runtime::InputInteraction::Press;
       if(action.kind!=runtime::ActionKind::Axis2D) for(auto &binding:action.bindings) binding.axis=0;
       if(action.kind!=runtime::ActionKind::Axis2D) {
         if(map.moveAction()==action.id) map.setMoveAction({});
@@ -8737,9 +9668,11 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       else {
         auto &binding=action.bindings[state.inputBindingIndex];
         if(widget==widgetId(EditorWidget::InputBindingSource)) {
-          binding.source=static_cast<runtime::InputSource>(1+(static_cast<u32>(binding.source)%6));
+          binding.source=static_cast<runtime::InputSource>(1+(static_cast<u32>(binding.source)%8));
           if(binding.source==runtime::InputSource::TouchButton && binding.code>=32) binding.code=0;
           if(binding.source!=runtime::InputSource::Key) binding.negativeCode=0;
+          if(binding.source==runtime::InputSource::MouseButton && binding.code>=5)binding.code=0;
+          if(binding.source==runtime::InputSource::MouseAxis && binding.code>=4)binding.code=0;
           if(binding.source==runtime::InputSource::TouchMove || binding.source==runtime::InputSource::TouchLook) binding.code=0;
         } else if(widget==widgetId(EditorWidget::InputBindingAxis)) {
           if(action.kind!=runtime::ActionKind::Axis2D) {state.status="Esta ação tem apenas um eixo";return outcome;}
@@ -8763,7 +9696,10 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   if(widget==widgetId(EditorWidget::ScenePostToggle)) {state.scenePost=!state.scenePost;return outcome;}
   if(widget>=widgetId(EditorWidget::ComponentVisualBase)&&widget<widgetId(EditorWidget::ComponentVisualBase)+0x01000000u) {
     const auto id=widget-widgetId(EditorWidget::ComponentVisualBase);
-    if(document.find(id)) {state.selection=id;state.textureInspector=false;state.textureViewer=false;state.propertyPage=0;}
+    if(componentVisualSelectable(document,id,state.hiddenLayers,state.unpickableLayers,
+        state.sceneHidden,state.scenePickOff)) {
+      state.selection=id;state.textureInspector=false;state.textureViewer=false;state.propertyPage=0;
+    }
     return outcome;
   }
   if(widget>=widgetId(EditorWidget::ComponentGroupBase)&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x01000000u) {
@@ -9115,6 +10051,46 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       if(state.projectSection==EditorProjectSection::Water && !waterCreationAvailable(state)) state.projectSection=EditorProjectSection::Layers;
       if(state.projectSection==EditorProjectSection::Water) state.selection=document.root();
       break;
+    case EditorWidget::InspectorInspection: state.inspectorSurface=EditorInspectorSurface::Inspection;break;
+    case EditorWidget::InspectorComponents: state.inspectorSurface=EditorInspectorSurface::Components;state.componentOverviewScroll=0;break;
+    case EditorWidget::InspectorMeshLightmap: state.meshTab=2;state.propertyPage=0;state.meshPicker=false;break;
+    case EditorWidget::InspectorReferenceFlags: state.inspectorReferenceFlags=true;state.propertyPage=0;break;
+    case EditorWidget::InspectorReferenceFlagsClose: state.inspectorReferenceFlags=false;state.propertyPage=0;break;
+    case EditorWidget::InspectorOverviewObject:
+      state.inspectorSurface=EditorInspectorSurface::Inspection;state.componentSelection=state.inspectorLocked?state.inspectorLocked:state.selection;
+      state.expandedComponent="astra.object";state.expandedNative=0;state.expandedScript=0;
+      state.nativeMenu=0;state.scriptMenu=0;state.transformMenu=false;state.inspectorReferenceFlags=false;state.propertyPage=0;break;
+    case EditorWidget::InspectorComponentPrevious:
+    case EditorWidget::InspectorComponentNext: {
+      const auto target=state.inspectorLocked?state.inspectorLocked:state.selection;
+      const auto *entity=document.find(target);if(!entity) break;
+      std::vector<i32> items{-2,-1}; // Objetos e Transform são dados universais.
+      i32 current=state.expandedComponent=="astra.object"?-2:-1;
+      for(u32 i=0;i<entity->components.size();++i) {
+        const auto *component=entity->components.at(i);
+        if(component->unresolved()||(!findEditorComponent(component->type().id)&&!scene::scriptBehavior(component))) continue;
+        if(state.multi.count>1&&target==state.selection&&!state.multi.isCommon(component->instanceId())) continue;
+        items.push_back(static_cast<i32>(i));
+        if(component->instanceId()==state.expandedNative||component->instanceId()==state.expandedScript) current=static_cast<i32>(i);
+      }
+      const auto found=std::find(items.begin(),items.end(),current);
+      const usize at=found==items.end()?0:static_cast<usize>(found-items.begin());
+      const usize next=widget==widgetId(EditorWidget::InspectorComponentNext)?(at+1)%items.size():(at+items.size()-1)%items.size();
+      state.componentSelection=target;state.expandedNative=0;state.expandedScript=0;
+      state.nativeMenu=0;state.scriptMenu=0;state.transformMenu=false;state.propertyPage=0;state.scriptPropertyPage=0;
+      state.propertyQuery.clear();state.inspectorReferenceFlags=false;
+      const auto selected=items[next];
+      state.expandedComponent=selected==-2?"astra.object":selected==-1?"astra.transform":"";
+      if(selected>=0) {
+        const auto *component=entity->components.at(static_cast<u32>(selected));
+        if(scene::scriptBehavior(component)) state.expandedScript=component->instanceId();
+        else state.expandedNative=component->instanceId();
+      }
+      break;
+    }
+    case EditorWidget::InspectorOverviewTransform:
+      state.inspectorSurface=EditorInspectorSurface::Inspection;state.componentSelection=state.inspectorLocked?state.inspectorLocked:state.selection;
+      state.expandedComponent="astra.transform";state.expandedNative=0;state.expandedScript=0;state.propertyPage=0;break;
     case EditorWidget::InspectorTabTransform: state.tab = EditorInspectorTab::Transform; break;
     case EditorWidget::InspectorTabMaterial:
       if (const auto *selected=document.find(state.selection); selected && meshAsset(*selected)) {

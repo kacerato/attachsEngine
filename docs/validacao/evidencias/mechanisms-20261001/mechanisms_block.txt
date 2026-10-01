@@ -1,0 +1,7 @@
+[ok] mechanisms_block_angular_limits_drives_and_v3_boundary
+[ok] mechanisms_block_creation_connection_and_undo_are_one_transaction
+[ok] mechanisms_block_portrait_inspection_and_return_preserve_authoring
+[ok] mechanisms_block_authored_roundtrip_solver_queries_live_edit_and_removal
+[ok] mechanisms_block_migration_and_invalid_drafts_are_atomic
+
+5/5 testes passaram

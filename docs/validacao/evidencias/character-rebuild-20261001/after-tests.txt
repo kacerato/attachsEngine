@@ -1,0 +1,7 @@
+[ok] character_rebuild_fixedupdate_body_edit_preserves_abi_move_and_accepted_jump
+CHARACTER_REBUILD_FALL: before=9.200 after=6.900 displacement=2.300
+[ok] character_rebuild_preserves_falling_velocity_but_resets_explicit_relocation
+CHARACTER_REBUILD_INTENT: dx=0.033 dy=0.083
+[ok] character_rebuild_preserves_script_intention_pending_jump_and_support_contacts
+
+3/3 testes passaram

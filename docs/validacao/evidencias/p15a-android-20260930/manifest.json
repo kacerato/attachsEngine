@@ -1,0 +1,364 @@
+{
+  "format": "ASTRA-DEVICE-ACCEPTANCE-1",
+  "date": "2026-09-30",
+  "scope": "P15a Path Curve3D PathFollow",
+  "project": "P15a-ADB-20260930",
+  "device": {
+    "model": "25053PC47G",
+    "androidApi": 36,
+    "orientation": "landscape",
+    "width": 2772,
+    "height": 1280,
+    "adbTransport": 1
+  },
+  "apk": {
+    "file": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "bytes": 264336812,
+    "sha256": "02A4C8C0F5E0C8491080FBAEA9B5912F68427F12FC6E4306A9E78C4EA8B8FF06",
+    "installedHashVerified": true
+  },
+  "host": {
+    "build": "pass",
+    "filters": [
+      {
+        "filter": "paths_",
+        "total": 5,
+        "passed": 5
+      },
+      {
+        "filter": "path_",
+        "total": 7,
+        "passed": 7
+      },
+      {
+        "filter": "mesh_collider_visual_uses",
+        "total": 1,
+        "passed": 1
+      }
+    ],
+    "fullSuiteExecuted": false
+  },
+  "android": {
+    "build": "pass",
+    "install": "pass",
+    "scriptCompilation": "on device",
+    "scriptPassTimestamps": [
+      "19:32:28.305",
+      "19:35:03.303",
+      "19:43:09.789"
+    ],
+    "pointId": 3,
+    "positionX": -5,
+    "outTangentX": 1,
+    "worldLengthAfterEdit": 11.846375819069051,
+    "stopUiProgress": 0.882187,
+    "stopCaptureBytesIdentical": true,
+    "savedReopenedAfterPlayIdentical": true
+  },
+  "notQualified": [
+    "portrait",
+    "device fleet",
+    "audio audibility and focus",
+    "physics2d Android scenario",
+    "many curves performance and thermal",
+    "all atlas components",
+    "GI bake and probes"
+  ],
+  "artifacts": [
+    {
+      "file": "00-shell.png",
+      "bytes": 199781,
+      "sha256": "DFE0AA94BDA15ED61EC9CA72B319EC663CB70E20343C4FCE104415F46BFB594E"
+    },
+    {
+      "file": "01-new.png",
+      "bytes": 121565,
+      "sha256": "FA2F0DF6D0B804E4CC035BF3B6F4A85251F0F2B5B19EF7ACC98A4B03F8C85C32"
+    },
+    {
+      "file": "02-empty.png",
+      "bytes": 128871,
+      "sha256": "6B48A1324332334C9E768D725F748E56591AD7696056FC2D1480F8CE49F4E0E9"
+    },
+    {
+      "file": "03-name.png",
+      "bytes": 199731,
+      "sha256": "9355606B2D4288D32E8CE658D32D1141FCAF34C7F21850D2E46D67078D2B92E6"
+    },
+    {
+      "file": "04-name.png",
+      "bytes": 142409,
+      "sha256": "E1C0463CC9410F80531BA72DDAD36025073C106F27844A3D563CBECC54391664"
+    },
+    {
+      "file": "05-editor.png",
+      "bytes": 1267886,
+      "sha256": "CD4245EF5ECFB16B47050487BF12BD1ACF2D4628652E3E71BD043D6D68E24C18"
+    },
+    {
+      "file": "06-create.png",
+      "bytes": 204738,
+      "sha256": "FB8898E963F6029220C9A0C6F31361976CABDA4BAFA76A2FB42015A24D2A451B"
+    },
+    {
+      "file": "07-gameplay.png",
+      "bytes": 264673,
+      "sha256": "250DBA4AB24F67BFA4068F39486459C2C30094201C856338447753DC6D1F161A"
+    },
+    {
+      "file": "08-path-created.png",
+      "bytes": 1361680,
+      "sha256": "5E7ED13A6E5361A1A0D688DA996CDA64783B2644B8284B3358CF6AF09C31D84E"
+    },
+    {
+      "file": "09-tangents.png",
+      "bytes": 1811682,
+      "sha256": "61FF387E057A776A2E95AA3D658FF305F7A2D2B75BD34F76CC718DC55FEB5336"
+    },
+    {
+      "file": "10-tangents.png",
+      "bytes": 1619127,
+      "sha256": "98470DE799FB987656070D5FD51E35D5148DE56BC3A42CDF4A93179F7B81ACC5"
+    },
+    {
+      "file": "11-number-open.png",
+      "bytes": 2102116,
+      "sha256": "FD1C64B22DC49BCA7C8CDE8AAB18C0BD3653D8DFA3A915617A5BC430CEFB23AD"
+    },
+    {
+      "file": "12-current.png",
+      "bytes": 41905,
+      "sha256": "08ED8B2C929C7CF522EC8292EEA604FA1043B38ED8AD49273EC505C1CCF5064A"
+    },
+    {
+      "file": "13-reopened.png",
+      "bytes": 26813,
+      "sha256": "DF54B4DA58F9EA7B2005041FC3A2B123758E656ABF9CAB7D049F56CCCBCAF85C"
+    },
+    {
+      "file": "14-reopened.png",
+      "bytes": 1281015,
+      "sha256": "A28CA4C8D4CF2694B67A72B8F6294AFB88EE9A66228BF4BEEACA607EE5C5E0F7"
+    },
+    {
+      "file": "15-create-follower.png",
+      "bytes": 296178,
+      "sha256": "11EA0263B51CDAC45FAC0E52064DD3F0B7826491FF47ED7F6D4ADA8A4E11D1A8"
+    },
+    {
+      "file": "16-follower-created.png",
+      "bytes": 1666551,
+      "sha256": "2DAF617E544B35B3B895177DA8EAC22923217B1FBC863E5445C7904E47EB3615"
+    },
+    {
+      "file": "17-follower-inspector.png",
+      "bytes": 1703430,
+      "sha256": "836A95A9E4D8DCFF0A97D884EB02CF60500D26116FA88294AA8FD5F5EC0C78C6"
+    },
+    {
+      "file": "18-components.png",
+      "bytes": 390111,
+      "sha256": "AF3C9918C46DD47D78A083EF0B3A5EDEFADD4826DA708957730467C9D155EBE9"
+    },
+    {
+      "file": "19-script-search.png",
+      "bytes": 599086,
+      "sha256": "528854E3AEA4D9A16D597F65CE5302C68CDB9F7D99E6917EFED0F96E148D6ED3"
+    },
+    {
+      "file": "20-script-result.png",
+      "bytes": 197961,
+      "sha256": "AB10A3D63414F49BF911A4D4E576A8F53AC93E4F9CF45359D2D65105EBD9BC5D"
+    },
+    {
+      "file": "21-script-preview.png",
+      "bytes": 219625,
+      "sha256": "70C1DC06942C2BDD7B5169E45AB64DA4332C37057E3C523A298BD9265373B38D"
+    },
+    {
+      "file": "22-play.png",
+      "bytes": 150503,
+      "sha256": "A14B58832D4093138F2BC88CAFDBA67A6671E1088E4398E5DBEDC6A5873292BF"
+    },
+    {
+      "file": "23-geometry.png",
+      "bytes": 268526,
+      "sha256": "3814AD78B98034EDCD289C97A1B48166A9C55A389A7A777B5B198446782864D4"
+    },
+    {
+      "file": "24-play-mesh-a.png",
+      "bytes": 330793,
+      "sha256": "A89F72468018BBD3946FC7B524CDD43C8491D27DF6BEABF0FD884E3B6807D31F"
+    },
+    {
+      "file": "25-body-menu.png",
+      "bytes": 1515976,
+      "sha256": "B8C54817F5EFE6CCE15D63458BB3DB8615EDB3BCA57E005CC851DBFC6B173DC2"
+    },
+    {
+      "file": "26-remove-collider.png",
+      "bytes": 1506227,
+      "sha256": "1C8B97C322567099C1FB6C637A0EA7218DD4077B313A8F34B4C03090FDA78E99"
+    },
+    {
+      "file": "27-mesh-only.png",
+      "bytes": 1442652,
+      "sha256": "468E4E9876CB9573CC31DA04A1EAF266A000E73449B1ADF108F4828521A08676"
+    },
+    {
+      "file": "28-body-actions.png",
+      "bytes": 1462437,
+      "sha256": "4441FADF13C7F143799657DDF0702623BE4A7AF1E829B6A8C3EDFC4733C8C44A"
+    },
+    {
+      "file": "29-play-mesh-b.png",
+      "bytes": 164460,
+      "sha256": "04ABA3652DD3B472A6ECC508956F1BFE46EB37D1755909485E4821D46B5477C7"
+    },
+    {
+      "file": "30-play-mesh-c.png",
+      "bytes": 174570,
+      "sha256": "6382FCB0C66E8EFC9BF7633E8F5592BAE6D513022B1B4252733D64822713F59A"
+    },
+    {
+      "file": "31-path-edit.png",
+      "bytes": 1477312,
+      "sha256": "1B93BCD7836F68E47CB949E4C23DAE43D2B4497278D316989CF908331A733F2E"
+    },
+    {
+      "file": "32-points.png",
+      "bytes": 1485922,
+      "sha256": "C5CA8BD753C3A43BB84878A69C4DB07A4599D28A1E1AA9A9D59D2071F6DFF1A4"
+    },
+    {
+      "file": "33-point-keyboard.png",
+      "bytes": 1124001,
+      "sha256": "6A80E4475CA47A3A874FBCBE3A249DC9DD58404A2D2D255DB79B47EB963CAE39"
+    },
+    {
+      "file": "34-point-change.png",
+      "bytes": 760577,
+      "sha256": "640352C82ABB83A55CE4ED73A52617C80C055791EBE59CF735DA8F04F186E1EE"
+    },
+    {
+      "file": "35-point-value.png",
+      "bytes": 1452266,
+      "sha256": "0357FAAFB6973C2A4049BC4CBD5C083453C558AFD283CC1EE97A745991CCDB19"
+    },
+    {
+      "file": "36-point-undo.png",
+      "bytes": 1468039,
+      "sha256": "D84D1AD16306F3FED44C66F1345F46CE078FA81FFE7F9E7B2BDA46B80B13180A"
+    },
+    {
+      "file": "37-tangents.png",
+      "bytes": 1459378,
+      "sha256": "496D55D3FC213EA75A946BB3AFDF20879BBDD9F4DFD84D0CE58B632C63737F7B"
+    },
+    {
+      "file": "38-tangent-keyboard.png",
+      "bytes": 805480,
+      "sha256": "CE0CDD1143077650391A66CF0DB5C5BAFC3C4550E6A35EA9B199B29B18D0FFF8"
+    },
+    {
+      "file": "39-tangent-edited.png",
+      "bytes": 1458790,
+      "sha256": "08866546F347C176662D7EEFD565A419C746305296645582666A32E6FDE02A3A"
+    },
+    {
+      "file": "40-wide-path.png",
+      "bytes": 1630740,
+      "sha256": "2AA942D8FE3578BB2E25A9AFF488C9169E74311AF6BFC3B6E455144D1021206F"
+    },
+    {
+      "file": "41-reopened-points.png",
+      "bytes": 1394942,
+      "sha256": "37305B251376081D6D0AA4A8C5C6D7D8EEF49F467A519F98882BDB2BBC8468E8"
+    },
+    {
+      "file": "42-runtime-inspector.png",
+      "bytes": 300101,
+      "sha256": "65357774FAD49713C721E595FE77EEB356732CB093C69B06FD8E38E244186A66"
+    },
+    {
+      "file": "43-runtime-commands.png",
+      "bytes": 325975,
+      "sha256": "C34482F0DD03122C9BB2B1049888C0BC13EE9AC0FA0B73C61AD02B9B87B35A7F"
+    },
+    {
+      "file": "44-ui-restart.png",
+      "bytes": 326803,
+      "sha256": "B2D07E217DDBD597310365BB46669FB43D6ED3573F815E5E95747ED62F4B95EB"
+    },
+    {
+      "file": "45-ui-stop.png",
+      "bytes": 328163,
+      "sha256": "240F3152BED914C9461597D6BF6972617EA916B0BC134D571B518C99FB45A263"
+    },
+    {
+      "file": "46-ui-stop-held.png",
+      "bytes": 328163,
+      "sha256": "240F3152BED914C9461597D6BF6972617EA916B0BC134D571B518C99FB45A263"
+    },
+    {
+      "file": "after-play.aescene",
+      "bytes": 1075,
+      "sha256": "DFDAF76A63E0FBE0AC9FC6D3A4FF559FFEE1CEE5A9F63219CF9A70880DB9DE40"
+    },
+    {
+      "file": "before-reopen.aescene",
+      "bytes": 530,
+      "sha256": "17BA3D41F0DB8E084958FCDD67EEF94E9FA822E8EB26F3283587EA801BAB5808"
+    },
+    {
+      "file": "edited.aescene",
+      "bytes": 1075,
+      "sha256": "DFDAF76A63E0FBE0AC9FC6D3A4FF559FFEE1CEE5A9F63219CF9A70880DB9DE40"
+    },
+    {
+      "file": "error-scan.log",
+      "bytes": 331,
+      "sha256": "5134BECFEB144248A00E2389CFA250CFC045202B1D528B1D6D13C5A05D752AE0"
+    },
+    {
+      "file": "path-motion.mp4",
+      "bytes": 1458736,
+      "sha256": "2FB048A45D5DE612B19A9DBDEA6F25AF30916021B517AA652CA602659AC6020F"
+    },
+    {
+      "file": "path-probe-mesh.log",
+      "bytes": 2279,
+      "sha256": "B489FD0B66AD01E728792550395E4A3624B26F1E22680225DDF5C2093C1AFEA2"
+    },
+    {
+      "file": "path-probe-reopened.log",
+      "bytes": 1772,
+      "sha256": "75A15A4DDF6B3FD5806B338603F51D30E1F25418E3E4344E09054EAAB27C49E0"
+    },
+    {
+      "file": "path-probe.log",
+      "bytes": 903,
+      "sha256": "992399B45C9DCFFE17FA0ACB49529C00E8F47961B3174650BF9A1368DB6FB058"
+    },
+    {
+      "file": "project.json",
+      "bytes": 368,
+      "sha256": "1F19A1E245EB536A91D3FBAFFAFCB06C564E50BA6772D6AF4E2303317B705408"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6025,
+      "sha256": "1BCA201D6ACA0C143AA0D6B0E71AD0ED7448A9525CD87FA988ECF2006559947E"
+    },
+    {
+      "file": "reopened.aescene",
+      "bytes": 1075,
+      "sha256": "DFDAF76A63E0FBE0AC9FC6D3A4FF559FFEE1CEE5A9F63219CF9A70880DB9DE40"
+    },
+    {
+      "file": "saved.aescene",
+      "bytes": 1075,
+      "sha256": "DFDAF76A63E0FBE0AC9FC6D3A4FF559FFEE1CEE5A9F63219CF9A70880DB9DE40"
+    }
+  ]
+}

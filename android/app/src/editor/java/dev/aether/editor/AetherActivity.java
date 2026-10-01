@@ -3,6 +3,12 @@ package dev.aether.editor;
 import android.app.NativeActivity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.media.AudioManager;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 /** Platform lifecycle and text input only; authoring controls belong to the native editor. */
 public final class AetherActivity extends NativeActivity {
@@ -12,6 +18,60 @@ public final class AetherActivity extends NativeActivity {
     private EditorTextInput editorTextInput;
     private ModelPicker modelPicker;
     private ExternalLinks externalLinks;
+    private volatile int playAudioFocusState; // 0 denied/released, 1 authorized, 2 delayed, -1 lost
+    private volatile boolean playAudioDemand;
+    private boolean playAudioForeground;
+    private AudioManager playAudioManager;
+    private AudioFocusRequest playAudioRequest;
+    private AudioManager.OnAudioFocusChangeListener playAudioListener;
+    private long playAudioGeneration;
+
+    /** Called by the native frame loop. It only schedules platform work on the UI thread. */
+    public void setPlayAudioDemand(boolean wanted) {
+        if (playAudioDemand == wanted) return;
+        playAudioDemand = wanted;
+        if (!wanted) playAudioFocusState = 0;
+        runOnUiThread(() -> { if (wanted && playAudioDemand && playAudioForeground) acquirePlayAudioFocus(); else releasePlayAudioFocus(); });
+    }
+    public int getPlayAudioFocusState() { return playAudioFocusState; }
+    @SuppressWarnings("deprecation")
+    private void acquirePlayAudioFocus() {
+        if (playAudioListener != null || !playAudioDemand || !playAudioForeground) return;
+        if (playAudioManager == null) playAudioManager = (AudioManager)getSystemService(AUDIO_SERVICE);
+        if (playAudioManager == null) { playAudioFocusState = 0; return; }
+        final long generation = ++playAudioGeneration;
+        playAudioListener = change -> {
+            if (generation != playAudioGeneration || !playAudioDemand || !playAudioForeground) return;
+            playAudioFocusState = change == AudioManager.AUDIOFOCUS_GAIN ? 1 : -1;
+            // Permanent loss is not retried every frame. A new Play or Activity
+            // foreground transition is the explicit next request boundary.
+        };
+        int result;
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                playAudioRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    .setAcceptsDelayedFocusGain(true).setWillPauseWhenDucked(true)
+                    .setOnAudioFocusChangeListener(playAudioListener, new Handler(Looper.getMainLooper())).build();
+                result = playAudioManager.requestAudioFocus(playAudioRequest);
+            } else result = playAudioManager.requestAudioFocus(playAudioListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+            playAudioFocusState = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED ? 1 :
+                result == AudioManager.AUDIOFOCUS_REQUEST_DELAYED ? 2 : 0;
+        } catch (RuntimeException failure) { playAudioFocusState = 0; android.util.Log.w("Astra.Audio", "Audio focus denied", failure); }
+    }
+    @SuppressWarnings("deprecation")
+    private void releasePlayAudioFocus() {
+        ++playAudioGeneration; playAudioFocusState = 0;
+        try {
+            if (playAudioManager != null && playAudioListener != null) {
+                if (Build.VERSION.SDK_INT >= 26 && playAudioRequest != null) playAudioManager.abandonAudioFocusRequest(playAudioRequest);
+                else playAudioManager.abandonAudioFocus(playAudioListener);
+            }
+        } catch (RuntimeException failure) {
+            android.util.Log.w("Astra.Audio", "Audio focus release failed", failure);
+        } finally { playAudioListener = null; playAudioRequest = null; }
+    }
 
     @Override protected void onCreate(Bundle state) {
         // NativeActivity starts native code in super.onCreate: establish the dry
@@ -29,6 +89,8 @@ public final class AetherActivity extends NativeActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        playAudioForeground = true;
+        if (playAudioDemand) acquirePlayAudioFocus();
         if (editorTextInput == null) editorTextInput = new EditorTextInput(this);
         editorTextInput.start();
         if (modelPicker == null) modelPicker = new ModelPicker(this);
@@ -38,10 +100,14 @@ public final class AetherActivity extends NativeActivity {
     }
 
     @Override protected void onPause() {
+        playAudioForeground = false; releasePlayAudioFocus();
         if (editorTextInput != null) editorTextInput.stop();
         if (modelPicker != null) modelPicker.stop();
         if (externalLinks != null) externalLinks.stop();
         super.onPause();
+    }
+    @Override protected void onDestroy() {
+        playAudioDemand = false; releasePlayAudioFocus(); super.onDestroy();
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {

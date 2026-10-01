@@ -13,7 +13,7 @@ public sealed record BehaviorFailure(ulong ObjectId, ulong InstanceId, string Ph
 public sealed record BehaviorEdit(bool Enabled, IReadOnlyDictionary<string, JsonElement>? Properties);
 
 /// <summary>Owns one isolated script assembly and its instances for a Play session.</summary>
-public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
+public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHost, ISaveHost, ITimeHost
 {
     private sealed class ProjectLoadContext() : AssemblyLoadContext("Astra.Project", isCollectible: true)
     {
@@ -38,17 +38,35 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     public enum ApplicationEvent : uint { Pause = 0, Focus = 1 }
     private ProjectLoadContext? _context;
     private ISceneAccess? _scene;
+    private SaveStore? _saveStore;
+    private TimeAccess? _time;
+    public TimeAccess Time => _time?.Validate() ?? throw new InvalidOperationException("No active Play clock.");
+    public SaveStore Save => _saveStore ?? throw new InvalidOperationException("This Play host has no configured project save store.");
     private readonly List<Entry> _entries = [];
     private readonly List<BehaviorFailure> _failures = [];
     private bool _started, _stopping, _bindComponentState;
     private int _dispatchDepth;
     private readonly Dictionary<Type, ScriptTypeSchema> _types = [];
+    private CoroutineScheduler? _coroutines;
+    private bool CoroutineMayRun(Behavior owner) => Running && !_stopping && owner.CoroutineEligible && owner.IsAlive &&
+        _scene is not null && owner.CoroutineOwner.ActiveInHierarchy;
+    private void CoroutineFailure(Coroutine handle, string phase, Exception error)
+    {
+        if (_failures.Count < 1024) _failures.Add(new(handle.ObjectId, handle.InstanceId, phase, error.ToString()));
+    }
+    Coroutine ICoroutineHost.StartCoroutine(Behavior owner, System.Collections.IEnumerator routine) =>
+        (_coroutines ?? throw new InvalidOperationException("No active Play scheduler.")).Start(owner, routine);
+    void ICoroutineHost.StopCoroutine(Behavior owner, Coroutine handle) =>
+        (_coroutines ?? throw new InvalidOperationException("No active Play scheduler.")).Stop(owner, handle);
+    void ICoroutineHost.StopCoroutine(Behavior owner, System.Collections.IEnumerator routine) =>
+        (_coroutines ?? throw new InvalidOperationException("No active Play scheduler.")).Stop(owner, routine);
+    void ICoroutineHost.StopAllCoroutines(Behavior owner) => _coroutines?.CancelOwner(owner);
 
     public IReadOnlyList<BehaviorFailure> Failures => _failures;
     public bool Running => _context is not null && _started;
 
     public void Start(CompiledProject project, ISceneAccess scene, IEnumerable<BehaviorAttachment> attachments,
-        bool bindComponentState = false)
+        bool bindComponentState = false, SaveStore? saveStore = null)
     {
         if (_context is not null) throw new InvalidOperationException("A script world is already active.");
         var context = new ProjectLoadContext();
@@ -60,9 +78,11 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             var assembly = context.LoadFromStream(dll, pdb);
             _types.Clear();
             foreach (var schema in project.Types) _types.Add(assembly.GetType(schema.Name, throwOnError: true)!, schema);
-            _bindComponentState = bindComponentState;
+            _bindComponentState = bindComponentState; _saveStore = saveStore;
+            _time = new TimeAccess(scene as ITimeSceneAccess); _time.Activate();
             PrepareAttachments(scene, attachments, prepared);
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
+            _coroutines = new(CoroutineMayRun, CoroutineFailure);
             // Todas as instâncias existem antes dos callbacks. Objetos inativos
             // aguardam sua primeira ativação; Enabled=false não adia o Awake.
             Dispatch("Awake", static b => { }, awakenOnly: true);
@@ -70,8 +90,10 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         }
         catch
         {
+            _coroutines?.Shutdown(); _coroutines = null;
+            _time?.End(); _time = null;
             foreach (var entry in prepared) entry.Instance.Detach();
-            _entries.Clear(); _types.Clear(); _messages.Clear(); _context = null; _scene = null; _started = false; context.Unload(); throw;
+            _entries.Clear(); _types.Clear(); _messages.Clear(); _context = null; _scene = null; _saveStore = null; _started = false; context.Unload(); throw;
         }
     }
     // A contagem fica fixa por despacho. Adições podem realocar a lista sem
@@ -95,15 +117,24 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     }
     public void Update(float deltaTime)
     {
-        if (float.IsFinite(deltaTime) && deltaTime >= 0) Dispatch("Update", b => b.Update(deltaTime));
+        if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
+        Time.BeginFrame(deltaTime);
+        _coroutines?.BeginFrame(deltaTime);
+        Dispatch("Update", b => b.Update(deltaTime));
+        _coroutines?.Tick();
     }
     public void LateUpdate(float deltaTime)
     {
-        if (float.IsFinite(deltaTime) && deltaTime >= 0) Dispatch("LateUpdate", b => b.LateUpdate(deltaTime));
+        if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
+        Time.FramePhase();
+        Dispatch("LateUpdate", b => b.LateUpdate(deltaTime));
     }
     public void FixedUpdate(float deltaTime)
     {
-        if (float.IsFinite(deltaTime) && deltaTime > 0) Dispatch("FixedUpdate", b => b.FixedUpdate(deltaTime));
+        if (!Running || !float.IsFinite(deltaTime) || deltaTime <= 0) return;
+        Time.BeginFixed(deltaTime);
+        try { _coroutines?.BeginFixedStep(); Dispatch("FixedUpdate", b => b.FixedUpdate(deltaTime)); _coroutines?.TickFixed(); }
+        finally { _time?.EndFixed(); }
     }
     public void Application(ApplicationEvent kind, bool value) => Dispatch(kind == ApplicationEvent.Pause ? "ApplicationPause" : "ApplicationFocus", b =>
     {
@@ -148,6 +179,8 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     {
         if (entry.Retired) return;
         entry.Retired = true;
+        entry.Instance.BlockCoroutines();
+        _coroutines?.CancelOwner(entry.Instance);
         Deactivate(entry);
         if (entry.Started) Invoke(entry, "Stop", static b => b.Stop());
         if (entry.Awoken) Invoke(entry, "Destroy", static b => b.Destroy());
@@ -472,6 +505,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         EnsureAwake(entry);
         if (!MayRun(entry))
         {
+            if (!ObjectActive(entry)) _coroutines?.CancelOwner(entry.Instance);
             Deactivate(entry);
             return false;
         }
@@ -496,6 +530,8 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         catch (Exception error)
         {
             entry.Failed = true;
+            entry.Instance.BlockCoroutines();
+            _coroutines?.CancelOwner(entry.Instance);
             // A falha pode ter ocorrido depois de Destroy. Não deixe uma
             // segunda exceção, ao desligar um handle vencido, escapar do isolamento.
             try { if (entry.Owner.IsAlive && entry.Instance.AttachedComponentAlive) entry.Instance.Enabled = false; }
@@ -592,12 +628,13 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     {
         if (_context is null || _stopping) return;
         _stopping = true;
+        _coroutines?.Shutdown();
         ++_dispatchDepth;
-        try { for (var i = _entries.Count - 1; i >= 0; --i) Retire(_entries[i]); }
+        try { for (var i = _entries.Count - 1; i >= 0; --i) Retire(_entries[i]); _saveStore?.Flush(); }
         finally
         {
-            --_dispatchDepth; _entries.Clear(); _types.Clear(); _messages.Clear(); _scene = null; _started = false;
-            var context = _context; _context = null; context.Unload(); _stopping = false;
+            --_dispatchDepth; _time?.End(); _time = null; _entries.Clear(); _types.Clear(); _messages.Clear(); _scene = null; _saveStore = null; _started = false;
+            var context = _context; _context = null; _coroutines = null; context.Unload(); _stopping = false;
         }
     }
 }

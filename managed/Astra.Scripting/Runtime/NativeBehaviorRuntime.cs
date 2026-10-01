@@ -48,7 +48,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v17). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v33). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -147,6 +147,33 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, uint, ulong> CreatePrimitive;
         public delegate* unmanaged<void*, ulong, NativeAssetGuid, ulong> InstantiatePrefab;
         public delegate* unmanaged<void*, ulong, byte*, int, int> InstantiationAttachments;
+        // v20 — publicação atômica de uma tripla refletida.
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, float*, int> SetTriple;
+        public delegate* unmanaged<void*, ulong, uint, uint, uint, float*, float*, int> Body2DCommand;
+        public delegate* unmanaged<void*, uint, uint, float*, float*, float, NativeQueryFilter*, RawQueryHit*, int, int> Query2D;
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, uint, ulong, uint, float*, float*, ulong*, int> PathPointCommand;
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, uint, double, uint, float*, double*, int> PathRuntimeCommand;
+
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, NativeAudioSnapshot*, int> AudioSnapshot;
+        public delegate* unmanaged<void*, uint, NativeTimeState*, int> TimeSnapshot;
+        public delegate* unmanaged<void*, uint, float, int> SetTimeScale;
+        public delegate* unmanaged<void*, ulong, byte*, int, int, int> GroupMembership;
+        public delegate* unmanaged<void*, byte*, int, ulong*, int, int, int> FindGroup;
+        public delegate* unmanaged<void*, ulong, uint, byte*, int, int> GroupAt;
+        public delegate* unmanaged<void*, byte*, int, uint, uint, InputBindingValue*, int> InputBindingCommand;
+        public delegate* unmanaged<void*, uint, byte*, int, byte*, int, int> InputProfile;
+        public delegate* unmanaged<void*, uint, byte*, int, uint, uint, uint, uint, int> InputCaptureCommand;
+
+        public delegate* unmanaged<void*, ulong, ulong, uint, float, NativeTimerState*, int> TimerCommand;
+        public delegate* unmanaged<void*, ulong, ulong, uint, NativeTweenState*, int> TweenCommand;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, NativeNumberTweenParameters*, ulong*, int> NumberTweenCreate;
+        public delegate* unmanaged<void*, ulong, uint, NativeNumberTweenState*, int> NumberTweenCommand;
+
+        public delegate* unmanaged<void*, ulong, NativeCharacterState*, int> CharacterSnapshot;
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, uint, float*, float*, NativeBodyState*, int> BodyCommand;
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, uint, float*, uint, NativeFieldState*, int> FieldQuery;
+        public delegate* unmanaged<void*, ulong, uint, uint, int, int> ObjectLayer;
+        public delegate* unmanaged<void*, byte*, int, uint, InputActionState*, int> InputActionCommand;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -165,10 +192,41 @@ public static unsafe class NativeBehaviorRuntime
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
             SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
-            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null;
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null;
     }
 
-    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeFieldState {public uint Size,Flags;public float Weight;public Vector3 Acceleration,WindVelocity;public float WindDrag,LinearDrag,AngularDrag,OverrideWeight;public uint AffectedBodies;public float AffectedMass;public uint Reserved;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeBodyState {public uint Size,Flags;public Vector3 Linear,Angular,CenterOfMass;public uint Reserved;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeCharacterState {public uint Size,GroundState,Flags,Reserved;public Vector3 Position,Velocity,MotorVelocity,GroundVelocity,GroundNormal;public uint TailReserved;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeNumberTweenParameters {public uint Size,Easing;public float Destination,Duration;public uint Flags,Reserved;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeNumberTweenState {public uint Size,Status,Failure,Flags;public double Elapsed;public float Value,Duration;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeTweenState {public uint Size,Status;public double Elapsed;public uint Flags,Reserved;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeTimerState { public uint Size,Flags;public double Remaining; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeAudioSnapshot
+    {
+        public uint Size,State,OutputRunning,Reserved;
+        public double Cursor;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeTimeState
+    {
+        public uint Size,Reserved;
+        public ulong FrameCount;
+        public double SimulationTime,UnscaledTime;
+        public float Delta,UnscaledDelta,TimeScale,FrameScale;
+    }
+
+    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess
     {
         // Nomes cabem em 63 bytes e ids de tipo em 256; os buffers são o teto do
         // contrato nativo, não uma estimativa.
@@ -180,6 +238,16 @@ public static unsafe class NativeBehaviorRuntime
         private readonly int _ownerThread = Environment.CurrentManagedThreadId;
         private bool Accessible => _active && Environment.CurrentManagedThreadId == _ownerThread;
         public void Invalidate() => _active = false;
+        public SimulationTimeState ReadTime() {
+            if(!Accessible) throw new WorldException(WorldStatus.NotRunning,"Time.Read");
+            NativeTimeState state=new() { Size=(uint)sizeof(NativeTimeState) };
+            if(access.TimeSnapshot(access.Context,WorldId,&state)==0) throw new WorldException(LastStatus,"Time.Read");
+            return new(state.FrameCount,state.SimulationTime,state.UnscaledTime,state.Delta,state.UnscaledDelta,state.TimeScale,state.FrameScale);
+        }
+        public WorldStatus SetTimeScale(float value) {
+            if(!Accessible) return WorldStatus.NotRunning;
+            return access.SetTimeScale(access.Context,WorldId,value)!=0?WorldStatus.Ok:LastStatus;
+        }
 
         private static byte[] Utf8(string text, string what)
         {
@@ -328,6 +396,40 @@ public static unsafe class NativeBehaviorRuntime
                 return result;
             }
         }
+        public int GroupMembership(ulong objectId,string name,int operation)
+        {
+            if(!Accessible) return -1;
+            var bytes=Utf8(name,"grupo");
+            fixed(byte* pointer=bytes) return access.GroupMembership(access.Context,objectId,pointer,bytes.Length,operation);
+        }
+        public string[] GetGroups(ulong objectId)
+        {
+            if(!Accessible) throw new WorldException(WorldStatus.NotRunning,"ler grupos");
+            var count=access.GroupAt(access.Context,objectId,uint.MaxValue,null,0);
+            if(count<0 || count>32) throw new WorldException(LastStatus,"ler grupos");
+            var result=new string[count];byte* buffer=stackalloc byte[64];
+            for(uint i=0;i<count;++i) {
+                var size=access.GroupAt(access.Context,objectId,i,buffer,64);
+                if(size<1 || size>63) throw new WorldException(LastStatus,"ler grupos");
+                result[i]=Encoding.UTF8.GetString(new ReadOnlySpan<byte>(buffer,size));
+            }
+            return result;
+        }
+        public ulong[] FindGroup(string name,bool includeInactive)
+        {
+            if(!Accessible) throw new WorldException(WorldStatus.NotRunning,"buscar grupo");
+            var bytes=Utf8(name,"grupo");
+            fixed(byte* pointer=bytes) {
+                var count=access.FindGroup(access.Context,pointer,bytes.Length,null,0,includeInactive?1:0);
+                if(count<0 || count>65536) throw new WorldException(LastStatus,"buscar grupo");
+                if(count==0) return [];
+                var result=new ulong[count];
+                fixed(ulong* output=result)
+                    if(access.FindGroup(access.Context,pointer,bytes.Length,output,count,includeInactive?1:0)!=count)
+                        throw new WorldException(LastStatus,"buscar grupo");
+                return result;
+            }
+        }
         public bool SetActive(ulong objectId, bool active) =>
             Accessible && access.SetActive(access.Context, objectId, active ? 1 : 0) != 0;
 
@@ -446,6 +548,14 @@ public static unsafe class NativeBehaviorRuntime
             fixed (byte* pointer = bytes)
                 return access.SetProperty(access.Context, objectId, instanceId, pointer, bytes.Length, kind, bits) != 0;
         }
+        public bool SetTriple(ulong objectId, ulong instanceId, string propertyId, Vector3 value)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "propriedade vetorial");
+            float* values = stackalloc float[3] { value.X, value.Y, value.Z };
+            fixed (byte* pointer = bytes)
+                return access.SetTriple(access.Context, objectId, instanceId, pointer, bytes.Length, values) != 0;
+        }
 
         // --- consultas físicas ----------------------------------------------
         private static NativeQueryFilter Encode(in QueryFilter filter) => new()
@@ -465,6 +575,55 @@ public static unsafe class NativeBehaviorRuntime
             RotationZ = shape.Rotation.Z, RotationW = shape.Rotation.W,
         };
 
+        public int PathPointCommand(ulong id,uint world,uint generation,ulong instance,uint operation,ulong element,uint index,ReadOnlySpan<float> input,Span<float> output,out ulong identity)
+        {
+            identity=0;
+            if(!Accessible) return -1;
+            if(operation>10 || ((operation==3||operation==4)&&input.Length!=9) || ((operation==1||operation==2)&&output.Length!=9) || ((operation==9||operation==10)&&input.Length!=10) || ((operation==7||operation==8)&&output.Length!=10))
+                throw new ArgumentException("Invalid path point command buffers.");
+            ulong pointId=0;
+            fixed(float* source=input) fixed(float* destination=output)
+            {
+                int result=access.PathPointCommand(access.Context,id,world,generation,instance,operation,element,index,source,destination,&pointId);
+                identity=pointId; return result;
+            }
+        }
+        public bool PathRuntimeCommand(ulong id,uint world,uint generation,ulong instance,uint operation,double distance,bool wrap,Span<float> output,out double scalar)
+        {
+            scalar=0;
+            if(!Accessible) return false;
+            if(operation>5 || (operation==0&&output.Length!=6) || (operation==5&&output.Length!=10)) throw new ArgumentException("Invalid path runtime command buffer.");
+            double value=0;
+            fixed(float* destination=output)
+            {
+                bool ok=access.PathRuntimeCommand(access.Context,id,world,generation,instance,operation,distance,wrap?1u:0u,destination,&value)!=0;
+                scalar=value;return ok;
+            }
+        }
+        public bool QueryAudioVoice(ulong id,uint world,uint generation,ulong instance,out AudioVoiceSnapshot snapshot)
+        {
+            snapshot=default;
+            if(!Accessible) return false;
+            NativeAudioSnapshot value=new() { Size=(uint)sizeof(NativeAudioSnapshot) };
+            if(access.AudioSnapshot(access.Context,id,world,generation,instance,&value)==0) return false;
+            snapshot=new((AudioVoiceState)value.State,value.Cursor,value.OutputRunning!=0);
+            return true;
+        }
+        public bool Body2DCommand(ulong id, uint world, uint generation, Body2DCommandKind command, Vector2 value, float angular, out Vector2 result, out float angularResult)
+        {
+            result = default; angularResult = 0; if (!Accessible) return false;
+            float* input = stackalloc float[3] { value.X, value.Y, angular };
+            float* output = stackalloc float[3];
+            if (access.Body2DCommand(access.Context,id,world,generation,(uint)command,input,output)==0) return false;
+            if(command == Body2DCommandKind.GetVelocity) { result=new(output[0],output[1]); angularResult=output[2]; }
+            return true;
+        }
+        public int Query2D(uint world, bool overlap, Vector2 origin, Vector2 translation, float radius, in QueryFilter filter, Span<RawQueryHit> results)
+        {
+            if (!Accessible) return -1;
+            var encoded = Encode(filter); float* from=stackalloc float[2]{origin.X,origin.Y}; float* along=stackalloc float[2]{translation.X,translation.Y};
+            fixed(RawQueryHit* hits=results) return access.Query2D(access.Context,world,overlap?1u:0u,from,along,radius,&encoded,hits,results.Length);
+        }
         public int RayCast(Vector3 origin, Vector3 direction, in QueryFilter filter, Span<RawQueryHit> results)
         {
             if (!Accessible) return 0;
@@ -509,6 +668,65 @@ public static unsafe class NativeBehaviorRuntime
         }
 
         // --- entrada por ações ----------------------------------------------
+        public bool NumberTweenCreate(ulong objectId,ulong instance,string property,float destination,float duration,uint easing,bool unscaled,out ulong id)
+        {
+            if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"criar tween numérico");
+            var bytes=Encoding.UTF8.GetBytes(property);NativeNumberTweenParameters parameters=new(){Size=(uint)sizeof(NativeNumberTweenParameters),Easing=easing,Destination=destination,Duration=duration,Flags=unscaled?1u:0u};
+            ulong handle=0;int result;fixed(byte* name=bytes)result=access.NumberTweenCreate(access.Context,objectId,instance,name,bytes.Length,&parameters,&handle);id=handle;return result==1;
+        }
+        public bool NumberTweenCommand(ulong id,uint operation,out NumberTweenState state)
+        {
+            if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"controlar tween numérico");
+            NativeNumberTweenState native=new(){Size=(uint)sizeof(NativeNumberTweenState)};state=default;
+            if(access.NumberTweenCommand(access.Context,id,operation,&native)!=1)return false;
+            state=new((NumberTweenStatus)native.Status,(WorldStatus)native.Failure,native.Elapsed,native.Value,native.Duration,(native.Flags&1)!=0,(native.Flags&2)!=0,(native.Flags&4)!=0);return true;
+        }
+        public bool TweenCommand(ulong objectId,ulong instance,uint operation,out TweenRuntimeState state)
+        {
+            if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"controlar tween");
+            NativeTweenState native=new(){Size=(uint)sizeof(NativeTweenState)};state=default;
+            if(access.TweenCommand(access.Context,objectId,instance,operation,&native)!=1)return false;
+            state=new((TweenRuntimeStatus)native.Status,native.Elapsed,(native.Flags&1)!=0,(native.Flags&2)!=0,(native.Flags&4)!=0);return true;
+        }
+        public bool TimerCommand(ulong objectId,ulong instance,uint operation,float seconds,out TimerRuntimeState state)
+        {
+            if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"controlar timer");
+            NativeTimerState native=new(){Size=(uint)sizeof(NativeTimerState)};state=default;
+            if(access.TimerCommand(access.Context,objectId,instance,operation,seconds,&native)!=1)return false;
+            state=new(native.Remaining,(native.Flags&1)!=0,(native.Flags&2)!=0,(native.Flags&4)!=0,(native.Flags&8)!=0,(native.Flags&16)!=0);return true;
+        }
+        public int InputCaptureCommand(uint operation,string action,uint index,InputSource source,bool negative,uint cancelKey)
+        {
+            var bytes=Encoding.UTF8.GetBytes(action);
+            fixed(byte* name=bytes)return access.InputCaptureCommand(access.Context,operation,name,bytes.Length,index,(uint)source,negative?1u:0u,cancelKey);
+        }
+        public bool InputActionCommand(string action,uint operation,ref InputActionState state)
+        {
+            var bytes=Encoding.UTF8.GetBytes(action);
+            fixed(byte* name=bytes)fixed(InputActionState* value=&state)
+                return access.InputActionCommand(access.Context,name,bytes.Length,operation,value)==1;
+        }
+        public bool InputBindingCommand(string action,uint index,uint operation,ref InputBindingValue binding)
+        {
+            var bytes=Encoding.UTF8.GetBytes(action);
+            fixed(byte* name=bytes) fixed(InputBindingValue* value=&binding)
+                return access.InputBindingCommand(access.Context,name,bytes.Length,index,operation,value)==1;
+        }
+        public string ExportInputProfile()
+        {
+            var size=access.InputProfile(access.Context,0,null,0,null,0);
+            if(size<=0||size>262144)throw new InvalidOperationException("Input profile unavailable");
+            var data=new byte[size];
+            fixed(byte* output=data)if(access.InputProfile(access.Context,0,null,0,output,size)!=size)
+                throw new InvalidOperationException("Input profile changed during export");
+            return Encoding.UTF8.GetString(data);
+        }
+        public bool ImportInputProfile(string profile)
+        {
+            var data=Encoding.UTF8.GetBytes(profile);
+            if(data.Length==0||data.Length>262144)return false;
+            fixed(byte* input=data)return access.InputProfile(access.Context,1,input,data.Length,null,0)==1;
+        }
         public bool InputAxis(string action, out Vector2 value)
         {
             value = default;
@@ -606,6 +824,23 @@ public static unsafe class NativeBehaviorRuntime
             float* command = stackalloc float[3] { input.X, input.Y, yawRadians };
             return access.CharacterMove(access.Context, objectId, command) != 0;
         }
+        public int ObjectLayer(ulong id,uint world,uint generation,int layer) => Accessible ? access.ObjectLayer(access.Context,id,world,generation,layer) : -1;
+        public bool FieldQuery(ulong id,uint world,uint generation,ulong instance,uint operation,Vector3 point,uint layer,out PhysicsFieldSample sample) {
+            sample=default;var native=new NativeFieldState {Size=(uint)sizeof(NativeFieldState)};
+            if(access.FieldQuery(access.Context,id,world,generation,instance,operation,(float*)&point,layer,&native)==0)return false;
+            sample=new PhysicsFieldSample((native.Flags&1)!=0,(native.Flags&2)!=0,native.Weight,native.Acceleration,native.WindVelocity,native.WindDrag,native.LinearDrag,native.AngularDrag,native.OverrideWeight,native.AffectedBodies,native.AffectedMass);return true;
+        }
+        public bool BodyCommand(ulong id,uint world,uint generation,ulong instance,uint operation,Vector3 value,Vector3 point,out PhysicsBodyState state) {
+            state=default;if(!Accessible)return false;
+            var native=new NativeBodyState {Size=(uint)sizeof(NativeBodyState)};
+            if(access.BodyCommand(access.Context,id,world,generation,instance,operation,(float*)&value,(float*)&point,&native)==0)return false;
+            state=new PhysicsBodyState(native.Linear,native.Angular,native.CenterOfMass,(native.Flags&1)!=0,(native.Flags&8)!=0);return true;
+        }
+        public bool TryGetCharacterState(ulong objectId,out CharacterRuntimeState state) {
+            state=default;if(!Accessible)return false;var value=new NativeCharacterState {Size=(uint)sizeof(NativeCharacterState)};
+            if(access.CharacterSnapshot(access.Context,objectId,&value)==0)return false;
+            state=new CharacterRuntimeState((CharacterGroundState)value.GroundState,(value.Flags&1)!=0,value.Position,value.Velocity,value.MotorVelocity,value.GroundVelocity,value.GroundNormal);return true;
+        }
         public bool CharacterJump(ulong objectId) => Accessible && access.CharacterJump(access.Context, objectId) != 0;
         public bool CameraLook(ulong objectId, Vector2 normalizedDelta)
         {
@@ -702,6 +937,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     private static BehaviorWorld? _world;
+    private static SaveStore? _saveStore;
     private static SceneAdapter? _scene;
     private static byte[] _diagnostics = [];
     [UnmanagedCallersOnly]
@@ -710,13 +946,14 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 19 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 36 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);
             var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(new ReadOnlySpan<byte>(json, jsonLength))
                 ?? throw new InvalidDataException("Behavior attachment data is empty.");
-            _scene = new(*access); Graphics.Bind(_scene); _world = new(); _world.Start(project, _scene, attachments, bindComponentState: true);
+            _saveStore = new SaveStore(directory);
+            _scene = new(*access); Graphics.Bind(_scene); _world = new(); _world.Start(project, _scene, attachments, bindComponentState: true, saveStore: _saveStore);
             RefreshDiagnostics(); return 0;
         }
         catch (Exception error) { StopWorld(); _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
@@ -825,7 +1062,8 @@ public static unsafe class NativeBehaviorRuntime
     private static void StopWorld()
     {
         try { _world?.Dispose(); }
-        finally { _world = null; _fieldSnapshot = []; _fieldSnapshotObject = 0; Graphics.Unbind(); _scene?.Invalidate(); _scene = null; }
+        finally { _world = null; _fieldSnapshot = []; _fieldSnapshotObject = 0; Graphics.Unbind(); _scene?.Invalidate(); _scene = null;
+            var save = _saveStore; _saveStore = null; save?.Dispose(); }
     }
     private static void RefreshDiagnostics()
     {

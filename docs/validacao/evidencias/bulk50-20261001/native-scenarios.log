@@ -1,0 +1,7 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_bulk50.cpp:33: speed cap is vector displacement per second
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_bulk50.cpp:45: short angular path across wrap
+FAIL bulk50_authoring_creation_history_archive_clone_and_consumers
+FAIL bulk50_spring_timestep_pause_reset_cycles_and_authority
+PASS bulk50_body_solver_properties_and_real_script_bridge_commands
+PASS bulk50_ccd_stops_fast_body_at_thin_wall
+2/4 scenarios passed

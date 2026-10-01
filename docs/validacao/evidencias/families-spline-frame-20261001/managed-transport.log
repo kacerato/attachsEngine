@@ -1,0 +1,11 @@
+
+  SplineFrameApiTests
+    [31mFALHA[0m SplineFrame_FullPointLegacyGeometryAtomicUpAndFrameTransport
+         NotSupportedException: Specified method is not supported.
+         at Astra.ISceneAccess.FindComponent(UInt64 objectId, String typeId, UInt32 ordinal) in C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Behavior.cs:line 388
+
+  [31m1 FALHAS[0m — 0 passaram, 1 falharam, 0 pulados em 78 ms
+
+  Falhas:
+    - SplineFrameApiTests.SplineFrame_FullPointLegacyGeometryAtomicUpAndFrameTransport: NotSupportedException: Specified method is not supported.
+

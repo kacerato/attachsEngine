@@ -24,7 +24,783 @@ public static class ComponentFacadeExtensions
         owner.HasComponent(T.TypeId);
 }
 
-/// <summary>Timer: Dispara eventos temporizados para comportamentos. Família Lógica · Tempo.</summary>
+/// <summary>Mola de posição: Segue fonte com velocidade e amortecimento persistentes no runtime. Família Lógica · Molas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html</remarks>
+public readonly struct SpringPositionConstraint : IComponentFacade<SpringPositionConstraint>
+{
+    public static string TypeId => "astra.spring.position";
+    public static SpringPositionConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public SpringPositionConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Offset</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Influência</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.01 a 60.</remarks>
+    public float Frequency
+    {
+        get => Component.GetFloat("frequency");
+        set => Component.SetFloat("frequency", value);
+    }
+    /// <summary>Razão de amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float DampingRatio
+    {
+        get => Component.GetFloat("damping_ratio");
+        set => Component.SetFloat("damping_ratio", value);
+    }
+    /// <summary>Velocidade máxima (m/s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float MaxSpeed
+    {
+        get => Component.GetFloat("max_speed");
+        set => Component.SetFloat("max_speed", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Mola de rotação: Segue orientação por quaternion com amortecimento e caminho curto. Família Lógica · Molas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-RotationConstraint.html</remarks>
+public readonly struct SpringRotationConstraint : IComponentFacade<SpringRotationConstraint>
+{
+    public static string TypeId => "astra.spring.rotation";
+    public static SpringRotationConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public SpringRotationConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Offset</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Influência</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.01 a 60.</remarks>
+    public float Frequency
+    {
+        get => Component.GetFloat("frequency");
+        set => Component.SetFloat("frequency", value);
+    }
+    /// <summary>Razão de amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float DampingRatio
+    {
+        get => Component.GetFloat("damping_ratio");
+        set => Component.SetFloat("damping_ratio", value);
+    }
+    /// <summary>Velocidade máxima (graus/s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float MaxSpeed
+    {
+        get => Component.GetFloat("max_speed");
+        set => Component.SetFloat("max_speed", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Mola de escala: Segue escala positiva sem publicar escala singular. Família Lógica · Molas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ScaleConstraint.html</remarks>
+public readonly struct SpringScaleConstraint : IComponentFacade<SpringScaleConstraint>
+{
+    public static string TypeId => "astra.spring.scale";
+    public static SpringScaleConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public SpringScaleConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Offset</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Influência</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.01 a 60.</remarks>
+    public float Frequency
+    {
+        get => Component.GetFloat("frequency");
+        set => Component.SetFloat("frequency", value);
+    }
+    /// <summary>Razão de amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float DampingRatio
+    {
+        get => Component.GetFloat("damping_ratio");
+        set => Component.SetFloat("damping_ratio", value);
+    }
+    /// <summary>Velocidade máxima (x/s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float MaxSpeed
+    {
+        get => Component.GetFloat("max_speed");
+        set => Component.SetFloat("max_speed", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Position Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html</remarks>
+public readonly struct PositionConstraint : IComponentFacade<PositionConstraint>
+{
+    public static string TypeId => "astra.constraint.position";
+    public static PositionConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PositionConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar X</summary>
+    public bool AxisX
+    {
+        get => Component.GetBool("axis_x");
+        set => Component.SetBool("axis_x", value);
+    }
+    /// <summary>Aplicar Y</summary>
+    public bool AxisY
+    {
+        get => Component.GetBool("axis_y");
+        set => Component.SetBool("axis_y", value);
+    }
+    /// <summary>Aplicar Z</summary>
+    public bool AxisZ
+    {
+        get => Component.GetBool("axis_z");
+        set => Component.SetBool("axis_z", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Rotation Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-RotationConstraint.html</remarks>
+public readonly struct RotationConstraint : IComponentFacade<RotationConstraint>
+{
+    public static string TypeId => "astra.constraint.rotation";
+    public static RotationConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public RotationConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar X</summary>
+    public bool AxisX
+    {
+        get => Component.GetBool("axis_x");
+        set => Component.SetBool("axis_x", value);
+    }
+    /// <summary>Aplicar Y</summary>
+    public bool AxisY
+    {
+        get => Component.GetBool("axis_y");
+        set => Component.SetBool("axis_y", value);
+    }
+    /// <summary>Aplicar Z</summary>
+    public bool AxisZ
+    {
+        get => Component.GetBool("axis_z");
+        set => Component.SetBool("axis_z", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Scale Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ScaleConstraint.html</remarks>
+public readonly struct ScaleConstraint : IComponentFacade<ScaleConstraint>
+{
+    public static string TypeId => "astra.constraint.scale";
+    public static ScaleConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ScaleConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar X</summary>
+    public bool AxisX
+    {
+        get => Component.GetBool("axis_x");
+        set => Component.SetBool("axis_x", value);
+    }
+    /// <summary>Aplicar Y</summary>
+    public bool AxisY
+    {
+        get => Component.GetBool("axis_y");
+        set => Component.SetBool("axis_y", value);
+    }
+    /// <summary>Aplicar Z</summary>
+    public bool AxisZ
+    {
+        get => Component.GetBool("axis_z");
+        set => Component.SetBool("axis_z", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Aim Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AimConstraint.html</remarks>
+public readonly struct AimConstraint : IComponentFacade<AimConstraint>
+{
+    public static string TypeId => "astra.constraint.aim";
+    public static AimConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AimConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar X</summary>
+    public bool AxisX
+    {
+        get => Component.GetBool("axis_x");
+        set => Component.SetBool("axis_x", value);
+    }
+    /// <summary>Aplicar Y</summary>
+    public bool AxisY
+    {
+        get => Component.GetBool("axis_y");
+        set => Component.SetBool("axis_y", value);
+    }
+    /// <summary>Aplicar Z</summary>
+    public bool AxisZ
+    {
+        get => Component.GetBool("axis_z");
+        set => Component.SetBool("axis_z", value);
+    }
+    public enum AimAxisOption : uint
+    {
+        X = 0,
+        Y = 1,
+        Z = 2,
+        X3 = 3,
+        Y4 = 4,
+        Z5 = 5,
+    }
+    /// <summary>Eixo de mira</summary>
+    public AimAxisOption AimAxis
+    {
+        get => (AimAxisOption)Component.GetEnum("aim_axis");
+        set => Component.SetEnum("aim_axis", (uint)value);
+    }
+    public enum UpAxisOption : uint
+    {
+        Y = 0,
+        Z = 1,
+        X = 2,
+    }
+    /// <summary>Vertical de mundo</summary>
+    public UpAxisOption UpAxis
+    {
+        get => (UpAxisOption)Component.GetEnum("up_axis");
+        set => Component.SetEnum("up_axis", (uint)value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Parent Constraint: Segue posição e rotação da fonte sem herdar escala. Família Lógica · Restrições.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ParentConstraint.html</remarks>
+public readonly struct ParentConstraint : IComponentFacade<ParentConstraint>
+{
+    public static string TypeId => "astra.constraint.parent";
+    public static ParentConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ParentConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Posição offset</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Rotação offset</summary>
+    public Vector3 RotationOffset
+    {
+        get => new(Component.GetFloat("rotation_offset_x"), Component.GetFloat("rotation_offset_y"), Component.GetFloat("rotation_offset_z"));
+        set => Component.SetVector3("rotation_offset", value);
+    }
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar X</summary>
+    public bool AxisX
+    {
+        get => Component.GetBool("axis_x");
+        set => Component.SetBool("axis_x", value);
+    }
+    /// <summary>Aplicar Y</summary>
+    public bool AxisY
+    {
+        get => Component.GetBool("axis_y");
+        set => Component.SetBool("axis_y", value);
+    }
+    /// <summary>Aplicar Z</summary>
+    public bool AxisZ
+    {
+        get => Component.GetBool("axis_z");
+        set => Component.SetBool("axis_z", value);
+    }
+    /// <summary>Rotação X</summary>
+    public bool RotationX
+    {
+        get => Component.GetBool("rotation_x");
+        set => Component.SetBool("rotation_x", value);
+    }
+    /// <summary>Rotação Y</summary>
+    public bool RotationY
+    {
+        get => Component.GetBool("rotation_y");
+        set => Component.SetBool("rotation_y", value);
+    }
+    /// <summary>Rotação Z</summary>
+    public bool RotationZ
+    {
+        get => Component.GetBool("rotation_z");
+        set => Component.SetBool("rotation_z", value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Look At Constraint: Orienta +Z para a fonte com vertical e roll. Família Lógica · Restrições.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-LookAtConstraint.html</remarks>
+public readonly struct LookAtConstraint : IComponentFacade<LookAtConstraint>
+{
+    public static string TypeId => "astra.constraint.look_at";
+    public static LookAtConstraint Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public LookAtConstraint(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Roll (graus)</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float Roll
+    {
+        get => Component.GetFloat("roll");
+        set => Component.SetFloat("roll", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar X</summary>
+    public bool AxisX
+    {
+        get => Component.GetBool("axis_x");
+        set => Component.SetBool("axis_x", value);
+    }
+    /// <summary>Aplicar Y</summary>
+    public bool AxisY
+    {
+        get => Component.GetBool("axis_y");
+        set => Component.SetBool("axis_y", value);
+    }
+    /// <summary>Aplicar Z</summary>
+    public bool AxisZ
+    {
+        get => Component.GetBool("axis_z");
+        set => Component.SetBool("axis_z", value);
+    }
+    public enum UpAxisOption : uint
+    {
+        Y = 0,
+        Z = 1,
+        X = 2,
+    }
+    /// <summary>Vertical de mundo</summary>
+    public UpAxisOption UpAxis
+    {
+        get => (UpAxisOption)Component.GetEnum("up_axis");
+        set => Component.SetEnum("up_axis", (uint)value);
+    }
+    /// <summary>Fonte</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Transform Tween: Interpola canais locais com espera, curva e repetição. Família Lógica · Tempo.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html</remarks>
+public readonly struct TransformTween : IComponentFacade<TransformTween>
+{
+    public static string TypeId => "astra.tween.transform";
+    public static TransformTween Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public TransformTween(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Posição destino</summary>
+    public Vector3 PositionDestination
+    {
+        get => new(Component.GetFloat("position_x"), Component.GetFloat("position_y"), Component.GetFloat("position_z"));
+        set => Component.SetVector3("position_destination", value);
+    }
+    /// <summary>Rotação destino</summary>
+    public Vector3 RotationDestination
+    {
+        get => new(Component.GetFloat("rotation_x"), Component.GetFloat("rotation_y"), Component.GetFloat("rotation_z"));
+        set => Component.SetVector3("rotation_destination", value);
+    }
+    /// <summary>Escala destino</summary>
+    public Vector3 ScaleDestination
+    {
+        get => new(Component.GetFloat("scale_x"), Component.GetFloat("scale_y"), Component.GetFloat("scale_z"));
+        set => Component.SetVector3("scale_destination", value);
+    }
+    /// <summary>Duração (s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 36000.</remarks>
+    public float Duration
+    {
+        get => Component.GetFloat("duration");
+        set => Component.SetFloat("duration", value);
+    }
+    /// <summary>Espera (s)</summary>
+    /// <remarks>Faixa válida: 0 a 36000.</remarks>
+    public float Delay
+    {
+        get => Component.GetFloat("delay");
+        set => Component.SetFloat("delay", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Iniciar no Play</summary>
+    public bool Autoplay
+    {
+        get => Component.GetBool("autoplay");
+        set => Component.SetBool("autoplay", value);
+    }
+    /// <summary>Ida e volta</summary>
+    public bool Pingpong
+    {
+        get => Component.GetBool("pingpong");
+        set => Component.SetBool("pingpong", value);
+    }
+    /// <summary>Destino relativo</summary>
+    public bool Relative
+    {
+        get => Component.GetBool("relative");
+        set => Component.SetBool("relative", value);
+    }
+    /// <summary>Mover</summary>
+    public bool Position
+    {
+        get => Component.GetBool("position");
+        set => Component.SetBool("position", value);
+    }
+    /// <summary>Girar</summary>
+    public bool Rotation
+    {
+        get => Component.GetBool("rotation");
+        set => Component.SetBool("rotation", value);
+    }
+    /// <summary>Escalar</summary>
+    public bool Scale
+    {
+        get => Component.GetBool("scale");
+        set => Component.SetBool("scale", value);
+    }
+    /// <summary>Ignorar escala de tempo. Usa o intervalo não escalado aceito; pausa editorial interrompe ambos os modos</summary>
+    public bool IgnoreTimeScale
+    {
+        get => Component.GetBool("ignore_time_scale");
+        set => Component.SetBool("ignore_time_scale", value);
+    }
+    public enum EasingOption : uint
+    {
+        Linear = 0,
+        Smoothstep = 1,
+        QuadraticoEntrada = 2,
+        QuadraticoSaida = 3,
+    }
+    /// <summary>Curva</summary>
+    public EasingOption Easing
+    {
+        get => (EasingOption)Component.GetEnum("easing");
+        set => Component.SetEnum("easing", (uint)value);
+    }
+    public enum LoopsOption : uint
+    {
+        Infinito = 0,
+        UmaVez = 1,
+        DuasVezes = 2,
+        TresVezes = 3,
+        DezVezes = 10,
+    }
+    /// <summary>Ciclos</summary>
+    public LoopsOption Loops
+    {
+        get => (LoopsOption)Component.GetEnum("loops");
+        set => Component.SetEnum("loops", (uint)value);
+    }
+    public enum FinishedActionOption : uint
+    {
+        Desconectado = 0,
+        AtivarObjeto = 1,
+        DesativarObjeto = 2,
+        AlternarObjeto = 3,
+    }
+    /// <summary>Ao concluir. Executa depois da pose final de todos os ciclos finitos; cancelar ou ciclo infinito não dispara</summary>
+    public FinishedActionOption FinishedAction
+    {
+        get => (FinishedActionOption)Component.GetEnum("finished_action");
+        set => Component.SetEnum("finished_action", (uint)value);
+    }
+    /// <summary>Receptor. Referência persistente remapeada ao clonar; controla activeSelf do receptor</summary>
+    public ObjectReference FinishedTarget
+    {
+        get => Component.GetReference("finished_target");
+        set => Component.SetReference("finished_target", value);
+    }
+}
+
+/// <summary>Timer: Dispara eventos temporizados e ações persistentes de ativação de objetos. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_timer.html</remarks>
 public readonly struct GameTimer : IComponentFacade<GameTimer>
 {
@@ -37,12 +813,22 @@ public readonly struct GameTimer : IComponentFacade<GameTimer>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Intervalo (s). Tempo entre disparos; uma vez quando Repetir está desligado</summary>
     /// <remarks>Faixa válida: 0.05 a 3600.</remarks>
     public float IntervalSeconds
     {
         get => Component.GetFloat("interval_seconds");
         set => Component.SetFloat("interval_seconds", value);
+    }
+    /// <summary>Iniciar automaticamente. Inicia ao entrar em Play ou criar a instância; desligado exige Start. Alteração não reinicia timer já criado</summary>
+    public bool AutoStart
+    {
+        get => Component.GetBool("auto_start");
+        set => Component.SetBool("auto_start", value);
     }
     /// <summary>Repetir</summary>
     public bool Repeat
@@ -55,6 +841,31 @@ public readonly struct GameTimer : IComponentFacade<GameTimer>
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ignorar escala de tempo. Usa o intervalo não escalado aceito do quadro; a pausa do editor interrompe ambos os relógios</summary>
+    public bool IgnoreTimeScale
+    {
+        get => Component.GetBool("ignore_time_scale");
+        set => Component.SetBool("ignore_time_scale", value);
+    }
+    public enum ElapsedActionOption : uint
+    {
+        Desconectado = 0,
+        AtivarObjeto = 1,
+        DesativarObjeto = 2,
+        AlternarObjeto = 3,
+    }
+    /// <summary>Ao disparar. Executa uma ação no alvo antes de entregar TimerElapsed; alternar preserva a paridade dos disparos agregados</summary>
+    public ElapsedActionOption ElapsedAction
+    {
+        get => (ElapsedActionOption)Component.GetEnum("elapsed_action");
+        set => Component.SetEnum("elapsed_action", (uint)value);
+    }
+    /// <summary>Receptor. Alvo da ação; usa referência persistente remapeada por clone/prefab</summary>
+    public ObjectReference ElapsedTarget
+    {
+        get => Component.GetReference("elapsed_target");
+        set => Component.SetReference("elapsed_target", value);
     }
 }
 
@@ -71,6 +882,10 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Cor R</summary>
     /// <remarks>Faixa válida: 0 a 1.</remarks>
     public float BaseColorR
@@ -172,9 +987,27 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
     /// <summary>Emissão. Recurso do projeto por slot</summary>
     public AssetGuid GetTextureEmissive(uint slot = 0) => Component.GetResource("texture.emissive", slot);
     public void SetTextureEmissive(AssetGuid value, uint slot = 0) => Component.SetResource("texture.emissive", value, slot);
+    /// <summary>Lightmap indireto (RGB linear / UV1). Recurso do projeto por slot</summary>
+    public AssetGuid GetTextureLightmap(uint slot = 0) => Component.GetResource("texture.lightmap", slot);
+    public void SetTextureLightmap(AssetGuid value, uint slot = 0) => Component.SetResource("texture.lightmap", value, slot);
     /// <summary>Oclusão. Recurso do projeto por slot</summary>
     public AssetGuid GetTextureOcclusion(uint slot = 0) => Component.GetResource("texture.occlusion", slot);
     public void SetTextureOcclusion(AssetGuid value, uint slot = 0) => Component.SetResource("texture.occlusion", value, slot);
+    /// <summary>Escala U. Valor por slot</summary>
+    public float GetLightmapScaleU(uint slot) => Component.GetSlotFloat("lightmap.scale_u", slot);
+    public void SetLightmapScaleU(uint slot, float value) => Component.SetSlotFloat("lightmap.scale_u", value, slot);
+    /// <summary>Escala V. Valor por slot</summary>
+    public float GetLightmapScaleV(uint slot) => Component.GetSlotFloat("lightmap.scale_v", slot);
+    public void SetLightmapScaleV(uint slot, float value) => Component.SetSlotFloat("lightmap.scale_v", value, slot);
+    /// <summary>Deslocamento U. Valor por slot</summary>
+    public float GetLightmapOffsetU(uint slot) => Component.GetSlotFloat("lightmap.offset_u", slot);
+    public void SetLightmapOffsetU(uint slot, float value) => Component.SetSlotFloat("lightmap.offset_u", value, slot);
+    /// <summary>Deslocamento V. Valor por slot</summary>
+    public float GetLightmapOffsetV(uint slot) => Component.GetSlotFloat("lightmap.offset_v", slot);
+    public void SetLightmapOffsetV(uint slot, float value) => Component.SetSlotFloat("lightmap.offset_v", value, slot);
+    /// <summary>Intensidade. Valor por slot</summary>
+    public float GetLightmapIntensity(uint slot) => Component.GetSlotFloat("lightmap.intensity", slot);
+    public void SetLightmapIntensity(uint slot, float value) => Component.SetSlotFloat("lightmap.intensity", value, slot);
     /// <summary>Corte do alfa. Valor por slot</summary>
     public float GetSurfaceAlphaCutoff(uint slot) => Component.GetSlotFloat("surface.alpha_cutoff", slot);
     public void SetSurfaceAlphaCutoff(uint slot, float value) => Component.SetSlotFloat("surface.alpha_cutoff", value, slot);
@@ -292,6 +1125,9 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
     /// <summary>Material. Opção por slot</summary>
     public uint GetMaterialOverride(uint slot) => Component.GetSlotEnum("material.override", slot);
     public void SetMaterialOverride(uint slot, uint value) => Component.SetSlotEnum("material.override", value, slot);
+    /// <summary>Receber lightmap indireto. Opção por slot</summary>
+    public uint GetLightmapEnabled(uint slot) => Component.GetSlotEnum("lightmap.enabled", slot);
+    public void SetLightmapEnabled(uint slot, uint value) => Component.SetSlotEnum("lightmap.enabled", value, slot);
     /// <summary>Tipo de superfície. Opção por slot</summary>
     public uint GetSurfaceAlphaMode(uint slot) => Component.GetSlotEnum("surface.alpha_mode", slot);
     public void SetSurfaceAlphaMode(uint slot, uint value) => Component.SetSlotEnum("surface.alpha_mode", value, slot);
@@ -376,6 +1212,10 @@ public readonly struct SkinnedMesh : IComponentFacade<SkinnedMesh>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Vetor de movimento da deformação. A reprojeção temporal usa a pose anterior dos ossos e dos blend shapes, não só a do objeto</summary>
     public bool SkinnedMotionVectors
     {
@@ -413,6 +1253,10 @@ public readonly struct LodGroup : IComponentFacade<LodGroup>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Transição LOD 0 (%). Altura na tela abaixo da qual este nível deixa de ser usado</summary>
     /// <remarks>Faixa válida: 0.1 a 100.</remarks>
     public float Transition0
@@ -565,60 +1409,39 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Cor do zênite. Cor linear RGB</summary>
     public Vector3 SkyZenith
     {
         get => new(Component.GetFloat("sky_zenith.r"), Component.GetFloat("sky_zenith.g"), Component.GetFloat("sky_zenith.b"));
-        set
-        {
-            Component.SetFloat("sky_zenith.r", value.X);
-            Component.SetFloat("sky_zenith.g", value.Y);
-            Component.SetFloat("sky_zenith.b", value.Z);
-        }
+        set => Component.SetVector3("sky_zenith", value);
     }
     /// <summary>Cor do horizonte. Cor linear RGB</summary>
     public Vector3 SkyHorizon
     {
         get => new(Component.GetFloat("sky_horizon.r"), Component.GetFloat("sky_horizon.g"), Component.GetFloat("sky_horizon.b"));
-        set
-        {
-            Component.SetFloat("sky_horizon.r", value.X);
-            Component.SetFloat("sky_horizon.g", value.Y);
-            Component.SetFloat("sky_horizon.b", value.Z);
-        }
+        set => Component.SetVector3("sky_horizon", value);
     }
     /// <summary>Cor do chão. Cor linear RGB</summary>
     public Vector3 Ground
     {
         get => new(Component.GetFloat("ground.r"), Component.GetFloat("ground.g"), Component.GetFloat("ground.b"));
-        set
-        {
-            Component.SetFloat("ground.r", value.X);
-            Component.SetFloat("ground.g", value.Y);
-            Component.SetFloat("ground.b", value.Z);
-        }
+        set => Component.SetVector3("ground", value);
     }
     /// <summary>Cor da neblina. Cor linear RGB</summary>
     public Vector3 FogColor
     {
         get => new(Component.GetFloat("fog_color.r"), Component.GetFloat("fog_color.g"), Component.GetFloat("fog_color.b"));
-        set
-        {
-            Component.SetFloat("fog_color.r", value.X);
-            Component.SetFloat("fog_color.g", value.Y);
-            Component.SetFloat("fog_color.b", value.Z);
-        }
+        set => Component.SetVector3("fog_color", value);
     }
     /// <summary>Tamanho da caixa</summary>
     public Vector3 BoxSize
     {
         get => new(Component.GetFloat("box_size.x"), Component.GetFloat("box_size.y"), Component.GetFloat("box_size.z"));
-        set
-        {
-            Component.SetFloat("box_size.x", value.X);
-            Component.SetFloat("box_size.y", value.Y);
-            Component.SetFloat("box_size.z", value.Z);
-        }
+        set => Component.SetVector3("box_size", value);
     }
     /// <summary>Prioridade</summary>
     /// <remarks>Faixa válida: -1000 a 1000.</remarks>
@@ -1086,16 +1909,15 @@ public readonly struct Light : IComponentFacade<Light>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Cor linear. Cor linear RGB</summary>
     public Vector3 Color
     {
         get => new(Component.GetFloat("color.r"), Component.GetFloat("color.g"), Component.GetFloat("color.b"));
-        set
-        {
-            Component.SetFloat("color.r", value.X);
-            Component.SetFloat("color.g", value.Y);
-            Component.SetFloat("color.b", value.Z);
-        }
+        set => Component.SetVector3("color", value);
     }
     /// <summary>Temperatura (K). Multiplicada pela cor linear; D65 é 6500 K</summary>
     /// <remarks>Faixa válida: 1667 a 25000.</remarks>
@@ -1237,6 +2059,10 @@ public readonly struct Camera : IComponentFacade<Camera>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Campo vertical (°)</summary>
     /// <remarks>Faixa válida: 1 a 170.</remarks>
     public float VerticalFov
@@ -1322,6 +2148,10 @@ public readonly struct CameraLook : IComponentFacade<CameraLook>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Sensibilidade horizontal graus/tela (°)</summary>
     /// <remarks>Faixa válida: 0 a 720.</remarks>
     public float YawSensitivity
@@ -1364,16 +2194,15 @@ public readonly struct CameraFollow : IComponentFacade<CameraFollow>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Deslocamento</summary>
     public Vector3 Offset
     {
         get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
-        set
-        {
-            Component.SetFloat("offset_x", value.X);
-            Component.SetFloat("offset_y", value.Y);
-            Component.SetFloat("offset_z", value.Z);
-        }
+        set => Component.SetVector3("offset", value);
     }
     /// <summary>Amortecimento (s)</summary>
     /// <remarks>Faixa válida: 0 a 30.</remarks>
@@ -1396,6 +2225,633 @@ public readonly struct CameraFollow : IComponentFacade<CameraFollow>
     }
 }
 
+/// <summary>Campo de gravidade: Gravidade local em volume sobre corpos dinâmicos. Família Física 3D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
+public readonly struct GravityField : IComponentFacade<GravityField>
+{
+    public static string TypeId => "astra.physics.field.gravity";
+    public static GravityField Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public GravityField(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XYZ</summary>
+    public Vector3 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"), Component.GetFloat("half_z"));
+        set => Component.SetVector3("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Gravidade local</summary>
+    public Vector3 Vector
+    {
+        get => new(Component.GetFloat("vector_x"), Component.GetFloat("vector_y"), Component.GetFloat("vector_z"));
+        set => Component.SetVector3("vector", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    /// <summary>Substituir gravidade do mundo. Sobrepostos somam vetores e cancelam a gravidade padrão uma única vez</summary>
+    public bool ReplaceWorldGravity
+    {
+        get => Component.GetBool("replace_world_gravity");
+        set => Component.SetBool("replace_world_gravity", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Caixa = 0,
+        Esfera = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Campo de vento: Arrasto para velocidade local do ar, dependente da massa. Família Física 3D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
+public readonly struct WindField : IComponentFacade<WindField>
+{
+    public static string TypeId => "astra.physics.field.wind";
+    public static WindField Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public WindField(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XYZ</summary>
+    public Vector3 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"), Component.GetFloat("half_z"));
+        set => Component.SetVector3("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Vento local</summary>
+    public Vector3 Vector
+    {
+        get => new(Component.GetFloat("vector_x"), Component.GetFloat("vector_y"), Component.GetFloat("vector_z"));
+        set => Component.SetVector3("vector", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Acoplamento (kg/s)</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float Coefficient
+    {
+        get => Component.GetFloat("coefficient");
+        set => Component.SetFloat("coefficient", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Caixa = 0,
+        Esfera = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Campo de arrasto: Amortecimento linear e angular local. Família Física 3D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
+public readonly struct DragField : IComponentFacade<DragField>
+{
+    public static string TypeId => "astra.physics.field.drag";
+    public static DragField Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public DragField(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XYZ</summary>
+    public Vector3 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"), Component.GetFloat("half_z"));
+        set => Component.SetVector3("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Arrasto linear (1/s)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float LinearDrag
+    {
+        get => Component.GetFloat("linear_drag");
+        set => Component.SetFloat("linear_drag", value);
+    }
+    /// <summary>Arrasto angular (1/s)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float AngularDrag
+    {
+        get => Component.GetFloat("angular_drag");
+        set => Component.SetFloat("angular_drag", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Caixa = 0,
+        Esfera = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Campo radial: Atração, repulsão e vórtice ao redor do centro. Família Física 3D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
+public readonly struct RadialField : IComponentFacade<RadialField>
+{
+    public static string TypeId => "astra.physics.field.radial";
+    public static RadialField Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public RadialField(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XYZ</summary>
+    public Vector3 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"), Component.GetFloat("half_z"));
+        set => Component.SetVector3("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Aceleração radial (m/s²)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float Acceleration
+    {
+        get => Component.GetFloat("acceleration");
+        set => Component.SetFloat("acceleration", value);
+    }
+    /// <summary>Aceleração tangencial (m/s²)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float TangentialAcceleration
+    {
+        get => Component.GetFloat("tangential_acceleration");
+        set => Component.SetFloat("tangential_acceleration", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Caixa = 0,
+        Esfera = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Conexão física 3D: Evento de sensor/contato altera a ativação de um receptor. Família Física 3D · Eventos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
+public readonly struct PhysicsEventConnection3D : IComponentFacade<PhysicsEventConnection3D>
+{
+    public static string TypeId => "astra.physics.event_connection";
+    public static PhysicsEventConnection3D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PhysicsEventConnection3D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ativa</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum EventOption : uint
+    {
+        EntradaSensor = 0,
+        PermSensor = 1,
+        SaidaSensor = 2,
+        EntradaContato = 3,
+        PermContato = 4,
+        SaidaContato = 5,
+    }
+    /// <summary>Evento. Sensor exige Sensor ligado no Corpo físico; contato sólido exige desligado</summary>
+    public EventOption Event
+    {
+        get => (EventOption)Component.GetEnum("event");
+        set => Component.SetEnum("event", (uint)value);
+    }
+    public enum ActionOption : uint
+    {
+        Desconectado = 0,
+        AtivarObjeto = 1,
+        DesativarObjeto = 2,
+        AlternarObjeto = 3,
+    }
+    /// <summary>Ação. Executada antes do callback C#; permanência pode disparar a cada passo físico</summary>
+    public ActionOption Action
+    {
+        get => (ActionOption)Component.GetEnum("action");
+        set => Component.SetEnum("action", (uint)value);
+    }
+    /// <summary>Receptor. Objeto cuja ativação será alterada</summary>
+    public ObjectReference Receiver
+    {
+        get => Component.GetReference("receiver");
+        set => Component.SetReference("receiver", value);
+    }
+    /// <summary>Outro objeto. Opcional: somente eventos com este outro objeto; vazio aceita todos</summary>
+    public ObjectReference OtherFilter
+    {
+        get => Component.GetReference("other_filter");
+        set => Component.SetReference("other_filter", value);
+    }
+}
+
+/// <summary>Força constante: Força e torque contínuos sobre corpo dinâmico. Família Física 3D · Forças.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ConstantForce.html</remarks>
+public readonly struct ConstantForce : IComponentFacade<ConstantForce>
+{
+    public static string TypeId => "astra.physics.constant_force";
+    public static ConstantForce Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ConstantForce(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Força mundo</summary>
+    public Vector3 Force
+    {
+        get => new(Component.GetFloat("force_x"), Component.GetFloat("force_y"), Component.GetFloat("force_z"));
+        set => Component.SetVector3("force", value);
+    }
+    /// <summary>Força local</summary>
+    public Vector3 RelativeForce
+    {
+        get => new(Component.GetFloat("relative_force_x"), Component.GetFloat("relative_force_y"), Component.GetFloat("relative_force_z"));
+        set => Component.SetVector3("relative_force", value);
+    }
+    /// <summary>Torque mundo</summary>
+    public Vector3 Torque
+    {
+        get => new(Component.GetFloat("torque_x"), Component.GetFloat("torque_y"), Component.GetFloat("torque_z"));
+        set => Component.SetVector3("torque", value);
+    }
+    /// <summary>Torque local</summary>
+    public Vector3 RelativeTorque
+    {
+        get => new(Component.GetFloat("relative_torque_x"), Component.GetFloat("relative_torque_y"), Component.GetFloat("relative_torque_z"));
+        set => Component.SetVector3("relative_torque", value);
+    }
+    /// <summary>Ativo. Requer Corpo físico dinâmico no mesmo objeto; desligado permite configurar sem aplicar.</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
 /// <summary>Corpo físico: Massa e resposta física. Família Física 3D · Corpos.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Rigidbody.html</remarks>
 public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
@@ -1409,27 +2865,21 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Velocidade inicial</summary>
     public Vector3 Velocity
     {
         get => new(Component.GetFloat("velocity_x"), Component.GetFloat("velocity_y"), Component.GetFloat("velocity_z"));
-        set
-        {
-            Component.SetFloat("velocity_x", value.X);
-            Component.SetFloat("velocity_y", value.Y);
-            Component.SetFloat("velocity_z", value.Z);
-        }
+        set => Component.SetVector3("velocity", value);
     }
     /// <summary>Giro inicial</summary>
     public Vector3 AngularVelocity
     {
         get => new(Component.GetFloat("angular_x"), Component.GetFloat("angular_y"), Component.GetFloat("angular_z"));
-        set
-        {
-            Component.SetFloat("angular_x", value.X);
-            Component.SetFloat("angular_y", value.Y);
-            Component.SetFloat("angular_z", value.Z);
-        }
+        set => Component.SetVector3("angular_velocity", value);
     }
     /// <summary>Massa kg (kg)</summary>
     /// <remarks>Faixa válida: 0.01 a 1000000.</remarks>
@@ -1473,6 +2923,27 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
         get => Component.GetFloat("gravity_factor");
         set => Component.SetFloat("gravity_factor", value);
     }
+    /// <summary>Limite linear (m/s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float MaxLinearVelocity
+    {
+        get => Component.GetFloat("max_linear_velocity");
+        set => Component.SetFloat("max_linear_velocity", value);
+    }
+    /// <summary>Limite angular (rad/s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float MaxAngularVelocity
+    {
+        get => Component.GetFloat("max_angular_velocity");
+        set => Component.SetFloat("max_angular_velocity", value);
+    }
+    /// <summary>Iterações de velocidade. 0 usa as iterações do mundo; aumenta custo por ilha de contato</summary>
+    /// <remarks>Faixa válida: 0 a 255.</remarks>
+    public float SolverVelocitySteps
+    {
+        get => Component.GetFloat("solver_velocity_steps");
+        set => Component.SetFloat("solver_velocity_steps", value);
+    }
     /// <summary>Sensor sem resposta</summary>
     public bool Sensor
     {
@@ -1484,6 +2955,48 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
     {
         get => Component.GetBool("allow_sleep");
         set => Component.SetBool("allow_sleep", value);
+    }
+    /// <summary>Travar posição X. Eixos do mundo; bloquear todos exige corpo estático</summary>
+    public bool FreezePositionX
+    {
+        get => Component.GetBool("freeze_position_x");
+        set => Component.SetBool("freeze_position_x", value);
+    }
+    /// <summary>Travar posição Y. Eixos do mundo; bloquear todos exige corpo estático</summary>
+    public bool FreezePositionY
+    {
+        get => Component.GetBool("freeze_position_y");
+        set => Component.SetBool("freeze_position_y", value);
+    }
+    /// <summary>Travar posição Z. Eixos do mundo; bloquear todos exige corpo estático</summary>
+    public bool FreezePositionZ
+    {
+        get => Component.GetBool("freeze_position_z");
+        set => Component.SetBool("freeze_position_z", value);
+    }
+    /// <summary>Travar rotação X. Eixos do mundo; bloquear todos exige corpo estático</summary>
+    public bool FreezeRotationX
+    {
+        get => Component.GetBool("freeze_rotation_x");
+        set => Component.SetBool("freeze_rotation_x", value);
+    }
+    /// <summary>Travar rotação Y. Eixos do mundo; bloquear todos exige corpo estático</summary>
+    public bool FreezeRotationY
+    {
+        get => Component.GetBool("freeze_rotation_y");
+        set => Component.SetBool("freeze_rotation_y", value);
+    }
+    /// <summary>Travar rotação Z. Eixos do mundo; bloquear todos exige corpo estático</summary>
+    public bool FreezeRotationZ
+    {
+        get => Component.GetBool("freeze_rotation_z");
+        set => Component.SetBool("freeze_rotation_z", value);
+    }
+    /// <summary>Colisão contínua. Varredura linear Jolt; não detecta varredura apenas angular</summary>
+    public bool ContinuousCollision
+    {
+        get => Component.GetBool("continuous_collision");
+        set => Component.SetBool("continuous_collision", value);
     }
     public enum MotionOption : uint
     {
@@ -1512,6 +3025,10 @@ public readonly struct Character : IComponentFacade<Character>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Raio m (m)</summary>
     /// <remarks>Faixa válida: 0.01 a 10.</remarks>
     public float Radius
@@ -1554,6 +3071,33 @@ public readonly struct Character : IComponentFacade<Character>
         get => Component.GetFloat("jump_speed");
         set => Component.SetFloat("jump_speed", value);
     }
+    /// <summary>Altura do degrau (m)</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float StepHeight
+    {
+        get => Component.GetFloat("step_height");
+        set => Component.SetFloat("step_height", value);
+    }
+    /// <summary>Aderência ao chão (m)</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float FloorSnapLength
+    {
+        get => Component.GetFloat("floor_snap_length");
+        set => Component.SetFloat("floor_snap_length", value);
+    }
+    /// <summary>Gravidade (m/s²)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float Gravity
+    {
+        get => Component.GetFloat("gravity");
+        set => Component.SetFloat("gravity", value);
+    }
+    /// <summary>Impulso ao sair. Conserva X/Z da superfície no ar; desligar remove apenas esse impulso, sem recriar a cápsula.</summary>
+    public bool InheritPlatformHorizontal
+    {
+        get => Component.GetBool("inherit_platform_horizontal");
+        set => Component.SetBool("inherit_platform_horizontal", value);
+    }
 }
 
 /// <summary>Colisor 3D: Volume de contato. Família Física 3D · Formas.</summary>
@@ -1569,38 +3113,27 @@ public readonly struct Collider : IComponentFacade<Collider>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Meia extensão</summary>
     public Vector3 HalfExtents
     {
         get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"), Component.GetFloat("half_z"));
-        set
-        {
-            Component.SetFloat("half_x", value.X);
-            Component.SetFloat("half_y", value.Y);
-            Component.SetFloat("half_z", value.Z);
-        }
+        set => Component.SetVector3("half_extents", value);
     }
     /// <summary>Centro</summary>
     public Vector3 Center
     {
         get => new(Component.GetFloat("center_x"), Component.GetFloat("center_y"), Component.GetFloat("center_z"));
-        set
-        {
-            Component.SetFloat("center_x", value.X);
-            Component.SetFloat("center_y", value.Y);
-            Component.SetFloat("center_z", value.Z);
-        }
+        set => Component.SetVector3("center", value);
     }
     /// <summary>Rotação</summary>
     public Vector3 Rotation
     {
         get => new(Component.GetFloat("rotation_x"), Component.GetFloat("rotation_y"), Component.GetFloat("rotation_z"));
-        set
-        {
-            Component.SetFloat("rotation_x", value.X);
-            Component.SetFloat("rotation_y", value.Y);
-            Component.SetFloat("rotation_z", value.Z);
-        }
+        set => Component.SetVector3("rotation", value);
     }
     /// <summary>Raio</summary>
     /// <remarks>Faixa válida: 0.01 a 10000.</remarks>
@@ -1660,6 +3193,7 @@ public readonly struct Collider : IComponentFacade<Collider>
         Esfera = 1,
         Capsula = 2,
         Malha = 3,
+        Cilindro = 4,
     }
     /// <summary>Forma</summary>
     public ShapeOption Shape
@@ -1678,8 +3212,8 @@ public readonly struct Collider : IComponentFacade<Collider>
     public void SetCollisionMesh(AssetGuid value, uint slot = 0) => Component.SetResource("collision_mesh", value, slot);
 }
 
-/// <summary>Junta: Conexão, limites e motor entre corpos. Família Física 3D · Juntas.</summary>
-/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-HingeJoint.html</remarks>
+/// <summary>Junta: Nove mecanismos Jolt com limites, referenciais e motores. Família Física 3D · Juntas.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_generic6dofjoint3d.html</remarks>
 public readonly struct Joint : IComponentFacade<Joint>
 {
     public static string TypeId => "astra.physics.joint";
@@ -1691,49 +3225,45 @@ public readonly struct Joint : IComponentFacade<Joint>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Âncora A</summary>
     public Vector3 AnchorA
     {
         get => new(Component.GetFloat("anchor_a_x"), Component.GetFloat("anchor_a_y"), Component.GetFloat("anchor_a_z"));
-        set
-        {
-            Component.SetFloat("anchor_a_x", value.X);
-            Component.SetFloat("anchor_a_y", value.Y);
-            Component.SetFloat("anchor_a_z", value.Z);
-        }
+        set => Component.SetVector3("anchor_a", value);
     }
     /// <summary>Âncora B</summary>
     public Vector3 AnchorB
     {
         get => new(Component.GetFloat("anchor_b_x"), Component.GetFloat("anchor_b_y"), Component.GetFloat("anchor_b_z"));
-        set
-        {
-            Component.SetFloat("anchor_b_x", value.X);
-            Component.SetFloat("anchor_b_y", value.Y);
-            Component.SetFloat("anchor_b_z", value.Z);
-        }
+        set => Component.SetVector3("anchor_b", value);
     }
     /// <summary>Eixo A</summary>
     public Vector3 AxisA
     {
         get => new(Component.GetFloat("axis_a_x"), Component.GetFloat("axis_a_y"), Component.GetFloat("axis_a_z"));
-        set
-        {
-            Component.SetFloat("axis_a_x", value.X);
-            Component.SetFloat("axis_a_y", value.Y);
-            Component.SetFloat("axis_a_z", value.Z);
-        }
+        set => Component.SetVector3("axis_a", value);
     }
     /// <summary>Eixo B</summary>
     public Vector3 AxisB
     {
         get => new(Component.GetFloat("axis_b_x"), Component.GetFloat("axis_b_y"), Component.GetFloat("axis_b_z"));
-        set
-        {
-            Component.SetFloat("axis_b_x", value.X);
-            Component.SetFloat("axis_b_y", value.Y);
-            Component.SetFloat("axis_b_z", value.Z);
-        }
+        set => Component.SetVector3("axis_b", value);
+    }
+    /// <summary>Plano A</summary>
+    public Vector3 NormalA
+    {
+        get => new(Component.GetFloat("normal_a_x"), Component.GetFloat("normal_a_y"), Component.GetFloat("normal_a_z"));
+        set => Component.SetVector3("normal_a", value);
+    }
+    /// <summary>Plano B</summary>
+    public Vector3 NormalB
+    {
+        get => new(Component.GetFloat("normal_b_x"), Component.GetFloat("normal_b_y"), Component.GetFloat("normal_b_z"));
+        set => Component.SetVector3("normal_b", value);
     }
     /// <summary>Limite mínimo</summary>
     /// <remarks>Faixa válida: -100000 a 100000.</remarks>
@@ -1784,6 +3314,370 @@ public readonly struct Joint : IComponentFacade<Joint>
         get => Component.GetFloat("spring_damping");
         set => Component.SetFloat("spring_damping", value);
     }
+    /// <summary>Cone · semiângulo Y (°)</summary>
+    /// <remarks>Faixa válida: 0 a 180.</remarks>
+    public float SwingY
+    {
+        get => Component.GetFloat("swing_y");
+        set => Component.SetFloat("swing_y", value);
+    }
+    /// <summary>Cone · semiângulo Z (°)</summary>
+    /// <remarks>Faixa válida: 0 a 180.</remarks>
+    public float SwingZ
+    {
+        get => Component.GetFloat("swing_z");
+        set => Component.SetFloat("swing_z", value);
+    }
+    /// <summary>Torção mínima (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float TwistMin
+    {
+        get => Component.GetFloat("twist_min");
+        set => Component.SetFloat("twist_min", value);
+    }
+    /// <summary>Torção máxima (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float TwistMax
+    {
+        get => Component.GetFloat("twist_max");
+        set => Component.SetFloat("twist_max", value);
+    }
+    /// <summary>Limite mínimo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearXMinimum
+    {
+        get => Component.GetFloat("linear_x_minimum");
+        set => Component.SetFloat("linear_x_minimum", value);
+    }
+    /// <summary>Limite máximo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearXMaximum
+    {
+        get => Component.GetFloat("linear_x_maximum");
+        set => Component.SetFloat("linear_x_maximum", value);
+    }
+    /// <summary>Atrito máximo (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float LinearXFriction
+    {
+        get => Component.GetFloat("linear_x_friction");
+        set => Component.SetFloat("linear_x_friction", value);
+    }
+    /// <summary>Velocidade alvo (u/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float LinearXVelocity
+    {
+        get => Component.GetFloat("linear_x_velocity");
+        set => Component.SetFloat("linear_x_velocity", value);
+    }
+    /// <summary>Posição alvo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearXPosition
+    {
+        get => Component.GetFloat("linear_x_position");
+        set => Component.SetFloat("linear_x_position", value);
+    }
+    /// <summary>Força máxima (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float LinearXForce
+    {
+        get => Component.GetFloat("linear_x_force");
+        set => Component.SetFloat("linear_x_force", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float LinearXFrequency
+    {
+        get => Component.GetFloat("linear_x_frequency");
+        set => Component.SetFloat("linear_x_frequency", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float LinearXDamping
+    {
+        get => Component.GetFloat("linear_x_damping");
+        set => Component.SetFloat("linear_x_damping", value);
+    }
+    /// <summary>Limite mínimo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearYMinimum
+    {
+        get => Component.GetFloat("linear_y_minimum");
+        set => Component.SetFloat("linear_y_minimum", value);
+    }
+    /// <summary>Limite máximo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearYMaximum
+    {
+        get => Component.GetFloat("linear_y_maximum");
+        set => Component.SetFloat("linear_y_maximum", value);
+    }
+    /// <summary>Atrito máximo (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float LinearYFriction
+    {
+        get => Component.GetFloat("linear_y_friction");
+        set => Component.SetFloat("linear_y_friction", value);
+    }
+    /// <summary>Velocidade alvo (u/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float LinearYVelocity
+    {
+        get => Component.GetFloat("linear_y_velocity");
+        set => Component.SetFloat("linear_y_velocity", value);
+    }
+    /// <summary>Posição alvo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearYPosition
+    {
+        get => Component.GetFloat("linear_y_position");
+        set => Component.SetFloat("linear_y_position", value);
+    }
+    /// <summary>Força máxima (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float LinearYForce
+    {
+        get => Component.GetFloat("linear_y_force");
+        set => Component.SetFloat("linear_y_force", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float LinearYFrequency
+    {
+        get => Component.GetFloat("linear_y_frequency");
+        set => Component.SetFloat("linear_y_frequency", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float LinearYDamping
+    {
+        get => Component.GetFloat("linear_y_damping");
+        set => Component.SetFloat("linear_y_damping", value);
+    }
+    /// <summary>Limite mínimo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearZMinimum
+    {
+        get => Component.GetFloat("linear_z_minimum");
+        set => Component.SetFloat("linear_z_minimum", value);
+    }
+    /// <summary>Limite máximo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearZMaximum
+    {
+        get => Component.GetFloat("linear_z_maximum");
+        set => Component.SetFloat("linear_z_maximum", value);
+    }
+    /// <summary>Atrito máximo (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float LinearZFriction
+    {
+        get => Component.GetFloat("linear_z_friction");
+        set => Component.SetFloat("linear_z_friction", value);
+    }
+    /// <summary>Velocidade alvo (u/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float LinearZVelocity
+    {
+        get => Component.GetFloat("linear_z_velocity");
+        set => Component.SetFloat("linear_z_velocity", value);
+    }
+    /// <summary>Posição alvo (u)</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float LinearZPosition
+    {
+        get => Component.GetFloat("linear_z_position");
+        set => Component.SetFloat("linear_z_position", value);
+    }
+    /// <summary>Força máxima (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float LinearZForce
+    {
+        get => Component.GetFloat("linear_z_force");
+        set => Component.SetFloat("linear_z_force", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float LinearZFrequency
+    {
+        get => Component.GetFloat("linear_z_frequency");
+        set => Component.SetFloat("linear_z_frequency", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float LinearZDamping
+    {
+        get => Component.GetFloat("linear_z_damping");
+        set => Component.SetFloat("linear_z_damping", value);
+    }
+    /// <summary>Limite mínimo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularXMinimum
+    {
+        get => Component.GetFloat("angular_x_minimum");
+        set => Component.SetFloat("angular_x_minimum", value);
+    }
+    /// <summary>Limite máximo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularXMaximum
+    {
+        get => Component.GetFloat("angular_x_maximum");
+        set => Component.SetFloat("angular_x_maximum", value);
+    }
+    /// <summary>Atrito máximo (Nm)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float AngularXFriction
+    {
+        get => Component.GetFloat("angular_x_friction");
+        set => Component.SetFloat("angular_x_friction", value);
+    }
+    /// <summary>Velocidade alvo (°/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AngularXVelocity
+    {
+        get => Component.GetFloat("angular_x_velocity");
+        set => Component.SetFloat("angular_x_velocity", value);
+    }
+    /// <summary>Posição alvo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularXPosition
+    {
+        get => Component.GetFloat("angular_x_position");
+        set => Component.SetFloat("angular_x_position", value);
+    }
+    /// <summary>Força máxima (Nm)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float AngularXForce
+    {
+        get => Component.GetFloat("angular_x_force");
+        set => Component.SetFloat("angular_x_force", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float AngularXFrequency
+    {
+        get => Component.GetFloat("angular_x_frequency");
+        set => Component.SetFloat("angular_x_frequency", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float AngularXDamping
+    {
+        get => Component.GetFloat("angular_x_damping");
+        set => Component.SetFloat("angular_x_damping", value);
+    }
+    /// <summary>Limite mínimo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularYMinimum
+    {
+        get => Component.GetFloat("angular_y_minimum");
+        set => Component.SetFloat("angular_y_minimum", value);
+    }
+    /// <summary>Limite máximo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularYMaximum
+    {
+        get => Component.GetFloat("angular_y_maximum");
+        set => Component.SetFloat("angular_y_maximum", value);
+    }
+    /// <summary>Atrito máximo (Nm)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float AngularYFriction
+    {
+        get => Component.GetFloat("angular_y_friction");
+        set => Component.SetFloat("angular_y_friction", value);
+    }
+    /// <summary>Velocidade alvo (°/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AngularYVelocity
+    {
+        get => Component.GetFloat("angular_y_velocity");
+        set => Component.SetFloat("angular_y_velocity", value);
+    }
+    /// <summary>Posição alvo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularYPosition
+    {
+        get => Component.GetFloat("angular_y_position");
+        set => Component.SetFloat("angular_y_position", value);
+    }
+    /// <summary>Força máxima (Nm)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float AngularYForce
+    {
+        get => Component.GetFloat("angular_y_force");
+        set => Component.SetFloat("angular_y_force", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float AngularYFrequency
+    {
+        get => Component.GetFloat("angular_y_frequency");
+        set => Component.SetFloat("angular_y_frequency", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float AngularYDamping
+    {
+        get => Component.GetFloat("angular_y_damping");
+        set => Component.SetFloat("angular_y_damping", value);
+    }
+    /// <summary>Limite mínimo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularZMinimum
+    {
+        get => Component.GetFloat("angular_z_minimum");
+        set => Component.SetFloat("angular_z_minimum", value);
+    }
+    /// <summary>Limite máximo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularZMaximum
+    {
+        get => Component.GetFloat("angular_z_maximum");
+        set => Component.SetFloat("angular_z_maximum", value);
+    }
+    /// <summary>Atrito máximo (Nm)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float AngularZFriction
+    {
+        get => Component.GetFloat("angular_z_friction");
+        set => Component.SetFloat("angular_z_friction", value);
+    }
+    /// <summary>Velocidade alvo (°/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AngularZVelocity
+    {
+        get => Component.GetFloat("angular_z_velocity");
+        set => Component.SetFloat("angular_z_velocity", value);
+    }
+    /// <summary>Posição alvo (°)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngularZPosition
+    {
+        get => Component.GetFloat("angular_z_position");
+        set => Component.SetFloat("angular_z_position", value);
+    }
+    /// <summary>Força máxima (Nm)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float AngularZForce
+    {
+        get => Component.GetFloat("angular_z_force");
+        set => Component.SetFloat("angular_z_force", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float AngularZFrequency
+    {
+        get => Component.GetFloat("angular_z_frequency");
+        set => Component.SetFloat("angular_z_frequency", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float AngularZDamping
+    {
+        get => Component.GetFloat("angular_z_damping");
+        set => Component.SetFloat("angular_z_damping", value);
+    }
     /// <summary>Ativa</summary>
     public bool Enabled
     {
@@ -1796,6 +3690,11 @@ public readonly struct Joint : IComponentFacade<Joint>
         Dobradica = 1,
         Deslizante = 2,
         Distancia = 3,
+        Fixa = 4,
+        Cone = 5,
+        SwingTwist = 6,
+        Configuravel6DOF = 7,
+        Mola = 8,
     }
     /// <summary>Tipo</summary>
     public KindOption Kind
@@ -1815,6 +3714,156 @@ public readonly struct Joint : IComponentFacade<Joint>
     {
         get => (MotorOption)Component.GetEnum("motor");
         set => Component.SetEnum("motor", (uint)value);
+    }
+    public enum LinearXMotionOption : uint
+    {
+        Travado = 0,
+        Limitado = 1,
+        Livre = 2,
+    }
+    /// <summary>Movimento</summary>
+    public LinearXMotionOption LinearXMotion
+    {
+        get => (LinearXMotionOption)Component.GetEnum("linear_x_motion");
+        set => Component.SetEnum("linear_x_motion", (uint)value);
+    }
+    public enum LinearXMotorOption : uint
+    {
+        Desligado = 0,
+        Velocidade = 1,
+        Posicao = 2,
+        PosicaoEVelocidade = 3,
+    }
+    /// <summary>Motor</summary>
+    public LinearXMotorOption LinearXMotor
+    {
+        get => (LinearXMotorOption)Component.GetEnum("linear_x_motor");
+        set => Component.SetEnum("linear_x_motor", (uint)value);
+    }
+    public enum LinearYMotionOption : uint
+    {
+        Travado = 0,
+        Limitado = 1,
+        Livre = 2,
+    }
+    /// <summary>Movimento</summary>
+    public LinearYMotionOption LinearYMotion
+    {
+        get => (LinearYMotionOption)Component.GetEnum("linear_y_motion");
+        set => Component.SetEnum("linear_y_motion", (uint)value);
+    }
+    public enum LinearYMotorOption : uint
+    {
+        Desligado = 0,
+        Velocidade = 1,
+        Posicao = 2,
+        PosicaoEVelocidade = 3,
+    }
+    /// <summary>Motor</summary>
+    public LinearYMotorOption LinearYMotor
+    {
+        get => (LinearYMotorOption)Component.GetEnum("linear_y_motor");
+        set => Component.SetEnum("linear_y_motor", (uint)value);
+    }
+    public enum LinearZMotionOption : uint
+    {
+        Travado = 0,
+        Limitado = 1,
+        Livre = 2,
+    }
+    /// <summary>Movimento</summary>
+    public LinearZMotionOption LinearZMotion
+    {
+        get => (LinearZMotionOption)Component.GetEnum("linear_z_motion");
+        set => Component.SetEnum("linear_z_motion", (uint)value);
+    }
+    public enum LinearZMotorOption : uint
+    {
+        Desligado = 0,
+        Velocidade = 1,
+        Posicao = 2,
+        PosicaoEVelocidade = 3,
+    }
+    /// <summary>Motor</summary>
+    public LinearZMotorOption LinearZMotor
+    {
+        get => (LinearZMotorOption)Component.GetEnum("linear_z_motor");
+        set => Component.SetEnum("linear_z_motor", (uint)value);
+    }
+    public enum AngularXMotionOption : uint
+    {
+        Travado = 0,
+        Limitado = 1,
+        Livre = 2,
+    }
+    /// <summary>Movimento</summary>
+    public AngularXMotionOption AngularXMotion
+    {
+        get => (AngularXMotionOption)Component.GetEnum("angular_x_motion");
+        set => Component.SetEnum("angular_x_motion", (uint)value);
+    }
+    public enum AngularXMotorOption : uint
+    {
+        Desligado = 0,
+        Velocidade = 1,
+        Posicao = 2,
+        PosicaoEVelocidade = 3,
+    }
+    /// <summary>Motor</summary>
+    public AngularXMotorOption AngularXMotor
+    {
+        get => (AngularXMotorOption)Component.GetEnum("angular_x_motor");
+        set => Component.SetEnum("angular_x_motor", (uint)value);
+    }
+    public enum AngularYMotionOption : uint
+    {
+        Travado = 0,
+        Limitado = 1,
+        Livre = 2,
+    }
+    /// <summary>Movimento</summary>
+    public AngularYMotionOption AngularYMotion
+    {
+        get => (AngularYMotionOption)Component.GetEnum("angular_y_motion");
+        set => Component.SetEnum("angular_y_motion", (uint)value);
+    }
+    public enum AngularYMotorOption : uint
+    {
+        Desligado = 0,
+        Velocidade = 1,
+        Posicao = 2,
+        PosicaoEVelocidade = 3,
+    }
+    /// <summary>Motor</summary>
+    public AngularYMotorOption AngularYMotor
+    {
+        get => (AngularYMotorOption)Component.GetEnum("angular_y_motor");
+        set => Component.SetEnum("angular_y_motor", (uint)value);
+    }
+    public enum AngularZMotionOption : uint
+    {
+        Travado = 0,
+        Limitado = 1,
+        Livre = 2,
+    }
+    /// <summary>Movimento</summary>
+    public AngularZMotionOption AngularZMotion
+    {
+        get => (AngularZMotionOption)Component.GetEnum("angular_z_motion");
+        set => Component.SetEnum("angular_z_motion", (uint)value);
+    }
+    public enum AngularZMotorOption : uint
+    {
+        Desligado = 0,
+        Velocidade = 1,
+        Posicao = 2,
+        PosicaoEVelocidade = 3,
+    }
+    /// <summary>Motor</summary>
+    public AngularZMotorOption AngularZMotor
+    {
+        get => (AngularZMotorOption)Component.GetEnum("angular_z_motor");
+        set => Component.SetEnum("angular_z_motor", (uint)value);
     }
     /// <summary>Conectar corpo</summary>
     public ObjectReference ConnectedBody
@@ -1837,6 +3886,10 @@ public readonly struct Animation : IComponentFacade<Animation>
         Component = component;
     }
     public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
     /// <summary>Velocidade (x). Velocidade inicial de cada clipe (AnimationState.speed); negativo toca de trás para frente</summary>
     /// <remarks>Faixa válida: -10 a 10.</remarks>
     public float Speed
@@ -1917,4 +3970,1471 @@ public readonly struct Animation : IComponentFacade<Animation>
     /// <summary>Clipe. Recurso do projeto por slot</summary>
     public AssetGuid GetClips(uint slot = 0) => Component.GetResource("clips", slot);
     public void SetClips(AssetGuid value, uint slot = 0) => Component.SetResource("clips", value, slot);
+}
+
+/// <summary>Campo de gravidade 2D: Gravidade XY em área sobre corpos dinâmicos 2D. Família Física 2D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
+public readonly struct GravityField2D : IComponentFacade<GravityField2D>
+{
+    public static string TypeId => "astra.physics2d.field.gravity";
+    public static GravityField2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public GravityField2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XY</summary>
+    public Vector2 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"));
+        set => Component.SetVector2("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector2 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"));
+        set => Component.SetVector2("offset", value);
+    }
+    /// <summary>Gravidade local</summary>
+    public Vector2 Vector
+    {
+        get => new(Component.GetFloat("vector_x"), Component.GetFloat("vector_y"));
+        set => Component.SetVector2("vector", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    /// <summary>Substituir gravidade do mundo. Sobrepostos somam vetores e cancelam a gravidade padrão uma única vez</summary>
+    public bool ReplaceWorldGravity
+    {
+        get => Component.GetBool("replace_world_gravity");
+        set => Component.SetBool("replace_world_gravity", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Retangulo = 0,
+        Circulo = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Campo de vento 2D: Acoplamento XY à velocidade do ar com massa real. Família Física 2D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
+public readonly struct WindField2D : IComponentFacade<WindField2D>
+{
+    public static string TypeId => "astra.physics2d.field.wind";
+    public static WindField2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public WindField2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XY</summary>
+    public Vector2 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"));
+        set => Component.SetVector2("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector2 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"));
+        set => Component.SetVector2("offset", value);
+    }
+    /// <summary>Vento local</summary>
+    public Vector2 Vector
+    {
+        get => new(Component.GetFloat("vector_x"), Component.GetFloat("vector_y"));
+        set => Component.SetVector2("vector", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Acoplamento (kg/s)</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float Coefficient
+    {
+        get => Component.GetFloat("coefficient");
+        set => Component.SetFloat("coefficient", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Retangulo = 0,
+        Circulo = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Campo de arrasto 2D: Amortecimento linear XY e angular de Body2D. Família Física 2D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
+public readonly struct DragField2D : IComponentFacade<DragField2D>
+{
+    public static string TypeId => "astra.physics2d.field.drag";
+    public static DragField2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public DragField2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XY</summary>
+    public Vector2 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"));
+        set => Component.SetVector2("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector2 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"));
+        set => Component.SetVector2("offset", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Arrasto linear (1/s)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float LinearDrag
+    {
+        get => Component.GetFloat("linear_drag");
+        set => Component.SetFloat("linear_drag", value);
+    }
+    /// <summary>Arrasto angular (1/s)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float AngularDrag
+    {
+        get => Component.GetFloat("angular_drag");
+        set => Component.SetFloat("angular_drag", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Retangulo = 0,
+        Circulo = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Campo radial 2D: Atração, repulsão e vórtice no plano XY. Família Física 2D · Campos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
+public readonly struct RadialField2D : IComponentFacade<RadialField2D>
+{
+    public static string TypeId => "astra.physics2d.field.radial";
+    public static RadialField2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public RadialField2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meias XY</summary>
+    public Vector2 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"));
+        set => Component.SetVector2("half_extents", value);
+    }
+    /// <summary>Centro local</summary>
+    public Vector2 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"));
+        set => Component.SetVector2("offset", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Aceleração radial (m/s²)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float Acceleration
+    {
+        get => Component.GetFloat("acceleration");
+        set => Component.SetFloat("acceleration", value);
+    }
+    /// <summary>Aceleração tangencial (m/s²)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float TangentialAcceleration
+    {
+        get => Component.GetFloat("tangential_acceleration");
+        set => Component.SetFloat("tangential_acceleration", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acordar corpos. Desligado: corpos em repouso permanecem dormindo</summary>
+    public bool WakeBodies
+    {
+        get => Component.GetBool("wake_bodies");
+        set => Component.SetBool("wake_bodies", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Retangulo = 0,
+        Circulo = 1,
+    }
+    /// <summary>Forma. Escala e orientação são as do objeto e de seus pais</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    public enum FalloffOption : uint
+    {
+        Uniforme = 0,
+        Linear = 1,
+        Suave = 2,
+    }
+    /// <summary>Queda de influência. Centro vale 1; Linear e Suave chegam a zero na borda</summary>
+    public FalloffOption Falloff
+    {
+        get => (FalloffOption)Component.GetEnum("falloff");
+        set => Component.SetEnum("falloff", (uint)value);
+    }
+    public enum AffectedLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada afetada. Todas ou uma camada física do projeto; não altera a matriz de colisão</summary>
+    public AffectedLayerOption AffectedLayer
+    {
+        get => (AffectedLayerOption)Component.GetEnum("affected_layer");
+        set => Component.SetEnum("affected_layer", (uint)value);
+    }
+}
+
+/// <summary>Conexão física 2D: Evento real de sensor/contato 2D altera ativação do receptor. Família Física 2D · Eventos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
+public readonly struct PhysicsEventConnection2D : IComponentFacade<PhysicsEventConnection2D>
+{
+    public static string TypeId => "astra.physics2d.event_connection";
+    public static PhysicsEventConnection2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PhysicsEventConnection2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ativa</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum EventOption : uint
+    {
+        EntradaSensor = 0,
+        PermSensor = 1,
+        SaidaSensor = 2,
+        EntradaContato = 3,
+        PermContato = 4,
+        SaidaContato = 5,
+    }
+    /// <summary>Evento. Sensor exige um Colisor 2D sensor; contato exige uma forma sólida no emissor</summary>
+    public EventOption Event
+    {
+        get => (EventOption)Component.GetEnum("event");
+        set => Component.SetEnum("event", (uint)value);
+    }
+    public enum ActionOption : uint
+    {
+        Desconectado = 0,
+        AtivarObjeto = 1,
+        DesativarObjeto = 2,
+        AlternarObjeto = 3,
+    }
+    /// <summary>Ação. Executada antes do callback C#; permanência pode disparar a cada passo físico</summary>
+    public ActionOption Action
+    {
+        get => (ActionOption)Component.GetEnum("action");
+        set => Component.SetEnum("action", (uint)value);
+    }
+    /// <summary>Receptor. Objeto cuja ativação será alterada</summary>
+    public ObjectReference Receiver
+    {
+        get => Component.GetReference("receiver");
+        set => Component.SetReference("receiver", value);
+    }
+    /// <summary>Outro objeto. Opcional: somente eventos com este outro objeto; vazio aceita todos</summary>
+    public ObjectReference OtherFilter
+    {
+        get => Component.GetReference("other_filter");
+        set => Component.SetReference("other_filter", value);
+    }
+}
+
+/// <summary>Força constante 2D: Força XY e torque contínuos sobre Body2D dinâmico. Família Física 2D · Forças.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/ConstantForce2D.html</remarks>
+public readonly struct ConstantForce2D : IComponentFacade<ConstantForce2D>
+{
+    public static string TypeId => "astra.physics2d.constant-force";
+    public static ConstantForce2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ConstantForce2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Força X (N)</summary>
+    /// <remarks>Faixa válida: -1000000 a 1000000.</remarks>
+    public float ForceX
+    {
+        get => Component.GetFloat("force_x");
+        set => Component.SetFloat("force_x", value);
+    }
+    /// <summary>Força Y (N)</summary>
+    /// <remarks>Faixa válida: -1000000 a 1000000.</remarks>
+    public float ForceY
+    {
+        get => Component.GetFloat("force_y");
+        set => Component.SetFloat("force_y", value);
+    }
+    /// <summary>Força local X (N)</summary>
+    /// <remarks>Faixa válida: -1000000 a 1000000.</remarks>
+    public float RelativeForceX
+    {
+        get => Component.GetFloat("relative_force_x");
+        set => Component.SetFloat("relative_force_x", value);
+    }
+    /// <summary>Força local Y (N)</summary>
+    /// <remarks>Faixa válida: -1000000 a 1000000.</remarks>
+    public float RelativeForceY
+    {
+        get => Component.GetFloat("relative_force_y");
+        set => Component.SetFloat("relative_force_y", value);
+    }
+    /// <summary>Torque (N m)</summary>
+    /// <remarks>Faixa válida: -1000000 a 1000000.</remarks>
+    public float Torque
+    {
+        get => Component.GetFloat("torque");
+        set => Component.SetFloat("torque", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Junta 2D: Fixed/Weld, Revolute, Prismatic ou Distance reais. Família Física 2D · Juntas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Joint2D.html</remarks>
+public readonly struct Joint2D : IComponentFacade<Joint2D>
+{
+    public static string TypeId => "astra.physics2d.joint";
+    public static Joint2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Joint2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Anchor A X (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AnchorAX
+    {
+        get => Component.GetFloat("anchor_a_x");
+        set => Component.SetFloat("anchor_a_x", value);
+    }
+    /// <summary>Anchor A Y (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AnchorAY
+    {
+        get => Component.GetFloat("anchor_a_y");
+        set => Component.SetFloat("anchor_a_y", value);
+    }
+    /// <summary>Anchor B X (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AnchorBX
+    {
+        get => Component.GetFloat("anchor_b_x");
+        set => Component.SetFloat("anchor_b_x", value);
+    }
+    /// <summary>Anchor B Y (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float AnchorBY
+    {
+        get => Component.GetFloat("anchor_b_y");
+        set => Component.SetFloat("anchor_b_y", value);
+    }
+    /// <summary>Ângulo referência (graus)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float ReferenceAngleDegrees
+    {
+        get => Component.GetFloat("reference_angle_degrees");
+        set => Component.SetFloat("reference_angle_degrees", value);
+    }
+    /// <summary>Eixo local A (graus)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AxisAngleDegrees
+    {
+        get => Component.GetFloat("axis_angle_degrees");
+        set => Component.SetFloat("axis_angle_degrees", value);
+    }
+    /// <summary>Comprimento repouso (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 1000.</remarks>
+    public float Length
+    {
+        get => Component.GetFloat("length");
+        set => Component.SetFloat("length", value);
+    }
+    /// <summary>Comprimento mínimo (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 1000.</remarks>
+    public float MinLength
+    {
+        get => Component.GetFloat("min_length");
+        set => Component.SetFloat("min_length", value);
+    }
+    /// <summary>Comprimento máximo (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 1000.</remarks>
+    public float MaxLength
+    {
+        get => Component.GetFloat("max_length");
+        set => Component.SetFloat("max_length", value);
+    }
+    /// <summary>Limite inferior</summary>
+    /// <remarks>Faixa válida: -178 a 178.</remarks>
+    public float LowerLimit
+    {
+        get => Component.GetFloat("lower_limit");
+        set => Component.SetFloat("lower_limit", value);
+    }
+    /// <summary>Limite superior</summary>
+    /// <remarks>Faixa válida: -178 a 178.</remarks>
+    public float UpperLimit
+    {
+        get => Component.GetFloat("upper_limit");
+        set => Component.SetFloat("upper_limit", value);
+    }
+    /// <summary>Velocidade motor (m/s)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float MotorSpeed
+    {
+        get => Component.GetFloat("motor_speed");
+        set => Component.SetFloat("motor_speed", value);
+    }
+    /// <summary>Motor angular (graus/s)</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float MotorAngularSpeedDegrees
+    {
+        get => Component.GetFloat("motor_angular_speed_degrees");
+        set => Component.SetFloat("motor_angular_speed_degrees", value);
+    }
+    /// <summary>Força máxima motor (N)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float MaxMotorForce
+    {
+        get => Component.GetFloat("max_motor_force");
+        set => Component.SetFloat("max_motor_force", value);
+    }
+    /// <summary>Torque máximo motor (N m)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float MaxMotorTorque
+    {
+        get => Component.GetFloat("max_motor_torque");
+        set => Component.SetFloat("max_motor_torque", value);
+    }
+    /// <summary>Frequência mola (Hz)</summary>
+    /// <remarks>Faixa válida: 0 a 120.</remarks>
+    public float SpringHertz
+    {
+        get => Component.GetFloat("spring_hertz");
+        set => Component.SetFloat("spring_hertz", value);
+    }
+    /// <summary>Razão amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float SpringDamping
+    {
+        get => Component.GetFloat("spring_damping");
+        set => Component.SetFloat("spring_damping", value);
+    }
+    /// <summary>Translação alvo (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float SpringTargetTranslation
+    {
+        get => Component.GetFloat("spring_target_translation");
+        set => Component.SetFloat("spring_target_translation", value);
+    }
+    /// <summary>Ângulo alvo (graus)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float SpringTargetAngleDegrees
+    {
+        get => Component.GetFloat("spring_target_angle_degrees");
+        set => Component.SetFloat("spring_target_angle_degrees", value);
+    }
+    /// <summary>Mola linear weld (Hz)</summary>
+    /// <remarks>Faixa válida: 0 a 120.</remarks>
+    public float LinearHertz
+    {
+        get => Component.GetFloat("linear_hertz");
+        set => Component.SetFloat("linear_hertz", value);
+    }
+    /// <summary>Mola angular weld (Hz)</summary>
+    /// <remarks>Faixa válida: 0 a 120.</remarks>
+    public float AngularHertz
+    {
+        get => Component.GetFloat("angular_hertz");
+        set => Component.SetFloat("angular_hertz", value);
+    }
+    /// <summary>Amortecimento linear weld</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float LinearDampingRatio
+    {
+        get => Component.GetFloat("linear_damping_ratio");
+        set => Component.SetFloat("linear_damping_ratio", value);
+    }
+    /// <summary>Amortecimento angular weld</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float AngularDampingRatio
+    {
+        get => Component.GetFloat("angular_damping_ratio");
+        set => Component.SetFloat("angular_damping_ratio", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Conectar ao mundo</summary>
+    public bool WorldAnchor
+    {
+        get => Component.GetBool("world_anchor");
+        set => Component.SetBool("world_anchor", value);
+    }
+    /// <summary>Colidir conectados</summary>
+    public bool CollideConnected
+    {
+        get => Component.GetBool("collide_connected");
+        set => Component.SetBool("collide_connected", value);
+    }
+    /// <summary>Limites</summary>
+    public bool LimitEnabled
+    {
+        get => Component.GetBool("limit_enabled");
+        set => Component.SetBool("limit_enabled", value);
+    }
+    /// <summary>Motor</summary>
+    public bool MotorEnabled
+    {
+        get => Component.GetBool("motor_enabled");
+        set => Component.SetBool("motor_enabled", value);
+    }
+    /// <summary>Mola</summary>
+    public bool SpringEnabled
+    {
+        get => Component.GetBool("spring_enabled");
+        set => Component.SetBool("spring_enabled", value);
+    }
+    public enum KindOption : uint
+    {
+        FixedWeld = 0,
+        Revolute = 1,
+        Prismatic = 2,
+        Distance = 3,
+    }
+    /// <summary>Modo</summary>
+    public KindOption Kind
+    {
+        get => (KindOption)Component.GetEnum("kind");
+        set => Component.SetEnum("kind", (uint)value);
+    }
+    /// <summary>Corpo conectado</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Corpo 2D: Corpo XY independente de física 3D. Família Física 2D · Corpos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_rigidbody2d.html</remarks>
+public readonly struct Body2D : IComponentFacade<Body2D>
+{
+    public static string TypeId => "astra.physics2d.body";
+    public static Body2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Body2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Massa (kg)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float Mass
+    {
+        get => Component.GetFloat("mass");
+        set => Component.SetFloat("mass", value);
+    }
+    /// <summary>Escala gravidade</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float GravityScale
+    {
+        get => Component.GetFloat("gravity_scale");
+        set => Component.SetFloat("gravity_scale", value);
+    }
+    /// <summary>Velocidade X (m/s)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float VelocityX
+    {
+        get => Component.GetFloat("velocity_x");
+        set => Component.SetFloat("velocity_x", value);
+    }
+    /// <summary>Velocidade Y (m/s)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float VelocityY
+    {
+        get => Component.GetFloat("velocity_y");
+        set => Component.SetFloat("velocity_y", value);
+    }
+    /// <summary>Velocidade angular (graus/s)</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float AngularVelocityDegrees
+    {
+        get => Component.GetFloat("angular_velocity_degrees");
+        set => Component.SetFloat("angular_velocity_degrees", value);
+    }
+    /// <summary>Arrasto linear</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float LinearDamping
+    {
+        get => Component.GetFloat("linear_damping");
+        set => Component.SetFloat("linear_damping", value);
+    }
+    /// <summary>Arrasto angular</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float AngularDamping
+    {
+        get => Component.GetFloat("angular_damping");
+        set => Component.SetFloat("angular_damping", value);
+    }
+    /// <summary>Fixar rotação</summary>
+    public bool FixedRotation
+    {
+        get => Component.GetBool("fixed_rotation");
+        set => Component.SetBool("fixed_rotation", value);
+    }
+    /// <summary>Permitir repouso</summary>
+    public bool AllowSleep
+    {
+        get => Component.GetBool("allow_sleep");
+        set => Component.SetBool("allow_sleep", value);
+    }
+    public enum MotionOption : uint
+    {
+        Estatico = 0,
+        Cinematico = 1,
+        Dinamico = 2,
+    }
+    /// <summary>Movimento</summary>
+    public MotionOption Motion
+    {
+        get => (MotionOption)Component.GetEnum("motion");
+        set => Component.SetEnum("motion", (uint)value);
+    }
+}
+
+/// <summary>Colisor 2D: Caixa, círculo ou cápsula; sensor real. Família Física 2D · Formas.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_collisionshape2d.html</remarks>
+public readonly struct Collider2D : IComponentFacade<Collider2D>
+{
+    public static string TypeId => "astra.physics2d.collider";
+    public static Collider2D Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Collider2D(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meia largura (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 500.</remarks>
+    public float HalfX
+    {
+        get => Component.GetFloat("half_x");
+        set => Component.SetFloat("half_x", value);
+    }
+    /// <summary>Meia altura (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 500.</remarks>
+    public float HalfY
+    {
+        get => Component.GetFloat("half_y");
+        set => Component.SetFloat("half_y", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 500.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Meia distância centros (m)</summary>
+    /// <remarks>Faixa válida: 0.005 a 500.</remarks>
+    public float CapsuleHalfLength
+    {
+        get => Component.GetFloat("capsule_half_length");
+        set => Component.SetFloat("capsule_half_length", value);
+    }
+    /// <summary>Centro X (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float OffsetX
+    {
+        get => Component.GetFloat("offset_x");
+        set => Component.SetFloat("offset_x", value);
+    }
+    /// <summary>Centro Y (m)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float OffsetY
+    {
+        get => Component.GetFloat("offset_y");
+        set => Component.SetFloat("offset_y", value);
+    }
+    /// <summary>Atrito</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Friction
+    {
+        get => Component.GetFloat("friction");
+        set => Component.SetFloat("friction", value);
+    }
+    /// <summary>Restituição</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Restitution
+    {
+        get => Component.GetFloat("restitution");
+        set => Component.SetFloat("restitution", value);
+    }
+    /// <summary>Sensor sem resposta</summary>
+    public bool Sensor
+    {
+        get => Component.GetBool("sensor");
+        set => Component.SetBool("sensor", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Caixa = 0,
+        Circulo = 1,
+        CapsulaY = 2,
+    }
+    /// <summary>Forma</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+}
+
+/// <summary>Audio Source: Clipe de projeto com reprodução e espaço acústico. Família Áudio · Reprodução.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioSource.html</remarks>
+public readonly struct AudioSource : IComponentFacade<AudioSource>
+{
+    public static string TypeId => "astra.audio.source";
+    public static AudioSource Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioSource(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Volume</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Volume
+    {
+        get => Component.GetFloat("volume");
+        set => Component.SetFloat("volume", value);
+    }
+    /// <summary>Velocidade / pitch (×)</summary>
+    /// <remarks>Faixa válida: 0.1 a 4.</remarks>
+    public float Pitch
+    {
+        get => Component.GetFloat("pitch");
+        set => Component.SetFloat("pitch", value);
+    }
+    /// <summary>Pan estéreo</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float Pan
+    {
+        get => Component.GetFloat("pan");
+        set => Component.SetFloat("pan", value);
+    }
+    /// <summary>Distância mínima (m)</summary>
+    /// <remarks>Faixa válida: 0.01 a 100000.</remarks>
+    public float MinDistance
+    {
+        get => Component.GetFloat("min_distance");
+        set => Component.SetFloat("min_distance", value);
+    }
+    /// <summary>Distância máxima (m)</summary>
+    /// <remarks>Faixa válida: 0.02 a 100001.</remarks>
+    public float MaxDistance
+    {
+        get => Component.GetFloat("max_distance");
+        set => Component.SetFloat("max_distance", value);
+    }
+    /// <summary>Decaimento</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float RolloffFactor
+    {
+        get => Component.GetFloat("rolloff_factor");
+        set => Component.SetFloat("rolloff_factor", value);
+    }
+    /// <summary>Cone interno (°)</summary>
+    /// <remarks>Faixa válida: 0 a 360.</remarks>
+    public float ConeInner
+    {
+        get => Component.GetFloat("cone_inner");
+        set => Component.SetFloat("cone_inner", value);
+    }
+    /// <summary>Cone externo (°)</summary>
+    /// <remarks>Faixa válida: 0 a 360.</remarks>
+    public float ConeOuter
+    {
+        get => Component.GetFloat("cone_outer");
+        set => Component.SetFloat("cone_outer", value);
+    }
+    /// <summary>Ganho fora do cone</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ConeGain
+    {
+        get => Component.GetFloat("cone_gain");
+        set => Component.SetFloat("cone_gain", value);
+    }
+    /// <summary>Doppler (×)</summary>
+    /// <remarks>Faixa válida: 0 a 4.</remarks>
+    public float Doppler
+    {
+        get => Component.GetFloat("doppler");
+        set => Component.SetFloat("doppler", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Silenciar</summary>
+    public bool Mute
+    {
+        get => Component.GetBool("mute");
+        set => Component.SetBool("mute", value);
+    }
+    /// <summary>Repetir</summary>
+    public bool Loop
+    {
+        get => Component.GetBool("loop");
+        set => Component.SetBool("loop", value);
+    }
+    public enum PlaybackOption : uint
+    {
+        Parar = 0,
+        Tocar = 1,
+        Pausar = 2,
+    }
+    /// <summary>Pedido. Pedido persistido; consulte o estado real na nota do componente.</summary>
+    public PlaybackOption Playback
+    {
+        get => (PlaybackOption)Component.GetEnum("playback");
+        set => Component.SetEnum("playback", (uint)value);
+    }
+    public enum DimensionOption : uint
+    {
+        V2DEstereo = 0,
+        V3DEspacial = 1,
+    }
+    /// <summary>Dimensão</summary>
+    public DimensionOption Dimension
+    {
+        get => (DimensionOption)Component.GetEnum("dimension");
+        set => Component.SetEnum("dimension", (uint)value);
+    }
+    public enum RolloffOption : uint
+    {
+        Linear = 0,
+        Inverso = 1,
+        Exponencial = 2,
+    }
+    /// <summary>Atenuação</summary>
+    public RolloffOption Rolloff
+    {
+        get => (RolloffOption)Component.GetEnum("rolloff");
+        set => Component.SetEnum("rolloff", (uint)value);
+    }
+    /// <summary>Bus</summary>
+    public ObjectReference Bus
+    {
+        get => Component.GetReference("bus");
+        set => Component.SetReference("bus", value);
+    }
+    /// <summary>Clipe WAV. Recurso do projeto por slot</summary>
+    public AssetGuid GetClip(uint slot = 0) => Component.GetResource("clip", slot);
+    public void SetClip(AssetGuid value, uint slot = 0) => Component.SetResource("clip", value, slot);
+}
+
+/// <summary>Audio Listener: Pose e volume de escuta escolhidos por prioridade. Família Áudio · Escuta.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioListener.html</remarks>
+public readonly struct AudioListener : IComponentFacade<AudioListener>
+{
+    public static string TypeId => "astra.audio.listener";
+    public static AudioListener Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioListener(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Volume global</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Volume
+    {
+        get => Component.GetFloat("volume");
+        set => Component.SetFloat("volume", value);
+    }
+    /// <summary>Prioridade</summary>
+    /// <remarks>Faixa válida: 0 a 255.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Audio Bus: Roteamento de ganho, mute e solo até Master. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html</remarks>
+public readonly struct AudioBus : IComponentFacade<AudioBus>
+{
+    public static string TypeId => "astra.audio.bus";
+    public static AudioBus Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioBus(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ganho</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Volume
+    {
+        get => Component.GetFloat("volume");
+        set => Component.SetFloat("volume", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Silenciar</summary>
+    public bool Mute
+    {
+        get => Component.GetBool("mute");
+        set => Component.SetBool("mute", value);
+    }
+    /// <summary>Solo</summary>
+    public bool Solo
+    {
+        get => Component.GetBool("solo");
+        set => Component.SetBool("solo", value);
+    }
+    /// <summary>Saída</summary>
+    public ObjectReference Output
+    {
+        get => Component.GetReference("output");
+        set => Component.SetReference("output", value);
+    }
+}
+
+/// <summary>Path: Curva Bézier local com pontos persistentes. Família Lógica · Caminhos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_path3d.html</remarks>
+public readonly struct PathComponent : IComponentFacade<PathComponent>
+{
+    public static string TypeId => "astra.path";
+    public static PathComponent Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PathComponent(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Up inicial local</summary>
+    public Vector3 Up
+    {
+        get => new(Component.GetFloat("up_x"), Component.GetFloat("up_y"), Component.GetFloat("up_z"));
+        set => Component.SetVector3("up", value);
+    }
+    /// <summary>Fechado</summary>
+    public bool Closed
+    {
+        get => Component.GetBool("closed");
+        set => Component.SetBool("closed", value);
+    }
+    /// <summary>Posição X (u). Valor por slot</summary>
+    public float GetPointPositionX(uint slot) => Component.GetSlotFloat("point_position_x", slot);
+    public void SetPointPositionX(uint slot, float value) => Component.SetSlotFloat("point_position_x", value, slot);
+    /// <summary>Posição Y (u). Valor por slot</summary>
+    public float GetPointPositionY(uint slot) => Component.GetSlotFloat("point_position_y", slot);
+    public void SetPointPositionY(uint slot, float value) => Component.SetSlotFloat("point_position_y", value, slot);
+    /// <summary>Posição Z (u). Valor por slot</summary>
+    public float GetPointPositionZ(uint slot) => Component.GetSlotFloat("point_position_z", slot);
+    public void SetPointPositionZ(uint slot, float value) => Component.SetSlotFloat("point_position_z", value, slot);
+    /// <summary>Entrada X (u). Valor por slot</summary>
+    public float GetPointInX(uint slot) => Component.GetSlotFloat("point_in_x", slot);
+    public void SetPointInX(uint slot, float value) => Component.SetSlotFloat("point_in_x", value, slot);
+    /// <summary>Entrada Y (u). Valor por slot</summary>
+    public float GetPointInY(uint slot) => Component.GetSlotFloat("point_in_y", slot);
+    public void SetPointInY(uint slot, float value) => Component.SetSlotFloat("point_in_y", value, slot);
+    /// <summary>Entrada Z (u). Valor por slot</summary>
+    public float GetPointInZ(uint slot) => Component.GetSlotFloat("point_in_z", slot);
+    public void SetPointInZ(uint slot, float value) => Component.SetSlotFloat("point_in_z", value, slot);
+    /// <summary>Saída X (u). Valor por slot</summary>
+    public float GetPointOutX(uint slot) => Component.GetSlotFloat("point_out_x", slot);
+    public void SetPointOutX(uint slot, float value) => Component.SetSlotFloat("point_out_x", value, slot);
+    /// <summary>Saída Y (u). Valor por slot</summary>
+    public float GetPointOutY(uint slot) => Component.GetSlotFloat("point_out_y", slot);
+    public void SetPointOutY(uint slot, float value) => Component.SetSlotFloat("point_out_y", value, slot);
+    /// <summary>Saída Z (u). Valor por slot</summary>
+    public float GetPointOutZ(uint slot) => Component.GetSlotFloat("point_out_z", slot);
+    public void SetPointOutZ(uint slot, float value) => Component.SetSlotFloat("point_out_z", value, slot);
+    /// <summary>Roll (°). Valor por slot</summary>
+    public float GetPointRoll(uint slot) => Component.GetSlotFloat("point_roll", slot);
+    public void SetPointRoll(uint slot, float value) => Component.SetSlotFloat("point_roll", value, slot);
+}
+
+/// <summary>Path Follow: Percorre curva em distância mundial e orienta +Z. Família Lógica · Caminhos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_pathfollow3d.html</remarks>
+public readonly struct PathFollow : IComponentFacade<PathFollow>
+{
+    public static string TypeId => "astra.path.follow";
+    public static PathFollow Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PathFollow(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Distância inicial (u)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float ProgressDistance
+    {
+        get => Component.GetFloat("progress_distance");
+        set => Component.SetFloat("progress_distance", value);
+    }
+    /// <summary>Velocidade (u/s)</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Speed
+    {
+        get => Component.GetFloat("speed");
+        set => Component.SetFloat("speed", value);
+    }
+    /// <summary>Duração (s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float Duration
+    {
+        get => Component.GetFloat("duration");
+        set => Component.SetFloat("duration", value);
+    }
+    /// <summary>Deslocamento lateral (u)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float OffsetX
+    {
+        get => Component.GetFloat("offset_x");
+        set => Component.SetFloat("offset_x", value);
+    }
+    /// <summary>Deslocamento vertical (u)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float OffsetY
+    {
+        get => Component.GetFloat("offset_y");
+        set => Component.SetFloat("offset_y", value);
+    }
+    /// <summary>Deslocamento tangente (u)</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float OffsetZ
+    {
+        get => Component.GetFloat("offset_z");
+        set => Component.SetFloat("offset_z", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Iniciar no Play</summary>
+    public bool Autoplay
+    {
+        get => Component.GetBool("autoplay");
+        set => Component.SetBool("autoplay", value);
+    }
+    /// <summary>Repetir percurso</summary>
+    public bool Loop
+    {
+        get => Component.GetBool("loop");
+        set => Component.SetBool("loop", value);
+    }
+    /// <summary>Sentido inverso</summary>
+    public bool Backwards
+    {
+        get => Component.GetBool("backwards");
+        set => Component.SetBool("backwards", value);
+    }
+    /// <summary>Orientar +Z</summary>
+    public bool Orient
+    {
+        get => Component.GetBool("orient");
+        set => Component.SetBool("orient", value);
+    }
+    public enum ModeOption : uint
+    {
+        VelocidadeMundial = 0,
+        DuracaoDoPercurso = 1,
+    }
+    /// <summary>Avanço</summary>
+    public ModeOption Mode
+    {
+        get => (ModeOption)Component.GetEnum("mode");
+        set => Component.SetEnum("mode", (uint)value);
+    }
+    /// <summary>Caminho</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
 }

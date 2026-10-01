@@ -1,5 +1,7 @@
 #include "harness.h"
 #include "editor/editor_numeric_expression.h"
+#include "editor/editor_archive.h"
+#include "editor/editor_history.h"
 #include "scene/script_behavior.h"
 
 #include <cmath>
@@ -46,6 +48,35 @@ AE_TEST(script_curve_tangents_wrap_and_evaluation) {
     AE_EXPECT_TRUE(scene::validScriptPropertyValue("curve", preset.value), preset.name);
   AE_EXPECT_TRUE(!scene::validScriptPropertyValue("curve", "0 0 2 1 0 0 0 0 0 0 1 1 0 0 0 0 0"), "tempos repetidos recusados");
   AE_EXPECT_TRUE(scene::validScriptPropertyValue("curve", "0 0 0"), "curva vazia é válida");
+}
+AE_TEST(script_curve_runtime_edits_precision_extremes_and_invalid_input_match_sdk) {
+  scene::ScriptCurve curve;curve.keys={{0,0,0,0,scene::CurveTangentMode::Linear,scene::CurveTangentMode::Linear},
+                                    {1,2,0,0,scene::CurveTangentMode::Linear,scene::CurveTangentMode::Linear}};
+  curve.keys[1].value=4;
+  AE_EXPECT_TRUE(near(scene::evaluateScriptCurve(curve,.25f),1),"Linear derives current value without authoring-cache refresh");
+  curve.keys[0].right=curve.keys[1].left=scene::CurveTangentMode::Auto;
+  AE_EXPECT_TRUE(near(scene::evaluateScriptCurve(curve,.25f),.625),"Auto endpoints flatten");
+  scene::ScriptCurve close;close.keys={{1,1},{std::nextafter(1.f,2.f),2}};const auto encoded=scene::scriptCurveValue(close);
+  scene::ScriptCurve reopened;AE_EXPECT_TRUE(scene::parseScriptCurve(encoded,reopened) && reopened.keys[1].time==close.keys[1].time,"float identity survives archive without collapsing adjacent times");
+  const float maximum=std::numeric_limits<float>::max();curve.keys={{-maximum,-maximum,0,0,scene::CurveTangentMode::Linear,scene::CurveTangentMode::Linear},
+                                                                 {maximum,maximum,0,0,scene::CurveTangentMode::Linear,scene::CurveTangentMode::Linear}};
+  curve.updateTangents();AE_EXPECT_TRUE(curve.valid() && near(scene::evaluateScriptCurve(curve,0),0),"double intermediates avoid overflowing a finite interval");
+  float result=17;curve.pre=static_cast<scene::CurveWrapMode>(99);
+  AE_EXPECT_TRUE(!scene::tryEvaluateScriptCurve(curve,0,result) && result==17,"invalid mode is reported before publishing a sample");
+  curve.pre=scene::CurveWrapMode::Clamp;
+  AE_EXPECT_TRUE(!scene::tryEvaluateScriptCurve(curve,std::numeric_limits<float>::infinity(),result) && result==17,"non-finite sample refused");
+  scene::ScriptGradient gradient;float rgba[4]{17,17,17,17};gradient.mode=static_cast<scene::GradientMode>(99);
+  AE_EXPECT_TRUE(!scene::tryEvaluateScriptGradient(gradient,.5f,rgba) && rgba[0]==17,"gradient validates mode before touching output");
+  EditorDocument document;const auto object=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Curve consumer");
+  auto value=*document.find(object);auto *script=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="family.Curves";script->source="Scripts/Curves.cs";
+  gradient.mode=scene::GradientMode::Perceptual;
+  script->properties={{"height","curve",encoded},{"colors","gradient",scene::scriptGradientValue(gradient)}};
+  EditorHistory history;AE_EXPECT_TRUE(history.applyValues(document,object,value),"author fields atomically");
+  const auto archive=serializeEditorDocument(document,7);EditorDocument restored;
+  AE_EXPECT_TRUE(deserializeEditorDocument(archive,7,restored) && serializeEditorDocument(restored,7)==archive,"curve and gradient field payloads roundtrip in real scene archive");
+  AE_EXPECT_TRUE(history.undo(document) && !document.find(object)->components.find(scene::ScriptBehavior::descriptor),"Undo removes the complete field publication");
+  AE_EXPECT_TRUE(history.redo(document) && serializeEditorDocument(document,7)==archive,"Redo restores exact field values");
 }
 
 // Unity ScriptReference/Gradient.Evaluate: fora das paradas vale a ponta;

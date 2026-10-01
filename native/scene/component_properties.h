@@ -78,9 +78,10 @@ inline ComponentPropertyStatus setComponentTriple(Components &components,std::st
     triple=&p;
   }
   if(!triple) return ComponentPropertyStatus::UnknownProperty;
+  if(triple->dimensions()==2&&values[2]!=0) return ComponentPropertyStatus::InvalidValue;
   auto candidate=source->clone();
   if(!candidate || &candidate->type()!=&source->type()) return ComponentPropertyStatus::InvalidValue;
-  for(u32 axis=0;axis<3;++axis) {
+  for(u32 axis=0;axis<triple->dimensions();++axis) {
     const ComponentNumber *channel=nullptr;
     for(const auto &p:source->type().numbers) if(p.id==triple->channels[axis]) {
       if(channel) return ComponentPropertyStatus::AmbiguousProperty;

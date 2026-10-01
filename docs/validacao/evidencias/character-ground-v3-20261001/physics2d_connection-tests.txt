@@ -1,0 +1,5 @@
+[ok] physics2d_connections_editor_creation_enum_picker_receiver_history_and_contextual_link
+[ok] physics2d_connections_real_box2d_sensor_activates_receiver_before_script_and_stop_restores_authoring
+[ok] physics2d_connections_reject_sensor_mismatch_and_preserve_archive_and_remap
+
+3/3 testes passaram

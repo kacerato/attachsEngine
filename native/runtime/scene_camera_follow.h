@@ -27,6 +27,19 @@ public:
       if(!component) continue;
       const auto follow=*static_cast<const scene::CameraFollow *>(component);
       if(!follow.enabled||!follow.target||follow.target==id) continue;
+      // A path follower diagnoses this competing authoring configuration.
+      // Neither driver may overwrite the other's pose in the same frame.
+      if(const auto *object=world.graph().find(id)) {
+        bool pathWriter=false;
+        for(usize k=0;k<object->components.size();++k) {
+          const auto *value=object->components.at(k);
+          if(value->type().id!="astra.path.follow") continue;
+          bool enabled=true;
+          for(const auto &property:value->type().booleans) if(property.id=="enabled") enabled=property.read(*value);
+          pathWriter|=enabled;
+        }
+        if(pathWriter) continue;
+      }
       if(world.graph().isDescendantOf(static_cast<ObjectId>(follow.target),id)) return false;
       const auto target=world.handle(static_cast<ObjectId>(follow.target));
       if(!world.activeInHierarchy(target)) continue;

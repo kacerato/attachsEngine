@@ -1,0 +1,74 @@
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 0000009c
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 67000013
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+unreachable test widget: 00000078
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp:826: requested widget must exist before touching it
+[FALHOU] session_component_catalog_adds_closed_expands_removes_and_undoes
+[ok] editor_environment_map_commit_reopen_and_component_binding_use_one_registered_resource
+[ok] component_mesh_resource_command_uses_the_reflected_binding_and_undo
+[ok] session_applies_a_multi_component_recipe_atomically_and_undoes_it_once
+[ok] component_menu_moves_copies_pastes_as_new_resets_and_opens_reference
+[ok] script_component_field_picks_and_drops_objects_that_have_the_component
+[ok] dragging_component_header_reorders_components_with_undo
+[ok] session_component_clipboard_and_reset_preserve_ownership_and_history
+[ok] session_component_property_search_uses_ime_without_authoring_changes
+[ok] session_component_add_previews_dependencies_before_one_undo
+[ok] component_volume_handles_use_effective_pose_schema_and_single_undo
+[ok] component_header_toggle_wins_over_fold_inside_the_card
+[ok] p02_component_presets_persist_preview_apply_and_undo_without_copying_references
+[ok] component_search_finds_other_categories
+[ok] component_preview_shows_schema_defaults_without_editing_document
+[ok] component_property_search_crosses_groups_and_keeps_conditional_fields
+[ok] diagnostic_dock_uses_session_console_without_replacing_component_add
+[ok] editor_component_surface_preserves_target_and_opens_stable_component_inspection
+[ok] preset_library_reads_the_previous_single_component_format
+[ok] component_collection_reorder_rejects_mixed_preset_atomically
+[ok] component_delta_reports_every_field_and_marks_what_changes
+[ok] apply_component_fields_changes_only_the_chosen_addresses
+[ok] apply_component_fields_is_a_single_transaction
+[ok] apply_component_fields_rejects_unknown_address_without_touching_the_rest
+[ok] apply_component_fields_moves_a_resource_slot
+[ok] component_contracts_are_complete_for_every_registered_type
+[ok] component_limit_is_reachable_and_the_refusal_names_it
+[ok] component_matrix_reports_default_domain_and_invalidation
+[ok] component_invalidation_is_reported_in_words
+[ok] every_registered_component_has_family_icon_and_versioned_reference
+[ok] generated_csharp_component_api_matches_the_schema_registry
+[ok] editor_component_records_reject_invalid_duplicate_and_future_payloads
+[ok] editor_water_body_component_metadata_history_and_archive
+[ok] scene_physics_component_roundtrip_falls_on_authored_floor_and_stop_restores
+[ok] editor_v7_rejects_properties_introduced_by_later_component_versions
+[ok] scene_physics_inspector_component_is_undoable
+[ok] camera_look_component_is_optional_serialized_and_clamped_in_runtime
+[ok] mesh_component_v1_archive_still_loads_and_gains_identity_on_save
+[ok] scene_light_is_a_component_with_contract_and_survives_the_archive
+[ok] tween_cancel_validates_world_component_removal_and_session_lifetime
+[ok] new_component_gizmos_use_offsets_local_destinations_and_unscaled_audio_ranges
+[ok] prefab_revert_restores_component_identity_and_refuses_stale_or_dangling_edits
+[ok] runtime_world_component_resources_keep_guid128_and_validate_asset_type
+[ok] runtime_world_component_api_follows_the_shared_schema
+
+43/44 testes passaram

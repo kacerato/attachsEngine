@@ -476,6 +476,20 @@ AE_TEST(m082_reimport_preserves_local_edits_across_two_instances_and_reopen) {
                "e a pose nova chegou");
 }
 
+AE_TEST(groups_reimport_preserves_membership_when_the_source_node_disappears) {
+  Project project;EditorSession session;FakeRenderer renderer;start(session,renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"project");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(commit(session,project,vehicleV1(),report) && session.instantiateModel(report.source,report),"real import instance");
+  auto &document=session.document();const auto root=children(document,document.root()).front();
+  const auto wheel=childNamed(document,root,"Roda",1);auto value=*document.find(wheel);
+  value.groups.add("recebe-dano");AE_EXPECT_TRUE(session.history().applyValues(document,wheel,value),"author membership only");
+  AE_EXPECT_TRUE(commit(session,project,vehicleWithoutWheels(),report),report.diagnostic.c_str());
+  AE_EXPECT_TRUE(document.exists(wheel) && document.find(wheel)->groups.contains("recebe-dano"),"membership protects object from silent deletion");
+  AE_EXPECT_TRUE(linkOf(document,wheel)->orphan,"removed source becomes an orphan");
+  AE_EXPECT_EQ(report.reconcile.removed,1u,"untouched sibling still removed");
+}
+
 AE_TEST(m082_removed_nodes_keep_local_data_as_orphans_and_deleted_parts_stay_deleted) {
   Project project;
   EditorSession session;

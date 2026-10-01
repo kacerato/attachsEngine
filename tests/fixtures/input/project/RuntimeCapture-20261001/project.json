@@ -1,0 +1,7 @@
+{
+  "format":"ASTRA-PROJECT-1",
+  "resourceSource":"independent",
+  "project":{"name":"RuntimeCapture-20261001","path":"C:/Users/donod/Downloads/atchengine/tests/fixtures/input/project/RuntimeCapture-20261001","template":"empty","scenes":1,"assets":0},
+  "mainScene":"scenes/editor.aescene",
+  "editorScene":"scenes/editor.aescene"
+}

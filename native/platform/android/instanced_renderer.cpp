@@ -1226,8 +1226,18 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
       const u64 texture = u64{material.occlusionTexture} + textureBase;
       if (texture < dirtTextureSlots_.size()) occlusionSlot = dirtTextureSlots_[texture];
     }
+    if(!useBindless_ && material.lightmapTexture!=scene::MaterialTextureKeep &&
+       material.lightmapTexture!=renderer::InvalidMapTexture && !lightmapUnsupportedReported_) {
+      lightmapUnsupportedReported_=true;
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Lightmap] backend sem descritores bindless: lightmap externo indisponível; ambiente dinâmico preservado.");
+    }
+    u32 lightmapSlot=renderer::MaterialExtensionNoTexture;
+    if(useBindless_ && material.lightmapTexture!=scene::MaterialTextureKeep && material.lightmapTexture!=renderer::InvalidMapTexture) {
+      const u64 texture=u64{material.lightmapTexture}+textureBase;
+      if(texture<dirtTextureSlots_.size()) lightmapSlot=dirtTextureSlots_[texture];
+    }
     renderer::materialExtensionEntry(material, flags, occlusionSlot,
-                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats);
+                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot);
     authoredUvTransformEntries_[draw] = ++used;
   }
   // Acima da capacidade o desenho fica sem extensão e isso é dito uma vez.

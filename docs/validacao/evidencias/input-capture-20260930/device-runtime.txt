@@ -1,0 +1,82 @@
+--------- beginning of main
+10-01 00:01:52.925 27902  9807 I Aether.Android: [SceneSelection] assets=other controller=free/locked hud=0
+10-01 00:01:52.925 27902  9807 I Aether.Android: [FramePolicy] painel mÃ¡ximo=120.00 Hz.
+10-01 00:01:52.925 27902  9807 I Aether.Android: [PerformancePolicy] sustained requested=true supported=false.
+10-01 00:01:52.937 27902  9807 I Aether.Android: [PerformancePolicy] ADPF prefer_power_efficiency=false resultado=0.
+10-01 00:01:52.937 27902  9807 I Aether.Android: [PerformancePolicy] ADPF ativo thread=9807 target_ms=8.333 update_ms=16.667 game_mode=2 gpu_work=true.
+10-01 00:01:52.942 27902  9807 I Aether.Android: [ThermalPolicy] sample=1 status=0 headroom=0.432 forecast_s=10 pressure=none changed=false.
+10-01 00:01:52.943 27902  9807 I Aether.Android: Shell nativo iniciado.
+10-01 00:01:52.943 27902  9807 I Aether.Android: [FramePolicy] render=120 Hz (8.333 ms), fixed tick=60 Hz, CPU<=6.500 ms, GPU<=7.333 ms.
+10-01 00:01:52.944 27902  9807 I Aether.Android: [FramePacer] VSYNC do Android controla a admissÃ£o de frames.
+10-01 00:01:52.946 27902  9807 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=311459454.553 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+10-01 00:01:52.946 27902  9807 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=311459454.573 elapsed_ms=0.531 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+10-01 00:01:52.946 27902  9807 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=311459455.104 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-01 00:01:52.950 27902  9807 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=311459458.994 elapsed_ms=3.889 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-01 00:01:52.956 27902  9807 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=311459465.244 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-01 00:01:52.956 27902  9807 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=311459465.283 elapsed_ms=0.041 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-01 00:01:52.961 27902  9807 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=311459469.316 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:52.961 27902  9807 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=311459469.368
+10-01 00:01:52.965 27902  9807 I Aether.Android: [FramePolicy] solicitaÃ§Ã£o da surface=120 Hz resultado=0.
+10-01 00:01:53.003 27902  9807 I Aether.Android: Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+10-01 00:01:53.014 27902  9807 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+10-01 00:01:53.014 27902  9807 I Aether.Android: [TemporalUpscaler] arm-asr=available fsr2=available
+10-01 00:01:53.014 27902  9807 I Aether.Android: [RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+10-01 00:01:53.014 27902  9807 I Aether.Android: [RenderPolicy] preset=auto perfil=2 sombras=on(3 cascatas @1536, 9/1 taps, cache=static margem=1.06 blend=0.10 fade=0.12) ambiente=hemisferio+especular+split-sum pos=passe+bloom malha_agua=high(176 seg) textura_mip_bias=0 aniso=8.0 escala=1.00 dinamica=off[0.78,1.00] clamps=0
+10-01 00:01:53.014 27902  9807 I Aether.Android: [RenderPolicy] lod=on erro_solido=1.50px erro_coverage=3.00px histerese=0.78 normal_ate=220.0 specular_ate=400.0 mr_ate=300.0 emissive_ate=400.0 variantes_material=off aa=fxaa bloom=1 sharpen=0.12 contraste=1.04 saturacao=1.03
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=311459522.631
+10-01 00:01:53.014 27902  9807 I Aether.Android: [EmptyWorkspace] initialization=loading
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=311459522.759 elapsed_ms=0.127
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=311459522.761 elapsed_ms=53.393
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=311459522.764 elapsed_ms=53.450 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=311459522.793 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=311459522.801 elapsed_ms=0.007 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=311459522.805 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=311459522.807 elapsed_ms=0.002 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=311459522.811 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=311459522.813 elapsed_ms=0.002 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.014 27902  9807 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=311459522.817 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.015 27902  9807 I Aether.Android: [FramePolicy] solicitaÃ§Ã£o da surface=120 Hz resultado=0.
+10-01 00:01:53.016 27902  9807 I Aether.Android: Aplicativo ativo.
+10-01 00:01:53.016 27902  9807 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=311459524.390 elapsed_ms=1.573 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.016 27902  9820 I Aether.Android: [Textures] anisotropia de material=8.0
+10-01 00:01:53.019 27902  9807 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=311459528.047 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.019 27902  9807 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=311459528.108 elapsed_ms=0.063 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+10-01 00:01:53.036 27902  9820 I Aether.Android: [Authoring] primitive_library=1 packages=0 water=0 authored_objects=0
+10-01 00:01:53.039 27902  9820 I Aether.Android: [FrameGraph] depth 1280x2772: store=sim sampled=sim memoryless_pedido=nao lazily_allocated_concedido=nao.
+10-01 00:01:53.071 27902  9820 I Aether.Android: [Shadow] PCF de hardware ativo: filtro=linear compare=LESS_OR_EQUAL.
+10-01 00:01:54.981 27902  9820 I Aether.Android: [UI] pronta: fonte 2048x1024 icones 1024x2354 capacidade=16384.
+10-01 00:01:54.981 27902  9820 I Aether.Android: Descritores: caminho=bindless, capacidade bindless=16777216.
+10-01 00:01:54.981 27902  9820 I Aether.Android: RHI/VMA: buffer de instÃ¢ncias=1152 bytes; uso=1643008, limite=2411094835 bytes.
+10-01 00:01:54.981 27902  9820 I Aether.Android: InstancedRenderer pronto: capacidade=6, modo=empty-scene.
+10-01 00:01:54.981 27902  9820 I Aether.Android: [DirtRoad] passes solid=6 coverage=0 transparent=0 coverage_prepass=on; frustum_culling=conservador indirect=multi-draw.
+10-01 00:01:54.981 27902  9820 I Aether.Android: RHI/VMA [buffer]: uso=1643008, pico=1643008 bytes.
+10-01 00:01:54.981 27902  9820 I Aether.Android: RHI/VMA [texture]: uso=18182528, pico=18182528 bytes.
+10-01 00:01:54.981 27902  9820 I Aether.Android: RHI/VMA [render-target]: uso=97726464, pico=97726464 bytes.
+10-01 00:01:54.981 27902  9820 I Aether.Android: RHI/VMA [staging]: uso=0, pico=9641984 bytes.
+10-01 00:01:54.997 27902  9807 I Aether.Android: [Material] culling por material (dupla face): sim.
+10-01 00:01:54.997 27902  9807 I Aether.Android: [Import] KTX2 com mips vira ASTC 4x4.
+10-01 00:01:54.999 27902  9807 I Aether.Android: [Editor] independent resources=6 fingerprint=0 managed=off
+10-01 00:01:55.000 27902  9807 I Aether.Android: [Editor] sessao pronta: 2 entidades no documento.
+10-01 00:01:55.000 27902  9807 I Aether.Android: [ThermalPolicy] applied=none lod=1.50/3.00 shadow=on/3c@1536/9t post=pass+bloom scale=1.00 dynamic=[0.78,1.00]
+10-01 00:01:55.001 27902  9807 I Aether.Android: [EmptyWorkspace] initialization=ready
+10-01 00:01:55.006 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=3/3 shadow_cache_hit_frames=0 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:01:55.006 27902  9807 I Aether.Android: Primeiro frame apÃ³s ativaÃ§Ã£o apresentado: ciclo=1. latency_ms=1991.242 uptime_ms=311461514.616
+10-01 00:01:55.014 27902  9807 I Aether.Android: [FramePacer] cadÃªncia VSYNC observada=60.06 Hz (120 intervalos).
+10-01 00:01:56.561 27902  9807 I Aether.Android: ExtraÃ§Ã£o de assets .NET concluÃ­da: 186 ok, 0 falharam.
+10-01 00:01:56.561 27902  9807 I Aether.Android: [ManagedBuild] id=ae83648301220340b09446717f524e4c56b0394bd2405fce4e8d0aaaae82322b reused=0
+10-01 00:01:56.566 27902  9807 I Aether.Android: OpenSSL privado da Astra carregado.
+10-01 00:01:56.607 27902  9807 I Aether.Android: Runtime hospedado: Mono/SGen; regioes GC nativas ativas.
+10-01 00:01:56.607 27902  9807 I Aether.Android: .NET carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+10-01 00:01:59.399 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=239 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:02.941 27902  9807 I Aether.Android: [ThermalPolicy] sample=2 status=0 headroom=0.567 forecast_s=10 pressure=none changed=false.
+10-01 00:02:03.394 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=479 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:07.394 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=719 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:11.391 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=959 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:12.053 27902  9807 I Aether.Android: Marco de renderizaÃ§Ã£o atingido: 1000 frames apresentados.
+10-01 00:02:12.949 27902  9807 I Aether.Android: [ThermalPolicy] sample=3 status=0 headroom=0.510 forecast_s=10 pressure=none changed=false.
+10-01 00:02:15.384 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=1199 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:19.383 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=1439 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:22.957 27902  9807 I Aether.Android: [ThermalPolicy] sample=4 status=0 headroom=0.463 forecast_s=10 pressure=none changed=false.
+10-01 00:02:23.377 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=1679 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:27.372 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=1919 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-01 00:02:31.370 27902  9807 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/3 shadow_cache_hit_frames=2159 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0

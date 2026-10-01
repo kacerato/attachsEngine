@@ -25,7 +25,7 @@ template<class Segment> void editorColliderSegments(const scene::Collider &c,Seg
     }
     for(u32 axis:{0u,2u}) {
       for(float sign:{-1.0f,1.0f}) {
-        for(u32 i=0;i<16;++i) {
+        if(c.shape==scene::ColliderShape::Capsule) for(u32 i=0;i<16;++i) {
           Point a{},b{};a[axis]=c.radius*std::cos(i*pi/16);b[axis]=c.radius*std::cos((i+1)*pi/16);
           a[1]=sign*(c.halfHeight+c.radius*std::sin(i*pi/16));b[1]=sign*(c.halfHeight+c.radius*std::sin((i+1)*pi/16));segment(a,b);
         }

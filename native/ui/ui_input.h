@@ -28,6 +28,7 @@
 namespace ae::ui {
 
 enum class UiPointerPhase : u8 { Down, Move, Up, Cancel };
+enum class UiPointerDevice : u8 { Touch, Mouse };
 
 struct UiPointerEvent final {
   // Identidade estável do dedo, vinda do sistema. Não é o índice na lista de
@@ -36,6 +37,7 @@ struct UiPointerEvent final {
   UiPointerPhase phase = UiPointerPhase::Down;
   UiPoint position{};
   double timeSeconds = 0.0;
+  UiPointerDevice device=UiPointerDevice::Touch;
 };
 
 // Para onde o ponteiro foi despachado. `Viewport` é o alvo de fallback: tudo

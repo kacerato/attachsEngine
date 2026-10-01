@@ -1,0 +1,38 @@
+{
+  "abi": 34,
+  "native_scenarios": 24,
+  "new_integrated_scenarios": 5,
+  "apk_sha256": "56a116357381e6e789a99c85744d6e13817d2083b7694d45cf33c15b31963b8c",
+  "apk_bytes": 265931168,
+  "source_sha256": "f0509642d189370eeb33939f84092127020b21535dddaf0fb786bb6453decb36",
+  "physical_device": "not installed or executed for this revision",
+  "family_F005": "partial: object topology, nested prefabs, variants and structural collections remain",
+  "ui": "actual host editor UI with document and asset registry; software raster, not Android Vulkan",
+  "packaged": [
+    {
+      "path": "assets/dotnet/Astra.Scripting.dll",
+      "sha256": "6fba5804a7b9697586f3a082060faebbb6994818d49073bc42e702fb42f7ff49",
+      "matches_generated": true
+    },
+    {
+      "path": "assets/dotnet/Aether.Rendering.dll",
+      "sha256": "76594c5b5939200952f90b721a4a5b3e8caa52ff64771a4cd07016a5b4177d6e",
+      "matches_generated": true
+    },
+    {
+      "path": "assets/ui/astra-ui-icons.aeui",
+      "sha256": "97c144cae7ed4725005119a11e5d1f1759aef2b5f21550edb60457403390c439",
+      "matches_generated": true
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_android.so",
+      "sha256": "d39695a51d85f0a975871c14bb687f38ddb6c652a06b951a2835b904b4f753e7",
+      "bytes": 33260720
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_transform.so",
+      "sha256": "917c2c72379be29a7d12644c00b423dcf96422fa4f5c07fd3220bb416d4ca5c9",
+      "bytes": 7088
+    }
+  ]
+}

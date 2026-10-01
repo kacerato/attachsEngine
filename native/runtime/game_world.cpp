@@ -38,6 +38,9 @@ const char *worldStatusMessage(WorldStatus status) noexcept {
     case WorldStatus::ClipNotInComponent: return "Clipe fora da lista do componente Animação";
     case WorldStatus::UnknownElement: return "Elemento da coleção inexistente";
     case WorldStatus::OperationExpired: return "Resultado da operação não está mais disponível";
+    case WorldStatus::PropertyNotTweenable: return "A propriedade não possui escrita numérica elegível para tween";
+    case WorldStatus::PropertyAlreadyTweening: return "Outro tween já controla esta propriedade";
+    case WorldStatus::PropertyWrittenExternally: return "Outro escritor alterou a propriedade durante o tween";
   }
   return "Operação recusada";
 }
@@ -63,6 +66,7 @@ void GameWorld::clear() {
   structuralRevision_ = 0;
   invalidated_ = 0;
   elapsed_ = 0;
+  clock_.reset();
   delayedDestroy_.clear();
   unpublishedClones_.clear();
 }
@@ -228,6 +232,38 @@ WorldStatus GameWorld::findTagged(std::string_view tag,std::span<u64> output,u32
       ++count;if(firstOnly) break;
     }
     for(const auto child:graph_.childrenOf(id)) ids.push_back(child);
+  }
+  return WorldStatus::Ok;
+}
+
+WorldStatus GameWorld::setGroups(const ObjectHandle &h,const ObjectGroups &groups) {
+  const auto status=validate(h);if(status!=WorldStatus::Ok) return status;
+  auto value=*find(h);if(value.groups==groups) return WorldStatus::Ok;
+  value.groups=groups;return graph_.applyEntityValues(h.id,value)?WorldStatus::Ok:WorldStatus::Rejected;
+}
+WorldStatus GameWorld::setGroupMembership(const ObjectHandle &h,std::string_view name,bool member) {
+  const auto status=validate(h);if(status!=WorldStatus::Ok) return status;
+  if(!ObjectGroups::validName(name)) return WorldStatus::InvalidArgument;
+  auto groups=find(h)->groups;
+  if(!(member?groups.add(name):groups.remove(name))) return WorldStatus::Rejected;
+  return setGroups(h,groups);
+}
+WorldStatus GameWorld::isInGroup(const ObjectHandle &h,std::string_view name,bool &member) const {
+  member=false;const auto status=validate(h);if(status!=WorldStatus::Ok) return status;
+  if(!ObjectGroups::validName(name)) return WorldStatus::InvalidArgument;
+  member=find(h)->groups.contains(name);return WorldStatus::Ok;
+}
+WorldStatus GameWorld::findGroup(std::string_view name,std::span<u64> output,u32 &count,bool includeInactive) const {
+  count=0;if(!running()) return WorldStatus::NotRunning;
+  if(!ObjectGroups::validName(name)) return WorldStatus::InvalidArgument;
+  std::vector<ObjectId> ids{graph_.root()};
+  while(!ids.empty()) {
+    const auto id=ids.back();ids.pop_back();const auto h=handle(id);
+    if(!alive(h) || (!includeInactive && !activeSelf(h))) continue;
+    const auto *object=find(h);
+    if(object->groups.contains(name)) {if(count<output.size()) output[count]=id;++count;}
+    const auto children=graph_.childrenOf(id);
+    for(auto at=children.rbegin();at!=children.rend();++at) ids.push_back(*at);
   }
   return WorldStatus::Ok;
 }
@@ -434,6 +470,14 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
           outcome = WorldStatus::StaleHandle; break;
         }
         if (graph_.isDescendantOf(command.parent, command.object)) break;
+        // Ownership can change after queueing (e.g. physics rebuild). Revalidate
+        // the complete subtree before publishing either reparent policy.
+        graph_.collectSubtree(command.object, scratch_);
+        if (std::any_of(scratch_.begin(), scratch_.end(), [this](ObjectId member) {
+              return member < authorities_.size() && authorities_[member] != TransformAuthority::Free;
+            })) {
+          outcome = WorldStatus::TransformOwnedByPhysics; break;
+        }
         if (command.posePolicy == ReparentPosePolicy::KeepWorld) {
           float current[16], targetParent[16];
           Transform local;
@@ -651,7 +695,11 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
   auto *components = editComponents(component.object.id);
   if (!components) return WorldStatus::StaleHandle;
   switch (scene::setComponentProperty(*components, typeId, propertyId, value, component.instance)) {
-    case scene::ComponentPropertyStatus::Applied: invalidated_ |= schema->invalidates; return WorldStatus::Ok;
+    case scene::ComponentPropertyStatus::Applied: {
+      u32 invalidates=schema->invalidates;
+      if(typeId==scene::Character::descriptor.id&&scene::characterMotionProperty(propertyId))invalidates&=~(scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape);
+      invalidated_|=invalidates;return WorldStatus::Ok;
+    }
     case scene::ComponentPropertyStatus::MissingComponent: return WorldStatus::ComponentMissing;
     case scene::ComponentPropertyStatus::UnknownProperty:
     case scene::ComponentPropertyStatus::AmbiguousProperty:
@@ -659,6 +707,62 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
     case scene::ComponentPropertyStatus::InvalidValue: return WorldStatus::Rejected;
   }
   return WorldStatus::Rejected;
+}
+
+WorldStatus GameWorld::validateTweenNumber(const ComponentHandle &component,std::string_view propertyId,float destination,float &initial) const {
+  const auto valid=validate(component.object);if(valid!=WorldStatus::Ok)return valid;
+  const auto *value=readComponent(component);if(!value)return WorldStatus::ComponentMissing;
+  const auto *schema=scene::findComponentSchema(value->type().id);if(!schema)return WorldStatus::UnknownComponent;
+  if(schema->propertiesInPlay==scene::PlayMutability::Never)return WorldStatus::NotMutableInPlay;
+  const scene::ComponentNumber *number=nullptr;
+  for(const auto &p:value->type().numbers)if(p.id==propertyId){if(number)return WorldStatus::InvalidArgument;number=&p;}
+  if(!number)return WorldStatus::InvalidArgument;
+  constexpr u32 heavy=scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape|scene::Invalidate::MeshDerived|scene::Invalidate::TextureResidency|scene::Invalidate::Policy|scene::Invalidate::Script;
+  const auto capability=number->presentation.capability.empty()?schema->capability:number->presentation.capability;
+  if(!number->tweenable||!number->read||!number->write||!number->presentation.isEditable(*value)||!number->presentation.isVisible(*value)||!core::engineCapabilityAuthorable(capability)||((schema->invalidates|number->presentation.invalidates)&heavy))return WorldStatus::PropertyNotTweenable;
+  if(!std::isfinite(destination)||destination<number->minimum||destination>number->maximum)return WorldStatus::Rejected;
+  initial=number->read(*value);return std::isfinite(initial)?WorldStatus::Ok:WorldStatus::Rejected;
+}
+WorldStatus GameWorld::setTweenNumber(const ComponentHandle &component,std::string_view propertyId,float value) {
+  float previous=0;const auto status=validateTweenNumber(component,propertyId,value,previous);if(status!=WorldStatus::Ok)return status;
+  auto *components=editComponents(component.object.id);if(!components)return WorldStatus::StaleHandle;
+  auto *current=components->editInstance(component.instance);if(!current)return WorldStatus::ComponentMissing;
+  for(const auto &p:current->type().numbers)if(p.id==propertyId) {
+    auto *field=p.write(*current);if(!field)return WorldStatus::Rejected;
+    *field=value;if(!current->valid()){*field=previous;return WorldStatus::Rejected;}
+    const auto *schema=scene::findComponentSchema(current->type().id);
+    invalidated_|=schema->invalidates|p.presentation.invalidates;return WorldStatus::Ok;
+  }
+  return WorldStatus::InvalidArgument;
+}
+
+WorldStatus GameWorld::setTriple(const ComponentHandle &component,std::string_view propertyId,
+                                const float (&values)[3]) {
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *current=readComponent(component);
+  if(!current) return WorldStatus::ComponentMissing;
+  const auto *schema=scene::findComponentSchema(current->type().id);
+  if(!schema) return WorldStatus::UnknownComponent;
+  if(schema->propertiesInPlay==scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  auto *components=editComponents(component.object.id);
+  if(!components) return WorldStatus::StaleHandle;
+  switch(scene::setComponentTriple(*components,current->type().id,propertyId,values,component.instance)) {
+    case scene::ComponentPropertyStatus::Applied: invalidated_|=schema->invalidates;return WorldStatus::Ok;
+    case scene::ComponentPropertyStatus::MissingComponent: return WorldStatus::ComponentMissing;
+    case scene::ComponentPropertyStatus::InvalidValue: return WorldStatus::Rejected;
+    default: return WorldStatus::InvalidArgument;
+  }
+}
+
+WorldStatus GameWorld::setTimeScale(float value) {
+  if(!running()) return WorldStatus::NotRunning;
+  return clock_.setScale(value)?WorldStatus::Ok:WorldStatus::InvalidArgument;
+}
+bool GameWorld::beginFrame(double elapsed,bool editorStep) {
+  if(!running() || !clock_.beginFrame(elapsed,editorStep)) return false;
+  advanceClock(clock_.delta());
+  return true;
 }
 
 WorldStatus GameWorld::getSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,

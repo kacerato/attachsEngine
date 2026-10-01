@@ -1,0 +1,3 @@
+[ok] portrait_authoring_panel_owns_its_pixels_and_scene_options_return_when_closed
+
+1/1 testes passaram

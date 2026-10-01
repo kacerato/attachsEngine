@@ -28,6 +28,7 @@
 #include "runtime/scene_graph.h"
 #include "runtime/primitive_object.h"
 #include "runtime/transform_math.h"
+#include "runtime/simulation_clock.h"
 #include "scene/component_properties.h"
 #include "scene/component_schema.h"
 #include "resources/asset_registry.h"
@@ -80,13 +81,16 @@ enum class WorldStatus : u32 {
   ClipNotInComponent, // o clipe existe mas não está na lista do componente Animation
   UnknownElement,     // elemento de coleção removido ou identidade desconhecida
   OperationExpired,   // resultado rastreado saiu da janela de retenção
+  PropertyNotTweenable,
+  PropertyAlreadyTweening,
+  PropertyWrittenExternally,
 };
 
 const char *worldStatusMessage(WorldStatus status) noexcept;
 
 // Quem escreve a pose de um objeto durante o Play. Escrever transform por script
 // em um objeto cuja pose é publicada pela física dessincronizaria os dois lados.
-enum class TransformAuthority : u32 { Free, PhysicsBody, Character };
+enum class TransformAuthority : u32 { Free, PhysicsBody, Character, PhysicsBody2D };
 enum class ReparentPosePolicy : u32 { KeepLocal, KeepWorld };
 enum class WorldOperationState : u32 { Pending, Applied, Failed };
 
@@ -150,6 +154,12 @@ public:
   WorldStatus setTag(const ObjectHandle &handle,std::string_view tag);
   WorldStatus compareTag(const ObjectHandle &handle,std::string_view tag,bool &matches) const;
   WorldStatus findTagged(std::string_view tag,std::span<u64> output,u32 &count,bool firstOnly=false) const;
+  WorldStatus setGroups(const ObjectHandle &handle,const ObjectGroups &groups);
+  WorldStatus setGroupMembership(const ObjectHandle &handle,std::string_view name,bool member);
+  WorldStatus isInGroup(const ObjectHandle &handle,std::string_view name,bool &member) const;
+  // Inactive objects belong to groups too; callers choose whether to include
+  // them. Pending destruction is always excluded, and order is tree order.
+  WorldStatus findGroup(std::string_view name,std::span<u64> output,u32 &count,bool includeInactive=true) const;
   // Camada de gameplay (filtro de física e consultas) e flags de desenho do
   // objeto. A camada recria o corpo; as flags o renderer lê a cada quadro.
   WorldStatus setLayer(const ObjectHandle &handle, u32 layer);
@@ -189,6 +199,13 @@ public:
                           scene::ComponentPropertyValue &out) const;
   WorldStatus setProperty(const ComponentHandle &component, std::string_view propertyId,
                           const scene::ComponentPropertyValue &value);
+  WorldStatus validateTweenNumber(const ComponentHandle &component,std::string_view propertyId,float destination,float &initial) const;
+  // Only explicitly eligible independent scalars: no component clone per tick.
+  WorldStatus setTweenNumber(const ComponentHandle &component,std::string_view propertyId,float value);
+  // A tripla refletida é uma atribuição: valida todos os canais e invariantes
+  // antes de publicar qualquer eixo, inclusive para vetores de direção.
+  WorldStatus setTriple(const ComponentHandle &component,std::string_view propertyId,
+                        const float (&values)[3]);
   WorldStatus getSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,
                               scene::ComponentPropertyValue &out) const;
   WorldStatus setSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,
@@ -213,6 +230,9 @@ public:
                                   const ComponentResourceResolver &resolveResource);
   WorldStatus removeAnimationClip(const ComponentHandle &component,u64 elementId);
   WorldStatus moveAnimationClip(const ComponentHandle &component,u64 elementId,u32 targetIndex);
+  // Point edits publish one validated curve value, preserving point identities.
+  WorldStatus editPathPoint(const ComponentHandle &component,u32 operation,u64 elementId,u32 index,
+                           const float *values,u64 &allocatedId);
 
   // --- transform ----------------------------------------------------------
   WorldStatus localTransform(const ObjectHandle &handle, Transform &out) const;
@@ -241,6 +261,9 @@ public:
   u32 pendingCommandCount() const noexcept { return static_cast<u32>(commands_.size()); }
   double elapsedSeconds() const noexcept { return elapsed_; }
   void advanceClock(double delta);
+  const SimulationClock &clock() const noexcept {return clock_;}
+  WorldStatus setTimeScale(float value);
+  bool beginFrame(double elapsed,bool editorStep=false);
 
 private:
   ObjectHandle registerInstantiation(ObjectId root,const ObjectCloneMap &mapping);
@@ -270,6 +293,7 @@ private:
   u64 structuralRevision_ = 0;
   u32 invalidated_ = 0;
   double elapsed_ = 0;
+  SimulationClock clock_;
   struct DelayedDestroy { ObjectHandle object; double due; };
   std::vector<DelayedDestroy> delayedDestroy_;
   std::vector<ObjectId> unpublishedClones_;

@@ -91,7 +91,7 @@ AE_TEST(preset_library_stores_and_reloads_a_recipe) {
   AE_EXPECT_TRUE(reopened.instantiate(id, error) == nullptr, "uma receita não é um componente");
 }
 
-AE_TEST(recipe_capture_skips_components_without_portable_preset) {
+AE_TEST(recipe_capture_rejects_partial_composition_without_modifying_library) {
   const auto root = temporaryRoot("partial");
   editor::EditorComponentPresets presets;
   std::string error;
@@ -102,10 +102,8 @@ AE_TEST(recipe_capture_skips_components_without_portable_preset) {
   auto *script = components.add(scene::ScriptBehavior::descriptor);
   static_cast<scene::ScriptBehavior &>(*script).scriptType = "Porta";
 
-  AE_EXPECT_TRUE(presets.captureRecipe("Mista", components, error), error.c_str());
-  auto values = presets.instantiateAll(presets.entries.front().id, error);
-  AE_EXPECT_EQ(values.size(), 1u, "o comportamento em C# fica de fora e o resto é salvo");
-  AE_EXPECT_TRUE(&values[0]->type() == &scene::Light::descriptor, "o que tem preset portátil entrou");
+  AE_EXPECT_TRUE(!presets.captureRecipe("Mista", components, error) && !error.empty(), "não descartar comportamento silenciosamente");
+  AE_EXPECT_TRUE(presets.entries.empty(), "nenhuma receita parcial é publicada");
 }
 
 AE_TEST(recipe_rejects_a_repeated_singleton_type_on_load) {
@@ -116,7 +114,7 @@ AE_TEST(recipe_rejects_a_repeated_singleton_type_on_load) {
   light.write(payload);
   std::ostringstream file;
   file.imbue(std::locale::classic());
-  file << editor::EditorComponentPresets::Magic << " 1\n1 " << std::quoted(std::string("Duas luzes")) << " 2";
+  file << "ASTRA_COMPONENT_PRESETS_2 1\n1 " << std::quoted(std::string("Duas luzes")) << " 2";
   for (u32 i = 0; i < 2; ++i)
     file << ' ' << std::quoted(std::string(scene::Light::descriptor.id)) << ' ' << scene::Light::descriptor.version
          << ' ' << std::quoted(payload.str());

@@ -1,0 +1,4 @@
+[ok] tween_controls_editor_routes_expanded_instance_to_runtime_and_preserves_authoring
+[ok] tween_controls_abi_start_pause_resume_cancel_and_after_stop_rejection
+
+2/2 testes passaram

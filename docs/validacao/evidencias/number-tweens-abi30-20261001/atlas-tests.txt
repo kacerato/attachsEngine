@@ -1,0 +1,7 @@
+[ok] builder_resolves_an_icon_to_its_atlas_rectangle
+[ok] builder_skips_an_icon_the_atlas_does_not_have
+[ok] font_rejects_a_glyph_that_leaves_the_atlas
+[ok] icons_reject_a_rect_that_leaves_the_atlas
+[ok] r4_texture_preview_atlas_fits_thumbnails_and_isolates_channels
+
+5/5 testes passaram

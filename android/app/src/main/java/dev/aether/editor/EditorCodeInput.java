@@ -77,7 +77,6 @@ final class EditorCodeInput {
     private final Runnable completion = () -> requestLanguage(0, "");
     private boolean portraitWorkspace;
     private float appliedScale;
-    private int sceneOrientation=ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
     private static native byte[][] poll(long buffer, long revision);
     private static native boolean send(int kind, long buffer, long revision, long serial,
         int start, int erased, byte[] inserted, int end, float x, float y, boolean flag, boolean focus);
@@ -147,11 +146,10 @@ final class EditorCodeInput {
         stopped = false;
         boolean code = workspace();
         if (code != portraitWorkspace) {
-            if (code) sceneOrientation = activity.getRequestedOrientation();
             portraitWorkspace = code;
             // Change the actual Activity/IME orientation. configChanges keeps
             // the native document and this input projection alive through it.
-            activity.setRequestedOrientation(code ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT : sceneOrientation);
+            activity.setRequestedOrientation(code ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         }
         byte[] copied = takeCopy();
         if (copied != null) {

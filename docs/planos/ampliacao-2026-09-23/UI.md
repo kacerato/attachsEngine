@@ -98,7 +98,7 @@ Arquivos em árvore à esquerda; gaveta mostra thumbnails/lista conforme o tipo 
 | P17–P18 | Extensões, docs/code/graph, build e problemas de projeto | Contratos, compiler/cooker/runtime |
 | P19 | Rede/XR/vídeo conforme módulo | Backend disponível; não apenas menus |
 
-A primeira workspace nova desse conjunto é “Agenda de timers”. Ela ocupa a área central com régua temporal e uma linha por instância, alterna horizonte de 2/10/60 segundos e seleciona a instância no Inspector. O Inspector edita intervalo, repetição e ativação; a linha temporal reflete esses valores. A régua descreve o agendamento autoral, não finge ser telemetria da contagem do Play.
+Timer é criado e editado no Inspector. Em Inspecionar durante Play, a instância expandida mostra restante e controles de iniciar/reiniciar, pausar/retomar e parar sobre o scheduler real. Não existe workspace Agenda de timers; a afirmação anterior foi corrigida. O estado de contagem é runtime e não é gravado no arquivo da cena.
 
 “Camadas físicas” é outra workspace própria: escolhe a camada, cria/renomeia nomes e alterna os pares que interagem. A lista contextual substitui a matriz 32×32 impossível de tocar no telefone; cada toque grava a matriz recíproca por um comando de Undo. O mesmo dado salvo é entregue ao filtro de colisão do Jolt no Play. A escolha de camada de cada objeto continua no Inspector.
 

@@ -1,0 +1,3 @@
+[ok] every_composed_recipe_creates_its_declared_composition_in_one_command
+
+1/1 testes passaram

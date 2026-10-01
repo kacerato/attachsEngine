@@ -52,10 +52,11 @@ std::string serializePrefabObject(const SceneObject &object) {
   for(float value:object.environment) out<<' '<<value;
   auto components=object.components;components.remove(scene::PrefabLink::descriptor);
   if(!components.write(out,true)) return {};
+  out<<' ';object.groups.write(out);
   return out.str();
 }
 
-bool deserializePrefabObject(std::istream &in,Prefab::Registry registry,SceneObject &object) {
+bool deserializePrefabObject(std::istream &in,Prefab::Registry registry,SceneObject &object,bool requireGroups) {
   SceneObject value;std::string name;u32 kind=0;
   if(!(in>>value.id>>value.parent>>kind>>std::quoted(name)) || name.empty() || name.size()>=kNameCapacity ||
      name.find('\0')!=std::string::npos || kind>static_cast<u32>(ObjectKind::Effect)) return false;
@@ -69,6 +70,12 @@ bool deserializePrefabObject(std::istream &in,Prefab::Registry registry,SceneObj
   for(float &v:value.environment) if(!(in>>v)) return false;
   if(!value.components.read(in,registry,scene::UnknownComponentPolicy::Reject,true) ||
      value.components.find(scene::PrefabLink::descriptor) || !validObject(value)) return false;
+  // PrefabLink baselines contain a standalone object without a file header.
+  // An explicit marker lets old baselines/objects migrate without guessing at
+  // the next object's numeric ID. Legacy records have no memberships.
+  in>>std::ws;
+  if(in.peek()=='G') {if(!value.groups.read(in)) return false;}
+  else if(requireGroups) return false;
   object=std::move(value);return true;
 }
 
@@ -95,7 +102,7 @@ std::string Prefab::write() const {
   if(!asset_.valid() || !root_ || !graph_.exists(root_)) return {};
   std::vector<ObjectId> ids;graph_.collectSubtree(root_,ids);
   std::ostringstream out;out.imbue(std::locale::classic());
-  out<<"ASTRA_PREFAB 2 "<<asset_.text()<<' '<<root_<<' '<<ids.size()<<' '<<graph_.nextObjectId()<<'\n';
+  out<<"ASTRA_PREFAB 3 "<<asset_.text()<<' '<<root_<<' '<<ids.size()<<' '<<graph_.nextObjectId()<<'\n';
   for(const auto id:ids) {
     const auto text=serializePrefabObject(*graph_.find(id));
     if(text.empty() || text.size()>256*1024) return {};
@@ -110,16 +117,16 @@ bool Prefab::read(std::string_view text,Registry registry,std::string &error) {
   if(text.size()>MaximumBytes) {error="Prefab excede 32 MiB";return false;}
   std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
   std::string magic,guid;u32 version=0,count=0,next=0;Prefab prepared;
-  if(!(in>>magic>>version>>guid>>prepared.root_>>count) || magic!="ASTRA_PREFAB" || (version!=1 && version!=2) ||
+  if(!(in>>magic>>version>>guid>>prepared.root_>>count) || magic!="ASTRA_PREFAB" || (version<1 || version>3) ||
      !resources::AssetGuid::parse(guid,prepared.asset_) || !prepared.asset_.valid() || !count || count>=SceneGraph::kMaximumObjects) {
     error="Cabeçalho de prefab inválido ou versão não suportada";return false;
   }
-  if(version==2 && (!(in>>next) || next<3 || next>SceneGraph::kMaximumObjects+1)) {
+  if(version>=2 && (!(in>>next) || next<3 || next>SceneGraph::kMaximumObjects+1)) {
     error="Contador de identidades inválido no prefab";return false;
   }
   for(u32 i=0;i<count;++i) {
     SceneObject object;
-    if(!deserializePrefabObject(in,registry,object) || (i==0 && (object.id!=prepared.root_ || object.parent!=prepared.graph_.root())) ||
+    if(!deserializePrefabObject(in,registry,object,version>=3) || (i==0 && (object.id!=prepared.root_ || object.parent!=prepared.graph_.root())) ||
        (i && (object.parent==prepared.graph_.root() || !prepared.graph_.exists(object.parent))) ||
        serializePrefabObject(object).size()>256*1024 || !prepared.graph_.restoreEntity(object,std::numeric_limits<u32>::max())) {
       error="Objeto, componente ou hierarquia inválida no prefab";return false;
@@ -127,7 +134,7 @@ bool Prefab::read(std::string_view text,Registry registry,std::string &error) {
   }
   in>>std::ws;
   if(!in.eof()) {error="Dados adicionais após o prefab";return false;}
-  if(version==2 && !prepared.graph_.reserveObjectIdsUntil(next)) {error="Contador de identidades anterior aos objetos do prefab";return false;}
+  if(version>=2 && !prepared.graph_.reserveObjectIdsUntil(next)) {error="Contador de identidades anterior aos objetos do prefab";return false;}
   if(!portableReferences(prepared.graph_,prepared.root_,error)) return false;
   *this=std::move(prepared);return true;
 }

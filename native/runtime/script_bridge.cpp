@@ -560,14 +560,35 @@ void ScriptBridge::installAccess() {
   // --- entrada por acoes ---------------------------------------------------
   access_.inputAxis = [](void *c, const u8 *action, int length, float *out) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
     const auto name = viewOf(action, length);
     if (name.empty() || !out) return 0;
     if (!s.input_->map().find(name)) { s.lastStatus_ = WorldStatus::InvalidArgument; return 0; }
     s.input_->axis2(name, out);
     return 1;
   };
+  access_.inputActionCommand=[](void*c,const u8*action,int length,u32 operation,scene::ScriptInputActionState*out)->int {
+    auto&s=*static_cast<ScriptBridge*>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!out||out->size!=sizeof(*out)||operation>4){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto name=viewOf(action,length);const auto*authored=s.input_->authoredMap().find(name);
+    if(operation<3 && !authored){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if((operation==1 && ((out->flags&~1u)||!s.input_->setActionEnabled(name,(out->flags&1)!=0))) ||
+       (operation==2 && !s.input_->restoreActionEnabled(name)) ||
+       (operation==4 && !s.input_->setDeviceGroups(out->deviceGroups))){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    scene::ScriptInputActionState result;
+    if(operation>=3)result.deviceGroups=s.input_->deviceGroups();
+    else {
+      result.flags=(s.input_->actionEnabled(name)?1u:0u)|(authored->enabled?2u:0u);
+      result.interaction=static_cast<u32>(authored->interaction);result.duration=authored->duration;
+      result.deviceGroups=authored->deviceGroups;result.phase=static_cast<u32>(s.input_->phase(name));
+      result.progress=s.input_->progress(name);result.elapsed=s.input_->elapsed(name);
+    }
+    *out=result;s.lastStatus_=WorldStatus::Ok;return 1;
+  };
   access_.inputButton = [](void *c, const u8 *action, int length, u32 query) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return -1;}
     const auto name = viewOf(action, length);
     if (name.empty() || !s.input_->map().find(name)) { s.lastStatus_ = WorldStatus::InvalidArgument; return -1; }
     switch (query) {
@@ -579,13 +600,89 @@ void ScriptBridge::installAccess() {
   };
   access_.inputContext = [](void *c, const u8 *context, int length, int enabled) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
     const auto name = viewOf(context, length);
     if (name.empty()) return 0;
     if (enabled >= 0) s.input_->setContextEnabled(name, enabled != 0);
     return s.input_->contextEnabled(name) ? 1 : 0;
   };
+  access_.inputBindingCommand=[](void *c,const u8 *action,int length,u32 index,u32 operation,scene::ScriptInputBinding *value)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return 0;}const auto name=viewOf(action,length);bool ok=false;
+    if(operation==3){s.input_->removeAllOverrides();ok=true;}
+    else if(operation==2)ok=s.input_->removeOverride(name,index);
+    else if(value && (operation==0||operation==4)) {
+      InputBinding binding;if(s.input_->binding(name,index,binding,operation==4)) {
+        *value={static_cast<u32>(binding.source),binding.code,binding.negativeCode,binding.axis,binding.scale,binding.invert?1u:0u};ok=true;
+      }
+    } else if(value && operation==1 && value->invert<=1) {
+      const InputBinding binding{static_cast<InputSource>(value->source),value->code,value->negativeCode,value->axis,value->scale,value->invert!=0};
+      ok=s.input_->overrideBinding(name,index,binding);
+    }
+    s.lastStatus_=ok?WorldStatus::Ok:WorldStatus::InvalidArgument;return ok?1:0;
+  };
+  access_.inputProfile=[](void *c,u32 operation,const u8 *data,int length,u8 *out,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(operation==1) {
+      const bool ok=data&&length>0&&length<=262144&&s.input_->importProfile({reinterpret_cast<const char*>(data),static_cast<usize>(length)});
+      s.lastStatus_=ok?WorldStatus::Ok:WorldStatus::InvalidArgument;return ok?1:-1;
+    }
+    if(operation!=0 || capacity<0){s.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    const auto profile=s.input_->exportProfile();const int size=static_cast<int>(profile.size());
+    if(size>262144){s.lastStatus_=WorldStatus::Rejected;return -1;}
+    if(out && capacity>=size)std::memcpy(out,profile.data(),profile.size());
+    s.lastStatus_=WorldStatus::Ok;return size;
+  };
+  access_.numberTweenCreate=[](void*context,u64 object,u64 instance,const u8*property,int length,const scene::ScriptNumberTweenParameters*parameters,u64*out)->int {
+    auto&s=*static_cast<ScriptBridge*>(context);
+    if(!s.world_||!s.numberTweens_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(object>std::numeric_limits<u32>::max()||!property||length<=0||length>127||!parameters||parameters->size!=sizeof(*parameters)||parameters->reserved||(parameters->flags&~1u)||!out){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.numberTweens_->create(*s.world_,{s.world_->handle(static_cast<ObjectId>(object)),instance},std::string_view(reinterpret_cast<const char*>(property),static_cast<usize>(length)),parameters->destination,parameters->duration,parameters->easing,(parameters->flags&1)!=0,*out);
+    return s.lastStatus_==WorldStatus::Ok?1:0;
+  };
+  access_.numberTweenCommand=[](void*context,u64 id,u32 operation,scene::ScriptNumberTweenState*output)->int {
+    auto&s=*static_cast<ScriptBridge*>(context);
+    if(!s.world_||!s.numberTweens_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!output||output->size!=sizeof(*output)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    SceneNumberTweens::State state;s.lastStatus_=s.numberTweens_->command(*s.world_,id,operation,state);if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    output->status=static_cast<u32>(state.status);output->failure=static_cast<u32>(state.failure);output->elapsed=state.elapsed;output->value=state.value;output->duration=state.duration;
+    output->flags=(state.paused?1u:0u)|(state.active?2u:0u)|(state.enabled?4u:0u);return 1;
+  };
+  access_.tweenCommand=[](void*context,u64 object,u64 instance,u32 operation,scene::ScriptTweenState*output)->int {
+    auto&s=*static_cast<ScriptBridge*>(context);
+    if(!s.world_||!s.tweens_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(object>std::numeric_limits<u32>::max()||!output||output->size!=sizeof(*output)||output->reserved){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto h=s.world_->handle(static_cast<ObjectId>(object));SceneTweens::State state;
+    s.lastStatus_=s.tweens_->command(*s.world_,{h,instance},operation,state);if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    const auto*v=s.world_->readComponent({h,instance});const bool enabled=v&&static_cast<const scene::TransformTween*>(v)->enabled;
+    output->status=static_cast<u32>(state.status);output->elapsed=state.elapsed;output->flags=(state.paused?1u:0u)|(enabled?2u:0u)|(s.world_->activeInHierarchy(h)?4u:0u);return 1;
+  };
+  access_.timerCommand=[](void *context,u64 object,u64 instance,u32 operation,float seconds,scene::ScriptTimerState *output)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);
+    if(!s.world_||!s.timers_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(object>std::numeric_limits<u32>::max()||!output||output->size!=sizeof(*output)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto handle=s.world_->handle(static_cast<ObjectId>(object));SceneTimers::State state;
+    s.lastStatus_=s.timers_->command(*s.world_,{handle,instance},operation,seconds,state);
+    if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    const auto *value=s.world_->readComponent({handle,instance});
+    const bool enabled=value&&static_cast<const scene::Timer*>(value)->enabled;
+    output->remaining=state.running?std::max(0.0,state.remaining):0;
+    output->flags=(state.running?1u:0u)|(state.paused?2u:0u)|(state.completed?4u:0u)|(enabled?8u:0u)|(s.world_->activeInHierarchy(handle)?16u:0u);
+    return 1;
+  };
+  access_.inputCaptureCommand=[](void *c,u32 operation,const u8 *name,int length,u32 index,u32 source,u32 flags,u32 cancelKey)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(operation==1) {
+      const bool ok=flags<=1&&s.input_->beginBindingCapture(viewOf(name,length),index,static_cast<InputSource>(source),flags!=0,cancelKey);
+      s.lastStatus_=ok?WorldStatus::Ok:WorldStatus::InvalidArgument;if(!ok)return -1;
+    } else if(operation==2)s.input_->cancelBindingCapture();
+    else if(operation!=0){s.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    s.lastStatus_=WorldStatus::Ok;return static_cast<int>(s.input_->captureStatus());
+  };
   access_.inputRole = [](void *c, u32 role, u8 *out, int capacity) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
+    if(!s.input_||!s.world_){s.lastStatus_=WorldStatus::NotRunning;return -1;}
     const auto &map = s.input_->map();
     const std::string &name = role == 0 ? map.moveAction() : role == 1 ? map.lookAction() : map.jumpAction();
     if (role > 2 || name.empty()) return -1;
@@ -630,6 +727,16 @@ void ScriptBridge::installAccess() {
     }
     s.lastStatus_ = s.world_->setProperty({s.world_->handle(static_cast<ObjectId>(id)), instance}, viewOf(propertyId, length), value);
     return s.lastStatus_ == WorldStatus::Ok;
+  };
+
+  access_.setTriple = [](void *c,u64 id,u64 instance,const u8 *propertyId,int length,const float *values) -> int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(!values || id>std::numeric_limits<ObjectId>::max() || !propertyId || length<=0) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    const float tuple[3]{values[0],values[1],values[2]};
+    s.lastStatus_=s.world_->setTriple({s.world_->handle(static_cast<ObjectId>(id)),instance},viewOf(propertyId,length),tuple);
+    return s.lastStatus_==WorldStatus::Ok;
   };
 
   access_.getRenderingState = [](void *c, u32 expectedWorld, scene::ScriptRenderingState *out) -> int {
@@ -745,6 +852,48 @@ void ScriptBridge::installAccess() {
         WorldStatus::Ok:WorldStatus::Rejected;
     return s.lastStatus_==WorldStatus::Ok;
   };
+  access_.objectLayer=[](void *c,u64 id,u32 world,u32 generation,int layer)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_||!s.world_->running()){s.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(id>std::numeric_limits<ObjectId>::max()||layer < -1||layer>=int(GameplayLayers::kCount)){
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    const ObjectHandle owner{world,(ObjectId)id,generation};
+    s.lastStatus_=s.world_->validate(owner);if(s.lastStatus_!=WorldStatus::Ok)return -1;
+    if(layer>=0){s.lastStatus_=s.world_->setLayer(owner,u32(layer));if(s.lastStatus_!=WorldStatus::Ok)return -1;}
+    return int(s.world_->find(owner)->layer);
+  };
+  access_.fieldQuery=[](void *c,u64 id,u32 world,u32 generation,u64 instance,u32 op,const float *point,u32 layer,scene::ScriptFieldState *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_||!s.physics_||!s.world_->running()){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||!out||out->size!=sizeof(*out)||out->reserved){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const ObjectHandle owner{world,(ObjectId)id,generation};s.lastStatus_=s.world_->validate(owner);if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    const auto *component=s.world_->find(owner)->components.findInstance(instance);
+    const bool field2D=component&&scene::physicsField2DKind(*component)>=0;
+    PhysicsFieldSample sample;s.lastStatus_=field2D?
+      (s.physics2D_?s.physics2D_->fieldQuery(*s.world_,owner,instance,op,point,layer,sample):WorldStatus::NotRunning):
+      s.physics_->fieldQuery(*s.world_,owner,instance,op,point,layer,sample);
+    if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    static_assert(sizeof(sample)==sizeof(*out));*out={};out->flags=sample.flags;out->weight=sample.weight;std::copy_n(sample.acceleration,3,out->acceleration);std::copy_n(sample.windVelocity,3,out->windVelocity);out->windDrag=sample.windDrag;out->linearDrag=sample.linearDrag;out->angularDrag=sample.angularDrag;out->overrideWeight=sample.overrideWeight;out->affectedBodies=sample.affectedBodies;out->affectedMass=sample.affectedMass;return 1;
+  };
+  access_.bodyCommand=[](void *c,u64 id,u32 world,u32 generation,u64 instance,u32 op,const float *value,const float *point,scene::ScriptBodyState *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_||!s.physics_||!s.world_->running()){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||!out||out->size!=sizeof(*out)||out->reserved||!value||!point||op>9){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    for(u32 a=0;a<3;++a)if(!std::isfinite(value[a])||!std::isfinite(point[a])){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    AetherBodyStateV1 state;
+    s.lastStatus_=s.physics_->bodyCommand(*s.world_,{world,(ObjectId)id,generation},instance,op,{value[0],value[1],value[2]},{point[0],point[1],point[2]},state);
+    if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    *out={};out->flags=state.flags;auto copy=[](float *to,AetherVec3 from){to[0]=from.x;to[1]=from.y;to[2]=from.z;};copy(out->linear,state.linear);copy(out->angular,state.angular);copy(out->centerOfMass,state.centerOfMass);return 1;
+  };
+  access_.characterSnapshot=[](void *c,u64 id,scene::ScriptCharacterState *out)->int {
+    auto&s=*static_cast<ScriptBridge*>(c);if(!s.world_||!s.physics_||!s.world_->running()){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||!out||out->size!=sizeof(*out)||out->reserved||out->tailReserved){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    physics::CharacterMotor::RuntimeState state;s.lastStatus_=s.physics_->characterState(*s.world_,(ObjectId)id,state);if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    *out={};out->groundState=static_cast<u32>(state.groundState);out->flags=state.hasMeasuredStep?1:0;
+    auto copy=[](float *to,AetherVec3 from){to[0]=from.x;to[1]=from.y;to[2]=from.z;};
+    copy(out->position,state.position);copy(out->velocity,state.velocity);copy(out->motorVelocity,state.motorVelocity);copy(out->groundVelocity,state.groundVelocity);copy(out->groundNormal,state.groundNormal);return 1;
+  };
   access_.characterJump=[](void *c,u64 id)->int {
     auto &s=*static_cast<ScriptBridge*>(c);
     if(id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
@@ -753,7 +902,7 @@ void ScriptBridge::installAccess() {
     if(s.lastStatus_!=WorldStatus::Ok) return 0;
     const auto *object=s.world_->find(handle);
     if(!object->components.find(scene::Character::descriptor)) {s.lastStatus_=WorldStatus::ComponentMissing;return 0;}
-    s.lastStatus_=s.physics_->jumpCharacter((ObjectId)id)?WorldStatus::Ok:WorldStatus::Rejected;
+    s.lastStatus_=s.physics_->jumpCharacter((ObjectId)id,s.world_)?WorldStatus::Ok:WorldStatus::Rejected;
     return s.lastStatus_==WorldStatus::Ok;
   };
   access_.cameraLook=[](void *c,u64 id,const float *delta)->int {
@@ -929,6 +1078,168 @@ void ScriptBridge::installAccess() {
     s.lastStatus_=s.world_->moveAnimationClip({s.world_->handle((ObjectId)id),instance},element,index);
     return s.lastStatus_==WorldStatus::Ok;
   };
+  access_.body2DCommand=[](void*c,u64 id,u32 world,u32 generation,u32 op,const float*input,float*out)->int {
+    auto&s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_||!s.physics2D_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||op>6){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->validate({world,static_cast<ObjectId>(id),generation});
+    if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    if(op==0&&!out){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(op!=0&&(!input||!std::isfinite(input[0])||!std::isfinite(input[1])||!std::isfinite(input[2]))){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto object=static_cast<ObjectId>(id);bool ok=false;
+    switch(op){case 0:ok=s.physics2D_->velocity(object,out,out[2]);break;
+      case 1:ok=s.physics2D_->setVelocity(object,input,input[2]);break;
+      case 2:ok=s.physics2D_->addForce(object,input);break;
+      case 3:ok=s.physics2D_->addImpulse(object,input);break;
+      case 4:ok=s.physics2D_->addTorque(object,input[0]);break;
+      case 5:ok=s.physics2D_->addAngularImpulse(object,input[0]);break;
+      case 6:ok=s.physics2D_->moveKinematic(object,input,input[2]);break;}
+    s.lastStatus_=ok?WorldStatus::Ok:WorldStatus::InvalidArgument;return ok;
+  };
+  access_.pathPointCommand=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 operation,u64 element,u32 index,const float *input,float *output,u64 *identity)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(id>std::numeric_limits<ObjectId>::max()||operation>10){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    const ComponentHandle handle{{worldId,static_cast<ObjectId>(id),generation},instance};
+    self.lastStatus_=self.world_->validate(handle.object);
+    if(self.lastStatus_!=WorldStatus::Ok) return -1;
+    const auto *value=self.world_->readComponent(handle);
+    if(!value||value->type().id!=scene::Path::descriptor.id){self.lastStatus_=WorldStatus::ComponentMissing;return -1;}
+    const auto &path=static_cast<const scene::Path &>(*value);
+    if(operation==0){self.lastStatus_=WorldStatus::Ok;return static_cast<int>(path.curve.points.size());}
+    if(operation==1||operation==2||operation==7||operation==8) {
+      const auto *point=(operation==1||operation==7)?(index<path.curve.points.size()?&path.curve.points[index]:nullptr):path.point(element);
+      if(!point){self.lastStatus_=WorldStatus::UnknownElement;return -1;}
+      if(!output||!identity){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+      std::copy(point->position.begin(),point->position.end(),output);
+      std::copy(point->in.begin(),point->in.end(),output+3);
+      std::copy(point->out.begin(),point->out.end(),output+6);
+      if(operation==7||operation==8)output[9]=point->rollDegrees;
+      *identity=point->id;self.lastStatus_=WorldStatus::Ok;return 1;
+    }
+    if((operation==3||operation==9)&&!identity){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    u64 allocated=0;
+    self.lastStatus_=self.world_->editPathPoint(handle,operation,element,index,input,allocated);
+    if(self.lastStatus_!=WorldStatus::Ok) return -1;
+    if(identity)*identity=allocated;
+    return 1;
+  };
+  access_.pathRuntimeCommand=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 operation,double distance,u32 wrap,float *output,double *scalar)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.paths_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||operation>5||wrap>1||!std::isfinite(distance)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const ComponentHandle handle{{worldId,static_cast<ObjectId>(id),generation},instance};
+    self.lastStatus_=self.world_->validate(handle.object);
+    if(self.lastStatus_!=WorldStatus::Ok) return 0;
+    const auto *value=self.world_->readComponent(handle);
+    const auto expected=(operation==0||operation==5)?scene::Path::descriptor.id:scene::PathFollow::descriptor.id;
+    if(!value||value->type().id!=expected){self.lastStatus_=WorldStatus::ComponentMissing;return 0;}
+    bool ok=false;
+    if(operation==0) {
+      if(!output||!scalar){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      std::array<float,3> position{},tangent{};
+      ok=self.paths_->sample(*self.world_,handle.object.id,distance,position,tangent,wrap!=0)&&self.paths_->length(*self.world_,handle.object.id,*scalar);
+      if(ok){std::copy(position.begin(),position.end(),output);std::copy(tangent.begin(),tangent.end(),output+3);}
+    } else if(operation==5){
+      if(!output||!scalar){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      resources::BakedCurve3D::Frame frame;
+      ok=self.paths_->sampleFrame(*self.world_,handle.object.id,distance,frame,wrap!=0)&&self.paths_->length(*self.world_,handle.object.id,*scalar);
+      if(ok){std::copy(frame.position.begin(),frame.position.end(),output);std::copy(frame.tangent.begin(),frame.tangent.end(),output+3);std::copy(frame.up.begin(),frame.up.end(),output+6);output[9]=frame.rollDegrees;}
+    } else if(operation==1) ok=self.paths_->restart(*self.world_,handle.object.id);
+    else if(operation==2) ok=self.paths_->stop(*self.world_,handle.object.id);
+    else {
+      if(!scalar){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      if(operation==3) ok=self.paths_->progress(*self.world_,handle.object.id,*scalar);
+      else {bool playing=false;ok=self.paths_->playing(*self.world_,handle.object.id,playing);if(ok)*scalar=playing?1:0;}
+    }
+    self.lastStatus_=ok?WorldStatus::Ok:WorldStatus::Rejected;
+    return ok;
+  };
+  access_.audioSnapshot=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,scene::ScriptAudioSnapshot *output)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.audio_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!output||output->size!=sizeof(*output)||output->reserved||id>std::numeric_limits<ObjectId>::max()) {
+      self.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    const ComponentHandle handle{{worldId,static_cast<ObjectId>(id),generation},instance};
+    self.lastStatus_=self.world_->validate(handle.object);
+    if(self.lastStatus_!=WorldStatus::Ok) return 0;
+    if(self.world_->componentTypeId(handle)!="astra.audio.source") {
+      self.lastStatus_=WorldStatus::ComponentMissing;return 0;
+    }
+    const auto *observed=self.audio_->diagnostic(handle.object.id,instance);
+    if(!observed){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    output->state=static_cast<u32>(observed->state);
+    output->cursor=observed->cursor;
+    output->outputRunning=self.audio_->deviceRunning()?1:0;
+    self.lastStatus_=WorldStatus::Ok;
+    return 1;
+  };
+  access_.groupMembership=[](void *c,u64 id,const u8 *text,int length,int operation)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max() || !text || length<=0 ||
+       length>static_cast<int>(ObjectTags::MaximumNameBytes) || operation<-1 || operation>1) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    const auto handle=s.world_->handle(static_cast<ObjectId>(id));
+    if(operation==-1) {
+      bool member=false;s.lastStatus_=s.world_->isInGroup(handle,viewOf(text,length),member);
+      return s.lastStatus_==WorldStatus::Ok?static_cast<int>(member):-1;
+    }
+    s.lastStatus_=s.world_->setGroupMembership(handle,viewOf(text,length),operation==1);
+    return s.lastStatus_==WorldStatus::Ok?1:-1;
+  };
+  access_.findGroup=[](void *c,const u8 *text,int length,u64 *out,int capacity,int includeInactive)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!text || length<=0 || length>static_cast<int>(ObjectTags::MaximumNameBytes) || capacity<0 ||
+       capacity>static_cast<int>(SceneGraph::kMaximumObjects) || (!out && capacity) || (includeInactive!=0 && includeInactive!=1)) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    u32 count=0;s.lastStatus_=s.world_->findGroup(viewOf(text,length),{out,static_cast<usize>(capacity)},count,includeInactive!=0);
+    return s.lastStatus_==WorldStatus::Ok?static_cast<int>(count):-1;
+  };
+  access_.groupAt=[](void *c,u64 id,u32 slot,u8 *out,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max() || capacity<0 || (!out && capacity)) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return -1;
+    }
+    const auto handle=s.world_->handle(static_cast<ObjectId>(id));s.lastStatus_=s.world_->validate(handle);
+    if(s.lastStatus_!=WorldStatus::Ok) return -1;
+    const auto &names=s.world_->find(handle)->groups.names();
+    if(slot==std::numeric_limits<u32>::max() && !out && !capacity) return static_cast<int>(names.size());
+    if(slot>=names.size()) {s.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    const auto &name=names[slot];
+    if(out && capacity>=static_cast<int>(name.size())) std::memcpy(out,name.data(),name.size());
+    return static_cast<int>(name.size());
+  };
+  access_.timeSnapshot=[](void *context,u32 worldId,scene::ScriptTimeState *output)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.world_->running()) {self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(worldId!=self.world_->worldId()) {self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    if(!output || output->size!=sizeof(*output) || output->reserved) {self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto &clock=self.world_->clock();
+    output->frameCount=clock.frameCount();output->simulationTime=self.world_->elapsedSeconds();
+    output->unscaledTime=clock.unscaledTime();output->delta=clock.delta();output->unscaledDelta=clock.unscaledDelta();
+    output->timeScale=clock.scale();output->frameScale=clock.frameScale();
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.setTimeScale=[](void *context,u32 worldId,float value)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.world_->running()) {self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(worldId!=self.world_->worldId()) {self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    self.lastStatus_=self.world_->setTimeScale(value);return self.lastStatus_==WorldStatus::Ok;
+  };
+  access_.query2D=[](void*c,u32 world,u32 kind,const float*origin,const float*translation,float radius,const scene::ScriptQueryFilter*filter,scene::ScriptQueryHit*out,int capacity)->int {
+    auto&s=*static_cast<ScriptBridge*>(c);
+    if(!s.world_||!s.physics2D_){s.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(world!=s.world_->worldId()){s.lastStatus_=WorldStatus::ForeignWorld;return -1;}
+    if(kind>1||!origin||!filter||filter->size!=sizeof(*filter)||filter->reserved||filter->flags>7||capacity<0||capacity>4096||(capacity&&!out)||filter->ignore>std::numeric_limits<ObjectId>::max()||!std::isfinite(origin[0])||!std::isfinite(origin[1])||!std::isfinite(radius)||radius<0||(kind==1&&radius<=0)||(kind==0&&(!translation||!std::isfinite(translation[0])||!std::isfinite(translation[1])))){s.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    Physics2DFilter f;f.layerMask=filter->gameplayLayerMask;f.includeStatic=filter->flags&1;f.includeDynamic=filter->flags&2;f.includeSensors=filter->flags&4;f.ignore=static_cast<ObjectId>(filter->ignore);
+    std::vector<Physics2DHit>hits(static_cast<usize>(capacity));
+    const auto count=kind==0?s.physics2D_->rayCastAll(origin,translation,f,hits.data(),static_cast<u32>(capacity)):s.physics2D_->overlapCircle(origin,radius,f,hits.data(),static_cast<u32>(capacity));
+    for(u32 i=0;i<std::min(count,static_cast<u32>(capacity));++i){scene::ScriptQueryHit hit{};const auto&raw=hits[i];hit.object=raw.object;hit.collider=raw.colliderInstance;hit.point[0]=raw.point[0];hit.point[1]=raw.point[1];hit.normal[0]=raw.normal[0];hit.normal[1]=raw.normal[1];hit.fraction=raw.fraction;hit.distance=kind==0?std::hypot(translation[0],translation[1])*raw.fraction:0;hit.flags=(kind==0?1u:0u)|(raw.sensor?2u:0u);out[i]=hit;}
+    s.lastStatus_=WorldStatus::Ok;return static_cast<int>(count);
+  };
 }
 
 bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &input) {
@@ -1080,7 +1391,7 @@ QueryFilter ScriptBridge::queryFilter(const scene::ScriptQueryFilter &filter) co
 
 QueryShapeDesc ScriptBridge::queryShape(const scene::ScriptShapeQuery &shape) {
   QueryShapeDesc value;
-  value.kind = static_cast<QueryShapeKind>(shape.kind > 2 ? 1u : shape.kind);
+  value.kind = static_cast<QueryShapeKind>(shape.kind);
   std::copy(shape.halfExtent, shape.halfExtent + 3, value.halfExtent);
   value.radius = shape.radius;
   value.halfHeight = shape.halfHeight;

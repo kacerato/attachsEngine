@@ -1,0 +1,33 @@
+input_capture
+[ok] input_capture_key_is_transactional_persistent_and_consumed_by_real_actions
+[ok] input_capture_axis_neutral_gate_direction_and_negative_key_are_explicit
+[ok] input_capture_editor_flow_reaches_cancel_and_commit_on_phone_and_landscape
+
+3/3 testes passaram
+
+path_script_abi
+[ok] path_script_abi_points_identity_sampling_runtime_control_and_stale_handles
+
+1/1 testes passaram
+
+audio_script
+[ok] audio_script_observes_real_offline_voice_and_rejects_stale_lifetime
+
+1/1 testes passaram
+
+physics2d_script_abi
+[ok] physics2d_script_abi_routes_real_solver_queries_and_rejects_stale_handles
+
+1/1 testes passaram
+
+scene_views
+[ok] scene_views_survive_the_file_exactly
+[ok] scene_views_travel_in_the_scene_archive
+
+2/2 testes passaram
+
+shipped_icon
+[ok] shipped_icon_asset_loads_with_the_generated_enum
+[ok] shipped_icon_names_line_up_with_the_enum
+
+2/2 testes passaram

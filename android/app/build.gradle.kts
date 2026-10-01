@@ -13,6 +13,9 @@ plugins {
 val managedTargetFramework = "net8.0"
 val managedRuntimeVersion = "8.0.27"
 val managedOutput = layout.buildDirectory.dir("managed/rendering-$managedTargetFramework-$managedRuntimeVersion")
+// Android publication must not overwrite host compiler/test intermediates. In
+// particular Roslyn may retain mapped metadata from a host debugging session.
+val managedArtifacts = layout.buildDirectory.dir("managed-artifacts")
 val generatedAssets = layout.buildDirectory.dir("generated/aetherAssets")
 fun elfLoadAlignments(library: File): Set<Long> = RandomAccessFile(library, "r").use { elf ->
     fun bytesAt(offset: Long, count: Int): ByteBuffer {
@@ -105,6 +108,8 @@ val publishManagedCore by tasks.registering(Exec::class) {
     val dotnetExecutable = providers.environmentVariable("ASTRA_DOTNET").getOrElse("dotnet")
     commandLine(dotnetExecutable, "publish", "managed/Aether.Rendering/Aether.Rendering.csproj", "-c", "Release",
         "-r", "linux-bionic-arm64", "--self-contained", "false",
+        "--artifacts-path", managedArtifacts.get().asFile.absolutePath,
+        "-p:UseSharedCompilation=false", "-nodeReuse:false",
         "-p:TargetFramework=$managedTargetFramework", "-p:GenerateRuntimeConfigurationFiles=true",
         "-p:RuntimeFrameworkVersion=$managedRuntimeVersion",
         "-o", managedOutput.get().asFile.absolutePath)

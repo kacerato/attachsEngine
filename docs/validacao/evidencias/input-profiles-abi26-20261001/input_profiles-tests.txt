@@ -1,0 +1,4 @@
+[ok] input_profiles_abi26_reads_overrides_exports_and_imports_real_play_input
+[ok] input_profiles_are_transactional_runtime_overrides_and_reject_changed_authoring
+
+2/2 testes passaram

@@ -12,7 +12,13 @@
 #include "runtime/prefab.h"
 #include "runtime/input_actions.h"
 #include "runtime/scene_physics.h"
+#include "runtime/scene_physics2d.h"
 #include "runtime/scene_animation.h"
+#include "runtime/scene_paths.h"
+#include "runtime/scene_audio.h"
+#include "runtime/scene_timers.h"
+#include "runtime/scene_tweens.h"
+#include "runtime/scene_number_tweens.h"
 #include "runtime/runtime_rendering_state.h"
 #include "scene/script_runtime.h"
 #include "resources/asset_registry.h"
@@ -76,6 +82,12 @@ public:
   // Avaliador de animação do Play; nulo recusa os comandos de animação com
   // NotRunning em vez de fingir que tocaram.
   void setAnimator(SceneAnimator *animator) noexcept { animator_ = animator; }
+  void setPhysics2D(ScenePhysics2D *physics) noexcept { physics2D_ = physics; }
+  void setAudio(SceneAudio *audio) noexcept { audio_ = audio; }
+  void setNumberTweens(SceneNumberTweens *numberTweens) noexcept {numberTweens_=numberTweens;}
+  void setTweens(SceneTweens *tweens) noexcept {tweens_=tweens;}
+  void setTimers(SceneTimers *timers) noexcept { timers_=timers; }
+  void setPaths(ScenePaths *paths) noexcept { paths_ = paths; }
   bool update(float elapsed);
   bool lateUpdate(float elapsed);
   bool lifecycle(scene::ScriptLifecycleEvent event, bool value);
@@ -108,6 +120,12 @@ private:
   LogSink logSink_;
   GameWorld *world_ = nullptr;
   ScenePhysics *physics_ = nullptr;
+  ScenePhysics2D *physics2D_ = nullptr;
+  ScenePaths *paths_ = nullptr;
+  SceneAudio *audio_ = nullptr;
+  SceneTimers *timers_=nullptr;
+  SceneTweens *tweens_=nullptr;
+  SceneNumberTweens *numberTweens_=nullptr;
   InputService *input_ = nullptr;
   SceneAnimator *animator_ = nullptr;
   const resources::AssetRegistry *assets_ = nullptr;

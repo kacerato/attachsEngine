@@ -8,6 +8,7 @@
 #include "resources/skeletal_animation.h"
 #include "runtime/scene_animation.h"
 #include "scene/skinned_mesh.h"
+#include "scene/lightmap_uv.h"
 
 namespace ae::editor {
 // Immutable package geometry plus authored transforms. No Vulkan or Android.
@@ -55,6 +56,11 @@ public:
   };
   bool deformedPose(const runtime::SceneGraph &document, const scene::SkinnedMesh &mesh, u32 assetIndex,
                     const float drawModel[16], DeformedPose &out) const;
+  scene::LightmapUvStatus lightmapUvStatus(u32 index) const {
+    return index<pickSlots_.size()?pickSlots_[pickSlots_[index].canonical].lightmapUvStatus:scene::LightmapUvStatus::MissingGeometry;
+  }
+  bool lightmapUvUsable(u32 index) const {return lightmapUvStatus(index)==scene::LightmapUvStatus::Valid;}
+  const char *lightmapUvDiagnostic(u32 index) const {return scene::lightmapUvDiagnostic(lightmapUvStatus(index));}
   u32 assetCount() const { return static_cast<u32>(source_.size()); }
   const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
   std::string_view assetName(u32 index) const { return index<assetNames_.size()?assetNames_[index]:std::string_view{}; }
@@ -249,6 +255,13 @@ public:
     value.channels=slotChannels(render,slot);
     // A textura de oclusão é dado (linear) e usa a amostragem do metal/rugosidade.
     value.occlusionTexture=resolveTexture(slotOcclusionTexture(render,slot),2,samplerFlags(slotSampling(render,slot,2)));
+    const auto &lm=render.slotLightmap(slot);
+    if(lm.enabled && render.slotMesh(slot) && lightmapUvUsable(render.slotMesh(slot)-1)) {
+      value.lightmapTexture=resolveTexture(lm.texture,2,samplerFlags(scene::lightmapSampling()));
+      value.lightmapScaleOffset[0]=lm.scale[0];value.lightmapScaleOffset[1]=lm.scale[1];
+      value.lightmapScaleOffset[2]=lm.offset[0];value.lightmapScaleOffset[3]=lm.offset[1];
+      value.lightmapIntensity=lm.intensity;
+    }
     const auto surface=slotSurface(render,slot);
     value.alphaMode=surface.alphaMode;value.sides=surface.sides;value.alphaCutoff=surface.alphaCutoff;
     return value;
@@ -296,7 +309,7 @@ private:
   // com a mesma geometria. Construir as 3,7 M faces do Sponza na adoção prendia
   // a thread do editor por ~20 s a cada superfície nova (ANR no aparelho).
   struct PickGeometry {std::vector<float> positions;std::vector<u32> indices;};
-  struct PickSlot {u32 firstIndex=0,indexCount=0;i32 vertexOffset=0;u32 canonical=0;};
+  struct PickSlot {u32 firstIndex=0,indexCount=0;i32 vertexOffset=0;u32 canonical=0;scene::LightmapUvStatus lightmapUvStatus=scene::LightmapUvStatus::MissingGeometry;};
   std::shared_ptr<const PickGeometry> pickGeometry_;
   std::vector<PickSlot> pickSlots_;
   mutable std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;

@@ -34,6 +34,9 @@ public enum WorldStatus : uint
     ClipNotInComponent,
     UnknownElement,
     OperationExpired,
+    PropertyNotTweenable,
+    PropertyAlreadyTweening,
+    PropertyWrittenExternally,
 }
 
 public sealed class WorldException(WorldStatus status, string operation)
@@ -43,6 +46,9 @@ public sealed class WorldException(WorldStatus status, string operation)
 
     private static string Describe(WorldStatus status) => status switch
     {
+        WorldStatus.PropertyNotTweenable => "a propriedade não possui escrita numérica elegível para tween",
+        WorldStatus.PropertyAlreadyTweening => "outro tween já controla esta propriedade",
+        WorldStatus.PropertyWrittenExternally => "outro escritor alterou a propriedade durante o tween",
         WorldStatus.NotRunning => "não há mundo de execução ativo",
         WorldStatus.ForeignWorld => "a referência pertence a outra execução",
         WorldStatus.StaleHandle => "a referência aponta para um objeto já removido",
@@ -66,6 +72,8 @@ public sealed class WorldException(WorldStatus status, string operation)
 /// <summary>Os identificadores dos componentes nativos anexáveis.</summary>
 public static class ComponentIds
 {
+    public const string Path = "astra.path";
+    public const string PathFollow = "astra.path.follow";
     public const string PhysicsBody = "astra.physics.body";
     public const string Collider = "astra.physics.collider";
     public const string Character = "astra.physics.character";
@@ -131,7 +139,7 @@ public readonly struct WorldOperation
     }
 }
 
-public sealed class GameObject : IEquatable<GameObject>
+public sealed partial class GameObject : IEquatable<GameObject>
 {
     private readonly ISceneAccess _scene;
     internal GameObject(ISceneAccess scene, ulong objectId, uint world, uint generation)
@@ -195,6 +203,16 @@ public sealed class GameObject : IEquatable<GameObject>
     {
         Require("comparar tag"); var value = Scene.CompareTag(ObjectId, tag);
         Check(value >= 0, "comparar tag"); return value == 1;
+    }
+
+    /// <summary>Gameplay layer 0..31. Uses the project layer catalog and actual
+    /// rendering/physics filters; groups and tags remain independent.</summary>
+    public uint Layer
+    {
+        get { Require("ler camada"); var layer=Scene.ObjectLayer(ObjectId,World,Generation,-1);
+            Check(layer>=0,"ler camada"); return (uint)layer; }
+        set { Require("alterar camada"); if(value>=32)throw new ArgumentOutOfRangeException(nameof(value));
+            Check(Scene.ObjectLayer(ObjectId,World,Generation,(int)value)>=0,"alterar camada"); }
     }
     /// <summary>Busca global neste mundo, somente objetos ativos. Não inclui a raiz sintética.</summary>
     public GameObject? FindWithTag(string tag)
@@ -277,6 +295,30 @@ public sealed class GameObject : IEquatable<GameObject>
         Require("instanciar prefab");
         if (!asset.IsValid) throw new ArgumentException("Prefab inválido.", nameof(asset));
         return Behaviors.InstantiatePrefab(this, asset);
+    }
+    /// <summary>Snapshot dos nomes de grupos deste objeto, em ordem ordinal.</summary>
+    public string[] Groups { get { Require("ler grupos"); return Scene.GetGroups(ObjectId); } }
+    public bool IsInGroup(string name)
+    {
+        Require("consultar grupo"); var member=Scene.GroupMembership(ObjectId,name,-1);
+        Check(member>=0,"consultar grupo"); return member==1;
+    }
+    public void AddToGroup(string name)
+    {
+        Require("adicionar ao grupo"); Check(Scene.GroupMembership(ObjectId,name,1)==1,"adicionar ao grupo");
+    }
+    public void RemoveFromGroup(string name)
+    {
+        Require("remover do grupo"); Check(Scene.GroupMembership(ObjectId,name,0)==1,"remover do grupo");
+    }
+    /// <summary>Snapshot neste mundo; inclui inativos por padrão, exclui destruições pendentes.
+    /// Custo linear na cena; ordem da árvore. Alterações no snapshot não alteram grupos.</summary>
+    public GameObject[] FindGameObjectsInGroup(string name,bool includeInactive=true)
+    {
+        Require("buscar grupo"); var ids=Scene.FindGroup(name,includeInactive);
+        var result=new GameObject[ids.Length];
+        for(var i=0;i<ids.Length;++i) result[i]=Resolve(Scene,ids[i]);
+        return result;
     }
 
     public GameObject CreateChild(string name)
@@ -366,6 +408,9 @@ public sealed class GameObject : IEquatable<GameObject>
         Require("mover personagem");
         Check(Scene.CharacterMove(ObjectId, input, yawRadians), "mover personagem");
     }
+
+    /// <summary>Consulta apoio e movimento resolvido do motor vivo, sem alterar a física.</summary>
+    public CharacterRuntimeState ReadCharacterState() {Require("ler estado do personagem");Check(Scene.TryGetCharacterState(ObjectId,out var state),"ler estado do personagem");return state;}
 
     /// <summary>Tenta saltar. Retorna falso quando o motor recusa o salto no ar.</summary>
     public bool TryJumpCharacter()
@@ -549,6 +594,12 @@ public readonly struct Component
 
     public void SetFloat(string propertyId, float value) =>
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 0, BitConverter.SingleToUInt32Bits(value)), "escrever " + propertyId);
+    /// <summary>Valida e publica os três canais refletidos como uma única atribuição.</summary>
+    public void SetVector3(string propertyId, Vector3 value) =>
+        Check(_scene.SetTriple(_object.ObjectId, InstanceId, propertyId, value), "escrever " + propertyId);
+    /// <summary>Writes the two persisted channels atomically; transport padding is zero.</summary>
+    public void SetVector2(string propertyId, Vector2 value) =>
+        Check(_scene.SetTriple(_object.ObjectId, InstanceId, propertyId, new Vector3(value, 0)), "escrever " + propertyId);
     public void SetBool(string propertyId, bool value) =>
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 1, value ? 1u : 0u), "escrever " + propertyId);
     public void SetEnum(string propertyId, uint value) =>
@@ -591,6 +642,10 @@ public readonly struct Component
         if(TypeId!=ComponentIds.Animation) throw new WorldException(WorldStatus.InvalidArgument,"acessar animação");
         return new AnimationPlayer(this);
     }
+    /// <summary>Stable point identities, Bézier handles and world distance sampling.</summary>
+    public CurvePath Curve() => new(this);
+    /// <summary>Control the real path follower in the current Play world.</summary>
+    public PathFollower FollowPath() => new(this);
     public DeformableMesh DeformableMesh()
     {
         if(TypeId!=ComponentIds.SkinnedMesh) throw new WorldException(WorldStatus.InvalidArgument,"acessar malha deformável");

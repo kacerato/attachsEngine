@@ -15,6 +15,7 @@ using namespace ae;
 using namespace ae::editor;
 using namespace ae::ui;
 
+
 namespace {
 
 bool loadAsset(const char *relative, std::vector<u8> &out) {
@@ -821,4 +822,66 @@ AE_TEST(screen_hides_the_panels_and_keeps_the_tool_rail) {
       }
     }
   AE_EXPECT_TRUE(foundAccent, "a ferramenta ativa aparece destacada na trilha");
+}
+
+AE_TEST(editor_component_surface_preserves_target_and_opens_stable_component_inspection) {
+  EditorDocument doc;EditorHistory history;
+  const auto camera=doc.createEntity(doc.root(),EditorEntityKind::Camera,"Camera");
+  const auto other=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Other selection");
+  auto value=*doc.find(camera);
+  value.components.add(scene::Camera::descriptor);
+  const auto instance=value.components.add(scene::CameraFollow::descriptor)->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(camera,value),"componente anexado");
+  EditorScreenState state{};state.surface={0,0,1200,700};state.document=&doc;
+  state.selection=other;state.inspectorLocked=camera;state.inspectorSurface=EditorInspectorSurface::Components;
+  Frame frame;composeFrame(frame,state);UiPoint point;
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::InspectorOverviewOpenBase)+1,frame.layout.inspectorPanel,point),"componente do alvo travado na lista");
+  frame.router.route({1,UiPointerPhase::Down,point,0});
+  const auto event=frame.router.route({1,UiPointerPhase::Up,point,.1});
+  const auto revision=doc.revision();
+  applyEditorPointer(state,frame.layout,event,doc,history);
+  AE_EXPECT_TRUE(state.inspectorSurface==EditorInspectorSurface::Inspection,"rota de inspeção aberta");
+  AE_EXPECT_EQ(state.expandedNative,instance,"identidade estável do componente");
+  AE_EXPECT_EQ(state.componentSelection,camera,"o alvo travado é inspecionado");
+  AE_EXPECT_EQ(state.selection,other,"seleção da cena preservada");
+  AE_EXPECT_EQ(doc.revision(),revision,"navegar não altera autoria");
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::InspectorComponents),frame.layout.inspectorPanel,point),"aba de retorno permanece disponível");
+  frame.router.route({2,UiPointerPhase::Down,point,0});
+  applyEditorPointer(state,frame.layout,frame.router.route({2,UiPointerPhase::Up,point,.1}),doc,history);
+  AE_EXPECT_TRUE(state.inspectorSurface==EditorInspectorSurface::Components,"volta à visão do conjunto");
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::AddComponentMenu),frame.layout.inspectorPanel,point),"Add Component acessível no rodapé");
+}
+
+AE_TEST(portrait_authoring_panel_owns_its_pixels_and_scene_options_return_when_closed) {
+  WaterLab lab;Frame frame;auto state=waterLabState(lab);state.surface={0,0,400,740};
+  state.compactPanel=EditorScreenState::CompactPanel::Inspector;composeFrame(frame,state);
+  UiPoint point;
+  AE_EXPECT_TRUE(frame.layout.viewport.width<324 && !frame.layout.inspectorPanel.isEmpty(),"narrow viewport with authoring context");
+  const EditorWidget options[]={EditorWidget::ViewsOpen,EditorWidget::SceneLayersOpen,EditorWidget::SceneLightingToggle,EditorWidget::SceneEffectsToggle};
+  for(const auto option:options)AE_EXPECT_TRUE(!findWidget(frame,widgetId(option),frame.layout.inspectorPanel,point),"viewport options never cover or intercept Inspector");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::CompactPanelMenu),frame.layout.viewport,point),"panel navigation stays inside viewport");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::FrameAll),frame.layout.viewport,point),"framing remains available");
+  state.compactPanel=EditorScreenState::CompactPanel::Viewport;composeFrame(frame,state);
+  for(const auto option:options)AE_EXPECT_TRUE(findWidget(frame,widgetId(option),frame.layout.viewport,point),"scene options return in full viewport");
+}
+
+#include "mechanisms_fixture.h"
+AE_TEST(mechanisms_block_portrait_inspection_and_return_preserve_authoring) {
+  ae::test::MechanismsFixture fixture;AE_EXPECT_TRUE(fixture.create(),"authored mechanisms");
+  EditorHistory history;auto &doc=fixture.document;const auto id=fixture.bodies[3];
+  EditorScreenState state;state.surface={0,0,360,800};state.document=&doc;state.selection=id;
+  state.componentSelection=id;state.expandedNative=doc.find(id)->components.find(scene::Joint::descriptor)->instanceId();
+  state.inspectorSurface=EditorInspectorSurface::Inspection;state.compactPanel=EditorScreenState::CompactPanel::Inspector;
+  state.componentGroup="Translação X";Frame frame;composeFrame(frame,state);
+  AE_EXPECT_TRUE(frame.layout.inspectorPanel.width>=350,"mechanism has usable portrait width");
+  UiPoint point;AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::CompactViewport),frame.layout.inspectorPanel,point),"return target is touchable above Inspector");
+  const auto revision=doc.revision();frame.router.route({1,UiPointerPhase::Down,point,0});
+  applyEditorPointer(state,frame.layout,frame.router.route({1,UiPointerPhase::Up,point,.1}),doc,history);
+  AE_EXPECT_TRUE(state.compactPanel==EditorScreenState::CompactPanel::Viewport,"existing navigation returns to scene");
+  composeFrame(frame,state);AE_EXPECT_TRUE(frame.layout.viewport.width>=350,"full viewport returns");
+  AE_EXPECT_EQ(doc.revision(),revision,"layout navigation does not author data");
+  state.surface={0,0,900,480};state.compactPanel=EditorScreenState::CompactPanel::Inspector;composeFrame(frame,state);
+  AE_EXPECT_TRUE(frame.layout.inspectorPanel.width<400&&frame.layout.viewport.width>300,"landscape retains simultaneous viewport");
 }

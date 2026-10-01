@@ -1,0 +1,24 @@
+{
+  "abi": 25,
+  "scene_version": 15,
+  "prefab_version": 3,
+  "schemas": 32,
+  "generated_facades": 31,
+  "icons": 224,
+  "apk": {
+    "bytes": 253317161,
+    "sha256": "52f7c8ca9b30216e8df3f26b8ca30c3ee1dffbd80ea4ba70379262b7c9b8d2dc"
+  },
+  "packaged_sdk_matches_build": true,
+  "sdk_sha256": "005aa8aeb1d7dc005976fe09953d37960a9722e179b78dcf2a7a736fb8903205",
+  "managed_astra_tests": "52/52",
+  "packaged_icon_atlas_matches_source": true,
+  "icon_atlas_sha256": "7e97df14b801d12c07946ba858f0a72790884370116fbff25b3937e86a369e51",
+  "native_regressions": "10/10",
+  "android": {
+    "installed": true,
+    "groups_play_qualified": false,
+    "editor_capture_qualified": false,
+    "reason": "Keyguard covers editor; physical unlock pending."
+  }
+}

@@ -1,5 +1,5 @@
 // GERADO por tools/generate-embedded-shaders.ps1 com glslc -O (NDK pinado).
-// NÃ£o editar este arquivo manualmente; altere os GLSL e regenere.
+// Não editar este arquivo manualmente; altere os GLSL e regenere.
 #pragma once
 
 #include <cstdint>

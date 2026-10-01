@@ -19,9 +19,7 @@ public readonly struct CameraFollowRig(Component component)
             if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z) ||
                 MathF.Abs(value.X) > 10000 || MathF.Abs(value.Y) > 10000 || MathF.Abs(value.Z) > 10000)
                 throw new ArgumentOutOfRangeException(nameof(value));
-            component.SetFloat("offset_x", value.X);
-            component.SetFloat("offset_y", value.Y);
-            component.SetFloat("offset_z", value.Z);
+            component.SetVector3("offset", value);
         }
     }
     public float DampingSeconds

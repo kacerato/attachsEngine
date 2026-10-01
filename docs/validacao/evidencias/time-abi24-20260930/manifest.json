@@ -1,0 +1,63 @@
+{
+  "recorded_utc": "2026-10-01T02:29:01.492361+00:00",
+  "scene_access_abi": 24,
+  "catalog": {
+    "native_schemas": 32,
+    "generated_facades": 31,
+    "new_component_types_in_this_package": 0
+  },
+  "native_passed": {
+    "play_time_scale": 5,
+    "play_timer": 2,
+    "tween_delay": 1,
+    "script_abi": 3,
+    "audio_script": 1,
+    "generated_csharp": 1
+  },
+  "native_total": 13,
+  "managed_astra_passed": 52,
+  "android_build": "passed",
+  "packaged_sdk_matches_build": true,
+  "packaged_sdk_sha256": "3ecb7308fdc572ab0e1a74e8d2d53b2dc15d5619f21b2003b70d9752523ffe11",
+  "device_install": false,
+  "android_clr_acceptance": false,
+  "android_visual_acceptance": false,
+  "p00_p20_complete": false,
+  "artifacts": [
+    {
+      "path": "android/app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 264340670,
+      "sha256": "22567edd29c4b476045a0190659368e4c1f70b0dbb8745f95f143f1dd9f4364a"
+    },
+    {
+      "path": "android/app/build/managed-artifacts/bin/Astra.Scripting/release/Astra.Scripting.dll",
+      "bytes": 351232,
+      "sha256": "3ecb7308fdc572ab0e1a74e8d2d53b2dc15d5619f21b2003b70d9752523ffe11"
+    },
+    {
+      "path": "build/editor-host/aether_tests.exe",
+      "bytes": 354004265,
+      "sha256": "2cb72c78e50395455619d391a808ead78ab4059fdfae6674d4979d7468b96381"
+    },
+    {
+      "path": "build/editor-host/aether_ui_preview.exe",
+      "bytes": 180351259,
+      "sha256": "097936c8895c43ff67adb1acd0273d32c37f68f7eabc4ef6b6e308f80201bc07"
+    },
+    {
+      "path": "tests/fixtures/time/project/Time-20260930/project.json",
+      "bytes": 313,
+      "sha256": "efc1be60da962a777c796a17e48870e430071f1403cdd9b3b8d92abd8f3fbc79"
+    },
+    {
+      "path": "tests/fixtures/time/project/Time-20260930/scenes/editor.aescene",
+      "bytes": 548,
+      "sha256": "4312b83167e0b431868de128abffa8e0efb08b134c8b89c47a0cbcab95f4de4b"
+    },
+    {
+      "path": "tests/fixtures/time/project/Time-20260930/Scripts/TimeProbe.cs",
+      "bytes": 3631,
+      "sha256": "226519b9f9a4f063ce2712ba8165882849208c2a966e939e7358645f6f11a762"
+    }
+  ]
+}

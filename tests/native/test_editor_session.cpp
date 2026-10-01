@@ -1,3 +1,5 @@
+#include "renderer/primitive_geometry.h"
+#include "scene/path_follow.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_reference_picker.h"
 #include "scene/component_properties.h"
@@ -13,6 +15,7 @@
 #include "scene/environment.h"
 #include "editor/editor_scene_template.h"
 #include "harness.h"
+#include "editor/editor_component_visuals.h"
 #include "scene/light.h"
 #include "renderer/water_authoring_geometry.h"
 #include "editor/editor_water_play.h"
@@ -32,6 +35,57 @@
 using namespace ae;
 using namespace ae::editor;
 using namespace ae::ui;
+
+AE_TEST(input_capture_key_is_transactional_persistent_and_consumed_by_real_actions) {
+  EditorSession session;auto &state=const_cast<EditorScreenState&>(session.screen());
+  state.workspace=EditorWorkspace::Project;state.projectSection=EditorProjectSection::Input;
+  auto map=session.document().inputActions();runtime::InputAction action;
+  action.id="Captura";action.kind=runtime::ActionKind::Button;
+  action.bindings={{runtime::InputSource::Key,29,0,0,1,false}};
+  AE_EXPECT_TRUE(map.add(action) && session.history().setInputActions(session.document(),map),"authored action");
+  state.inputActionIndex=static_cast<u32>(map.actions().size()-1);state.inputBindingIndex=0;
+  const auto depth=session.history().undoDepth();
+  AE_EXPECT_TRUE(session.beginInputBindingCapture() && session.inputBindingCaptureActive(),"target snapshot");
+  session.captureInputKey(30,true,true);session.captureInputKey(30,false,false);session.captureInputKey(30,false,true,true);
+  AE_EXPECT_TRUE(session.inputBindingCaptureActive() && session.history().undoDepth()==depth,"wrong source, release and autorepeat do not publish");
+  AE_EXPECT_TRUE(session.captureInputKey(30,false,true) && !session.inputBindingCaptureActive(),"new physical press commits");
+  AE_EXPECT_TRUE(session.history().undoDepth()==depth+1 && session.document().inputActions().find("Captura")->bindings[0].code==30,"one undo transaction");
+  runtime::InputService input;input.setMap(session.document().inputActions());runtime::InputDeviceState devices;devices.keys={30};input.submit(devices);
+  AE_EXPECT_TRUE(input.pressed("Captura"),"captured binding reaches actual input evaluator");
+  const auto archive=serializeEditorDocument(session.document(),0);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(archive,0,reopened) && reopened.inputActions()==session.document().inputActions(),"capture survives scene reopen");
+  AE_EXPECT_TRUE(session.history().undo(session.document()) && session.document().inputActions().find("Captura")->bindings[0].code==29,"undo restores previous binding");
+  AE_EXPECT_TRUE(session.history().redo(session.document()) && session.document().inputActions().find("Captura")->bindings[0].code==30,"redo restores capture");
+  AE_EXPECT_TRUE(session.beginInputBindingCapture(),"begin again");session.document().createEntity(session.document().root(),EditorEntityKind::Folder,"Edit during capture");
+  AE_EXPECT_TRUE(!session.captureInputKey(31,false,true) && !session.inputBindingCaptureActive() && session.document().inputActions().find("Captura")->bindings[0].code==30,"lost-update guard preserves newer authoring");
+  AE_EXPECT_TRUE(session.beginInputBindingCapture(),"begin before focus loss");session.applicationEvent(scene::ScriptLifecycleEvent::ApplicationFocus,false);
+  AE_EXPECT_TRUE(!session.inputBindingCaptureActive(),"focus loss cancels without mutating authoring");
+}
+
+AE_TEST(input_capture_axis_neutral_gate_direction_and_negative_key_are_explicit) {
+  EditorSession session;auto &state=const_cast<EditorScreenState&>(session.screen());
+  state.workspace=EditorWorkspace::Project;state.projectSection=EditorProjectSection::Input;
+  auto map=session.document().inputActions();runtime::InputAction action;
+  action.id="CapturaEixo";action.kind=runtime::ActionKind::Axis2D;action.deadzone=0;
+  action.bindings={{runtime::InputSource::GamepadAxis,0,0,1,1,false}};
+  AE_EXPECT_TRUE(map.add(action) && session.history().setInputActions(session.document(),map),"authored axis");
+  state.inputActionIndex=static_cast<u32>(map.actions().size()-1);
+  AE_EXPECT_TRUE(session.beginInputBindingCapture(),"begin axis");std::array<float,8> axes{};axes[2]=-.9f;
+  session.captureInputAxes(axes);AE_EXPECT_TRUE(session.inputBindingCaptureActive(),"already actuated axis cannot capture");
+  axes[2]=0;session.captureInputAxes(axes);axes[2]=-.3f;session.captureInputAxes(axes);
+  AE_EXPECT_TRUE(session.inputBindingCaptureActive(),"drift below capture threshold ignored");axes[2]=-.9f;session.captureInputAxes(axes);
+  const auto &captured=session.document().inputActions().find("CapturaEixo")->bindings[0];
+  AE_EXPECT_TRUE(!session.inputBindingCaptureActive() && captured.code==2 && captured.invert && captured.axis==1,"physical slot and intended positive direction captured; output axis preserved");
+  runtime::InputService input;input.setMap(session.document().inputActions());runtime::InputDeviceState devices;devices.gamepadAxes[2]=-.8f;input.submit(devices);float value[2]{};input.axis2("CapturaEixo",value);
+  AE_EXPECT_TRUE(value[0]==0 && std::abs(value[1]-.8f)<.0001f,"captured inversion consumed by runtime");
+  map=session.document().inputActions();action=*map.find("CapturaEixo");action.bindings[0]={runtime::InputSource::Key,30,31,1,1,false};
+  AE_EXPECT_TRUE(map.replace(action.id,action) && session.history().setInputActions(session.document(),map),"keyboard pair authored");
+  AE_EXPECT_TRUE(session.beginInputBindingCapture(true),"negative direction capture");session.captureInputKey(30,false,true);
+  AE_EXPECT_TRUE(session.inputBindingCaptureActive(),"same key for both directions rejected");session.captureInputKey(32,false,true);
+  AE_EXPECT_TRUE(!session.inputBindingCaptureActive() && session.document().inputActions().find("CapturaEixo")->bindings[0].negativeCode==32,"negative part replaced independently");
+  AE_EXPECT_TRUE(session.beginInputBindingCapture(),"cancel path");const auto before=session.document().inputActions();session.captureInputKey(111,false,true);
+  AE_EXPECT_TRUE(!session.inputBindingCaptureActive() && session.document().inputActions()==before,"Escape cancels without publication");
+}
 
 AE_TEST(editor_independent_document_roundtrip_without_map_resources) {
   namespace fs=std::filesystem;
@@ -788,6 +842,29 @@ void selectComponentFamily(Fixture &fixture,scene::ComponentFamily family) {
   }
   tapWidget(fixture,widgetId(EditorWidget::ComponentFamilyBase)+wanted);
   AE_EXPECT_EQ(fixture.session.screen().componentCategory,wanted,"família do Add selecionada");
+}
+
+AE_TEST(session_play_time_scale_button_controls_runtime_without_authoring_history) {
+  Fixture f;auto &session=f.session;
+  const auto revision=session.document().revision();const auto undo=session.history().undoDepth();
+  AE_EXPECT_TRUE(session.startPlay(),"Play");
+  std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(session.extractPlayMap(draws),"runtime started");session.update();
+  AE_EXPECT_TRUE(locateWidget(session,widgetId(EditorWidget::PlayTimeScale)).x>=0,"tempo reachable on landscape phone");
+  tapWidget(f,widgetId(EditorWidget::PlayTimeScale));
+  AE_EXPECT_TRUE(session.screen().playTimeScale==2,"touch changes native speed");
+  tapWidget(f,widgetId(EditorWidget::PlayTimeScale));tapWidget(f,widgetId(EditorWidget::PlayTimeScale));
+  AE_EXPECT_TRUE(session.screen().playTimeScale==0,"cycle reaches simulation freeze");
+  AE_EXPECT_TRUE(session.extractPlayMap(draws) && session.screen().playTimeScale==0,"snapshot preserves native scale");
+  const auto frozen=session.sceneTime();session.advanceClock(10);session.advanceClock(10.1f);
+  AE_EXPECT_TRUE(session.extractPlayMap(draws) && session.sceneTime()==frozen,"shader/render clock follows simulation freeze");
+  AE_EXPECT_TRUE(!session.setPlayTimeScale(-1) && session.screen().playTimeScale==0,"invalid setting is atomic");
+  tapWidget(f,widgetId(EditorWidget::PausePlay));
+  AE_EXPECT_TRUE(locateWidget(session,widgetId(EditorWidget::StepPlay)).x>=0 && locateWidget(session,widgetId(EditorWidget::PlayTimeScale)).x<0,"paused toolbar offers Step in same space");
+  tapWidget(f,widgetId(EditorWidget::StepPlay));AE_EXPECT_TRUE(session.extractPlayMap(draws),"Step executes real runtime");
+  AE_EXPECT_TRUE(session.screen().playTimeScale==0 && session.document().revision()==revision && session.history().undoDepth()==undo,"step/scale never enter authoring history");
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
+  AE_EXPECT_TRUE(session.startPlay() && session.extractPlayMap(draws) && session.screen().playTimeScale==1,"fresh Play resets speed");
 }
 // Rola a lista do Add pelo arraste, como a pessoa faz, até o item aparecer.
 void revealAddEntry(Fixture &fixture,u32 widget) {
@@ -1689,8 +1766,8 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"duplicate has no confirmation");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
-  for(u32 page=0;page<12 && locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.character")).x<0;++page)
-    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  selectComponentFamily(f,scene::ComponentFamily::Physics3D);
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.character"));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.character"));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"incompatible character has no confirmation");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
@@ -1705,6 +1782,29 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"undo restores configured component");
   AE_EXPECT_TRUE(f.session.history().redo(f.session.document()),"redo removal");
   AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"redo removes component");
+}
+
+AE_TEST(session_prefab_batch_revert_touch_uses_one_history_step) {
+  namespace fs=std::filesystem;
+  const auto directory=fs::temp_directory_path()/("astra-prefab-batch-ui-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(directory);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code ec;fs::remove_all(path,ec);}} cleanup{directory};
+  Fixture f;auto &session=f.session;auto &document=session.document();
+  session.setSurface({0,0,1200,800},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(directory.string().c_str()),"project");
+  const auto root=document.createEntity(document.root(),EditorEntityKind::Folder,"Prefab");
+  std::string error;AE_EXPECT_TRUE(session.createPrefab(root,error).valid(),error.c_str());
+  auto value=*document.find(root);value.active=false;value.visible=false;
+  AE_EXPECT_TRUE(document.applyEntityValues(root,value),"two local overrides");
+  session.setSelection(root);session.update();const auto depth=session.history().undoDepth();
+  tapWidget(f,widgetId(EditorWidget::PrefabOverrides));
+  AE_EXPECT_TRUE(session.screen().prefabOverrides.rows.size()==2,"comparison opened from source row");
+  tapWidget(f,widgetId(EditorWidget::PrefabOverridesRevertAll));
+  AE_EXPECT_TRUE(document.find(root)->active&&document.find(root)->visible,"touch restored both values");
+  AE_EXPECT_TRUE(session.screen().prefabOverrides.rows.empty(),"comparison refreshed after commit");
+  AE_EXPECT_EQ(session.history().undoDepth(),depth+1,"one history step");
+  AE_EXPECT_TRUE(session.history().undo(document),"undo batch");
+  AE_EXPECT_TRUE(!document.find(root)->active&&!document.find(root)->visible,"undo restores local values");
 }
 
 AE_TEST(session_script_catalog_previews_addition_and_removal_with_undo) {
@@ -2384,7 +2484,10 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
 // receita nova entra aqui sem teste próprio para existir.
 AE_TEST(every_composed_recipe_creates_its_declared_composition_in_one_command) {
   Fixture f;
-  AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"cena sem recursos importados");
+  std::vector<u8> vertices;std::vector<u32> indices;
+  std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials),"actual primitive resources");
+  AE_EXPECT_TRUE(f.session.importMap(draws,materials,false,vertices,indices,41),"library without precreated objects");
   auto &doc=f.session.document();auto &history=f.session.history();
   u32 composed=0;
   for(u32 index=0;index<editorCreationCatalog.size();++index) {
@@ -2394,7 +2497,7 @@ AE_TEST(every_composed_recipe_creates_its_declared_composition_in_one_command) {
     f.session.setSelection(doc.root());history.clear();
     const auto id=f.session.createRecipe(index,doc.root());
     const auto *object=doc.find(id);
-    AE_EXPECT_TRUE(object!=nullptr,"receita cria objeto");
+    AE_EXPECT_TRUE(object!=nullptr,(std::string(recipe.name)+": "+f.session.screen().status).c_str());
     if(!object) continue;
     AE_EXPECT_TRUE(object->kind==recipe.kind,"tipo de objeto declarado");
     for(const auto &part:recipe.components)
@@ -2472,7 +2575,7 @@ AE_TEST(input_workspace_authors_runtime_action_with_history_and_archive) {
   AE_EXPECT_TRUE(doc.inputActions().find("Interagir")!=nullptr,"id novo persistido no mapa");
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputRoleMove)).x<0,
                  "ação Botão não oferece papel de movimento inválido");
-  tapWidget(f,widgetId(EditorWidget::InputBindingRowBase));
+  tapWidget(f,widgetId(EditorWidget::InputTabBinding));
   tapWidget(f,widgetId(EditorWidget::InputBindingSource)); // TouchButton -> Key
   tapWidget(f,widgetId(EditorWidget::InputDetailsToggle));
   tapWidget(f,widgetId(EditorWidget::InputBindingCode));
@@ -2497,6 +2600,44 @@ AE_TEST(input_workspace_authors_runtime_action_with_history_and_archive) {
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputBindingSource)).x>=0,
                  "vínculos permanecem acessíveis em tela estreita");
 }
+AE_TEST(input_capture_editor_flow_reaches_cancel_and_commit_on_phone_and_landscape) {
+  Fixture fixture;auto &session=fixture.session;auto &state=const_cast<EditorScreenState&>(session.screen());
+  state.workspace=EditorWorkspace::Project;state.projectSection=EditorProjectSection::Input;state.inputTab=1;state.inputActionIndex=2;
+  auto map=session.document().inputActions();auto action=map.actions()[2];action.bindings[0].source=runtime::InputSource::Key;action.bindings[0].code=62;
+  AE_EXPECT_TRUE(map.replace(action.id,action) && session.history().setInputActions(session.document(),map),"authored keyboard source");session.update();
+  tapWidget(fixture,widgetId(EditorWidget::InputBindingCapture));session.update();
+  AE_EXPECT_TRUE(session.inputBindingCaptureActive() && locateWidget(session,widgetId(EditorWidget::InputBindingCaptureCancel)).x>=0,"actual editor route exposes cancellation");
+  tapWidget(fixture,widgetId(EditorWidget::InputBindingCaptureCancel));session.update();
+  AE_EXPECT_TRUE(!session.inputBindingCaptureActive() && session.document().inputActions()==map,"UI cancellation does not edit map");
+  session.setSurface({0,0,400,740},{});session.update();
+  tapWidget(fixture,widgetId(EditorWidget::InputBindingCapture));session.update();
+  AE_EXPECT_TRUE(session.inputBindingCaptureActive(),"capture accessible in portrait");
+  session.captureInputKey(69,false,true);session.update();
+  AE_EXPECT_TRUE(!session.inputBindingCaptureActive() && session.document().inputActions().find(action.id)->bindings[0].code==69,"physical press exits capture and publishes binding");
+  AE_EXPECT_TRUE(session.history().undo(session.document()) && session.document().inputActions()==map,"one reversible editor operation");
+}
+
+AE_TEST(groups_editor_route_authors_renames_removes_and_rejects_stale_text) {
+  Fixture f;auto &session=f.session;session.setSelection(f.cube);
+  session.update();tapWidget(f,widgetId(EditorWidget::ObjectFold));
+  revealProperty(f,widgetId(EditorWidget::ObjectGroupsOpen));
+  tapWidget(f,widgetId(EditorWidget::ObjectGroupsOpen));
+  AE_EXPECT_TRUE(session.screen().groupPicker && session.screen().groupEntity==f.cube,"explicit object context");
+  tapWidget(f,widgetId(EditorWidget::GroupNew));const auto edit=session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::GroupName && edit.entity==f.cube,"real text editing route");
+  AE_EXPECT_TRUE(session.completeTextEdit(edit,"guards",true),"author membership");session.update();
+  AE_EXPECT_TRUE(session.document().find(f.cube)->groups.contains("guards"),"groups changed in document");
+  tapWidget(f,widgetId(EditorWidget::GroupEditBase));
+  AE_EXPECT_TRUE(session.completeTextEdit(session.pendingTextEdit(),"damageable",true),"rename object membership");session.update();
+  AE_EXPECT_TRUE(!session.document().find(f.cube)->groups.contains("guards") && session.document().find(f.cube)->groups.contains("damageable"),"rename is one membership replacement");
+  tapWidget(f,widgetId(EditorWidget::GroupRemoveBase));
+  AE_EXPECT_TRUE(session.document().find(f.cube)->groups.names().empty(),"remove via UI");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"Undo restores membership");session.update();
+  tapWidget(f,widgetId(EditorWidget::GroupNew));const auto stale=session.pendingTextEdit();
+  session.document().setName(f.cube,"changed");
+  AE_EXPECT_TRUE(!session.completeTextEdit(stale,"stale",true) && !session.document().find(f.cube)->groups.contains("stale"),"stale draft cannot write to changed object");
+}
+
 AE_TEST(session_follow_camera_creation_links_selected_target) {
   Fixture f;auto &doc=f.session.document();
   f.session.setSelection(f.cube);f.session.update();
@@ -2585,6 +2726,7 @@ AE_TEST(inspector_object_card_and_actions_edit_the_selected_object_through_histo
   AE_EXPECT_TRUE(!f.session.screen().inspectorMenu,"o menu fecha depois da ação");
   const auto copy=f.session.screen().selection;
   tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  revealProperty(f,widgetId(EditorWidget::CreateChildGroup));
   tapWidget(f,widgetId(EditorWidget::CreateChildGroup));
   AE_EXPECT_EQ(document.find(f.session.screen().selection)->parent,copy,"filho vazio criado sob o objeto selecionado");
 }
@@ -2930,7 +3072,7 @@ AE_TEST(p01_composite_properties_are_atomic_and_keep_archive_contract) {
   const auto *result=static_cast<const scene::Joint*>(values.findInstance(id));
   AE_EXPECT_EQ(result->axisA[0],1.f,"rejection leaves previous direction intact");
   std::stringstream archive;result->write(archive);scene::Joint loaded;
-  AE_EXPECT_TRUE(loaded.read(archive,1),"existing archive version reads composite edit");
+  AE_EXPECT_TRUE(loaded.read(archive,scene::Joint::descriptor.version),"current archive version reads composite edit");
   AE_EXPECT_EQ(loaded.axisA[0],1.f,"archive keeps edited value");
   values.add(scene::Joint::descriptor);
   AE_EXPECT_TRUE(scene::setComponentTriple(values,"astra.physics.joint","axis_a",direction)==scene::ComponentPropertyStatus::AmbiguousProperty,"multiple instances require identity");
@@ -3329,6 +3471,39 @@ AE_TEST(advanced_object_picker_filters_highlights_and_refuses_incompatible) {
 // Unity Manual/InspectorOptions: o cadeado prende o Inspector no objeto e a
 // seleção segue livre; a edição feita nele vai ao objeto travado. ⋮ > Debug
 // mostra os valores crus e ⋮ > Ping revela o objeto na Hierarquia.
+AE_TEST(inspector_components_surface_scrolls_edits_locked_target_and_opens_add_catalog) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto other=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Other selection");
+  auto value=*doc.find(f.cube);value.components.add(scene::Light::descriptor);value.components.add(scene::Timer::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,value),"conjunto maior que janela curta");
+  f.session.setSurface({0,0,1200,700},{});f.session.setSelection(f.cube);f.session.update();
+  history.clear();
+  tapWidget(f,widgetId(EditorWidget::InspectorLock));
+  tapWidget(f,hierarchyRowWidget(other));
+  tapWidget(f,widgetId(EditorWidget::InspectorComponents));
+  const auto before=meshRenderer(*doc.find(f.cube))->enabled;
+  tapWidget(f,widgetId(EditorWidget::ComponentEnableBase));
+  AE_EXPECT_EQ(meshRenderer(*doc.find(f.cube))->enabled,!before,"checkbox edita consumidor real do alvo travado");
+  AE_EXPECT_EQ(f.session.selection(),other,"edição preserva seleção da cena");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"ativação é uma transação");
+  AE_EXPECT_TRUE(history.undo(doc) && meshRenderer(*doc.find(f.cube))->enabled==before,"Undo restaura enabled");
+  // Área curta: arrastar a linha rola sem abrir ou alterar componentes.
+  f.session.setSurface({0,0,853,394},{});f.session.update();
+  const auto window=f.session.layout().componentOverviewWindow;
+  AE_EXPECT_TRUE(f.session.layout().componentOverviewContent>window.height,"cenário exige rolagem");
+  const UiPoint from{window.x+window.width*.5f,window.y+window.height*.7f};
+  const auto revision=doc.revision();
+  f.down(31,from);f.move(31,{from.x,from.y-50});f.up(31,{from.x,from.y-50});f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().componentOverviewScroll>0,"arraste rola o conjunto");
+  AE_EXPECT_EQ(doc.revision(),revision,"rolar não altera autoria");
+  AE_EXPECT_TRUE(f.session.screen().inspectorSurface==EditorInspectorSurface::Components,"arraste não abre inspeção");
+  tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
+  AE_EXPECT_TRUE(f.session.screen().addingComponent,"Add Component abre catálogo");
+  AE_EXPECT_EQ(f.session.screen().inspectorTarget,f.cube,"catálogo mantém alvo travado");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentFamilyBase)).x>=0,"catálogo visível pela rota de componentes");
+  AE_EXPECT_EQ(f.session.selection(),other,"navegar no catálogo não rouba seleção");
+}
+
 AE_TEST(inspector_lock_debug_mode_and_ping) {
   Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
   const auto post=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Poste");
@@ -3471,9 +3646,11 @@ AE_TEST(focused_inspectors_open_edit_ping_and_restore) {
   AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
   AE_EXPECT_TRUE(state.focusedInspectors.empty(),"outro projeto começa sem abas");
   f.session.openFocusedInspector(f.cube);f.session.openFocusedInspector(f.cube,mesh);
+  tapWidget(f,widgetId(EditorWidget::InspectorComponents));
   const auto scenePath=(root/"cena.astra").string();
   AE_EXPECT_TRUE(f.session.save(scenePath.c_str(),0),"cena salva");
   AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto reaberto");
+  AE_EXPECT_TRUE(state.inspectorSurface==EditorInspectorSurface::Components,"preferência de superfície restaurada no projeto");
   AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"lista lida do projeto");
   AE_EXPECT_TRUE(f.session.load(scenePath.c_str(),0),"cena aberta");
   AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"as duas abas voltam");
@@ -4191,9 +4368,10 @@ AE_TEST(multi_selection_edits_common_components_in_one_undo_step) {
   AE_EXPECT_EQ(history.undoDepth(),1u,"um passo");
   // Campo da transformação: X da posição em todos.
   history.clear();
-  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+lightIndex);
-  f.session.update();
-  tapWidget(f,widgetId(EditorWidget::TransformFold));
+  // The short Inspector paginates its legacy card stack. Use the composition
+  // route to reach Transform without assuming it shares the light's page.
+  tapWidget(f,widgetId(EditorWidget::InspectorComponents));
+  tapWidget(f,widgetId(EditorWidget::InspectorOverviewTransform));
   revealProperty(f,transformFieldWidget(0,0));
   tapWidget(f,transformFieldWidget(0,0));
   AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"3",true),"posição aceita");
@@ -5416,4 +5594,324 @@ AE_TEST(multiple_environment_profiles_preserve_other_fields_and_synchronize_thei
   }
   tapWidget(f,widgetId(EditorWidget::ProfileInspectorClose));session.update();
   AE_EXPECT_TRUE(!state.profileInspector.valid()&&state.selectedFiles.empty(),"fechar encerra conjunto");
+}
+
+AE_TEST(session_path_follow_phone_paired_fields_frame_and_play_commands_reach_real_consumer) {
+  Fixture f;f.session.setSurface({0,0,853,394},{});
+  u32 pathRecipe=0,followRecipe=0;
+  AE_EXPECT_TRUE(findCreationRecipe("path.curve",&pathRecipe)&&findCreationRecipe("path.follower",&followRecipe),"registered real path compositions");
+  const auto path=f.session.createRecipe(pathRecipe,f.session.document().root());f.session.setSelection(path);
+  const auto follower=f.session.createRecipe(followRecipe,f.session.document().root());
+  AE_EXPECT_TRUE(path&&follower,"path and follower created atomically");
+  auto&state=const_cast<EditorScreenState&>(f.session.screen());state.pathEditorOpen=false;state.pathPointList=false;state.inspectorSurface=EditorInspectorSurface::Inspection;
+  f.session.setSelection(follower);f.session.update();
+  const auto follow=[&](){return static_cast<const scene::PathFollow*>(f.session.document().find(follower)->components.find(scene::PathFollow::descriptor));};
+  u32 component=0;const auto&components=f.session.document().find(follower)->components;for(;component<components.size();++component)if(components.at(component)->type().id==scene::PathFollow::descriptor.id)break;
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+component);tapWidget(f,widgetId(EditorWidget::ComponentGroupBase));
+  const auto number=[&](u32 field){return widgetId(EditorWidget::ComponentNumberBase)+component+(field<<8);};
+  const auto editDigit=[&](u32 field,u32 digit){const auto key=number(field);revealProperty(f,key);tapWidget(f,key);const auto request=f.session.pendingTextEdit();AE_EXPECT_TRUE(request.entity==follower&&request.propertyId==scene::pathFollowNumbers[field].id,"paired/Frame field opens correct reflected address");tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+digit-1);tapWidget(f,widgetId(EditorWidget::NumericApply));};
+  f.session.history().clear();editDigit(0,2);AE_EXPECT_TRUE(follow()->progressDistance==2&&follow()->speed==1,"initial cell changes only initial distance");tapWidget(f,widgetId(EditorWidget::Undo));AE_EXPECT_TRUE(follow()->progressDistance==0,"input Undo restores paired initial field");tapWidget(f,widgetId(EditorWidget::Redo));
+  editDigit(1,3);AE_EXPECT_TRUE(follow()->speed==3&&follow()->progressDistance==2,"speed cell reaches speed consumer value");
+  AE_EXPECT_TRUE(locateWidget(f.session,number(2)).x<0,"duration conditional has no hit in Speed mode");
+  const auto firstPropertyPage=[&](){for(u32 attempts=0;attempts<64&&locateWidget(f.session,widgetId(EditorWidget::PropertyPrevious)).x>=0;++attempts)tapWidget(f,widgetId(EditorWidget::PropertyPrevious));};
+  firstPropertyPage();const auto mode=widgetId(EditorWidget::ComponentEnumBase)+component;revealProperty(f,mode);tapWidget(f,mode);tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+1);
+  AE_EXPECT_TRUE(follow()->mode==scene::PathFollowMode::Duration,"mode enum changes real authoring value");editDigit(2,7);AE_EXPECT_TRUE(follow()->duration==7&&follow()->speed==3,"duration cell preserves dormant speed");AE_EXPECT_TRUE(locateWidget(f.session,number(1)).x<0,"speed conditional has no hit in Duration mode");
+  tapWidget(f,widgetId(EditorWidget::ComponentGroupBase)+1);editDigit(3,4);editDigit(4,5);editDigit(5,6);
+  AE_EXPECT_TRUE(follow()->offset[0]==4&&follow()->offset[1]==5&&follow()->offset[2]==6,"Frame XYZ controls map to lateral vertical tangent offsets");
+  firstPropertyPage();const auto orient=widgetId(EditorWidget::ComponentBooleanBase)+component+(4u<<8);revealProperty(f,orient);tapWidget(f,orient);AE_EXPECT_TRUE(!follow()->orient,"orientation checkbox reaches runtime property");tapWidget(f,widgetId(EditorWidget::Undo));AE_EXPECT_TRUE(follow()->orient,"Undo restores orientation independently of offsets");
+  const auto revision=f.session.document().revision();AE_EXPECT_TRUE(f.session.startPlay(),"real Play world starts");std::vector<renderer::MapDrawState>draws;AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"consumer initialized through public session Play path");tapWidget(f,widgetId(EditorWidget::PlayInspect));f.session.setSelection(follower);f.session.update();
+  state.pathEditorOpen=false;state.inspectorSurface=EditorInspectorSurface::Inspection;state.expandedNative=follow()->instanceId();state.componentSelection=follower;f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentGroupBase)+2);
+  tapWidget(f,widgetId(EditorWidget::PathFollowStop));AE_EXPECT_TRUE(f.session.screen().followStatus.find("Percurso parado")!=std::string::npos,"Stop reaches actual ScenePaths state in GameWorld");tapWidget(f,widgetId(EditorWidget::PathFollowRestart));AE_EXPECT_TRUE(f.session.screen().followStatus.find("Em execução")!=std::string::npos,"Restart reaches actual ScenePaths state");
+  AE_EXPECT_TRUE(f.session.document().revision()==revision&&follow()->target==path,"Play controls do not mutate authoring document");
+}
+
+AE_TEST(timer_connection_editor_authors_action_and_receiver_with_real_pointer_routes) {
+  Fixture f;AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"empty project");
+  auto &doc=f.session.document();auto &history=f.session.history();
+  u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("gameplay.timer",&recipe),"real timer recipe");
+  const auto emitter=f.session.createRecipe(recipe,doc.root());
+  const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Receptor timeout");
+  AE_EXPECT_TRUE(doc.setActive(receiver,false),"inactive authored receiver");
+  f.session.setSelection(emitter);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentGroupBase)+1);
+  const auto action=widgetId(EditorWidget::ComponentEnumBase);
+  revealProperty(f,action);tapWidget(f,action);tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+1);
+  auto timer=[&](){return static_cast<const scene::Timer*>(doc.find(emitter)->components.find(scene::Timer::descriptor));};
+  AE_EXPECT_TRUE(timer()->elapsedAction==1,"action enum changed authoring");
+  const auto target=widgetId(EditorWidget::ComponentReferenceBase);
+  revealProperty(f,target);tapWidget(f,target);
+  AE_EXPECT_TRUE(f.session.screen().referenceInstance!=0 && f.session.screen().referenceProperty=="elapsed_target","receiver uses real picker");
+  tapWidget(f,widgetId(EditorWidget::ReferenceSearch));
+  const auto search=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(search.purpose==EditorTextPurpose::ReferenceSearch && f.session.completeTextEdit(search,"Receptor timeout",true),"search uses IME");f.session.update();
+  const auto choices=editorReferenceChoices(doc,emitter,scene::timerReferences[0],f.session.screen().referenceQuery);
+  const auto chosen=std::find(choices.begin(),choices.end(),receiver);
+  AE_EXPECT_TRUE(chosen!=choices.end(),"receiver available");
+  const auto choice=widgetId(EditorWidget::ReferenceChoiceBase)+static_cast<u32>(chosen-choices.begin());
+  AE_EXPECT_TRUE(locateWidget(f.session,choice).x>=0,"receiver choice visible");tapWidget(f,choice);
+  AE_EXPECT_TRUE(timer()->elapsedTarget==receiver,"picker stores persistent target");
+  AE_EXPECT_EQ(history.undoDepth(),2u,"one undo per action and target");
+  AE_EXPECT_TRUE(history.undo(doc) && timer()->elapsedTarget==0,"Undo unbinds target without losing action");
+  AE_EXPECT_TRUE(history.redo(doc) && timer()->elapsedTarget==receiver,"Redo restores target");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened),"authoring roundtrip");
+  const auto *saved=static_cast<const scene::Timer*>(reopened.find(emitter)->components.find(scene::Timer::descriptor));
+  AE_EXPECT_TRUE(saved && saved->elapsedAction==1 && saved->elapsedTarget==receiver,"persistent UI connection");
+}
+
+AE_TEST(input_mouse_editor_named_choices_capture_cancel_history_and_runtime) {
+  Fixture f;openProjectSection(f,EditorProjectSection::Input);
+  tapWidget(f,widgetId(EditorWidget::InputActionRowBase)+2);
+  tapWidget(f,widgetId(EditorWidget::InputTabBinding));
+  for(u32 n=0;n<4;++n)tapWidget(f,widgetId(EditorWidget::InputBindingSource));
+  auto binding=[&](){return f.session.document().inputActions().find("Saltar")->bindings[0];};
+  AE_EXPECT_TRUE(binding().source==runtime::InputSource::MouseButton,"mouse source reachable through actual authoring controls");
+  tapWidget(f,widgetId(EditorWidget::InputBindingCode));AE_EXPECT_EQ(binding().code,1u,"named choice cycles to secondary without numeric codes");
+  tapWidget(f,widgetId(EditorWidget::InputBindingCapture));
+  const auto depth=f.session.history().undoDepth();
+  AE_EXPECT_TRUE(f.session.captureInputMouseButton(2,true,{-1,-1}) && !f.session.inputBindingCaptureActive(),"actual device callback captures middle");f.session.update();
+  AE_EXPECT_EQ(binding().code,2u,"captured button identity");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),depth+1,"one capture transaction");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()) && binding().code==1,"Undo previous named choice");
+  AE_EXPECT_TRUE(f.session.history().redo(f.session.document()) && binding().code==2,"Redo captured button");f.session.update();
+  tapWidget(f,widgetId(EditorWidget::InputBindingCapture));
+  const auto cancel=locateWidget(f.session,widgetId(EditorWidget::InputBindingCaptureCancel));
+  AE_EXPECT_TRUE(cancel.x>=0 && f.session.captureInputMouseButton(0,true,cancel) && !f.session.inputBindingCaptureActive(),"clicking Cancel does not rebind primary");
+  AE_EXPECT_EQ(binding().code,2u,"cancellation preserves authoring");
+  runtime::InputService input;input.setMap(f.session.document().inputActions());runtime::InputDeviceState device;device.mouseButtons=4;input.submit(device);
+  AE_EXPECT_TRUE(input.justPressed("Saltar"),"captured middle reaches the actual action consumer");
+}
+
+AE_TEST(input_mouse_session_drives_camera_without_virtual_touch_and_stop_restores_authoring) {
+  Fixture f;auto &doc=f.session.document();
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Mouse camera");auto camera=*doc.find(id);
+  camera.components.add(scene::Camera::descriptor);camera.components.add(scene::CameraLook::descriptor);
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,camera),"authored camera consumer");
+  auto map=doc.inputActions();auto look=*map.find("Olhar");look.deadzone=0;
+  look.bindings={{runtime::InputSource::MouseAxis,0,0,0},{runtime::InputSource::MouseAxis,1,0,1}};
+  AE_EXPECT_TRUE(map.replace(look.id,look)&&doc.setInputActions(map),"mouse routes to existing look role");
+  const auto revision=doc.revision();AE_EXPECT_TRUE(f.session.startPlay(),"real Play");f.session.update();
+  std::vector<renderer::MapDrawState> draws;runtime::InputDeviceState raw;raw.mouseAxes[0]=.1f;
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws,raw),"raw mouse reaches session consumer");
+  const auto yaw=f.session.sceneCameraPose().yaw;
+  AE_EXPECT_TRUE(std::abs(yaw-.5235988f)<.0001f,"viewport motion rotates actual runtime camera 30 degrees");
+  const auto view=f.session.layout().viewport;const ui::UiPoint point{view.x+view.width*.75f,view.y+view.height*.5f};
+  const auto pointer=0x80000000u;
+  AE_EXPECT_TRUE(!f.session.handlePointer({pointer,ui::UiPointerPhase::Down,point,1,ui::UiPointerDevice::Mouse}),"mouse is passed to platform rather than virtual touch");
+  AE_EXPECT_TRUE(!f.session.handlePointer({pointer,ui::UiPointerPhase::Move,{point.x+20,point.y+20},2,ui::UiPointerDevice::Mouse}),"mouse drag does not synthesize touch look");
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws)&&std::abs(f.session.sceneCameraPose().yaw-yaw)<.0001f,"no duplicate movement from UI routing");
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws,raw,false)&&std::abs(f.session.sceneCameraPose().yaw-yaw)<.0001f,"platform focus blocks motion");
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));f.session.update();
+  AE_EXPECT_TRUE(doc.revision()==revision&&std::abs(f.session.sceneCameraPose().yaw)<.0001f,"Stop restores authored camera and input map");
+}
+
+AE_TEST(physics_connections_editor_creation_enum_picker_receiver_history_and_contextual_link) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();f.session.usePlatformTextInput(true);
+  const auto other=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Outro receptor físico");auto value=*doc.find(other);value.transform.position[0]=4;doc.applyEntityValues(other,value);
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));tapWidget(f,recipeWidget("physics.connected_sensor"));
+  const auto emitter=f.session.screen().selection;const auto *object=doc.find(emitter);
+  const auto *connection=static_cast<const scene::PhysicsEventConnection3D*>(object->components.find(scene::PhysicsEventConnection3D::descriptor));
+  AE_EXPECT_TRUE(connection&&connection->receiver==f.cube&&connection->action==1&&runtime::physicsBody(*object)->sensor&&runtime::colliderComponent(*object),"actual Create path builds sensor and binds selected receiver");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"composition is one history operation");const auto instance=connection->instanceId();u32 index=0;
+  while(index<object->components.size()&&object->components.at(index)->instanceId()!=instance)++index;
+  AE_EXPECT_EQ(f.session.screen().expandedNative,instance,"creation opens the connection for authoring");
+  if(locateWidget(f.session,widgetId(EditorWidget::ComponentGroupBase)).x>=0)tapWidget(f,widgetId(EditorWidget::ComponentGroupBase));
+  const auto event=widgetId(EditorWidget::ComponentEnumBase)+index;revealProperty(f,event);tapWidget(f,event);tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+3);
+  auto read=[&](){return static_cast<const scene::PhysicsEventConnection3D*>(doc.find(emitter)->components.findInstance(instance));};
+  AE_EXPECT_EQ(read()->event,3u,"picker changes real contact event filter");
+  const auto target=widgetId(EditorWidget::ComponentReferenceBase)+index;revealProperty(f,target);tapWidget(f,target);tapWidget(f,widgetId(EditorWidget::ReferenceSearch));
+  const auto search=f.session.pendingTextEdit();AE_EXPECT_TRUE(f.session.completeTextEdit(search,"Outro receptor físico",true),"actual receiver search IME");f.session.update();
+  const auto choices=editorReferenceChoices(doc,emitter,scene::physicsConnectionReferences[0],f.session.screen().referenceQuery);
+  const auto found=std::find(choices.begin(),choices.end(),other);AE_EXPECT_TRUE(found!=choices.end(),"receiver found");
+  tapWidget(f,widgetId(EditorWidget::ReferenceChoiceBase)+static_cast<u32>(found-choices.begin()));AE_EXPECT_EQ(read()->receiver,static_cast<u64>(other),"picker persists receiver identity");
+  AE_EXPECT_TRUE(history.undo(doc)&&read()->receiver==f.cube&&history.redo(doc)&&read()->receiver==other,"receiver Undo/Redo");
+  const auto closed=collectComponentVisuals(doc,emitter,1);const auto open=collectComponentVisuals(doc,emitter,1,nullptr,0,0,0,instance);
+  const auto match=[&](const ComponentVisual &visual){return visual.instance==instance;};
+  const auto c=std::find_if(closed.begin(),closed.end(),match),o=std::find_if(open.begin(),open.end(),match);
+  AE_EXPECT_TRUE(c!=closed.end()&&c->segments.empty()&&o!=open.end()&&o->segments.size()==49,"receiver link only appears while this connection is edited");
+  AE_EXPECT_TRUE(std::abs(o->segments.front().b[0]-4)<.001f,"link resolves actual receiver world transform");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened),"UI authoring roundtrip");
+  AE_EXPECT_TRUE(reopened.find(emitter)->components.find(scene::PhysicsEventConnection3D::descriptor)!=nullptr,"new type remains available after reload");
+}
+
+AE_TEST(physics2d_connections_editor_creation_enum_picker_receiver_history_and_contextual_link) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();f.session.usePlatformTextInput(true);
+  const auto other=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Outro receptor físico");auto value=*doc.find(other);value.transform.position[0]=4;doc.applyEntityValues(other,value);
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));tapWidget(f,recipeWidget("physics2d.connected_sensor"));
+  const auto emitter=f.session.screen().selection;const auto *object=doc.find(emitter);
+  const auto *connection=static_cast<const scene::PhysicsEventConnection2D*>(object->components.find(scene::PhysicsEventConnection2D::descriptor));
+  AE_EXPECT_TRUE(object->components.size()==3&&connection&&connection->receiver==f.cube&&connection->action==1&&static_cast<const scene::Collider2D*>(object->components.find(scene::Collider2D::descriptor))->sensor&&object->components.find(scene::Body2D::descriptor),"actual Create path builds sensor and binds selected receiver");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"composition is one history operation");const auto instance=connection->instanceId();u32 index=0;
+  while(index<object->components.size()&&object->components.at(index)->instanceId()!=instance)++index;
+  AE_EXPECT_EQ(f.session.screen().expandedNative,instance,"creation opens the connection for authoring");
+  if(locateWidget(f.session,widgetId(EditorWidget::ComponentGroupBase)).x>=0)tapWidget(f,widgetId(EditorWidget::ComponentGroupBase));
+  const auto event=widgetId(EditorWidget::ComponentEnumBase)+index;revealProperty(f,event);tapWidget(f,event);tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+3);
+  auto read=[&](){return static_cast<const scene::PhysicsEventConnection2D*>(doc.find(emitter)->components.findInstance(instance));};
+  AE_EXPECT_EQ(read()->event,3u,"picker changes real contact event filter");
+  const auto target=widgetId(EditorWidget::ComponentReferenceBase)+index;revealProperty(f,target);tapWidget(f,target);tapWidget(f,widgetId(EditorWidget::ReferenceSearch));
+  const auto search=f.session.pendingTextEdit();AE_EXPECT_TRUE(f.session.completeTextEdit(search,"Outro receptor físico",true),"actual receiver search IME");f.session.update();
+  const auto choices=editorReferenceChoices(doc,emitter,scene::physics2DConnectionReferences[0],f.session.screen().referenceQuery);
+  const auto found=std::find(choices.begin(),choices.end(),other);AE_EXPECT_TRUE(found!=choices.end(),"receiver found");
+  tapWidget(f,widgetId(EditorWidget::ReferenceChoiceBase)+static_cast<u32>(found-choices.begin()));AE_EXPECT_EQ(read()->receiver,static_cast<u64>(other),"picker persists receiver identity");
+  AE_EXPECT_TRUE(history.undo(doc)&&read()->receiver==f.cube&&history.redo(doc)&&read()->receiver==other,"receiver Undo/Redo");
+  const auto closed=collectComponentVisuals(doc,emitter,1);const auto open=collectComponentVisuals(doc,emitter,1,nullptr,0,0,0,instance);
+  const auto match=[&](const ComponentVisual &visual){return visual.instance==instance;};
+  const auto c=std::find_if(closed.begin(),closed.end(),match),o=std::find_if(open.begin(),open.end(),match);
+  AE_EXPECT_TRUE(c!=closed.end()&&c->segments.empty()&&o!=open.end()&&o->segments.size()==49,"receiver link only appears while this connection is edited");
+  AE_EXPECT_TRUE(std::abs(o->segments.front().b[0]-4)<.001f,"link resolves actual receiver world transform");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened),"UI authoring roundtrip");
+  AE_EXPECT_TRUE(reopened.find(emitter)->components.find(scene::PhysicsEventConnection2D::descriptor)!=nullptr,"new type remains available after reload");
+}
+
+AE_TEST(timer_controls_editor_authors_autostart_and_controls_real_play_scheduler) {
+  Fixture f;f.session.importMap({}, {}, false);auto &doc=f.session.document();u32 recipe=0;findCreationRecipe("gameplay.timer",&recipe);
+  const auto id=f.session.createRecipe(recipe,doc.root());const auto instance=doc.find(id)->components.find(scene::Timer::descriptor)->instanceId();f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));const auto automatic=widgetId(EditorWidget::ComponentBooleanBase);revealProperty(f,automatic);tapWidget(f,automatic);
+  const auto read=[&](){return static_cast<const scene::Timer*>(doc.find(id)->components.findInstance(instance));};AE_EXPECT_TRUE(!read()->autoStart,"actual checkbox changes initial execution");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&read()->autoStart&&f.session.history().redo(doc)&&!read()->autoStart,"history preserves autostart");
+  const auto authored=serializeEditorDocument(doc,0);EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(authored,0,reopened)&&!static_cast<const scene::Timer*>(reopened.find(id)->components.findInstance(instance))->autoStart,"manual timer survives reload");
+  AE_EXPECT_TRUE(f.session.startPlay(),"Play");std::vector<renderer::MapDrawState> draws;AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"real scheduler initialized");tapWidget(f,widgetId(EditorWidget::PlayInspect));f.session.setSelection(id);f.session.update();
+  if(f.session.screen().expandedNative!=instance)tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  AE_EXPECT_TRUE(f.session.screen().timerRuntime!=nullptr,"Inspector reads session-owned timer state");
+  const auto live=[&](){return f.session.screen().timerRuntime->state(id,instance);};AE_EXPECT_TRUE(live()&&!live()->running,"manual timer starts stopped");
+  const auto command=widgetId(EditorWidget::TimerControlBase);tapWidget(f,command);AE_EXPECT_TRUE(live()->running&&live()->remaining>0,"Start button reaches scheduler");
+  tapWidget(f,command+1);AE_EXPECT_TRUE(live()->paused,"Pause button changes countdown state");tapWidget(f,command+1);AE_EXPECT_TRUE(!live()->paused,"same button resumes");
+  tapWidget(f,command+2);AE_EXPECT_TRUE(!live()->running&&live()->remaining==0,"Stop button clears countdown");AE_EXPECT_EQ(serializeEditorDocument(doc,0),authored,"Play controls keep authoring unchanged");
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));f.session.update();AE_EXPECT_TRUE(!f.session.screen().timerRuntime&&locateWidget(f.session,command).x<0,"Stop removes runtime controls and pointer");
+}
+AE_TEST(tween_controls_editor_routes_expanded_instance_to_runtime_and_preserves_authoring) {
+  Fixture f;AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"empty project");auto &doc=f.session.document();
+  const auto firstObject=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Tween A");const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Tween B");auto value=*doc.find(firstObject);
+  auto *a=static_cast<scene::TransformTween*>(value.components.add(scene::TransformTween::descriptor));a->autoplay=false;const auto first=a->instanceId();
+  doc.applyEntityValues(firstObject,value);value=*doc.find(id);AE_EXPECT_TRUE(value.components.add(scene::Timer::descriptor)!=nullptr,"other component precedes tween");
+  auto *b=static_cast<scene::TransformTween*>(value.components.add(scene::TransformTween::descriptor));AE_EXPECT_TRUE(b!=nullptr,"single tween per object");b->autoplay=false;b->destination[0]=4;const auto second=b->instanceId();doc.applyEntityValues(id,value);
+  const auto authored=serializeEditorDocument(doc,0);f.session.setSelection(id);f.session.update();
+  AE_EXPECT_TRUE(f.session.startPlay(),"real Play");std::vector<renderer::MapDrawState> draws;AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"initialize scheduler");tapWidget(f,widgetId(EditorWidget::PlayInspect));
+  auto &screen=const_cast<EditorScreenState&>(f.session.screen());screen.inspectorSurface=EditorInspectorSurface::Inspection;screen.expandedNative=second;screen.componentSelection=id;screen.componentGroup="Tempo";f.session.update();
+  AE_EXPECT_TRUE(screen.tweenRuntime!=nullptr,"runtime inspection connected");
+  const auto status=[&](u64 instance){return screen.tweenRuntime->state(instance==first?firstObject:id,instance)->status;};
+  AE_EXPECT_TRUE(status(first)==runtime::SceneTweens::Status::Idle&&status(second)==runtime::SceneTweens::Status::Idle,"manual instances idle");
+  tapWidget(f,widgetId(EditorWidget::TweenRestart)+4);AE_EXPECT_TRUE(status(second)==runtime::SceneTweens::Status::Running&&status(first)==runtime::SceneTweens::Status::Idle,"restart expanded second instance instead of first");
+  tapWidget(f,widgetId(EditorWidget::TweenPause)+4);AE_EXPECT_TRUE(screen.tweenRuntime->state(id,second)->paused,"pause reaches same instance");tapWidget(f,widgetId(EditorWidget::TweenPause)+4);AE_EXPECT_TRUE(!screen.tweenRuntime->state(id,second)->paused,"resume keeps instance");
+  tapWidget(f,widgetId(EditorWidget::TweenCancel)+4);AE_EXPECT_TRUE(status(second)==runtime::SceneTweens::Status::Cancelled&&status(first)==runtime::SceneTweens::Status::Idle,"cancel reaches real scheduler for same identity");
+  f.session.setSurface({0,0,1280,900},{});f.session.setSelection(firstObject);screen.expandedNative=first;screen.componentSelection=firstObject;screen.componentGroup="Tempo";
+  screen.focusedInspectors.push_back({id,second,EditorScreenState::FocusedAsset::None,{},"Tween B"});screen.focusedActive=1;f.session.update();
+  tapWidget(f,widgetId(EditorWidget::TweenRestart)+4);AE_EXPECT_TRUE(status(second)==runtime::SceneTweens::Status::Running&&status(first)==runtime::SceneTweens::Status::Idle,"focused window controls its own component instead of main Inspector identity");
+  tapWidget(f,widgetId(EditorWidget::TweenCancel)+4);AE_EXPECT_TRUE(status(second)==runtime::SceneTweens::Status::Cancelled,"focused cancellation stays on receiver");screen.focusedInspectors.clear();screen.focusedActive=0;
+  AE_EXPECT_EQ(serializeEditorDocument(doc,0),authored,"commands do not write authoring");
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));f.session.update();AE_EXPECT_TRUE(!screen.tweenRuntime&&locateWidget(f.session,widgetId(EditorWidget::TweenRestart)+4).x<0,"stop removes runtime controls");
+}
+AE_TEST(tween_connection_editor_recipe_picker_enum_history_and_persistence) {
+  Fixture f;f.session.importMap({}, {}, false);auto &doc=f.session.document();auto&history=f.session.history();const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Receptor tween");const auto other=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Outro receptor");
+  f.session.setSelection(receiver);f.session.update();history.clear();u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("tween.connected",&recipe),"creation recipe exists");const auto emitter=f.session.createRecipe(recipe,doc.root());
+  const auto read=[&](){return static_cast<const scene::TransformTween*>(doc.find(emitter)->components.find(scene::TransformTween::descriptor));};AE_EXPECT_TRUE(read()&&read()->finishedAction==1&&read()->finishedTarget==receiver&&read()->loops==1&&!read()->pingpong,"recipe configures finite evaluator and actual selected receiver");
+  const auto instance=read()->instanceId();AE_EXPECT_TRUE(f.session.screen().expandedNative==instance&&history.undoDepth()==1,"creation opens relevant component as one operation");AE_EXPECT_TRUE(history.undo(doc)&&!doc.exists(emitter)&&history.redo(doc)&&read()->finishedTarget==receiver,"whole composition undo/redo");f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentGroupBase)+3);const auto action=widgetId(EditorWidget::ComponentEnumBase)+512;revealProperty(f,action);tapWidget(f,action);tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+3);AE_EXPECT_TRUE(read()->finishedAction==3,"enum reaches real completion action");
+  const auto target=widgetId(EditorWidget::ComponentReferenceBase);revealProperty(f,target);tapWidget(f,target);tapWidget(f,widgetId(EditorWidget::ReferenceSearch));const auto edit=f.session.pendingTextEdit();AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::ReferenceSearch&&f.session.completeTextEdit(edit,"Outro receptor",true),"IME searches receiver");f.session.update();
+  const auto choices=editorReferenceChoices(doc,emitter,scene::tweenReferences[0],f.session.screen().referenceQuery);const auto found=std::find(choices.begin(),choices.end(),other);AE_EXPECT_TRUE(found!=choices.end(),"receiver candidate");tapWidget(f,widgetId(EditorWidget::ReferenceChoiceBase)+static_cast<u32>(found-choices.begin()));AE_EXPECT_TRUE(read()->finishedTarget==other,"picker persists actual identity");
+  AE_EXPECT_TRUE(history.undoDepth()==2&&history.undo(doc)&&read()->finishedTarget==receiver&&history.redo(doc)&&read()->finishedTarget==other,"one command per change");EditorDocument saved;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,saved),"reload");const auto*copy=static_cast<const scene::TransformTween*>(saved.find(emitter)->components.findInstance(instance));AE_EXPECT_TRUE(copy&&copy->finishedAction==3&&copy->finishedTarget==other,"action and receiver restored");
+}
+
+AE_TEST(character_ground_inspector_creation_ime_history_and_archive) {
+  Fixture f;AE_EXPECT_TRUE(f.session.importMap({}, {},false),"empty authoring project");f.session.setSurface({0,0,853,394},{});f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));tapWidget(f,recipeWidget("physics.character"));const auto id=f.session.screen().selection;auto&doc=f.session.document();
+  auto read=[&](){return static_cast<const scene::Character*>(doc.find(id)->components.find(scene::Character::descriptor));};AE_EXPECT_TRUE(read(),"real existing character creation path");
+  auto&state=const_cast<EditorScreenState&>(f.session.screen());state.expandedNative=read()->instanceId();state.inspectorSurface=EditorInspectorSurface::Inspection;state.compactPanel=EditorScreenState::CompactPanel::Inspector;state.componentSelection=id;f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentGroupBase)+2);f.session.history().clear();
+  const auto edit=[&](u32 index,const char*text){const auto key=widgetId(EditorWidget::ComponentNumberBase)+(index<<8);revealProperty(f,key);tapWidget(f,key);const auto request=f.session.pendingTextEdit();AE_EXPECT_TRUE(request.entity==id&&request.propertyId==scene::characterNumbers[index].id,"correct persistent field address");AE_EXPECT_TRUE(f.session.completeTextEdit(request,text,true),"numeric IME commits real authoring field");f.session.update();};
+  edit(6,"0.3");edit(7,"0.2");AE_EXPECT_TRUE(read()->stepHeight==.3f&&read()->floorSnapLength==.2f&&f.session.history().undoDepth()==2,"independent ground controls with two commands");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&read()->floorSnapLength==.5f&&f.session.history().redo(doc)&&read()->floorSnapLength==.2f,"Undo/Redo retains other ground setting");f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentGroupBase)+1);edit(8,"24");AE_EXPECT_TRUE(read()->gravity==24,"gravity control connected");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened),"save and reopen");const auto*saved=static_cast<const scene::Character*>(reopened.find(id)->components.find(scene::Character::descriptor));AE_EXPECT_TRUE(saved&&saved->stepHeight==.3f&&saved->floorSnapLength==.2f&&saved->gravity==24,"all authored runtime settings survive reopen");
+}
+
+AE_TEST(character_platform_carry_compact_inspector_exposes_checkbox_search_and_history) {
+  Fixture f;auto&doc=f.session.document();const auto actor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Actor");auto value=*doc.find(actor);value.components.add(scene::Character::descriptor);doc.applyEntityValues(actor,value);f.session.setSelection(actor);
+  auto&state=const_cast<EditorScreenState&>(f.session.screen());state.componentSelection=actor;state.expandedNative=doc.find(actor)->components.find(scene::Character::descriptor)->instanceId();state.componentGroup="Chão";state.inspectorSurface=EditorInspectorSurface::Inspection;f.session.usePlatformTextInput(true);f.session.update();
+  const auto checkbox=widgetId(EditorWidget::ComponentBooleanBase);AE_EXPECT_TRUE(locateWidget(f.session,checkbox).x>=0,"short landscape exposes actual carry property");tapWidget(f,checkbox);AE_EXPECT_TRUE(runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"checkbox affects real authoring");
+  const auto depth=f.session.history().undoDepth();tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch));const auto edit=f.session.pendingTextEdit();AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::PropertySearch&&f.session.screen().expandedNative!=0,"header search overrides fold hit and opens IME");
+  AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"impulso",7)&&locateWidget(f.session,checkbox).x>=0,"filtered carry remains accessible at same height");AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"impulso",true),"search commits");AE_EXPECT_EQ(f.session.history().undoDepth(),depth,"search does not mutate authoring");tapWidget(f,checkbox);AE_EXPECT_TRUE(!runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"filtered checkbox still edits the selected component");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"Undo follows actual filtered edit");
+  const auto authored=serializeEditorDocument(doc,0);AE_EXPECT_TRUE(f.session.startPlay(),"real Play starts");std::vector<renderer::MapDrawState>draws;AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"native world initialized");tapWidget(f,widgetId(EditorWidget::PlayInspect));f.session.setSelection(actor);f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().characterWorld&&f.session.screen().characterRuntime,"actual session owns character inspection service");if(!f.session.screen().expandedNative)tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  AE_EXPECT_TRUE(locateWidget(f.session,checkbox).x>=0,"same compact field remains editable in Play");tapWidget(f,checkbox);
+  AE_EXPECT_TRUE(!runtime::characterComponent(*f.session.screen().characterWorld->graph().find(actor))->inheritPlatformHorizontal&&runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"Play toggle edits runtime and preserves authoring");
+  AE_EXPECT_EQ(serializeEditorDocument(doc,0),authored,"Play edit leaves source bytes intact");tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));f.session.update();AE_EXPECT_TRUE(!f.session.screen().characterWorld&&!f.session.screen().characterRuntime,"Stop clears inspection ownership");
+}
+
+AE_TEST(mechanisms_block_creation_connection_and_undo_are_one_transaction) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto anchor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Anchor");
+  auto value=*doc.find(anchor);editPhysicsBody(value)->motion=scene::BodyMotion::Static;editCollider(value);
+  AE_EXPECT_TRUE(doc.applyEntityValues(anchor,value),"physical selected target");
+  for(const auto recipeId:{"physics.joint_fixed","physics.joint_cone","physics.joint_swing_twist","physics.joint_six_dof","physics.joint_spring"}) {
+    f.session.setSelection(anchor);history.clear();u32 index=0;AE_EXPECT_TRUE(findCreationRecipe(recipeId,&index),"recipe available");
+    const auto id=f.session.createRecipe(index,doc.root());const auto *object=doc.find(id);
+    AE_EXPECT_TRUE(object,"mechanism created");if(!object)continue;
+    const auto *joint=static_cast<const scene::Joint*>(object->components.find(scene::Joint::descriptor));
+    AE_EXPECT_TRUE(joint&&joint->connectedBody==anchor,"selected body connected through persistent reference");
+    AE_EXPECT_EQ(history.undoDepth(),1u,"one whole composition per undo");
+    AE_EXPECT_TRUE(history.undo(doc),"undo mechanism");AE_EXPECT_TRUE(!doc.find(id),"no component or body left behind");
+    AE_EXPECT_TRUE(history.redo(doc),"redo mechanism");
+    AE_EXPECT_TRUE(doc.find(id)&&doc.find(id)->components.find(scene::Joint::descriptor),"complete composition restored");
+  }
+}
+
+AE_TEST(input_interactions_editor_response_history_persistence_and_narrow_routes) {
+  Fixture f;auto&doc=f.session.document();openProjectSection(f,EditorProjectSection::Input);
+  tapWidget(f,widgetId(EditorWidget::InputActionRowBase)+2);tapWidget(f,widgetId(EditorWidget::InputTabResponse));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputInteractionHold)).x>=0,"response route fits landscape");
+  tapWidget(f,widgetId(EditorWidget::InputInteractionHold));tapWidget(f,widgetId(EditorWidget::InputDuration));
+  auto edit=f.session.pendingTextEdit();AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::InputNumber,"real numeric editor");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"0.25",true),"author hold threshold");
+  tapWidget(f,widgetId(EditorWidget::InputGroupKeyboardMouse));
+  AE_EXPECT_TRUE(doc.inputActions().find("Saltar")->duration==.25f&&doc.inputActions().find("Saltar")->deviceGroups==5,"controls alter actual model");
+  tapWidget(f,widgetId(EditorWidget::InputActionEnabled));
+  AE_EXPECT_TRUE(!doc.inputActions().find("Saltar")->enabled,"authored disable");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&doc.inputActions().find("Saltar")->enabled,"one undo restores enabled");
+  AE_EXPECT_TRUE(f.session.history().redo(doc)&&!doc.inputActions().find("Saltar")->enabled,"redo publishes disabled");
+  f.session.history().undo(doc);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened)&&reopened.inputActions()==doc.inputActions(),"entire response survives archive");
+  runtime::InputService input;input.setMap(reopened.inputActions());runtime::InputDeviceState state;state.touchButtons=1;
+  input.submit(state,0);input.submit(state,.25);AE_EXPECT_TRUE(input.justPressed("Saltar"),"authored persisted threshold consumed");
+  for(auto size:{UiRect{0,0,600,394},UiRect{0,0,400,740}}) {
+    f.session.setSurface(size,{});f.session.update();
+    AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputDuration)).x>=0&&locateWidget(f.session,widgetId(EditorWidget::InputGroupGamepad)).x>=0,"response controls remain reachable at narrow sizes");
+  }
+  tapWidget(f,widgetId(EditorWidget::InputTabBinding));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputBindingSource)).x>=0,"binding workflow available independently");
+}
+namespace {
+scene::ScriptSceneAccess inputTouchAccess;
+scene::ScriptRuntimeApi inputTouchApi(){scene::ScriptRuntimeApi a;
+ a.start=[](const u8*,int,const u8*,int,const scene::ScriptSceneAccess*s){inputTouchAccess=*s;return s->available()?0:1;};
+ a.update=[](float){return 0;};a.fixedUpdate=a.lateUpdate=a.update;a.stop=[]{};a.copyDiagnostics=[](u8*,int){return 0;};
+ a.trigger=[](u64,u64,u32){return 0;};a.contact=[](u64,u64,u32,const float*){return 0;};a.timer=[](u64,u64,u32){return 0;};a.lifecycle=[](u32,u32){return 0;};return a;
+}
+}
+AE_TEST(input_interactions_session_touch_hold_unscaled_cancel_and_fresh_press) {
+ Fixture f;auto&session=f.session;auto&doc=session.document();auto map=doc.inputActions();auto action=*map.find("Saltar");
+ action.interaction=runtime::InputInteraction::Hold;action.duration=.25f;map.replace(action.id,action);doc.setInputActions(map);
+ auto entity=*doc.find(f.cube);auto*s=static_cast<scene::ScriptBehavior*>(entity.components.add(scene::ScriptBehavior::descriptor));s->scriptType="test.InputTouch";s->source="Touch.cs";doc.applyEntityValues(f.cube,entity);
+ session.setScriptRuntime(inputTouchApi());AE_EXPECT_TRUE(session.startPlay(),"real session Play");session.update();
+ std::vector<renderer::MapDrawState> draws;session.advanceClock(1);AE_EXPECT_TRUE(session.extractPlayMap(draws),"Play starts with real bridge");
+ auto query=[&](){scene::ScriptInputActionState result;inputTouchAccess.inputActionCommand(inputTouchAccess.context,reinterpret_cast<const u8*>("Saltar"),6,0,&result);return result;};
+ const auto button=locateWidget(session,widgetId(EditorWidget::JumpCharacter));AE_EXPECT_TRUE(button.x>=0,"authored touch action has executable button");
+ session.handlePointer({10,UiPointerPhase::Down,button,1});session.extractPlayMap(draws);
+ AE_EXPECT_TRUE(query().phase==1&&query().elapsed==0,"Down arms while pointer remains held");
+ AE_EXPECT_TRUE(session.setPlayTimeScale(0),"pause simulated time only");
+ session.advanceClock(1.125f);session.extractPlayMap(draws);AE_EXPECT_TRUE(query().progress==.5f,"held pointer survives frame without Up");
+ session.advanceClock(1.25f);session.extractPlayMap(draws);AE_EXPECT_TRUE(query().phase==2,"touch hold completes while world timeScale is zero");
+ session.handlePointer({10,UiPointerPhase::Up,button,1.25});session.extractPlayMap(draws);AE_EXPECT_TRUE(query().phase==3,"release clears performed hold");
+ session.handlePointer({11,UiPointerPhase::Down,button,1.3});session.extractPlayMap(draws);
+ session.handlePointer({11,UiPointerPhase::Cancel,button,1.4});session.advanceClock(1.5f);session.extractPlayMap(draws);
+ AE_EXPECT_TRUE(query().phase==3&&query().progress==0,"pointer cancel aborts instead of performing");
+ session.handlePointer({12,UiPointerPhase::Down,button,1.5});session.extractPlayMap(draws);session.advanceClock(1.75f);session.extractPlayMap(draws);
+ AE_EXPECT_TRUE(query().phase==2,"fresh pointer starts new full interval");
+ session.applicationEvent(scene::ScriptLifecycleEvent::ApplicationFocus,false);session.extractPlayMap(draws,{},false);
+ AE_EXPECT_TRUE(query().phase!=2&&query().progress==0,"app focus cancels held touch");
+ session.applicationEvent(scene::ScriptLifecycleEvent::ApplicationFocus,true);session.advanceClock(2);session.extractPlayMap(draws);
+ AE_EXPECT_TRUE(query().phase!=2&&query().progress==0,"resume does not resurrect canceled pointer");
 }

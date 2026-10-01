@@ -1,0 +1,241 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "libaether_arm_asr.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_compile_options",
+			"target_compile_definitions",
+			"target_include_directories",
+			"target_compile_features"
+		],
+		"files" : 
+		[
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 224,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 256,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 252,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 240,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 233,
+				"parent" : 0
+			},
+			{
+				"command" : 4,
+				"file" : 0,
+				"line" : 247,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC"
+				},
+				{
+					"backtrace" : 2,
+					"fragment" : "-w"
+				},
+				{
+					"fragment" : "-std=c++20"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 3,
+					"define" : "FFXM_FSR"
+				},
+				{
+					"backtrace" : 3,
+					"define" : "vkGetPhysicalDeviceFeatures2=aetherVkGetPhysicalDeviceFeatures2"
+				},
+				{
+					"backtrace" : 3,
+					"define" : "vkGetPhysicalDeviceProperties2=aetherVkGetPhysicalDeviceProperties2"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 4,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/src/backends/shared"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/src/backends/shared/blob_accessors"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/src/backends/shared/blob_accessors/prebuilt_shaders"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/src/backends/vk"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/src/components"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/include"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/include/host"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/include/host/backends/vk"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/arm_asr/include/gpu"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					6
+				],
+				"standard" : "20"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6
+			],
+			"sysroot" : 
+			{
+				"path" : "C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+			}
+		}
+	],
+	"id" : "aether_arm_asr::@6890427a1f51a3e7e1df",
+	"name" : "aether_arm_asr",
+	"nameOnDisk" : "libaether_arm_asr.a",
+	"paths" : 
+	{
+		"build" : ".",
+		"source" : "."
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/shared/ffxm_assert.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/shared/ffxm_object_management.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/components/fsr2/ffxm_fsr2.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/backends/vk/ffxm_vk.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/backends/vk/ffxm_hash.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/backends/shared/ffxm_shader_blobs.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "third_party/arm_asr/src/backends/shared/blob_accessors/ffxm_fsr2_shaderblobs.cpp",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

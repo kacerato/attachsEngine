@@ -71,6 +71,7 @@ struct PropertyContract {
   PlayMutability playMutability = PlayMutability::SafePoint;
   core::CapabilityState capabilityState = core::CapabilityState::Implemented;
   const char *limitation = "";
+  bool tweenable=false;
 };
 
 inline std::string describeInvalidation(u32 mask) {
@@ -148,6 +149,7 @@ inline std::vector<PropertyContract> componentContracts(const ComponentSchema &s
     row.minimum = property.minimum;
     row.maximum = property.maximum;
     row.step = property.dragStep;
+    row.tweenable=property.tweenable;
     row.readOnly = row.readOnly || property.write == nullptr;
     if (probe) row.defaultValue = detail::formatNumber(property.read(*probe));
     row.domain = detail::formatNumber(property.minimum) + " … " + detail::formatNumber(property.maximum);
@@ -245,6 +247,19 @@ inline std::string componentMatrixMarkdown() {
       "Não edite à mão: acrescente a propriedade no descritor e regenere.\n"
       "Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e\n"
       "capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.\n";
+  usize listed=0,facades=0;
+  for(const auto &schema:componentSchemas) {
+    if(schema.listedInAdd) ++listed;
+    if(!schema.apiName.empty()) ++facades;
+  }
+  out += "\n**Registro atual:** "+std::to_string(componentSchemas.size())+" schemas; "+
+    std::to_string(listed)+" tipos no Add; "+std::to_string(facades)+" fachadas geradas.\n";
+  out += "Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.\n";
+  out += "\n| Tipo | Família | API C# | Criação |\n|---|---|---|---|\n";
+  for(const auto &schema:componentSchemas)
+    out += "| `"+std::string(schema.type->id)+"` | "+componentFamilyName(schema.family)+" | "+
+      (schema.apiName.empty()?std::string("API própria"):"`Astra.Components."+std::string(schema.apiName)+"`")+" | "+
+      (schema.listedInAdd?"Add Component":"Fluxo próprio")+" |\n";
   for (const auto &schema : componentSchemas) {
     out += "\n## ";
     out += schema.name;
@@ -258,6 +273,27 @@ inline std::string componentMatrixMarkdown() {
              core::capabilityStateName(capability ? capability->state : core::CapabilityState::Planned) + ").";
     }
     out += " **Invalida:** " + describeInvalidation(schema.invalidates) + ".\n\n";
+    if(!schema.reference.empty()) out += "**Referência estudada:** [documentação oficial]("+std::string(schema.reference)+").\n\n";
+    out += "**Durante Play:** estrutura "+std::string(schema.structuralInPlay==PlayMutability::SafePoint?"em ponto seguro":"não alterável")+
+      "; propriedades "+(schema.propertiesInPlay==PlayMutability::SafePoint?"em ponto seguro":"não alteráveis")+".\n\n";
+    if(!schema.requirements.empty() || !schema.conflicts.empty()) {
+      out += "| Relação no objeto | Tipo | Diagnóstico |\n|---|---|---|\n";
+      for(const auto &rule:schema.requirements)
+        out += "| Requer | `"+std::string(rule.typeId)+"` | "+escapeTableCell(rule.message)+" |\n";
+      for(const auto &rule:schema.conflicts)
+        out += "| Incompatível | `"+std::string(rule.typeId)+"` | "+escapeTableCell(rule.message)+" |\n";
+      out += "\n";
+    }
+    if(!schema.type->collections.empty()) {
+      out += "**Coleções com identidade persistente**\n\n";
+      out += "| Coleção | Elementos iniciais | Próximo ID |\n|---|---|---|\n";
+      const auto initial=schema.type->create();
+      for(const auto &collection:schema.type->collections)
+        out += "| `"+std::string(collection.id)+"` | "+
+          (collection.size?std::to_string(collection.size(*initial)):"indisponível")+" | "+
+          (collection.nextId?std::to_string(collection.nextId(*initial)):"indisponível")+" |\n";
+      out += "\nApply seletivo exige identidade, ordem e fronteira de alocação compatíveis.\n\n";
+    }
     // Recursos vêm antes das propriedades porque são a pergunta que o autor faz
     // primeiro ao levar um componente para outro projeto: de que arquivos isto
     // depende? Herança e ausência declarada são estados distintos e aparecem.
@@ -270,15 +306,15 @@ inline std::string componentMatrixMarkdown() {
                (binding.none.valid() ? "sim" : "não") + " | " + (binding.elementId ? "sim" : "não") + " |\n";
       out += "\n**Propriedades**\n\n";
     }
-    out += "| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |\n";
-    out += "|---|---|---|---|---|---|---|---|---|---|---|\n";
+    out += "| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |\n";
+    out += "|---|---|---|---|---|---|---|---|---|---|---|---|\n";
     for (const auto &row : componentContracts(schema)) {
       out += "| `" + std::string(row.propertyId) + "` | " + escapeTableCell(row.label) + " | " +
              propertyKindName(row.kind) + " | " + escapeTableCell(row.group) + " | " +
              escapeTableCell(row.defaultValue) + " | " + escapeTableCell(row.domain) + " | " +
              escapeTableCell(row.unit) + " | " + escapeTableCell(row.consumer) + " | " +
              describeInvalidation(row.invalidates) + " | " + (row.conditional ? "sim" : "não") + " | " +
-             (row.perSlot ? "sim" : "não") + " |\n";
+             (row.perSlot ? "sim" : "não") + " | " + (row.tweenable?"sim":"não") + " |\n";
     }
   }
   out += "\n## Capacidades do motor\n\n";
@@ -309,6 +345,13 @@ inline std::vector<ContractIssue> auditComponentContracts() {
     if (!core::engineCapabilityDeclared(schema.capability))
       report(type.id, {}, "capacidade não registrada: " + std::string(schema.capability));
     const auto rows = componentContracts(schema);
+    for(usize i=0;i<type.collections.size();++i) {
+      const auto &collection=type.collections[i];
+      if(collection.id.empty() || !collection.size || !collection.elementId || !collection.nextId || !collection.reserveIdsUntil)
+        report(type.id,collection.id,"coleção sem contrato completo de identidade");
+      for(usize j=0;j<i;++j)
+        if(type.collections[j].id==collection.id) report(type.id,collection.id,"identidade de coleção repetida");
+    }
     for (usize i = 0; i < rows.size(); ++i) {
       const auto &row = rows[i];
       if (row.propertyId.empty()) {
@@ -344,11 +387,13 @@ inline std::vector<ContractIssue> auditComponentContracts() {
     // não existe, o editor de vetor grava em lugar nenhum.
     for (const auto &triple : type.triples) {
       if (triple.id.empty()) report(type.id, {}, "tripla sem identidade");
-      for (const auto &channel : triple.channels) {
+      for (u32 axis=0;axis<triple.dimensions();++axis) {
+        const auto &channel=triple.channels[axis];
         bool found = false;
         for (const auto &number : type.numbers) if (number.id == channel) found = true;
         if (!found) report(type.id, triple.id, "canal inexistente: " + std::string(channel));
       }
+      if(triple.dimensions()==2&&!triple.channels[2].empty()) report(type.id,triple.id,"Vector2 não pode expor canal Z");
     }
   }
   return issues;

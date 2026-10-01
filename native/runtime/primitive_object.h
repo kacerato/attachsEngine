@@ -23,8 +23,9 @@ inline bool configurePrimitive(SceneObject &object,scene::PrimitiveType type,con
   body->motion=scene::BodyMotion::Static;
   collider->shape=type==scene::PrimitiveType::Sphere?scene::ColliderShape::Sphere:
     type==scene::PrimitiveType::Capsule?scene::ColliderShape::Capsule:
+    type==scene::PrimitiveType::Cylinder?scene::ColliderShape::Cylinder:
     type==scene::PrimitiveType::Cube?scene::ColliderShape::Box:scene::ColliderShape::Mesh;
-  collider->convex=type==scene::PrimitiveType::Cylinder;
+  if(type==scene::PrimitiveType::Cylinder) collider->halfHeight=1.f;
   return object.components.valid();
 }
 }

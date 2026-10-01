@@ -43,7 +43,7 @@ EditorComponentRegistry defaultEditorComponentRegistry() {
 }
 std::string serializeEditorDocument(const EditorDocument &document, u64 fingerprint) {
   std::ostringstream stream;stream.imbue(std::locale::classic());
-  stream << "AETHER_EDITOR 14 " << fingerprint << ' ' << document.entityCount() << '\n';
+  stream << "AETHER_EDITOR 17 " << fingerprint << ' ' << document.entityCount() << '\n';
   stream << std::setprecision(std::numeric_limits<float>::max_digits10);
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
@@ -71,6 +71,7 @@ std::string serializeEditorDocument(const EditorDocument &document, u64 fingerpr
     auto records=e.components;records.remove(LegacyWaterSettings::descriptor);
     if(!records.write(stream,true)) return {};
     stream << ' ' << std::quoted(e.tag);
+    stream << ' ';e.groups.write(stream);
     stream << '\n';
   }
   // Seção de CENA, depois das entidades: as camadas de gameplay do projeto.
@@ -87,7 +88,7 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
   if(text.size()>kMaximumArchiveBytes) return false;
   std::istringstream stream{std::string(text)};stream.imbue(std::locale::classic());
   std::string magic;u32 version=0,count=0;u64 stored=0;
-  if(!(stream>>magic>>version>>stored>>count) || magic!="AETHER_EDITOR" || (version<1 || version>14) ||
+  if(!(stream>>magic>>version>>stored>>count) || magic!="AETHER_EDITOR" || (version<1 || version>17) ||
      stored!=fingerprint || count==0 || count>EditorDocument::kMaximumEntities) return false;
   EditorDocument prepared;
   for(u32 index=0;index<count;++index) {
@@ -164,6 +165,7 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
       if(e.kind==EditorEntityKind::Camera && !cameraComponent(e) && !editCamera(e)) return false;
     }
     if(version>=14 && (!(stream>>std::quoted(e.tag)) || !runtime::ObjectTags::validName(e.tag))) return false;
+    if(version>=15 && !e.groups.read(stream)) return false;
     if(!e.components.registeredWith(registry)) return false;
     if(index==0) {
       if(e.id!=prepared.root() || e.parent!=0 || e.kind!=EditorEntityKind::Folder ||
@@ -177,7 +179,7 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
   }
   if(version>=12) {
     std::string section;runtime::InputActionMap actions;
-    if(!(stream>>section) || section!="INPUT" || !actions.read(stream) ||
+    if(!(stream>>section) || section!="INPUT" || !actions.read(stream,static_cast<u32>(version>=16?runtime::InputSource::MouseAxis:runtime::InputSource::GamepadButton),version>=17) ||
        !prepared.setInputActions(actions)) return false;
   }
   // Antes da versão 13 não havia vistas salvas: cena sem nenhuma, que é o que

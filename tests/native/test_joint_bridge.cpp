@@ -399,3 +399,32 @@ AE_TEST(junta_v2_valida_versao_e_contrato_continuo_da_dobradica) {
 
   AetherPhysics_DestroyWorld(world);
 }
+
+AE_TEST(mechanisms_block_angular_limits_drives_and_v3_boundary) {
+  // Exercise the angular constraints, not merely the common pivot constraint.
+  for(const auto kind:{AetherJointKind::Fixed,AetherJointKind::Cone,AetherJointKind::SwingTwist,AetherJointKind::SixDOF}) {
+    auto *world=AetherPhysics_CreateWorld({0,0,0},16);
+    const auto anchor=MakeSphere(world,{0,9,0},AetherMotionType::Static);
+    const auto body=MakeSphere(world,{0,7,0},AetherMotionType::Dynamic);
+    AetherJointDescV3 d{};d.structSize=sizeof(d);d.apiVersion=3;
+    auto &b=d.base;b.structSize=sizeof(b);b.apiVersion=2;b.kind=kind;
+    b.point1=b.point2={0,7,0};b.axis1=b.axis2={1,0,0};d.normal1=d.normal2={0,1,0};
+    d.swingY=d.swingZ=.6f;d.twistMin=-.25f;d.twistMax=.25f;
+    for(auto &a:d.axes){a.minimum=-1;a.maximum=1;a.motor=NoMotor();}
+    if(kind==AetherJointKind::SixDOF) {d.axes[5].motion=1;d.axes[5].minimum=-.2f;d.axes[5].maximum=.2f;d.axes[5].motor=VelocityMotor(2,100);}
+    auto invalid=d;invalid.apiVersion=4;
+    AE_EXPECT_TRUE(AetherPhysics_CreateJointV3(world,anchor,body,&invalid)==AetherJointHandle_Invalid,"wrong ABI version rejected before solver");
+    AE_EXPECT_TRUE(AetherPhysics_CreateJointV2(world,anchor,body,&b)==AetherJointHandle_Invalid,"legacy descriptor cannot pretend to carry extended fields");
+    const auto joint=AetherPhysics_CreateJointV3(world,anchor,body,&d);
+    AE_EXPECT_TRUE(joint!=AetherJointHandle_Invalid,"new native constraint created");
+    AE_EXPECT_TRUE(AetherPhysics_SetBodyAngularVelocityV1(world,body,kind==AetherJointKind::SwingTwist?AetherVec3{5,0,0}:AetherVec3{0,0,5}),"spin the constrained body");
+    for(int i=0;i<180;++i)AetherPhysics_Step(world,1.f/120,1);
+    AetherQuat rotation{};AetherPhysics_GetTransform(world,body,nullptr,&rotation);
+    const float angle=2*std::atan2(std::abs(kind==AetherJointKind::SwingTwist?rotation.x:rotation.z),std::abs(rotation.w));
+    const float limit=kind==AetherJointKind::Fixed?.02f:kind==AetherJointKind::Cone?.63f:kind==AetherJointKind::SwingTwist?.28f:.23f;
+    AE_EXPECT_TRUE(angle<limit,"rotation is bounded by the actual constraint");
+    if(kind!=AetherJointKind::Fixed) AE_EXPECT_TRUE(angle>.08f,"allowed rotational freedom is not welded");
+    AetherPhysics_DestroyJoint(world,joint);
+    AetherPhysics_DestroyWorld(world);
+  }
+}

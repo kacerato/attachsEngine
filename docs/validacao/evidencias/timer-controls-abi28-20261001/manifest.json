@@ -1,0 +1,21 @@
+{
+  "abi": 28,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 4,
+  "schemas": 34,
+  "csharpFacades": 33,
+  "recipes": 56,
+  "icons": 228,
+  "apkBytes": 264837230,
+  "apkSha256": "41e3d21408f2f6da169237dac6375ab6ac3e7752916cf810c203f4a8abf18773",
+  "sdkSha256": "14ed88b44479dc3d7f9f0c089a7967e31390e230158d959a51a86a8b01dffd33",
+  "atlasSha256": "ad0df98c509e0909db1823f12e5df1215feb1b62da480410ba5895a663e80835",
+  "assetsMatch": true,
+  "hostTimerControls": "4/4",
+  "managedAstra": "54/54; ten fixtures",
+  "deviceTimerControlPass": false,
+  "install": "Performing Streamed Install\nSuccess\n",
+  "secureKeyguardShowing": true,
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/TimerControls-20261001"
+}

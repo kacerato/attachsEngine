@@ -1,0 +1,113 @@
+
+> Task :app:publishManagedCore
+  Determinando os projetos a serem restaurados...
+  Todos os projetos estão atualizados para restauração.
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Analyzers\release\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Core\release\Aether.Core.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Scene\release\Aether.Scene.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Astra.Scripting\release\Astra.Scripting.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Rendering\release_linux-bionic-arm64\Aether.Rendering.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering-net8.0-8.0.27\
+
+> Task :app:verifyPackagedOpenSsl
+> Task :app:prepareEngineAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:dexBuilderDebug UP-TO-DATE
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeProjectDexDebug UP-TO-DATE
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:compressDebugAssets
+> Task :app:buildCMakeDebug[arm64-v8a][aether_android,aether_transform]
+C/C++: ninja: Entering directory `C:\Users\donod\Downloads\atchengine\android\app\.cxx\Debug\1y1q5570\arm64-v8a'
+C/C++: C:\Users\donod\AppData\Local\Android\Sdk\ndk\27.1.12297006\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -MD -MT CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o -MF CMakeFiles\aether_editor.dir\editor\editor_screen.cpp.o.d -o CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o -c C:/Users/donod/Downloads/atchengine/native/editor/editor_screen.cpp
+C/C++: C:/Users/donod/Downloads/atchengine/native/editor/editor_screen.cpp:6894:55: error: no member named 'divider' in 'ae::ui::UiPalette'
+C/C++:  6894 |   builder.list.addRect(takeTop(content,1),theme.color.divider);
+C/C++:       |                                           ~~~~~~~~~~~ ^
+C/C++: 1 error generated.
+
+> Task :app:buildCMakeDebug[arm64-v8a][aether_android,aether_transform] FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:buildCMakeDebug[arm64-v8a][aether_android,aether_transform]'.
+> com.android.ide.common.process.ProcessException: ninja: Entering directory `C:\Users\donod\Downloads\atchengine\android\app\.cxx\Debug\1y1q5570\arm64-v8a'
+  [1/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.o
+  [2/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.o
+  [3/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.o
+  [4/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_document.cpp.o
+  [5/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o
+  [6/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.o
+  [7/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.o
+  [8/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.o
+  [9/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o
+  FAILED: CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o 
+  C:\Users\donod\AppData\Local\Android\Sdk\ndk\27.1.12297006\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -MD -MT CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o -MF CMakeFiles\aether_editor.dir\editor\editor_screen.cpp.o.d -o CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o -c C:/Users/donod/Downloads/atchengine/native/editor/editor_screen.cpp
+  C:/Users/donod/Downloads/atchengine/native/editor/editor_screen.cpp:6894:55: error: no member named 'divider' in 'ae::ui::UiPalette'
+
+   6894 |   builder.list.addRect(takeTop(content,1),theme.color.divider);
+
+        |                                           ~~~~~~~~~~~ ^
+
+  1 error generated.
+
+  [10/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.o
+  [11/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.o
+  [12/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o
+  [13/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.o
+  [14/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.o
+  [15/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.o
+  [16/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.o
+  [17/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.o
+  [18/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.o
+  [19/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.o
+  [20/41] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.o
+  [21/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.o
+  [22/41] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o
+  ninja: build stopped: subcommand failed.
+  
+  C++ build system [build] failed while executing:
+      @echo off
+      "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe" ^
+        -C ^
+        "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a" ^
+        aether_android ^
+        aether_transform
+    from C:\Users\donod\Downloads\atchengine\android\app
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+32 actionable tasks: 7 executed, 25 up-to-date
+BUILD FAILED in 3m 55s

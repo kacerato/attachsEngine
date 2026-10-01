@@ -1,0 +1,5 @@
+miniaudio 0.11.23
+Source: https://github.com/mackron/miniaudio/tree/0.11.23
+Header SHA256: 7e4f3f13c8fe66df2080ac3dd12a89193e3c2463cb7f067c798abd7331cd8ee6
+License: public domain or MIT-0; LICENSE retained verbatim.
+Built-in WAV decoder enabled. MP3 and FLAC disabled for this initial asset contract.

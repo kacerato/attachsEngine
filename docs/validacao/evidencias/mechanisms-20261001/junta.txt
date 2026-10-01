@@ -1,0 +1,11 @@
+[ok] criar_junta_ponto_prende_corpo_dinamico_a_ancora_estatica
+[ok] junta_dobradica_com_limites_nao_ultrapassa_o_limite_configurado
+[ok] junta_slider_com_motor_de_posicao_converge_para_o_alvo
+[ok] junta_distancia_limita_afastamento_entre_dois_corpos_dinamicos
+[ok] destruir_junta_libera_o_corpo_que_volta_a_cair_livremente
+[ok] destruir_junta_duas_vezes_nao_crasha_e_handle_reciclado_nao_colide
+[ok] junta_v2_local_ao_corpo_1_converte_pontos_para_o_mundo
+[ok] junta_v2_local_ao_corpo_2_converte_eixo_rotacionado
+[ok] junta_v2_valida_versao_e_contrato_continuo_da_dobradica
+
+9/9 testes passaram

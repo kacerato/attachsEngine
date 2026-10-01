@@ -4,7 +4,9 @@
 #include "editor/editor_play_scene.h"
 #include "editor/editor_play_edit.h"
 #include "editor/editor_archive.h"
+#include "editor/editor_history.h"
 #include "runtime/scene_environment.h"
+#include "runtime/scene_lights.h"
 #include "scene/camera.h"
 #include "scene/camera_look.h"
 #include "scene/camera_follow.h"
@@ -16,8 +18,10 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <sstream>
 #include <string>
 #include <vector>
+#include <limits>
 
 using namespace ae;
 using namespace ae::editor;
@@ -41,7 +45,7 @@ struct FakeRuntime {
   static bool lastContactHadNormal;
   static std::string attachments;
   static scene::ScriptSceneAccess sceneAccess;
-  static std::function<void()> onUpdate, onStart;
+  static std::function<void()> onUpdate, onStart, onLateUpdate,onFixedUpdate;
 
   static void reset() {
     starts = updates = fixedUpdates = stops = triggers = contacts = timers = timerExpirations = 0;
@@ -53,7 +57,7 @@ struct FakeRuntime {
     lastContactHadNormal = false;
     attachments.clear();
     sceneAccess = {};
-    onUpdate = {}; onStart = {};
+    onUpdate = {}; onStart = {}; onLateUpdate = {};onFixedUpdate={};
   }
   static int start(const u8 *, int, const u8 *json, int length, const scene::ScriptSceneAccess *access) {
     ++starts;
@@ -65,8 +69,8 @@ struct FakeRuntime {
     return access && access->available() ? 0 : 1;
   }
   static int update(float) { ++updates; if(onUpdate) onUpdate(); return 0; }
-  static int fixedUpdate(float) { ++fixedUpdates; return 0; }
-  static int lateUpdate(float) { ++lateUpdates; return 0; }
+  static int fixedUpdate(float) { ++fixedUpdates;if(onFixedUpdate)onFixedUpdate();return 0; }
+  static int lateUpdate(float) { ++lateUpdates; if(onLateUpdate) onLateUpdate(); return 0; }
   static int lifecycle(u32 kind,u32 value) { ++lifecycleEvents; lastLifecycle=kind*2+value; return 0; }
   static void stop() { ++stops; }
   static int copyDiagnostics(u8 *, int) { return 0; }
@@ -113,7 +117,7 @@ u32 FakeRuntime::lastContactPhase = 99;
 bool FakeRuntime::lastContactHadNormal = false;
 std::string FakeRuntime::attachments;
 scene::ScriptSceneAccess FakeRuntime::sceneAccess{};
-std::function<void()> FakeRuntime::onUpdate{}, FakeRuntime::onStart{};
+std::function<void()> FakeRuntime::onUpdate{}, FakeRuntime::onStart{}, FakeRuntime::onLateUpdate{},FakeRuntime::onFixedUpdate{};
 
 EditorEntityId physical(EditorDocument &doc, const char *name, float y, scene::BodyMotion motion, float halfY) {
   const auto id = doc.createEntity(doc.root(), EditorEntityKind::Folder, name);
@@ -354,6 +358,38 @@ AE_TEST(primitives_runtime_creation_resolves_resources_and_real_collisions_throu
   play.stop();AE_EXPECT_EQ(doc.entityCount(),count,"authoring unaffected by runtime creation");
 }
 
+AE_TEST(play_scene_abi_v20_triple_assignment_rejects_partial_writes_and_reports_status) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Camera,"Camera");
+  auto value=*doc.find(id);
+  auto *follow=static_cast<scene::CameraFollow*>(value.components.add(scene::CameraFollow::descriptor));
+  const auto instance=follow->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,value),"author real CameraFollow");
+  attachScript(doc,id,"project.Teste");
+  play.setScriptRuntime(FakeRuntime::api(),"/projeto");
+  AE_EXPECT_TRUE(play.start(doc,resources),"bridge publishes scene access to runtime");
+  const auto &abi=FakeRuntime::sceneAccess;
+  AE_EXPECT_TRUE(abi.version==scene::ScriptSceneAccess{}.version && abi.size==sizeof(scene::ScriptSceneAccess) && abi.available(),"complete ABI v25 layout");
+  auto incomplete=abi;incomplete.setTriple=nullptr;
+  AE_EXPECT_TRUE(!incomplete.available(),"v20 requires appended triple callback");
+  const auto *property=reinterpret_cast<const u8*>("offset");
+  const float invalid[3]{9,std::numeric_limits<float>::quiet_NaN(),-2};
+  AE_EXPECT_EQ(abi.setTriple(abi.context,id,instance,property,6,invalid),0,"bridge rejects invalid tuple");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::Rejected),"bridge reports world rejection");
+  const auto handle=play.world().findComponent(play.world().handle(id),"astra.camera.follow");
+  const auto *unchanged=static_cast<const scene::CameraFollow*>(play.world().readComponent(handle));
+  AE_EXPECT_TRUE(unchanged && unchanged->offset[0]==0 && unchanged->offset[1]==2 && unchanged->offset[2]==-5,"invalid middle channel leaves all runtime channels intact");
+  const float valid[3]{9,3,-2};
+  AE_EXPECT_EQ(abi.setTriple(abi.context,id,instance,property,6,valid),1,"bridge accepts complete tuple");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::Ok),"success replaces prior failure status");
+  const auto *changed=static_cast<const scene::CameraFollow*>(play.world().readComponent(handle));
+  AE_EXPECT_TRUE(changed && changed->offset[0]==9 && changed->offset[1]==3 && changed->offset[2]==-2,"bridge publishes all three channels");
+  AE_EXPECT_EQ(abi.setTriple(abi.context,id,instance,property,6,nullptr),0,"null tuple refused at ABI boundary");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::InvalidArgument),"invalid ABI argument has precise status");
+  AE_EXPECT_EQ(static_cast<const scene::CameraFollow*>(doc.find(id)->components.findInstance(instance))->offset[0],0.f,"runtime tuple preserves authoring");
+  play.stop();
+}
+
 AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   EditorDocument doc;
   const auto parent = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Pai");
@@ -369,7 +405,7 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
                  "instância incluída para permitir a primeira ativação");
   const auto &abi = FakeRuntime::sceneAccess;
-  AE_EXPECT_TRUE(abi.version == 19 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_TRUE(abi.version == 24 && abi.available(), "contrato ABI completo");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
   AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
   const auto revision = play.world().structuralRevision();
@@ -381,6 +417,43 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, (1ull << 32) + child), -1, "id largo não pode acertar outro objeto");
   AE_EXPECT_EQ(abi.destroyObject(abi.context, parent), 1, "remove subárvore");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), -1, "filho vencido não vira falso silencioso");
+  play.stop();
+}
+
+AE_TEST(play_paused_step_completes_late_update_before_camera_follow_and_flushes_commands) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto target=physical(doc,"Target",3,scene::BodyMotion::Dynamic,.5f);
+  const auto disposable=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Disposable");
+  const auto camera=doc.createEntity(doc.root(),EditorEntityKind::Camera,"Camera");
+  attachScript(doc,target,"project.Teste");
+  auto value=*doc.find(camera);
+  auto *follow=static_cast<scene::CameraFollow*>(value.components.add(scene::CameraFollow::descriptor));
+  follow->target=target;follow->dampingSeconds=0;follow->offset[0]=follow->offset[1]=follow->offset[2]=0;
+  AE_EXPECT_TRUE(doc.applyEntityValues(camera,value),"camera follows runtime target");
+  play.setScriptRuntime(FakeRuntime::api(),"/projeto");
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play starts");
+  AE_EXPECT_TRUE(!play.step(),"step requires editor pause");
+  play.pause(true);
+  AE_EXPECT_TRUE(play.advance(.2),"paused advance is idle");
+  AE_EXPECT_EQ(FakeRuntime::updates,0u,"pause does not run Update");
+  AE_EXPECT_EQ(play.world().elapsedSeconds(),0.,"pause does not advance clock");
+  bool lateSawPhysics=false,lateChangedPose=false,lateQueuedDestroy=false;
+  FakeRuntime::onLateUpdate=[&] {
+    lateSawPhysics=FakeRuntime::updates==1 && FakeRuntime::fixedUpdates>0;
+    auto pose=play.document().find(target)->transform;pose.position[0]=7;
+    lateChangedPose=play.executionGraph()->setTransform(target,pose);
+    const auto &access=FakeRuntime::sceneAccess;
+    lateQueuedDestroy=access.destroyObject(access.context,disposable)==1;
+  };
+  AE_EXPECT_TRUE(play.step(),"one complete paused frame");
+  AE_EXPECT_EQ(FakeRuntime::lateUpdates,1u,"step invokes LateUpdate exactly once");
+  AE_EXPECT_TRUE(lateSawPhysics && lateChangedPose && lateQueuedDestroy,"LateUpdate follows Update and physics and applies runtime changes");
+  AE_EXPECT_EQ(play.document().find(camera)->transform.position[0],7.f,"CameraFollow reads LateUpdate pose in the same frame");
+  AE_EXPECT_TRUE(!play.document().find(disposable) && play.pendingCommandCount()==0,"LateUpdate destruction drained before frame ends");
+  AE_EXPECT_TRUE(std::abs(play.world().elapsedSeconds()-1./60)<1e-9,"step advances one fixed frame of time");
+  AE_EXPECT_TRUE(play.advance(.2),"step preserves pause");
+  AE_EXPECT_EQ(FakeRuntime::updates,1u,"advance after step stays idle");
+  FakeRuntime::onLateUpdate={};
   play.stop();
 }
 
@@ -493,6 +566,15 @@ AE_TEST(play_script_character_commands_cover_all_substeps_and_preserve_authorshi
   AE_EXPECT_TRUE(std::abs(distances[0]-distances[1])<.001f,"30 and 60 Hz cover the same physical steps");
 }
 
+AE_TEST(character_rebuild_fixedupdate_body_edit_preserves_abi_move_and_accepted_jump) {
+  FakeRuntime::reset();EditorDocument doc;const auto floor=physical(doc,"Floor",-.5f,scene::BodyMotion::Static,.5f);
+  const auto actor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Actor");auto value=*doc.find(actor);value.transform.position[1]=1;auto*character=static_cast<scene::Character*>(value.components.add(scene::Character::descriptor));character->speed=2;character->jumpSpeed=5;doc.applyEntityValues(actor,value);attachScript(doc,actor,"project.Teste");
+  EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");AE_EXPECT_TRUE(play.start(doc,resources),"actual Play/ABI");for(u32 frame=0;frame<120;++frame)AE_EXPECT_TRUE(play.advance(1./60),"settle real capsule");const auto before=play.document().find(actor)->transform;const auto body=play.world().findComponent(play.world().handle(floor),scene::PhysicsBody::descriptor.id);
+  FakeRuntime::onUpdate=[&](){const float move[3]{1,0,0};auto&abi=FakeRuntime::sceneAccess;AE_EXPECT_TRUE(abi.characterMove(abi.context,actor,move)==1&&abi.characterJump(abi.context,actor)==1,"commands accepted before FixedUpdate");};
+  FakeRuntime::onFixedUpdate=[&](){const u8 property[]{'f','r','i','c','t','i','o','n'};float friction=.7f;u32 bits=0;std::memcpy(&bits,&friction,sizeof(bits));auto&abi=FakeRuntime::sceneAccess;AE_EXPECT_TRUE(abi.setProperty(abi.context,floor,body.instance,property,8,0,bits)==1,"body edit enters actual script ABI");};
+  AE_EXPECT_TRUE(play.advance(1./60),"real callback safe-point reconciliation");AE_EXPECT_TRUE(!test::currentTestFailed(),"callback assertions");const auto after=play.document().find(actor)->transform;AE_EXPECT_TRUE(after.position[0]>before.position[0]+.02f&&after.position[1]>before.position[1]+.04f,"substep sees restored intentions and refreshed support");
+  play.stop();FakeRuntime::reset();
+}
 AE_TEST(play_scene_refuses_a_script_runtime_that_does_not_fill_the_abi) {
   EditorDocument doc;
   const auto box = physical(doc, "Caixa", 1, scene::BodyMotion::Dynamic, .5f);
@@ -720,5 +802,403 @@ AE_TEST(play_prefab_abi_creates_once_queries_attachments_and_can_rollback) {
   AE_EXPECT_TRUE(json.find("test.prefab")!=std::string::npos && json.find("test.driver")==std::string::npos,"only the new subtree scripts");
   AE_EXPECT_TRUE(abi.finishInstantiation(c,root,0) && play.document().entityCount()==count,"managed binding failure can rollback");
   AE_EXPECT_TRUE(!abi.instantiatePrefab(c,doc.root(),{1,2}) && play.document().entityCount()==count,"missing resource never creates objects");
+  play.stop();FakeRuntime::reset();
+}
+
+AE_TEST(play_time_scale_drives_solver_timers_delayed_destroy_and_native_clock) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;
+  const auto body=physical(doc,"Clock body",8,scene::BodyMotion::Dynamic,.5f);
+  attachScript(doc,body,"test.clock");
+  auto value=*doc.find(body);auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+  timer->intervalSeconds=.05f;timer->repeat=true;
+  AE_EXPECT_TRUE(doc.applyEntityValues(body,value),"timer authored");
+  const auto transient=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Delayed");
+  const auto authored=serializeEditorDocument(doc,0);
+  EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");
+  AE_EXPECT_TRUE(play.start(doc,resources),"real Play and Jolt solver");
+  const auto &abi=FakeRuntime::sceneAccess;const auto world=play.world().worldId();
+  AE_EXPECT_TRUE(abi.setTimeScale(abi.context,world,.5f),"native scale mutation");
+  AE_EXPECT_TRUE(play.world().destroyAfter(play.world().handle(transient),.04)==runtime::WorldStatus::Ok,"scaled destruction scheduled");
+  AE_EXPECT_TRUE(play.advance(1.0/60.0) && FakeRuntime::fixedUpdates==0,"half speed defers fixed dispatch");
+  AE_EXPECT_TRUE(play.advance(1.0/60.0) && FakeRuntime::fixedUpdates==1,"two frames consume one physical step");
+  const auto y=play.document().find(body)->transform.position[1];
+  AE_EXPECT_TRUE(y<8 && FakeRuntime::timerExpirations==0,"body consumed step; timer not due");
+  AE_EXPECT_TRUE(abi.setTimeScale(abi.context,world,0) && play.advance(.1),"freeze simulation while dispatch continues");
+  AE_EXPECT_TRUE(FakeRuntime::updates==3 && FakeRuntime::lateUpdates==3 && FakeRuntime::fixedUpdates==1,"Update/LateUpdate continue, FixedUpdate stops");
+  AE_EXPECT_TRUE(play.document().find(body)->transform.position[1]==y && play.world().alive(play.world().handle(transient)),"pose and destruction frozen");
+  scene::ScriptTimeState snapshot{};
+  AE_EXPECT_TRUE(abi.timeSnapshot(abi.context,world,&snapshot),"authoritative ABI snapshot");
+  AE_EXPECT_TRUE(snapshot.frameCount==3 && snapshot.delta==0 && snapshot.unscaledDelta==.1f && std::abs(snapshot.unscaledTime-(.1+1.0/30))<1e-8,"unscaled time remains observable");
+  AE_EXPECT_TRUE(!abi.setTimeScale(abi.context,world,std::numeric_limits<float>::quiet_NaN()) && !abi.setTimeScale(abi.context,world,5),"invalid scale rejected");
+  AE_EXPECT_TRUE(!abi.timeSnapshot(abi.context,world+1,&snapshot),"foreign session refused");
+  const auto frame=play.world().clock().frameCount();
+  AE_EXPECT_TRUE(!play.advance(std::numeric_limits<double>::quiet_NaN()) && play.world().clock().frameCount()==frame,"invalid delta is atomic");
+  play.pause(true);AE_EXPECT_TRUE(play.step(),"editor Step overrides zero scale for one frame");
+  AE_EXPECT_TRUE(play.world().clock().scale()==0 && FakeRuntime::fixedUpdates==2 && FakeRuntime::timerExpirations==0,"Step retains requested scale and consumes timers/physics");
+  AE_EXPECT_TRUE(abi.setTimeScale(abi.context,world,1),"resume normal time");play.pause(false);
+  AE_EXPECT_TRUE(play.advance(1.0/60) && !play.document().exists(transient) && FakeRuntime::timerExpirations==1,"timer and delayed destruction use scaled time and safe point");
+  AE_EXPECT_TRUE(serializeEditorDocument(doc,0)==authored,"Play clock never mutates authoring");
+  play.stop();AE_EXPECT_TRUE(!abi.timeSnapshot(abi.context,world,&snapshot),"ended session refused");
+  AE_EXPECT_TRUE(play.start(doc,resources) && play.world().clock().scale()==1 && play.world().clock().frameCount()==0,"restart resets session clock");
+  play.stop();FakeRuntime::reset();
+}
+
+AE_TEST(play_time_scale_changes_in_update_take_effect_on_next_whole_frame) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;
+  const auto body=physical(doc,"Next frame",8,scene::BodyMotion::Dynamic,.5f);attachScript(doc,body,"test.clock");
+  EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play");
+  FakeRuntime::onUpdate=[&] {const auto &abi=FakeRuntime::sceneAccess;abi.setTimeScale(abi.context,play.world().worldId(),0);};
+  AE_EXPECT_TRUE(play.advance(1.0/60) && FakeRuntime::fixedUpdates==1,"scale write cannot split current frame");
+  const auto y=play.document().find(body)->transform.position[1];
+  AE_EXPECT_TRUE(play.advance(1.0/60) && FakeRuntime::fixedUpdates==1 && play.document().find(body)->transform.position[1]==y,"next frame freezes all physical work");
+  play.stop();FakeRuntime::reset();
+}
+
+AE_TEST(play_time_scale_unscaled_timer_persists_and_dispatches_during_simulation_freeze) {
+  scene::Timer legacy;legacy.ignoreTimeScale=true;std::istringstream old("0.1 1 1");
+  AE_EXPECT_TRUE(legacy.read(old,1) && !legacy.ignoreTimeScale,"v1 timers migrate to scaled time");
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Unscaled timer");
+  auto value=*doc.find(id);auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+  timer->intervalSeconds=.1f;timer->repeat=false;timer->ignoreTimeScale=true;const auto instance=timer->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,value),"unscaled timer authored");attachScript(doc,id,"test.clock");
+  const auto file=serializeEditorDocument(doc,0);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(file,0,reopened),"v2 archive reopens");
+  AE_EXPECT_TRUE(static_cast<const scene::Timer*>(reopened.find(id)->components.findInstance(instance))->ignoreTimeScale,"clock mode persists by component identity");
+  EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");
+  AE_EXPECT_TRUE(play.start(reopened,resources),"Play");
+  AE_EXPECT_TRUE(play.world().setTimeScale(0)==runtime::WorldStatus::Ok && play.advance(.11),"zero scaled time with real frame");
+  AE_EXPECT_TRUE(FakeRuntime::timerExpirations==1 && play.world().elapsedSeconds()==0 && FakeRuntime::fixedUpdates==0,"timer dispatch uses unscaled clock, physics stays frozen");
+  const auto component=play.world().findComponent(play.world().handle(id),"astra.time.timer",0);
+  AE_EXPECT_TRUE(play.world().setProperty(component,"ignore_time_scale",false)==runtime::WorldStatus::Ok,"mode is runtime editable");
+  play.stop();FakeRuntime::reset();
+}
+
+AE_TEST(play_time_scale_unscaled_tween_migrates_persists_and_keeps_runtime_authority) {
+  scene::TransformTween legacy;legacy.ignoreTimeScale=true;
+  std::istringstream old("1 1 0 0 1 0 0 1 0 0 1 4 0 0 0 0 0 1 1 1");
+  AE_EXPECT_TRUE(legacy.read(old,1) && !legacy.ignoreTimeScale,"legacy tween remains scaled");
+  EditorDocument doc;EditorMapScene resources;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Unscaled tween");auto value=*doc.find(id);
+  auto *tween=static_cast<scene::TransformTween*>(value.components.add(scene::TransformTween::descriptor));
+  tween->duration=1;tween->destination[0]=4;tween->ignoreTimeScale=true;const auto instance=tween->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,value),"author real transform tween");
+  const auto file=serializeEditorDocument(doc,0);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(file,0,reopened) && serializeEditorDocument(reopened,0)==file,"v2 mode roundtrips exactly");
+  EditorPlayScene play;AE_EXPECT_TRUE(play.start(reopened,resources),"Play with actual tween consumer");
+  AE_EXPECT_TRUE(play.world().setTimeScale(0)==runtime::WorldStatus::Ok && play.advance(.25),"unscaled dispatch");
+  AE_EXPECT_TRUE(play.document().find(id)->transform.position[0]==1 && play.world().elapsedSeconds()==0,"unscaled tween changes pose during simulation freeze");
+  play.pause(true);AE_EXPECT_TRUE(play.advance(.25) && play.document().find(id)->transform.position[0]==1,"editor pause stops both clocks");
+  const auto component=play.world().findComponent(play.world().handle(id),"astra.tween.transform",0);
+  AE_EXPECT_TRUE(play.world().setProperty(component,"ignore_time_scale",false)==runtime::WorldStatus::Ok,"live clock switch");
+  play.pause(false);AE_EXPECT_TRUE(play.advance(.25) && play.document().find(id)->transform.position[0]==1,"scaled mode freezes without resetting progress");
+  AE_EXPECT_TRUE(play.world().setTimeScale(1)==runtime::WorldStatus::Ok && play.advance(.25) && play.document().find(id)->transform.position[0]==2,"resume retains elapsed state");
+  AE_EXPECT_TRUE(play.tweens().cancel(play.world(),id,instance) && play.advance(.25) && play.document().find(id)->transform.position[0]==2,"cancellation remains authoritative");
+  play.stop();
+}
+
+AE_TEST(timer_connection_roundtrip_migration_clone_and_native_activation) {
+  EditorDocument doc;
+  const auto source=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Emissor");
+  const auto receiver=doc.createEntity(source,EditorEntityKind::Folder,"Receptor");
+  AE_EXPECT_TRUE(doc.setActive(receiver,false),"receptor autoral inativo");
+  auto value=*doc.find(source);
+  auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+  timer->intervalSeconds=.1f;timer->repeat=false;timer->elapsedAction=1;timer->elapsedTarget=receiver;
+  const auto instance=timer->instanceId();
+  EditorHistory history;
+  AE_EXPECT_TRUE(history.applyValues(doc,source,value),"conexão editada pelo histórico");
+  AE_EXPECT_TRUE(history.undo(doc) && !doc.find(source)->components.find(scene::Timer::descriptor),"Undo retira conexão e timer juntos");
+  AE_EXPECT_TRUE(history.redo(doc),"Redo restaura autoria");
+  EditorDocument loaded;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,loaded),"conexão persistente");
+  runtime::ObjectCloneMap mapping;
+  const auto clone=loaded.cloneSubtree(source,loaded.root(),mapping);
+  AE_EXPECT_TRUE(clone!=0,"composição clonada");
+  const auto *cloned=static_cast<const scene::Timer*>(loaded.find(clone)->components.findInstance(instance));
+  AE_EXPECT_TRUE(cloned && cloned->elapsedTarget!=receiver && loaded.find(cloned->elapsedTarget)->parent==clone,"receptor remapeado dentro da composição");
+  runtime::GameWorld world;runtime::SceneTimers timers;
+  AE_EXPECT_TRUE(world.load(loaded),"mundo real");
+  u32 calls=0;bool callbackSawActive=true;
+  auto callback=[&](runtime::ObjectId object,u64,u32 count) {
+    calls+=count;
+    if(object==source)callbackSawActive=world.activeSelf(world.handle(receiver));
+    return true;
+  };
+  AE_EXPECT_TRUE(timers.advance(world,.11,callback),"timeout aplica ação e entrega evento");
+  AE_EXPECT_TRUE(callbackSawActive && world.activeSelf(world.handle(receiver)),"ativação precede callback");
+  AE_EXPECT_EQ(calls,2u,"cada composição entrega seu evento");
+  AE_EXPECT_TRUE(!loaded.find(receiver)->active,"ativação de Play não alterou autoria");
+  scene::Timer legacy;legacy.elapsedAction=3;legacy.elapsedTarget=receiver;
+  std::istringstream old("0.1 1 1 0");
+  AE_EXPECT_TRUE(legacy.read(old,2) && legacy.elapsedAction==0 && legacy.elapsedTarget==0,"v2 migra explicitamente desconectado");
+  std::istringstream invalid("0.1 1 1 0 4 2");
+  AE_EXPECT_TRUE(!legacy.read(invalid,3),"arquivo não inventa operação desconhecida");
+}
+
+AE_TEST(timer_connection_aggregated_toggle_pending_removal_and_teardown) {
+  EditorDocument doc;
+  const auto source=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Emissor");
+  const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Receptor");
+  auto value=*doc.find(source);auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));
+  timer->intervalSeconds=.1f;timer->elapsedAction=3;timer->elapsedTarget=receiver;const auto instance=timer->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(source,value),"conexão tipada");
+  runtime::GameWorld world;runtime::SceneTimers timers;AE_EXPECT_TRUE(world.load(doc),"mundo carregado");
+  auto fire=[](runtime::ObjectId,u64,u32){return true;};
+  AE_EXPECT_TRUE(timers.advance(world,.25,fire) && world.activeSelf(world.handle(receiver)),"dois disparos mantêm estado inicial");
+  AE_EXPECT_TRUE(timers.advance(world,.1,fire) && !world.activeSelf(world.handle(receiver)),"disparo ímpar alterna estado");
+  AE_EXPECT_TRUE(world.destroyObject(world.handle(receiver))==runtime::WorldStatus::Ok,"receptor removido em fila");
+  AE_EXPECT_TRUE(timers.advance(world,.1,fire),"receptor pendente nunca é acionado");
+  const auto *state=timers.state(source,instance);
+  AE_EXPECT_TRUE(state && state->connection==runtime::SceneTimers::ConnectionStatus::MissingTarget,"ausência é inspecionável");
+  world.flush();
+  const auto component=world.findComponent(world.handle(source),"astra.time.timer");
+  AE_EXPECT_TRUE(world.removeComponent(component)==runtime::WorldStatus::Ok,"emissor removido");world.flush();
+  AE_EXPECT_TRUE(timers.advance(world,.1,fire) && !timers.state(source,instance),"teardown retira estado e conexão");
+}
+
+AE_TEST(input_profiles_abi26_reads_overrides_exports_and_imports_real_play_input) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Rebind probe");attachScript(doc,id,"project.Teste");
+  play.setScriptRuntime(FakeRuntime::api(),"/projeto");AE_EXPECT_TRUE(play.start(doc,resources),"real bridge running");
+  const auto &abi=FakeRuntime::sceneAccess;const auto *name=reinterpret_cast<const u8*>("Saltar");
+  AE_EXPECT_TRUE(abi.version==scene::ScriptSceneAccess{}.version&&abi.available(),"complete ABI26");auto incomplete=abi;incomplete.inputProfile=nullptr;
+  AE_EXPECT_TRUE(!incomplete.available(),"profiles are required by new ABI");
+  scene::ScriptInputBinding binding;
+  AE_EXPECT_TRUE(abi.inputBindingCommand(abi.context,name,6,0,4,&binding)==1&&binding.source==3,"read authored touch binding");
+  binding={7,2,0,0,1,0};AE_EXPECT_EQ(abi.inputBindingCommand(abi.context,name,6,0,1,&binding),1,"apply middle mouse override");
+  runtime::InputDeviceState raw;raw.mouseButtons=4;play.submitInput(raw);
+  AE_EXPECT_EQ(abi.inputButton(abi.context,name,6,1),1,"override reaches ABI gameplay query");
+  const int size=abi.inputProfile(abi.context,0,nullptr,0,nullptr,0);AE_EXPECT_TRUE(size>0&&size<262144,"bounded size probe");
+  std::vector<u8> profile(static_cast<usize>(size));AE_EXPECT_EQ(abi.inputProfile(abi.context,0,nullptr,0,profile.data(),size),size,"copy complete profile");
+  AE_EXPECT_EQ(abi.inputBindingCommand(abi.context,nullptr,0,0,3,nullptr),1,"restore all");play.submitInput(raw);
+  AE_EXPECT_EQ(abi.inputButton(abi.context,name,6,0),0,"authored touch does not respond to middle mouse");
+  AE_EXPECT_EQ(abi.inputProfile(abi.context,1,profile.data(),size,nullptr,0),1,"import atomically");play.submitInput(raw);
+  AE_EXPECT_EQ(abi.inputButton(abi.context,name,6,1),1,"loaded profile produces press edge");
+  AE_EXPECT_TRUE(doc.inputActions().isDefault(),"scene authoring remains untouched");
+  play.stop();AE_EXPECT_TRUE(play.start(doc,resources),"new Play world");
+  AE_EXPECT_EQ(FakeRuntime::sceneAccess.inputBindingCommand(FakeRuntime::sceneAccess.context,name,6,0,0,&binding),1,"binding available after restart");
+  AE_EXPECT_EQ(binding.source,3u,"new Play uses authored defaults until explicit profile load");play.stop();
+}
+
+AE_TEST(input_runtime_capture_abi27_consumes_unbound_platform_keys_and_cancellation) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Capture probe");attachScript(doc,id,"project.Teste");
+  play.setScriptRuntime(FakeRuntime::api(),"/projeto");AE_EXPECT_TRUE(play.start(doc,resources),"bridge running");const auto &abi=FakeRuntime::sceneAccess;
+  const auto *name=reinterpret_cast<const u8*>("Saltar");auto incomplete=abi;incomplete.inputCaptureCommand=nullptr;AE_EXPECT_TRUE(!incomplete.available(),"ABI27 requires capture callback");
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,1,name,6,0,4,0,111),1,"begin key capture through ABI");
+  runtime::InputDeviceState device;play.submitInput(device);device.keys={62};play.submitInput(device);
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,0,nullptr,0,0,0,0,0),2,"completed status through ABI");scene::ScriptInputBinding binding;
+  AE_EXPECT_EQ(abi.inputBindingCommand(abi.context,name,6,0,0,&binding),1,"read effective captured binding");AE_EXPECT_EQ(binding.code,62u,"unbound platform key committed");
+  AE_EXPECT_EQ(abi.inputButton(abi.context,name,6,0),0,"capturing event cannot jump");device.keys.clear();play.submitInput(device);device.keys={62};play.submitInput(device);
+  AE_EXPECT_EQ(abi.inputButton(abi.context,name,6,1),1,"next real press reaches C# ABI consumer");
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,1,name,6,0,7,0,111),1,"begin mouse capture");
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,2,nullptr,0,0,0,0,0),3,"explicit cancel");
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,1,name,6,0,4,0,111),1,"begin before suspension");
+  AE_EXPECT_TRUE(play.applicationEvent(scene::ScriptLifecycleEvent::ApplicationPause,true),"native pause lifecycle");
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,0,nullptr,0,0,0,0,0),3,"application suspension cancels capture before frames stop");play.stop();
+  AE_EXPECT_EQ(abi.inputCaptureCommand(abi.context,0,nullptr,0,0,0,0,0),-1,"stopped world refuses retained capture access");
+  AE_EXPECT_EQ(abi.inputProfile(abi.context,0,nullptr,0,nullptr,0),-1,"stopped world refuses retained profile access");
+  AE_EXPECT_EQ(abi.inputBindingCommand(abi.context,name,6,0,0,&binding),0,"stopped world refuses retained binding access");
+}
+
+AE_TEST(physics_connections_real_jolt_sensor_activates_receiver_before_script_and_stop_restores_authoring) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto sensor=physical(doc,"Sensor conectado",0,scene::BodyMotion::Static,.5f);
+  const auto incoming=physical(doc,"Corpo entrante",3,scene::BodyMotion::Dynamic,.5f);
+  const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Luz receptora");auto lamp=*doc.find(receiver);
+  lamp.active=false;lamp.components.add(scene::Light::descriptor);AE_EXPECT_TRUE(doc.applyEntityValues(receiver,lamp),"inactive authored light");
+  auto value=*doc.find(sensor);editPhysicsBody(value)->sensor=true;
+  auto *connection=static_cast<scene::PhysicsEventConnection3D*>(value.components.add(scene::PhysicsEventConnection3D::descriptor));
+  connection->action=1;connection->receiver=receiver;connection->otherFilter=incoming;
+  AE_EXPECT_TRUE(doc.applyEntityValues(sensor,value),"typed connection on real sensor");attachScript(doc,sensor,"project.Teste");
+  static runtime::GameWorld *observedWorld;static runtime::ObjectId observedReceiver;static bool sawReady;
+  observedWorld=&play.world();observedReceiver=receiver;sawReady=false;
+  auto api=FakeRuntime::api();api.trigger=[](u64,u64,u32 phase)->int {
+    if(phase==0)sawReady=observedWorld->activeSelf(observedWorld->handle(observedReceiver));
+    return 0;
+  };
+  play.setScriptRuntime(api,"/projeto");AE_EXPECT_TRUE(play.start(doc,resources),"real Jolt and native connections start");
+  for(u32 frame=0;frame<120&&!sawReady;++frame)AE_EXPECT_TRUE(play.advance(.02f),"physical simulation");
+  AE_EXPECT_TRUE(sawReady&&play.physicsConnections().deliveries()>0,"receiver activation precedes actual trigger callback");
+  std::vector<renderer::SceneLight> lights;AE_EXPECT_TRUE(runtime::collectSceneLights(play.document(),lights)&&lights.size()==1,"activation reaches render light extraction");
+  AE_EXPECT_TRUE(!doc.find(receiver)->active,"authoring was not mutated");play.stop();
+  AE_EXPECT_TRUE(play.physicsConnections().deliveries()==0&&play.physicsConnections().diagnostic().empty(),"Stop tears down connection diagnostics and counts");
+}
+AE_TEST(physics_connections_event_filter_toggle_removal_and_storage_are_one_chain) {
+  EditorDocument doc;const auto first=physical(doc,"First",0,scene::BodyMotion::Static,.5f);
+  const auto second=physical(doc,"Second",3,scene::BodyMotion::Dynamic,.5f);
+  const auto target=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Receiver");auto receiver=*doc.find(target);receiver.active=false;doc.applyEntityValues(target,receiver);
+  auto value=*doc.find(first);auto *connection=static_cast<scene::PhysicsEventConnection3D*>(value.components.add(scene::PhysicsEventConnection3D::descriptor));
+  connection->event=3;connection->action=3;connection->receiver=target;connection->otherFilter=second;const auto instance=connection->instanceId();doc.applyEntityValues(first,value);
+  EditorHistory history;history.clear();value=*doc.find(first);static_cast<scene::PhysicsEventConnection3D*>(value.components.editInstance(instance))->enabled=false;
+  AE_EXPECT_TRUE(history.applyValues(doc,first,value)&&history.undo(doc)&&history.redo(doc)&&history.undo(doc),"property edit and history");
+  const auto archive=serializeEditorDocument(doc,0);EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(archive,0,reopened),"connection roundtrip");
+  runtime::ObjectCloneMap mapping;const auto duplicate=reopened.cloneSubtree(first,reopened.root(),mapping);const auto *copied=static_cast<const scene::PhysicsEventConnection3D*>(reopened.find(duplicate)->components.find(scene::PhysicsEventConnection3D::descriptor));
+  AE_EXPECT_TRUE(copied&&copied->receiver==target&&copied->otherFilter==second&&duplicate!=first&&copied->instanceId()==instance,"clone preserves references and object-scoped component identity");
+  runtime::GameWorld world;AE_EXPECT_TRUE(world.load(doc),"runtime loads authored data");runtime::ScenePhysicsConnections runtime;
+  runtime.trigger(world,first,second,0);AE_EXPECT_TRUE(!world.activeSelf(world.handle(target)),"trigger cannot satisfy contact filter");
+  runtime.contact(world,first,target,0);AE_EXPECT_TRUE(!world.activeSelf(world.handle(target)),"other-object filter rejects unmatched contact");
+  runtime.contact(world,first,second,0);AE_EXPECT_TRUE(world.activeSelf(world.handle(target))&&runtime.deliveries()==1,"matching contact toggles actual receiver");
+  AE_EXPECT_TRUE(world.destroyObject(world.handle(target))==runtime::WorldStatus::Ok,"pending receiver removal");runtime.contact(world,first,second,0);
+  AE_EXPECT_TRUE(runtime.deliveries()==1&&!runtime.diagnostic().empty(),"pending receiver excluded and diagnosed without pointer access");
+}
+
+AE_TEST(physics_connections_reject_mismatched_sensor_event_without_starting_a_partial_world) {
+  EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto emitter=physical(doc,"Sensor inválido",0,scene::BodyMotion::Static,.5f);
+  const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Receptor");
+  auto value=*doc.find(emitter);auto *connection=static_cast<scene::PhysicsEventConnection3D*>(value.components.add(scene::PhysicsEventConnection3D::descriptor));
+  connection->action=1;connection->receiver=receiver;doc.applyEntityValues(emitter,value);
+  AE_EXPECT_TRUE(!play.start(doc,resources)&&!play.active(),"sensor event on solid body is explicitly refused");
+  value=*doc.find(emitter);editPhysicsBody(value)->sensor=true;doc.applyEntityValues(emitter,value);
+  AE_EXPECT_TRUE(play.start(doc,resources),"matching real sensor starts");
+  const auto handle=play.world().findComponent(play.world().handle(emitter),scene::PhysicsEventConnection3D::descriptor.id);
+  AE_EXPECT_TRUE(play.world().setProperty(handle,"event",u32{3})==runtime::WorldStatus::Ok&&!play.commitEdits(),"runtime incompatible event edit is diagnosed at the safe point");play.stop();
+  value=*doc.find(emitter);static_cast<scene::PhysicsEventConnection3D*>(value.components.edit(scene::PhysicsEventConnection3D::descriptor))->event=3;doc.applyEntityValues(emitter,value);
+  AE_EXPECT_TRUE(!play.start(doc,resources)&&!play.active(),"contact event on sensor is explicitly refused");
+}
+
+AE_TEST(physics2d_connections_real_box2d_sensor_activates_receiver_before_script_and_stop_restores_authoring) {
+  FakeRuntime::reset();EditorDocument doc;EditorMapScene resources;EditorPlayScene play;
+  const auto physical2D=[&](const char *name,float y,bool dynamic,bool sensor) {
+    const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,name);auto value=*doc.find(id);value.transform.position[1]=y;
+    auto *body=static_cast<scene::Body2D*>(value.components.add(scene::Body2D::descriptor));body->motion=dynamic?scene::Body2DMotion::Dynamic:scene::Body2DMotion::Static;
+    auto *shape=static_cast<scene::Collider2D*>(value.components.add(scene::Collider2D::descriptor));shape->sensor=sensor;shape->halfX=sensor?8:.5f;
+    doc.applyEntityValues(id,value);return id;
+  };
+  const auto sensor=physical2D("Sensor conectado",0,false,true);
+  const auto incoming=physical2D("Corpo entrante",3,true,false);
+  const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Luz receptora");auto lamp=*doc.find(receiver);
+  lamp.active=false;lamp.components.add(scene::Light::descriptor);AE_EXPECT_TRUE(doc.applyEntityValues(receiver,lamp),"inactive authored light");
+  auto value=*doc.find(sensor);
+  auto *connection=static_cast<scene::PhysicsEventConnection2D*>(value.components.add(scene::PhysicsEventConnection2D::descriptor));
+  connection->action=1;connection->receiver=receiver;connection->otherFilter=incoming;
+  auto *exit=static_cast<scene::PhysicsEventConnection2D*>(value.components.add(scene::PhysicsEventConnection2D::descriptor));exit->event=2;exit->action=2;exit->receiver=receiver;exit->otherFilter=incoming;
+  AE_EXPECT_TRUE(doc.applyEntityValues(sensor,value),"typed connection on real sensor");attachScript(doc,sensor,"project.Teste");
+  static runtime::GameWorld *observedWorld;static runtime::ObjectId observedReceiver;static bool sawReady;
+  observedWorld=&play.world();observedReceiver=receiver;sawReady=false;
+  auto api=FakeRuntime::api();api.trigger=[](u64,u64,u32 phase)->int {
+    if(phase==0)sawReady=observedWorld->activeSelf(observedWorld->handle(observedReceiver));
+    return 0;
+  };
+  play.setScriptRuntime(api,"/projeto");AE_EXPECT_TRUE(play.start(doc,resources),"real Box2D and native connections start");
+  for(u32 frame=0;frame<120&&!sawReady;++frame)AE_EXPECT_TRUE(play.advance(.02f),"physical simulation");
+  AE_EXPECT_TRUE(sawReady&&play.physicsConnections().deliveries()>0,"receiver activation precedes actual trigger callback");
+  std::vector<renderer::SceneLight> lights;AE_EXPECT_TRUE(runtime::collectSceneLights(play.document(),lights)&&lights.size()==1,"activation reaches render light extraction");
+  AE_EXPECT_TRUE(play.world().destroyObject(play.world().handle(incoming))==runtime::WorldStatus::Ok&&play.commitEdits(),"visitor removal retires real body");
+  AE_EXPECT_TRUE(play.advance(.02f)&&!play.world().activeSelf(play.world().handle(receiver)),"queued exit on visitor destruction reaches surviving sensor connection");
+  AE_EXPECT_TRUE(!doc.find(receiver)->active,"authoring was not mutated");play.stop();
+  AE_EXPECT_TRUE(play.physicsConnections().deliveries()==0&&play.physicsConnections().diagnostic().empty(),"Stop tears down connection diagnostics and counts");
+}
+
+AE_TEST(timer_controls_native_commands_pause_restart_stop_and_lifecycle) {
+  EditorDocument doc;const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Manual");auto value=*doc.find(id);
+  auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));timer->autoStart=false;timer->intervalSeconds=.1f;timer->repeat=false;
+  const auto instance=timer->instanceId();doc.applyEntityValues(id,value);const auto saved=serializeEditorDocument(doc,0);
+  runtime::GameWorld world;AE_EXPECT_TRUE(world.load(doc),"world");runtime::SceneTimers timers;runtime::SceneTimers::State state;const auto handle=runtime::ComponentHandle{world.handle(id),instance};u32 fired=0;
+  const auto fire=[&](runtime::ObjectId,u64,u32 count){fired+=count;return true;};
+  AE_EXPECT_TRUE(timers.advance(world,.2,fire)&&fired==0,"autostart disabled does not fire");
+  AE_EXPECT_TRUE(timers.command(world,handle,3,0,state)==runtime::WorldStatus::Ok&&timers.command(world,handle,1,.15f,state)==runtime::WorldStatus::Ok&&state.running&&state.paused,"Start retains timer pause");
+  const auto remaining=state.remaining;AE_EXPECT_TRUE(timers.advance(world,.2,fire)&&timers.state(id,instance)->remaining==remaining&&fired==0,"paused countdown freezes");
+  AE_EXPECT_TRUE(timers.command(world,handle,4,0,state)==runtime::WorldStatus::Ok&&timers.advance(world,.2,fire)&&fired==1&&timers.state(id,instance)->completed&&!timers.state(id,instance)->running,"resume delivers exactly one timeout");
+  AE_EXPECT_TRUE(world.setProperty(handle,"auto_start",true)==runtime::WorldStatus::Ok,"initial setting does not itself restart existing timer");
+  AE_EXPECT_TRUE(timers.command(world,handle,1,0,state)==runtime::WorldStatus::Ok&&timers.command(world,handle,2,0,state)==runtime::WorldStatus::Ok&&state.remaining==0&&!state.running,"Stop clears countdown without timeout");
+  AE_EXPECT_TRUE(timers.advance(world,.2,fire)&&fired==1,"Stop remains stopped despite enabled/autostart flags");
+  AE_EXPECT_TRUE(timers.command(world,handle,1,.01f,state)==runtime::WorldStatus::InvalidArgument,"invalid interval rejected before write");
+  AE_EXPECT_TRUE(world.destroyObject(world.handle(id))==runtime::WorldStatus::Ok&&timers.command(world,handle,0,0,state)!=runtime::WorldStatus::Ok,"pending owner cannot receive commands");
+  AE_EXPECT_EQ(serializeEditorDocument(doc,0),saved,"runtime interval override does not mutate authoring");timers.reset();AE_EXPECT_TRUE(!timers.state(id,instance),"teardown clears countdown");
+}
+AE_TEST(timer_controls_abi_start_callback_snapshot_and_after_stop_rejection) {
+  FakeRuntime::reset();EditorDocument doc;const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"ABI timer");auto value=*doc.find(id);
+  auto *timer=static_cast<scene::Timer*>(value.components.add(scene::Timer::descriptor));timer->autoStart=false;timer->repeat=false;const auto instance=timer->instanceId();doc.applyEntityValues(id,value);attachScript(doc,id,"project.Teste");
+  bool started=false;FakeRuntime::onStart=[&](){auto &abi=FakeRuntime::sceneAccess;scene::ScriptTimerState snapshot;
+    started=abi.timerCommand(abi.context,id,instance,0,0,&snapshot)==1&&!(snapshot.flags&1)&&snapshot.remaining==0&&abi.timerCommand(abi.context,id,instance,1,.1f,&snapshot)==1&&(snapshot.flags&1);};
+  EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");AE_EXPECT_TRUE(play.start(doc,resources)&&started,"timer service exists before managed Start");
+  const auto abi=FakeRuntime::sceneAccess;auto incomplete=abi;incomplete.timerCommand=nullptr;AE_EXPECT_TRUE(abi.version==scene::ScriptSceneAccess{}.version&&abi.available()&&!incomplete.available(),"mandatory ABI28 callback");
+  AE_EXPECT_TRUE(play.advance(.2)&&FakeRuntime::timerExpirations==1,"command reaches native scheduler");scene::ScriptTimerState snapshot;
+  AE_EXPECT_TRUE(abi.timerCommand(abi.context,id,instance,0,0,&snapshot)==1&&snapshot.remaining==0&&(snapshot.flags&4)&&!(snapshot.flags&1),"completion state precedes callback and remains queryable");
+  snapshot.size=0;AE_EXPECT_TRUE(abi.timerCommand(abi.context,id,instance,0,0,&snapshot)==0,"snapshot layout refused");snapshot.size=sizeof(snapshot);play.stop();
+  AE_EXPECT_TRUE(abi.timerCommand(abi.context,id,instance,0,0,&snapshot)==0&&abi.lastStatus(abi.context)==static_cast<u32>(runtime::WorldStatus::NotRunning),"ended session rejects retained callback safely");
+}
+AE_TEST(timer_controls_version_four_migrates_old_autostart_and_preserves_new_authoring) {
+  for(u32 version=1;version<=3;++version){std::stringstream input;input<<"0.1 1 1";if(version>=2)input<<" 0";if(version>=3)input<<" 0 0";scene::Timer timer;AE_EXPECT_TRUE(timer.read(input,version)&&timer.autoStart,"legacy timers keep automatic behavior");}
+  scene::Timer timer;timer.autoStart=false;std::stringstream payload;timer.write(payload);scene::Timer restored;AE_EXPECT_TRUE(restored.read(payload,4)&&!restored.autoStart,"explicit manual authoring survives v4");
+}
+AE_TEST(tween_controls_abi_start_pause_resume_cancel_and_after_stop_rejection) {
+  FakeRuntime::reset();EditorDocument doc;const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"ABI tween");auto value=*doc.find(id);
+  auto *tween=static_cast<scene::TransformTween*>(value.components.add(scene::TransformTween::descriptor));tween->autoplay=false;tween->duration=1;tween->destination[0]=4;const auto instance=tween->instanceId();doc.applyEntityValues(id,value);attachScript(doc,id,"project.Teste");
+  const auto authored=serializeEditorDocument(doc,0);bool started=false;FakeRuntime::onStart=[&](){auto&abi=FakeRuntime::sceneAccess;scene::ScriptTweenState state;
+    started=abi.tweenCommand(abi.context,id,instance,0,&state)==1&&state.status==0&&abi.tweenCommand(abi.context,id,instance,3,&state)==1&&(state.flags&1)&&abi.tweenCommand(abi.context,id,instance,1,&state)==1&&(state.flags&1);};
+  EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");AE_EXPECT_TRUE(play.start(doc,resources)&&started,"real evaluator available before script Start and restart preserves pause");
+  const auto abi=FakeRuntime::sceneAccess;auto incomplete=abi;incomplete.tweenCommand=nullptr;AE_EXPECT_TRUE(abi.version==scene::ScriptSceneAccess{}.version&&abi.available()&&!incomplete.available(),"ABI29 requires tween consumer");
+  AE_EXPECT_TRUE(play.advance(.25)&&play.document().find(id)->transform.position[0]==0,"local pause freezes pose");scene::ScriptTweenState state;
+  AE_EXPECT_TRUE(abi.tweenCommand(abi.context,id,instance,4,&state)==1&&!(state.flags&1)&&play.advance(.25)&&std::abs(play.document().find(id)->transform.position[0]-1)<.001f,"resume drives actual transform");
+  AE_EXPECT_TRUE(abi.tweenCommand(abi.context,id,instance,2,&state)==1&&state.status==4&&play.advance(.25)&&std::abs(play.document().find(id)->transform.position[0]-1)<.001f,"cancel preserves pose");
+  state.size=0;AE_EXPECT_TRUE(abi.tweenCommand(abi.context,id,instance,0,&state)==0,"layout mismatch rejected");state.size=sizeof(state);state.reserved=1;AE_EXPECT_TRUE(abi.tweenCommand(abi.context,id,instance,0,&state)==0,"reserved flags rejected");state.reserved=0;
+  AE_EXPECT_EQ(serializeEditorDocument(doc,0),authored,"commands never modify source");play.stop();AE_EXPECT_TRUE(abi.tweenCommand(abi.context,id,instance,0,&state)==0&&abi.lastStatus(abi.context)==static_cast<u32>(runtime::WorldStatus::NotRunning),"retained callback rejects closed session");
+}
+AE_TEST(number_tween_abi_start_controls_real_light_and_retained_callback_lifecycle) {
+  FakeRuntime::reset();EditorDocument doc;const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"ABI numeric light");auto value=*doc.find(id);
+  auto*light=static_cast<scene::Light*>(value.components.add(scene::Light::descriptor));light->intensity=0;const auto instance=light->instanceId();doc.applyEntityValues(id,value);attachScript(doc,id,"project.Teste");
+  u64 track=0;bool started=false;const u8 property[]{'i','n','t','e','n','s','i','t','y'};
+  FakeRuntime::onStart=[&](){auto&abi=FakeRuntime::sceneAccess;scene::ScriptNumberTweenParameters parameters;parameters.destination=8;parameters.duration=.1f;scene::ScriptNumberTweenState state;
+    started=abi.numberTweenCreate(abi.context,id,instance,property,9,&parameters,&track)==1&&track!=0&&abi.numberTweenCommand(abi.context,track,1,&state)==1&&(state.flags&1);};
+  EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");AE_EXPECT_TRUE(play.start(doc,resources)&&started,"numeric scheduler exists before managed Start");
+  const auto abi=FakeRuntime::sceneAccess;auto incomplete=abi;incomplete.numberTweenCreate=nullptr;AE_EXPECT_TRUE(abi.version==scene::ScriptSceneAccess{}.version&&abi.available()&&!incomplete.available(),"ABI30 requires actual creation callback");incomplete=abi;incomplete.numberTweenCommand=nullptr;AE_EXPECT_TRUE(!incomplete.available(),"control callback mandatory too");
+  scene::ScriptNumberTweenParameters invalid;u64 rejected=0;invalid.size=0;AE_EXPECT_TRUE(abi.numberTweenCreate(abi.context,id,instance,property,9,&invalid,&rejected)==0,"wrong parameter layout rejected");invalid.size=sizeof(invalid);invalid.reserved=1;AE_EXPECT_TRUE(abi.numberTweenCreate(abi.context,id,instance,property,9,&invalid,&rejected)==0,"reserved rejected");invalid.reserved=0;invalid.flags=2;AE_EXPECT_TRUE(abi.numberTweenCreate(abi.context,id,instance,property,9,&invalid,&rejected)==0,"unknown flags rejected");
+  scene::ScriptNumberTweenState state;AE_EXPECT_TRUE(play.advance(.2)&&abi.numberTweenCommand(abi.context,track,0,&state)==1&&state.value==0&&state.elapsed==0,"pause freezes real scheduler");
+  AE_EXPECT_TRUE(abi.numberTweenCommand(abi.context,track,2,&state)==1&&play.advance(.2)&&abi.numberTweenCommand(abi.context,track,0,&state)==1&&state.status==1&&state.value==8,"resume reaches exact endpoint through Play");
+  std::vector<renderer::SceneLight> lights;AE_EXPECT_TRUE(runtime::collectSceneLights(play.document(),lights)&&lights.size()==1&&lights[0].intensity>0&&light->intensity==0,"actual render extraction changes without mutating authoring");
+  state.size=0;AE_EXPECT_TRUE(abi.numberTweenCommand(abi.context,track,0,&state)==0,"wrong output layout rejected");state.size=sizeof(state);
+  AE_EXPECT_TRUE(abi.numberTweenCommand(abi.context,track,4,&state)==1&&abi.numberTweenCommand(abi.context,track,0,&state)==0,"release expires retained snapshot");play.stop();
+  AE_EXPECT_TRUE(abi.numberTweenCommand(abi.context,track,0,&state)==0&&abi.lastStatus(abi.context)==static_cast<u32>(runtime::WorldStatus::NotRunning),"closed session callback rejected safely");
+}
+AE_TEST(tween_connection_version_three_clone_and_real_final_pose_activation) {
+  EditorDocument doc;const auto emitter=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Tween connected");const auto receiver=doc.createEntity(emitter,EditorEntityKind::Folder,"Receiver");doc.setActive(receiver,false);auto lamp=*doc.find(receiver);lamp.components.add(scene::Light::descriptor);doc.applyEntityValues(receiver,lamp);
+  auto value=*doc.find(emitter);auto *tween=static_cast<scene::TransformTween*>(value.components.add(scene::TransformTween::descriptor));tween->duration=.1f;tween->destination[0]=4;tween->finishedAction=1;tween->finishedTarget=receiver;const auto instance=tween->instanceId();doc.applyEntityValues(emitter,value);
+  const auto authored=serializeEditorDocument(doc,0);EditorDocument loaded;AE_EXPECT_TRUE(deserializeEditorDocument(authored,0,loaded),"v3 scene roundtrip");runtime::ObjectCloneMap mapping;const auto clone=loaded.cloneSubtree(emitter,loaded.root(),mapping);
+  const auto *copy=static_cast<const scene::TransformTween*>(loaded.find(clone)->components.findInstance(instance));AE_EXPECT_TRUE(copy&&copy->finishedTarget!=receiver&&loaded.find(copy->finishedTarget)->parent==clone,"clone remaps connection into cloned composition");
+  runtime::GameWorld world;runtime::SceneTweens runtime;AE_EXPECT_TRUE(world.load(loaded)&&runtime.advance(world,.11),"real evaluator");
+  AE_EXPECT_TRUE(world.activeSelf(world.handle(receiver))&&world.activeSelf(world.handle(static_cast<u32>(copy->finishedTarget)))&&world.graph().find(emitter)->transform.position[0]==4,"final pose and both actual receivers updated");
+  std::vector<renderer::SceneLight> lights;AE_EXPECT_TRUE(runtime::collectSceneLights(world.graph(),lights)&&lights.size()==2,"both receiver activations reach actual light extraction");
+  AE_EXPECT_TRUE(runtime.state(emitter,instance)->connectionInvoked&&runtime.state(emitter,instance)->connectionStatus==runtime::WorldStatus::Ok,"connection diagnostic records application");AE_EXPECT_EQ(serializeEditorDocument(doc,0),authored,"runtime does not change authoring");
+  std::ostringstream payload;tween->write(payload);auto old=payload.str();old.resize(old.rfind(' '));old.resize(old.rfind(' '));
+  for(u32 version=1;version<=2;++version){auto inputText=old;if(version==1)inputText.resize(inputText.rfind(' '));std::istringstream input(inputText);scene::TransformTween legacy;AE_EXPECT_TRUE(legacy.read(input,version)&&legacy.finishedAction==0&&legacy.finishedTarget==0,"v1/v2 explicitly migrate disconnected");}
+}
+AE_TEST(tween_connection_fires_once_restart_rearms_cancel_infinite_and_missing_receiver) {
+  EditorDocument doc;const auto emitter=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Tween");const auto receiver=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Receiver");doc.setActive(receiver,false);
+  auto value=*doc.find(emitter);auto*c=static_cast<scene::TransformTween*>(value.components.add(scene::TransformTween::descriptor));c->duration=.1f;c->finishedAction=3;c->finishedTarget=receiver;const auto instance=c->instanceId();doc.applyEntityValues(emitter,value);
+  runtime::GameWorld world;runtime::SceneTweens runtime;AE_EXPECT_TRUE(world.load(doc)&&runtime.advance(world,.11)&&world.activeSelf(world.handle(receiver)),"finite completion toggles once");runtime.advance(world,.25);AE_EXPECT_TRUE(world.activeSelf(world.handle(receiver)),"completed state never emits again");
+  runtime.restart(world,emitter,instance);runtime.advance(world,.11);AE_EXPECT_TRUE(!world.activeSelf(world.handle(receiver)),"explicit restart rearms one completion");runtime.restart(world,emitter,instance);runtime.cancel(world,emitter,instance);runtime.advance(world,.25);AE_EXPECT_TRUE(!world.activeSelf(world.handle(receiver)),"cancel never invokes completion");
+  world.setProperty({world.handle(emitter),instance},"loops",u32{0});runtime.restart(world,emitter,instance);runtime.advance(world,.25);AE_EXPECT_TRUE(!world.activeSelf(world.handle(receiver))&&!runtime.state(emitter,instance)->connectionInvoked,"infinite never completes");
+  world.setProperty({world.handle(emitter),instance},"loops",u32{1});runtime.restart(world,emitter,instance);AE_EXPECT_TRUE(world.destroyObject(world.handle(receiver))==runtime::WorldStatus::Ok,"receiver pending removal");world.flush();runtime.advance(world,.11);
+  AE_EXPECT_TRUE(runtime.state(emitter,instance)->status==runtime::SceneTweens::Status::Completed&&runtime.state(emitter,instance)->connectionInvoked&&runtime.state(emitter,instance)->connectionStatus!=runtime::WorldStatus::Ok,"pose completion survives missing receiver with explicit diagnostic");
+  runtime.reset();AE_EXPECT_TRUE(!runtime.state(emitter,instance),"Stop clears diagnostic and identity");
+}
+
+AE_TEST(character_state_abi_before_start_ground_jump_and_safe_after_stop) {
+  FakeRuntime::reset();EditorDocument doc;physical(doc,"Floor",-.5f,scene::BodyMotion::Static,.5f);
+  const auto actor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Actor");auto value=*doc.find(actor);value.transform.position[1]=1;value.components.add(scene::Character::descriptor);doc.applyEntityValues(actor,value);attachScript(doc,actor,"project.Teste");
+  bool observed=false;FakeRuntime::onStart=[&](){const auto&abi=FakeRuntime::sceneAccess;scene::ScriptCharacterState state;observed=abi.characterSnapshot(abi.context,actor,&state)==1&&!(state.flags&1);};
+  EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");AE_EXPECT_TRUE(play.start(doc,resources)&&observed,"native state service exists before script Start");
+  const auto abi=FakeRuntime::sceneAccess;auto incomplete=abi;incomplete.characterSnapshot=nullptr;AE_EXPECT_TRUE(abi.version==scene::ScriptSceneAccess{}.version&&abi.available()&&!incomplete.available()&&sizeof(scene::ScriptCharacterState)==80,"mandatory ABI31 layout");
+  for(int i=0;i<120;++i){AE_EXPECT_TRUE(play.advance(1./60),"settle");}
+  scene::ScriptCharacterState state;AE_EXPECT_TRUE(abi.characterSnapshot(abi.context,actor,&state)==1&&state.groundState==0&&(state.flags&1)&&state.groundNormal[1]>.9f,"real grounded snapshot");
+  state.size=0;AE_EXPECT_TRUE(!abi.characterSnapshot(abi.context,actor,&state),"reject layout");state={};state.tailReserved=1;AE_EXPECT_TRUE(!abi.characterSnapshot(abi.context,actor,&state),"reject reserved tail");state={};
+  AE_EXPECT_TRUE(abi.characterJump(abi.context,actor)&&play.advance(1./60)&&abi.characterSnapshot(abi.context,actor,&state)&&state.velocity[1]>0&&state.groundState!=0,"accepted jump produces measurable native state");
+  AE_EXPECT_TRUE(play.world().setActive(play.world().handle(actor),false)==runtime::WorldStatus::Ok&&!abi.characterSnapshot(abi.context,actor,&state)&&abi.lastStatus(abi.context)==static_cast<u32>(runtime::WorldStatus::ComponentUnavailable),"inactive object has no consumable state");
+  play.stop();AE_EXPECT_TRUE(!abi.characterSnapshot(abi.context,actor,&state)&&abi.lastStatus(abi.context)==static_cast<u32>(runtime::WorldStatus::NotRunning),"retained callback safe after Stop");FakeRuntime::reset();
+}
+
+AE_TEST(character_platform_fixedupdate_kinematic_abi_and_native_state_follow_real_play) {
+  FakeRuntime::reset();EditorDocument doc;const auto floor=physical(doc,"Piso",-.5f,scene::BodyMotion::Kinematic,.5f);auto base=*doc.find(floor);auto*collider=editCollider(base);collider->halfX=collider->halfZ=5;doc.applyEntityValues(floor,base);
+  const auto actor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Actor");auto value=*doc.find(actor);value.transform.position[1]=1;value.components.add(scene::Character::descriptor);doc.applyEntityValues(actor,value);attachScript(doc,actor,"project.Teste");
+  EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(FakeRuntime::api(),"/project");AE_EXPECT_TRUE(play.start(doc,resources),"Play with real physics");for(int i=0;i<120;++i){AE_EXPECT_TRUE(play.advance(1./60),"settle");}
+  float distance=0;FakeRuntime::onFixedUpdate=[&](){distance+=1.f/60;const float pose[7]{distance,-.5f,0,0,0,0,1};auto&abi=FakeRuntime::sceneAccess;AE_EXPECT_TRUE(abi.moveKinematic(abi.context,floor,pose),"actual kinematic ABI");};
+  for(int i=0;i<120;++i){AE_EXPECT_TRUE(play.advance(1./60),"script, motor, solver and pose sync");}
+  const auto&abi=FakeRuntime::sceneAccess;scene::ScriptCharacterState state;AE_EXPECT_TRUE(abi.characterSnapshot(abi.context,actor,&state)&&state.groundState==0&&state.position[0]>1.8f&&std::abs(state.groundVelocity[0]-1)<.02f,"native SDK snapshot reflects transported actor");
+  AE_EXPECT_TRUE(std::abs(play.document().find(actor)->transform.position[0]-state.position[0])<.001f,"published scene pose matches native foot position");
   play.stop();FakeRuntime::reset();
 }

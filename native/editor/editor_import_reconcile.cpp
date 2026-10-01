@@ -102,6 +102,7 @@ bool referenced(const EditorDocument &document, EditorEntityId target) {
 bool carriesLocalData(const EditorDocument &document, EditorEntityId id, const ImportLink &link, bool allowMaterial = false) {
   const auto *entity = document.find(id);
   if (!entity) return false;
+  if(!entity->groups.names().empty()) return true;
   if (!document.childrenOf(id).empty()) return true;
   for (usize c = 0; c < entity->components.size(); ++c) {
     const auto &type = entity->components.at(c)->type();
@@ -461,6 +462,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
           *render->editSlotSampling(slot) = partRender->sampling;
           *render->editSlotChannels(slot) = partRender->channels;
           *render->editSlotOcclusionTexture(slot) = partRender->occlusionTexture;
+          *render->editSlotLightmap(slot) = partRender->lightmap;
         }
         base.push_back(linkOf(part)->baseAsset);
       }

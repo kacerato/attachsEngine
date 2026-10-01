@@ -1,0 +1,5 @@
+[ok] timer_connection_editor_authors_action_and_receiver_with_real_pointer_routes
+[ok] timer_connection_roundtrip_migration_clone_and_native_activation
+[ok] timer_connection_aggregated_toggle_pending_removal_and_teardown
+
+3/3 testes passaram

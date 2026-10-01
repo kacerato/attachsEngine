@@ -1,0 +1,22 @@
+[0/1] Re-running CMake...
+Interprocedural optimizations are turned on
+-- CMake C compiler: GNU
+-- CMake C++ compiler: GNU
+-- CMake system name: Windows
+-- CMake host system processor: AMD64
+-- Box2D on MinGW
+-- Configuring done (4.7s)
+-- Generating done (1.7s)
+-- Build files have been written to: C:/Users/donod/Downloads/atchengine/build/editor-host
+[1/13] Building CXX object CMakeFiles/aether_curve_gradient_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_numeric_expression.cpp.obj
+[2/13] Building CXX object CMakeFiles/aether_audio_listener_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/family_base_main.cpp.obj
+[3/13] Building CXX object CMakeFiles/aether_prefab_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_prefab_structure.cpp.obj
+[4/13] Building CXX object CMakeFiles/aether_audio_listener_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_runtime_audio.cpp.obj
+[5/13] Building CXX object CMakeFiles/aether_prefab_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_prefab.cpp.obj
+[6/13] Building CXX object CMakeFiles/aether_recipe_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_component_preset.cpp.obj
+[7/13] Linking CXX executable aether_prefab_family_tests.exe
+[8/13] Building CXX object CMakeFiles/aether_recipe_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_component_recipes.cpp.obj
+[9/13] Linking CXX executable aether_curve_gradient_family_tests.exe
+[10/13] Linking CXX executable aether_audio_listener_family_tests.exe
+[11/13] Building CXX object CMakeFiles/aether_recipe_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_recipe_bindings.cpp.obj
+[12/13] Linking CXX executable aether_recipe_family_tests.exe

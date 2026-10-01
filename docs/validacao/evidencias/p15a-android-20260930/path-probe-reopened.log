@@ -1,0 +1,13 @@
+--------- beginning of main
+09-30 19:35:02.293 26711 32626 I Astra.Script: 3: PATH WAIT: finding authored Path and PathFollow; no objects will be created
+09-30 19:35:02.296 26711 32626 I Astra.Script: 3: PATH READY: path=2 instance=1 follower=3 instance=1 points=4 ids=[3,1,4,2] worldLength=16.755130167823935 middle=<-4.0273643, 0, 1.0073878> tangent=<0.31182072, 0, 0.95014095> progress=0 playing=True
+09-30 19:35:02.588 26711 32626 I Astra.Script: 3: PATH ADVANCE: progress=0.2835693359375 playing=True pose=<2.965025, 0, 0>
+09-30 19:35:02.588 26711 32626 I Astra.Script: 3: PATH STOP: progress=0.2835693359375 playing=False
+09-30 19:35:03.003 26711 32626 I Astra.Script: 3: PATH RESTART: progress=0 playing=True
+09-30 19:35:03.303 26711 32626 I Astra.Script: 3: PATH PASS: ABI22 point identities/world sample/advance/Stop hold/Restart advance; progress=0.300018310546875 playing=True
+09-30 19:43:08.838 32653 17933 I Astra.Script: 3: PATH WAIT: finding authored Path and PathFollow; no objects will be created
+09-30 19:43:08.877 32653 17933 I Astra.Script: 3: PATH READY: path=2 instance=1 follower=3 instance=1 points=4 ids=[3,1,4,2] worldLength=11.846375819069051 middle=<-2.8823924, 0, 0.2665521> tangent=<0.01858851, 0, 0.9998272> progress=0 playing=True
+09-30 19:43:09.072 32653 17933 I Astra.Script: 3: PATH ADVANCE: progress=0.29962921142578125 playing=True pose=<-6.2692842, 0, 0>
+09-30 19:43:09.072 32653 17933 I Astra.Script: 3: PATH STOP: progress=0.29962921142578125 playing=False
+09-30 19:43:09.471 32653 17933 I Astra.Script: 3: PATH RESTART: progress=0 playing=True
+09-30 19:43:09.789 32653 17933 I Astra.Script: 3: PATH PASS: ABI22 point identities/world sample/advance/Stop hold/Restart advance; progress=0.31626129150390625 playing=True

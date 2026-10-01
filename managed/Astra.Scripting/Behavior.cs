@@ -66,19 +66,40 @@ public sealed class Gradient
 
     public Color Evaluate(float time)
     {
+        if (!float.IsFinite(time)) throw new ArgumentOutOfRangeException(nameof(time));
+        if ((uint)Mode > 2 || ColorKeys is null || AlphaKeys is null || ColorKeys.Length > 8 || AlphaKeys.Length > 8)
+            throw new InvalidOperationException("Gradient requires a supported mode and at most eight color/alpha stops.");
+        foreach (var key in ColorKeys)
+            if (!float.IsFinite(key.Time) || key.Time < 0 || key.Time > 1 ||
+                !float.IsFinite(key.Color.R) || !float.IsFinite(key.Color.G) || !float.IsFinite(key.Color.B) ||
+                key.Color.R < 0 || key.Color.G < 0 || key.Color.B < 0 ||
+                key.Color.R > 65504 || key.Color.G > 65504 || key.Color.B > 65504)
+                throw new InvalidOperationException("Gradient color stops require finite linear HDR colors and time in [0,1].");
+        foreach (var key in AlphaKeys)
+            if (!float.IsFinite(key.Time) || key.Time < 0 || key.Time > 1 || !float.IsFinite(key.Alpha) || key.Alpha < 0 || key.Alpha > 1)
+                throw new InvalidOperationException("Gradient alpha stops require time and alpha in [0,1].");
         var t = Math.Clamp(time, 0, 1);
-        var colors = ColorKeys.OrderBy(k => k.Time).ToArray();
-        var alphas = AlphaKeys.OrderBy(k => k.Time).ToArray();
+        // Arrays remain mutable. Resolve the bracketing stops without allocating
+        // a sorted copy on every frame; equal-time stops retain stable ordering.
+        var colors = ColorKeys;
+        var alphas = AlphaKeys;
         Color color = colors.Length == 0 ? Color.White : Interpolate(colors, t);
         color.A = alphas.Length == 0 ? 1 : InterpolateAlpha(alphas, t);
         return color;
     }
     private Color Interpolate(GradientColorKey[] keys, float t)
     {
-        if (keys.Length == 1 || t <= keys[0].Time) return keys[0].Color;
-        if (t >= keys[^1].Time) return keys[^1].Color;
-        var i = 1; while (i < keys.Length && keys[i].Time < t) ++i;
-        var a = keys[i - 1]; var b = keys[i];
+        int first = 0, last = 0, lower = -1, upper = -1;
+        for (int i = 0; i < keys.Length; ++i)
+        {
+            if (keys[i].Time < keys[first].Time) first = i;
+            if (keys[i].Time >= keys[last].Time) last = i;
+            if (keys[i].Time < t && (lower < 0 || keys[i].Time >= keys[lower].Time)) lower = i;
+            if (keys[i].Time >= t && (upper < 0 || keys[i].Time < keys[upper].Time)) upper = i;
+        }
+        if (t <= keys[first].Time) return keys[first].Color;
+        if (t >= keys[last].Time) return keys[last].Color;
+        var a = keys[lower]; var b = keys[upper];
         if (Mode == GradientMode.Fixed) return b.Color;
         var span = b.Time - a.Time; var f = span > 0 ? (t - a.Time) / span : 1;
         if (Mode != GradientMode.PerceptualBlend) return Color.Lerp(a.Color, b.Color, f);
@@ -87,10 +108,17 @@ public sealed class Gradient
     }
     private float InterpolateAlpha(GradientAlphaKey[] keys, float t)
     {
-        if (keys.Length == 1 || t <= keys[0].Time) return keys[0].Alpha;
-        if (t >= keys[^1].Time) return keys[^1].Alpha;
-        var i = 1; while (i < keys.Length && keys[i].Time < t) ++i;
-        var a = keys[i - 1]; var b = keys[i];
+        int first = 0, last = 0, lower = -1, upper = -1;
+        for (int i = 0; i < keys.Length; ++i)
+        {
+            if (keys[i].Time < keys[first].Time) first = i;
+            if (keys[i].Time >= keys[last].Time) last = i;
+            if (keys[i].Time < t && (lower < 0 || keys[i].Time >= keys[lower].Time)) lower = i;
+            if (keys[i].Time >= t && (upper < 0 || keys[i].Time < keys[upper].Time)) upper = i;
+        }
+        if (t <= keys[first].Time) return keys[first].Alpha;
+        if (t >= keys[last].Time) return keys[last].Alpha;
+        var a = keys[lower]; var b = keys[upper];
         if (Mode == GradientMode.Fixed) return b.Alpha;
         var span = b.Time - a.Time; var f = span > 0 ? (t - a.Time) / span : 1;
         return a.Alpha + (b.Alpha - a.Alpha) * f;
@@ -144,39 +172,75 @@ public sealed class AnimationCurve
 
     public static AnimationCurve Linear(float timeStart, float valueStart, float timeEnd, float valueEnd)
     {
-        var slope = (valueEnd - valueStart) / (timeEnd - timeStart);
-        return new() { Keys = [new(timeStart, valueStart, slope, slope), new(timeEnd, valueEnd, slope, slope)] };
+        ValidateFactory(timeStart, timeEnd, valueStart, valueEnd);
+        var slope = (float)Math.Clamp(((double)valueEnd - valueStart) / ((double)timeEnd - timeStart), -float.MaxValue, float.MaxValue);
+        return new() { Keys = [new(timeStart, valueStart, slope, slope) { LeftMode = TangentMode.Linear, RightMode = TangentMode.Linear },
+                               new(timeEnd, valueEnd, slope, slope) { LeftMode = TangentMode.Linear, RightMode = TangentMode.Linear }] };
     }
-    public static AnimationCurve Constant(float timeStart, float timeEnd, float value) =>
-        new() { Keys = [new(timeStart, value), new(timeEnd, value)] };
+    public static AnimationCurve Constant(float timeStart, float timeEnd, float value)
+    {
+        ValidateFactory(timeStart, timeEnd, value, value);
+        return new() { Keys = [new(timeStart, value), new(timeEnd, value)] };
+    }
+    private static void ValidateFactory(float start, float end, float a, float b)
+    {
+        if (!float.IsFinite(start) || !float.IsFinite(end) || start >= end || !float.IsFinite(a) || !float.IsFinite(b))
+            throw new ArgumentException("Curve factories require finite values and strictly increasing times.");
+    }
+    private static double Tangent(Keyframe[] keys, int index, bool incoming)
+    {
+        var k = keys[index];
+        var mode = incoming ? k.LeftMode : k.RightMode;
+        double previous = index == 0 ? 0 : ((double)k.Value - keys[index - 1].Value) / ((double)k.Time - keys[index - 1].Time);
+        double next = index + 1 == keys.Length ? 0 : ((double)keys[index + 1].Value - k.Value) / ((double)keys[index + 1].Time - k.Time);
+        double smooth = index == 0 || index + 1 == keys.Length ? 0 :
+            ((double)keys[index + 1].Value - keys[index - 1].Value) / ((double)keys[index + 1].Time - keys[index - 1].Time);
+        if (mode == TangentMode.Linear) return incoming ? previous : next;
+        if (mode == TangentMode.Auto) return smooth;
+        if (mode == TangentMode.ClampedAuto)
+            return previous * next > 0 ? Math.CopySign(Math.Min(Math.Abs(smooth), 3 * Math.Min(Math.Abs(previous), Math.Abs(next))), smooth) : 0;
+        if (!incoming && !k.Broken && k.LeftMode == TangentMode.Free && k.RightMode == TangentMode.Free) return k.InTangent;
+        return incoming ? k.InTangent : k.OutTangent;
+    }
 
     public float Evaluate(float time)
     {
         var keys = Keys;
+        if (!float.IsFinite(time)) throw new ArgumentOutOfRangeException(nameof(time));
+        if ((uint)PreWrapMode > 2 || (uint)PostWrapMode > 2 || keys is null || keys.Length > 256)
+            throw new InvalidOperationException("Curve requires supported wrap modes and at most 256 keys.");
+        for (int j = 0; j < keys.Length; ++j)
+        {
+            var k = keys[j];
+            if (!float.IsFinite(k.Time) || !float.IsFinite(k.Value) || !float.IsFinite(k.InTangent) || !float.IsFinite(k.OutTangent) ||
+                (uint)k.LeftMode > 4 || (uint)k.RightMode > 4 || (j > 0 && keys[j - 1].Time >= k.Time))
+                throw new InvalidOperationException("Curve keys require finite values, supported tangent modes and strictly increasing times.");
+        }
         if (keys.Length == 0) return 0;
         if (keys.Length == 1) return keys[0].Value;
-        float start = keys[0].Time, end = keys[^1].Time, length = end - start;
-        if (time < start || time > end)
+        double sample = time, start = keys[0].Time, end = keys[^1].Time, length = end - start;
+        if (sample < start || sample > end)
         {
-            var mode = time < start ? PreWrapMode : PostWrapMode;
-            if (mode == CurveWrapMode.Clamp || length <= 0) time = Math.Clamp(time, start, end);
+            var mode = sample < start ? PreWrapMode : PostWrapMode;
+            if (mode == CurveWrapMode.Clamp) sample = Math.Clamp(sample, start, end);
             else
             {
-                var local = (time - start) % (2 * length);
+                var local = (sample - start) % (2 * length);
                 if (local < 0) local += 2 * length;
                 if (mode == CurveWrapMode.Loop) local %= length;
                 else if (local > length) local = 2 * length - local;
-                time = start + local;
+                sample = start + local;
             }
         }
         var i = 1;
-        while (i < keys.Length - 1 && keys[i].Time < time) ++i;
+        while (i < keys.Length - 1 && keys[i].Time < sample) ++i;
         var a = keys[i - 1]; var b = keys[i];
-        if (a.RightMode == TangentMode.Constant || b.LeftMode == TangentMode.Constant) return time >= b.Time ? b.Value : a.Value;
-        var dt = b.Time - a.Time;
-        if (dt <= 0) return b.Value;
-        var s = (time - a.Time) / dt; var s2 = s * s; var s3 = s2 * s;
-        return (2 * s3 - 3 * s2 + 1) * a.Value + (s3 - 2 * s2 + s) * dt * a.OutTangent + (-2 * s3 + 3 * s2) * b.Value + (s3 - s2) * dt * b.InTangent;
+        if (a.RightMode == TangentMode.Constant || b.LeftMode == TangentMode.Constant) return sample >= b.Time ? b.Value : a.Value;
+        var dt = (double)b.Time - a.Time;
+        var s = (sample - a.Time) / dt; var s2 = s * s; var s3 = s2 * s;
+        var value = (2 * s3 - 3 * s2 + 1) * a.Value + (s3 - 2 * s2 + s) * dt * Tangent(keys, i - 1, false) +
+                    (-2 * s3 + 3 * s2) * b.Value + (s3 - s2) * dt * Tangent(keys, i, true);
+        return (float)Math.Clamp(value, -float.MaxValue, float.MaxValue);
     }
 }
 
@@ -253,6 +317,13 @@ public readonly record struct TransformValue(Vector3 Position, Quaternion Rotati
 /// </summary>
 public interface ISceneAccess
 {
+    bool FieldQuery(ulong id,uint world,uint generation,ulong instance,uint operation,Vector3 point,uint layer,out PhysicsFieldSample sample) => throw new NotSupportedException();
+    int ObjectLayer(ulong id,uint world,uint generation,int layer) => throw new NotSupportedException();
+    bool BodyCommand(ulong id,uint world,uint generation,ulong instance,uint operation,Vector3 value,Vector3 point,out PhysicsBodyState state) => throw new NotSupportedException();
+    int PathPointCommand(ulong id,uint world,uint generation,ulong instance,uint operation,ulong element,uint index,ReadOnlySpan<float> input,Span<float> output,out ulong identity) => throw new NotSupportedException();
+    bool PathRuntimeCommand(ulong id,uint world,uint generation,ulong instance,uint operation,double distance,bool wrap,Span<float> output,out double scalar) => throw new NotSupportedException();
+    bool Body2DCommand(ulong id, uint world, uint generation, Body2DCommandKind command, Vector2 value, float angular, out Vector2 result, out float angularResult) => throw new NotSupportedException();
+    int Query2D(uint world, bool overlap, Vector2 origin, Vector2 translation, float radius, in QueryFilter filter, Span<RawQueryHit> results) => throw new NotSupportedException();
     bool Exists(ulong objectId);
     TransformValue GetTransform(ulong objectId);
     bool SetTransform(ulong objectId, TransformValue value);
@@ -287,6 +358,9 @@ public interface ISceneAccess
     bool SetTag(ulong objectId, string tag) => throw new NotSupportedException();
     int CompareTag(ulong objectId, string tag) => throw new NotSupportedException();
     ulong[] FindTagged(string tag, bool firstOnly) => throw new NotSupportedException();
+    int GroupMembership(ulong objectId, string name, int operation) => throw new NotSupportedException();
+    string[] GetGroups(ulong objectId) => throw new NotSupportedException();
+    ulong[] FindGroup(string name, bool includeInactive) => throw new NotSupportedException();
     bool SetActive(ulong objectId, bool active) => throw new NotSupportedException();
 
     // --- v3: ciclo de vida --------------------------------------------------
@@ -318,6 +392,8 @@ public interface ISceneAccess
         => throw new NotSupportedException();
     bool SetProperty(ulong objectId, ulong instanceId, string propertyId, uint kind, ulong bits)
         => throw new NotSupportedException();
+    bool SetTriple(ulong objectId, ulong instanceId, string propertyId, Vector3 value)
+        => throw new NotSupportedException("O acesso ao mundo não oferece atribuição vetorial atômica.");
 
     // --- v3: transform de mundo --------------------------------------------
     TransformValue GetWorldTransform(ulong objectId) => throw new NotSupportedException();
@@ -335,6 +411,15 @@ public interface ISceneAccess
     string LayerName(uint layer) => throw new NotSupportedException();
 
     // --- v5: entrada por ações -----------------------------------------------
+    bool NumberTweenCreate(ulong objectId,ulong instance,string property,float destination,float duration,uint easing,bool unscaled,out ulong id) => throw new NotSupportedException();
+    bool NumberTweenCommand(ulong id,uint operation,out NumberTweenState state) => throw new NotSupportedException();
+    bool TweenCommand(ulong objectId,ulong instance,uint operation,out TweenRuntimeState state) => throw new NotSupportedException();
+    bool TimerCommand(ulong objectId,ulong instance,uint operation,float seconds,out TimerRuntimeState state) => throw new NotSupportedException();
+    int InputCaptureCommand(uint operation,string action,uint index,InputSource source,bool negative,uint cancelKey) => throw new NotSupportedException();
+    bool InputBindingCommand(string action,uint index,uint operation,ref InputBindingValue binding) => throw new NotSupportedException();
+    bool InputActionCommand(string action,uint operation,ref InputActionState state) => throw new NotSupportedException();
+    string ExportInputProfile() => throw new NotSupportedException();
+    bool ImportInputProfile(string profile) => throw new NotSupportedException();
     bool InputAxis(string action, out Vector2 value) => throw new NotSupportedException();
     /// <summary>0 pressionado agora, 1 acabou de descer, 2 acabou de subir; -1 ação desconhecida.</summary>
     int InputButton(string action, uint query) => throw new NotSupportedException();
@@ -358,6 +443,7 @@ public interface ISceneAccess
 
     // --- v8: comandos dos consumidores de personagem/câmera -------------
     bool CharacterMove(ulong objectId, Vector2 input, float yawRadians) => throw new NotSupportedException();
+    bool TryGetCharacterState(ulong objectId,out CharacterRuntimeState state) => throw new NotSupportedException();
     bool CharacterJump(ulong objectId) => throw new NotSupportedException();
     bool CameraLook(ulong objectId, Vector2 normalizedDelta) => throw new NotSupportedException();
 
@@ -410,6 +496,8 @@ public abstract class Behavior
 {
     private ISceneAccess? _scene;
     private IBehaviorRegistry? _registry;
+    public SaveStore Save => IsAlive && _registry is ISaveHost host ? host.Save : throw new InvalidOperationException("Save requires an attached behavior and a configured project save host.");
+    public TimeAccess Time => _registry is ITimeHost host ? host.Time : throw new InvalidOperationException("Time requires an attached Play behavior.");
     public ulong ObjectId { get; private set; }
     public ulong InstanceId { get; private set; }
     private bool _enabled = true;
@@ -435,6 +523,46 @@ public abstract class Behavior
     protected ISceneAccess Scene => _scene ?? throw new InvalidOperationException("Behavior is not attached to an execution world.");
 
     private GameObject? _object;
+    private bool _coroutinesBlocked;
+    internal bool CoroutineEligible => !_coroutinesBlocked && !_removed && _scene is not null;
+    internal GameObject CoroutineOwner => Object;
+    internal void BlockCoroutines() => _coroutinesBlocked = true;
+    /// <summary>Owner-bound awaits. All continuations run on the script dispatch thread.</summary>
+    protected BehaviorAwaitables Awaitable => new(this, CoroutineHost);
+    private ICoroutineHost CoroutineHost => _registry as ICoroutineHost ??
+        throw new InvalidOperationException("This Behavior is not attached to a coroutine-capable Play session.");
+    public Coroutine StartCoroutine(System.Collections.IEnumerator routine) => CoroutineHost.StartCoroutine(this, routine);
+    public void StopCoroutine(Coroutine coroutine) => CoroutineHost.StopCoroutine(this, coroutine);
+    public void StopCoroutine(System.Collections.IEnumerator routine) => CoroutineHost.StopCoroutine(this, routine);
+    public void StopAllCoroutines() => CoroutineHost.StopAllCoroutines(this);
+
+    /// <summary>Runs an async Task with owner-bound lifecycle and observed errors.
+    /// Pass its token to each Awaitable call so stopping the returned coroutine cancels suspended work.</summary>
+    public Coroutine StartAsync(Func<CancellationToken, Task> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return StartCoroutine(Observe());
+        System.Collections.IEnumerator Observe()
+        {
+            using var cancellation = new CancellationTokenSource();
+            Task? task = null;
+            try
+            {
+                task = work(cancellation.Token) ?? throw new InvalidOperationException("Async Behavior returned a null Task.");
+                // Observe faults even when user awaits an external Task beyond session teardown.
+                // This static continuation captures no Behavior or collectible project type.
+                _ = task.ContinueWith(static failed => { _ = failed.Exception; }, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                yield return new WaitUntil(() => task.IsCompleted);
+                task.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                cancellation.Cancel();
+                if (task?.IsFaulted == true) task.GetAwaiter().GetResult();
+            }
+        }
+    }
 
     /// <summary>
     /// O objeto a que este comportamento está anexado. Resolvido uma vez: um
@@ -445,6 +573,7 @@ public abstract class Behavior
 
     /// <summary>As consultas físicas do mundo de execução.</summary>
     protected PhysicsAccess Physics => new(Scene);
+    protected Physics2DAccess Physics2D => new(Scene);
 
     /// <summary>As ações de entrada configuradas no projeto.</summary>
     protected InputAccess Input => new(Scene);

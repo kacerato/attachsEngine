@@ -91,4 +91,18 @@ inline std::vector<EditorEntityId> editorReferenceChoices(const runtime::SceneGr
   }
   return result;
 }
+inline std::vector<EditorEntityId> editorRecipeReferenceChoices(const runtime::SceneGraph &document,
+    std::span<const EditorEntityId> compatible,std::string_view search) {
+  std::vector<EditorEntityId> result;const auto query=editorSearchKey(search);
+  for(const auto id:compatible)if(const auto *entity=document.find(id);entity &&
+      (query.empty() || editorSearchKey(std::string(entity->name)+" "+std::to_string(id)).find(query)!=std::string::npos))result.push_back(id);
+  return result;
+}
+inline std::vector<EditorReferenceResult> editorRecipeReferenceResults(const runtime::SceneGraph &document,
+    EditorEntityId source,std::span<const EditorEntityId> compatible,std::string_view query,bool filter) {
+  auto results=editorAdvancedReferenceResults(document,source,editorAnyObjectReference,query,false);
+  for(auto &r:results)r.compatible=std::find(compatible.begin(),compatible.end(),r.id)!=compatible.end();
+  if(filter)std::erase_if(results,[](const auto &r){return !r.compatible;});
+  return results;
+}
 }

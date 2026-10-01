@@ -1,0 +1,1 @@
+Host Debug: 96 dynamic Box2D bodies, 32 overlapping fields, 60 fixed steps; fields+solver+sync mean=1.269 ms p95=1.871 ms max=2.254 ms

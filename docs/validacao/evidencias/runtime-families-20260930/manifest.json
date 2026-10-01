@@ -1,0 +1,124 @@
+{
+  "date": "2026-09-30",
+  "abi": 23,
+  "newSceneTypes": 0,
+  "android": {
+    "build": "passed",
+    "duration": "2m23s",
+    "bytes": 264336992,
+    "sha256": "066fad8868a544e8e8d68c66fd57e9720eb542fbeff8cece10a53d9881e4e657",
+    "packagedSdkMatchesBuild": true,
+    "sdkSha256": "83494efa2395d283d9cacc1aa1bc96918abb9513bca1ca22fee2b2a748fd80c3",
+    "installed": false,
+    "deviceValidated": false
+  },
+  "managed": {
+    "sdkAndAcceptanceBuild": "passed",
+    "warnings": 0,
+    "errors": 0,
+    "acceptanceScriptsExecuted": false
+  },
+  "nativeTests": {
+    "audio_": "5/5",
+    "physics2d": "8/8",
+    "path_script_abi": "1/1",
+    "play_scene_abi_v20": "1/1",
+    "play_active_self": "1/1"
+  },
+  "ui": {
+    "backend": "native UI / software raster / host",
+    "853x394": {
+      "missingGlyphs": 0,
+      "dropped": 0,
+      "culled": 0
+    },
+    "1200x700": {
+      "missingGlyphs": 0,
+      "dropped": 0,
+      "culled": 3
+    },
+    "inspectorControlsIntact": true
+  },
+  "fixture": {
+    "path": "tests/fixtures/runtime-families/project/Families-ADB-20260930",
+    "files": {
+      ".astra/assets.astra": {
+        "bytes": 225,
+        "sha256": "4f2d6a01c1d36b00a246d68fba83b1b0ef72a87328f26aa65b9f9c725048b06e"
+      },
+      "Audio/astra-audio-probe.wav": {
+        "bytes": 1152044,
+        "sha256": "0c6986d8c2abdc562a5387538b1b21793ee24cdc24acdffa105378a417094a41"
+      },
+      "project.json": {
+        "bytes": 341,
+        "sha256": "3d7f44fdda2c3d8c58ea4c7f315f2ca2cfadddd9c40d3e337056658466322872"
+      },
+      "scenes/editor.aescene": {
+        "bytes": 1203,
+        "sha256": "42495658f0e105bccef91ff114ec64fce4d358cc87d7e37ec4f3e3f50297726b"
+      },
+      "Scripts/AudioProbe.cs": {
+        "bytes": 4822,
+        "sha256": "0ccff0ae6eb5de8c8f244831c4bc6797ed1e88b4bf425c4ead22b41d48ce59c8"
+      },
+      "Scripts/Physics2DProbe.cs": {
+        "bytes": 6843,
+        "sha256": "b1159cc6eac609e9566c8b32360c1913bc281d5b3a04d60248b588b634fbc29f"
+      }
+    },
+    "nonemptyOutputRefusedWithoutChanges": true,
+    "exporterDiskSceneRoundtrip": "passed in independent import; same scene after GUID normalization",
+    "freshSourcesAndOriginalWaveMatch": true
+  },
+  "evidence": {
+    "audio-before-safe-point.txt": {
+      "bytes": 545,
+      "sha256": "34067b7559190c051c9b72bd8f8ed974be9d7b2a536a230d68651ca2f936585d"
+    },
+    "audio-picker-search-1200.png": {
+      "bytes": 48793,
+      "sha256": "7728d276a6fd53ba33da450e923b1d803c59a8ce4f01e308f4b0897675a6e19e"
+    },
+    "audio-picker-search-1200.ppm": {
+      "bytes": 2520016,
+      "sha256": "b7ddfce89a13aa77af674f1f663d47ffe2457649f7fa95347f56c5cd3662cb04"
+    },
+    "audio-picker-search-853.png": {
+      "bytes": 46328,
+      "sha256": "e53a0f9bb346d18f8bf2a7048a04fd9c6dfdc5db0658dacabd0008818e473a3c"
+    },
+    "audio-picker-search-853.ppm": {
+      "bytes": 1008261,
+      "sha256": "f24db647c031fe59f85378757b469496b305d60f2d0401883bfa6ca4cbd933b8"
+    },
+    "audio_.txt": {
+      "bytes": 399,
+      "sha256": "923a07d107a14ffc9f53ed6d4850b9ea7505ed8b90631dbd3b3a1f9fa32a0acc"
+    },
+    "export-refusal.txt": {
+      "bytes": 77,
+      "sha256": "7f34cbc915f4def14d14135c70fe6d209e9080cfeb59748f7f0f7e7e236ac01e"
+    },
+    "path_script_abi.txt": {
+      "bytes": 104,
+      "sha256": "6f82060981b0c7ef9f77cc746308ea519fd6e7dc36334403f1d9c1ace17f74f1"
+    },
+    "physics2d.txt": {
+      "bytes": 565,
+      "sha256": "b5ca2b0c6d94fb2550e1b2d1d19154de9a447f4cef74794e7f7ca22701ede3db"
+    },
+    "play_active_self.txt": {
+      "bytes": 94,
+      "sha256": "c6d2a587f49b70737b50c83420bd633fda86c502301b0ea5ba946a80209a772d"
+    },
+    "play_scene_abi_v20.txt": {
+      "bytes": 108,
+      "sha256": "997b12f9e6f131e32b8aff60c00e14546ac8eab224556e766fe9b38cffa7200f"
+    },
+    "README.md": {
+      "bytes": 4742,
+      "sha256": "e850090c0250716277b78ce09930ae2bce3793e6fca734f51f3c6f9b6f6a3fd7"
+    }
+  }
+}

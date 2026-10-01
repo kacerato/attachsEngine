@@ -1,0 +1,7 @@
+{
+  "format":"ASTRA-PROJECT-1",
+  "resourceSource":"independent",
+  "project":{"name":"Time-20260930","path":"C:/Users/donod/Downloads/atchengine/tests/fixtures/time/project/Time-20260930","template":"empty","scenes":1,"assets":0},
+  "mainScene":"scenes/editor.aescene",
+  "editorScene":"scenes/editor.aescene"
+}

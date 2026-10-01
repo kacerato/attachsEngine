@@ -11,6 +11,12 @@ inventário **O1 + O2 + O4 + P completo** no [bloco ampliado de objetos, scripts
 Essa é a sequência vigente para esse recorte; as metas de expansão e os demais
 sistemas deste documento permanecem como planejamento, não como entregas.
 
+Atualização de 01/10/2026: o [bloco de mecanismos físicos](MECANISMOS-FISICOS-2026-10-01.md)
+entrega Fixed, Cone, SwingTwist, SixDOF e Spring, cilindro nativo, contratos C#,
+nove receitas e Inspector contextual em retrato. São 66 receitas e 34 schemas;
+os demais tipos desta meta continuam planejados. O registro do bloco distingue
+validação host, empacotamento e evidência física.
+
 ---
 
 ## 1. Resumo

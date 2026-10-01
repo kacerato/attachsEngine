@@ -1,0 +1,3 @@
+[ok] tween_delay_relative_pingpong_serialization_cancel_and_authority
+
+1/1 testes passaram

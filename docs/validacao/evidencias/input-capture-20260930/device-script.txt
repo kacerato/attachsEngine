@@ -1,0 +1,7 @@
+--------- beginning of main
+10-01 00:09:58.837 12255 14033 I Astra.Script: 2: TIME READY: native scale=0; waiting for dispatched frames
+10-01 00:09:58.837 12255 14033 I Astra.Script: 2: INPUT READY: waiting for captured Saltar binding
+10-01 00:09:58.952 12255 14033 I Astra.Script: 2: INPUT DOWN: presses=1
+10-01 00:09:59.119 12255 14033 I Astra.Script: 2: TIME FROZEN: native simulation and FixedUpdate stopped; unscaled Timer fired=3
+10-01 00:09:59.169 12255 14033 I Astra.Script: 2: INPUT PASS: captured binding reached C#; presses=1 releases=1
+10-01 00:09:59.537 12255 14033 I Astra.Script: 2: TIME PASS: resumed half-speed; scaled=1 fixed=11 simulation=0.20014190673828125 unscaled=0.4002838134765625

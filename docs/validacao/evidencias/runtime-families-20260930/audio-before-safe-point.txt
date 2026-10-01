@@ -1,0 +1,8 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_script_audio.cpp:52: retained diagnostic cannot resurrect missing component
+[FALHOU] audio_script_observes_real_offline_voice_and_rejects_stale_lifetime
+[ok] audio_wave_decode_refuses_truncation_and_preserves_output_on_error
+[ok] audio_source_bus_pause_pitch_spatial_and_lifecycle_use_real_dsp
+[ok] audio_project_import_binding_history_save_reopen_and_play_share_guid
+[ok] new_component_gizmos_use_offsets_local_destinations_and_unscaled_audio_ranges
+
+4/5 testes passaram

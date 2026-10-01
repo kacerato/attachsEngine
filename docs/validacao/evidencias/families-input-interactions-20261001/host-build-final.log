@@ -1,0 +1,37 @@
+[1/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.obj
+[2/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.obj
+[3/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.obj
+[4/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/input_actions.cpp.obj
+[5/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.obj
+[6/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.obj
+[7/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.obj
+[8/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.obj
+[9/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.obj
+[10/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.obj
+[11/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.obj
+[12/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.obj
+[13/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_animation.cpp.obj
+[14/37] Building CXX object CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.obj
+[15/37] Linking CXX static library libaether_runtime.a
+[16/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.obj
+[17/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_document.cpp.obj
+[18/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.obj
+[19/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.obj
+[20/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[21/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[22/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[23/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[24/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.obj
+[25/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[26/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[27/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[28/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[29/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_history.cpp.obj
+[30/37] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.obj
+[31/37] Linking CXX static library libaether_editor.a
+[32/37] Building CXX object CMakeFiles/aether_input_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_runtime_input.cpp.obj
+[33/37] Building CXX object CMakeFiles/aether_input_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_input_interactions.cpp.obj
+[34/37] Building CXX object CMakeFiles/aether_ui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/ui_preview_main.cpp.obj
+[35/37] Linking CXX executable aether_ui_preview.exe
+[36/37] Building CXX object CMakeFiles/aether_input_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_editor_session.cpp.obj
+[37/37] Linking CXX executable aether_input_family_tests.exe

@@ -1,0 +1,6 @@
+AETHER_EDITOR 16 0 2
+1 0 0 "Cena" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1 "Untagged" GROUPS 1 0
+2 1 0 "TIME Acceptance" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 4 5 1 "astra.time.timer" 3 "0.100000001 1 0 0 0 0" 2 "astra.time.timer" 3 "0.100000001 1 0 1 0 0" 3 "astra.script.behavior" 1 "\"acceptance.time\" \"Scripts/TimeProbe.cs\" 1 0" 4 "astra.script.behavior" 1 "\"acceptance.input.mouse\" \"Scripts/MouseProbe.cs\" 1 0" "Untagged" GROUPS 1 0
+LAYERS 1 "Padrão" 4294967295
+INPUT 5 "Mover" "Olhar" "Saltar" "Mover" 2 0.119999997 1 "" 2 1 0 0 0 1 0 1 0 0 1 1 0 "Olhar" 2 0 1 "" 2 2 0 0 0 1 0 2 0 0 1 1 0 "Saltar" 0 0 1 "" 1 7 0 0 0 1 0 "MouseLook" 2 0 1 "" 2 8 0 0 0 1 0 8 1 0 1 1 0 "MouseWheel" 1 0 1 "" 1 8 3 0 0 1 0
+VIEWS 0

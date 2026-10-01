@@ -22,7 +22,7 @@ Uma referência a recurso pode ser vazia enquanto o objeto está sendo autorado.
 | R Receita/preset | Componentes iniciais, defaults, requisitos, referências externas, remapeamento | Cria composição via resolvedor; não acrescenta classes especiais por demo | Ampliar presets/recipes |
 | C Comportamento / MonoBehaviour, script em Node | Fonte/tipo/instância, ativação, propriedades expostas, ordem, callbacks, erros | Compilação + mundo; múltiplas instâncias por contrato; referência desconhecida preservada | Ampliar `Astra.Behavior` |
 | S Eventos/conexões / UnityEvent, signals | Assinatura, emissor/receptor, método/ação, payload, prioridade, conexão/desconexão, sinal único | Tipagem, lifetime, reentrância, ownership e despacho em thread definida | P06 |
-| C/S Timer / timers de gameplay, Timer | Intervalo, repetição, ativação, pause; autostart separado, tempo escalado e remaining read-only ainda pendentes | Scheduler do Play, evento ABI/C#, cancelamento em Stop/destruição; workspace de agenda | P06 parcial |
+| C/S Timer / timers de gameplay, Timer | Intervalo, repetição, ativação, autostart e escolha de relógio; início/parada/pausa e restante pelo scheduler real | Scheduler do Play, evento ABI/C#, cancelamento em Stop/destruição; controles na Inspeção durante Play | P06 parcial |
 | R/S Tween / animação de propriedades, Tween | Alvo, PropertyId, origem/destino, duração, easing, sequência/paralelo, loop | Propriedade elegível; cancelamento e concorrência com física/animação definidos | P06 |
 | S Grupos/tags/consultas | Membership múltipla, consulta, escopo de mundo, layers separados | Grupos de organização não viram máscara física automaticamente | P06 |
 

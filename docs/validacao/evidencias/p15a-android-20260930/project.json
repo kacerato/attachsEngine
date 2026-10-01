@@ -1,0 +1,13 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "project": {
+    "name": "P15a-ADB-20260930",
+    "path": "\/storage\/emulated\/0\/Android\/data\/dev.aether.editor\/files\/Projetos\/P15a-ADB-20260930",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 0
+  },
+  "mainScene": "scenes\/main.ascene",
+  "editorScene": "scenes\/editor.aescene"
+}

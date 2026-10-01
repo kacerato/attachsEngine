@@ -76,7 +76,8 @@ AE_TEST(primitives_editor_history_archive_and_resource_reordering_preserve_shape
     AE_EXPECT_TRUE(object->components.find(scene::MeshRenderer::descriptor) && object->components.find(scene::PhysicsBody::descriptor),"render and physics consumers");
     const auto *collider=static_cast<const scene::Collider*>(object->components.find(scene::Collider::descriptor));
     AE_EXPECT_TRUE(collider && collider->valid(),"collider attached");
-    AE_EXPECT_EQ(collider->convex,k==3,"only cylinder uses hull");
+    AE_EXPECT_TRUE(!collider->convex,"primitive cylinder no longer requires mesh cooking");
+    if(k==3) AE_EXPECT_TRUE(collider->shape==scene::ColliderShape::Cylinder&&collider->halfHeight==1.f,"cylinder collision matches visual height");
     AE_EXPECT_TRUE(runtime::meshRenderer(*object)->asset.valid(),"persistent resource identity before save");
   }
   AE_EXPECT_TRUE(session.history().undo(session.document()),"undo last primitive");

@@ -22,6 +22,7 @@
 #include "editor/editor_numeric_expression.h"
 #include "editor/editor_value_library.h"
 #include "editor/editor_curve_view.h"
+#include "resources/curve3d.h"
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
@@ -34,6 +35,7 @@
 #include "editor/editor_camera_look.h"
 #include "platform/first_person_controller.h"
 #include "resources/texture_asset.h"
+#include "resources/audio_clip.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
 #include "editor/editor_console.h"
@@ -70,14 +72,14 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
   EditorEntityId entity=0;
   u32 field=0;
   std::string text;
-  u64 bufferId=0,bufferRevision=0,componentInstance=0;
+  u64 bufferId=0,bufferRevision=0,componentInstance=0,elementId=0;
   std::string propertyId,propertyType;
 };
 
@@ -89,6 +91,20 @@ struct EditorAssetInstantiation {
 
 class EditorSession final {
 public:
+  bool importWaveClip(const std::string &relative,resources::AssetGuid &asset,std::string &error);
+  std::shared_ptr<const resources::AudioClip> loadAudioClip(resources::AssetGuid asset,std::string &error);
+  void setAudioOutput(runtime::SceneAudio::Output output) {
+    audioOutput_=output;
+    playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},output);
+  }
+  void setAudioFocus(bool focused){playScene_.setAudioFocus(focused);}
+  bool audioWantsFocus()const{return playScene_.audioWantsFocus();}
+  bool beginInputBindingCapture(bool negative=false);
+  void cancelInputBindingCapture();
+  bool inputBindingCaptureActive() const noexcept;
+  bool captureInputKey(u32 code,bool gamepad,bool down,bool repeated=false);
+  bool captureInputMouseButton(u32 code,bool down,ui::UiPoint position);
+  bool captureInputAxes(const std::array<float,8> &axes);
   static constexpr u32 kMaximumInstances = 16384;
 
   // Os atlas continuam pertencendo ao chamador e precisam sobreviver à sessão.
@@ -107,7 +123,7 @@ public:
   bool changeProjectTags(const runtime::ObjectTags &next);
   bool assignTag(std::string_view name);
   bool saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error);
-  // A receita do objeto inteiro: todos os componentes com preset portátil, na
+  // A receita do objeto inteiro: componentes portáteis, sem descarte silencioso, na
   // ordem em que estão nele. É o que permite salvar "porta interativa" e não
   // quatro presets soltos que o autor precisa lembrar de combinar.
   bool saveComponentRecipe(EditorEntityId entity,std::string name,std::string &error);
@@ -116,11 +132,14 @@ public:
   // exigências), o que já existe tem os valores atualizados, e o histórico
   // registra um passo só.
   bool applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::string &error);
+  bool applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::span<const u64> inputs,std::string &error);
   bool openComponentPresets(EditorEntityId entity,u64 instance);
   bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
   void setScriptRuntime(scene::ScriptRuntimeApi api);
   // Pausa e foco do aplicativo, repassados aos comportamentos quando há Play.
   void applicationEvent(scene::ScriptLifecycleEvent event,bool value) {
+    if((event==scene::ScriptLifecycleEvent::ApplicationFocus&&!value) ||
+       (event==scene::ScriptLifecycleEvent::ApplicationPause&&value)) {cancelInputBindingCapture();cancelPlayButtons();}
     if(isPlaying()) playScene_.applicationEvent(event,value);
   }
   void configureScriptRendering(const renderer::ProjectRenderingSettings &authored,
@@ -392,6 +411,10 @@ public:
   const EditorViewport &view() const noexcept { return view_; }
   EditorDocument &document() noexcept { return document_; }
   const EditorMapScene &mapScene() const noexcept { return mapScene_; }
+  bool insertPathPoint(runtime::ObjectId object,u64 instance,u64 beforeId,const resources::CurvePoint3D &point,u64 &outId);
+  bool removePathPoint(runtime::ObjectId object,u64 instance,u64 pointId);
+  bool movePathPoint(runtime::ObjectId object,u64 instance,u64 pointId,u64 beforeId);
+  bool editPathPoint(runtime::ObjectId object,u64 instance,u64 pointId,const resources::CurvePoint3D &point);
   EditorHistory &history() noexcept { return history_; }
   EditorEntityId selection() const noexcept { return state_.selection; }
   EditorSceneVersion sceneVersion() const noexcept { return {sceneEpoch_,document_.revision()}; }
@@ -410,16 +433,25 @@ public:
   bool isPlaying() const noexcept { return state_.workspace == EditorWorkspace::Play; }
   // Hierarquia e Inspector abertos sobre o mundo em execução.
   bool playInspecting() const noexcept { return isPlaying() && playScene_.active() && state_.playInspect; }
+  bool setPlayTimeScale(float value) {
+    if(!isPlaying() || !playScene_.active()) return false;
+    const auto status=playScene_.world().setTimeScale(value);
+    if(status!=runtime::WorldStatus::Ok) return false;
+    state_.playTimeScale=value;
+    return true;
+  }
   bool gameplayInputFocused() const noexcept {
     // Play hides authoring panels and their text fields. platformTextInput
     // advertises IME support for the whole Android session, not active focus.
-    return isPlaying()&&!state_.playPaused;
+    return isPlaying()&&!state_.playPaused && (!state_.platformTextInput || pendingTextEdit().purpose==EditorTextPurpose::None);
   }
   // Relógio da CENA, separado do relógio de parede. Ele só avança em Play, e é
   // ele que alimenta a animação e a simulação — congelar apenas o desenho
   // mostraria uma imagem parada sobre um estado que continua mudando, e apertar
   // Play daria um salto.
-  float sceneTime() const noexcept { return sceneTime_; }
+  float sceneTime() const noexcept {
+    return playScene_.active()?static_cast<float>(playScene_.world().elapsedSeconds()):sceneTime_;
+  }
   // `wallSeconds` é o relógio contínuo da plataforma. A sessão deriva o próprio
   // passo dele, o que a torna imune a um primeiro quadro com valor arbitrário.
   void advanceClock(float wallSeconds) noexcept;
@@ -985,6 +1017,7 @@ public:
         reportProblem(EditorConsoleSeverity::Error,state_.status);
         return false;
       }
+      reportedPhysicsConnectionDiagnostic_.clear();
       reportProblem(EditorConsoleSeverity::Info,"Play iniciado · código publicado "+std::to_string(runtimeCodeGeneration_));
       playLastSeconds_=sceneTime_;
     }
@@ -996,17 +1029,23 @@ public:
     // mapa de ações do projeto. Pausado, o gameplay perde o foco: as ações leem
     // zero e nenhum botão fica preso ao retomar.
     const auto actions=playTouches_.consumeInput();
+    if(!gameplayInputFocused()||!platformFocus)cancelPlayButtons();
     runtime::InputDeviceState device;
     device.moveX=actions.moveRight;device.moveY=actions.moveForward;
     device.lookX=actions.lookScreenX;device.lookY=actions.lookScreenY;
     device.touchButtons=(jumpPressed_?1u:0u)|(secondaryPressed_?2u:0u);
+    for(const auto &[pointer,mask]:playButtonPointers_)device.touchButtons|=mask;
+    device.canceledDeviceGroups=platformInput.canceledDeviceGroups|playButtonCanceled_;
+    device.canceledSources=platformInput.canceledSources;
+    playButtonCanceled_=0;
     device.keys=platformInput.keys;
     device.gamepadButtons=platformInput.gamepadButtons;
     device.gamepadAxes=platformInput.gamepadAxes;
+    device.mouseButtons=platformInput.mouseButtons;device.mouseAxes=platformInput.mouseAxes;
     jumpPressed_=false;
     secondaryPressed_=false;
     playScene_.setInputFocus(gameplayInputFocused()&&platformFocus);
-    playScene_.submitInput(device);
+    playScene_.submitInput(device,elapsed);
     const auto &input=playScene_.input();
     const auto &map=input.map();
     float look[2]{0,0},move[2]{0,0};
@@ -1032,6 +1071,12 @@ public:
       if(!playScene_.step()) return false;
     }
     if(!playScene_.advance(elapsed)) return false;
+    const auto &connectionDiagnostic=playScene_.physicsConnections().diagnostic();
+    if(connectionDiagnostic!=reportedPhysicsConnectionDiagnostic_) {
+      reportedPhysicsConnectionDiagnostic_=connectionDiagnostic;
+      if(!connectionDiagnostic.empty())reportProblem(EditorConsoleSeverity::Warning,connectionDiagnostic);
+    }
+    state_.playTimeScale=playScene_.world().clock().scale();
     if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
     if(!playScene_.extract(mapScene_,out)) return false;
     applyLodGroups(playScene_.document(),out);
@@ -1068,6 +1113,7 @@ public:
     if(requested) {state_.importEnvironment=true;state_.importTexture=false;}
     return requested;
   }
+  bool consumeWaveImportRequest() {return std::exchange(state_.waveImportRequested,false);}
   bool consumeTextureImportRequest() {
     const bool requested=std::exchange(state_.textureImportRequested,false);
     if(requested) {state_.importEnvironment=false;state_.importTexture=true;}
@@ -1183,7 +1229,11 @@ public:
   bool unpackPrefab(EditorEntityId selected,std::string &error);
   bool inspectPrefabOverrides(EditorEntityId selected,PrefabOverrideView &view,std::string &error);
   bool revertPrefabOverride(const PrefabOverrideView &view,usize row,std::string &error);
-  bool loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) const;
+  bool revertPrefabOverrides(const PrefabOverrideView &view,std::span<const usize> rows,std::string &error);
+  bool applyPrefabOverride(const PrefabOverrideView &view,usize row,bool overwriteConflict,std::string &error,PrefabApplyReport *report=nullptr);
+  bool applyPrefabOverrides(const PrefabOverrideView &view,std::span<const usize> rows,bool overwriteConflicts,std::string &error,PrefabApplyReport *report=nullptr);
+  bool refreshPrefabInstance(const PrefabOverrideView &view,std::string &error);
+  bool loadPrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error,std::string *sourceText=nullptr) const;
   bool preparePrefab(resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error);
   bool preparePrefab(const runtime::Prefab &authored,runtime::Prefab &prefab,std::string &error);
   EditorEntityId instantiatePrefab(resources::AssetGuid asset,EditorEntityId parent,std::string &error);
@@ -1239,6 +1289,8 @@ private:
   void refreshImportImpact();
   bool toggleImportNodeExclusion(usize row);
   void refreshComponentPresets();
+  bool openRecipeInput(u32 index);
+  bool prepareComponentRecipe(u64 preset,EditorEntityId entity,std::span<const u64> inputs,EditorEntity &candidate,std::string &error);
   // Valida e reconcilia os recursos de um componente vindo de preset contra
   // ESTE projeto. `only` restringe aos endereços que vão de fato ser aplicados;
   // nulo cobre o componente inteiro.
@@ -1469,6 +1521,17 @@ private:
   GeometryPublisher publishGeometry_;
   SkinningPublication skinningPublication_{};
   static u64 nextSceneEpoch() noexcept;
+  struct InputCapture {
+    EditorSceneVersion version;
+    runtime::InputActionMap before;
+    std::string action;
+    std::string project;
+    u32 binding=0,neutralAxes=0;
+    bool negative=false;
+  };
+  std::optional<InputCapture> inputCapture_;
+  bool validateInputCapture();
+  bool commitInputCapture(u32 code,bool invert);
   struct ViewportPointer final {
     u32 id = 0;
     ui::UiPoint position{};
@@ -1508,6 +1571,9 @@ private:
   runtime::ObjectTags projectTags_;
   EditorDocument document_;
   EditorFileSystem files_;
+  struct CachedAudioClip {resources::AssetGuid guid;std::string hash;std::shared_ptr<const resources::AudioClip> clip;};
+  std::vector<CachedAudioClip> audioClips_;
+  runtime::SceneAudio::Output audioOutput_=runtime::SceneAudio::Output::Device;
   EditorCodeWorkspace code_;
   std::string codeBuildRequest_;
   u64 codeBuildGeneration_=0;
@@ -1516,6 +1582,7 @@ private:
   u64 sceneEpoch_=nextSceneEpoch();
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
+  std::string reportedPhysicsConnectionDiagnostic_;
   double playLastSeconds_=0;
   platform::FirstPersonTouchControls playTouches_;
   EditorHistory history_;
@@ -1625,6 +1692,15 @@ private:
   void openCurveEditor(u32 key,std::string_view value,std::string_view type);
   void publishCurveDraft();
   u32 settleCurveSelection(u32 selected);
+  void refreshPathEditorState();
+  bool handlePathEditorInput(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  runtime::ObjectId pathEditorEntity_=0,pathStatsTarget_=0;
+  u64 pathStatsInstance_=0;
+  resources::Curve3D pathStatsCurve_;
+  bool pathStatsPlay_=false,pathStatsValid_=false;
+  double pathStatsLength_=0;
+  u64 numericPathPointId_=0;
+  EditorSceneVersion numericPathVersion_{};
   bool handleCurveEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   bool commitCurveEditor();
   void saveCurveLibraries();
@@ -1789,6 +1865,9 @@ private:
   // DISPOSITIVO, e o mapa de ações decide o que ele aciona.
   bool jumpPressed_ = false;
   bool secondaryPressed_ = false;
+  std::vector<std::pair<u32,u32>> playButtonPointers_;
+  u32 playButtonCanceled_=0;
+  void cancelPlayButtons(){playButtonPointers_.clear();jumpPressed_=secondaryPressed_=false;playButtonCanceled_=runtime::InputTouch;}
   float sceneTime_ = 0.0f;
   float lastWallSeconds_ = 0.0f;
   bool clockPrimed_ = false;

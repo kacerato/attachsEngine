@@ -1,4 +1,8 @@
 #include "editor/editor_import_transaction.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cctype>
 #include "resources/gltf_package.h"
 #include "resources/gltf_folder_source.h"
 #include "resources/import_cache.h"
@@ -237,6 +241,8 @@ struct AndroidShell final {
   ae::u64 importPickerEpoch=0;
   bool environmentImportPicker=false;
   bool textureImportPicker=false;
+  bool waveImportPicker=false;
+  jmethodID audioDemandMethod=nullptr,audioFocusMethod=nullptr;
   // R1 — abertura do projeto sem tela preta. As fontes registradas são lidas e
   // interpretadas num worker; o loop continua apresentando quadros do editor.
   // A publicação (uma só, para todas as fontes) e a recuperação da cena salva
@@ -272,6 +278,7 @@ struct AndroidShell final {
   ae::platform::FirstPersonController firstPersonController;
   ae::platform::FirstPersonTouchControls firstPersonTouches;
   ae::platform::android::AndroidGameInputState gameInput;
+  ae::u32 mouseEventButtons=0;
   std::chrono::steady_clock::time_point nextDeviceCheck{};
   ae::physics::CharacterMotor characterMotor;
   bool firstPersonEnabled = false;
@@ -1705,9 +1712,31 @@ void handleCommand(android_app *app, int32_t command) {
       ae::platform::android::lifecycleUptimeMs() - startedMs);
 }
 
+bool copyNewWave(const std::filesystem::path&path,const std::vector<ae::u8>&bytes) {
+  const int fd=::open(path.c_str(),O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC,0600);if(fd<0)return false;
+  ae::usize offset=0;bool ok=true;
+  while(offset<bytes.size()){const auto count=::write(fd,bytes.data()+offset,bytes.size()-offset);if(count<0&&errno==EINTR)continue;if(count<=0){ok=false;break;}offset+=static_cast<ae::usize>(count);}
+  if(ok&&::fsync(fd)!=0)ok=false;
+  if(::close(fd)!=0)ok=false;
+  if(!ok){std::error_code ec;std::filesystem::remove(path,ec);}return ok;
+}
+
+void updateAndroidAudioFocus(AndroidShell &shell,bool demand) {
+  JNIEnv*env=nullptr;auto*activity=shell.app->activity;
+  const bool detach=activity->vm->GetEnv(reinterpret_cast<void**>(&env),JNI_VERSION_1_6)==JNI_EDETACHED;
+  if(detach&&activity->vm->AttachCurrentThread(&env,nullptr)!=JNI_OK){shell.editorSession.setAudioFocus(false);return;}
+  if(!env){shell.editorSession.setAudioFocus(false);return;}
+  if(!shell.audioDemandMethod||!shell.audioFocusMethod){auto cls=env->GetObjectClass(activity->clazz);if(cls){shell.audioDemandMethod=env->GetMethodID(cls,"setPlayAudioDemand","(Z)V");if(!env->ExceptionCheck())shell.audioFocusMethod=env->GetMethodID(cls,"getPlayAudioFocusState","()I");env->DeleteLocalRef(cls);}}
+  int state=0;
+  if(!env->ExceptionCheck()&&shell.audioDemandMethod&&shell.audioFocusMethod){env->CallVoidMethod(activity->clazz,shell.audioDemandMethod,demand?JNI_TRUE:JNI_FALSE);if(!env->ExceptionCheck())state=env->CallIntMethod(activity->clazz,shell.audioFocusMethod);}
+  if(env->ExceptionCheck()){env->ExceptionClear();state=0;}
+  shell.editorSession.setAudioFocus(demand&&state==1);
+  if(detach)activity->vm->DetachCurrentThread();
+}
+
 void releaseDisconnectedInputs(AndroidShell &shell) {
-  if(!shell.gameInput.active() ||
-     (shell.gameInput.keyboardDevice()<0&&shell.gameInput.gamepadDevice()<0)) return;
+  if((!shell.gameInput.active() && shell.gameInput.mouseDevice()<0) ||
+     (shell.gameInput.keyboardDevice()<0&&shell.gameInput.gamepadDevice()<0&&shell.gameInput.mouseDevice()<0)) return;
   const auto now=std::chrono::steady_clock::now();
   if(now<shell.nextDeviceCheck) return;
   shell.nextDeviceCheck=now+std::chrono::seconds(1);
@@ -1739,6 +1768,7 @@ void releaseDisconnectedInputs(AndroidShell &shell) {
       const int keyboard=shell.gameInput.keyboardDevice(),gamepad=shell.gameInput.gamepadDevice();
       if(keyboard>=0&&!present(keyboard)) shell.gameInput.disconnect(keyboard);
       if(gamepad>=0&&!present(gamepad)) shell.gameInput.disconnect(gamepad);
+      const int mouse=shell.gameInput.mouseDevice();if(mouse>=0&&!present(mouse))shell.gameInput.disconnect(mouse);
     }
   } else {
     shell.gameInput.clear();
@@ -1758,11 +1788,18 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
   const bool gamepad=(source&AINPUT_SOURCE_GAMEPAD)==AINPUT_SOURCE_GAMEPAD ||
                      (source&AINPUT_SOURCE_JOYSTICK)==AINPUT_SOURCE_JOYSTICK ||
                      (source&AINPUT_SOURCE_DPAD)==AINPUT_SOURCE_DPAD;
+  const bool mouse=(source&AINPUT_SOURCE_MOUSE)==AINPUT_SOURCE_MOUSE;
   const bool gameplay=shell.editorUi&&shell.editorSession.gameplayInputFocused()&&
       !ae::platform::android::editorCodePanelVisible()&&
       shell.lifecycle.isActive();
   if(eventType==AINPUT_EVENT_TYPE_KEY) {
     const int32_t code=AKeyEvent_getKeyCode(event);
+    if(code==AKEYCODE_HOME || code==AKEYCODE_VOLUME_UP || code==AKEYCODE_VOLUME_DOWN || code==AKEYCODE_POWER) return 0;
+    if(shell.editorUi && shell.lifecycle.isActive() && shell.editorSession.inputBindingCaptureActive()) {
+      const int32_t captureAction=AKeyEvent_getAction(event);
+      return shell.editorSession.captureInputKey(static_cast<ae::u32>(code),gamepad,
+          captureAction==AKEY_EVENT_ACTION_DOWN,AKeyEvent_getRepeatCount(event)>0)?1:0;
+    }
     if(!gameplay) return 0;
     if(code==AKEYCODE_BACK || code==AKEYCODE_HOME || code==AKEYCODE_VOLUME_UP || code==AKEYCODE_VOLUME_DOWN)
       return 0;
@@ -1773,7 +1810,31 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
     return 1;
   }
   if(eventType!=AINPUT_EVENT_TYPE_MOTION) return 0;
+  const ae::u32 previousMouseButtons=shell.mouseEventButtons;
+  if(mouse)shell.mouseEventButtons=static_cast<ae::u32>(AMotionEvent_getButtonState(event))&31u;
+  if(mouse && shell.editorUi && shell.lifecycle.isActive() && shell.editorSession.inputBindingCaptureActive()) {
+    const auto action=AMotionEvent_getAction(event)&AMOTION_EVENT_ACTION_MASK;
+    if(action==AMOTION_EVENT_ACTION_CANCEL){shell.editorSession.cancelInputBindingCapture();return 1;}
+    const bool down=action==AMOTION_EVENT_ACTION_DOWN || action==AMOTION_EVENT_ACTION_BUTTON_PRESS;
+    const auto position=ae::ui::UiPoint{AMotionEvent_getX(event,0)/shell.editorScale,AMotionEvent_getY(event,0)/shell.editorScale};
+    const ae::u32 button=action==AMOTION_EVENT_ACTION_BUTTON_PRESS?(shell.mouseEventButtons&~previousMouseButtons):1u;
+    for(ae::u32 i=0;i<5;++i)if(button&(1u<<i))shell.editorSession.captureInputMouseButton(i,down,position);
+    return 1;
+  }
   if(gamepad) {
+    if(shell.editorUi && shell.lifecycle.isActive() && shell.editorSession.inputBindingCaptureActive()) {
+      const auto captureAction=AMotionEvent_getAction(event)&AMOTION_EVENT_ACTION_MASK;
+      if(captureAction==AMOTION_EVENT_ACTION_CANCEL) {shell.editorSession.cancelInputBindingCapture();return 1;}
+      if(captureAction==AMOTION_EVENT_ACTION_MOVE) {
+        const auto axis=[&](int32_t code){return AMotionEvent_getAxisValue(event,code,0);};
+        shell.editorSession.captureInputAxes({axis(AMOTION_EVENT_AXIS_X),-axis(AMOTION_EVENT_AXIS_Y),
+          axis(AMOTION_EVENT_AXIS_Z),-axis(AMOTION_EVENT_AXIS_RZ),
+          std::max(axis(AMOTION_EVENT_AXIS_LTRIGGER),axis(AMOTION_EVENT_AXIS_BRAKE)),
+          std::max(axis(AMOTION_EVENT_AXIS_RTRIGGER),axis(AMOTION_EVENT_AXIS_GAS)),
+          axis(AMOTION_EVENT_AXIS_HAT_X),-axis(AMOTION_EVENT_AXIS_HAT_Y)});
+      }
+      return 1;
+    }
     if(!gameplay) return 0;
     const auto action=AMotionEvent_getAction(event)&AMOTION_EVENT_ACTION_MASK;
     if(action==AMOTION_EVENT_ACTION_CANCEL) shell.gameInput.disconnect(AInputEvent_getDeviceId(event));
@@ -1834,23 +1895,40 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
     if (editorAction == AMOTION_EVENT_ACTION_CANCEL) {
       shell.editorSession.cancelPointers();
       consumed = true;
-    } else if (editorAction == AMOTION_EVENT_ACTION_MOVE) {
+    } else if (editorAction == AMOTION_EVENT_ACTION_MOVE || (mouse && editorAction==AMOTION_EVENT_ACTION_HOVER_MOVE)) {
       // Um MOVE carrega TODOS os dedos de uma vez. Repassar so o do indice da
       // acao perderia o segundo dedo da pinca em todo quadro.
       for (size_t index = 0; index < pointerCount; ++index)
         consumed |= shell.editorSession.handlePointer(
-            {static_cast<ae::u32>(AMotionEvent_getPointerId(event, index)),
-             ae::ui::UiPointerPhase::Move, toLogical(index), eventTime});
+            {(mouse?ae::platform::android::AndroidGameInputState::mousePointerId(static_cast<ae::u32>(AMotionEvent_getPointerId(event, index))):static_cast<ae::u32>(AMotionEvent_getPointerId(event, index))),
+             ae::ui::UiPointerPhase::Move, toLogical(index), eventTime,mouse?ae::ui::UiPointerDevice::Mouse:ae::ui::UiPointerDevice::Touch});
     } else if (editorAction == AMOTION_EVENT_ACTION_DOWN ||
                editorAction == AMOTION_EVENT_ACTION_POINTER_DOWN) {
       consumed = shell.editorSession.handlePointer(
-          {static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex)),
-           ae::ui::UiPointerPhase::Down, toLogical(editorIndex), eventTime});
+          {(mouse?ae::platform::android::AndroidGameInputState::mousePointerId(static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex))):static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex))),
+           ae::ui::UiPointerPhase::Down, toLogical(editorIndex), eventTime,mouse?ae::ui::UiPointerDevice::Mouse:ae::ui::UiPointerDevice::Touch});
     } else if (editorAction == AMOTION_EVENT_ACTION_UP ||
                editorAction == AMOTION_EVENT_ACTION_POINTER_UP) {
       consumed = shell.editorSession.handlePointer(
-          {static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex)),
-           ae::ui::UiPointerPhase::Up, toLogical(editorIndex), eventTime});
+          {(mouse?ae::platform::android::AndroidGameInputState::mousePointerId(static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex))):static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex))),
+           ae::ui::UiPointerPhase::Up, toLogical(editorIndex), eventTime,mouse?ae::ui::UiPointerDevice::Mouse:ae::ui::UiPointerDevice::Touch});
+    }
+    if(mouse) {
+      const auto position=toLogical(0);const auto &viewport=shell.editorSession.layout().viewport;
+      if(consumed || !gameplay || !viewport.contains(position) || editorAction==AMOTION_EVENT_ACTION_CANCEL || editorAction==AMOTION_EVENT_ACTION_HOVER_EXIT)
+        shell.gameInput.clearMouse();
+      else {
+        ae::u32 buttons=static_cast<ae::u32>(AMotionEvent_getButtonState(event));
+        // Android shell injection may omit buttonState on a primary contact.
+        if(buttons==0 && (editorAction==AMOTION_EVENT_ACTION_DOWN ||
+            (editorAction==AMOTION_EVENT_ACTION_MOVE && AMotionEvent_getPressure(event,0)>0)))buttons=1;
+        const bool scroll=editorAction==AMOTION_EVENT_ACTION_SCROLL;
+        shell.gameInput.mouse(AInputEvent_getDeviceId(event),position.x,position.y,viewport.width,viewport.height,buttons,
+            scroll?AMotionEvent_getAxisValue(event,AMOTION_EVENT_AXIS_HSCROLL,0):0,
+            scroll?AMotionEvent_getAxisValue(event,AMOTION_EVENT_AXIS_VSCROLL,0):0,
+            editorAction==AMOTION_EVENT_ACTION_MOVE || editorAction==AMOTION_EVENT_ACTION_HOVER_MOVE);
+      }
+      return 1;
     }
     if (consumed) {
       // Preserve editor capture through Down -> Move -> Up; runtime loses ownership.
@@ -1972,6 +2050,8 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 void android_main(android_app *app) {
   AndroidShell shell{};
   shell.app = app;
+  shell.editorSession.setAudioFocus(false);
+  shell.editorSession.setAudioOutput(ae::runtime::SceneAudio::Output::Device);
   shell.displayRotation = ae::platform::android::queryDisplayRotation(app->activity);
   shell.forceDescriptorFallback = ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.force_descriptor_fallback");
@@ -2557,6 +2637,7 @@ void android_main(android_app *app) {
             std::chrono::duration<double>(std::chrono::steady_clock::now()-shell.shellStartTime).count());
         updateEditorCodeCompiler(shell);
         shell.editorSession.update();
+        updateAndroidAudioFocus(shell,shell.editorSession.audioWantsFocus());
         // Painel Qualidade: "Aplicar" grava o arquivo do projeto e refaz o
         // renderer com a política nova — o mesmo caminho de quando a surface é
         // recriada, que já sabe devolver a cena ao renderer novo.
@@ -2953,30 +3034,37 @@ void android_main(android_app *app) {
         };
         if(auto link=session.consumeExternalLink();!link.empty()) ae::platform::android::requestExternalLink(std::move(link));
         bool importRequestTaken=false;
-        if(importSlotAvailable()&&session.consumeModelImportRequest()) {
+        if(importSlotAvailable()&&session.consumeWaveImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
-          shell.environmentImportPicker=false;shell.textureImportPicker=false;
+          shell.environmentImportPicker=false;shell.textureImportPicker=false;shell.waveImportPicker=true;
+          session.beginImportPreparation("WAV");
+          ae::platform::android::requestModelPick(false);
+        }
+        if(!importRequestTaken&&importSlotAvailable()&&session.consumeModelImportRequest()) {
+          importRequestTaken=true;
+          shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+          shell.environmentImportPicker=false;shell.textureImportPicker=false;shell.waveImportPicker=false;
           session.beginImportPreparation();
           ae::platform::android::requestModelPick();
         }
         if(!importRequestTaken&&importSlotAvailable()&&session.consumeFolderImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
-          shell.environmentImportPicker=false;shell.textureImportPicker=false;
+          shell.environmentImportPicker=false;shell.textureImportPicker=false;shell.waveImportPicker=false;
           session.beginImportPreparation();
           ae::platform::android::requestFolderPick();
         }
         if(!importRequestTaken&&importSlotAvailable()&&session.consumeEnvironmentImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
-          shell.environmentImportPicker=true;shell.textureImportPicker=false;session.beginImportPreparation();
+          shell.environmentImportPicker=true;shell.textureImportPicker=false;shell.waveImportPicker=false;session.beginImportPreparation();
           ae::platform::android::requestModelPick(false);
         }
         if(!importRequestTaken&&importSlotAvailable()&&session.consumeTextureImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
-          shell.environmentImportPicker=false;shell.textureImportPicker=true;session.beginImportPreparation();
+          shell.environmentImportPicker=false;shell.textureImportPicker=true;shell.waveImportPicker=false;session.beginImportPreparation();
           ae::platform::android::requestModelPick(false);
         }
         if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeTextureReimportPath();!path.empty()) {
@@ -3029,11 +3117,33 @@ void android_main(android_app *app) {
             else session.showImportFailure(picked.diagnostic);
           }
           else {
-            const char *fallbackName=shell.textureImportPicker?"textura.png":shell.environmentImportPicker?"ambiente.hdr":"modelo.glb";
+            const char *fallbackName=shell.waveImportPicker?"audio.wav":shell.textureImportPicker?"textura.png":shell.environmentImportPicker?"ambiente.hdr":"modelo.glb";
             std::string name=picked.displayName.empty()?fallbackName:picked.displayName;
             for(auto &character:name) if(character=='/' || character=='\\' || character==':' || static_cast<unsigned char>(character)<32) character='_';
             if(name=="." || name=="..") name=fallbackName;
-            if(picked.folder) {
+            if(shell.waveImportPicker) {
+              using Transaction=ae::editor::EditorImportTransaction;
+              ae::resources::AudioClip decoded;std::string error;
+              std::string extension=name.size()>=4?name.substr(name.size()-4):std::string{};
+              for(auto&c:extension)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+              if(extension!=".wav"||picked.bytes.size()>ae::resources::AudioClip::MaximumFileBytes||!ae::resources::decodeWaveClip(picked.bytes,decoded,error))
+                session.showImportFailure(error.empty()?"Escolha WAV válido com até 32 MiB.":error);
+              else {
+                name.replace(name.size()-4,4,".wav");
+                const auto root=Transaction::fromUtf8(shell.importPickerRoot);
+                std::string relative="Audio/"+name;std::filesystem::path destination;std::error_code ec;
+                bool free=false;
+                for(ae::u32 suffix=0;suffix<1000;++suffix){if(suffix)relative="Audio/"+name.substr(0,name.size()-4)+"-"+std::to_string(suffix)+".wav";if(!Transaction::safePath(root,relative,destination))break;if(!std::filesystem::exists(destination,ec)&&!ec){free=true;break;}if(ec)break;}
+                if(!free)session.showImportFailure("Não foi possível reservar um caminho WAV livre no projeto.");
+                else {
+                  std::filesystem::create_directories(destination.parent_path(),ec);
+                  bool copied=!ec&&copyNewWave(destination,picked.bytes);ae::resources::AssetGuid asset;
+                  if(!copied||!session.importWaveClip(relative,asset,error)) {
+                    session.showImportFailure(error.empty()?"Não foi possível copiar WAV para o projeto.":error);
+                  } else {session.closeImportPreview();session.setImportStatus("WAV importado · "+relative);}
+                }
+              }
+            } else if(picked.folder) {
               launchFolderImport(std::move(picked));
             } else if(shell.textureImportPicker) {
               launchTextureImport(std::move(picked),"Texturas/"+name,session.textureImportSettings());
@@ -3363,6 +3473,8 @@ void android_main(android_app *app) {
                 shell.thermalMonitor.state().pressure,effective);
             ready=shell.editorSession.extractPlayMap(authored,shell.gameInput.snapshot(),
                 !ae::platform::android::editorCodePanelVisible());
+            shell.gameInput.finishFrame();
+            if(ready) {timeSeconds=shell.editorSession.sceneTime();shell.waterTimeSeconds=timeSeconds;}
           }
           if(changed && shell.authoredWaterPlay.active()) shell.authoredWaterPlay.stop();
           if(ready && editorPlaying && !shell.independentWorkspace) {
@@ -3697,6 +3809,7 @@ void android_main(android_app *app) {
     collectRendererInitialization(shell,true);
   }
   shell.characterMotor.shutdown();
+  updateAndroidAudioFocus(shell,false);
   shell.performance.setActive(false, false);
   shell.thermalMonitor.shutdown();
   shell.performance.shutdown();

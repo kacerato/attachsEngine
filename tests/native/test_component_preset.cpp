@@ -9,8 +9,23 @@
 #include "scene/component_preset.h"
 #include "scene/light.h"
 #include "scene/mesh_renderer.h"
+#include "scene/animation.h"
 
 using namespace ae;
+AE_TEST(component_collection_reorder_rejects_mixed_preset_atomically) {
+  scene::Components components;
+  auto *animation=static_cast<scene::Animation*>(components.add(scene::Animation::descriptor));
+  animation->appendClip();const auto second=animation->appendClip();
+  auto source=*animation;source.moveClip(second,0);source.speed=2;
+  source.clips[0].asset=resources::assetGuidFromSeed("replacement-clip");
+  const scene::FieldAddress fields[]{{"speed",0,scene::FieldKind::Number},{"clips",0,scene::FieldKind::Resource}};
+  const auto outcome=scene::applyComponentFields(components,source,fields);
+  AE_EXPECT_TRUE(!outcome.ok() && outcome.applied==0 && outcome.rejected==2,"mixed operation rejects before scalar publication");
+  animation=static_cast<scene::Animation*>(components.edit(scene::Animation::descriptor));
+  AE_EXPECT_TRUE(animation->speed==1 && animation->clips[1].id==second && !animation->clips[0].asset.valid(),"identity and values unchanged");
+  const auto scalar=scene::applyComponentFields(components,source,{fields,1});
+  AE_EXPECT_TRUE(scalar.ok() && scalar.applied==1,"independent scalar still editable across collection changes");
+}
 
 namespace {
 const scene::FieldDelta *findDelta(const std::vector<scene::FieldDelta> &rows, std::string_view id, u32 slot = 0) {

@@ -1,0 +1,7 @@
+[1/7] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.obj
+[2/7] Linking CXX static library libaether_runtime.a
+[3/7] Building CXX object CMakeFiles/aether_spline_frame_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_paths.cpp.obj
+[4/7] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[5/7] Linking CXX static library libaether_editor.a
+[6/7] Linking CXX executable aether_ui_preview.exe
+[7/7] Linking CXX executable aether_spline_frame_family_tests.exe

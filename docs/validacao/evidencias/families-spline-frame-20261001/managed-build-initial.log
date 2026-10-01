@@ -1,0 +1,13 @@
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Debug\net8.0\Aether.Analyzers.dll
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Debug\net8.0\Aether.Core.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\bin\Debug\net8.0\Aether.Scene.dll
+  Aether.Flow -> C:\Users\donod\Downloads\atchengine\managed\Aether.Flow\bin\Debug\net8.0\Aether.Flow.dll
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Paths.cs(56,39): error CS1061: ‘Component’ não contém uma definição para "GetVector3" e não foi possível encontrar nenhum método de extensão "GetVector3" que aceite um primeiro argumento do tipo ‘Component’ (você está se esquecendo de usar uma diretiva ou uma referência de assembly?) [C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Astra.Scripting.csproj]
+
+FALHA da compilação.
+
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Paths.cs(56,39): error CS1061: ‘Component’ não contém uma definição para "GetVector3" e não foi possível encontrar nenhum método de extensão "GetVector3" que aceite um primeiro argumento do tipo ‘Component’ (você está se esquecendo de usar uma diretiva ou uma referência de assembly?) [C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Astra.Scripting.csproj]
+    0 Aviso(s)
+    1 Erro(s)
+
+Tempo Decorrido 00:00:07.85

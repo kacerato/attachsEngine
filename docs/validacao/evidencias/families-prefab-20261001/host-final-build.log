@@ -1,0 +1,5 @@
+[1/5] Building CXX object CMakeFiles/aether_prefab_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_prefab_structure.cpp.obj
+[2/5] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[3/5] Linking CXX static library libaether_editor.a
+[4/5] Linking CXX executable aether_ui_preview.exe
+[5/5] Linking CXX executable aether_prefab_family_tests.exe

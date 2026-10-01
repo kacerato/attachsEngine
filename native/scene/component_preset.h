@@ -206,6 +206,20 @@ inline ComponentApplyOutcome applyComponentFields(Components &components, const 
   auto candidate = current->clone();
   if (!candidate || &candidate->type() != &source.type()) { outcome.error = "Falha ao clonar componente"; return outcome; }
   const auto &type = source.type();
+  const bool portableSlots=sameComponentCollectionStructure(*current,source);
+  // Reject the whole selection before publishing any unrelated fields.
+  // Positional fields cannot silently cross reordered persistent collections.
+  for(const auto &field:fields) {
+    bool structural=field.kind==FieldKind::SlotNumber || field.kind==FieldKind::SlotEnum;
+    if(field.kind==FieldKind::Resource)
+      for(const auto &binding:type.resourceBindings)
+        if(binding.id==field.id && binding.elementId) structural=true;
+    if(structural && !portableSlots) {
+      outcome.rejected=static_cast<u32>(fields.size());
+      outcome.error="A identidade ou ordem da coleção mudou; aplicação por posição recusada";
+      return outcome;
+    }
+  }
   for (const auto &field : fields) {
     bool matched = false;
     switch (field.kind) {

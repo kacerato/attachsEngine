@@ -83,6 +83,7 @@ public:
     return false;
   }
   u64 nextClipId() const noexcept {return nextClipId_;}
+  bool reserveClipIdsUntil(u64 floor) {if(!floor)return false;nextClipId_=std::max(nextClipId_,floor);return valid();}
   void write(std::ostream &out) const override {
     const auto guid = [](const resources::AssetGuid &value) { return value.valid() ? value.text() : std::string("-"); };
     out << guid(clip) << ' ' << playAutomatically << ' ' << static_cast<u32>(wrapMode) << ' ' << speed << ' '
@@ -199,8 +200,14 @@ inline constexpr std::array<ComponentResourceBinding, 2> animationResources{{
      return slot<a.clips.size()?a.clips[slot].id:u64{0};
    }}
 }};
+inline const std::array<ComponentCollection,1> animationCollections{{
+  {"clips",[](const ComponentValue &v){return static_cast<u32>(static_cast<const Animation&>(v).clips.size());},
+   [](const ComponentValue &v,u32 slot){return static_cast<const Animation&>(v).clips[slot].id;},
+   [](const ComponentValue &v){return static_cast<const Animation&>(v).nextClipId();},
+   [](ComponentValue &v,u64 floor){return static_cast<Animation&>(v).reserveClipIdsUntil(floor);}}
+}};
 inline const ComponentType Animation::descriptor{
   "astra.animation", 4, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Animation>(); },
-  animationNumbers, animationBooleans, animationEnums, nullptr, false, {}, {}, animationResources
+  animationNumbers, animationBooleans, animationEnums, nullptr, false, {}, {}, animationResources, {}, {}, animationCollections
 };
 } // namespace ae::scene

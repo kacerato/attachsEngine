@@ -30,6 +30,30 @@ EditorEntityId named(EditorDocument &doc, EditorEntityId parent, const char *nam
 }
 }
 
+AE_TEST(runtime_world_triple_assignment_is_atomic_and_respects_identity) {
+  EditorDocument doc;
+  const auto target=named(doc,doc.root(),"Target");
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Camera,"Camera");
+  auto value=*doc.find(id);
+  auto *follow=static_cast<scene::CameraFollow *>(value.components.add(scene::CameraFollow::descriptor));
+  follow->target=target;
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,value),"autoria válida");
+  GameWorld world;AE_EXPECT_TRUE(world.load(doc),"mundo real");
+  const auto handle=world.findComponent(world.handle(id),"astra.camera.follow");
+  const float invalid[3]{9,std::numeric_limits<float>::quiet_NaN(),0};
+  AE_EXPECT_TRUE(world.setTriple(handle,"offset",invalid)==WorldStatus::Rejected,"recusa todos os canais");
+  const auto *unchanged=static_cast<const scene::CameraFollow *>(world.readComponent(handle));
+  AE_EXPECT_TRUE(unchanged->offset[0]==0 && unchanged->offset[1]==2 && unchanged->offset[2]==-5,"nenhum eixo parcial");
+  const float tuple[3]{9,3,-2};
+  AE_EXPECT_TRUE(world.setTriple(handle,"offset",tuple)==WorldStatus::Ok,"atribuição única");
+  const auto *changed=static_cast<const scene::CameraFollow *>(world.readComponent(handle));
+  AE_EXPECT_TRUE(changed->offset[0]==9 && changed->offset[1]==3 && changed->offset[2]==-2,"três canais publicados");
+  AE_EXPECT_TRUE(world.setTriple(handle,"unknown",tuple)==WorldStatus::InvalidArgument,"id desconhecido recusado");
+  AE_EXPECT_TRUE(world.destroyObject(world.handle(id))==WorldStatus::Ok,"expira identidade");
+  AE_EXPECT_TRUE(world.setTriple(handle,"offset",tuple)==WorldStatus::StaleHandle,"handle vencido recusado");
+  AE_EXPECT_EQ(static_cast<const scene::CameraFollow *>(doc.find(id)->components.find(scene::CameraFollow::descriptor))->offset[0],0.f,"autoria preservada");
+}
+
 AE_TEST(runtime_world_loads_scene_and_keeps_authoring_document_untouched) {
   EditorDocument doc;
   const auto child = named(doc, doc.root(), "Filho");

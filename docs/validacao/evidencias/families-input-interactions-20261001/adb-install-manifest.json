@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-01",
+  "device_model": "25053PC47G",
+  "device_transport": "wireless ADB, transport_id 1",
+  "package": "dev.aether.editor",
+  "version_code": 4,
+  "version_name": "0.2.0-editor-ui",
+  "local_apk": "android/app/build/outputs/apk/debug/app-debug.apk",
+  "local_apk_sha256": "62a247c1579f1be9ec2389a09f73512ed8dea2d49be9afd50a077156ac29181b",
+  "installed_base_apk_sha256": "62a247c1579f1be9ec2389a09f73512ed8dea2d49be9afd50a077156ac29181b",
+  "installed_bytes_match": true,
+  "install_result": "Success",
+  "install_mode": "adb install -r",
+  "device_reported_last_update": "2026-10-01 14:33:40",
+  "evidence_scope": "Installation and installed APK hash verification only; no app launch or runtime acceptance in this turn."
+}

@@ -12,6 +12,7 @@
 #include "runtime/scene_components.h"
 #include "physics/jolt_bridge.h"
 #include "physics/character_motor.h"
+#include "runtime/physics_field_sample.h"
 
 #include <memory>
 #include <string>
@@ -48,7 +49,7 @@ struct QueryHit {
   bool isSensor = false;
 };
 
-enum class QueryShapeKind : u32 { Box = 0, Sphere = 1, Capsule = 2 };
+enum class QueryShapeKind : u32 { Box = 0, Sphere = 1, Capsule = 2, Cylinder = 3 };
 struct QueryShapeDesc {
   QueryShapeKind kind = QueryShapeKind::Sphere;
   float halfExtent[3]{.5f, .5f, .5f};
@@ -113,6 +114,8 @@ public:
               QueryHit *out, u32 capacity) const;
   bool applyBodyForce(ObjectId id, const float *value, u32 kind);
   bool getBodyVelocity(ObjectId id, float *out) const;
+  WorldStatus bodyCommand(const GameWorld &,ObjectHandle,u64,u32,AetherVec3,AetherVec3,AetherBodyStateV1 &);
+  WorldStatus fieldQuery(const GameWorld &,ObjectHandle,u64,u32,const float *,u32,PhysicsFieldSample &) const;
   bool setBodyVelocity(ObjectId id, const float *velocity);
   bool moveKinematic(ObjectId id, const float *pose);
   void stop();
@@ -121,7 +124,7 @@ public:
   // novo a partir do grafo atual (pose publicada, valores novos). Corpos móveis
   // continuam com a velocidade linear e angular que tinham, exceto quando a
   // própria velocidade inicial autorada mudou — aí vale o valor pedido. O
-  // personagem recomeça parado na pose atual.
+  // personagem preserva movimento se instância, cápsula e pose não mudaram.
   bool rebuild(GameWorld &world, const CollisionGeometrySource *geometry);
   bool setCharacterMove(ObjectId id, float right, float forward, float yaw);
   // Novo quadro de scripts: descarta comando anterior. Um comando emitido em
@@ -129,7 +132,8 @@ public:
   // substituí-lo antes do subpasso corrente.
   void beginScriptInputFrame();
   bool setCharacterScriptMove(ObjectId id,float right,float forward,float yaw);
-  bool jumpCharacter(ObjectId id);
+  bool jumpCharacter(ObjectId id,const GameWorld *world=nullptr);
+  WorldStatus characterState(const GameWorld &world,ObjectId id,physics::CharacterMotor::RuntimeState &out) const;
   // Solta corpo, personagem e mapeamento de um objeto removido no ponto seguro.
   // Juntas ligadas a ele deixam de existir junto com o corpo no Jolt.
   void releaseObject(ObjectId id);
@@ -142,6 +146,11 @@ public:
   ObjectId objectForBody(AetherBodyHandle body) const;
 
 private:
+  bool applyPhysicsFields(GameWorld &,float);
+  std::vector<std::pair<ObjectId,u64>> fieldCandidates_;
+  std::vector<PhysicsFieldFrame> fieldFrames_;
+  u64 fieldRevision_=0;
+  bool applyContinuousForces(GameWorld &world);
   bool synchronizePoses(GameWorld &world);
   struct Binding {
     ObjectId id;
@@ -157,12 +166,15 @@ private:
   };
   QueryHit describeHit(AetherBodyHandle body, u32 subShapeId) const;
   AetherPhysicsWorld *world_ = nullptr;
+  u32 ownerWorldId_=0;
   std::vector<Binding> bindings_;
   std::unordered_map<AetherBodyHandle, ObjectId> objects_;
   std::vector<AetherTriggerEvent> events_;
   std::vector<AetherContactEventV1> contacts_;
   struct CharacterBinding {
     ObjectId id;
+    u64 instance=0;
+    float shapeFingerprint[4]{};
     std::unique_ptr<physics::CharacterMotor> motor;
     float world[16];
     float eyeHeight;

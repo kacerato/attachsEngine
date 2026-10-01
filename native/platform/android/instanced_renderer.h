@@ -570,6 +570,7 @@ private:
   rhi::VulkanBuffer materialUvTransformBuffer_{};
   std::vector<u32> authoredUvTransformEntries_;
   bool uvTransformOverflowReported_ = false;
+  bool lightmapUnsupportedReported_ = false;
   bool writeAuthoredUvTransforms();
   float environmentAdjustment_[4]{1,1,1,0};
 

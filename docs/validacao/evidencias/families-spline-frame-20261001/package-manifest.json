@@ -1,0 +1,55 @@
+{
+  "abi": 35,
+  "path_payload": 2,
+  "native_scenarios": 13,
+  "managed_transport_scenarios": 1,
+  "apk_sha256": "d0a1dc525946f46ee596d0361831fbb810bc94bffa818d2209b41856fcb8c55f",
+  "apk_bytes": 254330969,
+  "packaged": [
+    {
+      "path": "assets/dotnet/Astra.Scripting.dll",
+      "sha256": "99296491082f3b407cb6d240edfa60eb0fd7669b374a15d4daadcec251af1564",
+      "matches_generated": true
+    },
+    {
+      "path": "assets/dotnet/Aether.Rendering.dll",
+      "sha256": "cbc1d83aad8d971ac5cfd22833cfa4281b762ae68bcbb9f92fbb658b5c31aae0",
+      "matches_generated": true
+    },
+    {
+      "path": "assets/ui/astra-ui-icons.aeui",
+      "sha256": "65aa16b47254e70b7f8ee0f4ee3353ea42e9dc0f324dd0582e0ab4f89b330034",
+      "matches_generated": true
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_android.so",
+      "sha256": "d0272744a354e68db7edb70e483dd8816edbcd2779e7c1bd4937ef067fca5759",
+      "bytes": 33349488
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_transform.so",
+      "sha256": "917c2c72379be29a7d12644c00b423dcf96422fa4f5c07fd3220bb416d4ca5c9",
+      "bytes": 7088
+    }
+  ],
+  "source_sha256": {
+    "native/resources/curve3d.h": "45e7d12ad2996c3bc9ac71c7117f54e77b159eeacb32061829b2a29a6c11df1c",
+    "native/resources/curve3d_transform.h": "ad65acc2a20f6feae101a2001023b6d99a2061f02563a30856c1f37fa2993505",
+    "native/scene/path.h": "9df3ede522813663fb9e464e484d9a7a1e459c159d1ff2422f8728875927b849",
+    "native/runtime/scene_paths.cpp": "df1f83bb3619d8d3000f3a6aeda2919533394b152045ab05db9ed5cd6ccf142a",
+    "native/runtime/game_world_paths.cpp": "79f50f2ad4e619f0527cab0c8531f062e70dfd54b5104e5d47d86c407f22e174",
+    "native/runtime/script_bridge.cpp": "31d6a16b94ace6a2f1a5731e1e1258fcf5011c6121e009ff9489ede652684141",
+    "native/scene/script_runtime.h": "8a92ced223a6a2f28a48b0224c3d14e8036cb6d72ce681f4fc5418b553c46065",
+    "native/editor/editor_component_visuals.h": "eee59a6259de70d70ff46359c36769e0674f5b3aad15febc46668e7aa3929558",
+    "native/editor/editor_path.cpp": "790d3af0888c407e2a4245a1de8ece0d5dca351b49aa140c8b2a39f8439759ed",
+    "native/editor/editor_screen.cpp": "b6a01b19a233d5305aa65feba4c2e489b3379cc0b3a849e72c45fa76c0a9f473",
+    "managed/Astra.Scripting/Paths.cs": "30afe0bdc0020a07a3d4e4d35c99d1cb81ff04ae83b3007b0f08626942f11e42",
+    "managed/Astra.Scripting/Runtime/NativeBehaviorRuntime.cs": "76ce9c0d6bf86a36750846d6a874d32b212609916d41eabd692cbcd47999e9e1",
+    "managed/Astra.Scripting/Generated/Components.g.cs": "0416ce6fd04f4cf44d5f2635bb6ec9051390488b0194d74c785b1cbc0ff59a50"
+  },
+  "ui_sha256": "fbff4cae77820829c0adaf6919eab735610c99fe4b5632d8b3faf8688f2f9317",
+  "icon_svg_sha256": "71bf989494a6fdfec4cdbd60421c10332781d04c34411aac2be094cd85693f74",
+  "atlas_entries": 252,
+  "ui": "host executable 853x394; final layout reviewed; pointer/keyboard/history verified separately",
+  "physical_device": "not installed or executed for this revision"
+}

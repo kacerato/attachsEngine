@@ -1,0 +1,22 @@
+{
+  "abi": 29,
+  "scene": 16,
+  "prefab": 3,
+  "timer": 4,
+  "tween": 2,
+  "schemas": 34,
+  "csharpFacades": 33,
+  "recipes": 56,
+  "icons": 228,
+  "apkBytes": 264838455,
+  "apkSha256": "2357e6f3eb6b79c7d269e1f7b0f77cdef48a4c87437e3f63e701412b58362b37",
+  "sdkSha256": "fa79f37b061b8f08d829a00d0959ac6e3d7f7d94db83fd24b2abcfe50008d02b",
+  "atlasSha256": "ad0df98c509e0909db1823f12e5df1215feb1b62da480410ba5895a663e80835",
+  "assetsMatch": true,
+  "hostTweens": "10/10",
+  "managedAstra": "54/54; eleven fixtures",
+  "deviceTweenControlPass": false,
+  "install": "Performing Streamed Install\nSuccess\n",
+  "secureKeyguardShowing": true,
+  "fixturePushed": "/sdcard/Android/data/dev.aether.editor/files/Projetos/TweenControls-20261001"
+}

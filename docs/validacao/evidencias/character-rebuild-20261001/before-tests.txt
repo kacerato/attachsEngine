@@ -1,0 +1,8 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_runtime_physics_access.cpp:83: unrelated rebuild cannot erase falling velocity
+[FALHOU] character_rebuild_preserves_falling_velocity_but_resets_explicit_relocation
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_runtime_physics_access.cpp:93: accepted movement and pending jump survive unrelated rebuild with refreshed support
+[FALHOU] character_rebuild_preserves_script_intention_pending_jump_and_support_contacts
+CHARACTER_REBUILD_FALL: before=9.200 after=8.400 displacement=0.800
+CHARACTER_REBUILD_INTENT: dx=0.000 dy=0.000
+
+0/2 testes passaram

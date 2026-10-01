@@ -1,0 +1,4 @@
+[ok] Character_motor_falls_to_ground_and_stops_at_static_wall
+[ok] Character_motor_borrows_scene_world_and_collides_with_kinematic_bodies
+
+2/2 testes passaram

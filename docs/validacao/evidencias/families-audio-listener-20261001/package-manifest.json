@@ -1,0 +1,42 @@
+{
+  "abi": 34,
+  "native_scenarios": 4,
+  "apk_sha256": "c2c2d59bc9a440c033c0175a4cf60c334ee1c6918cf881a7724c85b425d309cf",
+  "apk_bytes": 265955506,
+  "packaged": [
+    {
+      "path": "assets/dotnet/Astra.Scripting.dll",
+      "sha256": "4c18c8148d84cd80d90133b6b106dc7e3df1af4469f29e63285206fb2a71e5ad",
+      "matches_generated": true
+    },
+    {
+      "path": "assets/dotnet/Aether.Rendering.dll",
+      "sha256": "5a1df03030ab45cac6d5d295ff447139f8a8750ea180e7882a403cf8ae50697e",
+      "matches_generated": true
+    },
+    {
+      "path": "assets/ui/astra-ui-icons.aeui",
+      "sha256": "97c144cae7ed4725005119a11e5d1f1759aef2b5f21550edb60457403390c439",
+      "matches_generated": true
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_android.so",
+      "sha256": "8052ff2525f6510212d0e8277f133ed7f94765f47845f2a7db790b781b9295c0",
+      "bytes": 33331368
+    },
+    {
+      "path": "lib/arm64-v8a/libaether_transform.so",
+      "sha256": "917c2c72379be29a7d12644c00b423dcf96422fa4f5c07fd3220bb416d4ca5c9",
+      "bytes": 7088
+    }
+  ],
+  "source_sha256": {
+    "native/scene/audio.h": "928a925518ba4e44b6e3cf95fcc0cd0edab816c352cde83b417d1aa98fe37dd7",
+    "native/runtime/scene_audio.cpp": "823aea9463a1fc26584c4ed467ad8e804de599c72ca9c6799a4d2d143b4909cc"
+  },
+  "ui_sha256": {
+    "listener-final.png": "ca652c44b4c688d7f541510c6bbc09df80740856d73206fcbf5289d29d914818"
+  },
+  "ui": "host executable, 853x394, software raster; layout judged separately from input/runtime tests",
+  "physical_device": "not installed or executed for this revision"
+}
