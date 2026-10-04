@@ -1,9 +1,5 @@
 #pragma once
 #include "scene/audio.h"
 namespace ae::scene {
-inline constexpr std::array<ComponentSchema,3> audioSchemas{{
- {.type=&AudioSource::descriptor,.name="Audio Source",.description="Clipe de projeto com reprodução e espaço acústico",.family=ComponentFamily::Audio,.structuralInPlay=PlayMutability::SafePoint,.consumer="runtime/scene_audio.cpp → miniaudio engine/device",.subfamily="Reprodução",.icon="audio/source",.searchTerms="AudioSource AudioStreamPlayer AudioStreamPlayer3D som WAV",.reference="https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioSource.html",.apiName="AudioSource"},
- {.type=&AudioListener::descriptor,.name="Audio Listener",.description="Pose e volume de escuta escolhidos por prioridade",.family=ComponentFamily::Audio,.structuralInPlay=PlayMutability::SafePoint,.consumer="runtime/scene_audio.cpp → miniaudio listener",.subfamily="Escuta",.icon="audio/listener",.searchTerms="AudioListener AudioListener3D escuta",.reference="https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioListener.html",.apiName="AudioListener"},
- {.type=&AudioBus::descriptor,.name="Audio Bus",.description="Roteamento de ganho, mute e solo até Master",.family=ComponentFamily::Audio,.structuralInPlay=PlayMutability::SafePoint,.consumer="runtime/scene_audio.cpp → voice gain routing",.subfamily="Mixer",.icon="audio/bus",.searchTerms="AudioMixerGroup AudioServer bus mixer",.reference="https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html",.apiName="AudioBus"}
-}};
+#include "scene/generated/audio_schemas.inc"
 }

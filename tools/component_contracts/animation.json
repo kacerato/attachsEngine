@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "family": "animation",
+  "table": "animationSchemas",
+  "entries": [
+    {
+      "type": "Animation",
+      "name": "Animação",
+      "description": "Clipes tocados e misturados no Play",
+      "icon": "assets/animation",
+      "searchTerms": "Animation AnimationPlayer Clip",
+      "apiName": "Animation"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Animation"
+    },
+    "structuralInPlay": {
+      "cpp": "PlayMutability::SafePoint"
+    },
+    "consumer": "runtime/scene_animation.cpp → pose local dos nós da instância",
+    "capability": "animation.clip",
+    "invalidates": {
+      "cpp": "Invalidate::Transform"
+    },
+    "subfamily": "Clipes",
+    "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-Animation.html"
+  }
+}

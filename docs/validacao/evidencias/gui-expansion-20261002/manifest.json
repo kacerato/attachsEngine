@@ -1,0 +1,348 @@
+{
+  "format": "ATTACHS-GUI-EXPANSION-EVIDENCE-1",
+  "recordedAt": "2026-10-02T19:45:13.8612682-03:00",
+  "repository": {
+    "remote": "https://github.com/kacerato/attachsEngine.git",
+    "branch": "codex/gameplay-runtime",
+    "baseHead": "97ecf56f17fe39e7d2fd527719b7fbce2528cd18",
+    "workspace": "C:\\Users\\donod\\Downloads\\atchengine",
+    "changes": "local, uncommitted; existing unrelated changes retained"
+  },
+  "contracts": {
+    "document": "AEUI 2, reads AEUI 1",
+    "scriptAbi": 39,
+    "authorableTypes": 10,
+    "activeCanvases": 1,
+    "imgui": "1.91.9b-docking / 4806a1924ff6181180bf5e4b8b79ab4394118875"
+  },
+  "host": {
+    "nativePassed": 45,
+    "nativeGuiScenarios": 9,
+    "nativeSharedUiScenarios": 36,
+    "managedGuiPassed": 3,
+    "managedAudioPassed": 1,
+    "testBinarySha256": "979AF6DBDB65B2233CC06490E0664774A5EC45C955DDECB84CC443BB8E5D3D30",
+    "shaderValidation": "compiled and SPIR-V validated"
+  },
+  "android": {
+    "model": "25053PC47G",
+    "package": "dev.aether.editor",
+    "project": "GuiExpansion-20261002-v2",
+    "capturePixels": [
+      2772,
+      1280
+    ],
+    "apk": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "sha256": "B6A918C145913CFB65DD4D0EBF7AB41C9AC04448AD1CA014B584FC9083E97977",
+    "installedAtDeviceLocal": "2026-10-02 19:40:14",
+    "finalProbeLogging": "removed before final build",
+    "finalAcceptance": [
+      "world-space rendering and ray click: Pronto",
+      "world slider gesture: Volume 90%",
+      "Cube depth occlusion blocks click",
+      "Cube.SetActive(false) removes occlusion; previous click did not fire; new click reaches C#",
+      "standard GuiExpansion.cs restored and compiled; left in editor"
+    ],
+    "earlierSameAbiAcceptance": [
+      "Contain to Stretch inspector edit",
+      "save and force-stop/reopen preserves image setting",
+      "C# Play isolation restores Contain",
+      "Grid columns 3 to 2 recompose nested VBox",
+      "world to screen action"
+    ]
+  },
+  "limits": [
+    "one active canvas",
+    "single-line text measurement",
+    "no pixel-exact transparent/deformed scene picking",
+    "no node/image maximum-scale thermal measurement",
+    "no full-engine or Unity parity claim"
+  ],
+  "sources": [
+    {
+      "path": "native/CMakeLists.txt",
+      "sha256": "2E6694DAFF48FF810C8724A42D882FDEEE6E465F70B1169FA293940181BCFB71"
+    },
+    {
+      "path": "native/ui/gui_document.h",
+      "sha256": "EBD387C40FC533E2F0504A7784DCB1104B85E11ACD85B76B2AA32F7016B1B6D6"
+    },
+    {
+      "path": "native/ui/gui_document.cpp",
+      "sha256": "CD5201ECE26B978DA6939FC16917512534FBC7A2E6D8357260B647444165CDB6"
+    },
+    {
+      "path": "native/ui/gui_images.h",
+      "sha256": "C0C5FB9A23027AC617610288C2DF6816DD2DA14F743DE0D0F32ECC02188CCDC8"
+    },
+    {
+      "path": "native/ui/gui_images.cpp",
+      "sha256": "6D9DBFF1DFF76A625D03F366C54F247E55DA8D4B7C8A6A3E3581291A71B0ACA5"
+    },
+    {
+      "path": "native/ui/gui_world.h",
+      "sha256": "B05B23696D96920236CF87EA7FEE05EAEF64A30B6D4B46F52088ABE834EA9FEB"
+    },
+    {
+      "path": "native/ui/gui_world.cpp",
+      "sha256": "E49E4C2D7BA6D3D8F412CD0412227C880CC318B42653F5ECA74959620F062356"
+    },
+    {
+      "path": "native/ui/gui_workbench.h",
+      "sha256": "5BE29CCBEE10036CD5F308753D710E23EC835DDD34D0919B001AC35EC149D447"
+    },
+    {
+      "path": "native/ui/gui_workbench.cpp",
+      "sha256": "ED3609CD9507A880F82A3F304DDC0D8AD19D1ACB448647D65E99429A407B0DBA"
+    },
+    {
+      "path": "native/ui/ui_draw_list.h",
+      "sha256": "E2F0BA1E91CBF87EF29845DBFBF958CDA0B11B859E7194819A00AD73FF6C3949"
+    },
+    {
+      "path": "native/ui/ui_draw_list.cpp",
+      "sha256": "EA3C4864F7E97B30DC2C5B4E964F33CFCDA589FD21A70954C57D888E683F0AA1"
+    },
+    {
+      "path": "native/ui/ui_instance_builder.h",
+      "sha256": "BC0E73273B12DBB1184A1619F83AF2BCFFB81BF026DECA22C4A12B7F9BD002D6"
+    },
+    {
+      "path": "native/ui/ui_instance_builder.cpp",
+      "sha256": "5602ACED0669C212C751D2B5525F6E6ADA1642E91AB2DE4E430A2D4858E4B1B4"
+    },
+    {
+      "path": "native/editor/editor_session.h",
+      "sha256": "82980230464E60BB29C6E8F270C27E0A7CE5C8774C7030313AFE9FC8D2813442"
+    },
+    {
+      "path": "native/editor/editor_session.cpp",
+      "sha256": "DDAA9C948616ACC805C5335D7381933493111E045077BFBE64BFC661949563F3"
+    },
+    {
+      "path": "native/editor/editor_play_scene.h",
+      "sha256": "B63EAB65B6716BCBC996279E38B369CD6F32643E3D608B6B2F2A3C1F9C5C134D"
+    },
+    {
+      "path": "native/scene/script_runtime.h",
+      "sha256": "A97418FD68D8EF2C3197E6C9DF78C8DCB8BCD6EFD3204332DC391259553B0D59"
+    },
+    {
+      "path": "native/runtime/script_bridge.cpp",
+      "sha256": "1F69DF178AA76F7B08F7329F6CB01E10BB5D24C12B92CF6B8323ED1315138649"
+    },
+    {
+      "path": "native/platform/android/instanced_renderer.h",
+      "sha256": "92675C29026669D46C31674D7D9FC777DC725B466A0981D6F37D356241CB31FD"
+    },
+    {
+      "path": "native/platform/android/instanced_renderer.cpp",
+      "sha256": "391623AE7E326E80930EDAFE3BF301F8BE471C14429D4C54A286E6996F66EDC9"
+    },
+    {
+      "path": "native/rhi/ui_renderer.h",
+      "sha256": "ED760F6D55A89A80070F008E5ABE1ADADB95BD4FFFE599F0F81CF7F8279FC73A"
+    },
+    {
+      "path": "native/rhi/ui_renderer.cpp",
+      "sha256": "460CCE50E1D37A8A59A5BA4C1A4A0C28C17637142373A111D55E1522E0EEEFDC"
+    },
+    {
+      "path": "native/rhi/shaders/astra_ui.vert",
+      "sha256": "6E3B2021C80D035A04F64F0DA33D56699E4AF5023EE292C023E81C48DABD4ED3"
+    },
+    {
+      "path": "native/rhi/shaders/astra_ui.frag",
+      "sha256": "527E7484ED4C5DBA065F6A257C1A09AD7B451DCFEB85E3CF7423CFFC064BEB91"
+    },
+    {
+      "path": "native/rhi/shaders/astra_ui_spirv.h",
+      "sha256": "7E8180AD7BEEE72A99BAFD7D21CC7386F76CC05FDBDFAFC58A58034108842BC6"
+    },
+    {
+      "path": "managed/Astra.Scripting/Gui.cs",
+      "sha256": "024B13D5DD03587A0B131CA6A0F1EAED13872A242C0F27BD795167848AC7F0E1"
+    },
+    {
+      "path": "managed/Astra.Scripting/Runtime/NativeBehaviorRuntime.cs",
+      "sha256": "1F1E9C731F223A19044911C6BAC7D230540049DACF579234F46E7A3DA869E848"
+    },
+    {
+      "path": "tests/Aether.Tests/GuiTests.cs",
+      "sha256": "FF0966EDE812E7008A1981E704DE9B45A82003EA162E44B6D159BB5ED30C15EB"
+    },
+    {
+      "path": "tests/native/test_gui.cpp",
+      "sha256": "B217A1800A6378B2288E1A7280F13C28E7A7147E8CE72F1B1EC96367ADC5813D"
+    },
+    {
+      "path": "tests/native/test_gui_expansion.cpp",
+      "sha256": "709EB1B8DE349A8E3345466C0E412016F30CEBAD3C80CFDD52B88EAA43D6C70E"
+    },
+    {
+      "path": "tests/native/gui_preview_main.cpp",
+      "sha256": "71853F26E753300FD67745F4713CA12818DE28D1697B3418F113177C6502913A"
+    },
+    {
+      "path": "examples/ui/layouts.aeui",
+      "sha256": "22C2DF127381FE4EEA7ABDEA0B17A13799055D14A89DE76CD77B38B5F7CF0E3C"
+    },
+    {
+      "path": "examples/ui/GuiExpansion.cs",
+      "sha256": "4ECBB4F22CC91376765039188BF852AC728621EAD879450D60C6A5680F03DDE8"
+    },
+    {
+      "path": "examples/ui/images/banner.png",
+      "sha256": "1E5460D2A22E6774FC90B4BD1B954659E39E284BC55C3D0CAD1DD869AA4EA85E"
+    },
+    {
+      "path": "assets/astra-visual/icons/named/ui/auto-layout.png",
+      "sha256": "3A0CA1820F3C83FCC32D57DD357EE20FE34C287F48FFD1A476321EDE6DC76208"
+    },
+    {
+      "path": "assets/astra-visual/icons/named/ui/world-canvas.png",
+      "sha256": "3E2A3269D207D519FD71F99B00F49045473FB695398DF26FE5CC48A10887A635"
+    },
+    {
+      "path": "assets/astra-visual/ui/astra-ui-icons.aeui",
+      "sha256": "714833E22300CBCA4B0B8F4189234C355138DBA849B66E63DE8A4779C306AEDC"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "android-build.log",
+      "bytes": 2974,
+      "sha256": "C5A7B1BA64D88D14CDAF8000A38F616BA010D19DE98AEA35AF6E3ED55DD24CB0"
+    },
+    {
+      "path": "audio-managed.log",
+      "bytes": 176,
+      "sha256": "EABF840921B2233B19FED0C9627A70B45D8CE73F97E9F0A6A90DEDD84F5B86C1"
+    },
+    {
+      "path": "author.png",
+      "bytes": 131320,
+      "sha256": "9655F3485152EEEBB468226D38952CEDB1CD187EFE0EE1353A79680C766AB8FB"
+    },
+    {
+      "path": "compact.png",
+      "bytes": 59410,
+      "sha256": "EEC943983760A862EBDBCD3400DA2459A6CC6EFBA163E0EDE1D6DE818B861328"
+    },
+    {
+      "path": "device-author.png",
+      "bytes": 355676,
+      "sha256": "3CA0F508AC3AAA87C1649816180ACD70B61AEFFD2EA7B46189F172ABB6B4489E"
+    },
+    {
+      "path": "device-final-author.png",
+      "bytes": 436396,
+      "sha256": "CD3AD21840B3BAB2F152F8A1025B2A977964351D0E8F8C3476313B9CAFA95973"
+    },
+    {
+      "path": "device-final-click.png",
+      "bytes": 209184,
+      "sha256": "28AA94B8CD44D2DC490C37F88CB612EE771105A6A2EA69729279F5DC5466054D"
+    },
+    {
+      "path": "device-final-occluded.png",
+      "bytes": 206878,
+      "sha256": "56E4E3BED4957B3722F1C1F189CD61579853ECB3502ABD71AA38EAAD519B3B55"
+    },
+    {
+      "path": "device-final-unblocked.png",
+      "bytes": 209025,
+      "sha256": "28255DF9F85B95037DD9293A246513DFF362174E031FE1F0225F2AD4671D50AB"
+    },
+    {
+      "path": "device-final-world-interaction.png",
+      "bytes": 211016,
+      "sha256": "E5FFE4E72CFBEAD7BBA28008BEE848F962BEF491C2638C220785E0D8B1C87F9F"
+    },
+    {
+      "path": "device-image-properties.png",
+      "bytes": 451862,
+      "sha256": "5C8A7BDBC9DA0AACA3290C57AB079FBE54F9A067665537798E9E68B39EFD618E"
+    },
+    {
+      "path": "device-image-stretch-save.png",
+      "bytes": 525255,
+      "sha256": "BA511837DD2152D79A652EA68DC864D71930C7CB683E0D02E6DCE67AAC1611C4"
+    },
+    {
+      "path": "device-play-reflow.png",
+      "bytes": 364917,
+      "sha256": "912E5908CFA120CD9DB3A2814AE24F65BAA33E384655D8F3A090045A47045E99"
+    },
+    {
+      "path": "device-play-screen.png",
+      "bytes": 366229,
+      "sha256": "A68B1AB73B6AFD1AB77C86B6286C768DC47B2F01BFAD89179D74F7F1BBA51B29"
+    },
+    {
+      "path": "device-play-world-interaction.png",
+      "bytes": 211133,
+      "sha256": "450BCFB27FD4876C8C8440F1A0EFB8B33257CE3AC888B247B0B004245E6B51FC"
+    },
+    {
+      "path": "device-play-world.png",
+      "bytes": 209351,
+      "sha256": "08041D3334CBA9730335973308CA4B8339D6C7A3968812D0B27B2E89739D0FD4"
+    },
+    {
+      "path": "device-reopened.png",
+      "bytes": 436396,
+      "sha256": "CD3AD21840B3BAB2F152F8A1025B2A977964351D0E8F8C3476313B9CAFA95973"
+    },
+    {
+      "path": "device-runtime-final.log",
+      "bytes": 60702,
+      "sha256": "FFF179A9A3FF97A49BF749B0DE49229F0846C4DBB51390172DF05382DB5F4B36"
+    },
+    {
+      "path": "device-saved.aeui",
+      "bytes": 2055,
+      "sha256": "A0C2022E6EEBCB94ABC4450623930776686EB82CE612596AE0027B488B3DC375"
+    },
+    {
+      "path": "device-schema.json",
+      "bytes": 88,
+      "sha256": "2EB6D5CAB59188D4FDA5B9D518021161A887F1FB19D93417A5AAD8EBE243F32F"
+    },
+    {
+      "path": "device-world-to-screen.png",
+      "bytes": 369052,
+      "sha256": "93BA06A3832763D07888BFF8DC24270D312FD76400FCC5D24BA7669EBD1C9A8D"
+    },
+    {
+      "path": "GuiOcclusion.cs",
+      "bytes": 1075,
+      "sha256": "32EBC7C30E497189092134447030BD541E19DF92BF1CC8D577146F43E8C816CD"
+    },
+    {
+      "path": "managed-build.log",
+      "bytes": 915,
+      "sha256": "ACEE77E9E2C4A5FE498845106E0EE359910464E49394B624858535ADD99B0BC2"
+    },
+    {
+      "path": "managed-tests.log",
+      "bytes": 291,
+      "sha256": "B8FD7B868C121A6303B9A13FCA1CF377BC9EFCEBDB2FD29941EE096097D830BB"
+    },
+    {
+      "path": "native-build.log",
+      "bytes": 403,
+      "sha256": "E7FCBFD6F93CADB513D441033B541A565FD51568621C8C95029E1B710C5316FA"
+    },
+    {
+      "path": "native-tests.log",
+      "bytes": 2580,
+      "sha256": "F6033BD12B56890E45B8D03ED8AC59CA0B809A81855A8AF246A78E599FC8EA1A"
+    },
+    {
+      "path": "shaders.log",
+      "bytes": 102,
+      "sha256": "6DD73553C8C9D996028168A27F95AD8D4D186267DFAD159DE78D263851C77106"
+    }
+  ]
+}

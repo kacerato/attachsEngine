@@ -75,7 +75,9 @@ public:
   // 0 onde sempre esteve preserva todos os consumidores de malha única.
   u32 mesh=0;
   resources::AssetGuid asset{};
-  bool enabled=true;
+
+#include "scene/generated/mesh_renderer_MeshRenderer_fields0.inc"
+
   MaterialParameters material;
   resources::AssetGuid materialAsset{};
   // R4: texturas trocadas nesta instância, por binding, do slot 0.
@@ -308,9 +310,7 @@ inline constexpr std::array<ComponentNumber,11> meshRendererNumbers{{
   AE_MESH_NUMBER("emission_strength","Potência de emissão",emissionStrength,0,10000,.1f)
 #undef AE_MESH_NUMBER
 }};
-inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
-  {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
-}};
+#include "scene/generated/mesh_renderer_meshRendererBooleans.inc"
 // Os recursos que este componente endereça, declarados como as demais
 // propriedades. O grafo de impacto, o reparo de referência quebrada, o preset
 // e o relatório de dependências passam a ler ESTA lista em vez de repetir, cada

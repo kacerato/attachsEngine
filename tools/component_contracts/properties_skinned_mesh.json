@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "source": "native/scene/skinned_mesh.h",
+  "tables": [
+    {
+      "name": "skinnedMeshBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "skinned_motion_vectors",
+          "label": "Vetor de movimento da deformação",
+          "member": "skinnedMotionVectors"
+        }
+      ],
+      "defaults": {
+        "type": "SkinnedMesh",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Skin",
+          "unit": "",
+          "help": "A reprojeção temporal usa a pose anterior dos ossos e dos blend shapes, não só a do objeto",
+          "visible": {
+            "cpp": "nullptr"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.motion_vectors",
+          "consumer": "platform/android/instanced_motion.inl → passe de movimento com pose anterior"
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "skinned_mesh_SkinnedMesh_fields1",
+      "type": "SkinnedMesh",
+      "properties": [
+        "skinnedMeshBooleans/skinned_motion_vectors"
+      ]
+    }
+  ]
+}

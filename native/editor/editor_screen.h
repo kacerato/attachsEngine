@@ -63,6 +63,7 @@ struct EditorPresetField {
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
 // no próprio identificador.
 enum class EditorWidget : u32 {
+  TabGui = 0xDB000000u,
   CreationCategoryBase=0x63000000,
   CreationRowBase=0x64000000,
   PrefabOverrideRevertBase=0xD0000000u,
@@ -627,7 +628,7 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 // Seis contextos fixos. Configuração de projeto (camadas, entrada, água) é UMA
 // workspace com seções; um tipo de componente ou uma lista de ajustes nunca
 // vira workspace própria — ver docs/planos/EXPANSAO-OBJETOS-COMPONENTES-API.
-enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code };
+enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code, Gui };
 enum class EditorProjectSection : u8 { Layers, Input, Water, Tags };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };

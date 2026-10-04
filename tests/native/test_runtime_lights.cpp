@@ -204,6 +204,14 @@ AE_TEST(punctual_light_budget_is_deterministic_and_reports_what_did_not_fit) {
   const auto *chosen = renderer::selectDirectionalLight(suns);
   AE_EXPECT_TRUE(chosen && chosen->objectId == 11, "a direcional mais forte é a escolhida");
 
+  // An enabled authored sun at zero is an explicit black interior, not permission
+  // to restore the default daylight source. It still contributes no light slots.
+  suns.resize(1);
+  suns[0].intensity = 0;
+  AE_EXPECT_TRUE(renderer::selectDirectionalLight(suns) == &suns[0],
+                 "direcional autoral zero suprime o sol padrão");
+  AE_EXPECT_TRUE(!renderer::lightContributes(suns[0]), "zero não passa a contribuir energia");
+
   // Intensidade zero é luz apagada pelo valor, não candidata: não pode roubar
   // vaga de uma que ilumina.
   std::vector<renderer::SceneLight> mixed;

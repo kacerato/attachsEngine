@@ -1,0 +1,96 @@
+{
+  "format": 1,
+  "source": "native/scene/animation.h",
+  "tables": [
+    {
+      "name": "animationNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "speed",
+          "label": "Velocidade",
+          "member": "speed"
+        }
+      ],
+      "defaults": {
+        "type": "Animation",
+        "min": {
+          "cpp": "-10"
+        },
+        "max": {
+          "cpp": "10"
+        },
+        "step": {
+          "cpp": ".05f"
+        },
+        "default": {
+          "cpp": "1"
+        },
+        "presentation": {
+          "group": "Reprodução",
+          "unit": "x",
+          "help": "Velocidade inicial de cada clipe (AnimationState.speed); negativo toca de trás para frente"
+        }
+      }
+    },
+    {
+      "name": "animationBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativa",
+          "member": "enabled",
+          "presentation": {
+            "help": "Desligar suspende tempo e avaliação; religar retoma os estados"
+          }
+        },
+        {
+          "id": "play_automatically",
+          "label": "Tocar ao iniciar",
+          "member": "playAutomatically",
+          "presentation": {
+            "help": "Play Automatically: o clipe padrão começa a tocar quando o Play inicia"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Animation",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Reprodução",
+          "unit": ""
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "animation_Animation_fields1",
+      "type": "Animation",
+      "properties": [
+        "animationBooleans/enabled"
+      ]
+    },
+    {
+      "name": "animation_Animation_fields2",
+      "type": "Animation",
+      "properties": [
+        "animationBooleans/play_automatically"
+      ]
+    },
+    {
+      "name": "animation_Animation_fields3",
+      "type": "Animation",
+      "properties": [
+        "animationNumbers/speed"
+      ]
+    }
+  ]
+}

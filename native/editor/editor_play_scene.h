@@ -130,6 +130,7 @@ public:
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);
+    scripts_.setGui(&gui_);
     // Audio outlives scripts; early Awake queries have no diagnostic until reconciliation.
     std::array<runtime::PrimitiveResource,6> primitives{};
     for(u32 i=0;i<resources.assetCount();++i) {
@@ -171,6 +172,8 @@ public:
     scripts_.setTweens(nullptr);
     scripts_.setNumberTweens(nullptr);
     scripts_.setAudio(nullptr);
+    scripts_.setGui(nullptr);
+    gui_.load(ui::GuiDocument{});
     paths_.reset();
     animator_.reset();
     timers_.reset();physicsConnections_.reset();
@@ -196,7 +199,7 @@ public:
     auto *components=world_.poseGraph().editComponents(id);
     return components && components->replaceInstance(after.instanceId(),after);
   }
-  void pause(bool value) {if(active_){paused_=value;if(value)input_.setGameplayFocus(false);updateAudioPause();}}
+  void pause(bool value) {if(active_){paused_=value;if(value){input_.setGameplayFocus(false);gui_.cancelPointers();}updateAudioPause();}}
   void setAudioFocus(bool focused){audioFocused_=focused;updateAudioPause();}
   bool audioWantsFocus()const{return active_&&!paused_&&!applicationPaused_&&applicationFocused_&&audio_.wantsDevice();}
   bool step() {return active_ && paused_ && advanceFrame(1.0/60.0,true);}
@@ -229,6 +232,8 @@ public:
   const runtime::ScenePaths &paths() const noexcept {return paths_;}
   runtime::ScenePaths &paths() noexcept {return paths_;}
   runtime::SceneAudio &audio() noexcept {return audio_;}
+  void configureGui(const ui::GuiDocument &document) { if(!active_) gui_.load(document); }
+  ui::GuiRuntime &gui() noexcept { return gui_; }
   const runtime::SceneAudio &audio() const noexcept {return audio_;}
   const runtime::ScenePhysics &physics() const noexcept {return physics_;}
   runtime::ScenePhysics2D &physics2D() noexcept {return physics2D_;}
@@ -245,6 +250,7 @@ private:
     if(!world_.beginFrame(elapsed,editorStep)) return false;
     const double frameElapsed=world_.clock().delta();
     const float scriptElapsed=world_.clock().delta();
+    gui_.advance(frameElapsed);
     return runScripts(scriptElapsed) && advanceTimers(frameElapsed,std::min(elapsed,.25)) && animate(scriptElapsed) &&
            reconcilePhysics() && physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
            scripts_.lateUpdate(scriptElapsed) && drainCommands() && reconcilePhysics() &&
@@ -310,6 +316,7 @@ private:
   runtime::ScenePhysics physics_;
   runtime::ScenePhysics2D physics2D_;
   runtime::SceneAudio audio_;
+  ui::GuiRuntime gui_;
   runtime::ScriptBridge scripts_;
   runtime::InputService input_;
   std::vector<runtime::ObjectId> destroyed_;

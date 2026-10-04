@@ -1,0 +1,236 @@
+{
+  "format": 1,
+  "source": "native/scene/character.h",
+  "tables": [
+    {
+      "name": "characterNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "radius",
+          "label": "Raio m",
+          "member": "radius",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Cápsula",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": ".45f"
+          }
+        },
+        {
+          "id": "half_height",
+          "label": "Meia altura do cilindro m",
+          "member": "halfHeight",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Cápsula",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": ".55f"
+          }
+        },
+        {
+          "id": "eye_height",
+          "label": "Altura dos olhos m",
+          "member": "eyeHeight",
+          "min": {
+            "cpp": ".02f"
+          },
+          "max": {
+            "cpp": "20"
+          },
+          "presentation": {
+            "group": "Cápsula",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": "1.65f"
+          }
+        },
+        {
+          "id": "speed",
+          "label": "Velocidade m/s",
+          "member": "speed",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s"
+          },
+          "default": {
+            "cpp": "8"
+          }
+        },
+        {
+          "id": "slope_degrees",
+          "label": "Inclinação máxima graus",
+          "member": "slopeDegrees",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "89"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "°"
+          },
+          "default": {
+            "cpp": "45"
+          }
+        },
+        {
+          "id": "jump_speed",
+          "label": "Velocidade do salto m/s",
+          "member": "jumpSpeed",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s"
+          },
+          "default": {
+            "cpp": "5"
+          }
+        },
+        {
+          "id": "step_height",
+          "label": "Altura do degrau",
+          "member": "stepHeight",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Chão",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": ".4f"
+          }
+        },
+        {
+          "id": "floor_snap_length",
+          "label": "Aderência ao chão",
+          "member": "floorSnapLength",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Chão",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "gravity",
+          "label": "Gravidade",
+          "member": "gravity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s²"
+          },
+          "default": {
+            "cpp": "9.81f"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Character",
+        "step": {
+          "cpp": ".1f"
+        }
+      }
+    },
+    {
+      "name": "characterBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "inherit_platform_horizontal",
+          "label": "Impulso ao sair",
+          "member": "inheritPlatformHorizontal"
+        }
+      ],
+      "defaults": {
+        "type": "Character",
+        "default": {
+          "cpp": "false"
+        },
+        "presentation": {
+          "group": "Chão",
+          "unit": "",
+          "help": "Conserva X/Z da superfície no ar; desligar remove apenas esse impulso, sem recriar a cápsula."
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "character_Character_fields0",
+      "type": "Character",
+      "properties": [
+        "characterNumbers/radius",
+        "characterNumbers/half_height",
+        "characterNumbers/eye_height",
+        "characterNumbers/speed",
+        "characterNumbers/slope_degrees",
+        "characterNumbers/jump_speed"
+      ]
+    },
+    {
+      "name": "character_Character_fields1",
+      "type": "Character",
+      "properties": [
+        "characterNumbers/step_height",
+        "characterNumbers/floor_snap_length",
+        "characterNumbers/gravity"
+      ]
+    },
+    {
+      "name": "character_Character_fields2",
+      "type": "Character",
+      "properties": [
+        "characterBooleans/inherit_platform_horizontal"
+      ]
+    }
+  ]
+}

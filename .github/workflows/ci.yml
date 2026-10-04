@@ -52,6 +52,23 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 jobs:
+  component-contracts:
+    name: generated component contracts
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python tools/generate-component-contracts.py --check --report build/component-codegen/generation.json
+      - run: python -m unittest discover -s tests/tools -p test_component_codegen.py -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-codegen-coverage
+          path: build/component-codegen/generation.json
+          if-no-files-found: error
+
   # --- unit: C# sem dependência nativa. Sempre roda, em qualquer runner. -------------
   unit:
     name: unit (C#, sem nativo)

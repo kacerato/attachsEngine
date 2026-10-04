@@ -1,0 +1,1414 @@
+{
+  "format": 1,
+  "source": "native/scene/physics2d_components.h",
+  "tables": [
+    {
+      "name": "Body2DNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "mass",
+          "label": "Massa",
+          "member": "mass",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Corpo",
+            "unit": "kg",
+            "visible": {
+              "cpp": "body2dDynamic"
+            }
+          },
+          "default": {
+            "cpp": "1.f"
+          }
+        },
+        {
+          "id": "gravity_scale",
+          "label": "Escala gravidade",
+          "member": "gravityScale",
+          "min": {
+            "cpp": "-100"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Corpo",
+            "unit": "",
+            "visible": {
+              "cpp": "body2dDynamic"
+            }
+          },
+          "default": {
+            "cpp": "1.f"
+          }
+        },
+        {
+          "id": "velocity_x",
+          "label": "Velocidade X",
+          "member": "velocityX",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Movimento",
+            "unit": "m/s",
+            "visible": {
+              "cpp": "body2dMoves"
+            }
+          },
+          "default": {
+            "cpp": "0.f"
+          }
+        },
+        {
+          "id": "velocity_y",
+          "label": "Velocidade Y",
+          "member": "velocityY",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Movimento",
+            "unit": "m/s",
+            "visible": {
+              "cpp": "body2dMoves"
+            }
+          },
+          "default": {
+            "cpp": "0.f"
+          }
+        },
+        {
+          "id": "angular_velocity_degrees",
+          "label": "Velocidade angular",
+          "member": "angularVelocityDegrees",
+          "min": {
+            "cpp": "-36000"
+          },
+          "max": {
+            "cpp": "36000"
+          },
+          "step": {
+            "cpp": "1.f"
+          },
+          "presentation": {
+            "group": "Movimento",
+            "unit": "graus/s",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Body2D&>(v);return c.motion==Body2DMotion::Kinematic||(c.motion==Body2DMotion::Dynamic&&!c.fixedRotation);}"
+            }
+          },
+          "default": {
+            "cpp": "0.f"
+          }
+        },
+        {
+          "id": "linear_damping",
+          "label": "Arrasto linear",
+          "member": "linearDamping",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Movimento",
+            "unit": "",
+            "visible": {
+              "cpp": "body2dDynamic"
+            }
+          },
+          "default": {
+            "cpp": "0.05f"
+          }
+        },
+        {
+          "id": "angular_damping",
+          "label": "Arrasto angular",
+          "member": "angularDamping",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Movimento",
+            "unit": "",
+            "visible": {
+              "cpp": "body2dDynamic"
+            }
+          },
+          "default": {
+            "cpp": "0.05f"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Body2D",
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "Body2DBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "fixed_rotation",
+          "label": "Fixar rotação",
+          "member": "fixedRotation",
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "allow_sleep",
+          "label": "Permitir repouso",
+          "member": "allowSleep",
+          "default": {
+            "cpp": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Body2D",
+        "presentation": {
+          "group": "Movimento",
+          "unit": "",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "body2dDynamic"
+          }
+        }
+      }
+    },
+    {
+      "name": "Collider2DNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "half_x",
+          "label": "Meia largura",
+          "member": "halfX",
+          "min": {
+            "cpp": "0.005f"
+          },
+          "max": {
+            "cpp": "500"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Collider2D&>(v).shape==Collider2DShape::Box;}"
+            }
+          },
+          "default": {
+            "cpp": "0.5f"
+          }
+        },
+        {
+          "id": "half_y",
+          "label": "Meia altura",
+          "member": "halfY",
+          "min": {
+            "cpp": "0.005f"
+          },
+          "max": {
+            "cpp": "500"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Collider2D&>(v).shape==Collider2DShape::Box;}"
+            }
+          },
+          "default": {
+            "cpp": "0.5f"
+          }
+        },
+        {
+          "id": "radius",
+          "label": "Raio",
+          "member": "radius",
+          "min": {
+            "cpp": "0.005f"
+          },
+          "max": {
+            "cpp": "500"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Collider2D&>(v).shape!=Collider2DShape::Box;}"
+            }
+          },
+          "default": {
+            "cpp": "0.5f"
+          }
+        },
+        {
+          "id": "capsule_half_length",
+          "label": "Meia distância centros",
+          "member": "capsuleHalfLength",
+          "min": {
+            "cpp": "0.005f"
+          },
+          "max": {
+            "cpp": "500"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Collider2D&>(v).shape==Collider2DShape::Capsule;}"
+            }
+          },
+          "default": {
+            "cpp": "0.5f"
+          }
+        },
+        {
+          "id": "offset_x",
+          "label": "Centro X",
+          "member": "offsetX",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": "0.f"
+          }
+        },
+        {
+          "id": "offset_y",
+          "label": "Centro Y",
+          "member": "offsetY",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": "0.f"
+          }
+        },
+        {
+          "id": "friction",
+          "label": "Atrito",
+          "member": "friction",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Contato",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return !static_cast<const Collider2D&>(v).sensor;}"
+            }
+          },
+          "default": {
+            "cpp": "0.5f"
+          }
+        },
+        {
+          "id": "restitution",
+          "label": "Restituição",
+          "member": "restitution",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Contato",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return !static_cast<const Collider2D&>(v).sensor;}"
+            }
+          },
+          "default": {
+            "cpp": "0.f"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Collider2D"
+      }
+    },
+    {
+      "name": "Collider2DBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "sensor",
+          "label": "Sensor sem resposta",
+          "member": "sensor"
+        }
+      ],
+      "defaults": {
+        "type": "Collider2D",
+        "default": {
+          "cpp": "false"
+        },
+        "presentation": {
+          "group": "Contato"
+        }
+      }
+    },
+    {
+      "name": "force2DNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "force_x",
+          "label": "Força X",
+          "member": "forceX",
+          "presentation": {
+            "unit": "N"
+          }
+        },
+        {
+          "id": "force_y",
+          "label": "Força Y",
+          "member": "forceY",
+          "presentation": {
+            "unit": "N"
+          }
+        },
+        {
+          "id": "relative_force_x",
+          "label": "Força local X",
+          "member": "relativeForceX",
+          "presentation": {
+            "unit": "N"
+          }
+        },
+        {
+          "id": "relative_force_y",
+          "label": "Força local Y",
+          "member": "relativeForceY",
+          "presentation": {
+            "unit": "N"
+          }
+        },
+        {
+          "id": "torque",
+          "label": "Torque",
+          "member": "torque",
+          "presentation": {
+            "unit": "N m"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "ConstantForce2D",
+        "min": {
+          "cpp": "-1000000"
+        },
+        "max": {
+          "cpp": "1000000"
+        },
+        "step": {
+          "cpp": ".1f"
+        },
+        "default": {
+          "cpp": "0"
+        },
+        "presentation": {
+          "group": "Propulsão"
+        }
+      }
+    },
+    {
+      "name": "force2DBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "ConstantForce2D",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Propulsão"
+        }
+      }
+    },
+    {
+      "name": "joint2DBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "presentation": {
+            "group": "Conexão",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "world_anchor",
+          "label": "Conectar ao mundo",
+          "member": "worldAnchor",
+          "presentation": {
+            "group": "Conexão",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "collide_connected",
+          "label": "Colidir conectados",
+          "member": "collideConnected",
+          "presentation": {
+            "group": "Conexão",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "limit_enabled",
+          "label": "Limites",
+          "member": "limitEnabled",
+          "presentation": {
+            "group": "Ajustes",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Revolute||c.kind==Joint2DKind::Prismatic||(c.kind==Joint2DKind::Distance&&c.springEnabled);}"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "motor_enabled",
+          "label": "Motor",
+          "member": "motorEnabled",
+          "presentation": {
+            "group": "Ajustes",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Revolute||c.kind==Joint2DKind::Prismatic||(c.kind==Joint2DKind::Distance&&c.springEnabled);}"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "spring_enabled",
+          "label": "Mola",
+          "member": "springEnabled",
+          "presentation": {
+            "group": "Ajustes",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind!=Joint2DKind::Weld;}"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Joint2D",
+        "presentation": {
+          "unit": "",
+          "help": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "joint2DNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "anchor_a_x",
+          "label": "Anchor A X",
+          "member": "anchorAX",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Anchors",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "anchor_a_y",
+          "label": "Anchor A Y",
+          "member": "anchorAY",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Anchors",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "anchor_b_x",
+          "label": "Anchor B X",
+          "member": "anchorBX",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Anchors",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "anchor_b_y",
+          "label": "Anchor B Y",
+          "member": "anchorBY",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Anchors",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return true;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "reference_angle_degrees",
+          "label": "Ângulo referência",
+          "member": "referenceAngleDegrees",
+          "min": {
+            "cpp": "-180"
+          },
+          "max": {
+            "cpp": "180"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "graus",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind!=Joint2DKind::Distance;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "axis_angle_degrees",
+          "label": "Eixo local A",
+          "member": "axisAngleDegrees",
+          "min": {
+            "cpp": "-180"
+          },
+          "max": {
+            "cpp": "180"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "graus",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Prismatic;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "length",
+          "label": "Comprimento repouso",
+          "member": "length",
+          "min": {
+            "cpp": ".005f"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Distance;}"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "min_length",
+          "label": "Comprimento mínimo",
+          "member": "minLength",
+          "min": {
+            "cpp": ".005f"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Distance&&c.springEnabled&&c.limitEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": ".005f"
+          }
+        },
+        {
+          "id": "max_length",
+          "label": "Comprimento máximo",
+          "member": "maxLength",
+          "min": {
+            "cpp": ".005f"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Distance&&c.springEnabled&&c.limitEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "100"
+          }
+        },
+        {
+          "id": "lower_limit",
+          "label": "Limite inferior",
+          "member": "lowerLimit",
+          "min": {
+            "cpp": "-178"
+          },
+          "max": {
+            "cpp": "178"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return (c.kind==Joint2DKind::Revolute||c.kind==Joint2DKind::Prismatic)&&c.limitEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "-1"
+          }
+        },
+        {
+          "id": "upper_limit",
+          "label": "Limite superior",
+          "member": "upperLimit",
+          "min": {
+            "cpp": "-178"
+          },
+          "max": {
+            "cpp": "178"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return (c.kind==Joint2DKind::Revolute||c.kind==Joint2DKind::Prismatic)&&c.limitEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "motor_speed",
+          "label": "Velocidade motor",
+          "member": "motorSpeed",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "m/s",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return (c.kind==Joint2DKind::Prismatic||(c.kind==Joint2DKind::Distance&&c.springEnabled))&&c.motorEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "motor_angular_speed_degrees",
+          "label": "Motor angular",
+          "member": "motorAngularSpeedDegrees",
+          "min": {
+            "cpp": "-36000"
+          },
+          "max": {
+            "cpp": "36000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "graus/s",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Revolute&&c.motorEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "90"
+          }
+        },
+        {
+          "id": "max_motor_force",
+          "label": "Força máxima motor",
+          "member": "maxMotorForce",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "N",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return (c.kind==Joint2DKind::Prismatic||(c.kind==Joint2DKind::Distance&&c.springEnabled))&&c.motorEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "100"
+          }
+        },
+        {
+          "id": "max_motor_torque",
+          "label": "Torque máximo motor",
+          "member": "maxMotorTorque",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "N m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Revolute&&c.motorEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "100"
+          }
+        },
+        {
+          "id": "spring_hertz",
+          "label": "Frequência mola",
+          "member": "springHertz",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind!=Joint2DKind::Weld&&c.springEnabled;}"
+            }
+          },
+          "default": {
+            "cpp": "5"
+          }
+        },
+        {
+          "id": "spring_damping",
+          "label": "Razão amortecimento",
+          "member": "springDamping",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind!=Joint2DKind::Weld&&c.springEnabled&&c.springHertz>0;}"
+            }
+          },
+          "default": {
+            "cpp": ".7f"
+          }
+        },
+        {
+          "id": "spring_target_translation",
+          "label": "Translação alvo",
+          "member": "springTargetTranslation",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "m",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Prismatic&&c.springEnabled&&c.springHertz>0;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "spring_target_angle_degrees",
+          "label": "Ângulo alvo",
+          "member": "springTargetAngleDegrees",
+          "min": {
+            "cpp": "-180"
+          },
+          "max": {
+            "cpp": "180"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "graus",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Revolute&&c.springEnabled&&c.springHertz>0;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "linear_hertz",
+          "label": "Mola linear weld",
+          "member": "linearHertz",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Weld;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "angular_hertz",
+          "label": "Mola angular weld",
+          "member": "angularHertz",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Weld;}"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "linear_damping_ratio",
+          "label": "Amortecimento linear weld",
+          "member": "linearDampingRatio",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Weld&&c.linearHertz>0;}"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "angular_damping_ratio",
+          "label": "Amortecimento angular weld",
+          "member": "angularDampingRatio",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Joint2D&>(v);(void)c;return c.kind==Joint2DKind::Weld&&c.angularHertz>0;}"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Joint2D",
+        "step": {
+          "cpp": ".1f"
+        },
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "Body2DEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "motion",
+          "label": "Movimento",
+          "type": "Body2D",
+          "member": "motion",
+          "options": "Body2DOptions",
+          "presentation": {
+            "group": "Corpo"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Collider2DEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "shape",
+          "label": "Forma",
+          "type": "Collider2D",
+          "member": "shape",
+          "options": "Collider2DOptions",
+          "presentation": {
+            "group": "Forma"
+          }
+        }
+      ]
+    },
+    {
+      "name": "joint2DEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "kind",
+          "label": "Modo",
+          "type": "Joint2D",
+          "member": "kind",
+          "options": "joint2DOptions",
+          "presentation": {
+            "group": "Conexão"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "physics2d_components_Body2D_fields0",
+      "type": "Body2D",
+      "properties": [
+        "Body2DBooleans/fixed_rotation",
+        "Body2DBooleans/allow_sleep"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields1",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/mass"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields2",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/gravity_scale"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields3",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/velocity_x"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields4",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/velocity_y"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields5",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/angular_velocity_degrees"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields6",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/linear_damping"
+      ]
+    },
+    {
+      "name": "physics2d_components_Body2D_fields7",
+      "type": "Body2D",
+      "properties": [
+        "Body2DNumbers/angular_damping"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields0",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DBooleans/sensor"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields1",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/half_x"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields2",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/half_y"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields3",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/radius"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields4",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/capsule_half_length"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields5",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/offset_x"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields6",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/offset_y"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields7",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/friction"
+      ]
+    },
+    {
+      "name": "physics2d_components_Collider2D_fields8",
+      "type": "Collider2D",
+      "properties": [
+        "Collider2DNumbers/restitution"
+      ]
+    },
+    {
+      "name": "physics2d_components_ConstantForce2D_fields0",
+      "type": "ConstantForce2D",
+      "properties": [
+        "force2DBooleans/enabled"
+      ]
+    },
+    {
+      "name": "physics2d_components_ConstantForce2D_fields1",
+      "type": "ConstantForce2D",
+      "properties": [
+        "force2DNumbers/force_x",
+        "force2DNumbers/force_y",
+        "force2DNumbers/relative_force_x",
+        "force2DNumbers/relative_force_y",
+        "force2DNumbers/torque"
+      ]
+    },
+    {
+      "name": "physics2d_components_Joint2D_fields0",
+      "type": "Joint2D",
+      "properties": [
+        "joint2DBooleans/enabled",
+        "joint2DBooleans/world_anchor",
+        "joint2DBooleans/collide_connected",
+        "joint2DBooleans/limit_enabled",
+        "joint2DBooleans/motor_enabled",
+        "joint2DBooleans/spring_enabled"
+      ]
+    },
+    {
+      "name": "physics2d_components_Joint2D_fields1",
+      "type": "Joint2D",
+      "properties": [
+        "joint2DNumbers/anchor_a_x",
+        "joint2DNumbers/anchor_a_y",
+        "joint2DNumbers/anchor_b_x",
+        "joint2DNumbers/anchor_b_y",
+        "joint2DNumbers/reference_angle_degrees",
+        "joint2DNumbers/axis_angle_degrees"
+      ]
+    },
+    {
+      "name": "physics2d_components_Joint2D_fields2",
+      "type": "Joint2D",
+      "properties": [
+        "joint2DNumbers/length",
+        "joint2DNumbers/min_length",
+        "joint2DNumbers/max_length",
+        "joint2DNumbers/lower_limit",
+        "joint2DNumbers/upper_limit"
+      ]
+    },
+    {
+      "name": "physics2d_components_Joint2D_fields3",
+      "type": "Joint2D",
+      "properties": [
+        "joint2DNumbers/motor_speed",
+        "joint2DNumbers/motor_angular_speed_degrees",
+        "joint2DNumbers/max_motor_force",
+        "joint2DNumbers/max_motor_torque"
+      ]
+    },
+    {
+      "name": "physics2d_components_Joint2D_fields4",
+      "type": "Joint2D",
+      "properties": [
+        "joint2DNumbers/spring_hertz",
+        "joint2DNumbers/spring_damping",
+        "joint2DNumbers/spring_target_translation",
+        "joint2DNumbers/spring_target_angle_degrees"
+      ]
+    },
+    {
+      "name": "physics2d_components_Joint2D_fields5",
+      "type": "Joint2D",
+      "properties": [
+        "joint2DNumbers/linear_hertz",
+        "joint2DNumbers/angular_hertz",
+        "joint2DNumbers/linear_damping_ratio",
+        "joint2DNumbers/angular_damping_ratio"
+      ]
+    }
+  ]
+}

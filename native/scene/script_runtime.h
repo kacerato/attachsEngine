@@ -191,8 +191,45 @@ struct ScriptFieldState {u32 size=64,flags=0;float weight=0,acceleration[3]{},wi
 static_assert(sizeof(ScriptFieldState)==64);
 struct ScriptBodyState {u32 size=48,flags=0;float linear[3]{},angular[3]{},centerOfMass[3]{};u32 reserved=0;};
 static_assert(sizeof(ScriptBodyState)==48);
+struct ScriptGuiState {
+  u32 world=0,node=0,kind=0,visible=0,enabled=0;
+  float value=0,minimum=0,maximum=1;
+  u32 event=0; // 0 none, 1 click, 2 value changed
+};
+static_assert(sizeof(ScriptGuiState)==36);
+struct ScriptGuiProperties {
+  float anchors[4]{},offsets[4]{};
+  u32 background=0,foreground=0,accent=0,clipChildren=0;
+  float fontSize=18,radius=0;
+};
+static_assert(sizeof(ScriptGuiProperties)==56);
+
+struct ScriptGuiSizing {
+  float minimum[2]{},preferred[2]{},flexible[2]{},padding[4]{},spacing[2]{};
+  u32 alignment=0,columns=2,ignore=0,imageFit=0,imageTint=0xFFFFFFFF;
+};
+static_assert(sizeof(ScriptGuiSizing)==68);
+struct ScriptGuiCanvas {
+  u32 mode=0;float resolution[2]{},position[3]{},rotation[3]{},unitsPerPixel=0;u32 occlusion=0;
+};
+static_assert(sizeof(ScriptGuiCanvas)==44);
+struct ScriptGuiBehavior {
+  u32 clickable=0,action=0,target=0;float value=0;
+  u32 enabled=0,autoPlay=0,loop=0,pingPong=0,easing=1;
+  float duration=.3f,delay=0,from[4]{0,0,1,1},to[4]{0,0,1,1};
+};
+static_assert(sizeof(ScriptGuiBehavior)==76);
+struct ScriptGuiAction {u32 event=1,action=0,target=0;float value=0;};
+static_assert(sizeof(ScriptGuiAction)==16);
+struct ScriptGuiTransitions {
+  u32 enabled=0,easing=1;float duration=.12f;
+  float poses[12]{0,0,1,1,0,0,.94f,1,0,0,1,.45f};
+  u32 tints[3]{0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF};
+};
+static_assert(sizeof(ScriptGuiTransitions)==72);
+
 struct ScriptSceneAccess {
-  u32 version=36,size=sizeof(ScriptSceneAccess);
+  u32 version=41,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -354,8 +391,21 @@ struct ScriptSceneAccess {
   int (*objectLayer)(void *,u64,u32,u32,int)=nullptr;
   // v36: action state / runtime enabled override / restore / global group read/write.
   int (*inputActionCommand)(void *,const u8 *,int,u32,ScriptInputActionState *)=nullptr;
+  // v37: voice transport: Play=0, Pause=1, Stop=2, Seek=3, Resume=4.
+  int (*audioCommand)(void *,u64,u32,u32,u64,u32,double)=nullptr;
+  // v38: Find=0, Read=1, Text=2, Value=3, Visible=4, Enabled=5, Poll=6.
+  // Handles are (world,node); a previous Play session is always rejected.
+  int (*guiCommand)(void *,u32,u32,u32,const u8 *,int,float,ScriptGuiState *)=nullptr;
+  int (*guiProperties)(void *,u32,u32,u32,ScriptGuiProperties *)=nullptr; // 0 read, 1 write
+  int (*guiText)(void *,u32,u32,u32,u8 *,int)=nullptr; // 0 text, 1 name. Returns UTF8 length, -1 on error.
+  int (*guiSizing)(void *,u32,u32,u32,ScriptGuiSizing *)=nullptr;
+  int (*guiCanvas)(void *,u32,u32,ScriptGuiCanvas *)=nullptr;
+  int (*guiBehavior)(void *,u32,u32,u32,ScriptGuiBehavior *)=nullptr;
+  // op 0 count, 1 read, 2 append, 3 replace, 4 remove, 5 move to value.target.
+  int (*guiAction)(void *,u32,u32,u32,u32,ScriptGuiAction *)=nullptr;
+  int (*guiTransitions)(void *,u32,u32,u32,ScriptGuiTransitions *)=nullptr;
   bool available() const {
-    return version==36&&size>=sizeof(ScriptSceneAccess)&&exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
+    return version==41&&size>=sizeof(ScriptSceneAccess)&&exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
            getActive&&setActive&&createObject&&destroyObject&&setParent&&componentCount&&componentAt&&
            findComponent&&addComponent&&removeComponent&&getProperty&&setProperty&&
@@ -366,7 +416,7 @@ struct ScriptSceneAccess {
            animationCommand&&getAnimationState&&setAnimationState&&animationClipAt&&
            resourceElementId&&getResourceByElementId&&setResourceByElementId&&
             appendAnimationClip&&removeAnimationClip&&moveAnimationClip&&setParentWithPolicy&&
-            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter&&instantiate&&finishInstantiation&&createPrimitive&&instantiatePrefab&&instantiationAttachments&&setTriple&&body2DCommand&&query2D&&pathPointCommand&&pathRuntimeCommand&&audioSnapshot&&timeSnapshot&&setTimeScale&&groupMembership&&findGroup&&groupAt&&inputBindingCommand&&inputProfile&&inputCaptureCommand&&timerCommand&&tweenCommand&&numberTweenCreate&&numberTweenCommand&&characterSnapshot&&bodyCommand&&fieldQuery&&objectLayer&&inputActionCommand;
+            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter&&instantiate&&finishInstantiation&&createPrimitive&&instantiatePrefab&&instantiationAttachments&&setTriple&&body2DCommand&&query2D&&pathPointCommand&&pathRuntimeCommand&&audioSnapshot&&timeSnapshot&&setTimeScale&&groupMembership&&findGroup&&groupAt&&inputBindingCommand&&inputProfile&&inputCaptureCommand&&timerCommand&&tweenCommand&&numberTweenCreate&&numberTweenCommand&&characterSnapshot&&bodyCommand&&fieldQuery&&objectLayer&&inputActionCommand&&audioCommand&&guiCommand&&guiProperties&&guiText&&guiSizing&&guiCanvas&&guiBehavior&&guiAction&&guiTransitions;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
@@ -396,7 +446,16 @@ static_assert(offsetof(ScriptSceneAccess,bodyCommand)==offsetof(ScriptSceneAcces
 static_assert(offsetof(ScriptSceneAccess,fieldQuery)==offsetof(ScriptSceneAccess,bodyCommand)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,objectLayer)==offsetof(ScriptSceneAccess,fieldQuery)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,inputActionCommand)==offsetof(ScriptSceneAccess,objectLayer)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,inputActionCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,audioCommand)==offsetof(ScriptSceneAccess,inputActionCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiCommand)==offsetof(ScriptSceneAccess,audioCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiProperties)==offsetof(ScriptSceneAccess,guiCommand)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiText)==offsetof(ScriptSceneAccess,guiProperties)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiSizing)==offsetof(ScriptSceneAccess,guiText)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiCanvas)==offsetof(ScriptSceneAccess,guiSizing)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiBehavior)==offsetof(ScriptSceneAccess,guiCanvas)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiAction)==offsetof(ScriptSceneAccess,guiBehavior)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,guiTransitions)==offsetof(ScriptSceneAccess,guiAction)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,guiTransitions)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 // Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.

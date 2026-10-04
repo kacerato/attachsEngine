@@ -1,0 +1,1763 @@
+{
+  "format": 1,
+  "source": "native/scene/environment.h",
+  "tables": [
+    {
+      "name": "environmentTailNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "saturation",
+          "label": "Saturação",
+          "member": "values.saturation",
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "vignette_intensity",
+          "label": "Intensidade da vinheta",
+          "member": "values.vignetteIntensity",
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "visible": {
+              "cpp": "environmentUsesVignette"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "film_grain_intensity",
+          "label": "Intensidade do grão",
+          "member": "values.filmGrainIntensity",
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "visible": {
+              "cpp": "environmentUsesFilmGrain"
+            },
+            "capability": "render.post.film_grain"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "min": {
+          "cpp": "0"
+        },
+        "presentation": {
+          "group": "Pós",
+          "unit": "",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "consumer": "rhi/shaders/post_process_common.glsl",
+          "invalidates": {
+            "cpp": "Invalidate::Policy"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentAmbientOcclusionNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "ambient_occlusion_radius",
+          "label": "Raio",
+          "member": "values.ambientOcclusionRadius",
+          "min": {
+            "cpp": ".05f"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": "m"
+          }
+        },
+        {
+          "id": "ambient_occlusion_intensity",
+          "label": "Intensidade",
+          "member": "values.ambientOcclusionIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "4"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "ambient_occlusion_power",
+          "label": "Potência",
+          "member": "values.ambientOcclusionPower",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "4"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "ambient_occlusion_bias",
+          "label": "Viés",
+          "member": "values.ambientOcclusionBias",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".005f"
+          },
+          "presentation": {
+            "unit": "m"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Oclusão ambiente",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesAmbientOcclusion"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.post.ambient_occlusion",
+          "consumer": "rhi/shaders/post_process_common.glsl",
+          "invalidates": {
+            "cpp": "Invalidate::Policy"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentIndirectNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "indirect_diffuse",
+          "label": "Difuso indireto",
+          "member": "values.indirectDiffuse",
+          "presentation": {
+            "capability": "render.ambient.hemispheric",
+            "consumer": "rhi/shaders/dirt_road_shading.glsl"
+          }
+        },
+        {
+          "id": "indirect_specular",
+          "label": "Reflexo indireto",
+          "member": "values.indirectSpecular",
+          "presentation": {
+            "capability": "render.ambient.specular",
+            "consumer": "rhi/shaders/environment_lighting.glsl"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "min": {
+          "cpp": "0"
+        },
+        "max": {
+          "cpp": "4"
+        },
+        "step": {
+          "cpp": ".02f"
+        },
+        "presentation": {
+          "group": "Luz indireta",
+          "unit": "×",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "nullptr"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentVolumeNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "weight",
+          "label": "Peso",
+          "member": "weight",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "unit": "",
+            "visible": {
+              "cpp": "nullptr"
+            }
+          }
+        },
+        {
+          "id": "blend_distance",
+          "label": "Distância de mistura",
+          "member": "blendDistance",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentIsLocal"
+            }
+          }
+        },
+        {
+          "id": "box_size.x",
+          "label": "Tamanho X",
+          "member": "boxSize[0]",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentIsBox"
+            }
+          }
+        },
+        {
+          "id": "box_size.y",
+          "label": "Tamanho Y",
+          "member": "boxSize[1]",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentIsBox"
+            }
+          }
+        },
+        {
+          "id": "box_size.z",
+          "label": "Tamanho Z",
+          "member": "boxSize[2]",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentIsBox"
+            }
+          }
+        },
+        {
+          "id": "sphere_radius",
+          "label": "Raio",
+          "member": "sphereRadius",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentIsSphere"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Volume",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.environment.volumes",
+          "consumer": "renderer/scene_environment.cpp",
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentHdriNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "hdri_rotation_degrees",
+          "label": "Rotação HDRI",
+          "member": "values.hdriRotationDegrees",
+          "min": {
+            "cpp": "-360"
+          },
+          "max": {
+            "cpp": "360"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": "°"
+          }
+        },
+        {
+          "id": "hdri_exposure_ev",
+          "label": "Exposição HDRI",
+          "member": "values.hdriExposureEv",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "EV"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "HDRI",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesHdri"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.environment.atmosphere",
+          "consumer": "rhi/shaders/environment_lighting.glsl",
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentAutoExposureNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "auto_exposure_min_ev",
+          "label": "EV mínimo",
+          "member": "values.autoExposureMinEv",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "EV"
+          }
+        },
+        {
+          "id": "auto_exposure_max_ev",
+          "label": "EV máximo",
+          "member": "values.autoExposureMaxEv",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "EV"
+          }
+        },
+        {
+          "id": "auto_exposure_low_percent",
+          "label": "Corte baixo",
+          "member": "values.autoExposureLowPercent",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "auto_exposure_high_percent",
+          "label": "Corte alto",
+          "member": "values.autoExposureHighPercent",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "auto_exposure_target_grey",
+          "label": "Cinza alvo",
+          "member": "values.autoExposureTargetGrey",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "auto_exposure_speed_up",
+          "label": "Velocidade ao escurecer",
+          "member": "values.autoExposureSpeedUp",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "20"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "EV/s"
+          }
+        },
+        {
+          "id": "auto_exposure_speed_down",
+          "label": "Velocidade ao clarear",
+          "member": "values.autoExposureSpeedDown",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "20"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "EV/s"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Exposição",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesAutoExposure"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.post.auto_exposure",
+          "consumer": "platform/android/instanced_auto_exposure.inl",
+          "invalidates": {
+            "cpp": "Invalidate::Policy"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "values.active",
+          "presentation": {
+            "group": "Geral",
+            "help": "Participa da seleção por prioridade"
+          }
+        },
+        {
+          "id": "fog",
+          "label": "Neblina",
+          "member": "values.fog",
+          "presentation": {
+            "group": "Neblina",
+            "help": "Aplica neblina exponencial uniforme ou com decaimento por altura",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "post",
+          "label": "Pós-processamento",
+          "member": "values.post",
+          "presentation": {
+            "group": "Pós",
+            "help": "Ativa os overrides autorais desta cena",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.tonemap",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "auto_exposure",
+          "label": "Exposição automática",
+          "member": "values.autoExposure",
+          "presentation": {
+            "group": "Exposição",
+            "help": "Mede luminância HDR e adapta a exposição por câmera",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.auto_exposure",
+            "consumer": "platform/android/instanced_auto_exposure.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "auto_exposure_center_weighted",
+          "label": "Peso central",
+          "member": "values.autoExposureCenterWeighted",
+          "presentation": {
+            "group": "Exposição",
+            "help": "Prioriza o centro da imagem na medição",
+            "visible": {
+              "cpp": "environmentUsesAutoExposure"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.auto_exposure",
+            "consumer": "platform/android/instanced_auto_exposure.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "bloom",
+          "label": "Bloom",
+          "member": "values.bloom",
+          "presentation": {
+            "group": "Pós",
+            "help": "Espalha altas luzes antes do tonemap",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.bloom",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "vignette",
+          "label": "Vinheta",
+          "member": "values.vignette",
+          "presentation": {
+            "group": "Pós",
+            "help": "Escurece gradualmente as bordas",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.tonemap",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "film_grain",
+          "label": "Grão de filme",
+          "member": "values.filmGrain",
+          "presentation": {
+            "group": "Pós",
+            "help": "Adiciona grão sensível à luminância depois da resolução temporal",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.film_grain",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "ambient_occlusion",
+          "label": "Oclusão ambiente",
+          "member": "values.ambientOcclusion",
+          "presentation": {
+            "group": "Oclusão ambiente",
+            "help": "Escurece contatos e concavidades a partir da profundidade da câmera",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.ambient_occlusion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "override_sky",
+          "label": "Sobrescrever céu",
+          "member": "overrideSky",
+          "presentation": {
+            "group": "Volume",
+            "help": "Participa da mistura de céu e atmosfera",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_fog",
+          "label": "Sobrescrever neblina",
+          "member": "overrideFog",
+          "presentation": {
+            "group": "Volume",
+            "help": "Participa da mistura de neblina",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_post",
+          "label": "Sobrescrever pós",
+          "member": "overridePost",
+          "presentation": {
+            "group": "Volume",
+            "help": "Participa da mistura de exposição e pós",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_indirect",
+          "label": "Sobrescrever luz indireta",
+          "member": "overrideIndirect",
+          "presentation": {
+            "group": "Volume",
+            "help": "Participa da mistura de difuso e reflexo indiretos",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "physical_atmosphere_high_quality",
+          "label": "Alta qualidade",
+          "member": "values.physicalAtmosphereHighQuality",
+          "presentation": {
+            "group": "Atmosfera física",
+            "help": "Aumenta as amostras de vista e luz; custa mais GPU",
+            "visible": {
+              "cpp": "environmentUsesPhysicalAtmosphere"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.physical_atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "unit": ""
+        }
+      }
+    },
+    {
+      "name": "environmentNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "priority",
+          "label": "Prioridade",
+          "member": "values.priority",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Geral",
+            "unit": "",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "runtime/scene_environment.cpp → seleção",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sky_zenith.r",
+          "label": "Zênite R",
+          "member": "values.skyZenith[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sky_zenith.g",
+          "label": "Zênite G",
+          "member": "values.skyZenith[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sky_zenith.b",
+          "label": "Zênite B",
+          "member": "values.skyZenith[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sky_horizon.r",
+          "label": "Horizonte R",
+          "member": "values.skyHorizon[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sky_horizon.g",
+          "label": "Horizonte G",
+          "member": "values.skyHorizon[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sky_horizon.b",
+          "label": "Horizonte B",
+          "member": "values.skyHorizon[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "ground.r",
+          "label": "Chão R",
+          "member": "values.ground[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "ground.g",
+          "label": "Chão G",
+          "member": "values.ground[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "ground.b",
+          "label": "Chão B",
+          "member": "values.ground[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "atmosphere",
+          "label": "Força atmosférica",
+          "member": "values.atmosphere",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sun_disk_degrees",
+          "label": "Diâmetro do sol",
+          "member": "values.sunDiskDegrees",
+          "min": {
+            "cpp": ".05f"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "°",
+            "visible": {
+              "cpp": "environmentUsesProceduralSky"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "sun_disk_intensity",
+          "label": "Brilho do disco solar",
+          "member": "values.sunDiskIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesProceduralSky"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_color.r",
+          "label": "Neblina R",
+          "member": "values.fogColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_color.g",
+          "label": "Neblina G",
+          "member": "values.fogColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_color.b",
+          "label": "Neblina B",
+          "member": "values.fogColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_light_energy",
+          "label": "Energia da neblina",
+          "member": "values.fogLightEnergy",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "65504"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "×",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "platform/android/instanced_renderer.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_density",
+          "label": "Densidade",
+          "member": "values.fogDensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".001f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "1/m",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_start",
+          "label": "Início",
+          "member": "values.fogStart",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_base_height",
+          "label": "Altura base",
+          "member": "values.fogBaseHeight",
+          "min": {
+            "cpp": "-100000"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "fog_height_falloff",
+          "label": "Decaimento por altura",
+          "member": "values.fogHeightFalloff",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".001f"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "1/m",
+            "visible": {
+              "cpp": "environmentUsesFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "exposure_ev",
+          "label": "Compensação",
+          "member": "values.exposureEv",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Exposição",
+            "unit": "EV",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "bloom_threshold",
+          "label": "Limiar do bloom",
+          "member": "values.bloomThreshold",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "64"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Pós",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "bloom_intensity",
+          "label": "Intensidade do bloom",
+          "member": "values.bloomIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "group": "Pós",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "contrast",
+          "label": "Contraste",
+          "member": "values.contrast",
+          "min": {
+            "cpp": ".5f"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "group": "Pós",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "environmentPhysicalAtmosphereNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "physical_sky_intensity",
+          "label": "Intensidade",
+          "member": "values.physicalSkyIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": "×"
+          }
+        },
+        {
+          "id": "air_density",
+          "label": "Densidade do ar",
+          "member": "values.airDensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "unit": "×"
+          }
+        },
+        {
+          "id": "aerosol_density",
+          "label": "Densidade de aerossóis",
+          "member": "values.aerosolDensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "unit": "×"
+          }
+        },
+        {
+          "id": "aerosol_anisotropy",
+          "label": "Anisotropia dos aerossóis",
+          "member": "values.aerosolAnisotropy",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": ".95f"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "g"
+          }
+        },
+        {
+          "id": "planet_radius_km",
+          "label": "Raio do planeta",
+          "member": "values.planetRadiusKm",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": "km"
+          }
+        },
+        {
+          "id": "observer_height_km",
+          "label": "Altura do observador",
+          "member": "values.observerHeightKm",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".001f"
+          },
+          "presentation": {
+            "unit": "km"
+          }
+        },
+        {
+          "id": "rayleigh_scale_height_km",
+          "label": "Escala Rayleigh",
+          "member": "values.rayleighScaleHeightKm",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "km"
+          }
+        },
+        {
+          "id": "aerosol_scale_height_km",
+          "label": "Escala de aerossóis",
+          "member": "values.aerosolScaleHeightKm",
+          "min": {
+            "cpp": ".05f"
+          },
+          "max": {
+            "cpp": "50"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": "km"
+          }
+        },
+        {
+          "id": "atmosphere_height_km",
+          "label": "Altura da atmosfera",
+          "member": "values.atmosphereHeightKm",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": "km"
+          }
+        },
+        {
+          "id": "ground_albedo",
+          "label": "Albedo médio do solo",
+          "member": "values.groundAlbedo",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Atmosfera física",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesPhysicalAtmosphere"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.environment.physical_atmosphere",
+          "consumer": "rhi/shaders/dirt_road_sky.frag",
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "environment_Environment_fields0",
+      "type": "Environment",
+      "properties": [
+        "environmentBooleans/override_sky",
+        "environmentBooleans/override_fog",
+        "environmentBooleans/override_post",
+        "environmentBooleans/override_indirect"
+      ]
+    }
+  ]
+}

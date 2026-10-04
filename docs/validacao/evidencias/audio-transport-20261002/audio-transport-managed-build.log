@@ -1,0 +1,26 @@
+  Determinando os projetos a serem restaurados...
+  C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj restaurado (em 118 ms).
+  C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\Aether.Scene.csproj restaurado (em 128 ms).
+  C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\Aether.Analyzers.csproj restaurado (em 118 ms).
+  C:\Users\donod\Downloads\atchengine\managed\Aether.Flow\Aether.Flow.csproj restaurado (em 128 ms).
+  C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\Aether.Tests.csproj restaurado (em 485 ms).
+  C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\Astra.Scripting.csproj restaurado (em 485 ms).
+  C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\Aether.Rendering.csproj restaurado (em 485 ms).
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Aether.Analyzers\release\Aether.Analyzers.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\math.cs(6,21): warning CS8981: O nome do tipo 'math' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\quaternion.cs(7,15): warning CS8981: O nome do tipo 'quaternion' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Aether.Core\release\Aether.Core.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Astra.Scripting\release\Astra.Scripting.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Aether.Scene\release\Aether.Scene.dll
+  Aether.Flow -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Aether.Flow\release\Aether.Flow.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Aether.Rendering\release\Aether.Rendering.dll
+  Aether.Tests -> C:\Users\donod\Downloads\atchengine\build\audio-transport-dotnet\bin\Aether.Tests\release\Aether.Tests.dll
+
+Compilação com êxito.
+
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\math.cs(6,21): warning CS8981: O nome do tipo 'math' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\quaternion.cs(7,15): warning CS8981: O nome do tipo 'quaternion' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+    2 Aviso(s)
+    0 Erro(s)
+
+Tempo Decorrido 00:00:11.91

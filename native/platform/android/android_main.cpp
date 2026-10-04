@@ -1,4 +1,5 @@
 #include "editor/editor_import_transaction.h"
+#include "imgui.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
@@ -38,6 +39,7 @@
 #include "platform/camera_route.h"
 #include "platform/first_person_controller.h"
 #include <android/configuration.h>
+#include <android/asset_manager.h>
 
 #include "editor/editor_history.h"
 #include "editor/editor_session.h"
@@ -94,6 +96,7 @@ ae::u64 currentMonotonicNanoseconds() {
 std::atomic<bool> partialImportTextures{false};
 
 struct AndroidShell final {
+  bool guiFontLoaded=false;
   struct AdpfFrameSample final {
     ae::u64 workStartNs = 0;
     ae::u64 totalNs = 0;
@@ -1230,6 +1233,21 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
         });
     shell.editorSession.initialize(&shell.instancedRenderer.uiFont(),
                                    &shell.instancedRenderer.uiIcons());
+    if(!shell.guiFontLoaded) {
+      std::vector<ae::u8> guiFont;
+      auto *asset=AAssetManager_open(shell.app->activity->assetManager,"ui/gui-inter.ttf",AASSET_MODE_BUFFER);
+      if(asset) {
+        const auto length=AAsset_getLength64(asset);
+        if(length>0 && length<=2*1024*1024) {
+          guiFont.resize(static_cast<ae::usize>(length));
+          if(AAsset_read(asset,guiFont.data(),guiFont.size())!=length) guiFont.clear();
+        }
+        AAsset_close(asset);
+      }
+      shell.guiFontLoaded=shell.editorSession.gui().immediate().setFont(guiFont);
+      if(!shell.guiFontLoaded)
+        __android_log_print(ANDROID_LOG_WARN,LogTag,"[UI] Inter font unavailable for ImGui; built-in font in use.");
+    }
     shell.editorSession.usePlatformTextInput(true);
     shell.editorSession.setScriptLogSink([](ae::u64 id,std::string_view message) {
       __android_log_print(ANDROID_LOG_INFO,"Astra.Script","%llu: %.*s",
@@ -1800,6 +1818,34 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
       return shell.editorSession.captureInputKey(static_cast<ae::u32>(code),gamepad,
           captureAction==AKEY_EVENT_ACTION_DOWN,AKeyEvent_getRepeatCount(event)>0)?1:0;
     }
+    if(shell.editorUi && shell.lifecycle.isActive() && shell.editorSession.guiActive()) {
+      const auto action=AKeyEvent_getAction(event);
+      if(action!=AKEY_EVENT_ACTION_DOWN && action!=AKEY_EVENT_ACTION_UP) return 0;
+      ImGuiKey key=ImGuiKey_None;
+      switch(code) {
+        case AKEYCODE_DEL:key=ImGuiKey_Backspace;break;
+        case AKEYCODE_FORWARD_DEL:key=ImGuiKey_Delete;break;
+        case AKEYCODE_ENTER:key=ImGuiKey_Enter;break;
+        case AKEYCODE_TAB:key=ImGuiKey_Tab;break;
+        case AKEYCODE_ESCAPE:key=ImGuiKey_Escape;break;
+        case AKEYCODE_DPAD_LEFT:key=ImGuiKey_LeftArrow;break;
+        case AKEYCODE_DPAD_RIGHT:key=ImGuiKey_RightArrow;break;
+        case AKEYCODE_DPAD_UP:key=ImGuiKey_UpArrow;break;
+        case AKEYCODE_DPAD_DOWN:key=ImGuiKey_DownArrow;break;
+        case AKEYCODE_MOVE_HOME:key=ImGuiKey_Home;break;
+        case AKEYCODE_MOVE_END:key=ImGuiKey_End;break;
+        default:break;
+      }
+      const auto modifiers=AKeyEvent_getMetaState(event);
+      shell.editorSession.guiKey(ImGuiMod_Ctrl,(modifiers & AMETA_CTRL_ON)!=0);
+      shell.editorSession.guiKey(ImGuiMod_Shift,(modifiers & AMETA_SHIFT_ON)!=0);
+      shell.editorSession.guiKey(ImGuiMod_Alt,(modifiers & AMETA_ALT_ON)!=0);
+      if(key!=ImGuiKey_None) {shell.editorSession.guiKey(key,action==AKEY_EVENT_ACTION_DOWN);return 1;}
+      if(code>=AKEYCODE_A && code<=AKEYCODE_Z && (modifiers&AMETA_CTRL_ON)) {
+        shell.editorSession.guiKey(ImGuiKey_A+code-AKEYCODE_A,action==AKEY_EVENT_ACTION_DOWN);return 1;
+      }
+      return 0; // printable text belongs to the existing platform IME bridge
+    }
     if(!gameplay) return 0;
     if(code==AKEYCODE_BACK || code==AKEYCODE_HOME || code==AKEYCODE_VOLUME_UP || code==AKEYCODE_VOLUME_DOWN)
       return 0;
@@ -1890,6 +1936,11 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
         (AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
         AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
     bool consumed = false;
+    if(editorAction==AMOTION_EVENT_ACTION_SCROLL && shell.editorSession.guiActive()) {
+      shell.editorSession.guiWheel(AMotionEvent_getAxisValue(event,AMOTION_EVENT_AXIS_HSCROLL,0),
+                                   AMotionEvent_getAxisValue(event,AMOTION_EVENT_AXIS_VSCROLL,0));
+      return 1;
+    }
     // Relógio do próprio evento (ns): é o que mede o toque longo do menu de contexto.
     const double eventTime = static_cast<double>(AMotionEvent_getEventTime(event)) * 1e-9;
     if (editorAction == AMOTION_EVENT_ACTION_CANCEL) {
@@ -3532,6 +3583,10 @@ void android_main(android_app *app) {
         // tudo; agora ela testa profundidade como qualquer outro desenho.
         shell.instancedRenderer.setEditorGrid(shell.editorSession.gridPlan());
         shell.instancedRenderer.setUiInstances(shell.editorSession.instances());
+        const auto &guiImages=shell.editorSession.guiImages();
+        shell.instancedRenderer.setUiGuiAtlas(guiImages.pixels(),guiImages.size(),guiImages.revision());
+        const auto &immediate=shell.editorSession.immediateGui();
+        shell.instancedRenderer.setUiImmediateAtlas(immediate.atlas(),immediate.atlasWidth(),immediate.atlasHeight());
         // R4: atlas de prévia de texturas, só quando o editor recompôs.
         if(const auto *preview=shell.editorSession.takePreviewAtlas())
           shell.instancedRenderer.setUiPreviewAtlas(*preview,ae::editor::TexturePreviewAtlasSize,ae::editor::TexturePreviewAtlasSize);

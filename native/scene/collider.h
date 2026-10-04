@@ -15,16 +15,31 @@ enum class ColliderShape : u32 { Box=0, Sphere=1, Capsule=2, Mesh=3, Cylinder=4 
 class Collider final : public ComponentValue {
 public:
   ColliderShape shape=ColliderShape::Box;
-  float halfX=.5f,halfY=.5f,halfZ=.5f,radius=.5f,halfHeight=.5f;
-  float centerX=0,centerY=0,centerZ=0;
-  float rotationX=0,rotationY=0,rotationZ=0;
+
+#include "scene/generated/collider_Collider_fields0.inc"
+
+#include "scene/generated/collider_Collider_fields1.inc"
+
+#include "scene/generated/collider_Collider_fields2.inc"
+
   u64 owner=0; // zero explicitly means the body on this object
-  bool enabled=true;
-  bool convex=false; // só vale para Mesh
-  bool weldVertices=true; // cooking da malha não convexa
-  bool optimizeCooking=true; // árvore mais cara de cozinhar, mais rápida em jogo
-  float hullTolerance=.001f; // unidades locais, só no casco convexo
-  float activeEdgeAngle=5.f; // graus, só na malha triangular
+
+#include "scene/generated/collider_Collider_fields3.inc"
+
+#include "scene/generated/collider_Collider_fields4.inc"
+ // só vale para Mesh
+
+#include "scene/generated/collider_Collider_fields5.inc"
+ // cooking da malha não convexa
+
+#include "scene/generated/collider_Collider_fields6.inc"
+ // árvore mais cara de cozinhar, mais rápida em jogo
+
+#include "scene/generated/collider_Collider_fields7.inc"
+ // unidades locais, só no casco convexo
+
+#include "scene/generated/collider_Collider_fields8.inc"
+ // graus, só na malha triangular
   // Vazio herda as malhas visuais do objeto. Válido escolhe um único recurso
   // de malha para a forma física (por exemplo, uma versão simplificada).
   resources::AssetGuid collisionMesh{};
@@ -68,45 +83,10 @@ inline bool colliderIsTriangleMesh(const ComponentValue &v) {const auto &c=stati
 // A malha já está no referencial do objeto: como no Mesh Collider da Unity, não
 // há centro nem rotação próprios — a pose é a do objeto.
 inline bool colliderIsPrimitive(const ComponentValue &v) {return !colliderIsMesh(v);}
-inline constexpr std::array<ComponentNumber,13> colliderNumbers{{
-#define AE_COLLIDER_NUMBER(id,label,field,visible) {label,.01f,10000,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Collider&>(v).field;},id,{"Forma","",nullptr,visible}}
-  AE_COLLIDER_NUMBER("half_x","Meia extensão X",halfX,colliderIsBox),
-  AE_COLLIDER_NUMBER("half_y","Meia extensão Y",halfY,colliderIsBox),
-  AE_COLLIDER_NUMBER("half_z","Meia extensão Z",halfZ,colliderIsBox),
-  AE_COLLIDER_NUMBER("radius","Raio",radius,colliderHasRadius),
-  AE_COLLIDER_NUMBER("half_height","Meia altura cilíndrica",halfHeight,colliderIsCapsule),
-#undef AE_COLLIDER_NUMBER
-#define AE_COLLIDER_CENTER(id,label,field,unit) {label,-10000000,10000000,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Collider&>(v).field;},id,{"Pose",unit,nullptr,colliderIsPrimitive}}
-  AE_COLLIDER_CENTER("center_x","Centro X",centerX,""),
-  AE_COLLIDER_CENTER("center_y","Centro Y",centerY,""),
-  AE_COLLIDER_CENTER("center_z","Centro Z",centerZ,""),
-  AE_COLLIDER_CENTER("rotation_x","Rotação local X",rotationX,"°"),
-  AE_COLLIDER_CENTER("rotation_y","Rotação local Y",rotationY,"°"),
-  AE_COLLIDER_CENTER("rotation_z","Rotação local Z",rotationZ,"°"),
-#undef AE_COLLIDER_CENTER
-  {"Tolerância do casco",.00001f,1.f,.001f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).hullTolerance;},
-   [](ComponentValue &v)->float*{return &static_cast<Collider&>(v).hullTolerance;},"hull_tolerance",
-   {"Cozimento","u","Pontos até esta distância podem ficar fora do casco; valores maiores geram cascos mais simples.",colliderIsConvexMesh}},
-  {"Ângulo de aresta ativa",0.f,90.f,1.f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).activeEdgeAngle;},
-   [](ComponentValue &v)->float*{return &static_cast<Collider&>(v).activeEdgeAngle;},"active_edge_angle",
-   {"Cozimento","°","Separa arestas de contato em superfícies com mudança de normal acima deste ângulo.",colliderIsTriangleMesh}}
-}};
+#include "scene/generated/collider_colliderNumbers.inc"
 inline constexpr std::array<ComponentEnumOption,5> colliderShapeOptions{{{0,"Caixa"},{1,"Esfera"},{2,"Cápsula"},{3,"Malha"},{4,"Cilindro"}}};
-inline constexpr std::array<ComponentEnum,1> colliderEnums{{
-  {"shape","Forma",colliderShapeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Collider&>(v).shape);},
-    [](ComponentValue &v,u32 value){static_cast<Collider&>(v).shape=static_cast<ColliderShape>(value);},{"Forma"}}
-}};
-inline constexpr std::array<ComponentBoolean,4> colliderBooleans{{
-  {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const Collider&>(v).enabled;},[](ComponentValue &v,bool enabled){static_cast<Collider&>(v).enabled=enabled;}},
-  {"convex","Convexo",[](const ComponentValue &v){return static_cast<const Collider&>(v).convex;},[](ComponentValue &v,bool value){static_cast<Collider&>(v).convex=value;},
-    {"Forma","","Casco convexo da malha: aceita corpo dinâmico. Desligado usa os triângulos exatos e só vale em corpo estático ou cinemático.",colliderIsMesh}},
-  {"weld_vertices","Soldar vértices iguais",[](const ComponentValue &v){return static_cast<const Collider&>(v).weldVertices;},
-    [](ComponentValue &v,bool value){static_cast<Collider&>(v).weldVertices=value;},
-    {"Cozimento","","Compartilha vértices coincidentes antes de criar a malha física, reduzindo costuras internas.",colliderIsTriangleMesh}},
-  {"optimize_cooking","Otimizar para o jogo",[](const ComponentValue &v){return static_cast<const Collider&>(v).optimizeCooking;},
-    [](ComponentValue &v,bool value){static_cast<Collider&>(v).optimizeCooking=value;},
-    {"Cozimento","","Constrói uma árvore de busca mais eficiente; desligue para cozinhar mais rápido durante iterações.",colliderIsTriangleMesh}}
-}};
+#include "scene/generated/collider_colliderEnums.inc"
+#include "scene/generated/collider_colliderBooleans.inc"
 inline constexpr std::array<ComponentObjectReference,1> colliderReferences{{
   {"owner","Corpo proprietário","astra.physics.body",ObjectReferenceScope::SelfOrAncestor,"Neste objeto",
     [](const ComponentValue &v){return static_cast<const Collider&>(v).owner;},[](ComponentValue &v,u64 id){static_cast<Collider&>(v).owner=id;},{"Vínculo"}}

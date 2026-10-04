@@ -1,0 +1,66 @@
+{
+  "format": 1,
+  "family": "camera",
+  "table": "cameraSchemas",
+  "entries": [
+    {
+      "type": "Camera",
+      "name": "Câmera",
+      "description": "Projeção e enquadramento",
+      "consumer": "renderer/render_view.h → matriz de projeção e culling",
+      "invalidates": {
+        "cpp": "Invalidate::Draw"
+      },
+      "subfamily": "Projeção",
+      "icon": "editor/author-camera",
+      "searchTerms": "Camera Camera3D Perspectiva Ortografica",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-Camera.html",
+      "apiName": "Camera"
+    },
+    {
+      "type": "CameraLook",
+      "name": "Olhar",
+      "description": "Rotação local da câmera por entrada ou script",
+      "requirements": {
+        "cpp": "lookRequirements"
+      },
+      "consumer": "runtime/game_world.cpp → pose da câmera",
+      "invalidates": {
+        "cpp": "Invalidate::Input"
+      },
+      "subfamily": "Controle",
+      "icon": "component/look",
+      "searchTerms": "MouseLook CameraController PanTilt InputAxisController",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachinePanTilt.html",
+      "apiName": "CameraLook"
+    },
+    {
+      "type": "CameraFollow",
+      "name": "Acompanhar alvo",
+      "description": "Posiciona a câmera após física e animação",
+      "requirements": {
+        "cpp": "followRequirements"
+      },
+      "conflicts": {
+        "cpp": "followConflicts"
+      },
+      "consumer": "runtime/scene_camera_follow.h → pose de Play da câmera",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Controle",
+      "icon": "component/camera-follow",
+      "searchTerms": "Follow Camera Tracking Damping CinemachineFollow",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineFollow.html",
+      "apiName": "CameraFollow"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Camera"
+    },
+    "structuralInPlay": {
+      "cpp": "PlayMutability::SafePoint"
+    }
+  }
+}

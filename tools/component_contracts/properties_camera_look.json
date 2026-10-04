@@ -1,0 +1,114 @@
+{
+  "format": 1,
+  "source": "native/scene/camera_look.h",
+  "tables": [
+    {
+      "name": "cameraLookNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "yaw_sensitivity",
+          "label": "Sensibilidade horizontal graus/tela",
+          "member": "yawSensitivity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "720"
+          },
+          "presentation": {
+            "group": "Sensibilidade"
+          },
+          "default": {
+            "cpp": "300"
+          }
+        },
+        {
+          "id": "pitch_sensitivity",
+          "label": "Sensibilidade vertical graus/tela",
+          "member": "pitchSensitivity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "720"
+          },
+          "presentation": {
+            "group": "Sensibilidade"
+          },
+          "default": {
+            "cpp": "195"
+          }
+        },
+        {
+          "id": "pitch_limit",
+          "label": "Limite vertical graus",
+          "member": "pitchLimit",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "89"
+          },
+          "presentation": {
+            "group": "Limites"
+          },
+          "default": {
+            "cpp": "83"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "CameraLook",
+        "step": {
+          "cpp": "1"
+        },
+        "presentation": {
+          "unit": "°"
+        }
+      }
+    },
+    {
+      "name": "cameraLookBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "CameraLook",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Controle"
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "camera_look_CameraLook_fields0",
+      "type": "CameraLook",
+      "properties": [
+        "cameraLookBooleans/enabled"
+      ]
+    },
+    {
+      "name": "camera_look_CameraLook_fields1",
+      "type": "CameraLook",
+      "properties": [
+        "cameraLookNumbers/yaw_sensitivity",
+        "cameraLookNumbers/pitch_sensitivity",
+        "cameraLookNumbers/pitch_limit"
+      ]
+    }
+  ]
+}

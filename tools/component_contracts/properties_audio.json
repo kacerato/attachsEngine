@@ -1,0 +1,561 @@
+{
+  "format": 1,
+  "source": "native/scene/audio.h",
+  "tables": [
+    {
+      "name": "audioSourceBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "presentation": {
+            "group": "Som"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "mute",
+          "label": "Silenciar",
+          "member": "mute",
+          "presentation": {
+            "group": "Som"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "loop",
+          "label": "Repetir",
+          "member": "loop",
+          "presentation": {
+            "group": "Reprodução"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "AudioSource"
+      }
+    },
+    {
+      "name": "audioListenerNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "volume",
+          "label": "Volume global",
+          "member": "volume",
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "priority",
+          "label": "Prioridade",
+          "member": "priority",
+          "max": {
+            "cpp": "255"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "default": {
+            "cpp": "0"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "AudioListener",
+        "min": {
+          "cpp": "0"
+        },
+        "presentation": {
+          "group": "Escuta",
+          "unit": "",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "audioListenerBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "AudioListener",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Escuta"
+        }
+      }
+    },
+    {
+      "name": "audioBusNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "volume",
+          "label": "Ganho",
+          "member": "volume"
+        }
+      ],
+      "defaults": {
+        "type": "AudioBus",
+        "min": {
+          "cpp": "0"
+        },
+        "max": {
+          "cpp": "1"
+        },
+        "step": {
+          "cpp": ".01f"
+        },
+        "default": {
+          "cpp": "1"
+        },
+        "presentation": {
+          "group": "Mixer",
+          "unit": "",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "audioBusBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "mute",
+          "label": "Silenciar",
+          "member": "mute",
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "solo",
+          "label": "Solo",
+          "member": "solo",
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "AudioBus",
+        "presentation": {
+          "group": "Mixer"
+        }
+      }
+    },
+    {
+      "name": "audioSourceNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "volume",
+          "label": "Volume",
+          "member": "volume",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Som",
+            "unit": "",
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "pitch",
+          "label": "Velocidade / pitch",
+          "member": "pitch",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "4"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Reprodução",
+            "unit": "×",
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "pan",
+          "label": "Pan estéreo",
+          "member": "pan",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Espaço",
+            "unit": "",
+            "visible": {
+              "cpp": "audioFlat"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "min_distance",
+          "label": "Distância mínima",
+          "member": "minDistance",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Espaço",
+            "unit": "m",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "max_distance",
+          "label": "Distância máxima",
+          "member": "maxDistance",
+          "min": {
+            "cpp": ".02f"
+          },
+          "max": {
+            "cpp": "100001"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Espaço",
+            "unit": "m",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "100"
+          }
+        },
+        {
+          "id": "rolloff_factor",
+          "label": "Decaimento",
+          "member": "rolloffFactor",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Espaço",
+            "unit": "",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "cone_inner",
+          "label": "Cone interno",
+          "member": "coneInner",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "360"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "°",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "360"
+          }
+        },
+        {
+          "id": "cone_outer",
+          "label": "Cone externo",
+          "member": "coneOuter",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "360"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "°",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "360"
+          }
+        },
+        {
+          "id": "cone_gain",
+          "label": "Ganho fora do cone",
+          "member": "coneGain",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "doppler",
+          "label": "Doppler",
+          "member": "doppler",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "4"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "×",
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "AudioSource",
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "audioSourceEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "playback",
+          "label": "Pedido",
+          "type": "AudioSource",
+          "member": "playback",
+          "options": "audioPlaybackOptions",
+          "presentation": {
+            "group": "Reprodução",
+            "unit": "",
+            "help": "Pedido persistido; consulte o estado real na nota do componente."
+          }
+        },
+        {
+          "id": "dimension",
+          "label": "Dimensão",
+          "type": "AudioSource",
+          "member": "dimension",
+          "options": "audioDimensionOptions",
+          "presentation": {
+            "group": "Espaço"
+          }
+        },
+        {
+          "id": "rolloff",
+          "label": "Atenuação",
+          "type": "AudioSource",
+          "member": "rolloff",
+          "options": "audioRolloffOptions",
+          "presentation": {
+            "group": "Espaço",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "audioSpatial"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "audio_AudioSource_fields0",
+      "type": "AudioSource",
+      "properties": [
+        "audioSourceBooleans/enabled",
+        "audioSourceBooleans/loop",
+        "audioSourceBooleans/mute"
+      ]
+    },
+    {
+      "name": "audio_AudioSource_fields1",
+      "type": "AudioSource",
+      "properties": [
+        "audioSourceNumbers/volume",
+        "audioSourceNumbers/pitch",
+        "audioSourceNumbers/pan",
+        "audioSourceNumbers/min_distance",
+        "audioSourceNumbers/max_distance",
+        "audioSourceNumbers/rolloff_factor",
+        "audioSourceNumbers/cone_inner",
+        "audioSourceNumbers/cone_outer",
+        "audioSourceNumbers/cone_gain",
+        "audioSourceNumbers/doppler"
+      ]
+    },
+    {
+      "name": "audio_AudioListener_fields0",
+      "type": "AudioListener",
+      "properties": [
+        "audioListenerBooleans/enabled"
+      ]
+    },
+    {
+      "name": "audio_AudioListener_fields1",
+      "type": "AudioListener",
+      "properties": [
+        "audioListenerNumbers/volume",
+        "audioListenerNumbers/priority"
+      ]
+    },
+    {
+      "name": "audio_AudioBus_fields0",
+      "type": "AudioBus",
+      "properties": [
+        "audioBusBooleans/enabled",
+        "audioBusBooleans/mute",
+        "audioBusBooleans/solo"
+      ]
+    },
+    {
+      "name": "audio_AudioBus_fields1",
+      "type": "AudioBus",
+      "properties": [
+        "audioBusNumbers/volume"
+      ]
+    }
+  ]
+}

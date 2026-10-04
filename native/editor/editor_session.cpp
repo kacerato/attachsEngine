@@ -19,6 +19,8 @@
 #include "resources/import_report.h"
 #include "editor/editor_import_transaction.h"
 #include "resources/texture_compression.h"
+#include "resources/image_decode.h"
+#include <fstream>
 #include "resources/gltf_package.h"
 #include "scene/import_link.h"
 #include "core/sha256.h"
@@ -573,6 +575,63 @@ bool EditorSession::setProjectDirectory(const char *path) {
   runtime::ObjectTags tags;std::string tagError;
   if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
   if(!files_.setRoot(path)) return false;
+  guiImages_.clear();gui_.setImages(&guiImages_);playScene_.gui().setImages(&guiImages_);
+  gui_.setImageChoices([this](){
+    std::vector<std::string> paths;std::error_code ec;const std::filesystem::path root(files_.rootPath());
+    std::filesystem::recursive_directory_iterator it(root,std::filesystem::directory_options::skip_permission_denied,ec),end;
+    for(u32 visited=0;it!=end&&!ec&&visited<8192;it.increment(ec),++visited) {
+      if(it->is_symlink(ec) || it->path().filename()==".astra") {if(it->is_directory(ec))it.disable_recursion_pending();continue;}
+      if(!it->is_regular_file(ec))continue;
+      auto extension=it->path().extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+      if(extension==".png" || extension==".jpg" || extension==".jpeg" || extension==".ktx2")paths.push_back(it->path().lexically_relative(root).generic_string());
+      if(paths.size()==4096)break;
+    }
+    std::sort(paths.begin(),paths.end());return paths;
+  });
+  gui_.document()=ui::GuiDocument{};gui_.history().clear();gui_.select(0);gui_.setPreview(false);
+  gui_.setResource("UI/main.aeui");gui_.setDiagnostic("");
+  gui_.setStorage([this](ui::GuiDocument &document,std::string_view relative,bool save,std::string &error) {
+    std::filesystem::path file;
+    const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+    if (!EditorImportTransaction::safePath(root,std::string(relative),file) || file.extension()!=".aeui") {
+      error="Use um caminho .aeui dentro do projeto";return false;
+    }
+    const auto remember=[&]() {
+      std::error_code ec;std::filesystem::create_directories(root/".astra",ec);
+      if(ec || !EditorImportTransaction::writeText(root/".astra/gui-resource",std::string(relative))) {
+        error="Interface carregada/salva, mas nao foi possivel registrar o recurso de inicializacao";return false;
+      }
+      return true;
+    };
+    if(save) {
+      if(!document.validate(error)) return false;
+      std::error_code filesystemError;std::filesystem::create_directories(file.parent_path(),filesystemError);
+      if(filesystemError) {error="Nao foi possivel criar a pasta da interface";return false;}
+      std::ostringstream content;document.write(content);
+      if(!EditorImportTransaction::writeText(file,content.str())) {error="Falha ao salvar interface; arquivo anterior preservado";return false;}
+      error.clear();return remember();
+    }
+    std::vector<u8> bytes;
+    if(!EditorImportTransaction::read(file,bytes,8u*1024u*1024u)) {error="Interface ausente ou maior que 8 MiB";return false;}
+    std::istringstream content(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()));
+    if(!document.read(content,error)) return false;
+    return remember();
+  });
+  {
+    const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+    std::filesystem::path file=root/"UI/main.aeui";
+    std::vector<u8> binding;
+    if(EditorImportTransaction::read(root/".astra/gui-resource",binding,255)) {
+      const std::string relative(binding.begin(),binding.end());std::filesystem::path bound;
+      if(EditorImportTransaction::safePath(root,relative,bound) && bound.extension()==".aeui" && gui_.setResource(relative)) file=bound;
+      else gui_.setDiagnostic("Recurso inicial invalido; usando UI/main.aeui");
+    }
+    std::error_code existsError;
+    if(std::filesystem::exists(file,existsError)) {
+      std::ifstream input(file);std::string error;
+      if(!gui_.document().read(input,error)) gui_.setDiagnostic(error);
+    }
+  }
   audioClips_.clear();
   playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},audioOutput_);
   projectTags_=std::move(tags);document_.setTags(projectTags_);
@@ -721,7 +780,9 @@ void EditorSession::saveEditorPreferences() {
 }
 
 void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
-  playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},audioOutput_);
+  // Android republishes the available scripting API while polling compilation.
+  // Audio ownership belongs to the project/output configuration, not that API:
+  // reconfiguring here stopped miniaudio and reset every cursor each frame.
   playScene_.setScriptRuntime(api,files_.rootPath());
   playScene_.setScriptResourceAvailability(runtimeResourceResolver());
   playScene_.setPrefabLoader([this](resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) {
@@ -870,13 +931,14 @@ EditorSession::ViewportPointer *EditorSession::findViewportPointer(u32 id) noexc
   return nullptr;
 }
 
-void EditorSession::buildPickCandidates() {
+void EditorSession::buildPickCandidates(const runtime::SceneGraph *source,bool occlusion) {
+  const auto &document=source?*source:static_cast<const runtime::SceneGraph &>(document_);
   candidates_.clear();
   std::vector<EditorEntityId> subtree;
-  document_.collectSubtree(document_.root(), subtree);
+  document.collectSubtree(document.root(), subtree);
   for (const EditorEntityId id : subtree) {
-    if (id == document_.root()) continue;
-    const EditorEntity *entity = document_.find(id);
+    if (id == document.root()) continue;
+    const EditorEntity *entity = document.find(id);
     if (entity == nullptr) continue;
     // Selection follows the visible capability, including meshes on logical objects.
     const auto *mesh=meshRenderer(*entity);if(!mesh || !mesh->enabled || !mesh->mesh) continue;
@@ -884,13 +946,13 @@ void EditorSession::buildPickCandidates() {
     candidate.id = id;
     // Missing resources have no viewport silhouette. Keep their document row
     // available for repair, but never invent an invisible pick sphere.
-    if(!mapScene_.bounds(document_, id, candidate.center, candidate.radius)) continue;
-    candidate.selectable = entity->visible && entity->active &&
+    if(!mapScene_.bounds(document, id, candidate.center, candidate.radius)) continue;
+    candidate.selectable = entity->visible && entity->active && (occlusion || (
         !(entity->layer<32 && ((state_.hiddenLayers|state_.unpickableLayers)&(1u<<entity->layer))) &&
-        !state_.sceneHiddenHas(id) && !state_.scenePickOffHas(id);
-    for(auto parent=document_.find(entity->parent);parent;parent=document_.find(parent->parent))
+        !state_.sceneHiddenHas(id) && !state_.scenePickOffHas(id)));
+    for(auto parent=document.find(entity->parent);parent;parent=document.find(parent->parent))
       candidate.selectable &= parent->visible && parent->active;
-    mapScene_.pickGeometry(document_,id,candidate);
+    mapScene_.pickGeometry(document,id,candidate);
     const auto base=candidate;
     candidates_.push_back(std::move(candidate));
     // Um candidato por slot adicional, com o MESMO objeto: tocar qualquer
@@ -898,8 +960,8 @@ void EditorSession::buildPickCandidates() {
     for(u32 slot=1;slot<mesh->slotCount();++slot) {
       const auto meshSlot=mesh->slotMesh(slot);if(!meshSlot) continue;
       auto extra=base;extra.mesh={};extra.resolve={};
-      if(!mapScene_.slotBounds(document_,id,meshSlot-1,extra.center,extra.radius) ||
-         !mapScene_.pickSlotGeometry(document_,id,slot,extra)) continue;
+      if(!mapScene_.slotBounds(document,id,meshSlot-1,extra.center,extra.radius) ||
+         !mapScene_.pickSlotGeometry(document,id,slot,extra)) continue;
       candidates_.push_back(std::move(extra));
     }
   }
@@ -1172,6 +1234,11 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
 
 EditorTextEdit EditorSession::pendingTextEdit() const {
   EditorTextEdit edit;edit.version=sceneVersion();
+  if(state_.workspace==EditorWorkspace::Gui) {
+    const auto &immediate=immediateGui();
+    if(const auto id=immediate.inputId()) {edit.purpose=EditorTextPurpose::Gui;edit.elementId=id;edit.text=immediate.inputText();}
+    return edit;
+  }
   // The Play HUD hides authoring fields. Returning no request also closes the
   // platform IME and rejects late replies instead of editing an invisible draft.
   // Inspecionando o Play, o campo aberto é o do espelho, com a época dele.
@@ -1314,6 +1381,7 @@ bool EditorSession::updateTextDraftNow(const EditorTextEdit &edit,std::string_vi
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
      current.entity!=edit.entity || current.componentInstance!=edit.componentInstance ||
      current.field!=edit.field || current.elementId!=edit.elementId || current.propertyType!=edit.propertyType || edit.version.epoch!=sceneEpoch_) return false;
+  if(edit.purpose==EditorTextPurpose::Gui) return gui_.immediate().replaceInput(static_cast<u32>(edit.elementId),text);
   // O mesmo teto que a ponte aplica. Um rascunho maior que o campo aceita não é
   // rascunho: é um commit que vai ser recusado no fim, depois de o usuário ter
   // digitado tudo.
@@ -1523,6 +1591,10 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
      current.entity!=edit.entity || current.field!=edit.field || current.elementId!=edit.elementId || edit.version.epoch!=sceneEpoch_) return false;
+  if(edit.purpose==EditorTextPurpose::Gui) {
+    if(accept && !gui_.immediate().replaceInput(static_cast<u32>(edit.elementId),text)) return false;
+    gui_.immediate().finishInput(accept);return true;
+  }
   const auto close=[&] {
     state_.presetNaming=false;
     state_.viewNaming=false;state_.viewRenaming=false;
@@ -2091,6 +2163,13 @@ EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
 }
 
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
+  if(state_.workspace==EditorWorkspace::Gui && !state_.workspaceMenu && gui_.pointer(event)) return true;
+  if(isPlaying() && playScene_.active() && !state_.playPaused && !state_.workspaceMenu) {
+    const auto hit=router_.hitTest(event.position);
+    // Native toolbar/inspection keeps priority. A captured game UI drag retains
+    // ownership outside its rectangle through Up/Cancel.
+    if((playScene_.gui().captures(event.pointerId) || hit.target!=UiPointerTarget::Widget) && guiPlayPointer(event)) return true;
+  }
   // Conta-gotas: todos os toques pertencem à amostragem. Cancelar pela faixa;
   // qualquer outro ponto vira o pedido de amostra ao soltar (o quadro seguinte,
   // sem a janela de cor, é o que se lê).
@@ -2907,6 +2986,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  if(state_.workspace==EditorWorkspace::Gui && routing.tapped) {
+    if(routing.widgetId==widgetId(EditorWidget::Undo)) {gui_.history().undo(gui_.document());return true;}
+    if(routing.widgetId==widgetId(EditorWidget::Redo)) {gui_.history().redo(gui_.document());return true;}
+    if(routing.widgetId==widgetId(EditorWidget::SaveDocument)) {gui_.save();return true;}
+  }
   if(event.phase==UiPointerPhase::Down) {
     const auto old=std::find_if(playButtonPointers_.begin(),playButtonPointers_.end(),[&](const auto&p){return p.first==event.pointerId;});
     if(old!=playButtonPointers_.end()) {playButtonPointers_.erase(old);playButtonCanceled_|=runtime::InputTouch;}
@@ -6768,6 +6852,7 @@ bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiP
 }
 
 void EditorSession::cancelPointers() {
+  gui_.cancelPointers();playScene_.gui().cancelPointers();
   state_.componentReorder=0;state_.componentReorderTarget=0;reorderPointer_=0;
   if(lodDivider_) {history_.cancel(document_);lodDivider_=0;lodPointer_=0;}
   if(lensDragOpen_) {history_.cancel(document_);lensDragOpen_=false;}
@@ -6799,6 +6884,7 @@ void EditorSession::advanceClock(float wallSeconds) noexcept {
   }
   const float delta = wallSeconds - lastWallSeconds_;
   lastWallSeconds_ = wallSeconds;
+  guiDeltaSeconds_=delta>0 && delta<=1?delta:0;
   // Passo negativo ou absurdo é o relógio de parede saltando (retomada do app,
   // mudança de fonte de tempo). Descartar é melhor do que teleportar a
   // simulação para um futuro que ninguém viu acontecer.
@@ -9203,8 +9289,8 @@ void EditorSession::update() {
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
   state_.assetCount=mapScene_.assetCount();
-  state_.canUndo = history_.canUndo();
-  state_.canRedo = history_.canRedo();
+  state_.canUndo = state_.workspace==EditorWorkspace::Gui ? gui_.history().canUndo() : history_.canUndo();
+  state_.canRedo = state_.workspace==EditorWorkspace::Gui ? gui_.history().canRedo() : history_.canRedo();
   // Conjunto coerente com o ativo, que muitas rotinas ainda escrevem direto:
   // apagados saem; um ativo novo fora do conjunto vira seleção única.
   {
@@ -9283,8 +9369,82 @@ void EditorSession::update() {
   // a unica que vale.
   if(state_.editingCode && state_.platformTextInput && !state_.platformCodeView) followCodeCaret();
 
+  refreshGuiImages();
+  if(state_.workspace==EditorWorkspace::Gui && !state_.workspaceMenu)
+  {
+    auto area=layout_.viewport;
+    area.height=std::max(0.0f,area.height-state_.surface.height*state_.platformImeFraction);
+    gui_.draw(area,state_.surface,list_,guiDeltaSeconds_);
+  }
+  if(isPlaying() && playScene_.active() && !state_.playInspect && !state_.workspaceMenu) {
+    auto &runtime=playScene_.gui();const auto &canvas=runtime.document().canvas();
+    if(canvas.mode==ui::GuiCanvasMode::World) {
+      if(guiWorld_.configure(canvas,guiPlayView().frustum,layout_.viewport,state_.surface)) {
+        runtime.layout({0,0,canvas.resolution.x,canvas.resolution.y});
+        guiWorldDrawing_.begin({0,0,canvas.resolution.x,canvas.resolution.y},metrics);
+        runtime.draw(guiWorldDrawing_);
+        guiWorldDrawing_.projectRange(0,guiWorld_.projection(),canvas.occlusion,layout_.viewport);
+        list_.append(guiWorldDrawing_);
+      }
+    } else {runtime.layout(layout_.viewport);runtime.draw(list_);}
+  }
   instances_.clear();
   buildUiInstances(list_, *font_, *icons_, kMaximumInstances, instances_);
+}
+
+void EditorSession::refreshGuiImages() {
+  const auto &document=isPlaying()?playScene_.gui().document():gui_.document();
+  const double now=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  if(document.revision()==guiImageDocumentRevision_ && now-guiImageCheckAt_<.3)return;
+  guiImageDocumentRevision_=document.revision();guiImageCheckAt_=now;
+  u64 stamp=1469598103934665603ull;
+  const std::filesystem::path root(files_.rootPath());
+  auto hash=[&](std::string_view text){for(unsigned char c:text){stamp^=c;stamp*=1099511628211ull;}};
+  hash(root.generic_string());
+  for(const auto &n:document.nodes()) if(n.kind==ui::GuiKind::Image) {
+    hash(n.image);std::filesystem::path path;std::error_code ec;
+    if(EditorImportTransaction::safePath(root,n.image,path)) {const auto time=std::filesystem::last_write_time(path,ec);hash(ec?"missing":std::to_string(static_cast<long long>(time.time_since_epoch().count())));}
+    else hash("unsafe");
+  }
+  const auto previous=guiImages_.revision();
+  guiImages_.reconcile(document,stamp,[&](std::string_view relative,std::vector<u8> &rgba,u32 &width,u32 &height,std::string &error) {
+    std::filesystem::path path;
+    if(!EditorImportTransaction::safePath(root,std::string(relative),path)){error="Imagem fora do projeto";return false;}
+    std::error_code ec;const auto size=std::filesystem::file_size(path,ec);
+    if(ec || size==0 || size>(8ull<<20)){error="Imagem ausente ou maior que 8 MiB";return false;}
+    std::vector<u8> bytes(static_cast<usize>(size));std::ifstream file(path,std::ios::binary);
+    if(!file.read(reinterpret_cast<char *>(bytes.data()),static_cast<std::streamsize>(bytes.size()))){error="Falha ao ler imagem";return false;}
+    resources::ImageDecodeLimits limits;limits.maximumDimension=1024;limits.maximumPixels=1024ull*1024;limits.maximumEncodedBytes=8ull<<20;
+    resources::DecodedImage image;if(!resources::decodeImageRgba8(bytes,limits,image,error))return false;
+    width=image.width;height=image.height;rgba=std::move(image.rgba);return true;
+  });
+  if(guiImages_.revision()!=previous) {gui_.setImages(&guiImages_);playScene_.gui().setImages(&guiImages_);}
+}
+EditorViewport EditorSession::guiPlayView() const {
+  auto view=view_;view.rect=layout_.viewport;
+  // GUI input has already been mapped from the physical display to logical
+  // coordinates. Use the same ray as GuiWorldFrame, without a second rotation.
+  view.surfaceTransform={};const auto pose=sceneCameraPose();
+  if(pose.entity && !view.rect.isEmpty()) {
+    auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;projection.verticalFieldOfViewRadians=pose.verticalFov*.017453292519943295f;projection.roll=pose.roll;
+    projection.projection=pose.projection==scene::CameraProjection::Orthographic?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;projection.orthographicHalfHeight=pose.orthographicHalfHeight;
+    view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,view.rect.width/view.rect.height,projection);
+  }
+  return view;
+}
+bool EditorSession::guiPlayPointer(const ui::UiPointerEvent &event) {
+  auto &runtime=playScene_.gui();const auto &canvas=runtime.document().canvas();
+  if(canvas.mode==ui::GuiCanvasMode::Screen)return runtime.pointer(event);
+  ui::UiPoint point;float distance=0;
+  if(!guiWorld_.configure(canvas,guiPlayView().frustum,layout_.viewport,state_.surface) || !guiWorld_.map(event.position,point,distance)) {
+    if(runtime.captures(event.pointerId)){auto cancel=event;cancel.phase=ui::UiPointerPhase::Cancel;runtime.pointer(cancel);return true;}return false;
+  }
+  if(event.phase==ui::UiPointerPhase::Down && canvas.occlusion) {
+    buildPickCandidates(&playScene_.document(),true);const auto ray=screenPointToRay(guiPlayView(),event.position);const auto scene=pickNearest(candidates_,ray);
+    if(scene.hit && scene.distance<distance-.0001f)return false;
+  }
+  runtime.layout({0,0,canvas.resolution.x,canvas.resolution.y});auto mapped=event;mapped.position=point;
+  return runtime.pointer(mapped);
 }
 
 void EditorSession::refreshMaterialSlotView() {

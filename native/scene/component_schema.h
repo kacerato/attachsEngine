@@ -10,11 +10,11 @@
 // Duas listas independentes divergem — um componente ganha uma regra em uma
 // delas e a API em C# continua aceitando o que a interface recusa.
 //
-// **Registro por família.** Cada família declara a sua tabela em
-// `scene/schemas/<família>.h`; `componentSchemas` é a concatenação delas, feita
-// em tempo de compilação. Acrescentar um tipo é escrever o descritor e uma linha
-// na tabela da família — o Add, o Inspector, o arquivo, o mundo de execução e a
-// API em C# leem daqui. Não existe segunda lista para manter.
+// **Registro por família.** tools/component_contracts/<família>.json gera a
+// tabela incluída por scene/schemas/<família>.h e a concatenação constexpr.
+// Tipos, requisitos e consumidores continuam sendo C++ real. O Add, o Inspector,
+// o arquivo, o mundo e a API C# usam este registro. Para atualizar todos os
+// bindings: python tools/generate-component-contracts.py --sync-api.
 //
 // Quem consome este arquivo: o catálogo do inspetor, o mundo de execução
 // (runtime/game_world.cpp), o arquivo de cena e, pelo mundo, a API em C#.
@@ -113,16 +113,7 @@ struct ComponentSchema {
 };
 } // namespace ae::scene
 
-#include "scene/schemas/logic.h"
-#include "scene/schemas/rendering.h"
-#include "scene/schemas/lighting.h"
-#include "scene/schemas/camera.h"
-#include "scene/schemas/physics3d.h"
-#include "scene/schemas/animation.h"
-#include "scene/schemas/physics2d.h"
-#include "scene/schemas/audio.h"
-#include "scene/schemas/path.h"
-#include "scene/schemas/path_follow.h"
+#include "scene/generated/schema_includes.inc"
 
 namespace ae::scene {
 namespace detail {
@@ -135,9 +126,7 @@ constexpr auto joinComponentSchemas(const std::array<ComponentSchema, Sizes> &..
 }
 } // namespace detail
 
-inline constexpr auto componentSchemas = detail::joinComponentSchemas(
-    logicSchemas, renderingSchemas, lightingSchemas, cameraSchemas, physics3dSchemas, animationSchemas,
-    physics2dSchemas, audioSchemas, pathSchemas, pathFollowSchemas);
+#include "scene/generated/schema_registry.inc"
 
 // Identidade é o contrato do arquivo: dois registros com o mesmo id tornariam a
 // leitura ambígua, e a leitura recusa ambiguidade em vez de escolher pela ordem.

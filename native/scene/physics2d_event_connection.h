@@ -6,7 +6,9 @@
 namespace ae::scene {
 class PhysicsEventConnection2D final : public ComponentValue {
 public:
-  bool enabled=true;
+
+#include "scene/generated/physics2d_event_connection_PhysicsEventConnection2D_fields0.inc"
+
   u32 event=0,action=0; // trigger enter/stay/exit, contact enter/stay/exit; disconnected/activate/deactivate/toggle
   u64 receiver=0,otherFilter=0;
   static const ComponentType descriptor;
@@ -23,18 +25,8 @@ inline constexpr std::array<ComponentEnumOption,6> physics2DConnectionEvents{{
 inline constexpr std::array<ComponentEnumOption,4> physics2DConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"}
 }};
-inline constexpr std::array<ComponentBoolean,1> physics2DConnectionBooleans{{
-  {"enabled","Ativa",[](const ComponentValue &v){return static_cast<const PhysicsEventConnection2D&>(v).enabled;},
-   [](ComponentValue &v,bool on){static_cast<PhysicsEventConnection2D&>(v).enabled=on;},{"Conexão"}}
-}};
-inline constexpr std::array<ComponentEnum,2> physics2DConnectionEnums{{
-  {"event","Evento",physics2DConnectionEvents,[](const ComponentValue &v){return static_cast<const PhysicsEventConnection2D&>(v).event;},
-   [](ComponentValue &v,u32 value){static_cast<PhysicsEventConnection2D&>(v).event=value;},
-   {"Conexão","","Sensor exige um Colisor 2D sensor; contato exige uma forma sólida no emissor"}},
-  {"action","Ação",physics2DConnectionActions,[](const ComponentValue &v){return static_cast<const PhysicsEventConnection2D&>(v).action;},
-   [](ComponentValue &v,u32 value){static_cast<PhysicsEventConnection2D&>(v).action=value;},
-   {"Conexão","","Executada antes do callback C#; permanência pode disparar a cada passo físico"}}
-}};
+#include "scene/generated/physics2d_event_connection_physics2DConnectionBooleans.inc"
+#include "scene/generated/physics2d_event_connection_physics2DConnectionEnums.inc"
 inline constexpr std::array<ComponentObjectReference,2> physics2DConnectionReferences{{
   {"receiver","Receptor","",ObjectReferenceScope::Any,"Escolher objeto",
    [](const ComponentValue &v){return static_cast<const PhysicsEventConnection2D&>(v).receiver;},

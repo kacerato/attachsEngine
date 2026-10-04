@@ -5,6 +5,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Host-side generation only. Generated C++ is checked in and has no Python
+# dependency at runtime. Checking as a dependency also protects explicit targets.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_custom_target(aether_component_codegen_check
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate-component-contracts.py --check
+  COMMENT "Checking generated component contracts"
+  VERBATIM)
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
@@ -341,6 +349,7 @@ add_library(aether_core STATIC
   profiler/frame_statistics.cpp
 )
 target_include_directories(aether_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_dependencies(aether_core aether_component_codegen_check)
 target_link_libraries(aether_core PUBLIC Threads::Threads)
 
 # --- aether_platform: lifecycle portátil do shell -------------------------
@@ -441,6 +450,17 @@ target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc PUBLIC 
 # percorram o MESMO caminho depois daqui.
 target_link_libraries(aether_assets PUBLIC aether_core aether_renderer)
 
+if(NOT ANDROID)
+  # Only descriptors and GUID/archive primitives: regenerating the scripting API
+  # must not rebuild/link the renderer, editor, physics or the full test runner.
+  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp)
+  target_include_directories(aether_component_contract_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  add_dependencies(aether_component_contract_probe aether_component_codegen_check)
+  if(MINGW)
+    target_compile_options(aether_component_contract_probe PRIVATE -Wa,-mbig-obj -g0)
+  endif()
+endif()
+
 # --- aether_runtime: o mundo de execucao, independente do editor -----------
 # Grafo de cena, identidade/geracao de handles, fila de comandos e relogio. Nao
 # conhece editor, UI, historico nem selecao: e o que um consumidor sem editor
@@ -465,7 +485,7 @@ add_library(aether_runtime STATIC
   runtime/scene_animation.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend)
+target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend aether_ui)
 
 # --- aether_editor: documento de cena, historico, projecao e gizmo ---------
 # O modelo do EDITOR, nao o do runtime: descreve o que o usuario autorou. Ele
@@ -510,7 +530,20 @@ endif()
 # Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,
 # nao conhece a cena e e desenhada por quem consome a lista de comandos. Quem
 # depende dela nao deveria arrastar junto o renderer inteiro.
+add_library(aether_imgui STATIC
+  third_party/imgui/imgui.cpp
+  third_party/imgui/imgui_draw.cpp
+  third_party/imgui/imgui_tables.cpp
+  third_party/imgui/imgui_widgets.cpp
+)
+target_include_directories(aether_imgui SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
+
 add_library(aether_ui STATIC
+  ui/gui_document.cpp
+  ui/gui_images.cpp
+  ui/gui_world.cpp
+  ui/gui_workbench.cpp
+  ui/immediate_gui.cpp
   ui/ui_draw_list.cpp
   ui/ui_font.cpp
   ui/ui_icon_atlas.cpp
@@ -521,7 +554,7 @@ add_library(aether_ui STATIC
   ui/ui_text.cpp
 )
 target_include_directories(aether_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_ui PUBLIC aether_core)
+target_link_libraries(aether_ui PUBLIC aether_core aether_imgui)
 
 # --- aether_rhi: descritores/cache/perfis de dispositivo + wrappers Vulkan -
 add_library(aether_rhi STATIC
@@ -855,6 +888,19 @@ if(NOT ANDROID)
     target_compile_options(aether_fields50_tests PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
+  add_executable(aether_gui_tests ../tests/native/family_base_main.cpp ../tests/native/test_gui.cpp ../tests/native/test_gui_expansion.cpp
+    ../tests/native/test_ui_draw_list.cpp ../tests/native/test_ui_instance_builder.cpp)
+  target_include_directories(aether_gui_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_gui_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_gui_tests PRIVATE aether_editor aether_ui aether_renderer)
+  add_executable(aether_gui_preview ../tests/native/gui_preview_main.cpp)
+  target_include_directories(aether_gui_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_gui_preview PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_gui_preview PRIVATE aether_editor aether_ui aether_renderer)
+  if(MINGW)
+    target_compile_options(aether_gui_tests PRIVATE -Wa,-mbig-obj)
+    target_compile_options(aether_gui_preview PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(aether_input_family_tests ../tests/native/input_family_main.cpp ../tests/native/test_runtime_input.cpp ../tests/native/test_input_interactions.cpp ../tests/native/test_editor_session.cpp)
   target_include_directories(aether_input_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_input_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
@@ -872,7 +918,7 @@ if(NOT ANDROID)
   add_executable(aether_family_base_tests ../tests/native/family_base_main.cpp ../tests/native/test_family_base.cpp ../tests/native/test_runtime_world.cpp)
   add_executable(aether_prefab_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_prefab.cpp ../tests/native/test_prefab_structure.cpp)
   add_executable(aether_curve_gradient_family_tests ../tests/native/curve_gradient_family_main.cpp ../tests/native/test_numeric_expression.cpp ../tests/native/test_editor_session.cpp)
-  add_executable(aether_audio_listener_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_runtime_audio.cpp)
+  add_executable(aether_audio_listener_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_runtime_audio.cpp ../tests/native/test_script_audio.cpp)
   target_include_directories(aether_audio_listener_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_audio_listener_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   if(MINGW)

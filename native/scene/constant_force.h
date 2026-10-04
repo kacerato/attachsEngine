@@ -7,11 +7,17 @@ namespace ae::scene {
 // follow the solver's current quaternion and never inherit object scale.
 class ConstantForce final : public ComponentValue {
 public:
-  float forceX=0,forceY=0,forceZ=0;
-  float relativeForceX=0,relativeForceY=0,relativeForceZ=0;
-  float torqueX=0,torqueY=0,torqueZ=0;
-  float relativeTorqueX=0,relativeTorqueY=0,relativeTorqueZ=0;
-  bool enabled=true;
+
+#include "scene/generated/constant_force_ConstantForce_fields0.inc"
+
+#include "scene/generated/constant_force_ConstantForce_fields1.inc"
+
+#include "scene/generated/constant_force_ConstantForce_fields2.inc"
+
+#include "scene/generated/constant_force_ConstantForce_fields3.inc"
+
+#include "scene/generated/constant_force_ConstantForce_fields4.inc"
+
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<ConstantForce>(*this);}
@@ -31,27 +37,8 @@ public:
     return valid();
   }
 };
-inline constexpr std::array<ComponentNumber,12> constantForceNumbers{{
-#define AE_FORCE_NUMBER(id,label,field,group,unit) {label,-10000000,10000000,1.f,[](const ComponentValue &v)->const float&{return static_cast<const ConstantForce&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<ConstantForce&>(v).field;},id,{group,unit,"Aplicado a cada passo físico; não multiplique pelo tempo."}}
-  AE_FORCE_NUMBER("force_x","Força X",forceX,"Força mundo","N"),
-  AE_FORCE_NUMBER("force_y","Força Y",forceY,"Força mundo","N"),
-  AE_FORCE_NUMBER("force_z","Força Z",forceZ,"Força mundo","N"),
-  AE_FORCE_NUMBER("relative_force_x","Força local X",relativeForceX,"Força local","N"),
-  AE_FORCE_NUMBER("relative_force_y","Força local Y",relativeForceY,"Força local","N"),
-  AE_FORCE_NUMBER("relative_force_z","Força local Z",relativeForceZ,"Força local","N"),
-  AE_FORCE_NUMBER("torque_x","Torque X",torqueX,"Torque mundo","N·m"),
-  AE_FORCE_NUMBER("torque_y","Torque Y",torqueY,"Torque mundo","N·m"),
-  AE_FORCE_NUMBER("torque_z","Torque Z",torqueZ,"Torque mundo","N·m"),
-  AE_FORCE_NUMBER("relative_torque_x","Torque local X",relativeTorqueX,"Torque local","N·m"),
-  AE_FORCE_NUMBER("relative_torque_y","Torque local Y",relativeTorqueY,"Torque local","N·m"),
-  AE_FORCE_NUMBER("relative_torque_z","Torque local Z",relativeTorqueZ,"Torque local","N·m")
-#undef AE_FORCE_NUMBER
-}};
-inline constexpr std::array<ComponentBoolean,1> constantForceBooleans{{
-  {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const ConstantForce&>(v).enabled;},
-   [](ComponentValue &v,bool b){static_cast<ConstantForce&>(v).enabled=b;},
-   {"Força mundo","","Requer Corpo físico dinâmico no mesmo objeto; desligado permite configurar sem aplicar."}}
-}};
+#include "scene/generated/constant_force_constantForceNumbers.inc"
+#include "scene/generated/constant_force_constantForceBooleans.inc"
 inline constexpr std::array<ComponentTriple,4> constantForceTriples{{
   {"force","Força mundo",{"force_x","force_y","force_z"}},
   {"relative_force","Força local",{"relative_force_x","relative_force_y","relative_force_z"}},

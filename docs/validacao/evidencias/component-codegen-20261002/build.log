@@ -1,0 +1,59 @@
+[0/1] Re-running CMake...
+-- Found Python3: C:/Users/donod/AppData/Local/Programs/Python/Python312/python.exe (found version "3.12.10") found components: Interpreter
+Interprocedural optimizations are turned on
+-- CMake C compiler: GNU
+-- CMake C++ compiler: GNU
+-- CMake system name: Windows
+-- CMake host system processor: AMD64
+-- Box2D on MinGW
+-- Configuring done (7.3s)
+-- Generating done (0.6s)
+-- Build files have been written to: C:/Users/donod/Downloads/atchengine/build/editor-host
+[1/48] Checking generated component contracts
+45 types / 10 family tables; 352 property declarations / 60 tables; 704 generated accessors; all outputs current
+[2/48] Building CXX object CMakeFiles/aether_renderer.dir/renderer/shadow_atlas.cpp.obj
+[3/48] Linking CXX static library libaether_renderer.a
+[4/48] Building CXX object CMakeFiles/aether_assets.dir/resources/material_asset.cpp.obj
+[5/48] Linking CXX static library libaether_assets.a
+[6/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.obj
+[7/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/prefab.cpp.obj
+[8/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.obj
+[9/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.obj
+[10/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.obj
+[11/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.obj
+[12/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.obj
+[13/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.obj
+[14/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.obj
+[15/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.obj
+[16/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_animation.cpp.obj
+[17/48] Building CXX object CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.obj
+[18/48] Linking CXX static library libaether_runtime.a
+[19/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.obj
+[20/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_document.cpp.obj
+[21/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.obj
+[22/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.obj
+[23/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[24/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[25/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[26/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.obj
+[27/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[28/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[29/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[30/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[31/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.obj
+[32/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[33/48] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_history.cpp.obj
+[34/48] Linking CXX static library libaether_editor.a
+[35/48] Building CXX object CMakeFiles/aether_component_contract_probe.dir/C_/Users/donod/Downloads/atchengine/tools/component_contract_probe.cpp.obj
+[36/48] Building CXX object CMakeFiles/aether_bulk50_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/bulk50_main.cpp.obj
+[37/48] Building CXX object CMakeFiles/aether_fields50_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/fields50_main.cpp.obj
+[38/48] Building CXX object CMakeFiles/aether_audio_listener_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_runtime_audio.cpp.obj
+[39/48] Building CXX object CMakeFiles/aether_bulk50_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_bulk50.cpp.obj
+[40/48] Building CXX object CMakeFiles/aether_fields50_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_fields50.cpp.obj
+[41/48] Linking CXX executable aether_component_contract_probe.exe
+[42/48] Building CXX object CMakeFiles/aether_fields2d50_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/fields2d50_main.cpp.obj
+[43/48] Linking CXX executable aether_bulk50_tests.exe
+[44/48] Linking CXX executable aether_fields50_tests.exe
+[45/48] Linking CXX executable aether_audio_listener_family_tests.exe
+[46/48] Building CXX object CMakeFiles/aether_fields2d50_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_fields2d50.cpp.obj
+[47/48] Linking CXX executable aether_fields2d50_tests.exe

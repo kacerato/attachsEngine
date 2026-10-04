@@ -1,0 +1,47 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "base_head": "97ecf56f17fe39e7d2fd527719b7fbce2528cd18",
+  "abi_before": 36,
+  "abi_after": 37,
+  "new_public_operations": [
+    "Resume",
+    "Seek"
+  ],
+  "corrected_transport_operations": [
+    "Play",
+    "Pause",
+    "Stop"
+  ],
+  "fixed_lifecycle": [
+    "Disabled last source remains queryable"
+  ],
+  "fixed_persistence": [
+    "Empty clip archive clears old GUID"
+  ],
+  "native_scenarios_passed": 6,
+  "managed_transport_scenarios_passed": 1,
+  "managed_abi_layout_checks_passed": 2,
+  "new_component_types": 0,
+  "newly_closed_atlas_families": 0,
+  "physical_android_validated": false,
+  "integrated_clr_android_validated": false,
+  "pushed": false,
+  "remaining_audio_gaps": [
+    "Streaming",
+    "Authored loop points",
+    "Source priority and preemption",
+    "Continuous spatial blend",
+    "Mixer sends/effects/snapshots",
+    "Completion events"
+  ],
+  "logs_sha256": {
+    "audio-abi-fields.log": "b76a211c18cf9ca777cea2af7fd93baee83032f760a3bb9b15722adeb5b63bb9",
+    "audio-abi-input.log": "0be8551b684faf4f7c6f87e4a4ff3fab6209bdf06f223301a81a98be3b76a1fd",
+    "audio-family-build-current.log": "346409db9d696874961689657ff5c4e0f3cb61e959fc9ca44b7d1ac0b91b58d1",
+    "audio-family-final-build.log": "f0da883d0b78f2f3561495c6947906038a2c6709116b77f13544d3bb0f9e9e24",
+    "audio-family-native.log": "321773db7dda4381d4f508c2c7a216846e1e2f22e6c1e999f0eea0911075ad05",
+    "audio-transport-managed-build.log": "2d0d8024af87375b007b769aeafe01a3534d5e228f96a55b913da17879d35b83",
+    "audio-transport-managed.log": "a29799827c2630d977d912db2762f90cccf3cabe81664db11896d5f3fb614684"
+  }
+}

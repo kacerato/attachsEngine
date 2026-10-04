@@ -1,0 +1,160 @@
+{
+  "format": 1,
+  "source": "native/scene/timer.h",
+  "tables": [
+    {
+      "name": "timerNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "interval_seconds",
+          "label": "Intervalo",
+          "member": "intervalSeconds"
+        }
+      ],
+      "defaults": {
+        "type": "Timer",
+        "min": {
+          "cpp": "0.05f"
+        },
+        "max": {
+          "cpp": "3600.0f"
+        },
+        "step": {
+          "cpp": "0.05f"
+        },
+        "default": {
+          "cpp": "1.0f"
+        },
+        "presentation": {
+          "group": "Disparo",
+          "unit": "s",
+          "help": "Tempo entre disparos; uma vez quando Repetir está desligado"
+        }
+      }
+    },
+    {
+      "name": "timerBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "auto_start",
+          "label": "Iniciar automaticamente",
+          "member": "autoStart",
+          "presentation": {
+            "unit": "",
+            "help": "Inicia ao entrar em Play ou criar a instância; desligado exige Start. Alteração não reinicia timer já criado"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "repeat",
+          "label": "Repetir",
+          "member": "repeat",
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "ignore_time_scale",
+          "label": "Ignorar escala de tempo",
+          "member": "ignoreTimeScale",
+          "presentation": {
+            "unit": "",
+            "help": "Usa o intervalo não escalado aceito do quadro; a pausa do editor interrompe ambos os relógios"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Timer",
+        "presentation": {
+          "group": "Disparo"
+        }
+      }
+    },
+    {
+      "name": "timerEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "elapsed_action",
+          "label": "Ao disparar",
+          "type": "Timer",
+          "member": "elapsedAction",
+          "options": "timerActions",
+          "presentation": {
+            "group": "Conexão",
+            "unit": "",
+            "help": "Executa uma ação no alvo antes de entregar TimerElapsed; alternar preserva a paridade dos disparos agregados",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": {
+              "cpp": "{}"
+            },
+            "consumer": "runtime/scene_timers.h -> GameWorld::setActive"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "timer_Timer_fields0",
+      "type": "Timer",
+      "properties": [
+        "timerNumbers/interval_seconds"
+      ]
+    },
+    {
+      "name": "timer_Timer_fields1",
+      "type": "Timer",
+      "properties": [
+        "timerBooleans/repeat"
+      ]
+    },
+    {
+      "name": "timer_Timer_fields2",
+      "type": "Timer",
+      "properties": [
+        "timerBooleans/enabled"
+      ]
+    },
+    {
+      "name": "timer_Timer_fields3",
+      "type": "Timer",
+      "properties": [
+        "timerBooleans/ignore_time_scale"
+      ]
+    },
+    {
+      "name": "timer_Timer_fields4",
+      "type": "Timer",
+      "properties": [
+        "timerBooleans/auto_start"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+{
+  "format": 1,
+  "source": "native/scene/transform_tween.h",
+  "tables": [
+    {
+      "name": "tweenBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "presentation": {
+            "group": "Tempo"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "autoplay",
+          "label": "Iniciar no Play",
+          "member": "autoplay",
+          "presentation": {
+            "group": "Tempo"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "pingpong",
+          "label": "Ida e volta",
+          "member": "pingpong",
+          "presentation": {
+            "group": "Repetição"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "relative",
+          "label": "Destino relativo",
+          "member": "relative",
+          "presentation": {
+            "group": "Destino"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "position",
+          "label": "Mover",
+          "member": "position",
+          "presentation": {
+            "group": "Destino"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "rotation",
+          "label": "Girar",
+          "member": "rotation",
+          "presentation": {
+            "group": "Destino"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "scale",
+          "label": "Escalar",
+          "member": "scale",
+          "presentation": {
+            "group": "Destino"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "ignore_time_scale",
+          "label": "Ignorar escala de tempo",
+          "member": "ignoreTimeScale",
+          "presentation": {
+            "group": "Tempo",
+            "unit": "",
+            "help": "Usa o intervalo não escalado aceito; pausa editorial interrompe ambos os modos"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "TransformTween"
+      }
+    },
+    {
+      "name": "tweenEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "easing",
+          "label": "Curva",
+          "type": "TransformTween",
+          "member": "easing",
+          "options": "tweenEasings",
+          "presentation": {
+            "group": "Tempo"
+          }
+        },
+        {
+          "id": "loops",
+          "label": "Ciclos",
+          "type": "TransformTween",
+          "member": "loops",
+          "options": "tweenLoops",
+          "presentation": {
+            "group": "Repetição"
+          }
+        },
+        {
+          "id": "finished_action",
+          "label": "Ao concluir",
+          "type": "TransformTween",
+          "member": "finishedAction",
+          "options": "tweenFinishedActions",
+          "presentation": {
+            "group": "Conexão",
+            "unit": "",
+            "help": "Executa depois da pose final de todos os ciclos finitos; cancelar ou ciclo infinito não dispara"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "transform_tween_TransformTween_fields0",
+      "type": "TransformTween",
+      "properties": [
+        "tweenBooleans/enabled",
+        "tweenBooleans/autoplay",
+        "tweenBooleans/pingpong",
+        "tweenBooleans/relative",
+        "tweenBooleans/position",
+        "tweenBooleans/rotation",
+        "tweenBooleans/scale",
+        "tweenBooleans/ignore_time_scale"
+      ]
+    }
+  ]
+}

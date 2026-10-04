@@ -1,0 +1,222 @@
+{
+  "format": 1,
+  "family": "logic",
+  "table": "logicSchemas",
+  "entries": [
+    {
+      "type": "SpringPositionConstraint",
+      "name": "Mola de posição",
+      "description": "Segue fonte com velocidade e amortecimento persistentes no runtime",
+      "conflicts": {
+        "cpp": "springPositionConflicts"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Molas",
+      "icon": "component/spring-position",
+      "searchTerms": "Spring SmoothDamp Position Follow",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html",
+      "apiName": "SpringPositionConstraint"
+    },
+    {
+      "type": "SpringRotationConstraint",
+      "name": "Mola de rotação",
+      "description": "Segue orientação por quaternion com amortecimento e caminho curto",
+      "conflicts": {
+        "cpp": "springRotationConflicts"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Molas",
+      "icon": "component/spring-rotation",
+      "searchTerms": "Spring Quaternion Rotation Follow",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-RotationConstraint.html",
+      "apiName": "SpringRotationConstraint"
+    },
+    {
+      "type": "SpringScaleConstraint",
+      "name": "Mola de escala",
+      "description": "Segue escala positiva sem publicar escala singular",
+      "conflicts": {
+        "cpp": "springScaleConflicts"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Molas",
+      "icon": "component/spring-scale",
+      "searchTerms": "Spring SmoothDamp Scale Follow",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-ScaleConstraint.html",
+      "apiName": "SpringScaleConstraint"
+    },
+    {
+      "type": "PositionConstraint",
+      "name": "Position Constraint",
+      "description": "Restrição de mundo com uma fonte",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Restrições",
+      "icon": "component/position-constraint",
+      "searchTerms": "Constraint Restricao Position",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html",
+      "apiName": "PositionConstraint"
+    },
+    {
+      "type": "RotationConstraint",
+      "name": "Rotation Constraint",
+      "description": "Restrição de mundo com uma fonte",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Restrições",
+      "icon": "component/rotation-constraint",
+      "searchTerms": "Constraint Restricao Rotation",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-RotationConstraint.html",
+      "apiName": "RotationConstraint"
+    },
+    {
+      "type": "ScaleConstraint",
+      "name": "Scale Constraint",
+      "description": "Restrição de mundo com uma fonte",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Restrições",
+      "icon": "component/scale-constraint",
+      "searchTerms": "Constraint Restricao Scale",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-ScaleConstraint.html",
+      "apiName": "ScaleConstraint"
+    },
+    {
+      "type": "AimConstraint",
+      "name": "Aim Constraint",
+      "description": "Restrição de mundo com uma fonte",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Restrições",
+      "icon": "component/aim-constraint",
+      "searchTerms": "Constraint Restricao Aim",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-AimConstraint.html",
+      "apiName": "AimConstraint"
+    },
+    {
+      "type": "ParentConstraint",
+      "name": "Parent Constraint",
+      "description": "Segue posição e rotação da fonte sem herdar escala",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Restrições",
+      "icon": "component/parent-constraint",
+      "searchTerms": "Parent Constraint Pai",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-ParentConstraint.html",
+      "apiName": "ParentConstraint"
+    },
+    {
+      "type": "LookAtConstraint",
+      "name": "Look At Constraint",
+      "description": "Orienta +Z para a fonte com vertical e roll",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_constraints.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Restrições",
+      "icon": "component/look-at-constraint",
+      "searchTerms": "Look At Olhar",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-LookAtConstraint.html",
+      "apiName": "LookAtConstraint"
+    },
+    {
+      "type": "TransformTween",
+      "name": "Transform Tween",
+      "description": "Interpola canais locais com espera, curva e repetição",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_tweens.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Tempo",
+      "icon": "component/tween-transform",
+      "searchTerms": "Tween Interpolar Transform",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_tween.html",
+      "apiName": "TransformTween"
+    },
+    {
+      "type": "Timer",
+      "name": "Timer",
+      "description": "Dispara eventos temporizados e ações persistentes de ativação de objetos",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_timers.h → ScriptBridge → Behavior.TimerElapsed",
+      "subfamily": "Tempo",
+      "icon": "component/timer",
+      "searchTerms": "Timer Countdown Interval Cronometro",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_timer.html",
+      "apiName": "GameTimer"
+    },
+    {
+      "type": "ScriptBehavior",
+      "name": "Comportamento",
+      "description": "Código C# do projeto",
+      "propertiesInPlay": {
+        "cpp": "PlayMutability::Never"
+      },
+      "consumer": "runtime/script_bridge.cpp → runtime .NET",
+      "invalidates": {
+        "cpp": "Invalidate::Script"
+      },
+      "subfamily": "Código",
+      "icon": "scripting/code",
+      "searchTerms": "MonoBehaviour Script Behaviour",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/ScriptReference/MonoBehaviour.html",
+      "listedInAdd": false
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Logic"
+    }
+  }
+}

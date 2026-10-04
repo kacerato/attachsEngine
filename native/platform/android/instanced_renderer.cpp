@@ -1632,6 +1632,8 @@ void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
     upload.shutdown();
     return;
   }
+  if(!uiImmediateAtlas_.empty()) uiImmediatePending_=true;
+  if(!uiGuiAtlas_.empty())uiGuiPending_=true;
   upload.shutdown();
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[UI] pronta: fonte %ux%u icones %ux%u capacidade=%u.",
@@ -1689,6 +1691,21 @@ void InstancedRenderer::recordRuntimeHud(u32 imageIndex,const renderer::RuntimeH
 
 void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
   if(!uiRenderer_.isReady() || uiInstances_.empty() || imageIndex>=uiFramebuffers_.size()) return;
+  uiRenderer_.setSceneDepth(depthImage_.view(),postDepthSampler_.handle(),swapchain_->width(),swapchain_->height());
+  if(uiGuiPending_) {
+    rhi::VulkanUploadContext upload;
+    if(upload.initialize(device_,rhiDevice_->graphicsQueueFamily()) && uiRenderer_.setGuiAtlas(upload,uiGuiAtlas_,uiGuiSize_,uiGuiSize_))uiGuiPending_=false;
+    else __android_log_print(ANDROID_LOG_ERROR,LogTag,"[UI] GUI image atlas upload failed; retry pending.");
+    upload.shutdown();
+  }
+  if(uiImmediatePending_) {
+    rhi::VulkanUploadContext upload;
+    if(upload.initialize(device_,rhiDevice_->graphicsQueueFamily()) &&
+       uiRenderer_.setImmediateAtlas(upload,uiImmediateAtlas_,uiImmediateWidth_,uiImmediateHeight_))
+      uiImmediatePending_=false;
+    else __android_log_print(ANDROID_LOG_WARN,LogTag,"[UI] ImGui font atlas upload failed; retry pending.");
+    upload.shutdown();
+  }
   // R4: atlas de prévia pendente. Aqui o quadro anterior já terminou (fence) e o
   // conjunto de descritores da interface ainda não foi ligado neste quadro.
   if(!pendingUiPreview_.empty()) {
@@ -1731,6 +1748,11 @@ ui::UiRect InstancedRenderer::physicalSceneViewport() const {
           (transform.yx*x+transform.yy*y+1-h)*.5f,w,h};
 }
 
+void InstancedRenderer::setUiGuiAtlas(std::span<const u8> rgba,u32 size,u64 revision) {
+  if(uiGuiRevision_==revision || rgba.size()!=static_cast<usize>(size)*size*4)return;
+  if(rgba.empty())std::vector<u8>{}.swap(uiGuiAtlas_);else uiGuiAtlas_.assign(rgba.begin(),rgba.end());
+  uiGuiSize_=size;uiGuiRevision_=revision;uiGuiPending_=true;
+}
 void InstancedRenderer::setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height) {
   pendingUiPreview_.assign(rgba.begin(), rgba.end());
   pendingUiPreviewWidth_ = width;
@@ -1739,6 +1761,13 @@ void InstancedRenderer::setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u
 
 void InstancedRenderer::setUiInstances(std::span<const ui::UiInstance> instances) {
   uiInstances_.assign(instances.begin(), instances.end());
+}
+
+void InstancedRenderer::setUiImmediateAtlas(std::span<const u8> rgba,u32 width,u32 height) {
+  if(!width || !height || rgba.size()!=static_cast<usize>(width)*height*4) return;
+  // Context font atlas is immutable. Only copy once; keep CPU data for swapchain recovery.
+  if(uiImmediateWidth_==width && uiImmediateHeight_==height && !uiImmediateAtlas_.empty()) return;
+  uiImmediateAtlas_.assign(rgba.begin(),rgba.end());uiImmediateWidth_=width;uiImmediateHeight_=height;uiImmediatePending_=true;
 }
 
 void InstancedRenderer::setUiSurfaceSize(float width, float height) {

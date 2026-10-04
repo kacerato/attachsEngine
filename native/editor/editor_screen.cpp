@@ -263,7 +263,7 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
 
   const auto sceneMenu=takeLeft(content,76.0f);
   builder.list.addRect(sceneMenu,theme.color.raised,theme.radius.control);
-  builder.label(sceneMenu,"Cena",theme.color.text,theme.type.caption,UiAlign::Center);
+  builder.label(sceneMenu,builder.state.workspace==EditorWorkspace::Gui?"Interface":"Cena",theme.color.text,theme.type.caption,UiAlign::Center);
   builder.router.addRegion(sceneMenu,widgetId(EditorWidget::ProjectMenu));
   takeLeft(content,theme.spacing.small);
   const auto save=takeLeft(content,64.0f);
@@ -8672,6 +8672,30 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
 }
 
 
+void buildWorkspaceMenu(ScreenBuilder &builder) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  auto &list=builder.list;auto &router=builder.router;
+  if(state.workspaceMenu) {
+    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
+    const u32 menuRows=6+(state.assetCount?1:0);
+    const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 48.0f+44.0f*menuRows);
+    list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
+    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Configurações do projeto","Interface (UI + ImGui)","Layout dos painéis","Fechar"};
+    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::TabGui,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
+    builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
+    for(u32 i=0;i<std::size(actions);++i) {
+      if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
+      auto row=takeTop(content,44);
+      if(actions[i]==EditorWidget::TabGui) {
+        builder.list.addImage(centred(takeLeft(row,32),24,24),static_cast<UiImageId>(UiIcon::UiInterfaceCanvas));
+      }
+      builder.label(row,names[i],theme.color.text,theme.type.body);
+      // The full menu line is the target, including its icon.
+      router.addRegion({content.x,row.y,content.width,row.height},widgetId(actions[i]));
+    }
+  }
+}
+
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
                                      UiDrawList &list, UiInputRouter &router) {
   EditorScreenLayout layout{};
@@ -8682,6 +8706,12 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   builder.layout=&layout;
   UiRect remaining = deflate(state.surface, state.safeArea);
   layout.topBar = takeTop(remaining, kTopBarHeight);
+  if(state.workspace==EditorWorkspace::Gui) {
+    buildTopBar(builder,layout.topBar);
+    layout.viewport=remaining;router.addBlocker(remaining);list.addRect(remaining,theme.color.canvas);
+    buildWorkspaceMenu(builder);
+    return layout;
+  }
   if(state.workspace==EditorWorkspace::Code) {
     buildCodeWorkspace(builder,remaining,layout.topBar,layout);
     // O campo embutido tambem vale aqui. Sem esta chamada, criar um script ou
@@ -8784,15 +8814,14 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   buildTopBar(builder, layout.topBar);
   // Play owns the entire body; editor gizmos must not intercept runtime input.
   if (state.workspace == EditorWorkspace::Play) {
-    list.addRect({layout.viewport.x+8,layout.viewport.y+4,std::min(390.0f,layout.viewport.width-16),32},withAlpha(theme.color.surface,.90f),3);
     const auto *controlled=state.document?state.document->find(state.selection):nullptr;
     const bool hasSecondary=!state.playSecondaryActionLabel.empty();
     const bool showJump=hasSecondary?state.playHasCharacter:
-        state.playHasScripts || (controlled&&characterComponent(*controlled)&&characterComponent(*controlled)->jumpSpeed>0);
+        (controlled&&characterComponent(*controlled)&&characterComponent(*controlled)->jumpSpeed>0);
     if(showJump) {
       const UiRect jump{layout.viewport.x+layout.viewport.width-(hasSecondary?208.0f:108.0f),layout.viewport.y+layout.viewport.height-76,92,56};
       list.addRect(jump,theme.color.raised,theme.radius.control);
-      builder.label(jump,hasSecondary?"Saltar":state.playHasScripts?"Ação":"Saltar",state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(jump,"Saltar",state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
       if(!state.playPaused) router.addRegion(jump,widgetId(EditorWidget::JumpCharacter),theme.touch.minimumTarget);
     }
     if(hasSecondary) {
@@ -8806,10 +8835,6 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       list.addRect({cx-1,cy-9,2,18},theme.color.accent);
       list.addRect({cx-9,cy-1,18,2},theme.color.accent);
     }
-    builder.label({layout.viewport.x+12,layout.viewport.y+8,layout.viewport.width-24,24},
-                  state.playFirstPerson?"Esquerda: mover · direita: olhar · botões: saltar e agir":
-                  state.playHasScripts?"Arraste à esquerda para mover · Ação ativa a habilidade":
-                  controlled&&characterComponent(*controlled)?"Arraste à esquerda para mover o personagem":"Simulação - use o quadrado no topo para parar", theme.color.textDim,theme.type.caption);
     if(!state.playHudMessage.empty()) {
       const float width=std::max(120.0f,std::min(510.0f,layout.viewport.width-(hasSecondary?222.0f:122.0f)));
       const UiRect status{layout.viewport.x+8,layout.viewport.y+layout.viewport.height-62,width,40};
@@ -9238,19 +9263,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     auto page=deflate(remaining,UiInsets::all(12));
     buildComponents(builder,page,*state.document->find(prefabTarget));
   }
-  if(state.workspaceMenu) {
-    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const u32 menuRows=5+(state.assetCount?1:0);
-    const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 48.0f+44.0f*menuRows);
-    list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Configurações do projeto","Layout dos painéis","Fechar"};
-    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
-    builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
-    for(u32 i=0;i<std::size(actions);++i) {
-      if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
-      auto row=takeTop(content,44);builder.label(row,names[i],theme.color.text,theme.type.body);router.addRegion(row,widgetId(actions[i]));
-    }
-  }
+  buildWorkspaceMenu(builder);
   // A contextual surface, not a second Inspector implementation. Draw after
   // viewport tools and block their hit regions, but before property pickers and
   // keyboards. Keeping the underlying viewport valid avoids zero-size render
@@ -10042,6 +10055,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       state.playPaused=false;state.playStepRequested=false;
       outcome.requestPlay = state.workspace == EditorWorkspace::Play;
       break;
+    case EditorWidget::TabGui: state.workspaceMenu=false;state.workspace=EditorWorkspace::Gui;break;
     case EditorWidget::TabScene: state.workspaceMenu=false; state.workspace = EditorWorkspace::Scene; break;
     case EditorWidget::TabAssets: if(state.assetCount) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Assets;} break;
     case EditorWidget::TabLighting: state.workspaceMenu=false; state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;

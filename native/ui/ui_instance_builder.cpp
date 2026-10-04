@@ -7,7 +7,7 @@ namespace {
 
 // astra_ui.vert lê o buffer como um array std430 destas. Um campo a mais aqui e
 // o shader passa a ler a instância seguinte, sem nenhum sintoma imediato.
-static_assert(sizeof(UiInstance) == 80, "astra_ui.vert le instancias de 80 bytes.");
+static_assert(sizeof(UiInstance) == 160, "astra_ui.vert reads 160-byte instances.");
 static_assert(alignof(UiInstance) == 16, "std430 alinha a instancia em 16 bytes.");
 
 void writeRect(float (&destination)[4], const UiRect &rect) noexcept {
@@ -75,8 +75,23 @@ UiInstanceBuildResult buildUiInstances(const UiDrawList &list, const UiFont &fon
     instance.colors[0] = command.color;
     instance.colors[1] = command.gradientEnd;
     instance.colors[2] = command.borderColor;
+    instance.colors[3] = command.worldFlags;
+    std::copy_n(command.projection,12,instance.projection);
+    writeRect(instance.worldClip,command.worldClip);
 
     switch (command.kind) {
+      case UiPrimitive::Triangle: {
+        const auto &a=command.vertices[0], &b=command.vertices[1], &c=command.vertices[2];
+        instance.bounds[0]=a.position.x; instance.bounds[1]=a.position.y;
+        instance.bounds[2]=b.position.x; instance.bounds[3]=b.position.y;
+        instance.atlas[0]=c.position.x; instance.atlas[1]=c.position.y;
+        instance.atlas[2]=a.uv.x; instance.atlas[3]=a.uv.y;
+        instance.params[0]=b.uv.x; instance.params[1]=b.uv.y;
+        instance.params[2]=static_cast<float>(UiInstanceKind::Triangle);
+        instance.extra[0]=c.uv.x; instance.extra[1]=c.uv.y;
+        instance.colors[0]=a.color; instance.colors[1]=b.color; instance.colors[2]=c.color;
+        push(instance); break;
+      }
       case UiPrimitive::Rect: {
         writeRect(instance.bounds, command.bounds);
         instance.params[2] = static_cast<float>(UiInstanceKind::Rect);
@@ -87,6 +102,9 @@ UiInstanceBuildResult buildUiInstances(const UiDrawList &list, const UiFont &fon
         if(command.image==kUiCameraPreviewImage) {
           writeRect(instance.bounds,command.bounds);instance.params[2]=static_cast<float>(UiInstanceKind::CameraPreview);
           push(instance);break;
+        }
+        if (command.image == kUiGuiImage) {
+          writeRect(instance.bounds,command.bounds);writeRect(instance.atlas,command.atlas);instance.params[2]=static_cast<float>(UiInstanceKind::GuiImage);push(instance);break;
         }
         if (command.image == kUiPreviewImage) {
           if (command.atlas.isEmpty()) break;
@@ -126,6 +144,7 @@ UiInstanceBuildResult buildUiInstances(const UiDrawList &list, const UiFont &fon
         glyphs.clear();
         font.layoutLine(text, weight, command.style, origin, glyphs);
         for (const UiPositionedGlyph &glyph : glyphs) {
+          if(intersect(glyph.bounds,command.clip).isEmpty()) continue;
           UiInstance glyphInstance = instance;
           writeRect(glyphInstance.bounds, glyph.bounds);
           writeRect(glyphInstance.atlas, glyph.atlas);

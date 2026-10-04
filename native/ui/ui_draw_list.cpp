@@ -4,6 +4,35 @@
 
 namespace ae::ui {
 
+bool UiDrawList::append(const UiDrawList &other) {
+  if (&other == this) return false;
+  bool ok = true;
+  for (auto command : other.commands()) {
+    if(!command.worldFlags) command.clip = intersect(command.clip,currentClip());
+    if (command.kind == UiPrimitive::Text) {
+      const auto text = other.textOf(command);
+      command.textOffset = static_cast<u32>(textArena_.size());
+      textArena_.append(text);
+    }
+    ok = push(command) && ok;
+  }
+  return ok;
+}
+
+bool UiDrawList::addTriangle(const UiMeshVertex &a, const UiMeshVertex &b, const UiMeshVertex &c) {
+  for (const auto &v : {a,b,c}) if (!std::isfinite(v.position.x) || !std::isfinite(v.position.y) ||
+      !std::isfinite(v.uv.x) || !std::isfinite(v.uv.y)) return false;
+  UiDrawCommand command{};
+  command.kind = UiPrimitive::Triangle;
+  const float x = std::min({a.position.x,b.position.x,c.position.x});
+  const float y = std::min({a.position.y,b.position.y,c.position.y});
+  command.bounds = {x,y,std::max({a.position.x,b.position.x,c.position.x})-x,
+                        std::max({a.position.y,b.position.y,c.position.y})-y};
+  command.clip = currentClip();
+  command.vertices[0]=a; command.vertices[1]=b; command.vertices[2]=c;
+  return push(command);
+}
+
 void UiDrawList::begin(const UiRect &viewport, const UiFontMetrics &metrics) noexcept {
   commands_.clear();
   textArena_.clear();
@@ -135,6 +164,13 @@ bool UiDrawList::addPreviewImage(const UiRect &bounds, const UiRect &texels, UiC
   return push(command);
 }
 
+bool UiDrawList::addGuiImage(const UiRect &bounds,const UiRect &texels,UiColor tint,float radius) {
+  if(!addPreviewImage(bounds,texels,tint,radius))return false;
+  commands_.back().image=kUiGuiImage;return true;
+}
+void UiDrawList::projectRange(usize first,const float projection[12],bool occlusion,const UiRect &viewport) {
+  for(usize i=first;i<commands_.size();++i) {std::copy_n(projection,12,commands_[i].projection);commands_[i].worldFlags=occlusion?3u:1u;commands_[i].worldClip=viewport;}
+}
 bool UiDrawList::addLine(UiPoint from, UiPoint to, UiColor color, float width) {
   if (!std::isfinite(width) || width <= 0.0f) return false;
   if (!std::isfinite(from.x) || !std::isfinite(from.y)) return false;

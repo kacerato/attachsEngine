@@ -1,0 +1,32 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "base_head": "97ecf56f17fe39e7d2fd527719b7fbce2528cd18",
+  "date": "2026-10-02",
+  "preexisting_dirty_changes": true,
+  "snapshot_before_sha256": "776bface2b97593ee2097ccb4fa66864a0733c9d9c80cf469bd6b6e69c88e800",
+  "snapshot_after_sha256": "776bface2b97593ee2097ccb4fa66864a0733c9d9c80cf469bd6b6e69c88e800",
+  "registered_types": 45,
+  "property_declarations": 352,
+  "instantiated_bindings_examined": 548,
+  "generated_fields": 189,
+  "types_with_generated_fields": 26,
+  "generator_tests_passed": 6,
+  "runtime_scenarios_passed": 16,
+  "new_components": 0,
+  "android_validated": false,
+  "pushed": false,
+  "github_ci_executed": false,
+  "evidence_sha256": {
+    "build.log": "e9deb50885be2e52e26aef6a50682d881873609b00a9487615e81d5ed82822ab",
+    "exporter-build.log": "83221cb12dd32d1bccb51eff456a4a149dd04f6bdfc5a2b7715237c08f7c1d43",
+    "generation.json": "7704150b3e065090666c7236369ff1adae4a1f3b577760c00d00d0758926dff6",
+    "generator-tests.log": "6a1f32f10dc56bed17936981667a4dd6ec4afabe9a92a446f2d94554c408d045",
+    "README.md": "95821f25ae04d72b79b0dba144f675c44d6c224e200fe99844ea44bb9c99038b",
+    "runtime-audio.log": "48b0ff7c3da626dd5ced581bb5a3f88e24ccdcd278c107af22c92190b6bd7a5e",
+    "runtime-bulk.log": "d7283560fe754a8cb0d07284fade450d2f4507e154443c118d7d3082e7a4dad7",
+    "runtime-fields2d.log": "ac7c4b83410c56fea1b5a2f01598139a6687d17182d72244db10f213c3cdda44",
+    "runtime-fields3d.log": "6621e4b90a523009d3a32adb14ff61025c76f5130dbe5118869b9669c6b25755",
+    "sync.log": "347719677a1cc49c48ca2ad50105215be461331e9bc46d50ebda79435829f813"
+  }
+}

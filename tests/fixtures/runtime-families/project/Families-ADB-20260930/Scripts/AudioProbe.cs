@@ -49,7 +49,7 @@ public sealed class AudioProbe : Behavior
             else if (stage == 1)
             {
                 if (observed.State != AudioVoiceState.Paused || Math.Abs(observed.Cursor - cursor) > .15) throw new Exception("Pause failed to preserve backend cursor");
-                cursor = observed.Cursor; voice.Play();
+                cursor = observed.Cursor; voice.Resume();
             }
             else if (stage == 2)
             {
@@ -59,7 +59,7 @@ public sealed class AudioProbe : Behavior
             else
             {
                 if (observed.State != AudioVoiceState.Stopped || Math.Abs(observed.Cursor) > .02) throw new Exception("Stop did not reset backend cursor");
-                Log("AUDIOPASS", "real voice play/pause/resume/stop and cursor observed; seek unsupported; audibility requires separate human evidence");
+                Log("AUDIOPASS", "real voice play/pause/resume/stop and cursor observed; seek covered by host transport acceptance; audibility requires separate human evidence");
                 finished = true; return;
             }
             ++stage; stageStarted = now;

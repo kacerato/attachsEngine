@@ -1,0 +1,209 @@
+{
+  "format": 1,
+  "source": "native/scene/constant_force.h",
+  "tables": [
+    {
+      "name": "constantForceBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "ConstantForce",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Força mundo",
+          "unit": "",
+          "help": "Requer Corpo físico dinâmico no mesmo objeto; desligado permite configurar sem aplicar."
+        }
+      }
+    },
+    {
+      "name": "constantForceNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "force_x",
+          "label": "Força X",
+          "member": "forceX",
+          "presentation": {
+            "group": "Força mundo",
+            "unit": "N"
+          }
+        },
+        {
+          "id": "force_y",
+          "label": "Força Y",
+          "member": "forceY",
+          "presentation": {
+            "group": "Força mundo",
+            "unit": "N"
+          }
+        },
+        {
+          "id": "force_z",
+          "label": "Força Z",
+          "member": "forceZ",
+          "presentation": {
+            "group": "Força mundo",
+            "unit": "N"
+          }
+        },
+        {
+          "id": "relative_force_x",
+          "label": "Força local X",
+          "member": "relativeForceX",
+          "presentation": {
+            "group": "Força local",
+            "unit": "N"
+          }
+        },
+        {
+          "id": "relative_force_y",
+          "label": "Força local Y",
+          "member": "relativeForceY",
+          "presentation": {
+            "group": "Força local",
+            "unit": "N"
+          }
+        },
+        {
+          "id": "relative_force_z",
+          "label": "Força local Z",
+          "member": "relativeForceZ",
+          "presentation": {
+            "group": "Força local",
+            "unit": "N"
+          }
+        },
+        {
+          "id": "torque_x",
+          "label": "Torque X",
+          "member": "torqueX",
+          "presentation": {
+            "group": "Torque mundo",
+            "unit": "N·m"
+          }
+        },
+        {
+          "id": "torque_y",
+          "label": "Torque Y",
+          "member": "torqueY",
+          "presentation": {
+            "group": "Torque mundo",
+            "unit": "N·m"
+          }
+        },
+        {
+          "id": "torque_z",
+          "label": "Torque Z",
+          "member": "torqueZ",
+          "presentation": {
+            "group": "Torque mundo",
+            "unit": "N·m"
+          }
+        },
+        {
+          "id": "relative_torque_x",
+          "label": "Torque local X",
+          "member": "relativeTorqueX",
+          "presentation": {
+            "group": "Torque local",
+            "unit": "N·m"
+          }
+        },
+        {
+          "id": "relative_torque_y",
+          "label": "Torque local Y",
+          "member": "relativeTorqueY",
+          "presentation": {
+            "group": "Torque local",
+            "unit": "N·m"
+          }
+        },
+        {
+          "id": "relative_torque_z",
+          "label": "Torque local Z",
+          "member": "relativeTorqueZ",
+          "presentation": {
+            "group": "Torque local",
+            "unit": "N·m"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "ConstantForce",
+        "min": {
+          "cpp": "-10000000"
+        },
+        "max": {
+          "cpp": "10000000"
+        },
+        "step": {
+          "cpp": "1.f"
+        },
+        "default": {
+          "cpp": "0"
+        },
+        "presentation": {
+          "help": "Aplicado a cada passo físico; não multiplique pelo tempo."
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "constant_force_ConstantForce_fields0",
+      "type": "ConstantForce",
+      "properties": [
+        "constantForceNumbers/force_x",
+        "constantForceNumbers/force_y",
+        "constantForceNumbers/force_z"
+      ]
+    },
+    {
+      "name": "constant_force_ConstantForce_fields1",
+      "type": "ConstantForce",
+      "properties": [
+        "constantForceNumbers/relative_force_x",
+        "constantForceNumbers/relative_force_y",
+        "constantForceNumbers/relative_force_z"
+      ]
+    },
+    {
+      "name": "constant_force_ConstantForce_fields2",
+      "type": "ConstantForce",
+      "properties": [
+        "constantForceNumbers/torque_x",
+        "constantForceNumbers/torque_y",
+        "constantForceNumbers/torque_z"
+      ]
+    },
+    {
+      "name": "constant_force_ConstantForce_fields3",
+      "type": "ConstantForce",
+      "properties": [
+        "constantForceNumbers/relative_torque_x",
+        "constantForceNumbers/relative_torque_y",
+        "constantForceNumbers/relative_torque_z"
+      ]
+    },
+    {
+      "name": "constant_force_ConstantForce_fields4",
+      "type": "ConstantForce",
+      "properties": [
+        "constantForceBooleans/enabled"
+      ]
+    }
+  ]
+}

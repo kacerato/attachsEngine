@@ -521,6 +521,7 @@ public abstract class Behavior
     internal bool AttachedComponentAlive => _stateComponent is null ||
         Scene.TryGetProperty(ObjectId, InstanceId, "enabled", out _, out _);
     protected ISceneAccess Scene => _scene ?? throw new InvalidOperationException("Behavior is not attached to an execution world.");
+    protected GuiAccess Gui => new(Scene);
 
     private GameObject? _object;
     private bool _coroutinesBlocked;

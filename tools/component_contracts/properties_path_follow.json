@@ -1,0 +1,230 @@
+{
+  "format": 1,
+  "source": "native/scene/path_follow.h",
+  "tables": [
+    {
+      "name": "pathFollowNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "progress_distance",
+          "label": "Distância inicial",
+          "member": "progressDistance",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "presentation": {
+            "group": "Percurso",
+            "unit": "u",
+            "visible": {
+              "cpp": "[](const ComponentValue&v){const auto&c=static_cast<const PathFollow&>(v);(void)c;return true;}"
+            }
+          }
+        },
+        {
+          "id": "speed",
+          "label": "Velocidade",
+          "member": "speed",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "presentation": {
+            "group": "Percurso",
+            "unit": "u/s",
+            "visible": {
+              "cpp": "[](const ComponentValue&v){const auto&c=static_cast<const PathFollow&>(v);(void)c;return c.mode==PathFollowMode::Speed;}"
+            }
+          }
+        },
+        {
+          "id": "duration",
+          "label": "Duração",
+          "member": "duration",
+          "min": {
+            "cpp": ".001f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "presentation": {
+            "group": "Percurso",
+            "unit": "s",
+            "visible": {
+              "cpp": "[](const ComponentValue&v){const auto&c=static_cast<const PathFollow&>(v);(void)c;return c.mode==PathFollowMode::Duration;}"
+            }
+          }
+        },
+        {
+          "id": "offset_x",
+          "label": "Deslocamento lateral",
+          "member": "offset[0]",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "presentation": {
+            "group": "Orientação",
+            "unit": "u",
+            "visible": {
+              "cpp": "[](const ComponentValue&v){const auto&c=static_cast<const PathFollow&>(v);(void)c;return true;}"
+            }
+          }
+        },
+        {
+          "id": "offset_y",
+          "label": "Deslocamento vertical",
+          "member": "offset[1]",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "presentation": {
+            "group": "Orientação",
+            "unit": "u",
+            "visible": {
+              "cpp": "[](const ComponentValue&v){const auto&c=static_cast<const PathFollow&>(v);(void)c;return true;}"
+            }
+          }
+        },
+        {
+          "id": "offset_z",
+          "label": "Deslocamento tangente",
+          "member": "offset[2]",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "presentation": {
+            "group": "Orientação",
+            "unit": "u",
+            "visible": {
+              "cpp": "[](const ComponentValue&v){const auto&c=static_cast<const PathFollow&>(v);(void)c;return true;}"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "PathFollow",
+        "step": {
+          "cpp": ".1f"
+        },
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "pathFollowBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "presentation": {
+            "group": "Execução"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "autoplay",
+          "label": "Iniciar no Play",
+          "member": "autoplay",
+          "presentation": {
+            "group": "Execução"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "loop",
+          "label": "Repetir percurso",
+          "member": "loop",
+          "presentation": {
+            "group": "Execução"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "backwards",
+          "label": "Sentido inverso",
+          "member": "backwards",
+          "presentation": {
+            "group": "Execução"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "orient",
+          "label": "Orientar +Z",
+          "member": "orient",
+          "presentation": {
+            "group": "Orientação"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "PathFollow"
+      }
+    },
+    {
+      "name": "pathFollowEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "mode",
+          "label": "Avanço",
+          "type": "PathFollow",
+          "member": "mode",
+          "options": "pathFollowModes",
+          "presentation": {
+            "group": "Percurso"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "path_follow_PathFollow_fields0",
+      "type": "PathFollow",
+      "properties": [
+        "pathFollowBooleans/enabled",
+        "pathFollowBooleans/autoplay",
+        "pathFollowBooleans/loop",
+        "pathFollowBooleans/backwards",
+        "pathFollowBooleans/orient"
+      ]
+    }
+  ]
+}

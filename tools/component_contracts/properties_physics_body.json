@@ -1,0 +1,618 @@
+{
+  "format": 1,
+  "source": "native/scene/physics_body.h",
+  "tables": [
+    {
+      "name": "physicsBodyBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "sensor",
+          "label": "Sensor sem resposta",
+          "member": "sensor",
+          "presentation": {
+            "group": "Corpo"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "allow_sleep",
+          "label": "Permitir repouso",
+          "member": "allowSleep",
+          "presentation": {
+            "group": "Corpo",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "freeze_position_x",
+          "label": "Travar posição X",
+          "member": "freezePosition[0]",
+          "presentation": {
+            "group": "Restrições",
+            "unit": "",
+            "help": "Eixos do mundo; bloquear todos exige corpo estático",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        },
+        {
+          "id": "freeze_position_y",
+          "label": "Travar posição Y",
+          "member": "freezePosition[1]",
+          "presentation": {
+            "group": "Restrições",
+            "unit": "",
+            "help": "Eixos do mundo; bloquear todos exige corpo estático",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        },
+        {
+          "id": "freeze_position_z",
+          "label": "Travar posição Z",
+          "member": "freezePosition[2]",
+          "presentation": {
+            "group": "Restrições",
+            "unit": "",
+            "help": "Eixos do mundo; bloquear todos exige corpo estático",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        },
+        {
+          "id": "freeze_rotation_x",
+          "label": "Travar rotação X",
+          "member": "freezeRotation[0]",
+          "presentation": {
+            "group": "Restrições",
+            "unit": "",
+            "help": "Eixos do mundo; bloquear todos exige corpo estático",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        },
+        {
+          "id": "freeze_rotation_y",
+          "label": "Travar rotação Y",
+          "member": "freezeRotation[1]",
+          "presentation": {
+            "group": "Restrições",
+            "unit": "",
+            "help": "Eixos do mundo; bloquear todos exige corpo estático",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        },
+        {
+          "id": "freeze_rotation_z",
+          "label": "Travar rotação Z",
+          "member": "freezeRotation[2]",
+          "presentation": {
+            "group": "Restrições",
+            "unit": "",
+            "help": "Eixos do mundo; bloquear todos exige corpo estático",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        },
+        {
+          "id": "continuous_collision",
+          "label": "Colisão contínua",
+          "member": "continuousCollision",
+          "presentation": {
+            "group": "Simulação",
+            "unit": "",
+            "help": "Varredura linear Jolt; não detecta varredura apenas angular",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "PhysicsBody"
+      }
+    },
+    {
+      "name": "physicsBodyNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "mass",
+          "label": "Massa kg",
+          "member": "mass",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Corpo",
+            "unit": "kg",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "friction",
+          "label": "Atrito",
+          "member": "friction",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Corpo",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "restitution",
+          "label": "Restituição",
+          "member": "restitution",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Corpo",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "velocity_x",
+          "label": "Velocidade inicial X",
+          "member": "velocityX",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Início",
+            "unit": "m/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "velocity_y",
+          "label": "Velocidade inicial Y",
+          "member": "velocityY",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Início",
+            "unit": "m/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "velocity_z",
+          "label": "Velocidade inicial Z",
+          "member": "velocityZ",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Início",
+            "unit": "m/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "angular_x",
+          "label": "Giro inicial X · rad/s",
+          "member": "angularX",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Início",
+            "unit": "rad/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "angular_y",
+          "label": "Giro inicial Y · rad/s",
+          "member": "angularY",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Início",
+            "unit": "rad/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "angular_z",
+          "label": "Giro inicial Z · rad/s",
+          "member": "angularZ",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Início",
+            "unit": "rad/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "linear_damping",
+          "label": "Amortecimento linear",
+          "member": "linearDamping",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Amortecimento",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": ".05f"
+          }
+        },
+        {
+          "id": "angular_damping",
+          "label": "Amortecimento angular",
+          "member": "angularDamping",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Amortecimento",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": ".05f"
+          }
+        },
+        {
+          "id": "gravity_factor",
+          "label": "Multiplicador da gravidade",
+          "member": "gravityFactor",
+          "min": {
+            "cpp": "-100"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Amortecimento",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "max_linear_velocity",
+          "label": "Limite linear",
+          "member": "maxLinearVelocity",
+          "min": {
+            "cpp": ".001f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Simulação",
+            "unit": "m/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "500"
+          }
+        },
+        {
+          "id": "max_angular_velocity",
+          "label": "Limite angular",
+          "member": "maxAngularVelocity",
+          "min": {
+            "cpp": ".001f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Simulação",
+            "unit": "rad/s",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          },
+          "default": {
+            "cpp": "47.12389f"
+          }
+        },
+        {
+          "id": "solver_velocity_steps",
+          "label": "Iterações de velocidade",
+          "member": "solverVelocitySteps",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "255"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Simulação",
+            "unit": "",
+            "help": "0 usa as iterações do mundo; aumenta custo por ilha de contato",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "PhysicsBody"
+      }
+    },
+    {
+      "name": "physicsBodyEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "motion",
+          "label": "Movimento",
+          "type": "PhysicsBody",
+          "member": "motion",
+          "options": "bodyMotionOptions",
+          "presentation": {
+            "group": "Corpo"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "physics_body_PhysicsBody_fields0",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyNumbers/mass",
+        "physicsBodyNumbers/friction",
+        "physicsBodyNumbers/restitution"
+      ]
+    },
+    {
+      "name": "physics_body_PhysicsBody_fields1",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyNumbers/velocity_x",
+        "physicsBodyNumbers/velocity_y",
+        "physicsBodyNumbers/velocity_z"
+      ]
+    },
+    {
+      "name": "physics_body_PhysicsBody_fields2",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyNumbers/angular_x",
+        "physicsBodyNumbers/angular_y",
+        "physicsBodyNumbers/angular_z",
+        "physicsBodyNumbers/linear_damping",
+        "physicsBodyNumbers/angular_damping",
+        "physicsBodyNumbers/gravity_factor"
+      ]
+    },
+    {
+      "name": "physics_body_PhysicsBody_fields3",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyBooleans/sensor",
+        "physicsBodyBooleans/allow_sleep"
+      ]
+    },
+    {
+      "name": "physics_body_PhysicsBody_fields5",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyNumbers/max_linear_velocity",
+        "physicsBodyNumbers/max_angular_velocity",
+        "physicsBodyNumbers/solver_velocity_steps"
+      ]
+    }
+  ]
+}

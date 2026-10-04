@@ -32,12 +32,17 @@ public:
   };
   std::vector<ClipEntry> clips;
   resources::AssetGuid clip{};
-  bool enabled = true;
-  bool playAutomatically = true;
+
+#include "scene/generated/animation_Animation_fields1.inc"
+
+#include "scene/generated/animation_Animation_fields2.inc"
+
   // glTF não declara modo de repetição; Loop deixa o clipe importado visível.
   resources::AnimationWrapMode wrapMode = resources::AnimationWrapMode::Loop;
   // Velocidade inicial dos estados (AnimationState.speed de cada clipe).
-  float speed = 1;
+
+#include "scene/generated/animation_Animation_fields3.inc"
+
   // v1 guardava o clipe por índice na fonte. A carga preserva o índice até o
   // editor, que conhece a fonte, trocá-lo pela identidade (nunca gravado).
   u32 legacyClipIndex = ~0u;
@@ -134,22 +139,8 @@ private:
   u64 nextClipId_=1;
 };
 
-inline constexpr std::array<ComponentNumber, 1> animationNumbers{{
-  {"Velocidade", -10, 10, .05f,
-   [](const ComponentValue &v) -> const float & { return static_cast<const Animation &>(v).speed; },
-   [](ComponentValue &v) -> float * { return &static_cast<Animation &>(v).speed; }, "speed",
-   {"Reprodução", "x", "Velocidade inicial de cada clipe (AnimationState.speed); negativo toca de trás para frente"}}
-}};
-inline constexpr std::array<ComponentBoolean, 2> animationBooleans{{
-  {"enabled", "Ativa",
-   [](const ComponentValue &v) { return static_cast<const Animation &>(v).enabled; },
-   [](ComponentValue &v, bool value) { static_cast<Animation &>(v).enabled = value; },
-   {"Reprodução", "", "Desligar suspende tempo e avaliação; religar retoma os estados"}},
-  {"play_automatically", "Tocar ao iniciar",
-   [](const ComponentValue &v) { return static_cast<const Animation &>(v).playAutomatically; },
-   [](ComponentValue &v, bool value) { static_cast<Animation &>(v).playAutomatically = value; },
-   {"Reprodução", "", "Play Automatically: o clipe padrão começa a tocar quando o Play inicia"}}
-}};
+#include "scene/generated/animation_animationNumbers.inc"
+#include "scene/generated/animation_animationBooleans.inc"
 inline constexpr std::array<ComponentEnumOption, 4> animationWrapOptions{{
   {0, "Uma vez"}, {1, "Repetir"}, {2, "Vai e volta"}, {3, "Segurar no fim"}}};
 inline constexpr auto animationClipCountOptions = [] {

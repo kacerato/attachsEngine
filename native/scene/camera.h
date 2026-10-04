@@ -5,10 +5,15 @@ namespace ae::scene {
 enum class CameraProjection : u32 { Perspective, Orthographic };
 class Camera final : public ComponentValue {
 public:
-  bool enabled=true;
-  float verticalFov=60,nearPlane=.1f,farPlane=2000,priority=0;
+
+#include "scene/generated/camera_Camera_fields0.inc"
+
+#include "scene/generated/camera_Camera_fields1.inc"
+
   CameraProjection projection=CameraProjection::Perspective;
-  float orthographicHalfHeight=5;
+
+#include "scene/generated/camera_Camera_fields2.inc"
+
   u32 environmentMask=~0u;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
@@ -27,27 +32,14 @@ public:
     return true;
   }
 };
-inline constexpr std::array<ComponentNumber,5> cameraNumbers{{
-#define AE_CAMERA_NUMBER(id,label,field,lo,hi,step,group,unit) {label,lo,hi,step,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).field;},id,{group,unit}}
-  {"Campo vertical",1,170,1,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).verticalFov;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).verticalFov;},"vertical_fov",{"Lente","°",nullptr,[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Perspective;}},true},
-  AE_CAMERA_NUMBER("near_plane","Próximo",nearPlane,.001f,10000,.01f,"Lente","m"),
-  AE_CAMERA_NUMBER("far_plane","Distante",farPlane,.01f,1000000,10,"Lente","m"),
-  AE_CAMERA_NUMBER("priority","Prioridade",priority,-10000,10000,1,"Saída",""),
-  {"Meia altura",.001f,100000, .1f,[](const ComponentValue &v)->const float&{return static_cast<const Camera&>(v).orthographicHalfHeight;},[](ComponentValue &v)->float*{return &static_cast<Camera&>(v).orthographicHalfHeight;},"orthographic_half_height",{"Lente","m","Metade da altura visível. Zoom altera esta extensão.",[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Orthographic;}},true}
-#undef AE_CAMERA_NUMBER
-}};
-inline constexpr std::array<ComponentBoolean,1> cameraBooleans{{
-  {"enabled","Usar no Play",[](const ComponentValue &v){return static_cast<const Camera&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<Camera&>(v).enabled=b;},{"Saída"}}
-}};
+#include "scene/generated/camera_cameraNumbers.inc"
+#include "scene/generated/camera_cameraBooleans.inc"
 inline constexpr std::array<ComponentEnumOption,2> cameraProjectionOptions{{{0,"Perspectiva"},{1,"Ortográfica"}}};
 inline constexpr std::array<ComponentEnumOption,9> cameraEnvironmentMaskOptions{{
   {~0u,"Todos os ambientes"},{1u,"Ambiente 0"},{2u,"Ambiente 1"},{4u,"Ambiente 2"},{8u,"Ambiente 3"},
   {16u,"Ambiente 4"},{32u,"Ambiente 5"},{64u,"Ambiente 6"},{128u,"Ambiente 7"}
 }};
-inline constexpr std::array<ComponentEnum,2> cameraEnums{{
-  {"projection","Projeção",cameraProjectionOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Camera&>(v).projection);},[](ComponentValue &v,u32 mode){static_cast<Camera&>(v).projection=static_cast<CameraProjection>(mode);},{"Lente"}}
-  ,{"environment_mask","Ambientes",cameraEnvironmentMaskOptions,[](const ComponentValue &v){return static_cast<const Camera&>(v).environmentMask;},[](ComponentValue &v,u32 mask){static_cast<Camera&>(v).environmentMask=mask;},{"Saída","","Volumes que esta câmera consulta",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}}
-}};
+#include "scene/generated/camera_cameraEnums.inc"
 inline const ComponentType Camera::descriptor{
   "astra.camera",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Camera>();},cameraNumbers,cameraBooleans,cameraEnums
 };

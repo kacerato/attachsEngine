@@ -1,0 +1,63 @@
+{
+  "format": 1,
+  "source": "native/scene/lod_group.h",
+  "tables": [
+    {
+      "name": "lodGroupBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "presentation": {
+            "group": "Níveis",
+            "help": "Desligar libera os renderizadores do controle deste grupo"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "animate_cross_fading",
+          "label": "Animate Cross-fading",
+          "member": "animateCrossFading",
+          "presentation": {
+            "group": "Fade",
+            "help": "Troca por tempo em vez da faixa de largura",
+            "visible": {
+              "cpp": "lodCrossFades"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "LodGroup",
+        "presentation": {
+          "unit": ""
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "lod_group_LodGroup_fields0",
+      "type": "LodGroup",
+      "properties": [
+        "lodGroupBooleans/enabled"
+      ]
+    },
+    {
+      "name": "lod_group_LodGroup_fields2",
+      "type": "LodGroup",
+      "properties": [
+        "lodGroupBooleans/animate_cross_fading"
+      ]
+    }
+  ]
+}

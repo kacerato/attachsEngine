@@ -57,6 +57,8 @@ void VulkanUiRenderer::shutdown() {
   fontAtlas_.reset();
   iconAtlas_.reset();
   previewAtlas_.reset();
+  immediateAtlas_.reset();
+  guiAtlas_.reset();sceneDepthView_=VK_NULL_HANDLE;
   cameraPreviewView_=VK_NULL_HANDLE;
   instanceBuffer_.reset();
   allocator_ = nullptr;
@@ -252,17 +254,20 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
     return false;
   }
 
-  const VkDescriptorSetLayoutBinding bindings[5] = {
+  const VkDescriptorSetLayoutBinding bindings[8] = {
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+      {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+      {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+      {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
   };
   VkDescriptorSetLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = 5;
+  layoutInfo.bindingCount = 8;
   layoutInfo.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorLayout_) !=
       VK_SUCCESS) {
@@ -271,7 +276,7 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   }
 
   const VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-                                         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4}};
+                                         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7}};
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.maxSets = 1;
@@ -300,8 +305,8 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorImageInfo iconInfo{sampler_.handle(), iconAtlas_.view(),
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet writes[5]{};
-  for (u32 index = 0; index < 5; ++index) {
+  VkWriteDescriptorSet writes[8]{};
+  for (u32 index = 0; index < 8; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = descriptorSet_;
     writes[index].dstBinding = index;
@@ -317,7 +322,10 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   writes[3].pImageInfo = &previewInfo;
   writes[4].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[4].pImageInfo=&previewInfo;
-  vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
+  writes[5].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[5].pImageInfo=&previewInfo;
+  for(u32 i=6;i<8;++i){writes[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[i].pImageInfo=&previewInfo;}
+  vkUpdateDescriptorSets(device_, 8, writes, 0, nullptr);
 
   if (!createPipeline(renderPass, subpass, pipelineCache)) {
     shutdown();
@@ -342,6 +350,8 @@ bool VulkanUiRenderer::record(VkCommandBuffer commandBuffer,
   push.outputFlags[0]=srgbTarget?1.0f:0.0f;
   push.outputFlags[2]=previewAtlasSize_[0];
   push.outputFlags[3]=previewAtlasSize_[1];
+  push.outputFlags[1]=sceneDepthView_?1.f:0.f;
+  push.depthSurface[0]=depthSurface_[0];push.depthSurface[1]=depthSurface_[1];
   push.surface[0] = surfaceWidth;
   push.surface[1] = surfaceHeight;
   push.surface[2] = 1.0f / surfaceWidth;
@@ -410,5 +420,50 @@ void VulkanUiRenderer::setCameraPreview(VkImageView view) {
   write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&image;
   vkUpdateDescriptorSets(device_,1,&write,0,nullptr);
 }
+
+bool VulkanUiRenderer::setImmediateAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height) {
+  if (!isReady() || !allocator_ || !width || !height || rgba.size()!=static_cast<usize>(width)*height*4) return false;
+  ImageDesc desc{}; desc.width=width; desc.height=height; desc.mipLevels=1;
+  desc.format=VK_FORMAT_R8G8B8A8_UNORM;
+  desc.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT; desc.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+  VulkanImage next{};
+  if (!allocator_->createImage(desc,&next) || !upload.uploadRgba8ToSampledImage(*allocator_,rgba.data(),rgba.size(),next)) return false;
+  VkDescriptorImageInfo info{sampler_.handle(),next.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{}; write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet=descriptorSet_; write.dstBinding=5; write.descriptorCount=1;
+  write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; write.pImageInfo=&info;
+  vkUpdateDescriptorSets(device_,1,&write,0,nullptr); immediateAtlas_=std::move(next); return true;
+}
+bool VulkanUiRenderer::setGuiAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height) {
+  if(isReady() && !width && !height && rgba.empty()) {
+    // Keep the unused descriptor valid while releasing the project-owned atlas.
+    VkDescriptorImageInfo info{sampler_.handle(),fontAtlas_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet=descriptorSet_;write.dstBinding=7;write.descriptorCount=1;
+    write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&info;
+    vkUpdateDescriptorSets(device_,1,&write,0,nullptr);guiAtlas_.reset();return true;
+  }
+  if (!isReady() || !allocator_ || !width || !height || rgba.size()!=static_cast<usize>(width)*height*4) return false;
+  ImageDesc desc{}; desc.width=width; desc.height=height; desc.mipLevels=1;
+  desc.format=VK_FORMAT_R8G8B8A8_UNORM;
+  desc.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT; desc.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+  VulkanImage next{};
+  if (!allocator_->createImage(desc,&next) || !upload.uploadRgba8ToSampledImage(*allocator_,rgba.data(),rgba.size(),next)) return false;
+  VkDescriptorImageInfo info{sampler_.handle(),next.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{}; write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet=descriptorSet_; write.dstBinding=7; write.descriptorCount=1;
+  write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; write.pImageInfo=&info;
+  vkUpdateDescriptorSets(device_,1,&write,0,nullptr); guiAtlas_=std::move(next); return true;
+}
+void VulkanUiRenderer::setSceneDepth(VkImageView view,VkSampler sampler,u32 width,u32 height) {
+  if(!isReady() || !view || !sampler || !width || !height)return;
+  depthSurface_[0]=1.f/width;depthSurface_[1]=1.f/height;
+  if(sceneDepthView_==view)return;
+  sceneDepthView_=view;
+  VkDescriptorImageInfo info{sampler,view,VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=descriptorSet_;write.dstBinding=6;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&info;
+  vkUpdateDescriptorSets(device_,1,&write,0,nullptr);
+}
+
 
 } // namespace ae::rhi

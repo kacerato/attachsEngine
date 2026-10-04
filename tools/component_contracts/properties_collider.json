@@ -1,0 +1,522 @@
+{
+  "format": 1,
+  "source": "native/scene/collider.h",
+  "tables": [
+    {
+      "name": "colliderBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "convex",
+          "label": "Convexo",
+          "member": "convex",
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "help": "Casco convexo da malha: aceita corpo dinâmico. Desligado usa os triângulos exatos e só vale em corpo estático ou cinemático.",
+            "visible": {
+              "cpp": "colliderIsMesh"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "weld_vertices",
+          "label": "Soldar vértices iguais",
+          "member": "weldVertices",
+          "presentation": {
+            "group": "Cozimento",
+            "unit": "",
+            "help": "Compartilha vértices coincidentes antes de criar a malha física, reduzindo costuras internas.",
+            "visible": {
+              "cpp": "colliderIsTriangleMesh"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "optimize_cooking",
+          "label": "Otimizar para o jogo",
+          "member": "optimizeCooking",
+          "presentation": {
+            "group": "Cozimento",
+            "unit": "",
+            "help": "Constrói uma árvore de busca mais eficiente; desligue para cozinhar mais rápido durante iterações.",
+            "visible": {
+              "cpp": "colliderIsTriangleMesh"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Collider"
+      }
+    },
+    {
+      "name": "colliderNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "half_x",
+          "label": "Meia extensão X",
+          "member": "halfX",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsBox"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "half_y",
+          "label": "Meia extensão Y",
+          "member": "halfY",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsBox"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "half_z",
+          "label": "Meia extensão Z",
+          "member": "halfZ",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsBox"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "radius",
+          "label": "Raio",
+          "member": "radius",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderHasRadius"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "half_height",
+          "label": "Meia altura cilíndrica",
+          "member": "halfHeight",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsCapsule"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "center_x",
+          "label": "Centro X",
+          "member": "centerX",
+          "min": {
+            "cpp": "-10000000"
+          },
+          "max": {
+            "cpp": "10000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Pose",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsPrimitive"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "center_y",
+          "label": "Centro Y",
+          "member": "centerY",
+          "min": {
+            "cpp": "-10000000"
+          },
+          "max": {
+            "cpp": "10000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Pose",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsPrimitive"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "center_z",
+          "label": "Centro Z",
+          "member": "centerZ",
+          "min": {
+            "cpp": "-10000000"
+          },
+          "max": {
+            "cpp": "10000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Pose",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsPrimitive"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "rotation_x",
+          "label": "Rotação local X",
+          "member": "rotationX",
+          "min": {
+            "cpp": "-10000000"
+          },
+          "max": {
+            "cpp": "10000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Pose",
+            "unit": "°",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsPrimitive"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "rotation_y",
+          "label": "Rotação local Y",
+          "member": "rotationY",
+          "min": {
+            "cpp": "-10000000"
+          },
+          "max": {
+            "cpp": "10000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Pose",
+            "unit": "°",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsPrimitive"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "rotation_z",
+          "label": "Rotação local Z",
+          "member": "rotationZ",
+          "min": {
+            "cpp": "-10000000"
+          },
+          "max": {
+            "cpp": "10000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Pose",
+            "unit": "°",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderIsPrimitive"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "hull_tolerance",
+          "label": "Tolerância do casco",
+          "member": "hullTolerance",
+          "min": {
+            "cpp": ".00001f"
+          },
+          "max": {
+            "cpp": "1.f"
+          },
+          "step": {
+            "cpp": ".001f"
+          },
+          "presentation": {
+            "group": "Cozimento",
+            "unit": "u",
+            "help": "Pontos até esta distância podem ficar fora do casco; valores maiores geram cascos mais simples.",
+            "visible": {
+              "cpp": "colliderIsConvexMesh"
+            }
+          },
+          "default": {
+            "cpp": ".001f"
+          }
+        },
+        {
+          "id": "active_edge_angle",
+          "label": "Ângulo de aresta ativa",
+          "member": "activeEdgeAngle",
+          "min": {
+            "cpp": "0.f"
+          },
+          "max": {
+            "cpp": "90.f"
+          },
+          "step": {
+            "cpp": "1.f"
+          },
+          "presentation": {
+            "group": "Cozimento",
+            "unit": "°",
+            "help": "Separa arestas de contato em superfícies com mudança de normal acima deste ângulo.",
+            "visible": {
+              "cpp": "colliderIsTriangleMesh"
+            }
+          },
+          "default": {
+            "cpp": "5.f"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Collider"
+      }
+    },
+    {
+      "name": "colliderEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "shape",
+          "label": "Forma",
+          "type": "Collider",
+          "member": "shape",
+          "options": "colliderShapeOptions",
+          "presentation": {
+            "group": "Forma"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "collider_Collider_fields0",
+      "type": "Collider",
+      "properties": [
+        "colliderNumbers/half_x",
+        "colliderNumbers/half_y",
+        "colliderNumbers/half_z",
+        "colliderNumbers/radius",
+        "colliderNumbers/half_height"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields1",
+      "type": "Collider",
+      "properties": [
+        "colliderNumbers/center_x",
+        "colliderNumbers/center_y",
+        "colliderNumbers/center_z"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields2",
+      "type": "Collider",
+      "properties": [
+        "colliderNumbers/rotation_x",
+        "colliderNumbers/rotation_y",
+        "colliderNumbers/rotation_z"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields3",
+      "type": "Collider",
+      "properties": [
+        "colliderBooleans/enabled"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields4",
+      "type": "Collider",
+      "properties": [
+        "colliderBooleans/convex"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields5",
+      "type": "Collider",
+      "properties": [
+        "colliderBooleans/weld_vertices"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields6",
+      "type": "Collider",
+      "properties": [
+        "colliderBooleans/optimize_cooking"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields7",
+      "type": "Collider",
+      "properties": [
+        "colliderNumbers/hull_tolerance"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields8",
+      "type": "Collider",
+      "properties": [
+        "colliderNumbers/active_edge_angle"
+      ]
+    }
+  ]
+}

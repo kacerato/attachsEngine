@@ -4,7 +4,9 @@
 namespace ae::scene {
 class TransformTween final:public ComponentValue {
 public:
- bool enabled=true,autoplay=true,pingpong=false,relative=false,position=true,rotation=false,scale=false,ignoreTimeScale=false;
+
+#include "scene/generated/transform_tween_TransformTween_fields0.inc"
+
  float duration=1,delay=0;u32 easing=0,loops=1;float destination[9]{0,0,0,0,0,0,1,1,1};
  u32 finishedAction=0;u64 finishedTarget=0;
  static const ComponentType descriptor;
@@ -24,20 +26,11 @@ inline const auto tweenNumbers=[] {
  AE_TWEEN_NUMBER(6,"scale_x","Escala X","Destino","x") AE_TWEEN_NUMBER(7,"scale_y","Escala Y","Destino","x") AE_TWEEN_NUMBER(8,"scale_z","Escala Z","Destino","x")
 #undef AE_TWEEN_NUMBER
  return a;}();
-inline constexpr std::array<ComponentBoolean,8>tweenBooleans{{
-#define AE_TWEEN_BOOL(F,L,G) {#F,L,[](const ComponentValue&v){return static_cast<const TransformTween&>(v).F;},[](ComponentValue&v,bool n){static_cast<TransformTween&>(v).F=n;},{G}},
- AE_TWEEN_BOOL(enabled,"Ativo","Tempo") AE_TWEEN_BOOL(autoplay,"Iniciar no Play","Tempo") AE_TWEEN_BOOL(pingpong,"Ida e volta","Repetição") AE_TWEEN_BOOL(relative,"Destino relativo","Destino") AE_TWEEN_BOOL(position,"Mover","Destino") AE_TWEEN_BOOL(rotation,"Girar","Destino") AE_TWEEN_BOOL(scale,"Escalar","Destino")
-#undef AE_TWEEN_BOOL
- {"ignore_time_scale","Ignorar escala de tempo",[](const ComponentValue&v){return static_cast<const TransformTween&>(v).ignoreTimeScale;},[](ComponentValue&v,bool n){static_cast<TransformTween&>(v).ignoreTimeScale=n;},{"Tempo","","Usa o intervalo não escalado aceito; pausa editorial interrompe ambos os modos"}},
-}};
+#include "scene/generated/transform_tween_tweenBooleans.inc"
 inline constexpr std::array<ComponentEnumOption,4>tweenEasings{{{0,"Linear"},{1,"Smoothstep"},{2,"Quadrático entrada"},{3,"Quadrático saída"}}};
 inline constexpr std::array<ComponentEnumOption,5>tweenLoops{{{0,"Infinito"},{1,"Uma vez"},{2,"Duas vezes"},{3,"Três vezes"},{10,"Dez vezes"}}};
 inline constexpr std::array<ComponentEnumOption,4>tweenFinishedActions{{{0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"}}};
-inline constexpr std::array<ComponentEnum,3>tweenEnums{{
- {"easing","Curva",tweenEasings,[](const ComponentValue&v){return static_cast<const TransformTween&>(v).easing;},[](ComponentValue&v,u32 n){static_cast<TransformTween&>(v).easing=n;},{"Tempo"}},
- {"loops","Ciclos",tweenLoops,[](const ComponentValue&v){return static_cast<const TransformTween&>(v).loops;},[](ComponentValue&v,u32 n){static_cast<TransformTween&>(v).loops=n;},{"Repetição"}},
- {"finished_action","Ao concluir",tweenFinishedActions,[](const ComponentValue&v){return static_cast<const TransformTween&>(v).finishedAction;},[](ComponentValue&v,u32 n){static_cast<TransformTween&>(v).finishedAction=n;},{"Conexão","","Executa depois da pose final de todos os ciclos finitos; cancelar ou ciclo infinito não dispara"}}
-}};
+#include "scene/generated/transform_tween_tweenEnums.inc"
 inline constexpr std::array<ComponentObjectReference,1>tweenReferences{{
  {"finished_target","Receptor","",ObjectReferenceScope::Any,"Escolher objeto",
   [](const ComponentValue&v){return static_cast<const TransformTween&>(v).finishedTarget;},[](ComponentValue&v,u64 n){static_cast<TransformTween&>(v).finishedTarget=n;},

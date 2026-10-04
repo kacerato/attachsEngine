@@ -160,7 +160,8 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     }
     // Atlas da interface do editor. Os dois sao lidos uma vez na inicializacao
     // e enviados a GPU; noCompress abaixo permite le-los sem descompactar.
-    from("../../assets/astra-visual/ui") { include("*.aeuf", "*.aeui"); into("ui") }
+    from("../../assets/astra-visual/ui") { include("*.aeuf", "*.aeui", "gui-inter.ttf"); into("ui") }
+    from("../../assets/astra-visual/fonts/OFL-1.1.txt") { into("ui"); rename { "gui-inter-OFL.txt" } }
     // The embedded code accessory bar uses the same authored raster marks as
     // the native toolbar. No second icon design or engine enum is introduced.
     from("../../assets/astra-visual/icons/mark-v1") { include("undo.png", "redo.png"); into("ui/code") }

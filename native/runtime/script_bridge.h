@@ -7,6 +7,7 @@
 //
 // A plataforma injeta o serviço gerenciado; este arquivo não conhece CLR.
 #pragma once
+#include "ui/gui_document.h"
 #include "runtime/script_inspection.h"
 #include "runtime/game_world.h"
 #include "runtime/prefab.h"
@@ -84,6 +85,7 @@ public:
   void setAnimator(SceneAnimator *animator) noexcept { animator_ = animator; }
   void setPhysics2D(ScenePhysics2D *physics) noexcept { physics2D_ = physics; }
   void setAudio(SceneAudio *audio) noexcept { audio_ = audio; }
+  void setGui(ui::GuiRuntime *gui) noexcept { gui_ = gui; }
   void setNumberTweens(SceneNumberTweens *numberTweens) noexcept {numberTweens_=numberTweens;}
   void setTweens(SceneTweens *tweens) noexcept {tweens_=tweens;}
   void setTimers(SceneTimers *timers) noexcept { timers_=timers; }
@@ -123,6 +125,7 @@ private:
   ScenePhysics2D *physics2D_ = nullptr;
   ScenePaths *paths_ = nullptr;
   SceneAudio *audio_ = nullptr;
+  ui::GuiRuntime *gui_ = nullptr;
   SceneTimers *timers_=nullptr;
   SceneTweens *tweens_=nullptr;
   SceneNumberTweens *numberTweens_=nullptr;

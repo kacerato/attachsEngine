@@ -24,6 +24,14 @@ AE_TEST(audio_wave_decode_refuses_truncation_and_preserves_output_on_error){
   AE_EXPECT_TRUE(!resources::decodeWaveClip(broken,clip,error)&&clip.samples==old,"truncation refuses without replacing liveclip");
   broken=bytes;broken[22]=3;AE_EXPECT_TRUE(!resources::decodeWaveClip(broken,clip,error),"unsupportedchannels refuse");
 }
+AE_TEST(audio_source_archive_clears_previous_clip_in_reused_component){
+  scene::AudioSource empty,reused;
+  reused.clip=resources::assetGuidFromSeed("previous-clip");
+  std::ostringstream saved;empty.write(saved);std::istringstream input(saved.str());
+  AE_EXPECT_TRUE(reused.read(input,1)&&!reused.clip.valid(),"empty persisted binding must replace previous GUID");
+  std::ostringstream restored;reused.write(restored);
+  AE_EXPECT_TRUE(restored.str()==saved.str(),"clear roundtrip must not resurrect previous resource");
+}
 AE_TEST(audio_listener_priority_pose_disable_and_removal_affect_real_output) {
   editor::EditorDocument doc;
   const auto muted=doc.createEntity(doc.root(),runtime::ObjectKind::Folder,"Muted listener");

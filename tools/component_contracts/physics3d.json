@@ -1,0 +1,176 @@
+{
+  "format": 1,
+  "family": "physics3d",
+  "table": "physics3dSchemas",
+  "entries": [
+    {
+      "type": "GravityField",
+      "name": "Campo de gravidade",
+      "description": "Gravidade local em volume sobre corpos dinâmicos",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics_fields.inl → Jolt",
+      "subfamily": "Campos",
+      "icon": "physics/field-gravity",
+      "searchTerms": "Area3D Gravity Zone Gravidade",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_area3d.html",
+      "apiName": "GravityField"
+    },
+    {
+      "type": "WindField",
+      "name": "Campo de vento",
+      "description": "Arrasto para velocidade local do ar, dependente da massa",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics_fields.inl → Jolt",
+      "subfamily": "Campos",
+      "icon": "physics/field-wind",
+      "searchTerms": "Area3D Wind Vento",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_area3d.html",
+      "apiName": "WindField"
+    },
+    {
+      "type": "DragField",
+      "name": "Campo de arrasto",
+      "description": "Amortecimento linear e angular local",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics_fields.inl → Jolt",
+      "subfamily": "Campos",
+      "icon": "physics/field-drag",
+      "searchTerms": "Area3D Damp Drag Arrasto",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_area3d.html",
+      "apiName": "DragField"
+    },
+    {
+      "type": "RadialField",
+      "name": "Campo radial",
+      "description": "Atração, repulsão e vórtice ao redor do centro",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics_fields.inl → Jolt",
+      "subfamily": "Campos",
+      "icon": "physics/field-radial",
+      "searchTerms": "Area3D Point Gravity Vortex Radial",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_area3d.html",
+      "apiName": "RadialField"
+    },
+    {
+      "type": "PhysicsEventConnection3D",
+      "name": "Conexão física 3D",
+      "description": "Evento de sensor/contato altera a ativação de um receptor",
+      "requirements": {
+        "cpp": "physicsConnectionRequirements"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics_connections.h → GameWorld::setActive",
+      "invalidates": {
+        "cpp": "Invalidate::PhysicsBody"
+      },
+      "subfamily": "Eventos",
+      "icon": "event/physics-connection",
+      "searchTerms": "Trigger Collision Area3D Signal Evento Conexao",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_area3d.html",
+      "apiName": "PhysicsEventConnection3D"
+    },
+    {
+      "type": "ConstantForce",
+      "name": "Força constante",
+      "description": "Força e torque contínuos sobre corpo dinâmico",
+      "requirements": {
+        "cpp": "jointRequirements"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt",
+      "subfamily": "Forças",
+      "icon": "component/constant-force",
+      "searchTerms": "ConstantForce AddRelativeForce AddRelativeTorque Propulsão",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-ConstantForce.html",
+      "apiName": "ConstantForce"
+    },
+    {
+      "type": "PhysicsBody",
+      "name": "Corpo físico",
+      "description": "Massa e resposta física",
+      "conflicts": {
+        "cpp": "bodyConflicts"
+      },
+      "consumer": "runtime/scene_physics.cpp → Jolt",
+      "invalidates": {
+        "cpp": "Invalidate::PhysicsBody"
+      },
+      "subfamily": "Corpos",
+      "icon": "component/physics",
+      "searchTerms": "Rigidbody RigidBody3D StaticBody3D Massa",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-Rigidbody.html",
+      "apiName": "PhysicsBody"
+    },
+    {
+      "type": "Character",
+      "name": "Personagem",
+      "description": "Locomoção com cápsula",
+      "conflicts": {
+        "cpp": "characterConflicts"
+      },
+      "consumer": "runtime/scene_physics.cpp → CharacterVirtual",
+      "invalidates": {
+        "cpp": "Invalidate::PhysicsBody|Invalidate::PhysicsShape"
+      },
+      "subfamily": "Corpos",
+      "icon": "component/character",
+      "searchTerms": "CharacterController CharacterBody3D Jogador",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-CharacterController.html",
+      "apiName": "Character"
+    },
+    {
+      "type": "Collider",
+      "name": "Colisor 3D",
+      "description": "Volume de contato",
+      "conflicts": {
+        "cpp": "colliderConflicts"
+      },
+      "consumer": "runtime/scene_physics.cpp → forma do Jolt",
+      "invalidates": {
+        "cpp": "Invalidate::PhysicsShape"
+      },
+      "subfamily": "Formas",
+      "icon": "component/collider",
+      "searchTerms": "BoxCollider SphereCollider CapsuleCollider MeshCollider CylinderShape3D CollisionShape3D",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-BoxCollider.html",
+      "apiName": "Collider"
+    },
+    {
+      "type": "Joint",
+      "name": "Junta",
+      "description": "Nove mecanismos Jolt com limites, referenciais e motores",
+      "requirements": {
+        "cpp": "jointRequirements"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_physics.cpp → constraint do Jolt",
+      "invalidates": {
+        "cpp": "Invalidate::PhysicsBody"
+      },
+      "subfamily": "Juntas",
+      "icon": "component/joint",
+      "searchTerms": "HingeJoint SliderJoint SpringJoint FixedJoint ConeTwistJoint3D Generic6DOFJoint3D",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_generic6dofjoint3d.html",
+      "apiName": "Joint"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Physics3D"
+    }
+  }
+}

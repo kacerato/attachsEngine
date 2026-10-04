@@ -1,0 +1,171 @@
+{
+  "capturedAt": "2026-10-02T18:39:28.2076518Z",
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "baseCommit": "97ecf56f17fe39e7d2fd527719b7fbce2528cd18",
+  "publication": "local working tree; no commit or push",
+  "imguiVersion": "1.91.9b-docking",
+  "imguiCommit": "4806a1924ff6181180bf5e4b8b79ab4394118875",
+  "scriptAbi": 38,
+  "types": [
+    "Panel",
+    "Text",
+    "Button",
+    "Toggle",
+    "Slider",
+    "Progress"
+  ],
+  "device": {
+    "project": "GuiAcceptance-20261002",
+    "model": "25053PC47G",
+    "package": "dev.aether.editor",
+    "capturePixels": [
+      2772,
+      1280
+    ],
+    "apkSha256": "E7916705B9C39979F8490D33C01A1D3C405299F59AAF89369BE1F4B73D449E57"
+  },
+  "checks": {
+    "androidBuild": "successful",
+    "managedAudioPassed": 1,
+    "nativeAudioPassed": 6,
+    "nativeFailed": 0,
+    "guiScenarios": 6,
+    "storage": "real EditorSession save/reopen/safe-path passed",
+    "nativePassed": 42,
+    "managedGuiPassed": 2,
+    "existingSharedUiScenarios": 36
+  },
+  "physicalScenario": [
+    "create seventh node as child",
+    "edit text with Android touch keyboard",
+    "edit numeric minimum to 0.1 with Android keyboard; undo before save",
+    "drag and undo/redo",
+    "save and reopen",
+    "official Dear ImGui diagnostic callback",
+    "C# click changes Iniciar to Pronto",
+    "C# slider text reaches 89 percent",
+    "C# toggle disables slider; subsequent drag leaves value unchanged",
+    "Stop restores authored 0.65 value and enabled state"
+  ],
+  "limits": [
+    "single active screen-space document",
+    "1024 nodes; 64 history transactions; 256 events",
+    "no automatic containers, arbitrary image assets, world-space canvas or export",
+    "no game text-input widget or gamepad navigation",
+    "no ImGui docking, multi-viewport, external textures or user draw callbacks",
+    "large-layout performance and thermal cost not measured"
+  ],
+  "files": [
+    {
+      "name": "android-accepted.log",
+      "bytes": 2210,
+      "sha256": "32498A69281045012F90EB816CBE6BA9CF875E8C6E6F614CEBEBD3CFA5AC9565"
+    },
+    {
+      "name": "android-script-schema.json",
+      "bytes": 88,
+      "sha256": "2EB6D5CAB59188D4FDA5B9D518021161A887F1FB19D93417A5AAD8EBE243F32F"
+    },
+    {
+      "name": "audio-managed-current.log",
+      "bytes": 176,
+      "sha256": "1D6F53011488892AD4BE9F948265F80BBCF844F5A3659D5936560BB438322C05"
+    },
+    {
+      "name": "audio-native-tests.log",
+      "bytes": 456,
+      "sha256": "321773DB7DDA4381D4F508C2C7A216846E1E2F22E6C1E999F0EEA0911075AD05"
+    },
+    {
+      "name": "device-disabled-final.png",
+      "bytes": 165522,
+      "sha256": "C3ED768AF86C30DA16C8742DD4D39D5DF7B60A9F0D7B7FCC776FCB69ADF29673"
+    },
+    {
+      "name": "device-final.aeui",
+      "bytes": 779,
+      "sha256": "301DF0E1388CF1874F3B14A443BD2D532843A2EC30C169EE0C173E4F74C2A8C0"
+    },
+    {
+      "name": "device-gui-create.png",
+      "bytes": 283614,
+      "sha256": "9CEF945997728588305AB44AC68238B8E0FC688F45E544D03608812BA665B0FA"
+    },
+    {
+      "name": "device-gui-diagnostic.png",
+      "bytes": 313663,
+      "sha256": "05CC16697E9A3F1934EFC091B201B21D28D18CF360E75D94EA91744782DB758F"
+    },
+    {
+      "name": "device-gui-final.png",
+      "bytes": 261966,
+      "sha256": "F25815A2BF15C967CB266BB5AFA21316B4F5DE13419A90728ED82A01904D0662"
+    },
+    {
+      "name": "device-gui-keyboard-fixed.png",
+      "bytes": 226296,
+      "sha256": "28E1AB39126AFF99A02CAA9D464694CF24DDAAFF5908CBE3A371EFD5B8AE0C52"
+    },
+    {
+      "name": "device-gui-reopened.png",
+      "bytes": 215816,
+      "sha256": "CB1D429FBBA249834C2FCB33DF9FBC6168384578B280DD5652E57F9A2E562117"
+    },
+    {
+      "name": "device-numeric-accepted.png",
+      "bytes": 307595,
+      "sha256": "3C2162ABB5BF941C4E32DEAD0CA60BB08225B7056D4A373A90198E77F1EF2F56"
+    },
+    {
+      "name": "device-numeric-keyboard-fixed.png",
+      "bytes": 234221,
+      "sha256": "031A95B2218F8B83BC443B737A1AD79CCAAD2E8CC726D46371E5A82DA3FB2196"
+    },
+    {
+      "name": "device-play-final.png",
+      "bytes": 165219,
+      "sha256": "EA9C513BFA694AAC8AC6227ED40B458AE5281834E3491A85579D3BE571345DF2"
+    },
+    {
+      "name": "device-stop-final.png",
+      "bytes": 261966,
+      "sha256": "F25815A2BF15C967CB266BB5AFA21316B4F5DE13419A90728ED82A01904D0662"
+    },
+    {
+      "name": "gui-and-shared-tests.log",
+      "bytes": 2368,
+      "sha256": "D6A847809A6041948F45519B1125819A60466CFD3950E90D65A28DE5B4DF7753"
+    },
+    {
+      "name": "gui-author-final.png",
+      "bytes": 74876,
+      "sha256": "1A8A0CA4C1188DAEFC6300604810D88E33E631AA7998ED0C698D0A71FAE60C41"
+    },
+    {
+      "name": "gui-compact-final.png",
+      "bytes": 42833,
+      "sha256": "73C4D90FAE22E0BF7330B29F472E33366594EC81D51923E6FA82DE112CA4C062"
+    },
+    {
+      "name": "gui-managed-tests.log",
+      "bytes": 207,
+      "sha256": "F3E2B7A1C86757BBB41441BE4E943D44D8C2EA06155F9CB0FDC149E821D47364"
+    },
+    {
+      "name": "gui-preview-final.png",
+      "bytes": 41593,
+      "sha256": "59E0BA3E2EAFB33210BF1B716730B6C9A83C895BE65B41C026280939BD2AD888"
+    },
+    {
+      "name": "native-accepted.log",
+      "bytes": 390,
+      "sha256": "93D3AFB4BA527E620CF7E8C81EB6D138159A8A2810C494A9DF7F81CE5E7BDB65"
+    },
+    {
+      "name": "storage-tests.log",
+      "bytes": 95,
+      "sha256": "A8DE8A4AEE2FF0F8F15E7872A09D910D26351336F25784280730EEC94A26A9D5"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "family": "path",
+  "table": "pathSchemas",
+  "entries": [
+    {
+      "type": "Path",
+      "name": "Path",
+      "description": "Curva Bézier local com pontos persistentes",
+      "icon": "path/curve",
+      "searchTerms": "Path Curve3D Spline Caminho Bezier",
+      "apiName": "PathComponent"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Logic"
+    },
+    "structuralInPlay": {
+      "cpp": "PlayMutability::SafePoint"
+    },
+    "consumer": "runtime/scene_paths.cpp",
+    "invalidates": {
+      "cpp": "Invalidate::Transform"
+    },
+    "subfamily": "Caminhos",
+    "reference": "https://docs.godotengine.org/en/4.5/classes/class_path3d.html"
+  }
+}

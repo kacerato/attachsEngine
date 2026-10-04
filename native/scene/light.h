@@ -29,21 +29,33 @@ namespace ae::scene {
 class Light final : public ComponentValue {
 public:
   LightKind kind = LightKind::Point;
-  bool enabled = true;
+
+#include "scene/generated/light_Light_fields0.inc"
+
   LightUnit unit = LightUnit::LuxLumen;
-  bool useColorTemperature = false;
+
+#include "scene/generated/light_Light_fields1.inc"
+
   float color[3]{1, 1, 1};
-  float colorTemperature = 6500;
-  float intensity = 1000;
-  float range = 10;
-  float innerAngle = 20, outerAngle = 35;
+
+#include "scene/generated/light_Light_fields3.inc"
+
+#include "scene/generated/light_Light_fields4.inc"
+
+#include "scene/generated/light_Light_fields5.inc"
+
+#include "scene/generated/light_Light_fields6.inc"
+
   // Sombra local. `shadowMode` 0 nenhuma, 1 dura, 2 suave; `shadowResolution`
   // 0 automática (a política escolhe pelo tamanho na tela) e 1..4 Baixa a
   // Muito alta.
   u32 shadowMode = 0;
   u32 shadowResolution = 0;
-  float shadowStrength = 1;
-  float shadowBias = .05f, shadowNormalBias = .4f, shadowNearPlane = .2f;
+
+#include "scene/generated/light_Light_fields7.inc"
+
+#include "scene/generated/light_Light_fields8.inc"
+
   static const ComponentType descriptor;
   const ComponentType &type() const override { return descriptor; }
   std::unique_ptr<ComponentValue> clone() const override { return std::make_unique<Light>(*this); }
@@ -101,37 +113,7 @@ inline bool lightCastsLocalShadow(const ComponentValue &v) {
   const auto &light=static_cast<const Light &>(v);
   return light.kind!=LightKind::Directional && light.shadowMode!=0;
 }
-inline constexpr std::array<ComponentNumber, 12> lightNumbers{{
-#define AE_LIGHT_NUMBER(id, label, field, lo, hi, step, group, unit, visible) {label, lo, hi, step, [](const ComponentValue &v) -> const float & {return static_cast<const Light &>(v).field;}, [](ComponentValue &v) -> float * {return &static_cast<Light &>(v).field;}, id,{group,unit,nullptr,visible},std::string_view(id)=="intensity"||std::string_view(id)=="color.r"||std::string_view(id)=="color.g"||std::string_view(id)=="color.b"}
-  AE_LIGHT_NUMBER("color.r", "Cor R", color[0], 0, 1, .01f,"Emissão","",nullptr),
-  AE_LIGHT_NUMBER("color.g", "Cor G", color[1], 0, 1, .01f,"Emissão","",nullptr),
-  AE_LIGHT_NUMBER("color.b", "Cor B", color[2], 0, 1, .01f,"Emissão","",nullptr),
-  {"Temperatura",1667,25000,50,[](const ComponentValue &v)->const float&{return static_cast<const Light&>(v).colorTemperature;},
-    [](ComponentValue &v)->float*{return &static_cast<Light&>(v).colorTemperature;},"color_temperature",
-    {"Emissão","K","Multiplicada pela cor linear; D65 é 6500 K",lightUsesTemperature,nullptr,
-     "render.light.temperature","scene/light_units.h → RGB linear",Invalidate::LightCluster}},
-  AE_LIGHT_NUMBER("intensity", "Intensidade", intensity, 0, 1000000, 1.f,"Emissão","",nullptr),
-  AE_LIGHT_NUMBER("range", "Alcance", range, .01f, 1000, .1f,"Volume","m",lightHasRange),
-  AE_LIGHT_NUMBER("inner_angle", "Meio-cone interno", innerAngle, 0, 89, 1,"Volume","°",lightHasCone),
-  AE_LIGHT_NUMBER("outer_angle", "Meio-cone externo", outerAngle, 0, 89, 1,"Volume","°",lightHasCone),
-  {"Força da sombra",0,1,.01f,[](const ComponentValue &v)->const float&{return static_cast<const Light&>(v).shadowStrength;},
-    [](ComponentValue &v)->float*{return &static_cast<Light&>(v).shadowStrength;},"shadow_strength",
-    {"Sombra","","1 é sombra opaca; abaixo disso a luz vaza pelo oclusor",lightCastsLocalShadow,nullptr,
-     "render.shadow.punctual","renderer/shadow_atlas.h → atlas local",Invalidate::LightCluster}},
-  {"Desvio",0,2,.005f,[](const ComponentValue &v)->const float&{return static_cast<const Light&>(v).shadowBias;},
-    [](ComponentValue &v)->float*{return &static_cast<Light&>(v).shadowBias;},"shadow_bias",
-    {"Sombra","texel","Afasta a comparação de profundidade e some com a acne",lightCastsLocalShadow,nullptr,
-     "render.shadow.punctual","renderer/shadow_atlas.h → atlas local",Invalidate::LightCluster}},
-  {"Desvio na normal",0,2,.01f,[](const ComponentValue &v)->const float&{return static_cast<const Light&>(v).shadowNormalBias;},
-    [](ComponentValue &v)->float*{return &static_cast<Light&>(v).shadowNormalBias;},"shadow_normal_bias",
-    {"Sombra","texel","Desloca a amostra ao longo da normal; some com o serrilhado da borda",lightCastsLocalShadow,nullptr,
-     "render.shadow.punctual","renderer/shadow_atlas.h → atlas local",Invalidate::LightCluster}},
-  {"Plano próximo da sombra",.01f,10,.01f,[](const ComponentValue &v)->const float&{return static_cast<const Light&>(v).shadowNearPlane;},
-    [](ComponentValue &v)->float*{return &static_cast<Light&>(v).shadowNearPlane;},"shadow_near_plane",
-    {"Sombra","m","Perto demais perde precisão; longe demais corta o que está junto da lâmpada",lightCastsLocalShadow,nullptr,
-     "render.shadow.punctual","renderer/shadow_atlas.h → atlas local",Invalidate::LightCluster}}
-#undef AE_LIGHT_NUMBER
-}};
+#include "scene/generated/light_lightNumbers.inc"
 inline constexpr std::array<ComponentEnumOption, 3> lightKindOptions{{
   {0, "Direcional"}, {1, "Pontual"}, {2, "Spot"}
 }};
@@ -165,15 +147,7 @@ inline constexpr std::array<ComponentEnum, 4> lightEnums{{
     {"Sombra","","Automática escolhe pelo tamanho da luz na tela",lightCastsLocalShadow,nullptr,
      "render.shadow.punctual","renderer/shadow_atlas.h → atlas local",Invalidate::LightCluster}}
 }};
-inline constexpr std::array<ComponentBoolean, 2> lightBooleans{{
-  {"enabled", "Acesa", [](const ComponentValue &v) { return static_cast<const Light &>(v).enabled; },
-   [](ComponentValue &v, bool b) { static_cast<Light &>(v).enabled = b; },
-   {"Geral","","Ativa a contribuição desta luz"}},
-  {"use_color_temperature", "Filtro por temperatura", [](const ComponentValue &v) { return static_cast<const Light &>(v).useColorTemperature; },
-   [](ComponentValue &v, bool b) { static_cast<Light &>(v).useColorTemperature = b; },
-   {"Emissão","","Multiplica a cor pela temperatura de corpo negro",nullptr,nullptr,
-    "render.light.temperature","scene/light_units.h → RGB linear",Invalidate::LightCluster}}
-}};
+#include "scene/generated/light_lightBooleans.inc"
 inline constexpr std::array<ComponentTriple,1> lightTriples{{
   {"color","Cor linear",{"color.r","color.g","color.b"},ComponentTripleKind::LinearColor}
 }};

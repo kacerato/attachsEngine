@@ -120,7 +120,9 @@ public:
   bool nativeTaaExecuted() const noexcept { return temporalAaActive_ && temporalHistoryInitialized_; }
   // R4: atlas de prévia de texturas composto pelo editor; enviado à GPU no
   // início da gravação da interface do próximo quadro.
+  void setUiGuiAtlas(std::span<const u8> rgba,u32 size,u64 revision);
   void setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height);
+  void setUiImmediateAtlas(std::span<const u8> rgba,u32 width,u32 height);
   void requestCameraPreview(const renderer::RenderViewSnapshot &view) {pendingPreview_=view;}
   void closeCameraPreview() {
     pendingPreview_={};
@@ -788,6 +790,9 @@ private:
   bool astc4x4_ = false;
   bool materialCulling_ = false;
   std::vector<u8> pendingUiPreview_;
+  std::vector<u8> uiImmediateAtlas_;
+  u32 uiImmediateWidth_=0,uiImmediateHeight_=0;
+  bool uiImmediatePending_=false;
   u32 pendingUiPreviewWidth_ = 0, pendingUiPreviewHeight_ = 0;
   VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool texturePool_ = VK_NULL_HANDLE;
@@ -1078,6 +1083,8 @@ private:
   ui::UiFont uiFont_{};
   ui::UiIconAtlas uiIcons_{};
   rhi::VulkanUiRenderer uiRenderer_{};
+  std::vector<u8> uiGuiAtlas_;
+  u64 uiGuiRevision_=~u64{0};u32 uiGuiSize_=0;bool uiGuiPending_=false;
   VkRenderPass uiRenderPass_=VK_NULL_HANDLE;
   std::vector<VkFramebuffer> uiFramebuffers_;
   std::vector<ui::UiInstance> uiInstances_;

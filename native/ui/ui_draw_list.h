@@ -29,7 +29,9 @@
 
 namespace ae::ui {
 
-enum class UiPrimitive : u8 { Rect, Text, Image, Line };
+enum class UiPrimitive : u8 { Rect, Text, Image, Line, Triangle };
+
+struct UiMeshVertex final { UiPoint position{}, uv{}; UiColor color = 0xFFFFFFFF; };
 
 // Identificador de imagem no atlas da interface. Zero é "nenhuma": um comando
 // de imagem com id zero é recusado em vez de desenhar o primeiro slot do atlas.
@@ -40,6 +42,7 @@ inline constexpr UiImageId kUiNoImage = 0;
 // atlas é composto pela sessão e não tem tabela fixa como o atlas de ícones.
 inline constexpr UiImageId kUiPreviewImage = 0x40000000u;
 inline constexpr UiImageId kUiCameraPreviewImage = 0x40000001u;
+inline constexpr UiImageId kUiGuiImage = 0x40000002u;
 
 struct UiDrawCommand final {
   UiPrimitive kind = UiPrimitive::Rect;
@@ -66,11 +69,15 @@ struct UiDrawCommand final {
   UiTypeStyle style{};
   UiAlign horizontalAlign = UiAlign::Start;
   UiAlign verticalAlign = UiAlign::Center;
+  UiMeshVertex vertices[3]{};
+  float projection[12]{}; // local pixel X/Y/constant -> homogeneous clip XYZW
+  u32 worldFlags=0; // 1 world plane, 2 scene depth occlusion
+  UiRect worldClip{};
 };
 
 class UiDrawList final {
 public:
-  static constexpr u32 kMaximumCommands = 8192;
+  static constexpr u32 kMaximumCommands = 32768;
   static constexpr u32 kMaximumClipDepth = 32;
 
   // Recomeça o frame. O recorte volta a ser `viewport` e todo comando futuro
@@ -99,9 +106,15 @@ public:
   // R4: recorte `texels` do atlas de prévia desenhado em `bounds`.
   bool addPreviewImage(const UiRect &bounds, const UiRect &texels, UiColor tint = 0xFFFFFFFF,
                        float radius = 0.0f);
+  bool addGuiImage(const UiRect &bounds,const UiRect &texels,UiColor tint,float radius);
+  void projectRange(usize first,const float projection[12],bool occlusion,const UiRect &viewport);
   // Segmento com extremidades arredondadas. `bounds` do comando guarda a caixa
   // envolvente, que é o que o recorte precisa; as pontas viajam em `atlas`.
   bool addLine(UiPoint from, UiPoint to, UiColor color, float width);
+  // Normalized UVs in the dedicated immediate-mode font atlas. Actual mesh,
+  // including per-vertex colors; not a widget-name translation.
+  bool addTriangle(const UiMeshVertex &a, const UiMeshVertex &b, const UiMeshVertex &c);
+  bool append(const UiDrawList &other);
 
   std::span<const UiDrawCommand> commands() const noexcept { return commands_; }
   u32 commandCount() const noexcept { return static_cast<u32>(commands_.size()); }

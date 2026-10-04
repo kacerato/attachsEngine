@@ -13,6 +13,9 @@ struct UiInstance {
   vec4 atlas;
   vec4 params;   // raio, espessura do contorno, tipo, alcance do campo em texels
   uvec4 colors;
+  vec4 extra;
+  vec4 projectX, projectY, projectOrigin;
+  vec4 worldClip;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Instances {
@@ -23,16 +26,21 @@ layout(set = 0, binding = 1) uniform sampler2D fontAtlas;  // campo de distânci
 layout(set = 0, binding = 2) uniform sampler2D iconAtlas;  // RGBA8, alfa direto
 layout(set = 0, binding = 3) uniform sampler2D previewAtlas;  // R4: prévia de texturas, RGBA8
 layout(set = 0, binding = 4) uniform sampler2D cameraPreview;
+layout(set = 0, binding = 5) uniform sampler2D immediateAtlas;
+layout(set = 0, binding = 6) uniform sampler2D sceneDepth;
+layout(set = 0, binding = 7) uniform sampler2D guiAtlas;
 
 layout(push_constant) uniform UiPushConstants {
   vec4 surface;
   vec4 surfaceTransform;
   vec4 atlasSizes;
   vec4 outputFlags;
+  vec4 depthSurface;
 } push;
 
 layout(location = 0) flat in uint vInstance;
 layout(location = 1) in vec2 vPixel;
+layout(location = 2) noperspective in vec2 vScreen;
 layout(location = 0) out vec4 outColor;
 
 #define UI_KIND_RECT 0u
@@ -76,8 +84,26 @@ void main() {
     discard;
   }
 
+  if((instance.colors.w & 1u)!=0u && (any(lessThan(vScreen,instance.worldClip.xy)) || any(greaterThanEqual(vScreen,instance.worldClip.xy+instance.worldClip.zw))))discard;
+  if((instance.colors.w & 2u)!=0u && push.outputFlags.y>0.5) {
+    float depth=texture(sceneDepth,gl_FragCoord.xy*push.depthSurface.xy).r;
+    if(gl_FragCoord.z>depth+0.00001)discard;
+  }
   const uint kind = uint(instance.params.z + 0.5);
   const vec4 fill = unpackColor(instance.colors.x);
+  if (kind == 6u) {
+    const vec2 a = instance.bounds.xy, b = instance.bounds.zw, c = instance.atlas.xy;
+    const vec2 ab = b-a, ac = c-a, ap = vPixel-a;
+    const float determinant = ab.x*ac.y-ab.y*ac.x;
+    if (abs(determinant) < 0.00001) discard;
+    const float v = (ap.x*ac.y-ap.y*ac.x)/determinant;
+    const float w = (ab.x*ap.y-ab.y*ap.x)/determinant;
+    const float u = 1.0-v-w;
+    const vec2 uv = instance.atlas.zw*u + instance.params.xy*v + instance.extra.xy*w;
+    const vec4 tint = fill*u + unpackColor(instance.colors.y)*v + unpackColor(instance.colors.z)*w;
+    outColor = outputColor(texture(immediateAtlas,uv)*tint);
+    return;
+  }
 
   if (kind == UI_KIND_LINE) {
     // Distância ponto-segmento, presa às pontas: isso arredonda as
@@ -103,7 +129,7 @@ void main() {
     // tela responde a pergunta exatamente e sem o ruído de fwidth num texto
     // pequeno, que é justamente onde o ruído apareceria.
     const float texelsPerPixel = instance.atlas.w / max(instance.bounds.w, 0.001);
-    const float softness = max(texelsPerPixel / (2.0 * max(instance.params.w, 0.001)), 0.0015);
+    const float softness = (instance.colors.w & 1u)!=0u?max(fwidth(field),0.0015):max(texelsPerPixel / (2.0 * max(instance.params.w, 0.001)), 0.0015);
     const float alpha = clamp((field - 0.5) / softness + 0.5, 0.0, 1.0);
     outColor = outputColor(vec4(fill.rgb, fill.a * alpha));
     return;
@@ -113,6 +139,12 @@ void main() {
     vec4 color=texture(cameraPreview,(vPixel-instance.bounds.xy)/instance.bounds.zw)*fill;
     color.a*=coverageFromDistance(roundedBoxDistance(vPixel,instance.bounds,instance.params.x));
     outColor=color;return;
+  }
+  if(kind==7u) {
+    vec2 uv=(instance.atlas.xy+(vPixel-instance.bounds.xy)/instance.bounds.zw*instance.atlas.zw)/2048.0;
+    vec4 color=texture(guiAtlas,uv)*fill;
+    color.a*=coverageFromDistance(roundedBoxDistance(vPixel,instance.bounds,instance.params.x));
+    outColor=outputColor(color);return;
   }
   if (kind == UI_KIND_PREVIEW) {
     // O tamanho do atlas de prévia viaja em outputFlags.zw: ele muda quando a

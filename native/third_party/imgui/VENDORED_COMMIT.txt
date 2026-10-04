@@ -1,0 +1,4 @@
+Dear ImGui v1.91.9b-docking
+4806a1924ff6181180bf5e4b8b79ab4394118875
+https://github.com/ocornut/imgui
+MIT; LICENSE.txt retained.

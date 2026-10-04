@@ -1,0 +1,189 @@
+{
+  "format": 1,
+  "source": "native/scene/transform_constraints.h",
+  "tables": [
+    {
+      "name": "constraintNumbers",
+      "kind": "Number",
+      "template": true,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "weight",
+          "label": "Peso",
+          "member": "weight",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Influência"
+          }
+        },
+        {
+          "id": "offset_x",
+          "label": {
+            "cpp": "constraintScale<T>?\"Fator X\":\"Deslocamento X\""
+          },
+          "member": "offset[0]",
+          "min": {
+            "cpp": "constraintScale<T>?0.f:-10000.f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": {
+              "cpp": "constraintScale<T>?\"x\":constraintAngular<T>?\"graus\":\"u\""
+            }
+          }
+        },
+        {
+          "id": "offset_y",
+          "label": {
+            "cpp": "constraintScale<T>?\"Fator Y\":\"Deslocamento Y\""
+          },
+          "member": "offset[1]",
+          "min": {
+            "cpp": "constraintScale<T>?0.f:-10000.f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": {
+              "cpp": "constraintScale<T>?\"x\":constraintAngular<T>?\"graus\":\"u\""
+            }
+          }
+        },
+        {
+          "id": "offset_z",
+          "label": {
+            "cpp": "constraintScale<T>?\"Fator Z\":\"Deslocamento Z\""
+          },
+          "member": "offset[2]",
+          "min": {
+            "cpp": "constraintScale<T>?0.f:-10000.f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": {
+              "cpp": "constraintScale<T>?\"x\":constraintAngular<T>?\"graus\":\"u\""
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "T"
+      }
+    },
+    {
+      "name": "constraintBooleans",
+      "kind": "Boolean",
+      "template": true,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "presentation": {
+            "group": "Influência"
+          }
+        },
+        {
+          "id": "axis_x",
+          "label": "Aplicar X",
+          "member": "axis[0]",
+          "presentation": {
+            "group": "Ajustes"
+          }
+        },
+        {
+          "id": "axis_y",
+          "label": "Aplicar Y",
+          "member": "axis[1]",
+          "presentation": {
+            "group": "Ajustes"
+          }
+        },
+        {
+          "id": "axis_z",
+          "label": "Aplicar Z",
+          "member": "axis[2]",
+          "presentation": {
+            "group": "Ajustes"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "T"
+      }
+    },
+    {
+      "name": "aimEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "aim_axis",
+          "label": "Eixo de mira",
+          "type": "AimConstraint",
+          "member": "aimAxis",
+          "options": "aimAxisOptions",
+          "presentation": {
+            "group": "Ajustes"
+          }
+        },
+        {
+          "id": "up_axis",
+          "label": "Vertical de mundo",
+          "type": "AimConstraint",
+          "member": "upAxis",
+          "options": "upAxisOptions",
+          "presentation": {
+            "group": "Ajustes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "lookEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "up_axis",
+          "label": "Vertical de mundo",
+          "type": "LookAtConstraint",
+          "member": "upAxis",
+          "options": "upAxisOptions",
+          "presentation": {
+            "group": "Mira"
+          }
+        }
+      ]
+    }
+  ]
+}

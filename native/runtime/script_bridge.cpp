@@ -1155,6 +1155,182 @@ void ScriptBridge::installAccess() {
     self.lastStatus_=ok?WorldStatus::Ok:WorldStatus::Rejected;
     return ok;
   };
+  access_.audioCommand=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 operation,double seconds)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.audio_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const ComponentHandle handle{{worldId,static_cast<ObjectId>(id),generation},instance};
+    self.lastStatus_=self.audio_->command(*self.world_,handle,static_cast<SceneAudio::Command>(operation),seconds);
+    return self.lastStatus_==WorldStatus::Ok;
+  };
+  access_.guiCommand=[](void *context,u32 worldId,u32 id,u32 op,const u8 *text,int length,float value,scene::ScriptGuiState *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!out || op>14 || length<0 || length>4096 || (length && !text) || !std::isfinite(value)) {
+      self.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    if(op!=0 && worldId!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    const std::string_view string=length?std::string_view(reinterpret_cast<const char*>(text),static_cast<usize>(length)):std::string_view{};
+    if(string.find('\0')!=std::string_view::npos){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    ui::GuiEvent event{};
+    if(op==0) id=self.gui_->document().findByName(string);
+    if(op==7) {
+      if(out->kind>=ui::kGuiKindCount) {self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      auto &document=self.gui_->document();const auto before=document;
+      id=document.create(static_cast<ui::GuiKind>(out->kind),id);
+      if(!id){self.lastStatus_=WorldStatus::Rejected;return 0;}
+      if(!string.empty()) {
+        auto created=*document.find(id);created.name=string;std::string error;
+        if(!document.update(created,error)){document=before;self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      }
+    }
+    if(op==6) {
+      if(!self.gui_->poll(event)){self.lastStatus_=WorldStatus::Ok;*out={};return 0;}
+      id=event.node;
+    }
+    const auto *node=self.gui_->document().find(id);
+    if(!node){self.lastStatus_=WorldStatus::UnknownElement;return 0;}
+    if(op==8) {self.gui_->document().remove(id);*out={};self.lastStatus_=WorldStatus::Ok;return 1;}
+    bool ok=true;
+    if(op==2) ok=self.gui_->setText(id,std::string(string));
+    if(op==3) ok=self.gui_->setValue(id,value);
+    if(op==4) ok=self.gui_->setVisible(id,value!=0);
+    if(op==5) ok=self.gui_->setEnabled(id,value!=0);
+    if(op==10) {auto edit=*node;edit.image=string;std::string error;ok=node->kind==ui::GuiKind::Image && self.gui_->document().update(edit,error);}
+    if(op==11 || op==12)ok=self.gui_->document().reorder(id,op==11?-1:1);
+    if(op==13)ok=self.gui_->playAnimation(id);
+    if(op==14)ok=self.gui_->stopAnimation(id);
+    if(op==9) {auto edit=*node;edit.name=string;std::string error;ok=self.gui_->document().update(edit,error);}
+    if(!ok){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    node=self.gui_->document().find(id);
+    *out={self.world_->worldId(),id,static_cast<u32>(node->kind),node->visible?1u:0u,node->enabled?1u:0u,
+          node->value,node->minimum,node->maximum,op==6?static_cast<u32>(event.kind)+1:0};
+    if(op==6) out->value=event.value;
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.guiProperties=[](void *context,u32 world,u32 id,u32 operation,scene::ScriptGuiProperties *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_) {self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(world!=self.world_->worldId()) {self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    if(!out || operation>1) {self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto *node=self.gui_->document().find(id);
+    if(!node) {self.lastStatus_=WorldStatus::UnknownElement;return 0;}
+    if(operation==1) {
+      auto edit=*node;
+      edit.anchorMin={out->anchors[0],out->anchors[1]};edit.anchorMax={out->anchors[2],out->anchors[3]};
+      edit.offsets={out->offsets[0],out->offsets[1],out->offsets[2],out->offsets[3]};
+      edit.background=out->background;edit.foreground=out->foreground;edit.accent=out->accent;
+      edit.fontSize=out->fontSize;edit.radius=out->radius;edit.clipChildren=out->clipChildren!=0;
+      std::string error;
+      if(out->clipChildren>1 || !self.gui_->document().update(edit,error)) {self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      node=self.gui_->document().find(id);
+    }
+    *out={{node->anchorMin.x,node->anchorMin.y,node->anchorMax.x,node->anchorMax.y},
+          {node->offsets.x,node->offsets.y,node->offsets.width,node->offsets.height},
+          node->background,node->foreground,node->accent,node->clipChildren?1u:0u,node->fontSize,node->radius};
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.guiText=[](void *context,u32 world,u32 id,u32 field,u8 *buffer,int capacity)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_) {self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(world!=self.world_->worldId()) {self.lastStatus_=WorldStatus::ForeignWorld;return -1;}
+    if(field>3 || capacity<0 || (capacity && !buffer)) {self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    if(field==3) {
+      const auto &text=self.gui_->diagnostic();
+      if(capacity>=static_cast<int>(text.size()) && !text.empty())std::memcpy(buffer,text.data(),text.size());
+      self.lastStatus_=WorldStatus::Ok;return static_cast<int>(text.size());
+    }
+    const auto *node=self.gui_->document().find(id);
+    if(!node) {self.lastStatus_=WorldStatus::UnknownElement;return -1;}
+    const auto &text=field==0?node->text:field==1?node->name:node->image;
+    if(capacity>=static_cast<int>(text.size()) && !text.empty()) std::memcpy(buffer,text.data(),text.size());
+    self.lastStatus_=WorldStatus::Ok;return static_cast<int>(text.size());
+  };
+  access_.guiSizing=[](void *context,u32 world,u32 id,u32 op,scene::ScriptGuiSizing *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(world!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    if(!out || op>1){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto *node=self.gui_->document().find(id);if(!node){self.lastStatus_=WorldStatus::UnknownElement;return 0;}
+    if(op==1) {
+      auto edit=*node;auto &z=edit.sizing;
+      z.minimum={out->minimum[0],out->minimum[1]};z.preferred={out->preferred[0],out->preferred[1]};z.flexible={out->flexible[0],out->flexible[1]};
+      z.padding={out->padding[0],out->padding[1],out->padding[2],out->padding[3]};z.spacing={out->spacing[0],out->spacing[1]};
+      z.alignment=static_cast<ui::GuiAlignment>(out->alignment);z.columns=out->columns;z.ignore=out->ignore!=0;edit.imageFit=static_cast<ui::GuiImageFit>(out->imageFit);edit.imageTint=out->imageTint;
+      std::string error;if(out->alignment>3 || out->imageFit>2 || out->ignore>1 || !self.gui_->document().update(edit,error)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}node=self.gui_->document().find(id);
+    }
+    const auto &z=node->sizing;
+    *out={{z.minimum.x,z.minimum.y},{z.preferred.x,z.preferred.y},{z.flexible.x,z.flexible.y},{z.padding.left,z.padding.top,z.padding.right,z.padding.bottom},{z.spacing.x,z.spacing.y},static_cast<u32>(z.alignment),z.columns,z.ignore?1u:0u,static_cast<u32>(node->imageFit),node->imageTint};
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.guiBehavior=[](void *context,u32 world,u32 id,u32 op,scene::ScriptGuiBehavior *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(world!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    if(!out || op>1){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto *node=self.gui_->document().find(id);if(!node){self.lastStatus_=WorldStatus::UnknownElement;return 0;}
+    if(op==1) {
+      if(out->clickable>1 || out->action>5 || out->enabled>1 || out->autoPlay>1 || out->loop>1 || out->pingPong>1 || out->easing>3){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      auto edit=*node;edit.interaction={out->clickable!=0,static_cast<ui::GuiClickAction>(out->action),out->target,out->value};
+      edit.motion={out->enabled!=0,out->autoPlay!=0,out->loop!=0,out->pingPong!=0,static_cast<ui::GuiEasing>(out->easing),out->duration,out->delay,
+                   {out->from[0],out->from[1],out->from[2],out->from[3]},{out->to[0],out->to[1],out->to[2],out->to[3]}};
+      std::string error;if(!self.gui_->document().update(edit,error)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      node=self.gui_->document().find(id);
+    }
+    const auto &a=node->interaction;const auto &m=node->motion;
+    *out={a.clickable?1u:0u,static_cast<u32>(a.action),a.target,a.value,m.enabled?1u:0u,m.autoPlay?1u:0u,m.loop?1u:0u,m.pingPong?1u:0u,static_cast<u32>(m.easing),m.duration,m.delay,
+          {m.from.x,m.from.y,m.from.scale,m.from.opacity},{m.to.x,m.to.y,m.to.scale,m.to.opacity}};
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.guiAction=[](void *context,u32 world,u32 id,u32 op,u32 index,scene::ScriptGuiAction *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(world!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return -1;}
+    const auto *node=self.gui_->document().find(id);if(!node){self.lastStatus_=WorldStatus::UnknownElement;return -1;}
+    if(op>5 || (op && !out) || (op!=0 && op!=2 && index>=node->actions.size()) || (op==2 && node->actions.size()>=ui::GuiDocument::kMaximumActions)) {self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    if(op==0){self.lastStatus_=WorldStatus::Ok;return static_cast<int>(node->actions.size());}
+    if(op==1){const auto &a=node->actions[index];*out={static_cast<u32>(a.event)+1,static_cast<u32>(a.action),a.target,a.value};self.lastStatus_=WorldStatus::Ok;return 1;}
+    auto edit=*node;
+    if(op==2 || op==3) {
+      if(out->event<1 || out->event>2 || out->action>5 || !std::isfinite(out->value)){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+      ui::GuiActionBinding a{static_cast<ui::GuiEventKind>(out->event-1),static_cast<ui::GuiClickAction>(out->action),out->target,out->value};
+      if(op==2)edit.actions.push_back(a);else edit.actions[index]=a;
+    } else if(op==4)edit.actions.erase(edit.actions.begin()+index);
+    else {
+      if(out->target>=edit.actions.size()){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+      const auto a=edit.actions[index];edit.actions.erase(edit.actions.begin()+index);edit.actions.insert(edit.actions.begin()+out->target,a);
+    }
+    std::string error;if(!self.gui_->document().update(edit,error)){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.guiTransitions=[](void *context,u32 world,u32 id,u32 op,scene::ScriptGuiTransitions *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(world!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    const auto *node=self.gui_->document().find(id);if(!node){self.lastStatus_=WorldStatus::UnknownElement;return 0;}
+    if(!out || op>1 || (op && (out->enabled>1 || out->easing>3))){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(op) {
+      auto edit=*node;auto &t=edit.transitions;t.enabled=out->enabled!=0;t.easing=static_cast<ui::GuiEasing>(out->easing);t.duration=out->duration;
+      u32 i=0;for(auto *v:{&t.normal,&t.pressed,&t.disabled}){const auto *p=&out->poses[4*i];v->pose={p[0],p[1],p[2],p[3]};v->tint=out->tints[i++];}
+      std::string error;if(!self.gui_->document().update(edit,error)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}node=self.gui_->document().find(id);
+    }
+    const auto &t=node->transitions;out->enabled=t.enabled?1u:0u;out->easing=static_cast<u32>(t.easing);out->duration=t.duration;
+    u32 i=0;for(const auto &v:{t.normal,t.pressed,t.disabled}){auto *p=&out->poses[4*i];p[0]=v.pose.x;p[1]=v.pose.y;p[2]=v.pose.scale;p[3]=v.pose.opacity;out->tints[i++]=v.tint;}
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.guiCanvas=[](void *context,u32 world,u32 op,scene::ScriptGuiCanvas *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(world!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    if(!out || op>1){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(op==1) {
+      ui::GuiCanvas c;c.mode=static_cast<ui::GuiCanvasMode>(out->mode);c.resolution={out->resolution[0],out->resolution[1]};std::copy_n(out->position,3,c.position);std::copy_n(out->rotation,3,c.rotation);c.unitsPerPixel=out->unitsPerPixel;c.occlusion=out->occlusion!=0;
+      std::string error;if(out->mode>1 || out->occlusion>1 || !self.gui_->document().setCanvas(c,error)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      self.gui_->cancelPointers();
+    }
+    const auto &c=self.gui_->document().canvas();
+    *out={static_cast<u32>(c.mode),{c.resolution.x,c.resolution.y},{c.position[0],c.position[1],c.position[2]},{c.rotation[0],c.rotation[1],c.rotation[2]},c.unitsPerPixel,c.occlusion?1u:0u};self.lastStatus_=WorldStatus::Ok;return 1;
+  };
   access_.audioSnapshot=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,scene::ScriptAudioSnapshot *output)->int {
     auto &self=*static_cast<ScriptBridge *>(context);
     if(!self.world_||!self.audio_){self.lastStatus_=WorldStatus::NotRunning;return 0;}

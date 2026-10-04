@@ -1,0 +1,67 @@
+{
+  "format": 1,
+  "source": "native/scene/path.h",
+  "tables": [
+    {
+      "name": "pathBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "closed",
+          "label": "Fechado",
+          "member": "curve.closed"
+        }
+      ],
+      "defaults": {
+        "type": "Path",
+        "presentation": {
+          "group": "Caminho"
+        }
+      }
+    },
+    {
+      "name": "pathNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": false,
+      "items": [
+        {
+          "id": "up_x",
+          "label": "Up X",
+          "member": "curve.up[0]",
+          "presentation": {
+            "unit": "",
+            "help": "Up inicial local; vetor zero é inválido."
+          }
+        },
+        {
+          "id": "up_y",
+          "label": "Up Y",
+          "member": "curve.up[1]"
+        },
+        {
+          "id": "up_z",
+          "label": "Up Z",
+          "member": "curve.up[2]"
+        }
+      ],
+      "defaults": {
+        "type": "Path",
+        "min": {
+          "cpp": "-100000"
+        },
+        "max": {
+          "cpp": "100000"
+        },
+        "step": {
+          "cpp": ".1f"
+        },
+        "presentation": {
+          "group": "Orientação"
+        }
+      }
+    }
+  ]
+}

@@ -61,6 +61,9 @@
 #include "ui/ui_font.h"
 #include "ui/ui_icon_atlas.h"
 #include "ui/ui_instance_builder.h"
+#include "ui/gui_workbench.h"
+#include "ui/gui_images.h"
+#include "ui/gui_world.h"
 
 #include "scene/component_properties.h"
 
@@ -72,7 +75,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName, Gui };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -315,6 +318,16 @@ public:
   // interface o consumiu — a plataforma usa isso para não repassar o mesmo
   // toque ao controlador de jogo.
   bool handlePointer(const ui::UiPointerEvent &event);
+  const ui::GuiImageAtlas &guiImages() const {return guiImages_;}
+  void refreshGuiImages();
+  bool guiPlayPointer(const ui::UiPointerEvent &event);
+  EditorViewport guiPlayView() const;
+  ui::GuiWorkbench &gui() noexcept { return gui_; }
+  const ui::ImmediateGui &immediateGui() const noexcept { return const_cast<EditorSession *>(this)->gui_.immediate(); }
+  void openGui() { state_.workspace=EditorWorkspace::Gui;state_.workspaceMenu=false; }
+  bool guiActive() const noexcept { return state_.workspace==EditorWorkspace::Gui; }
+  void guiKey(int imguiKey,bool down) { if(state_.workspace==EditorWorkspace::Gui) gui_.key(imguiKey,down); }
+  void guiWheel(float x,float y) { if(state_.workspace==EditorWorkspace::Gui) gui_.wheel(x,y); }
   void cancelPointers();
   void usePlatformTextInput(bool enabled) { state_.platformTextInput=enabled; }
   void usePlatformCodeView(bool enabled) {state_.platformCodeView=enabled;}
@@ -1012,6 +1025,7 @@ public:
         reportProblem(EditorConsoleSeverity::Error,state_.status);return false;
       }
       runtimeCodeGeneration_=code_.publishedGeneration();
+      playScene_.configureGui(gui_.document());
       if(!playScene_.start(document_,mapScene_)) {
         state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
         reportProblem(EditorConsoleSeverity::Error,state_.status);
@@ -1538,7 +1552,7 @@ private:
     bool moved = false;
   };
 
-  void buildPickCandidates();
+  void buildPickCandidates(const runtime::SceneGraph *source=nullptr,bool occlusion=false);
   void frameSubtree(EditorEntityId root);
   bool handleViewportPointer(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   bool handlePointerNow(const ui::UiPointerEvent &event);
@@ -1570,6 +1584,11 @@ private:
   const ui::UiIconAtlas *icons_ = nullptr;
   runtime::ObjectTags projectTags_;
   EditorDocument document_;
+  ui::GuiWorkbench gui_;
+  ui::GuiImageAtlas guiImages_;
+  ui::GuiWorldFrame guiWorld_;
+  ui::UiDrawList guiWorldDrawing_;
+  double guiImageCheckAt_=0;u64 guiImageDocumentRevision_=~u64{0};
   EditorFileSystem files_;
   struct CachedAudioClip {resources::AssetGuid guid;std::string hash;std::shared_ptr<const resources::AudioClip> clip;};
   std::vector<CachedAudioClip> audioClips_;
@@ -1870,6 +1889,7 @@ private:
   void cancelPlayButtons(){playButtonPointers_.clear();jumpPressed_=secondaryPressed_=false;playButtonCanceled_=runtime::InputTouch;}
   float sceneTime_ = 0.0f;
   float lastWallSeconds_ = 0.0f;
+  float guiDeltaSeconds_ = 1.f/60;
   bool clockPrimed_ = false;
 };
 

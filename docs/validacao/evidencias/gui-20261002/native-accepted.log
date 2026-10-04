@@ -1,0 +1,6 @@
+[1/5] Checking generated component contracts
+45 types / 10 family tables; 374 property declarations / 74 tables; 748 generated accessors; all outputs current
+[2/5] Building CXX object CMakeFiles/aether_ui.dir/ui/gui_workbench.cpp.obj
+[3/5] Linking CXX static library libaether_ui.a
+[4/5] Linking CXX executable aether_gui_tests.exe
+[5/5] Linking CXX executable aether_gui_preview.exe

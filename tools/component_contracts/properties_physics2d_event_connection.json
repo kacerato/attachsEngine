@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "source": "native/scene/physics2d_event_connection.h",
+  "tables": [
+    {
+      "name": "physics2DConnectionBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativa",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "PhysicsEventConnection2D",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Conexão"
+        }
+      }
+    },
+    {
+      "name": "physics2DConnectionEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "event",
+          "label": "Evento",
+          "type": "PhysicsEventConnection2D",
+          "member": "event",
+          "options": "physics2DConnectionEvents",
+          "presentation": {
+            "group": "Conexão",
+            "unit": "",
+            "help": "Sensor exige um Colisor 2D sensor; contato exige uma forma sólida no emissor"
+          }
+        },
+        {
+          "id": "action",
+          "label": "Ação",
+          "type": "PhysicsEventConnection2D",
+          "member": "action",
+          "options": "physics2DConnectionActions",
+          "presentation": {
+            "group": "Conexão",
+            "unit": "",
+            "help": "Executada antes do callback C#; permanência pode disparar a cada passo físico"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "physics2d_event_connection_PhysicsEventConnection2D_fields0",
+      "type": "PhysicsEventConnection2D",
+      "properties": [
+        "physics2DConnectionBooleans/enabled"
+      ]
+    }
+  ]
+}

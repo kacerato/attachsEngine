@@ -1,0 +1,1119 @@
+{
+  "format": 1,
+  "source": "native/scene/joint.h",
+  "tables": [
+    {
+      "name": "jointExtraNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "normal_a_x",
+          "label": "Plano A · X",
+          "member": "normalA[0]",
+          "min": {
+            "cpp": "-1.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Eixos",
+            "unit": "",
+            "visible": {
+              "cpp": "jointHasFrame"
+            }
+          }
+        },
+        {
+          "id": "normal_a_y",
+          "label": "Plano A · Y",
+          "member": "normalA[1]",
+          "min": {
+            "cpp": "-1.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Eixos",
+            "unit": "",
+            "visible": {
+              "cpp": "jointHasFrame"
+            }
+          }
+        },
+        {
+          "id": "normal_a_z",
+          "label": "Plano A · Z",
+          "member": "normalA[2]",
+          "min": {
+            "cpp": "-1.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Eixos",
+            "unit": "",
+            "visible": {
+              "cpp": "jointHasFrame"
+            }
+          }
+        },
+        {
+          "id": "normal_b_x",
+          "label": "Plano B · X",
+          "member": "normalB[0]",
+          "min": {
+            "cpp": "-1.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Eixos",
+            "unit": "",
+            "visible": {
+              "cpp": "jointHasFrame"
+            }
+          }
+        },
+        {
+          "id": "normal_b_y",
+          "label": "Plano B · Y",
+          "member": "normalB[1]",
+          "min": {
+            "cpp": "-1.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Eixos",
+            "unit": "",
+            "visible": {
+              "cpp": "jointHasFrame"
+            }
+          }
+        },
+        {
+          "id": "normal_b_z",
+          "label": "Plano B · Z",
+          "member": "normalB[2]",
+          "min": {
+            "cpp": "-1.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Eixos",
+            "unit": "",
+            "visible": {
+              "cpp": "jointHasFrame"
+            }
+          }
+        },
+        {
+          "id": "swing_y",
+          "label": "Cone · semiângulo Y",
+          "member": "swingY",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointHasSwing"
+            }
+          },
+          "default": {
+            "cpp": "45"
+          }
+        },
+        {
+          "id": "swing_z",
+          "label": "Cone · semiângulo Z",
+          "member": "swingZ",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointHasTwist"
+            }
+          },
+          "default": {
+            "cpp": "45"
+          }
+        },
+        {
+          "id": "twist_min",
+          "label": "Torção mínima",
+          "member": "twistMin",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointHasTwist"
+            }
+          },
+          "default": {
+            "cpp": "-45"
+          }
+        },
+        {
+          "id": "twist_max",
+          "label": "Torção máxima",
+          "member": "twistMax",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointHasTwist"
+            }
+          },
+          "default": {
+            "cpp": "45"
+          }
+        },
+        {
+          "id": "linear_x_minimum",
+          "label": "Limite mínimo",
+          "member": "axes[0].minimum",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisLimited<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_maximum",
+          "label": "Limite máximo",
+          "member": "axes[0].maximum",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisLimited<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_friction",
+          "label": "Atrito máximo",
+          "member": "axes[0].friction",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "N",
+            "visible": {
+              "cpp": "jointAxisFriction<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_velocity",
+          "label": "Velocidade alvo",
+          "member": "axes[0].velocity",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "u/s",
+            "visible": {
+              "cpp": "jointAxisVelocity<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_position",
+          "label": "Posição alvo",
+          "member": "axes[0].position",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisPosition<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_force",
+          "label": "Força máxima",
+          "member": "axes[0].force",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "N",
+            "visible": {
+              "cpp": "jointAxisMotor<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_frequency",
+          "label": "Frequência",
+          "member": "axes[0].frequency",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "jointAxisPosition<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_x_damping",
+          "label": "Amortecimento",
+          "member": "axes[0].damping",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Translação X",
+            "unit": "",
+            "visible": {
+              "cpp": "jointAxisPosition<0>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_minimum",
+          "label": "Limite mínimo",
+          "member": "axes[1].minimum",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisLimited<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_maximum",
+          "label": "Limite máximo",
+          "member": "axes[1].maximum",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisLimited<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_friction",
+          "label": "Atrito máximo",
+          "member": "axes[1].friction",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "N",
+            "visible": {
+              "cpp": "jointAxisFriction<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_velocity",
+          "label": "Velocidade alvo",
+          "member": "axes[1].velocity",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "u/s",
+            "visible": {
+              "cpp": "jointAxisVelocity<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_position",
+          "label": "Posição alvo",
+          "member": "axes[1].position",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisPosition<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_force",
+          "label": "Força máxima",
+          "member": "axes[1].force",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "N",
+            "visible": {
+              "cpp": "jointAxisMotor<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_frequency",
+          "label": "Frequência",
+          "member": "axes[1].frequency",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "jointAxisPosition<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_y_damping",
+          "label": "Amortecimento",
+          "member": "axes[1].damping",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Translação Y",
+            "unit": "",
+            "visible": {
+              "cpp": "jointAxisPosition<1>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_minimum",
+          "label": "Limite mínimo",
+          "member": "axes[2].minimum",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisLimited<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_maximum",
+          "label": "Limite máximo",
+          "member": "axes[2].maximum",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisLimited<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_friction",
+          "label": "Atrito máximo",
+          "member": "axes[2].friction",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "N",
+            "visible": {
+              "cpp": "jointAxisFriction<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_velocity",
+          "label": "Velocidade alvo",
+          "member": "axes[2].velocity",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "u/s",
+            "visible": {
+              "cpp": "jointAxisVelocity<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_position",
+          "label": "Posição alvo",
+          "member": "axes[2].position",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "u",
+            "visible": {
+              "cpp": "jointAxisPosition<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_force",
+          "label": "Força máxima",
+          "member": "axes[2].force",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "N",
+            "visible": {
+              "cpp": "jointAxisMotor<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_frequency",
+          "label": "Frequência",
+          "member": "axes[2].frequency",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "jointAxisPosition<2>"
+            }
+          }
+        },
+        {
+          "id": "linear_z_damping",
+          "label": "Amortecimento",
+          "member": "axes[2].damping",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Translação Z",
+            "unit": "",
+            "visible": {
+              "cpp": "jointAxisPosition<2>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_minimum",
+          "label": "Limite mínimo",
+          "member": "axes[3].minimum",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisLimited<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_maximum",
+          "label": "Limite máximo",
+          "member": "axes[3].maximum",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisLimited<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_friction",
+          "label": "Atrito máximo",
+          "member": "axes[3].friction",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "Nm",
+            "visible": {
+              "cpp": "jointAxisFriction<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_velocity",
+          "label": "Velocidade alvo",
+          "member": "axes[3].velocity",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "°/s",
+            "visible": {
+              "cpp": "jointAxisVelocity<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_position",
+          "label": "Posição alvo",
+          "member": "axes[3].position",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisPosition<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_force",
+          "label": "Força máxima",
+          "member": "axes[3].force",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "Nm",
+            "visible": {
+              "cpp": "jointAxisMotor<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_frequency",
+          "label": "Frequência",
+          "member": "axes[3].frequency",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "jointAxisPosition<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_x_damping",
+          "label": "Amortecimento",
+          "member": "axes[3].damping",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Rotação X",
+            "unit": "",
+            "visible": {
+              "cpp": "jointAxisPosition<3>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_minimum",
+          "label": "Limite mínimo",
+          "member": "axes[4].minimum",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisLimited<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_maximum",
+          "label": "Limite máximo",
+          "member": "axes[4].maximum",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisLimited<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_friction",
+          "label": "Atrito máximo",
+          "member": "axes[4].friction",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "Nm",
+            "visible": {
+              "cpp": "jointAxisFriction<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_velocity",
+          "label": "Velocidade alvo",
+          "member": "axes[4].velocity",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "°/s",
+            "visible": {
+              "cpp": "jointAxisVelocity<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_position",
+          "label": "Posição alvo",
+          "member": "axes[4].position",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisPosition<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_force",
+          "label": "Força máxima",
+          "member": "axes[4].force",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "Nm",
+            "visible": {
+              "cpp": "jointAxisMotor<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_frequency",
+          "label": "Frequência",
+          "member": "axes[4].frequency",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "jointAxisPosition<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_y_damping",
+          "label": "Amortecimento",
+          "member": "axes[4].damping",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Rotação Y",
+            "unit": "",
+            "visible": {
+              "cpp": "jointAxisPosition<4>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_minimum",
+          "label": "Limite mínimo",
+          "member": "axes[5].minimum",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisLimited<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_maximum",
+          "label": "Limite máximo",
+          "member": "axes[5].maximum",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisLimited<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_friction",
+          "label": "Atrito máximo",
+          "member": "axes[5].friction",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "Nm",
+            "visible": {
+              "cpp": "jointAxisFriction<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_velocity",
+          "label": "Velocidade alvo",
+          "member": "axes[5].velocity",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "°/s",
+            "visible": {
+              "cpp": "jointAxisVelocity<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_position",
+          "label": "Posição alvo",
+          "member": "axes[5].position",
+          "min": {
+            "cpp": "-180.0f"
+          },
+          "max": {
+            "cpp": "180.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "°",
+            "visible": {
+              "cpp": "jointAxisPosition<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_force",
+          "label": "Força máxima",
+          "member": "axes[5].force",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "Nm",
+            "visible": {
+              "cpp": "jointAxisMotor<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_frequency",
+          "label": "Frequência",
+          "member": "axes[5].frequency",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "Hz",
+            "visible": {
+              "cpp": "jointAxisPosition<5>"
+            }
+          }
+        },
+        {
+          "id": "angular_z_damping",
+          "label": "Amortecimento",
+          "member": "axes[5].damping",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Rotação Z",
+            "unit": "",
+            "visible": {
+              "cpp": "jointAxisPosition<5>"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Joint",
+        "step": {
+          "cpp": ".1f"
+        },
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          }
+        }
+      }
+    },
+    {
+      "name": "jointBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativa",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "Joint",
+        "default": {
+          "cpp": "true"
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "joint_Joint_fields0",
+      "type": "Joint",
+      "properties": [
+        "jointBooleans/enabled"
+      ]
+    },
+    {
+      "name": "joint_Joint_fields4",
+      "type": "Joint",
+      "properties": [
+        "jointExtraNumbers/swing_y",
+        "jointExtraNumbers/swing_z",
+        "jointExtraNumbers/twist_min",
+        "jointExtraNumbers/twist_max"
+      ]
+    }
+  ]
+}

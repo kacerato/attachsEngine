@@ -922,7 +922,8 @@
       "estado": "parcial",
       "evidencias": [
         "docs/planos/AUDIO-2026-09-30.md",
-        "tests/native/test_runtime_audio.cpp"
+        "tests/native/test_runtime_audio.cpp",
+        "docs/planos/AUDIO-TRANSPORTE-ABI37-2026-10-02.md"
       ],
       "lacunas": [
         "Streaming de clipe e pontos de loop autorados nao implementados; WAV decodificado/cached e loop inteiro funcionam."
@@ -941,7 +942,8 @@
       "estado": "parcial",
       "evidencias": [
         "docs/planos/AUDIO-2026-09-30.md",
-        "docs/planos/AUDIO-API-ABI-2026-09-30.md"
+        "docs/planos/AUDIO-API-ABI-2026-09-30.md",
+        "docs/planos/AUDIO-TRANSPORTE-ABI37-2026-10-02.md"
       ],
       "lacunas": [
         "Prioridade/preempcao de fontes e mistura espacial continua ainda nao implementadas; dimensao plana/espacial e demais propriedades possuem consumidor."

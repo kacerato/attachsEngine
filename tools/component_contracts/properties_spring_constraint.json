@@ -1,0 +1,164 @@
+{
+  "format": 1,
+  "source": "native/scene/spring_constraint.h",
+  "tables": [
+    {
+      "name": "springNumbers",
+      "kind": "Number",
+      "template": true,
+      "constexpr": false,
+      "items": [
+        {
+          "id": "weight",
+          "label": "Influência",
+          "member": "weight",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Fonte",
+            "unit": ""
+          }
+        },
+        {
+          "id": "frequency",
+          "label": "Frequência",
+          "member": "frequency",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "60"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Resposta",
+            "unit": "Hz"
+          }
+        },
+        {
+          "id": "damping_ratio",
+          "label": "Razão de amortecimento",
+          "member": "dampingRatio",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Resposta",
+            "unit": ""
+          }
+        },
+        {
+          "id": "max_speed",
+          "label": "Velocidade máxima",
+          "member": "maxSpeed",
+          "min": {
+            "cpp": ".001f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Resposta",
+            "unit": {
+              "cpp": "(std::is_same_v<T,SpringRotationConstraint>?\"graus/s\":std::is_same_v<T,SpringScaleConstraint>?\"x/s\":\"m/s\")"
+            }
+          }
+        },
+        {
+          "id": "offset_x",
+          "label": "Offset X",
+          "member": "offset[0]",
+          "min": {
+            "cpp": "(std::is_same_v<T,SpringScaleConstraint>?.0001f:-10000.f)"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": ""
+          }
+        },
+        {
+          "id": "offset_y",
+          "label": "Offset Y",
+          "member": "offset[1]",
+          "min": {
+            "cpp": "(std::is_same_v<T,SpringScaleConstraint>?.0001f:-10000.f)"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": ""
+          }
+        },
+        {
+          "id": "offset_z",
+          "label": "Offset Z",
+          "member": "offset[2]",
+          "min": {
+            "cpp": "(std::is_same_v<T,SpringScaleConstraint>?.0001f:-10000.f)"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes",
+            "unit": ""
+          }
+        }
+      ],
+      "defaults": {
+        "type": "T"
+      }
+    },
+    {
+      "name": "springBooleans",
+      "kind": "Boolean",
+      "template": true,
+      "constexpr": false,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "T",
+        "presentation": {
+          "group": "Fonte"
+        }
+      }
+    }
+  ]
+}

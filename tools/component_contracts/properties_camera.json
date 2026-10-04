@@ -1,0 +1,227 @@
+{
+  "format": 1,
+  "source": "native/scene/camera.h",
+  "tables": [
+    {
+      "name": "cameraNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "vertical_fov",
+          "label": "Campo vertical",
+          "member": "verticalFov",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "170"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "°",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Perspective;}"
+            }
+          },
+          "tweenable": {
+            "cpp": "true"
+          },
+          "default": {
+            "cpp": "60"
+          }
+        },
+        {
+          "id": "near_plane",
+          "label": "Próximo",
+          "member": "nearPlane",
+          "min": {
+            "cpp": ".001f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": ".1f"
+          }
+        },
+        {
+          "id": "far_plane",
+          "label": "Distante",
+          "member": "farPlane",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "m"
+          },
+          "default": {
+            "cpp": "2000"
+          }
+        },
+        {
+          "id": "priority",
+          "label": "Prioridade",
+          "member": "priority",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Saída",
+            "unit": ""
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "orthographic_half_height",
+          "label": "Meia altura",
+          "member": "orthographicHalfHeight",
+          "min": {
+            "cpp": ".001f"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "m",
+            "help": "Metade da altura visível. Zoom altera esta extensão.",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Orthographic;}"
+            }
+          },
+          "tweenable": {
+            "cpp": "true"
+          },
+          "default": {
+            "cpp": "5"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Camera"
+      }
+    },
+    {
+      "name": "cameraBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Usar no Play",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "Camera",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Saída"
+        }
+      }
+    },
+    {
+      "name": "cameraEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "projection",
+          "label": "Projeção",
+          "type": "Camera",
+          "member": "projection",
+          "options": "cameraProjectionOptions",
+          "presentation": {
+            "group": "Lente"
+          }
+        },
+        {
+          "id": "environment_mask",
+          "label": "Ambientes",
+          "type": "Camera",
+          "member": "environmentMask",
+          "options": "cameraEnvironmentMaskOptions",
+          "presentation": {
+            "group": "Saída",
+            "unit": "",
+            "help": "Volumes que esta câmera consulta",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "camera_Camera_fields0",
+      "type": "Camera",
+      "properties": [
+        "cameraBooleans/enabled"
+      ]
+    },
+    {
+      "name": "camera_Camera_fields1",
+      "type": "Camera",
+      "properties": [
+        "cameraNumbers/vertical_fov",
+        "cameraNumbers/near_plane",
+        "cameraNumbers/far_plane",
+        "cameraNumbers/priority"
+      ]
+    },
+    {
+      "name": "camera_Camera_fields2",
+      "type": "Camera",
+      "properties": [
+        "cameraNumbers/orthographic_half_height"
+      ]
+    }
+  ]
+}

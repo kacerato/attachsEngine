@@ -1,0 +1,24 @@
+[1/23] Checking generated component contracts
+45 types / 10 family tables; 374 property declarations / 74 tables; 748 generated accessors; all outputs current
+[2/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.obj
+[3/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics2d.cpp.obj
+[4/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world_paths.cpp.obj
+[5/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_audio.cpp.obj
+[6/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_paths.cpp.obj
+[7/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.obj
+[8/23] Building CXX object CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.obj
+[9/23] Linking CXX static library libaether_runtime.a
+[10/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.obj
+[11/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[12/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[13/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.obj
+[14/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[15/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[16/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[17/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[18/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[19/23] Building CXX object CMakeFiles/aether_audio_listener_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_script_audio.cpp.obj
+[20/23] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[21/23] Building CXX object CMakeFiles/aether_audio_listener_family_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_runtime_audio.cpp.obj
+[22/23] Linking CXX static library libaether_editor.a
+[23/23] Linking CXX executable aether_audio_listener_family_tests.exe

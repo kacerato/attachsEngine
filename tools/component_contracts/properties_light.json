@@ -1,0 +1,493 @@
+{
+  "format": 1,
+  "source": "native/scene/light.h",
+  "tables": [
+    {
+      "name": "lightNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "color.r",
+          "label": "Cor R",
+          "member": "color[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"color.r\")==\"intensity\"||std::string_view(\"color.r\")==\"color.r\"||std::string_view(\"color.r\")==\"color.g\"||std::string_view(\"color.r\")==\"color.b\""
+          }
+        },
+        {
+          "id": "color.g",
+          "label": "Cor G",
+          "member": "color[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"color.g\")==\"intensity\"||std::string_view(\"color.g\")==\"color.r\"||std::string_view(\"color.g\")==\"color.g\"||std::string_view(\"color.g\")==\"color.b\""
+          }
+        },
+        {
+          "id": "color.b",
+          "label": "Cor B",
+          "member": "color[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"color.b\")==\"intensity\"||std::string_view(\"color.b\")==\"color.r\"||std::string_view(\"color.b\")==\"color.g\"||std::string_view(\"color.b\")==\"color.b\""
+          }
+        },
+        {
+          "id": "color_temperature",
+          "label": "Temperatura",
+          "member": "colorTemperature",
+          "min": {
+            "cpp": "1667"
+          },
+          "max": {
+            "cpp": "25000"
+          },
+          "step": {
+            "cpp": "50"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "K",
+            "help": "Multiplicada pela cor linear; D65 é 6500 K",
+            "visible": {
+              "cpp": "lightUsesTemperature"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.light.temperature",
+            "consumer": "scene/light_units.h → RGB linear",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
+            }
+          },
+          "default": {
+            "cpp": "6500"
+          }
+        },
+        {
+          "id": "intensity",
+          "label": "Intensidade",
+          "member": "intensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": "1.f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "nullptr"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"intensity\")==\"intensity\"||std::string_view(\"intensity\")==\"color.r\"||std::string_view(\"intensity\")==\"color.g\"||std::string_view(\"intensity\")==\"color.b\""
+          },
+          "default": {
+            "cpp": "1000"
+          }
+        },
+        {
+          "id": "range",
+          "label": "Alcance",
+          "member": "range",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Volume",
+            "unit": "m",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "lightHasRange"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"range\")==\"intensity\"||std::string_view(\"range\")==\"color.r\"||std::string_view(\"range\")==\"color.g\"||std::string_view(\"range\")==\"color.b\""
+          },
+          "default": {
+            "cpp": "10"
+          }
+        },
+        {
+          "id": "inner_angle",
+          "label": "Meio-cone interno",
+          "member": "innerAngle",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "89"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Volume",
+            "unit": "°",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "lightHasCone"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"inner_angle\")==\"intensity\"||std::string_view(\"inner_angle\")==\"color.r\"||std::string_view(\"inner_angle\")==\"color.g\"||std::string_view(\"inner_angle\")==\"color.b\""
+          },
+          "default": {
+            "cpp": "20"
+          }
+        },
+        {
+          "id": "outer_angle",
+          "label": "Meio-cone externo",
+          "member": "outerAngle",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "89"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Volume",
+            "unit": "°",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "lightHasCone"
+            }
+          },
+          "tweenable": {
+            "cpp": "std::string_view(\"outer_angle\")==\"intensity\"||std::string_view(\"outer_angle\")==\"color.r\"||std::string_view(\"outer_angle\")==\"color.g\"||std::string_view(\"outer_angle\")==\"color.b\""
+          },
+          "default": {
+            "cpp": "35"
+          }
+        },
+        {
+          "id": "shadow_strength",
+          "label": "Força da sombra",
+          "member": "shadowStrength",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Sombra",
+            "unit": "",
+            "help": "1 é sombra opaca; abaixo disso a luz vaza pelo oclusor",
+            "visible": {
+              "cpp": "lightCastsLocalShadow"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.shadow.punctual",
+            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
+            }
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "shadow_bias",
+          "label": "Desvio",
+          "member": "shadowBias",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".005f"
+          },
+          "presentation": {
+            "group": "Sombra",
+            "unit": "texel",
+            "help": "Afasta a comparação de profundidade e some com a acne",
+            "visible": {
+              "cpp": "lightCastsLocalShadow"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.shadow.punctual",
+            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
+            }
+          },
+          "default": {
+            "cpp": ".05f"
+          }
+        },
+        {
+          "id": "shadow_normal_bias",
+          "label": "Desvio na normal",
+          "member": "shadowNormalBias",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Sombra",
+            "unit": "texel",
+            "help": "Desloca a amostra ao longo da normal; some com o serrilhado da borda",
+            "visible": {
+              "cpp": "lightCastsLocalShadow"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.shadow.punctual",
+            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
+            }
+          },
+          "default": {
+            "cpp": ".4f"
+          }
+        },
+        {
+          "id": "shadow_near_plane",
+          "label": "Plano próximo da sombra",
+          "member": "shadowNearPlane",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Sombra",
+            "unit": "m",
+            "help": "Perto demais perde precisão; longe demais corta o que está junto da lâmpada",
+            "visible": {
+              "cpp": "lightCastsLocalShadow"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.shadow.punctual",
+            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
+            }
+          },
+          "default": {
+            "cpp": ".2f"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Light"
+      }
+    },
+    {
+      "name": "lightBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Acesa",
+          "member": "enabled",
+          "presentation": {
+            "group": "Geral",
+            "help": "Ativa a contribuição desta luz"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "use_color_temperature",
+          "label": "Filtro por temperatura",
+          "member": "useColorTemperature",
+          "presentation": {
+            "group": "Emissão",
+            "help": "Multiplica a cor pela temperatura de corpo negro",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.light.temperature",
+            "consumer": "scene/light_units.h → RGB linear",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Light",
+        "presentation": {
+          "unit": ""
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "light_Light_fields0",
+      "type": "Light",
+      "properties": [
+        "lightBooleans/enabled"
+      ]
+    },
+    {
+      "name": "light_Light_fields1",
+      "type": "Light",
+      "properties": [
+        "lightBooleans/use_color_temperature"
+      ]
+    },
+    {
+      "name": "light_Light_fields3",
+      "type": "Light",
+      "properties": [
+        "lightNumbers/color_temperature"
+      ]
+    },
+    {
+      "name": "light_Light_fields4",
+      "type": "Light",
+      "properties": [
+        "lightNumbers/intensity"
+      ]
+    },
+    {
+      "name": "light_Light_fields5",
+      "type": "Light",
+      "properties": [
+        "lightNumbers/range"
+      ]
+    },
+    {
+      "name": "light_Light_fields6",
+      "type": "Light",
+      "properties": [
+        "lightNumbers/inner_angle",
+        "lightNumbers/outer_angle"
+      ]
+    },
+    {
+      "name": "light_Light_fields7",
+      "type": "Light",
+      "properties": [
+        "lightNumbers/shadow_strength"
+      ]
+    },
+    {
+      "name": "light_Light_fields8",
+      "type": "Light",
+      "properties": [
+        "lightNumbers/shadow_bias",
+        "lightNumbers/shadow_normal_bias",
+        "lightNumbers/shadow_near_plane"
+      ]
+    }
+  ]
+}

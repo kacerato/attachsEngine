@@ -1,0 +1,130 @@
+{
+  "format": 1,
+  "source": "native/scene/camera_follow.h",
+  "tables": [
+    {
+      "name": "cameraFollowNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "offset_x",
+          "label": "Deslocamento X",
+          "member": "offset[0]",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Posição",
+            "unit": "m"
+          }
+        },
+        {
+          "id": "offset_y",
+          "label": "Deslocamento Y",
+          "member": "offset[1]",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Posição",
+            "unit": "m"
+          }
+        },
+        {
+          "id": "offset_z",
+          "label": "Deslocamento Z",
+          "member": "offset[2]",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Posição",
+            "unit": "m"
+          }
+        },
+        {
+          "id": "damping_seconds",
+          "label": "Amortecimento",
+          "member": "dampingSeconds",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "30"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Resposta",
+            "unit": "s"
+          },
+          "default": {
+            "cpp": ".2f"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "CameraFollow"
+      }
+    },
+    {
+      "name": "cameraFollowBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "CameraFollow",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Resposta"
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "camera_follow_CameraFollow_fields0",
+      "type": "CameraFollow",
+      "properties": [
+        "cameraFollowBooleans/enabled"
+      ]
+    },
+    {
+      "name": "camera_follow_CameraFollow_fields2",
+      "type": "CameraFollow",
+      "properties": [
+        "cameraFollowNumbers/damping_seconds"
+      ]
+    }
+  ]
+}

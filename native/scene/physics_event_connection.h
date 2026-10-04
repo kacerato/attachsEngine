@@ -6,7 +6,9 @@
 namespace ae::scene {
 class PhysicsEventConnection3D final : public ComponentValue {
 public:
-  bool enabled=true;
+
+#include "scene/generated/physics_event_connection_PhysicsEventConnection3D_fields0.inc"
+
   u32 event=0,action=0; // trigger enter/stay/exit, contact enter/stay/exit; disconnected/activate/deactivate/toggle
   u64 receiver=0,otherFilter=0;
   static const ComponentType descriptor;
@@ -23,18 +25,8 @@ inline constexpr std::array<ComponentEnumOption,6> physicsConnectionEvents{{
 inline constexpr std::array<ComponentEnumOption,4> physicsConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"}
 }};
-inline constexpr std::array<ComponentBoolean,1> physicsConnectionBooleans{{
-  {"enabled","Ativa",[](const ComponentValue &v){return static_cast<const PhysicsEventConnection3D&>(v).enabled;},
-   [](ComponentValue &v,bool on){static_cast<PhysicsEventConnection3D&>(v).enabled=on;},{"Conexão"}}
-}};
-inline constexpr std::array<ComponentEnum,2> physicsConnectionEnums{{
-  {"event","Evento",physicsConnectionEvents,[](const ComponentValue &v){return static_cast<const PhysicsEventConnection3D&>(v).event;},
-   [](ComponentValue &v,u32 value){static_cast<PhysicsEventConnection3D&>(v).event=value;},
-   {"Conexão","","Sensor exige Sensor ligado no Corpo físico; contato sólido exige desligado"}},
-  {"action","Ação",physicsConnectionActions,[](const ComponentValue &v){return static_cast<const PhysicsEventConnection3D&>(v).action;},
-   [](ComponentValue &v,u32 value){static_cast<PhysicsEventConnection3D&>(v).action=value;},
-   {"Conexão","","Executada antes do callback C#; permanência pode disparar a cada passo físico"}}
-}};
+#include "scene/generated/physics_event_connection_physicsConnectionBooleans.inc"
+#include "scene/generated/physics_event_connection_physicsConnectionEnums.inc"
 inline constexpr std::array<ComponentObjectReference,2> physicsConnectionReferences{{
   {"receiver","Receptor","",ObjectReferenceScope::Any,"Escolher objeto",
    [](const ComponentValue &v){return static_cast<const PhysicsEventConnection3D&>(v).receiver;},

@@ -8,6 +8,44 @@ namespace Astra.Runtime;
 
 public static unsafe class NativeBehaviorRuntime
 {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiState
+    {
+        public uint World,Node,Kind,Visible,Enabled;
+        public float Value,Minimum,Maximum;
+        public uint Event;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiProperties
+    {
+        public float AnchorMinX,AnchorMinY,AnchorMaxX,AnchorMaxY;
+        public float Left,Top,Right,Bottom;
+        public uint Background,Foreground,Accent,ClipChildren;
+        public float FontSize,Radius;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiSizing {
+        public float MinX,MinY,PrefX,PrefY,FlexX,FlexY,Left,Top,Right,Bottom,SpaceX,SpaceY;
+        public uint Alignment,Columns,Ignore,ImageFit,ImageTint;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiCanvas {
+        public uint Mode;public float Width,Height,X,Y,Z,Rx,Ry,Rz,Units;public uint Occlusion;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiBehavior {
+        public uint Clickable,Action,Target;public float Value;
+        public uint Enabled,AutoPlay,Loop,PingPong,Easing;
+        public float Duration,Delay,FromX,FromY,FromScale,FromOpacity,ToX,ToY,ToScale,ToOpacity;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiAction { public uint Event,Action,Target;public float Value; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiTransitions {
+        public uint Enabled,Easing;public float Duration;
+        public float NormalX,NormalY,NormalScale,NormalOpacity,PressedX,PressedY,PressedScale,PressedOpacity,DisabledX,DisabledY,DisabledScale,DisabledOpacity;
+        public uint NormalTint,PressedTint,DisabledTint;
+    }
     /// <summary>Espelho de <c>ae::scene::ScriptQueryFilter</c>.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeQueryFilter
@@ -48,7 +86,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v33). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v41). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -175,6 +213,16 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, uint, uint, int, int> ObjectLayer;
         public delegate* unmanaged<void*, byte*, int, uint, InputActionState*, int> InputActionCommand;
 
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, uint, double, int> AudioCommand;
+        public delegate* unmanaged<void*, uint, uint, uint, byte*, int, float, NativeGuiState*, int> GuiCommand;
+        public delegate* unmanaged<void*, uint, uint, uint, NativeGuiProperties*, int> GuiProperties;
+        public delegate* unmanaged<void*, uint, uint, uint, byte*, int, int> GuiText;
+        public delegate* unmanaged<void*,uint,uint,uint,NativeGuiSizing*,int> GuiSizing;
+        public delegate* unmanaged<void*,uint,uint,NativeGuiCanvas*,int> GuiCanvas;
+        public delegate* unmanaged<void*,uint,uint,uint,NativeGuiBehavior*,int> GuiBehavior;
+        public delegate* unmanaged<void*,uint,uint,uint,uint,NativeGuiAction*,int> GuiAction;
+        public delegate* unmanaged<void*,uint,uint,uint,NativeGuiTransitions*,int> GuiTransitions;
+
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
             Generation != null && LastStatus != null && ParentOf != null && ChildCount != null && ChildAt != null &&
@@ -192,7 +240,7 @@ public static unsafe class NativeBehaviorRuntime
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
             SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
-            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null;
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null && AudioCommand != null && GuiCommand != null && GuiProperties != null && GuiText != null && GuiSizing != null && GuiCanvas != null && GuiBehavior != null && GuiAction != null && GuiTransitions != null;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -226,7 +274,7 @@ public static unsafe class NativeBehaviorRuntime
         public float Delta,UnscaledDelta,TimeScale,FrameScale;
     }
 
-    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess
+    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess
     {
         // Nomes cabem em 63 bytes e ids de tipo em 256; os buffers são o teto do
         // contrato nativo, não uma estimativa.
@@ -600,6 +648,90 @@ public static unsafe class NativeBehaviorRuntime
                 scalar=value;return ok;
             }
         }
+        public bool CommandAudioVoice(ulong id,uint world,uint generation,ulong instance,AudioVoiceCommand command,double seconds)
+        {
+            if(!Accessible) return false;
+            return access.AudioCommand(access.Context,id,world,generation,instance,(uint)command,seconds)!=0;
+        }
+        public bool GuiCommand(uint world,uint node,uint operation,string text,float value,GuiKind createKind,
+            out GuiSnapshot snapshot,out GuiEventKind eventKind)
+        {
+            snapshot=default;eventKind=default;
+            if(!Accessible) return false;
+            byte[] bytes=Encoding.UTF8.GetBytes(text);
+            if(bytes.Length>4096 || text.Contains('\0')) throw new ArgumentException("UI text exceeds 4096 bytes or contains NUL.",nameof(text));
+            NativeGuiState result=new() { Kind=(uint)createKind };
+            fixed(byte* pointer=bytes) {
+                if(access.GuiCommand(access.Context,world,node,operation,pointer,bytes.Length,value,&result)==0) return false;
+            }
+            snapshot=new(result.World,result.Node,(GuiKind)result.Kind,result.Visible!=0,result.Enabled!=0,result.Value,result.Minimum,result.Maximum);
+            eventKind=(GuiEventKind)result.Event;return true;
+        }
+        public bool GuiProperties(uint world,uint node,bool write,ref GuiLayout layout,ref GuiStyle style)
+        {
+            if(!Accessible) return false;
+            NativeGuiProperties result=new() {
+                AnchorMinX=layout.AnchorMin.X,AnchorMinY=layout.AnchorMin.Y,AnchorMaxX=layout.AnchorMax.X,AnchorMaxY=layout.AnchorMax.Y,
+                Left=layout.Offsets.X,Top=layout.Offsets.Y,Right=layout.Offsets.Z,Bottom=layout.Offsets.W,
+                Background=style.Background,Foreground=style.Foreground,Accent=style.Accent,ClipChildren=style.ClipChildren?1u:0u,
+                FontSize=style.FontSize,Radius=style.Radius
+            };
+            if(access.GuiProperties(access.Context,world,node,write?1u:0u,&result)==0) return false;
+            layout=new(new(result.AnchorMinX,result.AnchorMinY),new(result.AnchorMaxX,result.AnchorMaxY),new(result.Left,result.Top,result.Right,result.Bottom));
+            style=new(result.Background,result.Foreground,result.Accent,result.ClipChildren!=0,result.FontSize,result.Radius);return true;
+        }
+        public bool GuiSizing(uint world,uint node,bool write,ref GuiSizing sizing,ref GuiImageStyle image) {
+            if(!Accessible)return false;
+            NativeGuiSizing raw=new(){MinX=sizing.Minimum.X,MinY=sizing.Minimum.Y,PrefX=sizing.Preferred.X,PrefY=sizing.Preferred.Y,FlexX=sizing.Flexible.X,FlexY=sizing.Flexible.Y,Left=sizing.Padding.X,Top=sizing.Padding.Y,Right=sizing.Padding.Z,Bottom=sizing.Padding.W,SpaceX=sizing.Spacing.X,SpaceY=sizing.Spacing.Y,Alignment=(uint)sizing.Alignment,Columns=sizing.Columns,Ignore=sizing.Ignore?1u:0u,ImageFit=(uint)image.Fit,ImageTint=image.Tint};
+            if(access.GuiSizing(access.Context,world,node,write?1u:0u,&raw)==0)return false;
+            sizing=new(new(raw.MinX,raw.MinY),new(raw.PrefX,raw.PrefY),new(raw.FlexX,raw.FlexY),new(raw.Left,raw.Top,raw.Right,raw.Bottom),new(raw.SpaceX,raw.SpaceY),(GuiAlignment)raw.Alignment,raw.Columns,raw.Ignore!=0);image=new((GuiImageFit)raw.ImageFit,raw.ImageTint);return true;
+        }
+        public bool GuiCanvas(uint world,bool write,ref GuiCanvas canvas) {
+            if(!Accessible)return false;
+            NativeGuiCanvas raw=new(){Mode=(uint)canvas.Mode,Width=canvas.Resolution.X,Height=canvas.Resolution.Y,X=canvas.Position.X,Y=canvas.Position.Y,Z=canvas.Position.Z,Rx=canvas.Rotation.X,Ry=canvas.Rotation.Y,Rz=canvas.Rotation.Z,Units=canvas.UnitsPerPixel,Occlusion=canvas.Occlusion?1u:0u};
+            if(access.GuiCanvas(access.Context,world,write?1u:0u,&raw)==0)return false;
+            canvas=new((GuiCanvasMode)raw.Mode,new(raw.Width,raw.Height),new(raw.X,raw.Y,raw.Z),new(raw.Rx,raw.Ry,raw.Rz),raw.Units,raw.Occlusion!=0);return true;
+        }
+        public bool GuiBehavior(uint world,uint node,bool write,ref GuiInteraction interaction,ref GuiAnimation animation) {
+            if(!Accessible)return false;
+            NativeGuiBehavior raw=new(){Clickable=interaction.Clickable?1u:0u,Action=(uint)interaction.Action,Target=interaction.Target,Value=interaction.Value,
+                Enabled=animation.Enabled?1u:0u,AutoPlay=animation.AutoPlay?1u:0u,Loop=animation.Loop?1u:0u,PingPong=animation.PingPong?1u:0u,Easing=(uint)animation.Easing,Duration=animation.Duration,Delay=animation.Delay,
+                FromX=animation.From.Position.X,FromY=animation.From.Position.Y,FromScale=animation.From.Scale,FromOpacity=animation.From.Opacity,
+                ToX=animation.To.Position.X,ToY=animation.To.Position.Y,ToScale=animation.To.Scale,ToOpacity=animation.To.Opacity};
+            if(access.GuiBehavior(access.Context,world,node,write?1u:0u,&raw)==0)return false;
+            interaction=new(raw.Clickable!=0,(GuiClickAction)raw.Action,raw.Target,raw.Value);
+            animation=new(raw.Enabled!=0,raw.AutoPlay!=0,raw.Loop!=0,raw.PingPong!=0,(GuiEasing)raw.Easing,raw.Duration,raw.Delay,new(new(raw.FromX,raw.FromY),raw.FromScale,raw.FromOpacity),new(new(raw.ToX,raw.ToY),raw.ToScale,raw.ToOpacity));return true;
+        }
+        public string ReadGuiDiagnostic(uint world)=>ReadGuiString(world,0,3);
+        public int GuiAction(uint world,uint node,uint operation,uint index,ref GuiActionBinding binding) {
+            if(!Accessible)return -1;
+            NativeGuiAction raw=new(){Event=(uint)binding.Event,Action=(uint)binding.Action,Target=binding.Target,Value=binding.Value};
+            int result=access.GuiAction(access.Context,world,node,operation,index,&raw);
+            if(result>=0)binding=new((GuiEventKind)raw.Event,(GuiClickAction)raw.Action,raw.Target,raw.Value);return result;
+        }
+        public bool GuiTransitions(uint world,uint node,bool write,ref GuiTransitions transitions) {
+            if(!Accessible)return false;
+            var t=transitions;
+            NativeGuiTransitions raw=new(){Enabled=t.Enabled?1u:0u,Easing=(uint)t.Easing,Duration=t.Duration,
+                NormalX=t.Normal.Pose.Position.X,NormalY=t.Normal.Pose.Position.Y,NormalScale=t.Normal.Pose.Scale,NormalOpacity=t.Normal.Pose.Opacity,NormalTint=t.Normal.Tint,
+                PressedX=t.Pressed.Pose.Position.X,PressedY=t.Pressed.Pose.Position.Y,PressedScale=t.Pressed.Pose.Scale,PressedOpacity=t.Pressed.Pose.Opacity,PressedTint=t.Pressed.Tint,
+                DisabledX=t.Disabled.Pose.Position.X,DisabledY=t.Disabled.Pose.Position.Y,DisabledScale=t.Disabled.Pose.Scale,DisabledOpacity=t.Disabled.Pose.Opacity,DisabledTint=t.Disabled.Tint};
+            if(access.GuiTransitions(access.Context,world,node,write?1u:0u,&raw)==0)return false;
+            transitions=new(raw.Enabled!=0,raw.Duration,(GuiEasing)raw.Easing,new(new(new(raw.NormalX,raw.NormalY),raw.NormalScale,raw.NormalOpacity),raw.NormalTint),new(new(new(raw.PressedX,raw.PressedY),raw.PressedScale,raw.PressedOpacity),raw.PressedTint),new(new(new(raw.DisabledX,raw.DisabledY),raw.DisabledScale,raw.DisabledOpacity),raw.DisabledTint));return true;
+        }
+        public string ReadGuiText(uint world,uint node,bool name)=>ReadGuiString(world,node,name?1u:0u);
+        public string ReadGuiImage(uint world,uint node)=>ReadGuiString(world,node,2);
+        private string ReadGuiString(uint world,uint node,uint field)
+        {
+            if(!Accessible) throw new WorldException(WorldStatus.NotRunning,"read UI text");
+            int length=access.GuiText(access.Context,world,node,field,null,0);
+            if(length<0) throw new WorldException(LastStatus,"read UI text");
+            if(length>4096) throw new InvalidOperationException("Native UI string exceeds its contract.");
+            byte[] bytes=new byte[length];
+            fixed(byte* buffer=bytes) if(access.GuiText(access.Context,world,node,field,buffer,length)!=length)
+                throw new WorldException(LastStatus,"read UI text");
+            return Encoding.UTF8.GetString(bytes);
+        }
         public bool QueryAudioVoice(ulong id,uint world,uint generation,ulong instance,out AudioVoiceSnapshot snapshot)
         {
             snapshot=default;
@@ -946,7 +1078,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 36 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 41 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

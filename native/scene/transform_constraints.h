@@ -30,28 +30,15 @@ using ParentConstraint=TransformConstraint<ConstraintKind::Parent>;
 using LookAtConstraint=TransformConstraint<ConstraintKind::LookAt>;
 template<class T> inline constexpr bool constraintScale=std::is_same_v<T,ScaleConstraint>;
 template<class T> inline constexpr bool constraintAngular=std::is_same_v<T,RotationConstraint>||std::is_same_v<T,AimConstraint>;
-template<class T> inline constexpr std::array<ComponentNumber,4> constraintNumbers{{
- {"Peso",0,1,.01f,[](const ComponentValue &v)->const float &{return static_cast<const T&>(v).weight;},[](ComponentValue &v){return &static_cast<T&>(v).weight;},"weight",{"Influência"}},
- {constraintScale<T>?"Fator X":"Deslocamento X",constraintScale<T>?0.f:-10000.f,10000,.1f,[](const ComponentValue &v)->const float &{return static_cast<const T&>(v).offset[0];},[](ComponentValue &v){return &static_cast<T&>(v).offset[0];},"offset_x",{"Ajustes",constraintScale<T>?"x":constraintAngular<T>?"graus":"u"}},
- {constraintScale<T>?"Fator Y":"Deslocamento Y",constraintScale<T>?0.f:-10000.f,10000,.1f,[](const ComponentValue &v)->const float &{return static_cast<const T&>(v).offset[1];},[](ComponentValue &v){return &static_cast<T&>(v).offset[1];},"offset_y",{"Ajustes",constraintScale<T>?"x":constraintAngular<T>?"graus":"u"}},
- {constraintScale<T>?"Fator Z":"Deslocamento Z",constraintScale<T>?0.f:-10000.f,10000,.1f,[](const ComponentValue &v)->const float &{return static_cast<const T&>(v).offset[2];},[](ComponentValue &v){return &static_cast<T&>(v).offset[2];},"offset_z",{"Ajustes",constraintScale<T>?"x":constraintAngular<T>?"graus":"u"}},
-}};
-template<class T> inline constexpr std::array<ComponentBoolean,4> constraintBooleans{{
- {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const T&>(v).enabled;},[](ComponentValue &v,bool n){static_cast<T&>(v).enabled=n;},{"Influência"}},
- {"axis_x","Aplicar X",[](const ComponentValue &v){return static_cast<const T&>(v).axis[0];},[](ComponentValue &v,bool n){static_cast<T&>(v).axis[0]=n;},{"Ajustes"}},
- {"axis_y","Aplicar Y",[](const ComponentValue &v){return static_cast<const T&>(v).axis[1];},[](ComponentValue &v,bool n){static_cast<T&>(v).axis[1]=n;},{"Ajustes"}},
- {"axis_z","Aplicar Z",[](const ComponentValue &v){return static_cast<const T&>(v).axis[2];},[](ComponentValue &v,bool n){static_cast<T&>(v).axis[2]=n;},{"Ajustes"}},
-}};
+#include "scene/generated/transform_constraints_constraintNumbers.inc"
+#include "scene/generated/transform_constraints_constraintBooleans.inc"
 template<class T> inline constexpr std::array<ComponentObjectReference,1> constraintReferences{{
  {"target","Fonte","",ObjectReferenceScope::OtherNonDescendant,"Escolher fonte",[](const ComponentValue &v){return static_cast<const T&>(v).target;},[](ComponentValue &v,u64 n){static_cast<T&>(v).target=n;},{"Influência"},[](const ComponentValue &v){const auto &c=static_cast<const T&>(v);return c.enabled&&c.weight>0;}}
 }};
 inline constexpr std::array<ComponentTriple,1> constraintTriples{{{"offset","Deslocamento",{"offset_x","offset_y","offset_z"}}}};
 inline constexpr std::array<ComponentEnumOption,6> aimAxisOptions{{{0,"+X"},{1,"+Y"},{2,"+Z"},{3,"-X"},{4,"-Y"},{5,"-Z"}}};
 inline constexpr std::array<ComponentEnumOption,3> upAxisOptions{{{0,"Y"},{1,"Z"},{2,"X"}}};
-inline constexpr std::array<ComponentEnum,2> aimEnums{{
- {"aim_axis","Eixo de mira",aimAxisOptions,[](const ComponentValue &v){return static_cast<const AimConstraint&>(v).aimAxis;},[](ComponentValue &v,u32 n){static_cast<AimConstraint&>(v).aimAxis=n;},{"Ajustes"}},
- {"up_axis","Vertical de mundo",upAxisOptions,[](const ComponentValue &v){return static_cast<const AimConstraint&>(v).upAxis;},[](ComponentValue &v,u32 n){static_cast<AimConstraint&>(v).upAxis=n;},{"Ajustes"}}
-}};
+#include "scene/generated/transform_constraints_aimEnums.inc"
 template<> inline const ComponentType PositionConstraint::descriptor{"astra.constraint.position",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<PositionConstraint>();},constraintNumbers<PositionConstraint>,constraintBooleans<PositionConstraint>,{},nullptr,false,constraintReferences<PositionConstraint>,constraintTriples};
 template<> inline const ComponentType RotationConstraint::descriptor{"astra.constraint.rotation",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<RotationConstraint>();},constraintNumbers<RotationConstraint>,constraintBooleans<RotationConstraint>,{},nullptr,false,constraintReferences<RotationConstraint>,constraintTriples};
 template<> inline const ComponentType ScaleConstraint::descriptor{"astra.constraint.scale",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ScaleConstraint>();},constraintNumbers<ScaleConstraint>,constraintBooleans<ScaleConstraint>,{},nullptr,false,constraintReferences<ScaleConstraint>,constraintTriples};
@@ -65,7 +52,7 @@ inline const auto parentBooleans=[] {std::array<ComponentBoolean,7>a{};for(u32 i
  a[5]={"rotation_y","Rotação Y",[](const ComponentValue&v){return static_cast<const ParentConstraint&>(v).rotationAxis[1];},[](ComponentValue&v,bool n){static_cast<ParentConstraint&>(v).rotationAxis[1]=n;},{"Rotação"}};
  a[6]={"rotation_z","Rotação Z",[](const ComponentValue&v){return static_cast<const ParentConstraint&>(v).rotationAxis[2];},[](ComponentValue&v,bool n){static_cast<ParentConstraint&>(v).rotationAxis[2]=n;},{"Rotação"}};return a;}();
 inline const auto lookNumbers=[] {std::array<ComponentNumber,2>a{};a[0]=constraintNumbers<LookAtConstraint>[0];a[1]={"Roll",-360,360,.1f,[](const ComponentValue&v)->const float&{return static_cast<const LookAtConstraint&>(v).roll;},[](ComponentValue&v){return &static_cast<LookAtConstraint&>(v).roll;},"roll",{"Mira","graus"}};return a;}();
-inline constexpr std::array<ComponentEnum,1> lookEnums{{{"up_axis","Vertical de mundo",upAxisOptions,[](const ComponentValue&v){return static_cast<const LookAtConstraint&>(v).upAxis;},[](ComponentValue&v,u32 n){static_cast<LookAtConstraint&>(v).upAxis=n;},{"Mira"}}}};
+#include "scene/generated/transform_constraints_lookEnums.inc"
 inline constexpr std::array<ComponentTriple,2>parentTriples{{{"offset","Posição offset",{"offset_x","offset_y","offset_z"}},{"rotation_offset","Rotação offset",{"rotation_offset_x","rotation_offset_y","rotation_offset_z"}}}};
 template<> inline const ComponentType ParentConstraint::descriptor{"astra.constraint.parent",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ParentConstraint>();},parentNumbers,parentBooleans,{},nullptr,false,constraintReferences<ParentConstraint>,parentTriples};
 template<> inline const ComponentType LookAtConstraint::descriptor{"astra.constraint.look_at",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<LookAtConstraint>();},lookNumbers,constraintBooleans<LookAtConstraint>,lookEnums,nullptr,false,constraintReferences<LookAtConstraint>};

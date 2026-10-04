@@ -14,11 +14,15 @@ public:
   JointKind kind=JointKind::Distance;
   u32 motor=0;
   u64 connectedBody=0;
-  bool enabled=true;
+
+#include "scene/generated/joint_Joint_fields0.inc"
+
   float anchorA[3]{},anchorB[3]{},axisA[3]{0,1,0},axisB[3]{0,1,0};
   float limitMin=0,limitMax=1,motorVelocity=0,motorPosition=0,motorForce=100,frequency=2,damping=1;
   float normalA[3]{1,0,0},normalB[3]{1,0,0};
-  float swingY=45,swingZ=45,twistMin=-45,twistMax=45;
+
+#include "scene/generated/joint_Joint_fields4.inc"
+
   JointAxis axes[6]{};
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
@@ -109,66 +113,7 @@ for(usize i=0;i<properties.size();++i) {
 }
 return properties;
 }();
-inline constexpr std::array<ComponentNumber,58> jointExtraNumbers{{
-  {"Plano A · X",-1.0f,1.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).normalA[0];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).normalA[0];},"normal_a_x",{"Eixos","",nullptr,jointHasFrame}},
-  {"Plano A · Y",-1.0f,1.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).normalA[1];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).normalA[1];},"normal_a_y",{"Eixos","",nullptr,jointHasFrame}},
-  {"Plano A · Z",-1.0f,1.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).normalA[2];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).normalA[2];},"normal_a_z",{"Eixos","",nullptr,jointHasFrame}},
-  {"Plano B · X",-1.0f,1.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).normalB[0];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).normalB[0];},"normal_b_x",{"Eixos","",nullptr,jointHasFrame}},
-  {"Plano B · Y",-1.0f,1.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).normalB[1];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).normalB[1];},"normal_b_y",{"Eixos","",nullptr,jointHasFrame}},
-  {"Plano B · Z",-1.0f,1.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).normalB[2];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).normalB[2];},"normal_b_z",{"Eixos","",nullptr,jointHasFrame}},
-  {"Cone · semiângulo Y",0.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).swingY;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).swingY;},"swing_y",{"Rotação","°",nullptr,jointHasSwing}},
-  {"Cone · semiângulo Z",0.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).swingZ;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).swingZ;},"swing_z",{"Rotação","°",nullptr,jointHasTwist}},
-  {"Torção mínima",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).twistMin;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).twistMin;},"twist_min",{"Rotação","°",nullptr,jointHasTwist}},
-  {"Torção máxima",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).twistMax;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).twistMax;},"twist_max",{"Rotação","°",nullptr,jointHasTwist}},
-  {"Limite mínimo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].minimum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].minimum;},"linear_x_minimum",{"Translação X","u",nullptr,jointAxisLimited<0>}},
-  {"Limite máximo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].maximum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].maximum;},"linear_x_maximum",{"Translação X","u",nullptr,jointAxisLimited<0>}},
-  {"Atrito máximo",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].friction;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].friction;},"linear_x_friction",{"Translação X","N",nullptr,jointAxisFriction<0>}},
-  {"Velocidade alvo",-1000.0f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].velocity;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].velocity;},"linear_x_velocity",{"Translação X","u/s",nullptr,jointAxisVelocity<0>}},
-  {"Posição alvo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].position;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].position;},"linear_x_position",{"Translação X","u",nullptr,jointAxisPosition<0>}},
-  {"Força máxima",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].force;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].force;},"linear_x_force",{"Translação X","N",nullptr,jointAxisMotor<0>}},
-  {"Frequência",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].frequency;},"linear_x_frequency",{"Translação X","Hz",nullptr,jointAxisPosition<0>}},
-  {"Amortecimento",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[0].damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[0].damping;},"linear_x_damping",{"Translação X","",nullptr,jointAxisPosition<0>}},
-  {"Limite mínimo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].minimum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].minimum;},"linear_y_minimum",{"Translação Y","u",nullptr,jointAxisLimited<1>}},
-  {"Limite máximo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].maximum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].maximum;},"linear_y_maximum",{"Translação Y","u",nullptr,jointAxisLimited<1>}},
-  {"Atrito máximo",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].friction;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].friction;},"linear_y_friction",{"Translação Y","N",nullptr,jointAxisFriction<1>}},
-  {"Velocidade alvo",-1000.0f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].velocity;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].velocity;},"linear_y_velocity",{"Translação Y","u/s",nullptr,jointAxisVelocity<1>}},
-  {"Posição alvo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].position;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].position;},"linear_y_position",{"Translação Y","u",nullptr,jointAxisPosition<1>}},
-  {"Força máxima",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].force;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].force;},"linear_y_force",{"Translação Y","N",nullptr,jointAxisMotor<1>}},
-  {"Frequência",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].frequency;},"linear_y_frequency",{"Translação Y","Hz",nullptr,jointAxisPosition<1>}},
-  {"Amortecimento",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[1].damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[1].damping;},"linear_y_damping",{"Translação Y","",nullptr,jointAxisPosition<1>}},
-  {"Limite mínimo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].minimum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].minimum;},"linear_z_minimum",{"Translação Z","u",nullptr,jointAxisLimited<2>}},
-  {"Limite máximo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].maximum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].maximum;},"linear_z_maximum",{"Translação Z","u",nullptr,jointAxisLimited<2>}},
-  {"Atrito máximo",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].friction;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].friction;},"linear_z_friction",{"Translação Z","N",nullptr,jointAxisFriction<2>}},
-  {"Velocidade alvo",-1000.0f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].velocity;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].velocity;},"linear_z_velocity",{"Translação Z","u/s",nullptr,jointAxisVelocity<2>}},
-  {"Posição alvo",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].position;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].position;},"linear_z_position",{"Translação Z","u",nullptr,jointAxisPosition<2>}},
-  {"Força máxima",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].force;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].force;},"linear_z_force",{"Translação Z","N",nullptr,jointAxisMotor<2>}},
-  {"Frequência",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].frequency;},"linear_z_frequency",{"Translação Z","Hz",nullptr,jointAxisPosition<2>}},
-  {"Amortecimento",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[2].damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[2].damping;},"linear_z_damping",{"Translação Z","",nullptr,jointAxisPosition<2>}},
-  {"Limite mínimo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].minimum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].minimum;},"angular_x_minimum",{"Rotação X","°",nullptr,jointAxisLimited<3>}},
-  {"Limite máximo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].maximum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].maximum;},"angular_x_maximum",{"Rotação X","°",nullptr,jointAxisLimited<3>}},
-  {"Atrito máximo",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].friction;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].friction;},"angular_x_friction",{"Rotação X","Nm",nullptr,jointAxisFriction<3>}},
-  {"Velocidade alvo",-1000.0f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].velocity;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].velocity;},"angular_x_velocity",{"Rotação X","°/s",nullptr,jointAxisVelocity<3>}},
-  {"Posição alvo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].position;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].position;},"angular_x_position",{"Rotação X","°",nullptr,jointAxisPosition<3>}},
-  {"Força máxima",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].force;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].force;},"angular_x_force",{"Rotação X","Nm",nullptr,jointAxisMotor<3>}},
-  {"Frequência",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].frequency;},"angular_x_frequency",{"Rotação X","Hz",nullptr,jointAxisPosition<3>}},
-  {"Amortecimento",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[3].damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[3].damping;},"angular_x_damping",{"Rotação X","",nullptr,jointAxisPosition<3>}},
-  {"Limite mínimo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].minimum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].minimum;},"angular_y_minimum",{"Rotação Y","°",nullptr,jointAxisLimited<4>}},
-  {"Limite máximo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].maximum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].maximum;},"angular_y_maximum",{"Rotação Y","°",nullptr,jointAxisLimited<4>}},
-  {"Atrito máximo",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].friction;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].friction;},"angular_y_friction",{"Rotação Y","Nm",nullptr,jointAxisFriction<4>}},
-  {"Velocidade alvo",-1000.0f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].velocity;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].velocity;},"angular_y_velocity",{"Rotação Y","°/s",nullptr,jointAxisVelocity<4>}},
-  {"Posição alvo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].position;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].position;},"angular_y_position",{"Rotação Y","°",nullptr,jointAxisPosition<4>}},
-  {"Força máxima",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].force;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].force;},"angular_y_force",{"Rotação Y","Nm",nullptr,jointAxisMotor<4>}},
-  {"Frequência",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].frequency;},"angular_y_frequency",{"Rotação Y","Hz",nullptr,jointAxisPosition<4>}},
-  {"Amortecimento",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[4].damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[4].damping;},"angular_y_damping",{"Rotação Y","",nullptr,jointAxisPosition<4>}},
-  {"Limite mínimo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].minimum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].minimum;},"angular_z_minimum",{"Rotação Z","°",nullptr,jointAxisLimited<5>}},
-  {"Limite máximo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].maximum;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].maximum;},"angular_z_maximum",{"Rotação Z","°",nullptr,jointAxisLimited<5>}},
-  {"Atrito máximo",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].friction;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].friction;},"angular_z_friction",{"Rotação Z","Nm",nullptr,jointAxisFriction<5>}},
-  {"Velocidade alvo",-1000.0f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].velocity;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].velocity;},"angular_z_velocity",{"Rotação Z","°/s",nullptr,jointAxisVelocity<5>}},
-  {"Posição alvo",-180.0f,180.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].position;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].position;},"angular_z_position",{"Rotação Z","°",nullptr,jointAxisPosition<5>}},
-  {"Força máxima",0.0f,1000000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].force;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].force;},"angular_z_force",{"Rotação Z","Nm",nullptr,jointAxisMotor<5>}},
-  {"Frequência",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].frequency;},"angular_z_frequency",{"Rotação Z","Hz",nullptr,jointAxisPosition<5>}},
-  {"Amortecimento",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).axes[5].damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).axes[5].damping;},"angular_z_damping",{"Rotação Z","",nullptr,jointAxisPosition<5>}}
-}};
+#include "scene/generated/joint_jointExtraNumbers.inc"
 inline constexpr auto jointNumbers=[] {std::array<ComponentNumber,jointBaseNumbers.size()+jointExtraNumbers.size()> a{};usize n=0;for(auto p:jointBaseNumbers)a[n++]=p;for(auto p:jointExtraNumbers)a[n++]=p;return a;}();
 inline constexpr std::array<ComponentEnumOption,9> jointKinds{{{0,"Ponto"},{1,"Dobradiça"},{2,"Deslizante"},{3,"Distância"},{4,"Fixa"},{5,"Cone"},{6,"Swing / Twist"},{7,"Configurável 6DOF"},{8,"Mola"}}};
 inline constexpr std::array<ComponentEnumOption,4> jointMotors{{{0,"Desligado"},{1,"Velocidade"},{2,"Posição"},{3,"Posição e velocidade"}}};
@@ -192,9 +137,7 @@ inline constexpr std::array<ComponentEnum,14> jointEnums{{
   {"angular_z_motion","Movimento",jointMotionModes,[](const ComponentValue &v){return static_cast<const Joint&>(v).axes[5].motion;},[](ComponentValue &v,u32 k){auto &j=static_cast<Joint&>(v);j.axes[5].motion=k;if(k==0)j.axes[5].motor=0;},{"Rotação Z","",nullptr,jointIsSixDOF}},
   {"angular_z_motor","Motor",jointMotors,[](const ComponentValue &v){return static_cast<const Joint&>(v).axes[5].motor;},[](ComponentValue &v,u32 k){auto &j=static_cast<Joint&>(v);j.axes[5].motor=k;},{"Rotação Z","",nullptr,jointAxisMoving<5>}}
 }};
-inline constexpr std::array<ComponentBoolean,1> jointBooleans{{
-  {"enabled","Ativa",[](const ComponentValue &v){return static_cast<const Joint&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<Joint&>(v).enabled=b;}}
-}};
+#include "scene/generated/joint_jointBooleans.inc"
 inline constexpr std::array<ComponentObjectReference,1> jointReferences{{
   {"connected_body","Conectar corpo","astra.physics.body",ObjectReferenceScope::Other,"Escolher corpo",
     [](const ComponentValue &v){return static_cast<const Joint&>(v).connectedBody;},[](ComponentValue &v,u64 id){static_cast<Joint&>(v).connectedBody=id;},{"Âncoras"},

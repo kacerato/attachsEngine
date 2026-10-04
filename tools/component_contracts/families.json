@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "families": [
+    "logic",
+    "rendering",
+    "lighting",
+    "camera",
+    "physics3d",
+    "animation",
+    "physics2d",
+    "audio",
+    "path",
+    "path_follow"
+  ]
+}

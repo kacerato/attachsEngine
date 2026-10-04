@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "source": "native/scene/physics_event_connection.h",
+  "tables": [
+    {
+      "name": "physicsConnectionBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativa",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "PhysicsEventConnection3D",
+        "default": {
+          "cpp": "true"
+        },
+        "presentation": {
+          "group": "Conexão"
+        }
+      }
+    },
+    {
+      "name": "physicsConnectionEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "event",
+          "label": "Evento",
+          "type": "PhysicsEventConnection3D",
+          "member": "event",
+          "options": "physicsConnectionEvents",
+          "presentation": {
+            "group": "Conexão",
+            "unit": "",
+            "help": "Sensor exige Sensor ligado no Corpo físico; contato sólido exige desligado"
+          }
+        },
+        {
+          "id": "action",
+          "label": "Ação",
+          "type": "PhysicsEventConnection3D",
+          "member": "action",
+          "options": "physicsConnectionActions",
+          "presentation": {
+            "group": "Conexão",
+            "unit": "",
+            "help": "Executada antes do callback C#; permanência pode disparar a cada passo físico"
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "physics_event_connection_PhysicsEventConnection3D_fields0",
+      "type": "PhysicsEventConnection3D",
+      "properties": [
+        "physicsConnectionBooleans/enabled"
+      ]
+    }
+  ]
+}

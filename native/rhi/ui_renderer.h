@@ -52,8 +52,11 @@ public:
   // R4: troca o atlas de prévia (texturas). Cria imagem nova, envia e atualiza o
   // descritor; chamar só fora de gravação e com o quadro anterior concluído.
   bool setPreviewAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height);
+  bool setImmediateAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height);
   // Borrowed view. Caller keeps it alive until previous UI submissions finish.
   void setCameraPreview(VkImageView view);
+  bool setGuiAtlas(VulkanUploadContext &upload,std::span<const u8> rgba,u32 width,u32 height);
+  void setSceneDepth(VkImageView view,VkSampler sampler,u32 displayWidth,u32 displayHeight);
 
 private:
   struct PushConstants final {
@@ -61,6 +64,7 @@ private:
     float surfaceTransform[4]{};
     float atlasSizes[4]{};
     float outputFlags[4]{};
+    float depthSurface[4]{};
   };
 
   bool createAtlas(VulkanMemoryAllocator &allocator, VulkanUploadContext &upload,
@@ -77,6 +81,10 @@ private:
   VulkanImage fontAtlas_{};
   VulkanImage iconAtlas_{};
   VulkanImage previewAtlas_{};
+  VulkanImage immediateAtlas_{};
+  VulkanImage guiAtlas_{};
+  VkImageView sceneDepthView_=VK_NULL_HANDLE;
+  float depthSurface_[2]{};
   VkImageView cameraPreviewView_=VK_NULL_HANDLE;
   float previewAtlasSize_[2]{};
   VulkanSampler sampler_{};

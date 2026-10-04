@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "family": "lighting",
+  "table": "lightingSchemas",
+  "entries": [
+    {
+      "type": "Light",
+      "name": "Luz",
+      "description": "Direcional, pontual ou spot",
+      "icon": "lighting/sun",
+      "searchTerms": "Light DirectionalLight3D OmniLight3D SpotLight3D Point Spot Sol",
+      "apiName": "Light"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Lighting"
+    },
+    "structuralInPlay": {
+      "cpp": "PlayMutability::SafePoint"
+    },
+    "consumer": "runtime/scene_lights.cpp → renderer/punctual_lights.h",
+    "invalidates": {
+      "cpp": "Invalidate::LightCluster"
+    },
+    "subfamily": "Luzes",
+    "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-Light.html"
+  }
+}

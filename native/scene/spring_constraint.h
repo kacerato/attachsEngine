@@ -30,20 +30,8 @@ public:
 using SpringPositionConstraint=SpringConstraint<SpringChannel::Position>;
 using SpringRotationConstraint=SpringConstraint<SpringChannel::Rotation>;
 using SpringScaleConstraint=SpringConstraint<SpringChannel::Scale>;
-template<class T> inline const std::array<ComponentNumber,7> springNumbers{{
-#define AE_SPRING_NUMBER(id,label,field,lo,hi,step,group,unit) {label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).field;},[](ComponentValue&v){return &static_cast<T&>(v).field;},id,{group,unit}}
- AE_SPRING_NUMBER("weight","Influência",weight,0,1,.05f,"Fonte",""),
- AE_SPRING_NUMBER("frequency","Frequência",frequency,.01f,60,.1f,"Resposta","Hz"),
- AE_SPRING_NUMBER("damping_ratio","Razão de amortecimento",dampingRatio,0,10,.05f,"Resposta",""),
- AE_SPRING_NUMBER("max_speed","Velocidade máxima",maxSpeed,.001f,100000,1,"Resposta",(std::is_same_v<T,SpringRotationConstraint>?"graus/s":std::is_same_v<T,SpringScaleConstraint>?"x/s":"m/s")),
- AE_SPRING_NUMBER("offset_x","Offset X",offset[0],(std::is_same_v<T,SpringScaleConstraint>?.0001f:-10000.f),10000,.1f,"Ajustes",""),
- AE_SPRING_NUMBER("offset_y","Offset Y",offset[1],(std::is_same_v<T,SpringScaleConstraint>?.0001f:-10000.f),10000,.1f,"Ajustes",""),
- AE_SPRING_NUMBER("offset_z","Offset Z",offset[2],(std::is_same_v<T,SpringScaleConstraint>?.0001f:-10000.f),10000,.1f,"Ajustes","")
-#undef AE_SPRING_NUMBER
-}};
-template<class T> inline const std::array<ComponentBoolean,1> springBooleans{{
- {"enabled","Ativo",[](const ComponentValue&v){return static_cast<const T&>(v).enabled;},[](ComponentValue&v,bool n){static_cast<T&>(v).enabled=n;},{"Fonte"}}
-}};
+#include "scene/generated/spring_constraint_springNumbers.inc"
+#include "scene/generated/spring_constraint_springBooleans.inc"
 template<class T> inline const std::array<ComponentObjectReference,1> springReferences{{
  {"target","Fonte","",ObjectReferenceScope::OtherNonDescendant,"Escolher fonte",[](const ComponentValue&v){return static_cast<const T&>(v).target;},[](ComponentValue&v,u64 n){static_cast<T&>(v).target=n;},{"Fonte"}}
 }};

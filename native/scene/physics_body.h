@@ -5,12 +5,19 @@ enum class BodyMotion : u32 { Static=0, Kinematic=1, Dynamic=2 };
 class PhysicsBody final : public ComponentValue {
 public:
   BodyMotion motion=BodyMotion::Static;
-  float mass=1,friction=.5f,restitution=0;
-  float velocityX=0,velocityY=0,velocityZ=0;
-  float angularX=0,angularY=0,angularZ=0,linearDamping=.05f,angularDamping=.05f,gravityFactor=1;
-  bool sensor=false,allowSleep=true;
+
+#include "scene/generated/physics_body_PhysicsBody_fields0.inc"
+
+#include "scene/generated/physics_body_PhysicsBody_fields1.inc"
+
+#include "scene/generated/physics_body_PhysicsBody_fields2.inc"
+
+#include "scene/generated/physics_body_PhysicsBody_fields3.inc"
+
   bool freezePosition[3]{},freezeRotation[3]{},continuousCollision=false;
-  float maxLinearVelocity=500,maxAngularVelocity=47.12389f,solverVelocitySteps=0;
+
+#include "scene/generated/physics_body_PhysicsBody_fields5.inc"
+
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<PhysicsBody>(*this);}
@@ -37,34 +44,13 @@ public:
 // seções na interface.
 inline bool bodySimulates(const ComponentValue &v) {return static_cast<const PhysicsBody&>(v).motion!=BodyMotion::Static;}
 inline bool bodyIsDynamic(const ComponentValue &v) {return static_cast<const PhysicsBody&>(v).motion==BodyMotion::Dynamic;}
-inline constexpr std::array<ComponentNumber,15> physicsBodyNumbers{{
-#define AE_PHYS_NUMBER(id,label,field,lo,hi,group,unit,visible) {label,lo,hi,.1f,[](const ComponentValue &v)->const float&{return static_cast<const PhysicsBody&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<PhysicsBody&>(v).field;},id,{group,unit,nullptr,visible}}
-  AE_PHYS_NUMBER("mass","Massa kg",mass,.01f,1000000,"Corpo","kg",bodyIsDynamic),
-  AE_PHYS_NUMBER("friction","Atrito",friction,0,1,"Corpo","",nullptr),
-  AE_PHYS_NUMBER("restitution","Restituição",restitution,0,1,"Corpo","",nullptr),
-  AE_PHYS_NUMBER("velocity_x","Velocidade inicial X",velocityX,-1000,1000,"Início","m/s",bodySimulates),
-  AE_PHYS_NUMBER("velocity_y","Velocidade inicial Y",velocityY,-1000,1000,"Início","m/s",bodySimulates),
-  AE_PHYS_NUMBER("velocity_z","Velocidade inicial Z",velocityZ,-1000,1000,"Início","m/s",bodySimulates),
-  AE_PHYS_NUMBER("angular_x","Giro inicial X · rad/s",angularX,-1000,1000,"Início","rad/s",bodySimulates),
-  AE_PHYS_NUMBER("angular_y","Giro inicial Y · rad/s",angularY,-1000,1000,"Início","rad/s",bodySimulates),
-  AE_PHYS_NUMBER("angular_z","Giro inicial Z · rad/s",angularZ,-1000,1000,"Início","rad/s",bodySimulates),
-  AE_PHYS_NUMBER("linear_damping","Amortecimento linear",linearDamping,0,10,"Amortecimento","",bodyIsDynamic),
-  AE_PHYS_NUMBER("angular_damping","Amortecimento angular",angularDamping,0,10,"Amortecimento","",bodyIsDynamic),
-  AE_PHYS_NUMBER("gravity_factor","Multiplicador da gravidade",gravityFactor,-100,100,"Amortecimento","",bodyIsDynamic),
-  AE_PHYS_NUMBER("max_linear_velocity","Limite linear",maxLinearVelocity,.001f,100000,"Simulação","m/s",bodySimulates),
-  AE_PHYS_NUMBER("max_angular_velocity","Limite angular",maxAngularVelocity,.001f,100000,"Simulação","rad/s",bodySimulates),
-  {"Iterações de velocidade",0,255,1,[](const ComponentValue&v)->const float&{return static_cast<const PhysicsBody&>(v).solverVelocitySteps;},[](ComponentValue&v){return &static_cast<PhysicsBody&>(v).solverVelocitySteps;},"solver_velocity_steps",{"Simulação","","0 usa as iterações do mundo; aumenta custo por ilha de contato",bodyIsDynamic}}
-#undef AE_PHYS_NUMBER
-}};
+#include "scene/generated/physics_body_physicsBodyNumbers.inc"
 inline constexpr std::array<ComponentTriple,2> physicsBodyTriples{{
   {"velocity","Velocidade inicial",{"velocity_x","velocity_y","velocity_z"}},
   {"angular_velocity","Giro inicial",{"angular_x","angular_y","angular_z"}}
 }};
 inline constexpr std::array<ComponentEnumOption,3> bodyMotionOptions{{{0,"Estático"},{1,"Cinemático"},{2,"Dinâmico"}}};
-inline constexpr std::array<ComponentEnum,1> physicsBodyEnums{{
-  {"motion","Movimento",bodyMotionOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const PhysicsBody&>(v).motion);},
-    [](ComponentValue &v,u32 value){static_cast<PhysicsBody&>(v).motion=static_cast<BodyMotion>(value);},{"Corpo"}}
-}};
+#include "scene/generated/physics_body_physicsBodyEnums.inc"
 inline bool migratePhysicsBody(std::istream &in,u32 version,Components &components) {
   // V1 stored an implicit box in the body; never replace an explicit collider.
   if(version==2||version==3) {PhysicsBody body;if(!body.read(in,version)||!body.valid()) return false;return components.edit(PhysicsBody::descriptor)&&components.replace(body);}
@@ -76,19 +62,7 @@ inline bool migratePhysicsBody(std::istream &in,u32 version,Components &componen
   return components.edit(PhysicsBody::descriptor) && components.replace(body) &&
          components.edit(Collider::descriptor) && components.replace(collider);
 }
-inline constexpr std::array<ComponentBoolean,9> physicsBodyBooleans{{
-  {"sensor","Sensor sem resposta",[](const ComponentValue &v){return static_cast<const PhysicsBody&>(v).sensor;},[](ComponentValue &v,bool b){static_cast<PhysicsBody&>(v).sensor=b;},{"Corpo"}},
-  {"allow_sleep","Permitir repouso",[](const ComponentValue &v){return static_cast<const PhysicsBody&>(v).allowSleep;},[](ComponentValue &v,bool b){static_cast<PhysicsBody&>(v).allowSleep=b;},{"Corpo","",nullptr,bodySimulates}},
-#define AE_LOCK(id,label,field) {id,label,[](const ComponentValue&v){return static_cast<const PhysicsBody&>(v).field;},[](ComponentValue&v,bool n){static_cast<PhysicsBody&>(v).field=n;},{"Restrições","","Eixos do mundo; bloquear todos exige corpo estático",bodyIsDynamic}}
-  AE_LOCK("freeze_position_x","Travar posição X",freezePosition[0]),
-  AE_LOCK("freeze_position_y","Travar posição Y",freezePosition[1]),
-  AE_LOCK("freeze_position_z","Travar posição Z",freezePosition[2]),
-  AE_LOCK("freeze_rotation_x","Travar rotação X",freezeRotation[0]),
-  AE_LOCK("freeze_rotation_y","Travar rotação Y",freezeRotation[1]),
-  AE_LOCK("freeze_rotation_z","Travar rotação Z",freezeRotation[2]),
-#undef AE_LOCK
-  {"continuous_collision","Colisão contínua",[](const ComponentValue&v){return static_cast<const PhysicsBody&>(v).continuousCollision;},[](ComponentValue&v,bool n){static_cast<PhysicsBody&>(v).continuousCollision=n;},{"Simulação","","Varredura linear Jolt; não detecta varredura apenas angular",bodyIsDynamic}}
-}};
+#include "scene/generated/physics_body_physicsBodyBooleans.inc"
 inline const ComponentType PhysicsBody::descriptor{
   "astra.physics.body",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<PhysicsBody>();},
   physicsBodyNumbers,physicsBodyBooleans,physicsBodyEnums,migratePhysicsBody,false,{},physicsBodyTriples

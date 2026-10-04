@@ -17,6 +17,6 @@ public static class PhysicsFieldsAbiTests
         Assert.Equal(field+IntPtr.Size,layer);
         var input=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("InputActionCommand").ToInt64();
         Assert.Equal(layer+IntPtr.Size,input);
-        Assert.Equal(input+IntPtr.Size,(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>());
+        Assert.Equal(input+2*IntPtr.Size,(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>());
     }
 }

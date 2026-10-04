@@ -42,7 +42,7 @@ public static class InputInteractionContractsTests
         var previous=Marshal.OffsetOf<Astra.Runtime.NativeBehaviorRuntime.SceneAccess>("ObjectLayer").ToInt64();
         var appended=Marshal.OffsetOf<Astra.Runtime.NativeBehaviorRuntime.SceneAccess>("InputActionCommand").ToInt64();
         Assert.Equal(previous+IntPtr.Size,appended);
-        Assert.Equal(appended+IntPtr.Size,(long)Marshal.SizeOf<Astra.Runtime.NativeBehaviorRuntime.SceneAccess>());
+        Assert.Equal(appended+2*IntPtr.Size,(long)Marshal.SizeOf<Astra.Runtime.NativeBehaviorRuntime.SceneAccess>());
         var state=input.ActionState("Hold");Assert.True(state.Enabled&&state.AuthoredEnabled);
         Assert.Equal(InputInteraction.Hold,state.Interaction);Assert.Equal(InputPhase.Started,state.Phase);
         Assert.Close(.5f,state.Progress);Assert.Close(.25f,state.Elapsed);

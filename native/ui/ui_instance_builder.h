@@ -26,7 +26,7 @@
 
 namespace ae::ui {
 
-// Espelho de `UiInstance` em astra_ui.vert, campo a campo. 80 bytes, alinhado a
+// Espelho de `UiInstance` em astra_ui.vert, campo a campo. 96 bytes, alinhado a
 // 16 como std430 exige; um `static_assert` no .cpp tranca o tamanho.
 enum class UiInstanceKind : u32 {
   // Retângulo arredondado, com preenchimento, degradê horizontal e/ou contorno.
@@ -41,6 +41,8 @@ enum class UiInstanceKind : u32 {
   // R4: recorte do atlas dinâmico de prévia (texturas), multiplicado pela cor.
   Preview = 4,
   CameraPreview = 5,
+  Triangle = 6,
+  GuiImage = 7,
 };
 
 struct alignas(16) UiInstance final {
@@ -54,6 +56,10 @@ struct alignas(16) UiInstance final {
   float params[4]{};
   // preenchimento, fim do degradê, contorno, reservado. 0xAARRGGBB.
   u32 colors[4]{};
+  // Triangle UV2 (xy). p0/p1 in bounds, p2/UV0 in atlas, UV1 in params.xy.
+  float extra[4]{};
+  float projection[12]{};
+  float worldClip[4]{};
 };
 
 struct UiInstanceBuildResult final {

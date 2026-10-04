@@ -1,0 +1,6 @@
+[1/3] Checking generated component contracts
+45 types / 10 family tables; 352 property declarations / 60 tables; 704 generated accessors; all outputs current
+[2/3] Building CXX object CMakeFiles/aether_component_contract_probe.dir/C_/Users/donod/Downloads/atchengine/tools/component_contract_probe.cpp.obj
+[3/3] Linking CXX executable aether_component_contract_probe.exe
+C# component API is current
+45 types / 10 family tables; 352 property declarations / 60 tables; 704 generated accessors; 0 files updated

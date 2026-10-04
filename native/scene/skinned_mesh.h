@@ -35,7 +35,8 @@ public:
   // fora dessa faixa extrapolam, como a Unity permite.
   std::vector<float> blendShapeWeights;
   SkinQuality quality = SkinQuality::Auto;
-  bool skinnedMotionVectors = true;
+
+#include "scene/generated/skinned_mesh_SkinnedMesh_fields1.inc"
 
   static const ComponentType descriptor;
   const ComponentType &type() const override { return descriptor; }
@@ -81,13 +82,7 @@ inline constexpr std::array<ComponentEnum, 1> skinnedMeshEnums{{
    [](ComponentValue &v, u32 value) { static_cast<SkinnedMesh &>(v).quality = static_cast<SkinQuality>(value); },
    {"Skin", "", "Influências por vértice usadas na deformação (Skin Weights)"}}
 }};
-inline constexpr std::array<ComponentBoolean, 1> skinnedMeshBooleans{{
-  {"skinned_motion_vectors", "Vetor de movimento da deformação",
-   [](const ComponentValue &v) { return static_cast<const SkinnedMesh &>(v).skinnedMotionVectors; },
-   [](ComponentValue &v, bool value) { static_cast<SkinnedMesh &>(v).skinnedMotionVectors = value; },
-   {"Skin", "", "A reprojeção temporal usa a pose anterior dos ossos e dos blend shapes, não só a do objeto",
-    nullptr, nullptr, "render.motion_vectors", "platform/android/instanced_motion.inl → passe de movimento com pose anterior"}}
-}};
+#include "scene/generated/skinned_mesh_skinnedMeshBooleans.inc"
 // SetBlendShapeWeight/GetBlendShapeWeight da Unity: um endereço por blend shape.
 inline constexpr std::array<ComponentSlotNumber, 1> skinnedMeshSlotNumbers{{
   {"blend_shape_weight", "Peso do blend shape", -SkinnedMesh::MaximumBlendShapeWeight, SkinnedMesh::MaximumBlendShapeWeight, 1,

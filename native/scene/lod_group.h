@@ -27,7 +27,9 @@ inline constexpr float LodCrossFadeAnimationSeconds = .5f;
 
 class LodGroup final : public ComponentValue {
 public:
-  bool enabled = true;
+
+#include "scene/generated/lod_group_LodGroup_fields0.inc"
+
   u32 levelCount = 3;
   // Porcentagem da altura da vista. Os padrões são os da Unity para três níveis.
   std::array<float, LodGroupMaximumLevels> transitions{60, 30, 10, 5};
@@ -36,7 +38,9 @@ public:
   // limites do nível mais detalhado. Multiplicado pela maior escala global.
   float size = 1;
   LodFadeMode fadeMode = LodFadeMode::None;
-  bool animateCrossFading = false;
+
+#include "scene/generated/lod_group_LodGroup_fields2.inc"
+
   // Proporção (0..1) do comprimento de cada nível em que ele cruza com o
   // próximo. A documentação da Unity não fixa um padrão; 0,2 é o da Astra.
   std::array<float, LodGroupMaximumLevels> fadeWidths{.2f, .2f, .2f, .2f};
@@ -146,16 +150,7 @@ inline constexpr std::array<ComponentEnum, 3> lodGroupEnums{{
    [](ComponentValue &v, u32 value) { static_cast<LodGroup &>(v).forcedLevel = value; },
    {"Execução", "", "Estado de execução: 0 automático, n força o LOD n-1", lodNever}}
 }};
-inline constexpr std::array<ComponentBoolean, 2> lodGroupBooleans{{
-  {"enabled", "Ativo",
-   [](const ComponentValue &v) { return static_cast<const LodGroup &>(v).enabled; },
-   [](ComponentValue &v, bool value) { static_cast<LodGroup &>(v).enabled = value; },
-   {"Níveis", "", "Desligar libera os renderizadores do controle deste grupo"}},
-  {"animate_cross_fading", "Animate Cross-fading",
-   [](const ComponentValue &v) { return static_cast<const LodGroup &>(v).animateCrossFading; },
-   [](ComponentValue &v, bool value) { static_cast<LodGroup &>(v).animateCrossFading = value; },
-   {"Fade", "", "Troca por tempo em vez da faixa de largura", lodCrossFades}}
-}};
+#include "scene/generated/lod_group_lodGroupBooleans.inc"
 inline constexpr std::array<ComponentObjectReference, 4> lodGroupReferences{{
 #define AE_LOD_LEVEL(i, visible)                                                                               \
   {"level_" #i, "Objetos LOD " #i, "", ObjectReferenceScope::Descendant, "Nenhum",                            \

@@ -54,6 +54,53 @@ bool SceneAudio::renderOffline(std::span<float> stereo){
   return ma_engine_read_pcm_frames(&d.engine,stereo.data(),stereo.size()/2,&read)==MA_SUCCESS&&read==stereo.size()/2;
 }
 
+WorldStatus SceneAudio::command(GameWorld &world,const ComponentHandle &handle,Command operation,double seconds){
+  auto &d=*data_;
+  if(!world.running())return WorldStatus::NotRunning;
+  const auto status=world.validate(handle.object);if(status!=WorldStatus::Ok)return status;
+  if(world.componentTypeId(handle)!="astra.audio.source")return WorldStatus::ComponentMissing;
+  if(u32(operation)>u32(Command::Resume)||!std::isfinite(seconds)||seconds<0 ||
+     (operation!=Command::Seek&&seconds!=0))return WorldStatus::InvalidArgument;
+  // Resolve current authoring changes, clip ownership and disabled/removed sources first.
+  if(!advance(world,0))return WorldStatus::Rejected;
+  const auto found=d.voices.find({handle.object.id,handle.instance});
+  if(found==d.voices.end()){
+    if(operation==Command::Stop||operation==Command::Pause)
+      return world.setProperty(handle,"playback",u32(operation==Command::Stop?scene::AudioPlayback::Stopped:scene::AudioPlayback::Paused));
+    return WorldStatus::ComponentUnavailable;
+  }
+  auto &voice=*found->second;auto &sound=voice.sound;
+  if(operation==Command::Seek&&seconds>double(voice.clip->frames())/resources::AudioClip::SampleRate)
+    return WorldStatus::InvalidArgument;
+  // Resume is deliberately distinct from Play: it never restarts an ended/stopped voice.
+  if(operation==Command::Resume&&voice.command!=scene::AudioPlayback::Paused)return WorldStatus::Ok;
+  const auto playback=operation==Command::Pause?scene::AudioPlayback::Paused:
+    operation==Command::Stop?scene::AudioPlayback::Stopped:
+    operation==Command::Seek?voice.command:scene::AudioPlayback::Playing;
+  const auto written=world.setProperty(handle,"playback",u32(playback));
+  if(written!=WorldStatus::Ok)return written;
+  ma_result result=MA_SUCCESS;
+  if(operation==Command::Play||operation==Command::Stop){
+    result=ma_sound_stop(&sound);
+    if(result==MA_SUCCESS)result=ma_sound_seek_to_pcm_frame(&sound,0);
+    if(result==MA_SUCCESS&&operation==Command::Play)result=ma_sound_start(&sound);
+  }else if(operation==Command::Pause)result=ma_sound_stop(&sound);
+  else if(operation==Command::Resume)result=ma_sound_start(&sound);
+  else result=ma_sound_seek_to_pcm_frame(&sound,static_cast<ma_uint64>(seconds*resources::AudioClip::SampleRate));
+  voice.command=playback;voice.everStarted=true;
+  // Query the backend's cursor (which includes its pending seek target). PCM is
+  // consumed on the mixer thread; a successful command does not imply audibility.
+  for(auto &diagnostic:d.diagnostics)if(diagnostic.object==handle.object.id&&diagnostic.instance==handle.instance){
+    float cursor=0;ma_sound_get_cursor_in_seconds(&sound,&cursor);diagnostic.cursor=cursor;
+    diagnostic.state=playback==scene::AudioPlayback::Paused?State::Paused:
+      ma_sound_is_playing(&sound)&&!ma_sound_at_end(&sound)?State::Playing:State::Stopped;
+    diagnostic.message="Comando aceito pelo backend; cursor pode incluir busca pendente";
+    if(result!=MA_SUCCESS){diagnostic.state=State::DeviceError;diagnostic.message="Backend recusou comando de transporte de áudio";}
+  }
+  if(result!=MA_SUCCESS){d.error="Backend recusou comando de transporte de áudio";return WorldStatus::Rejected;}
+  return WorldStatus::Ok;
+}
+
 bool SceneAudio::advance(GameWorld &world,double elapsed){
   auto &d=*data_;d.diagnostics.clear();
   if(!world.running()||!std::isfinite(elapsed)||elapsed<0||elapsed>.25){d.error="Mundo ou delta de áudio inválido";return false;}
@@ -70,7 +117,12 @@ bool SceneAudio::advance(GameWorld &world,double elapsed){
     if(const auto *c=o->components.find(scene::AudioBus::descriptor)){const auto &b=static_cast<const scene::AudioBus&>(*c);solo|=b.enabled&&b.solo;}
     if(const auto *c=o->components.find(scene::AudioSource::descriptor))hasSources|=static_cast<const scene::AudioSource*>(c)->enabled;
   }
-  if(!hasSources){d.voices.clear();return true;}
+  if(!hasSources){
+    d.voices.clear();
+    for(auto id:d.ids)if(const auto *o=world.graph().find(id))if(const auto *c=o->components.find(scene::AudioSource::descriptor))
+      d.diagnostics.push_back({id,c->instanceId(),State::Stopped,"Inativo · cursor reiniciado",0});
+    return true;
+  }
   if(!d.ready){
     bool needsOutput=false;
     for(auto id:d.ids)if(const auto *o=world.graph().find(id);o&&world.activeInHierarchy(world.handle(id)))

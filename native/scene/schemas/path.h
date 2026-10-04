@@ -1,7 +1,5 @@
 #pragma once
 #include "scene/path.h"
 namespace ae::scene {
-inline constexpr std::array<ComponentSchema,1>pathSchemas{{
- {.type=&Path::descriptor,.name="Path",.description="Curva Bézier local com pontos persistentes",.family=ComponentFamily::Logic,.structuralInPlay=PlayMutability::SafePoint,.consumer="runtime/scene_paths.cpp",.invalidates=Invalidate::Transform,.subfamily="Caminhos",.icon="path/curve",.searchTerms="Path Curve3D Spline Caminho Bezier",.reference="https://docs.godotengine.org/en/4.5/classes/class_path3d.html",.apiName="PathComponent"}
-}};
+#include "scene/generated/path_schemas.inc"
 }

@@ -5,8 +5,11 @@
 namespace ae::scene {
 class CameraLook final : public ComponentValue {
 public:
-  bool enabled=true;
-  float yawSensitivity=300,pitchSensitivity=195,pitchLimit=83;
+
+#include "scene/generated/camera_look_CameraLook_fields0.inc"
+
+#include "scene/generated/camera_look_CameraLook_fields1.inc"
+
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<CameraLook>(*this);}
@@ -23,17 +26,8 @@ public:
     return valid();
   }
 };
-inline constexpr std::array<ComponentNumber,3> cameraLookNumbers{{
-#define AE_LOOK_NUMBER(id,label,field,lo,hi,group) {label,lo,hi,1,[](const ComponentValue &v)->const float&{return static_cast<const CameraLook&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<CameraLook&>(v).field;},id,{group,"°"}}
-  AE_LOOK_NUMBER("yaw_sensitivity","Sensibilidade horizontal graus/tela",yawSensitivity,0,720,"Sensibilidade"),
-  AE_LOOK_NUMBER("pitch_sensitivity","Sensibilidade vertical graus/tela",pitchSensitivity,0,720,"Sensibilidade"),
-  AE_LOOK_NUMBER("pitch_limit","Limite vertical graus",pitchLimit,1,89,"Limites")
-#undef AE_LOOK_NUMBER
-}};
-inline constexpr std::array<ComponentBoolean,1> cameraLookBooleans{{
-  {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const CameraLook&>(v).enabled;},
-   [](ComponentValue &v,bool on){static_cast<CameraLook&>(v).enabled=on;},{"Controle"}}
-}};
+#include "scene/generated/camera_look_cameraLookNumbers.inc"
+#include "scene/generated/camera_look_cameraLookBooleans.inc"
 inline const ComponentType CameraLook::descriptor{
   "astra.camera.look",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<CameraLook>();},cameraLookNumbers,cameraLookBooleans
 };

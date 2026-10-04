@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "base_head": "97ecf56f17fe39e7d2fd527719b7fbce2528cd18",
+  "comparison_sha256": "3840753e7d45a49125e10a509b49dd983f4b01b8d39213b7178d9016eb4a75fd",
+  "snapshots_equal": true,
+  "delta": {
+    "property_declarations": 22,
+    "property_tables": 14,
+    "new_runtime_types": 0
+  },
+  "totals": {
+    "property_declarations": 374,
+    "property_tables": 74,
+    "enum_property_declarations": 22,
+    "generated_accessors": 748,
+    "generated_fields": 189,
+    "registered_types": 45
+  },
+  "validation": {
+    "generator_tests_passed": 6,
+    "enum_options_compared": 530,
+    "csharp_api_current": true,
+    "android_validated": false,
+    "runtime_scenarios_passed": 8
+  },
+  "remaining": [
+    "Specialized setters",
+    "Enum option lists and defaults",
+    "Methods and events through ABI/runtime",
+    "Resources/references/collections",
+    "New backend integration"
+  ]
+}

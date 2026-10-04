@@ -1,0 +1,11 @@
+test_check_rejects_stale_output_without_repairing_it (test_component_codegen.BatchContracts.test_check_rejects_stale_output_without_repairing_it) ... ok
+test_disconnected_generated_code_is_rejected (test_component_codegen.BatchContracts.test_disconnected_generated_code_is_rejected) ... ok
+test_duplicate_property_is_rejected (test_component_codegen.BatchContracts.test_duplicate_property_is_rejected) ... ok
+test_one_contract_updates_native_field_and_property_binding (test_component_codegen.BatchContracts.test_one_contract_updates_native_field_and_property_binding) ... ok
+test_unconsumed_field_default_is_rejected (test_component_codegen.BatchContracts.test_unconsumed_field_default_is_rejected) ... ok
+test_unknown_field_is_rejected_instead_of_ignored (test_component_codegen.BatchContracts.test_unknown_field_is_rejected_instead_of_ignored) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 7.069s
+
+OK

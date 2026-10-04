@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "source": "native/scene/script_behavior.h",
+  "tables": [
+    {
+      "name": "scriptBehaviorBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled"
+        }
+      ],
+      "defaults": {
+        "type": "ScriptBehavior",
+        "presentation": {
+          "group": "Execução"
+        }
+      }
+    }
+  ]
+}

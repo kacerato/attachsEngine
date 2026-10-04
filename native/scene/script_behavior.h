@@ -237,10 +237,7 @@ struct ScriptBehavior final : ComponentValue {
 // comportamento seria possível pelo dedo no inspetor e impossível por API,
 // preset ou animação, que é exatamente a divergência que o schema existe para
 // impedir.
-inline constexpr std::array<ComponentBoolean,1> scriptBehaviorBooleans{{
-  {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const ScriptBehavior&>(v).enabled;},
-   [](ComponentValue &v,bool b){static_cast<ScriptBehavior&>(v).enabled=b;},{"Execução"}}
-}};
+#include "scene/generated/script_behavior_scriptBehaviorBooleans.inc"
 inline const ComponentType ScriptBehavior::descriptor{
   "astra.script.behavior",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ScriptBehavior>();},
   {},scriptBehaviorBooleans,{},nullptr,true

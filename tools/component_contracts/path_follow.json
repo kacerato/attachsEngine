@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "family": "path_follow",
+  "table": "pathFollowSchemas",
+  "entries": [
+    {
+      "type": "PathFollow",
+      "name": "Path Follow",
+      "description": "Percorre curva em distância mundial e orienta +Z",
+      "icon": "component/path-follow",
+      "searchTerms": "Path Follow Caminho Curva Percurso",
+      "apiName": "PathFollow"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Logic"
+    },
+    "structuralInPlay": {
+      "cpp": "PlayMutability::SafePoint"
+    },
+    "consumer": "runtime/scene_paths.cpp",
+    "invalidates": {
+      "cpp": "Invalidate::Transform"
+    },
+    "subfamily": "Caminhos",
+    "reference": "https://docs.godotengine.org/en/4.5/classes/class_pathfollow3d.html"
+  }
+}

@@ -5894,7 +5894,7 @@ scene::ScriptRuntimeApi inputTouchApi(){scene::ScriptRuntimeApi a;
 AE_TEST(input_interactions_session_touch_hold_unscaled_cancel_and_fresh_press) {
  Fixture f;auto&session=f.session;auto&doc=session.document();auto map=doc.inputActions();auto action=*map.find("Saltar");
  action.interaction=runtime::InputInteraction::Hold;action.duration=.25f;map.replace(action.id,action);doc.setInputActions(map);
- auto entity=*doc.find(f.cube);auto*s=static_cast<scene::ScriptBehavior*>(entity.components.add(scene::ScriptBehavior::descriptor));s->scriptType="test.InputTouch";s->source="Touch.cs";doc.applyEntityValues(f.cube,entity);
+ auto entity=*doc.find(f.cube);AE_EXPECT_TRUE(entity.components.add(scene::Character::descriptor),"explicit character owns the jump HUD");auto*s=static_cast<scene::ScriptBehavior*>(entity.components.add(scene::ScriptBehavior::descriptor));s->scriptType="test.InputTouch";s->source="Touch.cs";doc.applyEntityValues(f.cube,entity);session.setSelection(f.cube);
  session.setScriptRuntime(inputTouchApi());AE_EXPECT_TRUE(session.startPlay(),"real session Play");session.update();
  std::vector<renderer::MapDrawState> draws;session.advanceClock(1);AE_EXPECT_TRUE(session.extractPlayMap(draws),"Play starts with real bridge");
  auto query=[&](){scene::ScriptInputActionState result;inputTouchAccess.inputActionCommand(inputTouchAccess.context,reinterpret_cast<const u8*>("Saltar"),6,0,&result);return result;};
