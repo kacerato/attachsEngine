@@ -272,7 +272,7 @@ inline const std::array<EditorCreationEntry,81> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::connectedSensor2D,CreationPose::ViewTarget,0,"astra.physics2d.event_connection","receiver","Area2D Sensor Evento",scene::PrimitiveType::Count,false,{},"astra.physics2d.event_connection"},
   {"physics.connected_sensor",EditorWidget::None,3,"Sensor conectado","Ativa o receptor selecionado quando outro corpo entra. Sem receptor, configure a referência na Inspeção.",ui::UiIcon::EventPhysicsConnection,
     runtime::ObjectKind::Folder,recipe::connectedSensor,CreationPose::ViewTarget,0,recipe::physicsConnection,"receiver","Trigger Area3D Evento Conexao",scene::PrimitiveType::Count,false,{},recipe::physicsConnection},
-  {"gameplay.event_connection",EditorWidget::None,5,"Conexão de evento","Liga um evento deste objeto a ativar objetos ou chamar métodos, sem script.",ui::UiIcon::ComponentEventConnection,
+  {"gameplay.event_connection",EditorWidget::None,5,"Conexão de evento","Evento deste objeto aciona objeto ou método, sem script.",ui::UiIcon::ComponentEventConnection,
     runtime::ObjectKind::Folder,recipe::eventConnectionRecipe,CreationPose::ViewTarget,0,recipe::eventConnection,"receiver","UnityEvent Signal Evento Conexao",scene::PrimitiveType::Count,false,{},recipe::eventConnection},
   {"gameplay.sound_trigger",EditorWidget::None,5,"Gatilho sonoro","Sensor que toca o próprio som quando outro corpo entra.",ui::UiIcon::EventSoundTrigger,
     runtime::ObjectKind::Folder,recipe::soundTrigger,CreationPose::ViewTarget,0,{},{},"Trigger Audio Som Evento",scene::PrimitiveType::Count,false,{},recipe::eventConnection},
