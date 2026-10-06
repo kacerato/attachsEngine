@@ -13,7 +13,7 @@ public sealed record BehaviorFailure(ulong ObjectId, ulong InstanceId, string Ph
 public sealed record BehaviorEdit(bool Enabled, IReadOnlyDictionary<string, JsonElement>? Properties);
 
 /// <summary>Owns one isolated script assembly and its instances for a Play session.</summary>
-public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHost, ISaveHost, ITimeHost, IComponentEventHost
+public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHost, ISaveHost, ITimeHost, IComponentEventHost, IScenesHost
 {
     // Assinaturas de eventos de componente. Limite explícito: uma assinatura por
     // quadro em um loop seria vazamento, não uso legítimo.
@@ -424,23 +424,43 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
         if (_dispatchDepth >= 32) throw new WorldException(WorldStatus.LimitReached, "instanciar prefab");
         var root = _scene.InstantiatePrefab(parent.ObjectId, asset);
         if (root == 0) throw new WorldException(_scene.LastStatus, "instanciar prefab");
+        return AdoptInstantiation(root, "prefab");
+    }
+
+    /// <summary>Cena aditiva: mesmo caminho de publicação de um prefab, com os scripts da cena.</summary>
+    public GameObject LoadSceneAdditive(GameObject parent, string name)
+    {
+        if (!Running || _stopping || _scene is null) throw new WorldException(WorldStatus.NotRunning, "carregar cena");
+        if (!parent.BelongsTo(_scene)) throw new WorldException(WorldStatus.ForeignWorld, "carregar cena");
+        if (_dispatchDepth >= 32) throw new WorldException(WorldStatus.LimitReached, "carregar cena");
+        if (_scene is not IProjectScenesAccess scenes) throw new NotSupportedException("O host não oferece cenas do projeto (astra.scenes).");
+        var root = scenes.LoadSceneAdditive(parent.ObjectId, name);
+        if (root == 0) throw new WorldException(_scene.LastStatus, "carregar cena " + name);
+        return AdoptInstantiation(root, "cena");
+    }
+
+    // Publica uma subárvore recém-criada: scripts preparados antes, publicação
+    // única, rollback completo se qualquer script falhar ao ser construído.
+    private GameObject AdoptInstantiation(ulong root, string what)
+    {
+        var scene = _scene ?? throw new WorldException(WorldStatus.NotRunning, "publicar " + what);
         var prepared = new List<Entry>();
         try
         {
-            var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(_scene.InstantiationAttachments(root))
-                ?? throw new InvalidDataException("Descrição de scripts do prefab ausente.");
+            var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(scene.InstantiationAttachments(root))
+                ?? throw new InvalidDataException("Descrição de scripts ausente: " + what + ".");
             if (_entries.Count + attachments.Length > 4096) throw new WorldException(WorldStatus.LimitReached, "instanciar scripts");
-            PrepareAttachments(_scene, attachments, prepared);
-            if (!_scene.FinishInstantiation(root, true)) throw new WorldException(_scene.LastStatus, "publicar prefab");
+            PrepareAttachments(scene, attachments, prepared);
+            if (!scene.FinishInstantiation(root, true)) throw new WorldException(scene.LastStatus, "publicar " + what);
         }
         catch
         {
             foreach (var entry in prepared) entry.Instance.Detach();
-            if (!_scene.FinishInstantiation(root, false)) throw new InvalidOperationException("Falha ao reverter instanciação de prefab.");
+            if (!scene.FinishInstantiation(root, false)) throw new InvalidOperationException("Falha ao reverter instanciação: " + what + ".");
             throw;
         }
         _entries.AddRange(prepared);
-        var result = GameObject.Resolve(_scene, root);
+        var result = GameObject.Resolve(scene, root);
         ++_dispatchDepth;
         try { foreach (var entry in prepared) EnsureActivated(entry); }
         finally { if (--_dispatchDepth == 0) SweepRemoved(); }

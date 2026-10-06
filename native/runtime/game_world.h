@@ -173,6 +173,11 @@ public:
   ObjectHandle createPrimitive(const ObjectHandle &parent,scene::PrimitiveType type,const PrimitiveResource &resource,WorldStatus &status);
   ObjectHandle instantiate(const ObjectHandle &source,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status);
   ObjectHandle instantiate(const Prefab &prefab,const ObjectHandle &parent,ObjectCloneMap &mapping,WorldStatus &status,std::string &diagnostic);
+  // Cena aditiva (SceneManager.LoadSceneAdditive): copia a cena inteira de uma
+  // vez sob um objeto contêiner com o nome dela, remapeando referências entre
+  // objetos da cena. Mesma publicação dos clones: fica pendente até
+  // finishInstantiation, que é onde os comportamentos da cena são criados.
+  ObjectHandle instantiateScene(const SceneGraph &source,const ObjectHandle &parent,std::string_view name,ObjectCloneMap &mapping,WorldStatus &status);
   WorldStatus finishInstantiation(const ObjectHandle &root,bool commit);
   // Marca o objeto e a subárvore como vencidos na hora; o armazenamento sai no
   // próximo `flush()`. Handles guardados passam a ser recusados imediatamente.

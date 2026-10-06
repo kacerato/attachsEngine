@@ -788,6 +788,65 @@ void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
   playScene_.setPrefabLoader([this](resources::AssetGuid asset,runtime::Prefab &prefab,std::string &error) {
     return preparePrefab(asset,prefab,error);
   });
+  playScene_.setSceneSource([this]{return projectScenes();},
+    [this](std::string_view request,runtime::SceneGraph &out,std::string &name,std::string &error) {
+      return loadPlayScene(request,out,name,error);
+    });
+}
+
+// Cenas do projeto como os scripts as nomeiam: caminho relativo, sem extensão,
+// com '/'. Ordenado para que índices sejam estáveis entre chamadas.
+std::vector<std::string> EditorSession::projectScenes() const {
+  std::vector<std::string> scenes;
+  if(files_.rootPath().empty()) return scenes;
+  std::error_code ec;const std::filesystem::path root(EditorImportTransaction::fromUtf8(files_.rootPath()));
+  std::filesystem::recursive_directory_iterator it(root,std::filesystem::directory_options::skip_permission_denied,ec),end;
+  for(u32 visited=0;it!=end&&!ec&&visited<8192;it.increment(ec),++visited) {
+    if(it->is_symlink(ec) || it->path().filename()==".astra") {if(it->is_directory(ec))it.disable_recursion_pending();continue;}
+    if(!it->is_regular_file(ec) || it->path().extension()!=".aescene") continue;
+    auto relative=it->path().lexically_relative(root);relative.replace_extension();
+    scenes.push_back(relative.generic_string());
+    if(scenes.size()==4096) break;
+  }
+  std::sort(scenes.begin(),scenes.end());
+  return scenes;
+}
+
+// Resolve o pedido do script e prepara o grafo como a abertura de cena faz:
+// tags do projeto, reconciliação de recursos e materiais, e extração conferida.
+// O documento autoral não é tocado.
+bool EditorSession::loadPlayScene(std::string_view request,runtime::SceneGraph &out,std::string &name,std::string &error) {
+  const auto scenes=projectScenes();
+  std::string resolved;
+  for(const auto &scene:scenes) if(scene==request) {resolved=scene;break;}
+  if(resolved.empty()) {
+    u32 matches=0;
+    for(const auto &scene:scenes) {
+      const auto slash=scene.rfind('/');
+      if(std::string_view(scene).substr(slash==std::string::npos?0:slash+1)==request) {resolved=scene;++matches;}
+    }
+    if(matches>1) {error="Nome de cena ambíguo; use o caminho: "+std::string(request);return false;}
+  }
+  if(resolved.empty()) {error="Cena não encontrada no projeto: "+std::string(request);return false;}
+  std::filesystem::path file;
+  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),resolved+".aescene",file)) {
+    error="Caminho de cena inválido";return false;
+  }
+  EditorDocument candidate;
+  const auto full=files_.resolveFile(resolved+".aescene");
+  if(full.empty() || !loadEditorDocument(full.c_str(),sceneFingerprint_,candidate)) {
+    error="A cena não pôde ser lida: "+resolved;return false;
+  }
+  candidate.setTags(projectTags_);
+  mapScene_.reconcileAssets(candidate);
+  std::vector<renderer::MapDrawState> check;
+  if(!mapScene_.extract(candidate,check)) {error="A cena referencia recursos indisponíveis: "+resolved;return false;}
+  mapScene_.hydrateMaterials(candidate);
+  if(EditorPlayScene::unresolvedEntity(candidate)!=kInvalidEntity) {error="A cena tem componentes de tipo ausente: "+resolved;return false;}
+  const auto slash=resolved.rfind('/');
+  name=resolved.substr(slash==std::string::npos?0:slash+1);
+  out=std::move(static_cast<runtime::SceneGraph&>(candidate));
+  return true;
 }
 
 // Quem publica sob demanda um recurso trocado com o Play rodando: o mesmo
@@ -6913,6 +6972,7 @@ void EditorSession::frameSelection() {
 bool EditorSession::save(const char *path, u64 fingerprint) {
   state_.saveRequested=false;
   const bool ok=saveEditorDocument(path,document_,fingerprint);
+  if(ok && path) {scenePath_=path;sceneFingerprint_=fingerprint;}
   state_.status=ok?"Salvo":"Erro ao salvar";
   return ok;
 }
@@ -6940,6 +7000,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   if(!mapScene_.extract(candidate,check)) return false;
   mapScene_.hydrateMaterials(candidate);
   cancelPointers();document_=std::move(candidate);history_.clear();
+  scenePath_=path;sceneFingerprint_=fingerprint;
   state_.cameraViewEntity=0;state_.cameraPiloting=false;state_.componentGroup.clear();
   sceneEpoch_=nextSceneEpoch();state_.groupPicker=false;state_.editingGroupName=false;state_.groupEntity=0;cameraPreview_.close();state_.colorField=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};
   // R4: a cena aberta pode usar texturas do projeto que a biblioteca atual ainda

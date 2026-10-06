@@ -103,6 +103,19 @@ public:
   // Vibrador da plataforma. Sem ele, a família astra.haptics não existe.
   using Haptics = std::function<bool(u32 milliseconds,float amplitude)>;
   void setHaptics(Haptics haptics) { if(!running_) haptics_=std::move(haptics); }
+  // Cenas do projeto: quem conhece o sistema de arquivos entrega o catálogo e
+  // o carregador. O carregador devolve o grafo pronto para o mundo (tags e
+  // recursos reconciliados) e o nome canônico da cena.
+  using SceneCatalog = std::function<std::vector<std::string>()>;
+  using SceneLoader = std::function<bool(std::string_view request,SceneGraph &out,std::string &name,std::string &error)>;
+  void setSceneSource(SceneCatalog catalog,SceneLoader loader) {if(!running_){sceneCatalog_=std::move(catalog);sceneLoader_=std::move(loader);}}
+  void setActiveScene(std::string name) {activeScene_=std::move(name);}
+  const std::string &activeScene() const noexcept {return activeScene_;}
+  // Troca de cena pedida por script: entregue uma vez a quem conduz o Play.
+  bool takeSceneRequest(SceneGraph &graph,std::string &name) {
+    if(!sceneRequest_.pending) return false;
+    graph=std::move(sceneRequest_.graph);name=std::move(sceneRequest_.name);sceneRequest_={};return true;
+  }
   void setEvents(ComponentEventQueue *events) noexcept {
     if(events_ && events_!=events) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
     events_=events;
@@ -148,6 +161,11 @@ private:
   DebugLines *debugLines_=nullptr;
   Haptics haptics_;
   std::deque<GameWorld::HierarchyChange> pendingHierarchy_;
+  scene::ScriptSceneOperations sceneOperations_{};
+  SceneCatalog sceneCatalog_;
+  SceneLoader sceneLoader_;
+  std::string activeScene_;
+  struct SceneRequest {SceneGraph graph;std::string name;bool pending=false;} sceneRequest_;
   std::string root_, diagnostics_;
   LogSink logSink_;
   GameWorld *world_ = nullptr;

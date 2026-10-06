@@ -104,4 +104,20 @@ struct ScriptHapticsOperations {
   int (*vibrate)(void *,u32 milliseconds,float amplitude)=nullptr;
 };
 
+// --- astra.scenes v1 -----------------------------------------------------------
+// Cenas do projeto em Play (Unity 6000.0 SceneManager). Nomes são o caminho
+// relativo sem extensão ou só o nome do arquivo, quando único no projeto.
+// Aditiva: cria a cena sob `parent` e devolve o contêiner; o chamador publica
+// pelo mesmo par instantiationAttachments/finishInstantiation dos prefabs.
+// Única: aceita o pedido, que troca o mundo inteiro no fim do quadro.
+inline constexpr std::string_view kScriptScenes="astra.scenes";
+struct ScriptSceneOperations {
+  u32 version=1,size=sizeof(ScriptSceneOperations);
+  int (*active)(void *,u8 *buffer,int capacity)=nullptr;            // comprimento ou -1
+  int (*count)(void *)=nullptr;                                       // -1 sem catálogo
+  int (*nameAt)(void *,u32 index,u8 *buffer,int capacity)=nullptr;   // comprimento ou -1
+  u64 (*loadAdditive)(void *,u64 parent,const u8 *name,int length)=nullptr;
+  int (*requestSingle)(void *,const u8 *name,int length)=nullptr;
+};
+
 } // namespace ae::scene

@@ -307,6 +307,62 @@ void ScriptBridge::installExtensions() {
     }
     return written;
   };
+  sceneOperations_ = scene::ScriptSceneOperations{};
+  sceneOperations_.active=[](void *context,u8 *buffer,int capacity)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(capacity<0||(capacity&&!buffer)){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    if(buffer) std::copy_n(self.activeScene_.data(),std::min<usize>(self.activeScene_.size(),static_cast<usize>(capacity)),buffer);
+    return static_cast<int>(self.activeScene_.size());
+  };
+  sceneOperations_.count=[](void *context)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.sceneCatalog_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    return static_cast<int>(std::min<usize>(self.sceneCatalog_().size(),4096));
+  };
+  sceneOperations_.nameAt=[](void *context,u32 index,u8 *buffer,int capacity)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.sceneCatalog_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    const auto names=self.sceneCatalog_();
+    if(index>=names.size()||capacity<0||(capacity&&!buffer)){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    if(buffer) std::copy_n(names[index].data(),std::min<usize>(names[index].size(),static_cast<usize>(capacity)),buffer);
+    return static_cast<int>(names[index].size());
+  };
+  sceneOperations_.loadAdditive=[](void *context,u64 parent,const u8 *name,int length)->u64 {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.sceneLoader_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    const auto request=viewOf(name,length);
+    if(parent>std::numeric_limits<ObjectId>::max()||request.empty()){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto destination=self.world_->handle(static_cast<ObjectId>(parent));
+    self.lastStatus_=self.world_->validate(destination);if(self.lastStatus_!=WorldStatus::Ok) return 0;
+    SceneGraph graph;std::string canonical,error;
+    if(!self.sceneLoader_(request,graph,canonical,error)) {
+      self.lastStatus_=WorldStatus::UnknownResource;
+      if(self.logSink_) self.logSink_(parent,"Cena recusada: "+error);
+      return 0;
+    }
+    ObjectCloneMap mapping;
+    const auto created=self.world_->instantiateScene(graph,destination,canonical,mapping,self.lastStatus_);
+    return created.valid()?created.id:0;
+  };
+  sceneOperations_.requestSingle=[](void *context,const u8 *name,int length)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.sceneLoader_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    const auto request=viewOf(name,length);
+    if(request.empty()){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    // Um pedido por quadro: dois LoadScene no mesmo quadro seriam uma corrida
+    // sem vencedor definido; o segundo é recusado de forma explícita.
+    if(self.sceneRequest_.pending){self.lastStatus_=WorldStatus::LimitReached;return 0;}
+    SceneRequest pending;std::string error;
+    // Carregar já agora recusa nome ou arquivo inválido no mesmo callback.
+    if(!self.sceneLoader_(request,pending.graph,pending.name,error)) {
+      self.lastStatus_=WorldStatus::UnknownResource;
+      if(self.logSink_) self.logSink_(0,"Cena recusada: "+error);
+      return 0;
+    }
+    pending.pending=true;self.sceneRequest_=std::move(pending);
+    self.lastStatus_=WorldStatus::Ok;return 1;
+  };
   hapticsOperations_ = scene::ScriptHapticsOperations{};
   hapticsOperations_.vibrate=[](void *context,u32 milliseconds,float amplitude)->int {
     auto &self=*static_cast<ScriptBridge *>(context);
@@ -328,6 +384,7 @@ void ScriptBridge::installExtensions() {
     if(requested==scene::kScriptView) return publish(self.viewOperations_);
     if(requested==scene::kScriptDebug) return publish(self.debugOperations_);
     if(requested==scene::kScriptHierarchy) return publish(self.hierarchyOperations_);
+    if(requested==scene::kScriptScenes) return publish(self.sceneOperations_);
     // Família ausente de verdade: sem vibrador, não há tabela a oferecer.
     if(requested==scene::kScriptHaptics && self.haptics_) return publish(self.hapticsOperations_);
     return nullptr;
@@ -1750,6 +1807,7 @@ void ScriptBridge::stop() {
   if (running_) api_.stop();
   if (events_) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
   pendingHierarchy_.clear();
+  sceneRequest_ = {};
   rendering_.end();
   running_ = false;
   world_ = nullptr;

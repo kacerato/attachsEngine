@@ -316,6 +316,17 @@ public:
     dpi_=std::isfinite(dpi)&&dpi>0?dpi:0;platform_=platform;
   }
   void setHaptics(runtime::ScriptBridge::Haptics haptics) {playScene_.setHaptics(std::move(haptics));}
+  // Cenas do projeto vistas pelos scripts (SceneManager): catálogo e carga.
+  std::vector<std::string> projectScenes() const;
+  bool loadPlayScene(std::string_view request,runtime::SceneGraph &out,std::string &name,std::string &error);
+  // Nome da cena aberta como os scripts a veem: arquivo sem extensão.
+  std::string activeSceneName() const {
+    if(scenePath_.empty()) return "Cena";
+    const auto slash=scenePath_.find_last_of("/\\");
+    auto name=scenePath_.substr(slash==std::string::npos?0:slash+1);
+    if(name.ends_with(".aescene")) name.resize(name.size()-8);
+    return name;
+  }
   // A vista de jogo deste quadro: o retângulo da cena e a câmera que o renderer
   // usa no Play (a autorada quando existe; senão a do editor).
   runtime::GameView gameView() const {
@@ -474,6 +485,8 @@ public:
   bool isPlaying() const noexcept { return state_.workspace == EditorWorkspace::Play; }
   // Hierarquia e Inspector abertos sobre o mundo em execução.
   bool playInspecting() const noexcept { return isPlaying() && playScene_.active() && state_.playInspect; }
+  // Leitura do mundo em execução (testes e ferramentas); edição passa pelos comandos.
+  const EditorPlayScene &playScene() const noexcept { return playScene_; }
   bool setPlayTimeScale(float value) {
     if(!isPlaying() || !playScene_.active()) return false;
     const auto status=playScene_.world().setTimeScale(value);
@@ -1054,6 +1067,7 @@ public:
       }
       runtimeCodeGeneration_=code_.publishedGeneration();
       playScene_.configureGui(gui_.document());
+      playScene_.setActiveScene(activeSceneName());
       if(!playScene_.start(document_,mapScene_)) {
         state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
         reportProblem(EditorConsoleSeverity::Error,state_.status);
@@ -1115,6 +1129,22 @@ public:
     }
     playScene_.setGameView(gameView());
     if(!playScene_.advance(elapsed)) return false;
+    // SceneManager.LoadScene (única): o mundo inteiro é trocado aqui, fora de
+    // qualquer callback de script. O documento autoral continua intacto e volta
+    // ao parar o Play, como as cenas carregadas em Play Mode na Unity.
+    runtime::SceneGraph next;std::string nextName;
+    if(playScene_.takeSceneRequest(next,nextName)) {
+      playScene_.stop();
+      playScene_.configureGui(gui_.document());
+      playScene_.setActiveScene(nextName);
+      if(!playScene_.start(next,mapScene_)) {
+        state_.status="Troca de cena falhou: "+nextName+(playScene_.scriptDiagnostics().empty()?"":" · "+playScene_.scriptDiagnostics());
+        reportProblem(EditorConsoleSeverity::Error,state_.status);
+        return false;
+      }
+      state_.selection=kInvalidEntity;state_.componentSelection=kInvalidEntity;state_.expandedNative=0;
+      reportedPhysicsConnectionDiagnostic_.clear();reportedEventConnectionDiagnostic_.clear();
+    }
     const auto &eventDiagnostic=playScene_.eventConnections().diagnostic();
     if(eventDiagnostic!=reportedEventConnectionDiagnostic_) {
       reportedEventConnectionDiagnostic_=eventDiagnostic;
@@ -1663,6 +1693,10 @@ private:
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};
   float pixelsPerUnit_=1,dpi_=0;
+  std::string scenePath_;
+  // Impressão digital com que a cena aberta foi lida/salva; cenas carregadas
+  // em Play são lidas com a mesma. Distinta de packageFingerprint_ (primitivas).
+  u64 sceneFingerprint_=0;
   runtime::GameViewPlatform platform_=runtime::GameViewPlatform::Host;
   EditorViewport view_{};
   EditorScreenState state_{};

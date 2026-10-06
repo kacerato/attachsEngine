@@ -580,6 +580,17 @@ public abstract class Behavior
     protected DebugDraw Debug => new(Scene);
     /// <summary>Vibração do aparelho, quando a plataforma oferece.</summary>
     protected HapticsAccess Haptics => new(Scene);
+    /// <summary>Cenas do projeto: ativa, lista, troca e carga aditiva.</summary>
+    protected ScenesAccess Scenes
+    {
+        get
+        {
+            // A raiz do mundo é o ancestral comum de tudo; aditiva sem pai vai para ela.
+            var root = Object;
+            for (var parent = root.Parent; parent is not null; parent = parent.Parent) root = parent;
+            return new(Scene, _registry as IScenesHost, root.Parent ?? root);
+        }
+    }
     protected Physics2DAccess Physics2D => new(Scene);
 
     /// <summary>As ações de entrada configuradas no projeto.</summary>

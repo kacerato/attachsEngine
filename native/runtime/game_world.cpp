@@ -363,6 +363,24 @@ ObjectHandle GameWorld::instantiate(const Prefab &prefab,const ObjectHandle &par
   status=WorldStatus::Ok;return registerInstantiation(root,mapping);
 }
 
+ObjectHandle GameWorld::instantiateScene(const SceneGraph &source,const ObjectHandle &parent,std::string_view name,ObjectCloneMap &mapping,WorldStatus &status) {
+  mapping.clear();status=validate(parent);if(status!=WorldStatus::Ok) return {};
+  if(name.empty() || name.size()>=kNameCapacity) {status=WorldStatus::InvalidArgument;return {};}
+  if(unpublishedClones_.size()>=32) {status=WorldStatus::LimitReached;return {};}
+  // Uma cópia com contêiner: clonar os filhos da raiz um a um perderia as
+  // referências cruzadas entre eles, que só são remapeadas dentro de um clone.
+  SceneGraph staged=source;
+  std::vector<ObjectId> topLevel;
+  {const auto children=staged.childrenOf(staged.root());topLevel.assign(children.begin(),children.end());}
+  const auto container=staged.createEntity(staged.root(),ObjectKind::Folder,name);
+  if(!container) {status=WorldStatus::LimitReached;return {};}
+  for(u32 index=0;index<topLevel.size();++index)
+    if(!staged.reparent(topLevel[index],container,index)) {status=WorldStatus::Rejected;return {};}
+  const auto root=graph_.cloneSubtree(staged,container,parent.id,mapping);
+  if(!root) {mapping.clear();status=WorldStatus::Rejected;return {};}
+  status=WorldStatus::Ok;return registerInstantiation(root,mapping);
+}
+
 ObjectHandle GameWorld::registerInstantiation(ObjectId root,const ObjectCloneMap &mapping) {
   for(const auto &[original,copy]:mapping) {
     (void)original;

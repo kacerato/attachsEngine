@@ -292,6 +292,16 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, uint, float, int> Vibrate;
     }
     [StructLayout(LayoutKind.Sequential)]
+    public struct NativeSceneOperations
+    {
+        public uint Version, Size;
+        public delegate* unmanaged<void*, byte*, int, int> Active;
+        public delegate* unmanaged<void*, int> Count;
+        public delegate* unmanaged<void*, uint, byte*, int, int> NameAt;
+        public delegate* unmanaged<void*, ulong, byte*, int, ulong> LoadAdditive;
+        public delegate* unmanaged<void*, byte*, int, int> RequestSingle;
+    }
+    [StructLayout(LayoutKind.Sequential)]
     public struct NativeComponentEvent
     {
         public ulong Object, Instance;
@@ -330,8 +340,42 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess, IComponentOperationAccess,
-        IGameViewAccess, IDebugDrawAccess, IHierarchyChangeAccess, IHapticsAccess
+        IGameViewAccess, IDebugDrawAccess, IHierarchyChangeAccess, IHapticsAccess, IProjectScenesAccess
     {
+        // index negativo lê a cena ativa; senão o nome na posição do catálogo.
+        private string ReadSceneName(NativeSceneOperations* scenes, int index)
+        {
+            byte* small = stackalloc byte[512];
+            var length = index < 0 ? scenes->Active(access.Context, small, 512) : scenes->NameAt(access.Context, (uint)index, small, 512);
+            if (length < 0) throw new WorldException(LastStatus, "ler nome de cena");
+            if (length <= 512) return Encoding.UTF8.GetString(small, length);
+            var large = new byte[length];
+            fixed (byte* pointer = large)
+                length = index < 0 ? scenes->Active(access.Context, pointer, large.Length) : scenes->NameAt(access.Context, (uint)index, pointer, large.Length);
+            return Encoding.UTF8.GetString(large, 0, Math.Clamp(length, 0, large.Length));
+        }
+        public string ActiveScene() => ReadSceneName(Require<NativeSceneOperations>("astra.scenes"), -1);
+        public IReadOnlyList<string> ProjectScenes()
+        {
+            var scenes = Require<NativeSceneOperations>("astra.scenes");
+            var count = scenes->Count(access.Context);
+            if (count < 0) throw new WorldException(LastStatus, "listar cenas");
+            var names = new string[count];
+            for (var i = 0; i < count; ++i) names[i] = ReadSceneName(scenes, i);
+            return names;
+        }
+        public ulong LoadSceneAdditive(ulong parent, string name)
+        {
+            var scenes = Require<NativeSceneOperations>("astra.scenes");
+            var bytes = Utf8(name, "cena");
+            fixed (byte* pointer = bytes) return scenes->LoadAdditive(access.Context, parent, pointer, bytes.Length);
+        }
+        public bool RequestSingleScene(string name)
+        {
+            var scenes = Require<NativeSceneOperations>("astra.scenes");
+            var bytes = Utf8(name, "cena");
+            fixed (byte* pointer = bytes) return scenes->RequestSingle(access.Context, pointer, bytes.Length) != 0;
+        }
         // Resolve uma família pelo nome uma vez por sessão; nulo quando o host não
         // a oferece ou entrega versão/tamanho menores que os deste SDK.
         private readonly Dictionary<string, nint> _families = [];

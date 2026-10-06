@@ -778,6 +778,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_component_operations.cpp
     ../tests/native/test_game_services.cpp
+    ../tests/native/test_play_scenes.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_highlevel_example_games.cpp
     ../tests/native/test_scene_components.cpp

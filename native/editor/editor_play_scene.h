@@ -103,12 +103,12 @@ public:
   // Foco: quando a interface consome o toque, o gameplay lê zero e nenhum botão
   // fica preso — a pausa e o cancelamento usam o mesmo caminho.
   void setInputFocus(bool focused) { input_.setGameplayFocus(focused&&!applicationPaused_&&applicationFocused_); }
-  static EditorEntityId unresolvedEntity(const EditorDocument &source) {
+  static EditorEntityId unresolvedEntity(const runtime::SceneGraph &source) {
     std::vector<EditorEntityId> ids;source.collectSubtree(source.root(),ids);
     for(auto id:ids) if(source.find(id)->components.hasUnresolved()) return id;
     return kInvalidEntity;
   }
-  bool start(const EditorDocument &source, const EditorMapScene &resources) {
+  bool start(const runtime::SceneGraph &source, const EditorMapScene &resources) {
     if(active_ || unresolvedEntity(source)!=kInvalidEntity) return false;
     if(!world_.load(source)) return false;
     std::vector<renderer::MapDrawState> validated;
@@ -259,6 +259,12 @@ public:
   const runtime::GameView &gameView() const noexcept {return gameView_;}
   const runtime::DebugLines &debugLines() const noexcept {return debugLines_;}
   void setHaptics(runtime::ScriptBridge::Haptics haptics) {scripts_.setHaptics(std::move(haptics));}
+  void setSceneSource(runtime::ScriptBridge::SceneCatalog catalog,runtime::ScriptBridge::SceneLoader loader) {
+    scripts_.setSceneSource(std::move(catalog),std::move(loader));
+  }
+  void setActiveScene(std::string name) {scripts_.setActiveScene(std::move(name));}
+  const std::string &activeScene() const noexcept {return scripts_.activeScene();}
+  bool takeSceneRequest(runtime::SceneGraph &graph,std::string &name) {return scripts_.takeSceneRequest(graph,name);}
   const runtime::ComponentEventQueue &events() const noexcept {return events_;}
   const runtime::ScenePhysicsConnections &physicsConnections() const noexcept {return physicsConnections_;}
   const runtime::SceneConstraints &constraints() const noexcept {return constraints_;}
