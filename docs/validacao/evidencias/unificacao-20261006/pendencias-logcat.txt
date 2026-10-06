@@ -1,0 +1,24 @@
+SERVICES scene=editor project=scenes/Fase2,scenes/editor
+SERVICES sensor-enter other=5
+SERVICES audio state=Playing cursor=0.00 output=False
+SERVICES audio state=Playing cursor=0.00 output=True
+SERVICES audio state=Playing cursor=0.06 output=True
+SERVICES audio state=Playing cursor=0.06 output=True
+SERVICES audio state=Playing cursor=0.06 output=True
+SERVICES audio state=Playing cursor=0.10 output=True
+SERVICES audio state=Playing cursor=0.13 output=True
+SERVICES audio state=Playing cursor=0.13 output=True
+SERVICES audio state=Playing cursor=0.16 output=True
+SERVICES audio state=Playing cursor=0.16 output=True
+SERVICES audio state=Playing cursor=0.19 output=True
+SERVICES audio state=Playing cursor=0.19 output=True
+SERVICES audio state=Playing cursor=0.22 output=True
+SERVICES AUDIO PASS
+SERVICES view 2772x1178.6 dpi=520 camera=2 safeReported=False
+SERVICES RAY PASS hit=Alvo distance=5.25
+SERVICES HAPTICS requested 300ms
+SERVICES loading Fase2
+SERVICES SCENE PASS active=Fase2
+vulkan-errors(E Aether.Vulkan): 0
+--- dumpsys vibrator_manager (dev.aether.editor, última)
+10-06 16:24:15.140 |   effect |             finished | duration:   336ms | start: 16:24:15.152 | end: 16:24:15.477 | scale:     NONE (adaptive=1.00) | flags:    0 | usage: MEDIA | audioUsage=USAGE_GAME | dev.aether.editor (uid=110

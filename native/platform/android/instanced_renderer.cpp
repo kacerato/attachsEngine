@@ -1535,6 +1535,24 @@ bool InstancedRenderer::createRuntimeHudPipeline() {
   return ok;
 }
 
+// Dependência externa ÚNICA dos passes que escrevem a cor da swapchain: o pós
+// (editorPostRenderPass_) e a interface (uiRenderPass_). A fusão da UI no pós
+// grava pipelines criados contra uiRenderPass_ dentro do pass de pós, e a
+// compatibilidade de render pass inclui as dependências de subpass
+// (VUID-vkCmdDraw-renderPass-02684). A união cobre os dois produtores
+// anteriores possíveis (cena com profundidade, cópia de histórico) e os dois
+// consumidores (amostragem no fragmento e escrita de cor).
+static VkSubpassDependency swapchainColorDependency() {
+  VkSubpassDependency dependency{};
+  dependency.srcSubpass=VK_SUBPASS_EXTERNAL;dependency.dstSubpass=0;
+  dependency.srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                          VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT;
+  dependency.dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT;
+  dependency.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  return dependency;
+}
+
 bool InstancedRenderer::createUiRenderPass() {
   VkAttachmentDescription attachment{};attachment.format=swapchain_->imageFormat();attachment.samples=VK_SAMPLE_COUNT_1_BIT;
   attachment.loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;attachment.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
@@ -1542,11 +1560,7 @@ bool InstancedRenderer::createUiRenderPass() {
   attachment.initialLayout=attachment.finalLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   VkAttachmentReference color{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};
   subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.colorAttachmentCount=1;subpass.pColorAttachments=&color;
-  VkSubpassDependency dependency{};dependency.srcSubpass=VK_SUBPASS_EXTERNAL;dependency.dstSubpass=0;
-  dependency.srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT;
-  dependency.dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT;
-  dependency.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  const VkSubpassDependency dependency=swapchainColorDependency();
   VkRenderPassCreateInfo pass{};pass.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;pass.attachmentCount=1;pass.pAttachments=&attachment;
   pass.subpassCount=1;pass.pSubpasses=&subpass;pass.dependencyCount=1;pass.pDependencies=&dependency;
   if(vkCreateRenderPass(device_,&pass,nullptr,&uiRenderPass_)!=VK_SUCCESS) return false;
@@ -1904,18 +1918,7 @@ bool InstancedRenderer::createPostResources() {
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount = outputCount;
   subpass.pColorAttachments = colors;
-  VkSubpassDependency dependency{};
-  dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-  dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-  dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-                            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  const VkSubpassDependency dependency = swapchainColorDependency();
   VkRenderPassCreateInfo renderPass{};
   renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   renderPass.attachmentCount = outputCount;

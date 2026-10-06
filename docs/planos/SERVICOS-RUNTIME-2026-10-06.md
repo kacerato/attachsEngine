@@ -38,7 +38,7 @@ GameWorld (create/destroy/reparent/instantiate aplicados) → HierarchyChange
   → ParentChanged no objeto e subárvore; ChildrenChanged no pai cuja lista mudou
 
 android_main: AConfiguration_getDensity + editorScale → setDisplayMetrics
-              VibrationEffect.createOneShot via JNI → setHaptics → astra.haptics
+              VibrationEffect.createOneShot + AudioAttributes(USAGE_GAME) via JNI → setHaptics → astra.haptics
 ```
 
 ## Diferenças em relação à referência
@@ -52,13 +52,13 @@ android_main: AConfiguration_getDensity + editorScale → setDisplayMetrics
 | `Application.targetFrameRate` | Não duplicado: já existe como `maximumRenderHz` em `Graphics` | Não aplicável com motivo |
 | Debug.DrawLine | Desenhado no Play do editor; jogo exportado não desenha | Adaptação explícita (na Unity, só com Gizmos na Game view) |
 | `OnTransformParentChanged` | Entregue no despacho seguinte ao ponto seguro, não dentro do `SetParent` | Adaptação explícita: estrutura muda só no ponto seguro |
-| `Handheld.Vibrate` | Duração e amplitude; família ausente sem vibrador | Adaptação explícita |
+| `Handheld.Vibrate` | Duração e amplitude; família ausente sem vibrador; declarada como uso de jogo (sem atributos o Android a trata como toque e a ignora quando o retorno tátil está desligado) | Adaptação explícita |
 | `OnBecameVisible/Invisible`, `OnJointBreak`, `OnControllerColliderHit` | Não implementados | Pendente: dependem de retorno de visibilidade do renderer, limite de quebra nas juntas e contatos do personagem |
-| Carregar cena (`SceneManager`) | Não implementado neste bloco | Pendente: bloco próprio (F004), exige registro de cenas do projeto e troca de mundo em Play |
+| Carregar cena (`SceneManager`) | Implementado no bloco C2 (`astra.scenes`), ver `CENAS-EM-PLAY-2026-10-06.md` | Adaptação explícita, descrita lá |
 
 ## Validação executada (06/10/2026)
 
 - Host C++: `game_view_*` 1/1 (raio e projeção inversos em perspectiva e ortográfica, origem inferior esquerda), `game_services_*` 2/2 (famílias pelo Play real: estado da vista antes e depois de publicada, recusa de layout, linhas com duração zero e temporizada, reparent pelo ponto seguro gerando ParentChanged/ChildrenChanged uma única vez, recusa após Stop; família de vibração só com vibrador registrado e domínio checado antes da plataforma).
 - C#: `GameServicesTests` 2/2 (layouts das tabelas, conversão de cor linear para sRGB, Behavior real usando View/Debug/Haptics e recebendo ParentChanged/ChildrenChanged, geração vencida ignorada). Suíte 517/518; a falha restante é anterior à branch.
 - UI executável: `docs/validacao/evidencias/game-services-20261006/debug-lines-*.png` em 853×394 e 1200×700, Play com eixos, raio e anel desenhados pela mesma rotina do editor; zero glifos ausentes e zero recortes.
-- Android: `libaether_android.so` arm64 compilado com o JNI do vibrador e as métricas de tela. A permissão `VIBRATE` (normal, sem diálogo) foi declarada no manifesto. Sem aparelho: vibração real, DPI real e raio de toque em tela física continuam a qualificar.
+- Android: `libaether_android.so` arm64 compilado com o JNI do vibrador e as métricas de tela. A permissão `VIBRATE` (normal, sem diálogo) foi declarada no manifesto. No aparelho (06/10, `docs/validacao/evidencias/unificacao-20261006/`): vibração `finished` 336 ms com uso de jogo, DPI 520, `ScreenPointToRay` do centro da vista acertando o alvo. Raio a partir de toque real ainda não exercitado.

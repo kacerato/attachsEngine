@@ -17,11 +17,32 @@ APK debug do merge `dcf5c0f5` (main), 239085867 bytes, SHA-256
 
 Achados:
 - Descrição da receita Conexão de evento cortava no painel; encurtada no commit seguinte.
-- A camada de validação Vulkan registra `VUID-vkCmdDraw-renderPass-02684` no
-  `InstancedRenderer` (dependências de subpass incompatíveis entre o render pass
-  do comando e o do pipeline). Não vem das frentes de API; fica para a frente de
-  renderização investigar.
+- A camada de validação Vulkan registrava `VUID-vkCmdDraw-renderPass-02684` no
+  `InstancedRenderer`: os pipelines de UI são criados para o render pass da UI e
+  gravados também dentro do render pass de pós-processo do editor, e as
+  dependências de subpass entram na compatibilidade. Corrigido: os dois passes
+  usam a mesma dependência externa (`swapchainColorDependency`). Depois da
+  correção, 0 linhas `E Aether.Vulkan` na sessão de aceite abaixo.
 
-Não verificado no aparelho: som audível do Gatilho sonoro ao vivo (a cena de
-validação não tem corpo dinâmico entrando no sensor nem clipe WAV atribuído),
-vibração física, `ScreenPointToRay` por toque e troca de cena por script.
+## Pendências resolvidas (06/10/2026, segunda rodada)
+
+Projeto `Servicos-20261006`, gerado por
+`aether_ui_preview write-services-project` (mesmo importador de WAV e mesmo
+formato de cena do produto): câmera autorada, `Alvo` com corpo estático e caixa,
+`Gatilho sonoro` (sensor estático + AudioSource com clipe WAV importado +
+Conexão de evento `Ao entrar no gatilho → Chamar método play`), `Corpo que cai`
+dinâmico e a sonda `Scripts/ServicesProbe.cs`; segunda cena `scenes/Fase2`.
+Play por toque no aparelho; registro em `pendencias-logcat.txt`.
+
+| Item | Resultado observado |
+|---|---|
+| Corpo dinâmico entra no sensor | `sensor-enter other=5` |
+| Som do Gatilho sonoro | `state=Playing output=True`, cursor 0,00 → 0,22 s; `AUDIO PASS` exige saída ativa e cursor avançando. Reprodução vista pelo AudioFlinger; audibilidade não medida por microfone |
+| `ScreenPointToRay` + `Physics.RayCast` | Centro da vista 2772×1178,6 px (dpi 520): `RAY PASS hit=Alvo distance=5.25` |
+| Vibração física | Antes: `ignored_for_settings`, uso TOUCH. Com `AudioAttributes USAGE_GAME`: `finished`, 336 ms, `usage: MEDIA audioUsage=USAGE_GAME` no `dumpsys vibrator_manager` |
+| Troca de cena por script | `Scenes.Load("Fase2")` → `SCENE PASS active=Fase2` (captura 13) |
+| Validação Vulkan | 0 erros |
+
+Ainda não verificado: raio a partir de um toque real na tela (a sonda usa o
+centro da vista) e área segura (`safeReported=False`: depende de `WindowInsets`
+no shell Java).

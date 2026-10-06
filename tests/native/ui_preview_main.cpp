@@ -2,6 +2,9 @@
 #include "scene/physics2d_components.h"
 #include "scene/audio.h"
 #include "scene/event_connection.h"
+#include "scene/camera.h"
+#include "scene/collider.h"
+#include "scene/physics_body.h"
 #include "scene/timer.h"
 #include <sstream>
 #include <iomanip>
@@ -100,6 +103,74 @@ bool writePreviewWave(const std::filesystem::path &path) {
   for(u32 i=0;i<frames;++i) integer(static_cast<u16>(static_cast<i16>(std::sin(double(i)*6.283185307179586*440/rate)*4000)),2);
   auto *file=std::fopen(path.string().c_str(),"wb");if(!file) return false;
   const bool ok=std::fwrite(bytes.data(),1,bytes.size(),file)==bytes.size();std::fclose(file);return ok;
+}
+
+// Aceite no aparelho dos blocos B, C e C2 (docs/planos/CONEXOES-DE-EVENTO,
+// SERVICOS-RUNTIME e CENAS-EM-PLAY): cena com câmera autorada, alvo, sensor
+// com Gatilho sonoro (Conexão de evento -> AudioSource.play) e corpo caindo;
+// segunda cena "Fase2" para a troca por script. Mesmo importador de WAV e
+// mesmo arquivo de cena do produto.
+int writeServicesProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Services export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe,fase2,wave;
+  if(!readAsset("tests/fixtures/services/ServicesProbe.cs",probe)||!readAsset("tests/fixtures/services/Fase2Probe.cs",fase2)||
+     !readAsset("tests/fixtures/audio/astra-audio-probe.wav",wave)) return fail("fixture sources unavailable");
+  for(const auto *folder:{"Scripts","Audio","scenes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/ServicesProbe.cs",probe)||!editor::EditorImportTransaction::write(root/"Scripts/Fase2Probe.cs",fase2)||
+     !editor::EditorImportTransaction::write(root/"Audio/astra-audio-probe.wav",wave)) return fail("cannot publish sources");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  resources::AssetGuid clip;std::string error;
+  if(!session.importWaveClip("Audio/astra-audio-probe.wav",clip,error)) return fail(error);
+  auto &document=session.document();
+  const auto entity=[&](const char *name,float x,float y,float z){
+    const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto v=*document.find(id);
+    v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;document.applyEntityValues(id,v);return id;};
+  // Câmera autorada: o raio do centro da vista atravessa o alvo.
+  const auto cameraId=entity("Câmera",0,1,-6);auto camera=*document.find(cameraId);
+  if(!camera.components.add(scene::Camera::descriptor)||!document.applyEntityValues(cameraId,camera)) return fail("camera");
+  const auto targetId=entity("Alvo",0,1,0);auto target=*document.find(targetId);
+  static_cast<scene::PhysicsBody*>(target.components.add(scene::PhysicsBody::descriptor))->motion=scene::BodyMotion::Static;
+  auto *targetShape=static_cast<scene::Collider*>(target.components.add(scene::Collider::descriptor));
+  targetShape->halfX=targetShape->halfY=targetShape->halfZ=.75f;
+  if(!document.applyEntityValues(targetId,target)) return fail("target");
+  // Sensor com o Gatilho sonoro e a sonda.
+  const auto sensorId=entity("Gatilho sonoro",4,0,0);auto sensor=*document.find(sensorId);
+  auto *body=static_cast<scene::PhysicsBody*>(sensor.components.add(scene::PhysicsBody::descriptor));
+  body->motion=scene::BodyMotion::Static;body->sensor=true;
+  auto *shape=static_cast<scene::Collider*>(sensor.components.add(scene::Collider::descriptor));shape->halfX=shape->halfY=shape->halfZ=1;
+  auto *audio=static_cast<scene::AudioSource*>(sensor.components.add(scene::AudioSource::descriptor));
+  audio->clip=clip;audio->dimension=scene::AudioDimension::Flat;audio->playback=scene::AudioPlayback::Stopped;audio->volume=1;audio->loop=true;
+  auto *connection=static_cast<scene::EventConnection*>(sensor.components.add(scene::EventConnection::descriptor));
+  connection->event=3;connection->action=scene::kEventConnectionCallMethod;connection->method=1;
+  auto *script=static_cast<scene::ScriptBehavior*>(sensor.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="acceptance.services";script->source="Scripts/ServicesProbe.cs";
+  if(!session.history().applyValues(document,sensorId,sensor)) return fail("sound trigger");
+  const auto fallingId=entity("Corpo que cai",4,4,0);auto falling=*document.find(fallingId);
+  static_cast<scene::PhysicsBody*>(falling.components.add(scene::PhysicsBody::descriptor))->motion=scene::BodyMotion::Dynamic;
+  auto *ball=static_cast<scene::Collider*>(falling.components.add(scene::Collider::descriptor));ball->shape=scene::ColliderShape::Sphere;ball->radius=.4f;
+  if(!session.history().applyValues(document,fallingId,falling)) return fail("falling body");
+  const auto listenerId=entity("Ouvinte",0,1,-6);auto listener=*document.find(listenerId);
+  if(!listener.components.add(scene::AudioListener::descriptor)||!document.applyEntityValues(listenerId,listener)) return fail("listener");
+  // Fase2: só a sonda que confirma a cena ativa e uma câmera.
+  editor::EditorDocument second;second.setTags(document.tags());
+  const auto marker=second.createEntity(second.root(),runtime::ObjectKind::Folder,"Fase2");auto value=*second.find(marker);
+  value.components.add(scene::Camera::descriptor);
+  auto *secondScript=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+  secondScript->scriptType="acceptance.services.fase2";secondScript->source="Scripts/Fase2Probe.cs";
+  if(!second.applyEntityValues(marker,value)) return fail("second scene");
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))||
+     !editor::EditorImportTransaction::writeText(root/"scenes/Fase2.aescene",editor::serializeEditorDocument(second,0))) return fail("scenes");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"Servicos-20261006\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":2,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Services project written: %s clip=%s\n",root.generic_string().c_str(),clip.text().c_str());
+  return 0;
 }
 
 // Fixture exporter, separate from rendering and never an editor product command.
@@ -413,6 +484,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-input-capture-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Input);
   if(argc>1&&std::string_view(argv[1])=="write-timer-connection-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::TimerConnection);
   if(argc>1&&std::string_view(argv[1])=="write-groups-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Groups);
+  if(argc>1&&std::string_view(argv[1])=="write-services-project")return writeServicesProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);
   const char *output = argc > 1 ? argv[1] : "build/editor-preview.ppm";
   const u32 width = argc > 3 ? static_cast<u32>(std::atoi(argv[2])) : 1600;

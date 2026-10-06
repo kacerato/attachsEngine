@@ -43,9 +43,24 @@ bool vibrateOnce(ANativeActivity *activity,u32 milliseconds,float amplitude) {
       const jint level=amplitude<=0?-1:static_cast<jint>(std::clamp(std::lround(amplitude*255.f),1l,255l));
       jobject effect=env->CallStaticObjectMethod(effectClass,createOneShot,static_cast<jlong>(milliseconds),level);
       if(env->ExceptionCheck() || !effect) return false;
-      jmethodID vibrate=env->GetMethodID(vibratorClass,"vibrate","(Landroid/os/VibrationEffect;)V");
+      // Sem atributos o sistema classifica como resposta tátil de toque, que o
+      // usuário pode ter desligado (observado: ignored_for_settings, usage TOUCH).
+      // Jogo declara USAGE_GAME, o mesmo uso de áudio de jogo.
+      jclass builderClass=env->FindClass("android/media/AudioAttributes$Builder");
+      if(!builderClass) return false;
+      jmethodID builderInit=env->GetMethodID(builderClass,"<init>","()V");
+      jmethodID setUsage=env->GetMethodID(builderClass,"setUsage","(I)Landroid/media/AudioAttributes$Builder;");
+      jmethodID build=env->GetMethodID(builderClass,"build","()Landroid/media/AudioAttributes;");
+      if(!builderInit || !setUsage || !build) return false;
+      jobject builder=env->NewObject(builderClass,builderInit);
+      if(env->ExceptionCheck() || !builder) return false;
+      constexpr jint UsageGame=14; // AudioAttributes.USAGE_GAME
+      env->CallObjectMethod(builder,setUsage,UsageGame);
+      jobject attributes=env->CallObjectMethod(builder,build);
+      if(env->ExceptionCheck() || !attributes) return false;
+      jmethodID vibrate=env->GetMethodID(vibratorClass,"vibrate","(Landroid/os/VibrationEffect;Landroid/media/AudioAttributes;)V");
       if(!vibrate) return false;
-      env->CallVoidMethod(vibrator,vibrate,effect);
+      env->CallVoidMethod(vibrator,vibrate,effect,attributes);
       return !env->ExceptionCheck();
     }();
     if(env->ExceptionCheck()) {
