@@ -27,6 +27,7 @@
 #include "resources/texture_profile.h"
 #include "core/base.h"
 #include "runtime/script_inspection.h"
+#include "runtime/game_view.h"
 #include "editor/editor_document.h"
 #include "editor/editor_prefab_overrides.h"
 #include "editor/editor_filesystem.h"
@@ -1068,6 +1069,10 @@ struct EditorScreenState final {
   // Câmera do viewport. Sem ela a cena continua aparecendo, mas sem grade nem
   // gizmo — que é exatamente a diferença entre um preview e um editor.
   const EditorViewport *view = nullptr;
+  // Play: linhas Debug.DrawLine e a vista de jogo que as projeta (a câmera do
+  // quadro, que pode não ser a do editor). Nulo fora do Play.
+  const runtime::DebugLines *debugLines = nullptr;
+  EditorViewport debugView{};
   bool showGrid = true;
   bool showComponentVisuals=true;
   // Opções da câmera editorial, equivalentes à barra de visualização da Scene

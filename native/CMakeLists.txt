@@ -611,6 +611,7 @@ if(ANDROID)
     platform/android/android_texture_loader.cpp
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
+    platform/android/android_haptics.cpp
     platform/android/android_performance.cpp
     platform/android/android_thermal_monitor.cpp
     platform/android/android_frame_profiler.cpp
@@ -776,6 +777,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_component_operations.cpp
+    ../tests/native/test_game_services.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_highlevel_example_games.cpp
     ../tests/native/test_scene_components.cpp

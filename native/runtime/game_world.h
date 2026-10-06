@@ -266,7 +266,21 @@ public:
   WorldStatus setTimeScale(float value);
   bool beginFrame(double elapsed,bool editorStep=false);
 
+  // Mudanças de hierarquia aplicadas, para os callbacks ParentChanged e
+  // ChildrenChanged (Unity 6000.0 OnTransformParentChanged/ChildrenChanged).
+  // ParentChanged vale para o objeto e toda a subárvore dele; ChildrenChanged
+  // para o pai cuja lista direta de filhos mudou. Limitada: além do teto, as
+  // mais antigas saem e `hierarchyChangesDropped` conta a perda.
+  enum class HierarchyChangeKind : u32 { ParentChanged=0, ChildrenChanged=1 };
+  struct HierarchyChange { ObjectHandle object{}; HierarchyChangeKind kind=HierarchyChangeKind::ParentChanged; };
+  static constexpr usize kHierarchyChangeCapacity=4096;
+  // Entrega e esvazia; o consumidor é único (o runtime de scripts).
+  std::vector<HierarchyChange> takeHierarchyChanges();
+  u64 hierarchyChangesDropped() const noexcept {return hierarchyDropped_;}
+
 private:
+  void recordHierarchyChange(ObjectId id,HierarchyChangeKind kind);
+  void recordParentChangedSubtree(ObjectId id);
   ObjectHandle registerInstantiation(ObjectId root,const ObjectCloneMap &mapping);
   struct Slot {
     u32 generation = 0;  // zero quando o id nunca existiu ou já foi destruído
@@ -298,6 +312,8 @@ private:
   struct DelayedDestroy { ObjectHandle object; double due; };
   std::vector<DelayedDestroy> delayedDestroy_;
   std::vector<ObjectId> unpublishedClones_;
+  std::vector<HierarchyChange> hierarchyChanges_;
+  u64 hierarchyDropped_=0;
 };
 
 } // namespace ae::runtime

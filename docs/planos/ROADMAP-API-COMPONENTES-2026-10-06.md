@@ -68,6 +68,8 @@ Componente repetível “Conexões de evento”: emissor (qualquer evento descri
 
 ### Bloco C — Serviços de runtime ausentes
 
+**Estado (06/10):** Screen/vista, conversões de câmera, Debug.DrawLine/DrawRay, vibração e ParentChanged/ChildrenChanged implementados — ver [serviços de runtime](SERVICOS-RUNTIME-2026-10-06.md). Realocados com motivo: carregamento de cena vira o bloco C2 (F004); JointBreak exige limite de quebra nas juntas e ControllerColliderHit exige contatos do CharacterVirtual, ambos entram no bloco F; BecameVisible depende de retorno de visibilidade do renderer (coordenar com `codex/render-rebuild`); área segura real exige `WindowInsets` no shell Java (coordenar com a frente de UI).
+
 - **Cena (F004):** carregar cena única/aditiva/assíncrona, descarregar, cena ativa, eventos de carga; handles da cena descarregada invalidados por geração. Referência: Unity 6000.0 [SceneManager](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/SceneManagement.SceneManager.html).
 - **Application/Screen:** tamanho, DPI, área segura, orientação, taxa alvo, plataforma; pausa/foco já chegam como callbacks. Referência: [Screen](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Screen.html), [Application](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Application.html).
 - **Câmera:** ScreenPointToRay, WorldToScreen/ViewportPoint, usando a câmera autorada de jogo. Referência: [Camera.ScreenPointToRay](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Camera.ScreenPointToRay.html).

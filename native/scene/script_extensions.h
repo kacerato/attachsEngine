@@ -52,4 +52,56 @@ struct ScriptComponentOperations {
   int (*declaresEvent)(void *,const u8 *name,int length)=nullptr;
 };
 
+// --- astra.view v1 -------------------------------------------------------------
+// Vista de jogo publicada por quem desenha o quadro (runtime/game_view.h).
+// Pixels com origem no canto inferior esquerdo, como Screen/Camera da Unity.
+inline constexpr std::string_view kScriptView="astra.view";
+inline constexpr u32 kScriptViewValid=1,kScriptViewSafeArea=2,kScriptViewAuthoredCamera=4;
+struct ScriptViewState {
+  u32 size=sizeof(ScriptViewState),flags=0;
+  float width=0,height=0,dpi=0;
+  float safeX=0,safeY=0,safeWidth=0,safeHeight=0;
+  u32 platform=0,reserved=0;
+  u64 camera=0;
+};
+static_assert(sizeof(ScriptViewState)==56);
+struct ScriptViewOperations {
+  u32 version=1,size=sizeof(ScriptViewOperations);
+  int (*state)(void *,ScriptViewState *)=nullptr;
+  // origin3/direction3 normalizada; 0 sem vista válida ou entrada inválida.
+  int (*screenRay)(void *,float x,float y,float *origin,float *direction)=nullptr;
+  // screen3: x,y em pixels e z = profundidade de vista em metros.
+  int (*worldToScreen)(void *,const float *world,float *screen)=nullptr;
+};
+
+// --- astra.debug v1 ------------------------------------------------------------
+// Linhas de depuração do Play (Debug.DrawLine/DrawRay); nunca persistidas.
+inline constexpr std::string_view kScriptDebug="astra.debug";
+struct ScriptDebugOperations {
+  u32 version=1,size=sizeof(ScriptDebugOperations);
+  int (*drawLine)(void *,const float *from,const float *to,u32 rgba,float seconds)=nullptr;
+};
+
+// --- astra.hierarchy v1 --------------------------------------------------------
+// Mudanças de hierarquia aplicadas (GameWorld::takeHierarchyChanges): kind 0 =
+// pai mudou (objeto e subárvore), 1 = lista direta de filhos mudou.
+inline constexpr std::string_view kScriptHierarchy="astra.hierarchy";
+struct ScriptHierarchyChange { u64 object=0; u32 generation=0,kind=0; };
+static_assert(sizeof(ScriptHierarchyChange)==16);
+struct ScriptHierarchyOperations {
+  u32 version=1,size=sizeof(ScriptHierarchyOperations);
+  // Copia até `capacity` mudanças e as retira; o resto fica para a próxima.
+  int (*pollChanges)(void *,ScriptHierarchyChange *changes,int capacity)=nullptr;
+};
+
+// --- astra.haptics v1 ----------------------------------------------------------
+// Só existe quando a plataforma entrega um vibrador real (Android). Host sem
+// vibrador devolve a família nula: o C# recusa a operação, não finge vibrar.
+inline constexpr std::string_view kScriptHaptics="astra.haptics";
+struct ScriptHapticsOperations {
+  u32 version=1,size=sizeof(ScriptHapticsOperations);
+  // milissegundos 1..5000; amplitude 0..1 (0 usa a padrão do aparelho).
+  int (*vibrate)(void *,u32 milliseconds,float amplitude)=nullptr;
+};
+
 } // namespace ae::scene

@@ -1383,6 +1383,17 @@ void buildPhysicsOverlay(ScreenBuilder &builder) {
 
 // A grade do chão e o gizmo. É o que separa "a cena está rodando" de "estou
 // editando a cena": sem referência espacial e sem alça, o viewport é um vídeo.
+// Debug.DrawLine/DrawRay do Play, na câmera que produziu o quadro. Cor no
+// mesmo formato da interface (0xAARRGGBB); só vivem no mundo de execução.
+void buildPlayDebugLines(ScreenBuilder &builder) {
+  const auto &state=builder.state;
+  if(!state.debugLines || state.workspace!=EditorWorkspace::Play) return;
+  for(const auto &line:state.debugLines->lines()) {
+    UiPoint a,b;
+    if(projectSegmentToScreen(state.debugView,line.a,line.b,a,b)) builder.list.addLine(a,b,line.rgba,1.6f);
+  }
+}
+
 void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   const EditorScreenState &state = builder.state;
   if (state.view == nullptr || !isViewportValid(*state.view)) return;
@@ -8846,6 +8857,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       builder.label(action,state.playSecondaryActionLabel,state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
       if(!state.playPaused) router.addRegion(action,widgetId(EditorWidget::PlaySecondaryAction),theme.touch.minimumTarget);
     }
+    buildPlayDebugLines(builder);
     if(state.playFirstPerson) {
       const float cx=layout.viewport.x+layout.viewport.width*.5f,cy=layout.viewport.y+layout.viewport.height*.5f;
       list.addRect({cx-1,cy-9,2,18},theme.color.accent);

@@ -132,6 +132,9 @@ public:
     events_.attach(runtime::ComponentEventQueue::Consumer::Connections,true);
     tweens_.setEvents(&events_);
     scripts_.setEvents(&events_);
+    debugLines_.reset();
+    scripts_.setGameView(&gameView_);
+    scripts_.setDebugLines(&debugLines_);
     scripts_.setAnimator(&animator_);
     scripts_.setPhysics2D(&physics2D_);
     scripts_.setPaths(&paths_);
@@ -184,6 +187,9 @@ public:
     scripts_.setAudio(nullptr);
     scripts_.setGui(nullptr);
     scripts_.setEvents(nullptr);
+    scripts_.setGameView(nullptr);
+    scripts_.setDebugLines(nullptr);
+    debugLines_.reset();
     tweens_.setEvents(nullptr);
     events_.reset();
     eventConnections_.reset();
@@ -248,6 +254,11 @@ public:
   runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_};}
   runtime::ComponentEventQueue &events() noexcept {return events_;}
   const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
+  // Quem desenha o quadro publica a vista de jogo antes de avançar o mundo.
+  void setGameView(const runtime::GameView &view) noexcept {gameView_=view;}
+  const runtime::GameView &gameView() const noexcept {return gameView_;}
+  const runtime::DebugLines &debugLines() const noexcept {return debugLines_;}
+  void setHaptics(runtime::ScriptBridge::Haptics haptics) {scripts_.setHaptics(std::move(haptics));}
   const runtime::ComponentEventQueue &events() const noexcept {return events_;}
   const runtime::ScenePhysicsConnections &physicsConnections() const noexcept {return physicsConnections_;}
   const runtime::SceneConstraints &constraints() const noexcept {return constraints_;}
@@ -273,6 +284,7 @@ private:
   bool advanceFrame(double elapsed,bool editorStep=false) {
     if(!world_.beginFrame(elapsed,editorStep)) return false;
     const double frameElapsed=world_.clock().delta();
+    debugLines_.advance(frameElapsed);
     const float scriptElapsed=world_.clock().delta();
     gui_.advance(frameElapsed);
     return runScripts(scriptElapsed) && advanceTimers(frameElapsed,std::min(elapsed,.25)) && animate(scriptElapsed) &&
@@ -371,6 +383,8 @@ private:
   runtime::ScenePaths paths_;
   runtime::ComponentEventQueue events_;
   runtime::SceneEventConnections eventConnections_;
+  runtime::GameView gameView_;
+  runtime::DebugLines debugLines_;
   const EditorMapScene *resources_=nullptr;
   bool active_=false;
   bool paused_=false;

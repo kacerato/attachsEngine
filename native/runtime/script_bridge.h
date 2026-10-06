@@ -24,9 +24,11 @@
 #include "scene/script_runtime.h"
 #include "scene/script_extensions.h"
 #include "runtime/component_operations.h"
+#include "runtime/game_view.h"
 #include "resources/asset_registry.h"
 #include "resources/environment_profile.h"
 
+#include <deque>
 #include <functional>
 #include <span>
 #include <string>
@@ -94,6 +96,13 @@ public:
   void setPaths(ScenePaths *paths) noexcept { paths_ = paths; }
   // Fila de eventos de componente do Play; os scripts a leem pela família
   // `astra.component.operations` da ABI.
+  // Vista de jogo do quadro corrente e linhas de depuração (famílias
+  // astra.view e astra.debug). Nulos recusam as operações com NotRunning.
+  void setGameView(const GameView *view) noexcept { gameView_=view; }
+  void setDebugLines(DebugLines *lines) noexcept { debugLines_=lines; }
+  // Vibrador da plataforma. Sem ele, a família astra.haptics não existe.
+  using Haptics = std::function<bool(u32 milliseconds,float amplitude)>;
+  void setHaptics(Haptics haptics) { if(!running_) haptics_=std::move(haptics); }
   void setEvents(ComponentEventQueue *events) noexcept {
     if(events_ && events_!=events) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
     events_=events;
@@ -130,7 +139,15 @@ private:
   scene::ScriptRuntimeApi api_{};
   scene::ScriptSceneAccess access_{};
   scene::ScriptComponentOperations componentOperations_{};
+  scene::ScriptViewOperations viewOperations_{};
+  scene::ScriptDebugOperations debugOperations_{};
+  scene::ScriptHierarchyOperations hierarchyOperations_{};
+  scene::ScriptHapticsOperations hapticsOperations_{};
   ComponentEventQueue *events_=nullptr;
+  const GameView *gameView_=nullptr;
+  DebugLines *debugLines_=nullptr;
+  Haptics haptics_;
+  std::deque<GameWorld::HierarchyChange> pendingHierarchy_;
   std::string root_, diagnostics_;
   LogSink logSink_;
   GameWorld *world_ = nullptr;

@@ -309,6 +309,34 @@ public:
   void reportSceneOpenFailure() { state_.status="Não foi possível abrir a cena; cena atual preservada"; }
   void setCameraPose(const float position[3], float yaw, float pitch);
   void setProjection(renderer::PerspectiveVisibilitySettings settings) { projection_=settings; }
+  // Métrica física da superfície: pixels por unidade lógica da interface e
+  // DPI informado pelo sistema (zero quando desconhecido). Alimenta Screen.
+  void setDisplayMetrics(float pixelsPerUnit,float dpi,runtime::GameViewPlatform platform) {
+    if(std::isfinite(pixelsPerUnit)&&pixelsPerUnit>0) pixelsPerUnit_=pixelsPerUnit;
+    dpi_=std::isfinite(dpi)&&dpi>0?dpi:0;platform_=platform;
+  }
+  void setHaptics(runtime::ScriptBridge::Haptics haptics) {playScene_.setHaptics(std::move(haptics));}
+  // A vista de jogo deste quadro: o retângulo da cena e a câmera que o renderer
+  // usa no Play (a autorada quando existe; senão a do editor).
+  runtime::GameView gameView() const {
+    runtime::GameView view;
+    const auto rect=layout_.viewport;
+    if(rect.isEmpty()) return view;
+    view.width=rect.width*pixelsPerUnit_;view.height=rect.height*pixelsPerUnit_;
+    view.dpi=dpi_;view.platform=platform_;
+    view.frustum=view_.frustum;
+    const auto pose=sceneCameraPose();
+    if(pose.entity) {
+      auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;
+      projection.verticalFieldOfViewRadians=pose.verticalFov*.017453292519943295f;projection.roll=pose.roll;
+      projection.projection=pose.projection==scene::CameraProjection::Orthographic?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;
+      projection.orthographicHalfHeight=pose.orthographicHalfHeight;
+      view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,rect.width/rect.height,projection);
+      view.camera=pose.entity;
+    }
+    view.valid=view.frustum.valid&&view.width>0&&view.height>0;
+    return view;
+  }
 
   // Seleção inicial vinda de fora, para uma cena recém-carregada já abrir com
   // algo no Inspector em vez de "nada selecionado".
@@ -1085,6 +1113,7 @@ public:
       state_.playStepRequested=false;
       if(!playScene_.step()) return false;
     }
+    playScene_.setGameView(gameView());
     if(!playScene_.advance(elapsed)) return false;
     const auto &eventDiagnostic=playScene_.eventConnections().diagnostic();
     if(eventDiagnostic!=reportedEventConnectionDiagnostic_) {
@@ -1633,6 +1662,8 @@ private:
   u64 renderingSettingsRequestRevision_ = 0;
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};
+  float pixelsPerUnit_=1,dpi_=0;
+  runtime::GameViewPlatform platform_=runtime::GameViewPlatform::Host;
   EditorViewport view_{};
   EditorScreenState state_{};
   EditorConsole console_;

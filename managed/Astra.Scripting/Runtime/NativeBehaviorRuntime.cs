@@ -256,6 +256,42 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, byte*, int, int> DeclaresEvent;
     }
     [StructLayout(LayoutKind.Sequential)]
+    public struct NativeViewState
+    {
+        public uint Size, Flags;
+        public float Width, Height, Dpi, SafeX, SafeY, SafeWidth, SafeHeight;
+        public uint Platform, Reserved;
+        public ulong Camera;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeViewOperations
+    {
+        public uint Version, Size;
+        public delegate* unmanaged<void*, NativeViewState*, int> State;
+        public delegate* unmanaged<void*, float, float, float*, float*, int> ScreenRay;
+        public delegate* unmanaged<void*, float*, float*, int> WorldToScreen;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeDebugOperations
+    {
+        public uint Version, Size;
+        public delegate* unmanaged<void*, float*, float*, uint, float, int> DrawLine;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeHierarchyChange { public ulong Object; public uint Generation, Kind; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeHierarchyOperations
+    {
+        public uint Version, Size;
+        public delegate* unmanaged<void*, NativeHierarchyChange*, int, int> PollChanges;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeHapticsOperations
+    {
+        public uint Version, Size;
+        public delegate* unmanaged<void*, uint, float, int> Vibrate;
+    }
+    [StructLayout(LayoutKind.Sequential)]
     public struct NativeComponentEvent
     {
         public ulong Object, Instance;
@@ -293,8 +329,74 @@ public static unsafe class NativeBehaviorRuntime
         public float Delta,UnscaledDelta,TimeScale,FrameScale;
     }
 
-    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess, IComponentOperationAccess
+    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess, IComponentOperationAccess,
+        IGameViewAccess, IDebugDrawAccess, IHierarchyChangeAccess, IHapticsAccess
     {
+        // Resolve uma família pelo nome uma vez por sessão; nulo quando o host não
+        // a oferece ou entrega versão/tamanho menores que os deste SDK.
+        private readonly Dictionary<string, nint> _families = [];
+        private T* Family<T>(string name, uint minimumVersion = 1) where T : unmanaged
+        {
+            if (!Accessible) throw new WorldException(WorldStatus.NotRunning, name);
+            if (!_families.TryGetValue(name, out var cached))
+            {
+                var bytes = Encoding.ASCII.GetBytes(name);
+                uint version = 0, size = 0; void* table;
+                fixed (byte* pointer = bytes) table = access.Extension(access.Context, pointer, bytes.Length, &version, &size);
+                cached = table != null && version >= minimumVersion && size >= (uint)sizeof(T) ? (nint)table : 0;
+                _families[name] = cached;
+            }
+            return (T*)cached;
+        }
+        private T* Require<T>(string name) where T : unmanaged =>
+            Family<T>(name) is var table && table != null ? table : throw new NotSupportedException($"O host não oferece a família {name}.");
+        public bool ReadGameView(out GameViewState state)
+        {
+            state = default;
+            var view = Require<NativeViewOperations>("astra.view");
+            NativeViewState raw = new() { Size = (uint)sizeof(NativeViewState) };
+            if (view->State(access.Context, &raw) == 0 || (raw.Flags & 1) == 0) return false;
+            state = new(raw.Width, raw.Height, raw.Dpi, (raw.Flags & 2) != 0, new(raw.SafeX, raw.SafeY, raw.SafeWidth, raw.SafeHeight),
+                (GameViewPlatform)raw.Platform, raw.Camera);
+            return true;
+        }
+        public bool ScreenRay(float x, float y, out Ray ray)
+        {
+            ray = default;
+            var view = Require<NativeViewOperations>("astra.view");
+            float* origin = stackalloc float[3]; float* direction = stackalloc float[3];
+            if (view->ScreenRay(access.Context, x, y, origin, direction) == 0) return false;
+            ray = new(new(origin[0], origin[1], origin[2]), new(direction[0], direction[1], direction[2])); return true;
+        }
+        public bool WorldToScreen(Vector3 world, out Vector3 screen)
+        {
+            screen = default;
+            var view = Require<NativeViewOperations>("astra.view");
+            float* input = stackalloc float[3] { world.X, world.Y, world.Z }; float* output = stackalloc float[3];
+            if (view->WorldToScreen(access.Context, input, output) == 0) return false;
+            screen = new(output[0], output[1], output[2]); return true;
+        }
+        public bool DrawLine(Vector3 from, Vector3 to, uint argb, float seconds)
+        {
+            var debug = Require<NativeDebugOperations>("astra.debug");
+            float* a = stackalloc float[3] { from.X, from.Y, from.Z }; float* b = stackalloc float[3] { to.X, to.Y, to.Z };
+            return debug->DrawLine(access.Context, a, b, argb, seconds) != 0;
+        }
+        public int PollHierarchyChanges(Span<HierarchyChange> destination)
+        {
+            var hierarchy = Require<NativeHierarchyOperations>("astra.hierarchy");
+            var capacity = Math.Min(destination.Length, 64);
+            if (capacity == 0) return 0;
+            var raw = stackalloc NativeHierarchyChange[capacity];
+            var count = hierarchy->PollChanges(access.Context, raw, capacity);
+            if (count < 0) throw new WorldException(LastStatus, "ler mudanças de hierarquia");
+            for (var i = 0; i < count; ++i) destination[i] = new(raw[i].Object, raw[i].Generation, raw[i].Kind == 0);
+            return count;
+        }
+        public bool HapticsAvailable => Accessible && Family<NativeHapticsOperations>("astra.haptics") != null;
+        public bool Vibrate(uint milliseconds, float amplitude) =>
+            Require<NativeHapticsOperations>("astra.haptics")->Vibrate(access.Context, milliseconds, amplitude) != 0;
+
         // Famílias opcionais: resolvidas uma vez por sessão; nulo quando o host
         // não oferece ou entrega uma versão/tamanho que este SDK não conhece.
         private bool _operationsResolved;

@@ -38,8 +38,28 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
     }
     // Drena a fila nativa mesmo sem assinaturas: um consumidor parado faria a
     // fila estourar e descartar eventos que conexões autoradas ainda leriam.
+    private readonly HierarchyChange[] _hierarchyBuffer = new HierarchyChange[64];
+    // Mudanças aplicadas no ponto seguro chegam no despacho seguinte, na ordem
+    // em que o mundo as aplicou; geração antiga significa objeto já trocado.
+    private void DispatchHierarchyChanges()
+    {
+        if (!Running || _scene is not IHierarchyChangeAccess access) return;
+        for (var round = 0; round < 64; ++round)
+        {
+            var count = access.PollHierarchyChanges(_hierarchyBuffer);
+            for (var i = 0; i < count; ++i)
+            {
+                var change = _hierarchyBuffer[i];
+                if (_scene.GenerationOf(change.ObjectId) != change.Generation) continue;
+                if (change.ParentChanged) Dispatch("ParentChanged", static b => b.ParentChanged(), change.ObjectId);
+                else Dispatch("ChildrenChanged", static b => b.ChildrenChanged(), change.ObjectId);
+            }
+            if (count < _hierarchyBuffer.Length) break;
+        }
+    }
     private void DispatchComponentEvents()
     {
+        DispatchHierarchyChanges();
         if (!Running || _scene is not IComponentOperationAccess access) return;
         for (var round = 0; round < 64; ++round)
         {

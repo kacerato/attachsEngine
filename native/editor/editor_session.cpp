@@ -9359,6 +9359,10 @@ void EditorSession::update() {
     } else {finishCameraGesture(true);state_.cameraViewEntity=0;state_.cameraPiloting=false;}
   }
   state_.view = &view_;
+  if(isPlaying() && playScene_.active()) {
+    state_.debugLines=&playScene_.debugLines();
+    state_.debugView=view_;state_.debugView.frustum=gameView().frustum;
+  } else state_.debugLines=nullptr;
 
   list_.begin(state_.surface, metrics);
   router_.beginFrame();

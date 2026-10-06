@@ -1407,6 +1407,7 @@ int main(int argc, char **argv) {
     if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
     if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
   }
+  if(argc>4 && std::string(argv[4])=="debug-lines") state.workspace=editor::EditorWorkspace::Play;
   state.canUndo = history.canUndo();
   state.canRedo = history.canRedo();
 
@@ -1433,6 +1434,17 @@ int main(int argc, char **argv) {
   editor::EditorScreenLayout layout =
       editor::buildEditorScreen(state, ui::defaultTheme(), list, router);
   view.rect = layout.viewport;
+  // Debug.DrawLine/DrawRay como o Play desenha: mesma lista e mesma projeção.
+  static runtime::DebugLines debugLines;
+  if(argc>4 && std::string(argv[4])=="debug-lines") {
+    const float origin[3]{0,0,0},x[3]{2,0,0},y[3]{0,2,0},z[3]{0,0,2},target[3]{3,1.5f,1};
+    debugLines.add(origin,x,0xFFE5484D,1);debugLines.add(origin,y,0xFF46C97A,1);debugLines.add(origin,z,0xFF4D8DF7,1);
+    debugLines.add(origin,target,0xFFF2C14E,1);
+    for(int i=0;i<12;++i){const float a=i*0.5235988f,b=(i+1)*0.5235988f;const float p[3]{std::cos(a)*1.5f,0,std::sin(a)*1.5f},q[3]{std::cos(b)*1.5f,0,std::sin(b)*1.5f};debugLines.add(p,q,0xFFFFFFFF,1);}
+    const float debugEye[3]{1.5f,2.5f,-6.f};
+    view.frustum=renderer::buildPerspectiveFrustum(debugEye,-.077f,.298f,layout.viewport.width/layout.viewport.height,visibility);
+    state.debugLines=&debugLines;state.debugView=view;
+  }
   if(pathPreview||characterPreview||fieldPreview||field2DPreview)view.frustum=renderer::buildPerspectiveFrustum(eye,0,field2DPreview?0.f:fieldPreview?.3f:characterPreview?0.f:.2f,layout.viewport.width/layout.viewport.height,visibility);
   list.begin(state.surface, font.metrics(ui::UiFontWeight::Regular));
   router.beginFrame();

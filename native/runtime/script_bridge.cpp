@@ -256,14 +256,80 @@ void ScriptBridge::installExtensions() {
     const auto *schema=scene::findComponentSchema(text.substr(0,slash));
     return schema && scene::findComponentEvent(*schema->type,text.substr(slash+1))?1:0;
   };
+  viewOperations_ = scene::ScriptViewOperations{};
+  viewOperations_.state=[](void *context,scene::ScriptViewState *out)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.gameView_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!out||out->size!=sizeof(*out)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto &view=*self.gameView_;
+    *out=scene::ScriptViewState{};
+    out->flags=(view.valid?scene::kScriptViewValid:0u)|(view.safeAreaReported?scene::kScriptViewSafeArea:0u)|(view.camera?scene::kScriptViewAuthoredCamera:0u);
+    out->width=view.width;out->height=view.height;out->dpi=view.dpi;
+    // Sem recorte informado, a área segura é a vista inteira, e a flag diz isso.
+    out->safeX=view.safeAreaReported?view.safeX:0;out->safeY=view.safeAreaReported?view.safeY:0;
+    out->safeWidth=view.safeAreaReported?view.safeWidth:view.width;out->safeHeight=view.safeAreaReported?view.safeHeight:view.height;
+    out->platform=static_cast<u32>(view.platform);out->camera=view.camera;
+    return 1;
+  };
+  viewOperations_.screenRay=[](void *context,float x,float y,float *origin,float *direction)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.gameView_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!origin||!direction||!gameViewScreenRay(*self.gameView_,x,y,origin,direction)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    return 1;
+  };
+  viewOperations_.worldToScreen=[](void *context,const float *world,float *screen)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.gameView_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!world||!screen||!gameViewWorldToScreen(*self.gameView_,world,screen)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    return 1;
+  };
+  debugOperations_ = scene::ScriptDebugOperations{};
+  debugOperations_.drawLine=[](void *context,const float *from,const float *to,u32 rgba,float seconds)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.debugLines_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(!from||!to||!self.debugLines_->add(from,to,rgba,seconds)){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    return 1;
+  };
+  hierarchyOperations_ = scene::ScriptHierarchyOperations{};
+  hierarchyOperations_.pollChanges=[](void *context,scene::ScriptHierarchyChange *changes,int capacity)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(capacity<0||(capacity&&!changes)){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    auto &pending=self.pendingHierarchy_;
+    if(pending.empty()) {
+      auto taken=self.world_->takeHierarchyChanges();
+      pending.assign(taken.begin(),taken.end());
+    }
+    int written=0;
+    while(written<capacity && !pending.empty()) {
+      const auto change=pending.front();pending.pop_front();
+      changes[written++]=scene::ScriptHierarchyChange{change.object.id,change.object.generation,static_cast<u32>(change.kind)};
+    }
+    return written;
+  };
+  hapticsOperations_ = scene::ScriptHapticsOperations{};
+  hapticsOperations_.vibrate=[](void *context,u32 milliseconds,float amplitude)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_||!self.haptics_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(milliseconds<1||milliseconds>5000||!std::isfinite(amplitude)||amplitude<0||amplitude>1){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(!self.haptics_(milliseconds,amplitude)){self.lastStatus_=WorldStatus::Rejected;return 0;}
+    return 1;
+  };
   access_.extension=[](void *context,const u8 *name,int length,u32 *version,u32 *size)->const void * {
     auto &self=*static_cast<ScriptBridge *>(context);
     if(!name||length<=0||length>256) return nullptr;
-    if(viewOf(name,length)==scene::kScriptComponentOperations) {
-      if(version) *version=self.componentOperations_.version;
-      if(size) *size=self.componentOperations_.size;
-      return &self.componentOperations_;
-    }
+    const auto requested=viewOf(name,length);
+    const auto publish=[&](const auto &table)->const void * {
+      if(version) *version=table.version;
+      if(size) *size=table.size;
+      return &table;
+    };
+    if(requested==scene::kScriptComponentOperations) return publish(self.componentOperations_);
+    if(requested==scene::kScriptView) return publish(self.viewOperations_);
+    if(requested==scene::kScriptDebug) return publish(self.debugOperations_);
+    if(requested==scene::kScriptHierarchy) return publish(self.hierarchyOperations_);
+    // Família ausente de verdade: sem vibrador, não há tabela a oferecer.
+    if(requested==scene::kScriptHaptics && self.haptics_) return publish(self.hapticsOperations_);
     return nullptr;
   };
 }
@@ -1683,6 +1749,7 @@ bool ScriptBridge::timer(ObjectId object,u64 instance,u32 count) {
 void ScriptBridge::stop() {
   if (running_) api_.stop();
   if (events_) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
+  pendingHierarchy_.clear();
   rendering_.end();
   running_ = false;
   world_ = nullptr;

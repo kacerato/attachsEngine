@@ -5,6 +5,9 @@
         android:name="android.hardware.vulkan.level"
         android:required="false"
         android:version="1" />
+    <!-- Haptics de gameplay (astra.haptics). Permissão normal, concedida na
+         instalação; sem ela o vibrador recusa e a API informa a recusa. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- extractNativeLibs="true": por padrão o Android moderno carrega .so direto de dentro do
          .apk (mapeado em memória), sem extrair para disco — funciona para o carregamento

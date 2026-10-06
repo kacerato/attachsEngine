@@ -574,6 +574,12 @@ public abstract class Behavior
 
     /// <summary>As consultas físicas do mundo de execução.</summary>
     protected PhysicsAccess Physics => new(Scene);
+    /// <summary>Tamanho, DPI, área segura e conversões tela/mundo da vista de jogo.</summary>
+    protected GameViewAccess View => new(Scene);
+    /// <summary>Linhas de depuração visíveis no Play.</summary>
+    protected DebugDraw Debug => new(Scene);
+    /// <summary>Vibração do aparelho, quando a plataforma oferece.</summary>
+    protected HapticsAccess Haptics => new(Scene);
     protected Physics2DAccess Physics2D => new(Scene);
 
     /// <summary>As ações de entrada configuradas no projeto.</summary>
@@ -670,4 +676,10 @@ public abstract class Behavior
     public virtual void CollisionStay(Collision collision) { }
     public virtual void CollisionExit(Collision collision) { }
     public virtual void Stop() { }
+    /// <summary>O pai deste objeto ou de um ancestral mudou (Unity 6000.0
+    /// OnTransformParentChanged). Entregue no despacho seguinte ao ponto seguro.</summary>
+    public virtual void ParentChanged() { }
+    /// <summary>A lista direta de filhos deste objeto mudou: criação, remoção,
+    /// reparent ou reordenação (Unity 6000.0 OnTransformChildrenChanged).</summary>
+    public virtual void ChildrenChanged() { }
 }

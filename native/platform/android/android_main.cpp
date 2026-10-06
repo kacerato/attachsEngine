@@ -13,6 +13,7 @@
 #include "editor/editor_scene_camera.h"
 #include <cstring>
 #include "platform/android/android_paths.h"
+#include "platform/android/android_haptics.h"
 #include "platform/android/android_launch_options.h"
 #include "platform/android/android_model_picker.h"
 #include "platform/android/android_external_links.h"
@@ -2103,6 +2104,10 @@ void android_main(android_app *app) {
   shell.app = app;
   shell.editorSession.setAudioFocus(false);
   shell.editorSession.setAudioOutput(ae::runtime::SceneAudio::Output::Device);
+  // Haptics de gameplay: o serviço real do sistema; sem vibrador, a chamada recusa.
+  shell.editorSession.setHaptics([activity=app->activity](ae::u32 milliseconds,float amplitude) {
+    return ae::platform::android::vibrateOnce(activity,milliseconds,amplitude);
+  });
   shell.displayRotation = ae::platform::android::queryDisplayRotation(app->activity);
   shell.forceDescriptorFallback = ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.force_descriptor_fallback");
@@ -2681,6 +2686,12 @@ void android_main(android_app *app) {
         const float logicalWidth = static_cast<float>(display.width) / shell.editorScale;
         const float logicalHeight = static_cast<float>(display.height) / shell.editorScale;
         shell.editorSession.setSurface({0.0f, 0.0f, logicalWidth, logicalHeight}, {});
+        {
+          // Screen dos scripts: pixels reais da vista e o DPI do bucket do sistema.
+          const ae::i32 density=app->config?AConfiguration_getDensity(app->config):0;
+          shell.editorSession.setDisplayMetrics(shell.editorScale,density>0&&density<10000?static_cast<float>(density):0.f,
+                                                ae::runtime::GameViewPlatform::Android);
+        }
         ae::platform::android::updateEditorTextInput(shell.editorSession);
         // O build sai sozinho quando a digitacao para. O relogio e o mesmo do
         // shell; a sessao so precisa de um instante que ande para frente.

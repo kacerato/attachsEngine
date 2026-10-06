@@ -57,6 +57,8 @@ u32 GameWorld::nextWorldId() noexcept {
 
 void GameWorld::clear() {
   graph_.reset();
+  hierarchyChanges_.clear();
+  hierarchyDropped_ = 0;
   slots_.clear();
   authorities_.clear();
   commands_.clear();
@@ -315,6 +317,7 @@ ObjectHandle GameWorld::createObject(const ObjectHandle &parent, std::string_vie
   slots_[id].generation = 1;
   authorities_[id] = TransformAuthority::Free;
   ++structuralRevision_;
+  recordHierarchyChange(parent.id, HierarchyChangeKind::ChildrenChanged);
   status = WorldStatus::Ok;
   return {worldId_, id, slots_[id].generation};
 }
@@ -332,6 +335,7 @@ ObjectHandle GameWorld::createPrimitive(const ObjectHandle &parent,scene::Primit
   if(id>=slots_.size()) {slots_.resize(static_cast<usize>(id)+1);authorities_.resize(static_cast<usize>(id)+1,TransformAuthority::Free);}
   slots_[id].generation=1;authorities_[id]=TransformAuthority::Free;
   ++structuralRevision_;invalidated_|=subtreeInvalidation(id);
+  recordHierarchyChange(parent.id,HierarchyChangeKind::ChildrenChanged);
   status=WorldStatus::Ok;return handle(id);
 }
 
@@ -366,6 +370,7 @@ ObjectHandle GameWorld::registerInstantiation(ObjectId root,const ObjectCloneMap
     slots_[copy].generation=1;authorities_[copy]=TransformAuthority::Free;
   }
   ++structuralRevision_;invalidated_|=subtreeInvalidation(root);
+  if(const auto *object=graph_.find(root)) recordHierarchyChange(object->parent,HierarchyChangeKind::ChildrenChanged);
   unpublishedClones_.push_back(root);
   return handle(root);
 }
@@ -459,18 +464,25 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
     const auto command = commands_[i];
     WorldStatus outcome = WorldStatus::Rejected;
     switch (command.kind) {
-      case PendingCommand::Kind::Destroy:
+      case PendingCommand::Kind::Destroy: {
         if (destroyed) {
           graph_.collectSubtree(command.object, scratch_);
           destroyed->insert(destroyed->end(), scratch_.begin(), scratch_.end());
         }
-        if (graph_.destroyEntity(command.object)) { ++applied; outcome = WorldStatus::Ok; }
+        const auto *object = graph_.find(command.object);
+        const ObjectId parent = object ? object->parent : kInvalidObject;
+        if (graph_.destroyEntity(command.object)) {
+          ++applied; outcome = WorldStatus::Ok;
+          recordHierarchyChange(parent, HierarchyChangeKind::ChildrenChanged);
+        }
         break;
-      case PendingCommand::Kind::Reparent:
+      }
+      case PendingCommand::Kind::Reparent: {
         if (!graph_.exists(command.object) || !graph_.exists(command.parent)) {
           outcome = WorldStatus::StaleHandle; break;
         }
         if (graph_.isDescendantOf(command.parent, command.object)) break;
+        const ObjectId previousParent = graph_.find(command.object)->parent;
         // Ownership can change after queueing (e.g. physics rebuild). Revalidate
         // the complete subtree before publishing either reparent policy.
         graph_.collectSubtree(command.object, scratch_);
@@ -490,8 +502,17 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
         } else if (graph_.reparent(command.object, command.parent, command.childIndex)) {
           ++applied; outcome = WorldStatus::Ok;
         }
-        if (outcome == WorldStatus::Ok) invalidated_ |= subtreeInvalidation(command.object);
+        if (outcome == WorldStatus::Ok) {
+          invalidated_ |= subtreeInvalidation(command.object);
+          // Reordenar dentro do mesmo pai muda a lista de filhos, não o pai.
+          if (previousParent != command.parent) {
+            recordParentChangedSubtree(command.object);
+            recordHierarchyChange(previousParent, HierarchyChangeKind::ChildrenChanged);
+          }
+          recordHierarchyChange(command.parent, HierarchyChangeKind::ChildrenChanged);
+        }
         break;
+      }
       case PendingCommand::Kind::RemoveComponent:
         // A callback may have added a dependent after removal was queued.
         // Re-resolve at the safe point before publishing the structural edit.
@@ -518,6 +539,32 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
   commands_.clear();
   if (applied) ++structuralRevision_;
   return applied;
+}
+
+void GameWorld::recordHierarchyChange(ObjectId id, HierarchyChangeKind kind) {
+  // A raiz sintética não tem comportamentos; objeto morto não recebe callback.
+  if (id == kInvalidObject || id == graph_.root() || !graph_.exists(id)) return;
+  const auto target = handle(id);
+  if (!target.valid()) return;
+  for (const auto &change : hierarchyChanges_)
+    if (change.object == target && change.kind == kind) return;  // um aviso por quadro basta
+  if (hierarchyChanges_.size() >= kHierarchyChangeCapacity) {
+    hierarchyChanges_.erase(hierarchyChanges_.begin());
+    ++hierarchyDropped_;
+  }
+  hierarchyChanges_.push_back({target, kind});
+}
+
+void GameWorld::recordParentChangedSubtree(ObjectId id) {
+  std::vector<ObjectId> members;
+  graph_.collectSubtree(id, members);
+  for (const ObjectId member : members) recordHierarchyChange(member, HierarchyChangeKind::ParentChanged);
+}
+
+std::vector<GameWorld::HierarchyChange> GameWorld::takeHierarchyChanges() {
+  std::vector<HierarchyChange> out;
+  out.swap(hierarchyChanges_);
+  return out;
 }
 
 // --- componentes ----------------------------------------------------------
