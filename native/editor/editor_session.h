@@ -1032,6 +1032,7 @@ public:
         return false;
       }
       reportedPhysicsConnectionDiagnostic_.clear();
+      reportedEventConnectionDiagnostic_.clear();
       reportProblem(EditorConsoleSeverity::Info,"Play iniciado · código publicado "+std::to_string(runtimeCodeGeneration_));
       playLastSeconds_=sceneTime_;
     }
@@ -1085,6 +1086,11 @@ public:
       if(!playScene_.step()) return false;
     }
     if(!playScene_.advance(elapsed)) return false;
+    const auto &eventDiagnostic=playScene_.eventConnections().diagnostic();
+    if(eventDiagnostic!=reportedEventConnectionDiagnostic_) {
+      reportedEventConnectionDiagnostic_=eventDiagnostic;
+      if(!eventDiagnostic.empty())reportProblem(EditorConsoleSeverity::Warning,eventDiagnostic);
+    }
     const auto &connectionDiagnostic=playScene_.physicsConnections().diagnostic();
     if(connectionDiagnostic!=reportedPhysicsConnectionDiagnostic_) {
       reportedPhysicsConnectionDiagnostic_=connectionDiagnostic;
@@ -1602,6 +1608,7 @@ private:
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
   std::string reportedPhysicsConnectionDiagnostic_;
+  std::string reportedEventConnectionDiagnostic_;
   double playLastSeconds_=0;
   platform::FirstPersonTouchControls playTouches_;
   EditorHistory history_;

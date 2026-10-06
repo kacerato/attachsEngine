@@ -316,6 +316,26 @@ inline std::string componentMatrixMarkdown() {
              describeInvalidation(row.invalidates) + " | " + (row.conditional ? "sim" : "não") + " | " +
              (row.perSlot ? "sim" : "não") + " | " + (row.tweenable?"sim":"não") + " |\n";
     }
+    // Métodos e eventos vêm do mesmo descritor que runtime e fachada C# usam;
+    // a existência da função efetiva é auditada em runtime/component_operations.
+    const auto parameters=[](std::span<const ComponentParameter> list) {
+      std::string text;
+      for(const auto &p:list) text+=(text.empty()?"":", ")+std::string(p.id)+": "+componentValueKindName(p.kind)+
+                                    (p.unit.empty()?"":" ("+std::string(p.unit)+")");
+      return text.empty()?std::string("—"):text;
+    };
+    if(!schema.type->methods.empty()) {
+      out += "\n**Métodos em Play**\n\n| Método | Rótulo | Argumentos | Retorno | Efeito |\n|---|---|---|---|---|\n";
+      for(const auto &m:schema.type->methods)
+        out += "| `"+std::string(m.id)+"` | "+escapeTableCell(m.name)+" | "+escapeTableCell(parameters(m.parameters))+" | "+
+               componentValueKindName(m.result)+" | "+escapeTableCell(m.help?m.help:"")+" |\n";
+    }
+    if(!schema.type->events.empty()) {
+      out += "\n**Eventos em Play**\n\n| Evento | Rótulo | Payload | Quando |\n|---|---|---|---|\n";
+      for(const auto &e:schema.type->events)
+        out += "| `"+std::string(e.id)+"` | "+escapeTableCell(e.name)+" | "+escapeTableCell(parameters(e.payload))+" | "+
+               escapeTableCell(e.help?e.help:"")+" |\n";
+    }
   }
   out += "\n## Capacidades do motor\n\n";
   out += "| Capacidade | Nome | Estado | Onde vive | Limite |\n|---|---|---|---|---|\n";

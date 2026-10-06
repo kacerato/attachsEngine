@@ -48,7 +48,9 @@ Cada bloco fecha com a trilha completa da AGENTS §6: dado → editor/API → va
 
 ### Bloco A — Fundação da API (sem tipos novos)
 
-**A1. Tabela de capacidades na ABI.** `ScriptSceneAccess` passa a ter um núcleo obrigatório congelado e uma tabela de famílias opcionais, cada uma com id, versão e tamanho próprios. O lado C# consulta a família antes de usar e recusa com `NotSupported` explícito apenas aquela operação. As famílias existentes (GUI, áudio, caminhos, timer, tween, input, física 2D) migram para entradas da tabela sem mudar sua semântica.
+**Estado (06/10):** A1 e A2 implementados — ver [contrato e evidência](API-METODOS-EVENTOS-ABI42-2026-10-06.md).
+
+**A1. Tabela de capacidades na ABI.** `ScriptSceneAccess` passa a ter um núcleo obrigatório congelado e uma tabela de famílias opcionais, cada uma com id, versão e tamanho próprios. O lado C# consulta a família antes de usar e recusa com `NotSupported` explícito apenas aquela operação. Decisão na implementação: as funções existentes (GUI, áudio, caminhos, timer, tween, input, física 2D) ficam no núcleo congelado v42, para não reescrever a superfície que a frente de UI está editando; só funções novas entram como família.
 - Aceite: host antigo sem a família de áudio continua executando scripts que não usam áudio; script que usa áudio recebe falha explícita; frentes diferentes adicionam famílias sem colidir no número de versão.
 - Referência: Godot 4.5 [GDExtension interface](https://docs.godotengine.org/en/4.5/tutorials/scripting/gdextension/gdextension_cpp_example.html) (resolução de funções por nome/versão) como princípio; a implementação é Astra.
 
@@ -57,6 +59,8 @@ Cada bloco fecha com a trilha completa da AGENTS §6: dado → editor/API → va
 - Referência: Godot 4.5 [ClassDB](https://github.com/godotengine/godot/blob/4.5/core/object/class_db.h) (métodos e sinais registrados junto das propriedades).
 
 ### Bloco B — Eventos e conexões gerais (F008)
+
+**Estado (06/10):** implementado — ver [Conexão de evento](CONEXOES-DE-EVENTO-2026-10-06.md). As conexões especializadas existentes permanecem até a fila transportar Stay; condição de remoção registrada no documento.
 
 Componente repetível “Conexões de evento”: emissor (qualquer evento descrito em A2) → filtro opcional → lista ordenada de ações. Ações iniciais, todas com consumidor existente: ativar/desativar objeto, alterar propriedade refletida, chamar método descrito (A2), enviar mensagem a Behavior (`SendMessage` já existe), iniciar Timer/Tween, tocar áudio. As conexões de Timer, Tween e física migram para o modelo comum com migração de arquivo; o formato antigo continua legível.
 - Aceite: “sensor entrou → tocar som e ativar porta” montado só no Inspector, salvo, reaberto, executado em Play; remover o receptor encerra a conexão com diagnóstico; reentrância limitada e documentada.

@@ -23,7 +23,7 @@ AE_TEST(groups_script_abi_queries_mutates_and_bounds_live_world_membership) {
   auto *script=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
   script->scriptType="test.Groups";script->source="Groups.cs";doc.applyEntityValues(id,value);
   editor::EditorMapScene resources;editor::EditorPlayScene play;play.setScriptRuntime(pathApi(),"/test");
-  AE_EXPECT_TRUE(play.start(doc,resources) && pathAccess.version==38 && pathAccess.available(),"complete groups ABI");
+  AE_EXPECT_TRUE(play.start(doc,resources) && pathAccess.version==scene::ScriptSceneAccess{}.version && pathAccess.available(),"complete groups ABI");
   const auto *name=reinterpret_cast<const u8*>("guards");auto &a=pathAccess;
   AE_EXPECT_EQ(a.groupMembership(a.context,id,name,6,-1),1,"query authored membership");
   AE_EXPECT_EQ(a.groupAt(a.context,id,std::numeric_limits<u32>::max(),nullptr,0),1,"enumeration count");
@@ -57,7 +57,7 @@ AE_TEST(path_script_abi_points_identity_sampling_runtime_control_and_stale_handl
   editor::EditorMapScene resources;editor::EditorPlayScene play;
   play.setScriptRuntime(pathApi(),"/test");
   AE_EXPECT_TRUE(play.start(doc,resources),"real Play bridge installs complete ABI");
-  AE_EXPECT_TRUE(pathAccess.version==38&&pathAccess.size==sizeof(pathAccess)&&pathAccess.available(),"exact complete layout");
+  AE_EXPECT_TRUE(pathAccess.version==scene::ScriptSceneAccess{}.version&&pathAccess.size==sizeof(pathAccess)&&pathAccess.available(),"exact complete layout");
   auto incomplete=pathAccess;incomplete.pathRuntimeCommand=nullptr;AE_EXPECT_TRUE(!incomplete.available(),"new callback required");
   const auto handle=play.world().handle(pathId),follower=play.world().handle(followerId);
   float input[9]{},output[9]{};u64 a=0,b=0,identity=0;

@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 45 schemas; 44 tipos no Add; 44 fachadas geradas.
+**Registro atual:** 46 schemas; 45 tipos no Add; 45 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -21,6 +21,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.constraint.look_at` | Lógica | `Astra.Components.LookAtConstraint` | Add Component |
 | `astra.tween.transform` | Lógica | `Astra.Components.TransformTween` | Add Component |
 | `astra.time.timer` | Lógica | `Astra.Components.GameTimer` | Add Component |
+| `astra.logic.event_connection` | Lógica | `Astra.Components.EventConnection` | Add Component |
 | `astra.script.behavior` | Lógica | API própria | Fluxo próprio |
 | `astra.render.mesh` | Renderização | `Astra.Components.MeshRenderer` | Add Component |
 | `astra.render.skinned_mesh` | Renderização | `Astra.Components.SkinnedMesh` | Add Component |
@@ -293,6 +294,22 @@ Interpola canais locais com espera, curva e repetição. **Consumidor:** runtime
 | `finished_action` | Ao concluir | enumeração | Conexão | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto |  | runtime/scene_tweens.h | pose e bounds | não | não | não |
 | `finished_target` | Receptor | referência | Conexão | Escolher objeto | qualquer objeto |  | runtime/scene_tweens.h | pose e bounds | sim | não | não |
 
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `restart` | Reiniciar | — | nada | Recomeça da pose atual, conservando a pausa |
+| `cancel` | Cancelar | — | nada | Interrompe sem voltar à pose inicial |
+| `pause` | Pausar | — | nada | Congela o progresso |
+| `resume` | Retomar | — | nada | Continua o progresso pausado |
+| `elapsed` | Decorrido | — | número | Segundos desde o início, incluindo o atraso |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `completed` | Concluiu | — | Emitido uma vez quando as repetições finitas terminam, depois da pose final |
+
 ## Timer · `astra.time.timer` v4
 
 Dispara eventos temporizados e ações persistentes de ativação de objetos. **Consumidor:** runtime/scene_timers.h → ScriptBridge → Behavior.TimerElapsed. **Invalida:** nada.
@@ -310,6 +327,42 @@ Dispara eventos temporizados e ações persistentes de ativação de objetos. **
 | `ignore_time_scale` | Ignorar escala de tempo | booleano | Disparo | falso | verdadeiro \| falso |  | runtime/scene_timers.h → ScriptBridge → Behavior.TimerElapsed | nada | não | não | não |
 | `elapsed_action` | Ao disparar | enumeração | Conexão | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto |  | runtime/scene_timers.h -> GameWorld::setActive | nada | não | não | não |
 | `elapsed_target` | Receptor | referência | Conexão | Escolher objeto | qualquer objeto |  | runtime/scene_timers.h -> GameWorld::setActive | nada | sim | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `start` | Iniciar | interval: número (s) | nada | Reinicia a contagem; intervalo zero usa o autorado |
+| `stop` | Parar | — | nada | Interrompe e zera a contagem |
+| `pause` | Pausar | — | nada | Congela a contagem sem perder o restante |
+| `resume` | Retomar | — | nada | Continua a contagem pausada |
+| `remaining` | Restante | — | número | Segundos até o próximo disparo; zero quando parado |
+| `running` | Em execução | — | booleano | Verdadeiro enquanto conta, inclusive pausado |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `elapsed` | Disparou | count: inteiro | Um evento por quadro; Disparos conta intervalos vencidos no quadro |
+
+## Conexão de evento · `astra.logic.event_connection` v1
+
+Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runtime/scene_event_connections.h. **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Events.UnityEvent.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
+| `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 
 ## Comportamento · `astra.script.behavior` v1
 
@@ -924,6 +977,15 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | `shape` | Forma | enumeração | Forma | Caixa | Caixa \| Esfera \| Cápsula \| Malha \| Cilindro |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 | `owner` | Corpo proprietário | referência | Vínculo | Neste objeto | astra.physics.body · neste objeto ou ancestral |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `trigger_enter` | Sensor: entrou | other: objeto | Outro corpo começou a sobrepor este sensor |
+| `trigger_exit` | Sensor: saiu | other: objeto | Outro corpo deixou de sobrepor este sensor |
+| `collision_enter` | Colisão: começou | other: objeto | Contato sólido começou; entregue aos dois objetos |
+| `collision_exit` | Colisão: terminou | other: objeto | Contato sólido terminou; entregue aos dois objetos |
+
 ## Junta · `astra.physics.joint` v2
 
 Nove mecanismos Jolt com limites, referenciais e motores. **Consumidor:** runtime/scene_physics.cpp → constraint do Jolt. **Invalida:** corpo físico.
@@ -1301,6 +1363,15 @@ Caixa, círculo ou cápsula; sensor real. **Consumidor:** runtime/scene_physics2
 | `sensor` | Sensor sem resposta | booleano | Contato | falso | verdadeiro \| falso |  | runtime/scene_physics2d.cpp → Box2D 3.1.1 | forma física | não | não | não |
 | `shape` | Forma | enumeração | Forma | Caixa | Caixa \| Círculo \| Cápsula Y |  | runtime/scene_physics2d.cpp → Box2D 3.1.1 | forma física | não | não | não |
 
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `trigger_enter` | Sensor: entrou | other: objeto | Outro corpo começou a sobrepor este sensor |
+| `trigger_exit` | Sensor: saiu | other: objeto | Outro corpo deixou de sobrepor este sensor |
+| `collision_enter` | Colisão: começou | other: objeto | Contato sólido começou; entregue aos dois colisores |
+| `collision_exit` | Colisão: terminou | other: objeto | Contato sólido terminou; entregue aos dois colisores |
+
 ## Audio Source · `astra.audio.source` v1
 
 Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/scene_audio.cpp → miniaudio engine/device. **Invalida:** nada.
@@ -1337,6 +1408,16 @@ Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/s
 | `rolloff` | Atenuação | enumeração | Espaço | Inverso | Linear \| Inverso \| Exponencial |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
 | `bus` | Bus | referência | Som | Master | astra.audio.bus |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
 
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `play` | Tocar | — | nada | Recomeça do início |
+| `pause` | Pausar | — | nada | Congela o cursor |
+| `resume` | Retomar | — | nada | Continua do cursor pausado |
+| `stop` | Parar | — | nada | Interrompe e libera a voz |
+| `seek` | Posicionar | seconds: número (s) | nada | Move o cursor; aplicado pelo mixer |
+
 ## Audio Listener · `astra.audio.listener` v1
 
 Pose e volume de escuta escolhidos por prioridade. **Consumidor:** runtime/scene_audio.cpp → miniaudio listener. **Invalida:** nada.
@@ -1367,7 +1448,7 @@ Roteamento de ganho, mute e solo até Master. **Consumidor:** runtime/scene_audi
 | `solo` | Solo | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
 | `output` | Saída | referência | Mixer | Master | astra.audio.bus · outro objeto |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
 
-## Path · `astra.path` v1
+## Path · `astra.path` v2
 
 Curva Bézier local com pontos persistentes. **Consumidor:** runtime/scene_paths.cpp. **Invalida:** pose e bounds.
 
@@ -1385,6 +1466,9 @@ Apply seletivo exige identidade, ordem e fronteira de alocação compatíveis.
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| `up_x` | Up X | número | Orientação | 0 | -100000 … 100000 |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
+| `up_y` | Up Y | número | Orientação | 1 | -100000 … 100000 |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
+| `up_z` | Up Z | número | Orientação | 0 | -100000 … 100000 |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
 | `closed` | Fechado | booleano | Caminho | falso | verdadeiro \| falso |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
 | `point_position_x` | Posição X | número | Posição |  | -100000 … 100000 | u | runtime/scene_paths.cpp | pose e bounds | não | sim | não |
 | `point_position_y` | Posição Y | número | Posição |  | -100000 … 100000 | u | runtime/scene_paths.cpp | pose e bounds | não | sim | não |
@@ -1395,6 +1479,7 @@ Apply seletivo exige identidade, ordem e fronteira de alocação compatíveis.
 | `point_out_x` | Saída X | número | Tangentes |  | -100000 … 100000 | u | runtime/scene_paths.cpp | pose e bounds | não | sim | não |
 | `point_out_y` | Saída Y | número | Tangentes |  | -100000 … 100000 | u | runtime/scene_paths.cpp | pose e bounds | não | sim | não |
 | `point_out_z` | Saída Z | número | Tangentes |  | -100000 … 100000 | u | runtime/scene_paths.cpp | pose e bounds | não | sim | não |
+| `point_roll` | Roll | número | Orientação |  | -3600 … 3600 | ° | runtime/scene_paths.cpp | pose e bounds | não | sim | não |
 
 ## Path Follow · `astra.path.follow` v1
 
@@ -1419,6 +1504,15 @@ Percorre curva em distância mundial e orienta +Z. **Consumidor:** runtime/scene
 | `orient` | Orientar +Z | booleano | Orientação | verdadeiro | verdadeiro \| falso |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
 | `mode` | Avanço | enumeração | Percurso | Velocidade mundial | Velocidade mundial \| Duração do percurso |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
 | `target` | Caminho | referência | Percurso | Escolher Path | astra.path · outro objeto |  | runtime/scene_paths.cpp | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `restart` | Reiniciar | — | nada | Volta à distância inicial e avança |
+| `stop` | Parar | — | nada | Congela pose e progresso |
+| `progress` | Progresso | — | número | Distância percorrida no mundo |
+| `playing` | Em movimento | — | booleano | Verdadeiro enquanto avança |
 
 ## Capacidades do motor
 

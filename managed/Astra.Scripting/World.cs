@@ -37,6 +37,8 @@ public enum WorldStatus : uint
     PropertyNotTweenable,
     PropertyAlreadyTweening,
     PropertyWrittenExternally,
+    /// <summary>O tipo do componente não declara esse método ou evento.</summary>
+    UnknownOperation,
 }
 
 public sealed class WorldException(WorldStatus status, string operation)
@@ -65,6 +67,7 @@ public sealed class WorldException(WorldStatus status, string operation)
         WorldStatus.ResourceTypeMismatch => "tipo de recurso incompatível",
         WorldStatus.UnknownElement => "elemento da coleção inexistente",
         WorldStatus.OperationExpired => "resultado da operação não está mais disponível",
+        WorldStatus.UnknownOperation => "o componente não declara esse método ou evento",
         _ => "operação recusada",
     };
 }
@@ -667,6 +670,25 @@ public readonly struct Component
         if (TypeId != ComponentIds.CameraFollow) throw new WorldException(WorldStatus.InvalidArgument, "acessar acompanhamento de câmera");
         return new CameraFollowRig(this);
     }
+
+    /// <summary>
+    /// Executa um método declarado pelo tipo do componente no mundo de Play,
+    /// com os argumentos tipados do descritor nativo. Host sem a família
+    /// <c>astra.component.operations</c> lança <see cref="NotSupportedException"/>.
+    /// </summary>
+    public ComponentValue Invoke(string method, params ComponentValue[] arguments) =>
+        Invoke(method, (ReadOnlySpan<ComponentValue>)arguments);
+    public ComponentValue Invoke(string method, ReadOnlySpan<ComponentValue> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        if (_object is null) throw new InvalidOperationException("Componente sem objeto.");
+        if (_scene is not IComponentOperationAccess access)
+            throw new NotSupportedException("O host não oferece métodos de componente.");
+        if (!access.InvokeComponentMethod(_object.ObjectId, _object.World, _object.Generation, InstanceId, method, arguments, out var result))
+            throw new WorldException(_scene.LastStatus, "chamar " + method);
+        return result;
+    }
+    internal ObjectReference Reference(ComponentValue value) => ObjectReference.Capture(_scene, value.AsObjectId());
 
     /// <summary>Remoção aplicada no próximo ponto seguro do mundo.</summary>
     public void Remove() => Check(_scene.RemoveComponent(_object.ObjectId, InstanceId), "remover componente");

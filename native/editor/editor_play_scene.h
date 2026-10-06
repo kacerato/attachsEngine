@@ -9,6 +9,11 @@
 #include "runtime/scene_animation.h"
 #include "runtime/scene_timers.h"
 #include "runtime/scene_physics_connections.h"
+#include "runtime/component_operations.h"
+#include "runtime/scene_event_connections.h"
+#include "scene/collider.h"
+#include "scene/physics2d_components.h"
+#include "scene/timer.h"
 #include "runtime/scene_camera_follow.h"
 #include "runtime/scene_constraints.h"
 #include "runtime/scene_tweens.h"
@@ -122,6 +127,11 @@ public:
     constraints_.reset();
     tweens_.reset();numberTweens_.reset();
     paths_.reset();
+    events_.reset();
+    eventConnections_.reset();
+    events_.attach(runtime::ComponentEventQueue::Consumer::Connections,true);
+    tweens_.setEvents(&events_);
+    scripts_.setEvents(&events_);
     scripts_.setAnimator(&animator_);
     scripts_.setPhysics2D(&physics2D_);
     scripts_.setPaths(&paths_);
@@ -173,6 +183,10 @@ public:
     scripts_.setNumberTweens(nullptr);
     scripts_.setAudio(nullptr);
     scripts_.setGui(nullptr);
+    scripts_.setEvents(nullptr);
+    tweens_.setEvents(nullptr);
+    events_.reset();
+    eventConnections_.reset();
     gui_.load(ui::GuiDocument{});
     paths_.reset();
     animator_.reset();
@@ -225,6 +239,16 @@ public:
     return timers_.command(world_,{world_.handle(object),instance},operation,seconds,state);
   }
   const runtime::SceneTimers &timers() const noexcept {return timers_;}
+  // Mesma porta dos scripts: o método declarado no tipo, com a função efetiva.
+  runtime::WorldStatus invokeMethod(runtime::ObjectId object,u64 instance,std::string_view method,
+                                    std::span<const scene::ComponentOperationValue> arguments,scene::ComponentOperationValue &result) {
+    if(!active_) return runtime::WorldStatus::NotRunning;
+    return runtime::invokeComponentMethod(operationServices(),{world_.handle(object),instance},method,arguments,result);
+  }
+  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_};}
+  runtime::ComponentEventQueue &events() noexcept {return events_;}
+  const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
+  const runtime::ComponentEventQueue &events() const noexcept {return events_;}
   const runtime::ScenePhysicsConnections &physicsConnections() const noexcept {return physicsConnections_;}
   const runtime::SceneConstraints &constraints() const noexcept {return constraints_;}
   const runtime::SceneTweens &tweens() const noexcept {return tweens_;}
@@ -254,11 +278,14 @@ private:
     return runScripts(scriptElapsed) && advanceTimers(frameElapsed,std::min(elapsed,.25)) && animate(scriptElapsed) &&
            reconcilePhysics() && physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
            scripts_.lateUpdate(scriptElapsed) && drainCommands() && reconcilePhysics() &&
-           paths_.advance(world_,frameElapsed) && tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)) && numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)) && constraints_.advance(world_,frameElapsed) && cameraFollow_.advance(world_,frameElapsed) && audio_.advance(world_,std::min(elapsed,.25));
+           paths_.advance(world_,frameElapsed) && tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)) && numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)) && drainCommands() && constraints_.advance(world_,frameElapsed) && cameraFollow_.advance(world_,frameElapsed) && audio_.advance(world_,std::min(elapsed,.25));
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.
   bool drainCommands() {
+    // Conexões de evento reagem no ponto seguro, antes de a fila estrutural ser
+    // aplicada: uma desativação pedida por elas entra no mesmo flush.
+    eventConnections_.process(operationServices(),events_);
     destroyed_.clear();
     world_.flush(&destroyed_);
     for(const auto id:destroyed_) {physics_.releaseObject(id);physics2D_.releaseObject(id,&world_);}
@@ -276,6 +303,8 @@ private:
   }
   bool advanceTimers(double elapsed,double unscaledElapsed) {
     return timers_.advance(world_,elapsed,unscaledElapsed,[this](runtime::ObjectId object,u64 instance,u32 count) {
+      const auto fired=scene::ComponentOperationValue::makeInteger(count);
+      events_.emit(world_,object,instance,scene::Timer::descriptor,"elapsed",std::span(&fired,1));
       return scripts_.timer(object,instance,count) && drainCommands();
     });
   }
@@ -290,12 +319,22 @@ private:
   static bool triggerEvent(void *context,runtime::ObjectId sensor,runtime::ObjectId other,u32 phase) {
     auto &self=*static_cast<EditorPlayScene *>(context);
     self.physicsConnections_.trigger(self.world_,sensor,other,phase);
+    self.emitContact(scene::Collider::descriptor,sensor,0,other,phase,true);
     return self.scripts_.trigger(sensor,other,phase) && self.drainCommands();
   }
   static bool contactEvent(void *context,const runtime::ContactEvent &event) {
     auto &self=*static_cast<EditorPlayScene *>(context);
     self.physicsConnections_.contact(self.world_,event.first,event.second,event.phase);
+    self.emitContact(scene::Collider::descriptor,event.first,0,event.second,event.phase,false);
+    self.emitContact(scene::Collider::descriptor,event.second,0,event.first,event.phase,false);
     return self.scripts_.contact(event) && self.drainCommands();
+  }
+  // Enter/Exit viram eventos de componente; Stay fica só no callback do script.
+  void emitContact(const scene::ComponentType &type,runtime::ObjectId source,u64 instance,runtime::ObjectId other,u32 phase,bool sensor) {
+    if(phase!=0 && phase!=2) return;
+    const auto otherValue=scene::ComponentOperationValue::makeObject(other);
+    const char *id=sensor?(phase==0?"trigger_enter":"trigger_exit"):(phase==0?"collision_enter":"collision_exit");
+    events_.emit(world_,source,instance,type,id,std::span(&otherValue,1));
   }
   static bool fixedStep(void *context,float dt) {
     auto &self=*static_cast<EditorPlayScene *>(context);
@@ -305,6 +344,8 @@ private:
     auto &self=*static_cast<EditorPlayScene*>(context);
     if(!self.world_.alive(self.world_.handle(event.first)))return true;
     self.physicsConnections_.event2D(self.world_,event.first,event.second,event.phase,event.sensor);
+    self.emitContact(scene::Collider2D::descriptor,event.first,event.firstCollider,event.second,event.phase,event.sensor);
+    if(!event.sensor)self.emitContact(scene::Collider2D::descriptor,event.second,event.secondCollider,event.first,event.phase,false);
     // A retired visitor can still produce a native exit for a surviving sensor.
     // Managed callbacks retain their existing live-other contract.
     if(!self.world_.alive(self.world_.handle(event.second)))return self.drainCommands();
@@ -328,6 +369,8 @@ private:
   runtime::SceneTweens tweens_;
   runtime::SceneNumberTweens numberTweens_;
   runtime::ScenePaths paths_;
+  runtime::ComponentEventQueue events_;
+  runtime::SceneEventConnections eventConnections_;
   const EditorMapScene *resources_=nullptr;
   bool active_=false;
   bool paused_=false;

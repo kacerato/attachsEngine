@@ -95,7 +95,7 @@ AE_TEST(input_interactions_live_play_abi_state_enabled_and_group_ownership){
  editor::EditorDocument doc;doc.setInputActions(timedMap());const auto id=doc.createEntity(doc.root(),ObjectKind::Folder,"Probe");
  auto entity=*doc.find(id);auto*s=static_cast<scene::ScriptBehavior*>(entity.components.add(scene::ScriptBehavior::descriptor));s->scriptType="test.Input";s->source="Input.cs";doc.applyEntityValues(id,entity);
  editor::EditorMapScene resources;editor::EditorPlayScene play;play.setScriptRuntime(api(),"/test");
- AE_EXPECT_TRUE(play.start(doc,resources)&&access.version==39&&access.available(),"real world publishes ABI39");
+ AE_EXPECT_TRUE(play.start(doc,resources)&&access.version==scene::ScriptSceneAccess{}.version&&access.available(),"real world publishes the core ABI");
  auto incomplete=access;incomplete.inputActionCommand=nullptr;AE_EXPECT_TRUE(!incomplete.available(),"new callback is mandatory");
  auto command=[&](const char*name,u32 op,scene::ScriptInputActionState&state){return access.inputActionCommand(access.context,reinterpret_cast<const u8*>(name),static_cast<int>(std::char_traits<char>::length(name)),op,&state);};
  InputDeviceState input;input.keys={62};play.submitInput(input,0);play.submitInput(input,.25);scene::ScriptInputActionState state;

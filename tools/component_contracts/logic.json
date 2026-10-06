@@ -197,6 +197,20 @@
       "apiName": "GameTimer"
     },
     {
+      "type": "EventConnection",
+      "name": "Conexão de evento",
+      "description": "Evento deste objeto aciona objetos ou métodos, sem script",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_event_connections.h",
+      "subfamily": "Eventos",
+      "icon": "component/event-connection",
+      "searchTerms": "UnityEvent Signal Evento Conexao Trigger Gatilho",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Events.UnityEvent.html",
+      "apiName": "EventConnection"
+    },
+    {
       "type": "ScriptBehavior",
       "name": "Comportamento",
       "description": "Código C# do projeto",

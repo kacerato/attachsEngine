@@ -84,6 +84,7 @@ enum class WorldStatus : u32 {
   PropertyNotTweenable,
   PropertyAlreadyTweening,
   PropertyWrittenExternally,
+  UnknownOperation,   // método ou evento não declarado pelo tipo do componente
 };
 
 const char *worldStatusMessage(WorldStatus status) noexcept;

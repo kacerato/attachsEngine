@@ -53,6 +53,6 @@ public static class AudioTransportTests
         Assert.Equal(command+IntPtr.Size,gui);
         var text=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiText").ToInt64();
         Assert.Equal(gui+2*IntPtr.Size,text);
-        Assert.Equal(text+3*IntPtr.Size,(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>());
+        Assert.True(text+IntPtr.Size<=(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>(),"campo dentro do núcleo; o tamanho total é conferido em ComponentOperationsTests");
     }
 }

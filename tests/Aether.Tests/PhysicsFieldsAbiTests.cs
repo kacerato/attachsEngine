@@ -17,6 +17,6 @@ public static class PhysicsFieldsAbiTests
         Assert.Equal(field+IntPtr.Size,layer);
         var input=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("InputActionCommand").ToInt64();
         Assert.Equal(layer+IntPtr.Size,input);
-        Assert.Equal(input+2*IntPtr.Size,(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>());
+        Assert.True(input+IntPtr.Size<=(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>(),"campo dentro do núcleo; o tamanho total é conferido em ComponentOperationsTests");
     }
 }

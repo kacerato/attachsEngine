@@ -8,6 +8,7 @@
 #include "scene/transform_constraints.h"
 #include "scene/spring_constraint.h"
 #include "scene/transform_tween.h"
+#include "scene/event_connection.h"
 #include "scene/physics2d_components.h"
 #include "scene/audio.h"
 #include "scene/path.h"
@@ -308,7 +309,7 @@ inline void physicsField2DVisual(const scene::ComponentValue &value,const Editor
  if(kind==0||kind==1){const float length=std::hypot(field.vector[0],field.vector[1]);if(length>1e-6f){float pose[16]{};const float norm=std::hypot(frame[0],frame[1]);if(norm<1e-6f)return;pose[0]=frame[0]/norm;pose[1]=frame[1]/norm;pose[4]=-pose[1];pose[5]=pose[0];pose[10]=pose[15]=1;std::copy_n(frame+12,3,pose+12);const float origin[3]{},tip[3]{field.vector[0]/length*1.5f,field.vector[1]/length*1.5f,0};visual_detail::segment(out,pose,origin,tip);out.segments.back().emphasis=1;}}
  else if(kind==3){for(u32 axis=0;axis<2;++axis)for(float sign:{-1.f,1.f}){float a[3]{},b[3]{};a[axis]=sign*(field.acceleration<0?1.2f:.2f);b[axis]=sign*(field.acceleration<0?.2f:1.2f);visual_detail::segment(out,frame,a,b);out.segments.back().emphasis=1;}}
 }
-inline const std::array<ComponentVisualProvider,33> componentVisualProviders{{
+inline const std::array<ComponentVisualProvider,34> componentVisualProviders{{
   {&scene::GravityField2D::descriptor,ui::UiIcon::PhysicsFieldGravity2d,true,physicsField2DVisual},
   {&scene::WindField2D::descriptor,ui::UiIcon::PhysicsFieldWind2d,true,physicsField2DVisual},
   {&scene::DragField2D::descriptor,ui::UiIcon::PhysicsFieldDrag2d,true,physicsField2DVisual},
@@ -320,6 +321,7 @@ inline const std::array<ComponentVisualProvider,33> componentVisualProviders{{
   {&scene::Character::descriptor,ui::UiIcon::PhysicsCharacterGround,true,visual_detail::characterGround},
   {&scene::PhysicsEventConnection3D::descriptor,ui::UiIcon::EventPhysicsConnection,true,visual_detail::physicsConnection<scene::PhysicsEventConnection3D>},
   {&scene::PhysicsEventConnection2D::descriptor,ui::UiIcon::EventPhysicsConnection2d,true,visual_detail::physicsConnection<scene::PhysicsEventConnection2D>},
+  {&scene::EventConnection::descriptor,ui::UiIcon::ComponentEventConnection,true,visual_detail::physicsConnection<scene::EventConnection>},
   {&scene::Path::descriptor,ui::UiIcon::PathCurve,true,pathVisual},
   {&scene::PathFollow::descriptor,ui::UiIcon::ComponentPathFollow,true,visual_detail::constraint},
   {&scene::ParentConstraint::descriptor,ui::UiIcon::ComponentParentConstraint,true,visual_detail::constraint},
@@ -411,6 +413,19 @@ inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::Scene
           if(action&&value->instanceId()==editedConnectionInstance&&receiver) {
             float target[16];
             if(editorWorldMatrix(document,static_cast<EditorEntityId>(receiver),target)) {
+              ComponentVisualSegment link;std::copy(world+12,world+15,link.a);std::copy(target+12,target+15,link.b);
+              link.emphasis=1;v.segments.push_back(link);visual_detail::ring(v,target,.15f,0,1);
+            }
+          }
+        }
+        if(id==selected&&&value->type()==&scene::EventConnection::descriptor) {
+          // Mesma linha contextual das conexões físicas: só da instância em edição
+          // e só quando o receptor é outro objeto (vazio significa o próprio emissor).
+          const auto &connection=scene::eventConnection(*value);
+          v.segments.clear();
+          if(connection.action&&connection.receiver&&value->instanceId()==editedConnectionInstance) {
+            float target[16];
+            if(editorWorldMatrix(document,static_cast<EditorEntityId>(connection.receiver),target)) {
               ComponentVisualSegment link;std::copy(world+12,world+15,link.a);std::copy(target+12,target+15,link.b);
               link.emphasis=1;v.segments.push_back(link);visual_detail::ring(v,target,.15f,0,1);
             }

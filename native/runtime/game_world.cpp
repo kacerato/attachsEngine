@@ -41,6 +41,7 @@ const char *worldStatusMessage(WorldStatus status) noexcept {
     case WorldStatus::PropertyNotTweenable: return "A propriedade não possui escrita numérica elegível para tween";
     case WorldStatus::PropertyAlreadyTweening: return "Outro tween já controla esta propriedade";
     case WorldStatus::PropertyWrittenExternally: return "Outro escritor alterou a propriedade durante o tween";
+    case WorldStatus::UnknownOperation: return "O componente não declara esse método ou evento";
   }
   return "Operação recusada";
 }

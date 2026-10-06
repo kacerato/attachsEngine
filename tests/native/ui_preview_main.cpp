@@ -1,6 +1,8 @@
 #include "mechanisms_fixture.h"
 #include "scene/physics2d_components.h"
 #include "scene/audio.h"
+#include "scene/event_connection.h"
+#include "scene/timer.h"
 #include <sstream>
 #include <iomanip>
 #include "editor/editor_route_component.h"
@@ -1385,6 +1387,25 @@ int main(int argc, char **argv) {
     selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Conexão";
     state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
     if(std::string(argv[4])=="physics2d-connection-focused") {state.focusedInspectors.push_back({id,instance,editor::EditorScreenState::FocusedAsset::None,{},{}});state.focusedActive=1;}
+  }
+  if(argc>4 && std::string(argv[4]).starts_with("event-connection")) {
+    const std::string mode=argv[4];
+    const auto door=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Porta automática");
+    auto doorValue=*document.find(door);doorValue.transform.position[0]=2.5f;
+    static_cast<scene::Timer*>(doorValue.components.add(scene::Timer::descriptor))->autoStart=false;document.applyEntityValues(door,doorValue);
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Sensor da entrada");auto value=*document.find(id);
+    auto *body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;body->sensor=true;
+    value.components.add(scene::Collider::descriptor);
+    auto *connection=static_cast<scene::EventConnection*>(value.components.add(scene::EventConnection::descriptor));
+    connection->event=3;connection->action=scene::kEventConnectionCallMethod;connection->method=6;connection->argument=.5f;connection->receiver=door;
+    if(mode=="event-connection-activation"){connection->action=1;connection->method=0;}
+    const auto instance=connection->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(mode=="event-connection-when")state.componentGroup="Quando";
+    if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
+    if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
   }
   state.canUndo = history.canUndo();
   state.canRedo = history.canRedo();

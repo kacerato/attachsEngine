@@ -86,7 +86,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v41). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v42). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -222,6 +222,8 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*,uint,uint,uint,NativeGuiBehavior*,int> GuiBehavior;
         public delegate* unmanaged<void*,uint,uint,uint,uint,NativeGuiAction*,int> GuiAction;
         public delegate* unmanaged<void*,uint,uint,uint,NativeGuiTransitions*,int> GuiTransitions;
+        // v42 — último campo do núcleo; o resto entra por famílias nomeadas.
+        public delegate* unmanaged<void*, byte*, int, uint*, uint*, void*> Extension;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -240,9 +242,26 @@ public static unsafe class NativeBehaviorRuntime
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
             SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
-            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null && AudioCommand != null && GuiCommand != null && GuiProperties != null && GuiText != null && GuiSizing != null && GuiCanvas != null && GuiBehavior != null && GuiAction != null && GuiTransitions != null;
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null && AudioCommand != null && GuiCommand != null && GuiProperties != null && GuiText != null && GuiSizing != null && GuiCanvas != null && GuiBehavior != null && GuiAction != null && GuiTransitions != null && Extension != null;
     }
 
+    /// <summary>Família <c>astra.component.operations</c> v1 (native/scene/script_extensions.h).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeComponentOperations
+    {
+        public uint Version, Size;
+        public delegate* unmanaged<void*, ulong, uint, uint, ulong, byte*, int, ComponentValue*, int, ComponentValue*, int> Invoke;
+        public delegate* unmanaged<void*, NativeComponentEvent*, int, int> PollEvents;
+        public delegate* unmanaged<void*, uint, uint, byte*, int, int> EventName;
+        public delegate* unmanaged<void*, byte*, int, int> DeclaresEvent;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeComponentEvent
+    {
+        public ulong Object, Instance;
+        public uint World, Generation, Type, Event, Count, Lost;
+        public ComponentValue Value0, Value1, Value2;
+    }
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeFieldState {public uint Size,Flags;public float Weight;public Vector3 Acceleration,WindVelocity;public float WindDrag,LinearDrag,AngularDrag,OverrideWeight;public uint AffectedBodies;public float AffectedMass;public uint Reserved;}
     [StructLayout(LayoutKind.Sequential)]
@@ -274,8 +293,80 @@ public static unsafe class NativeBehaviorRuntime
         public float Delta,UnscaledDelta,TimeScale,FrameScale;
     }
 
-    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess
+    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess, IComponentOperationAccess
     {
+        // Famílias opcionais: resolvidas uma vez por sessão; nulo quando o host
+        // não oferece ou entrega uma versão/tamanho que este SDK não conhece.
+        private bool _operationsResolved;
+        private NativeComponentOperations* _operations;
+        private readonly Dictionary<ulong, (string Type, string Event)> _eventNames = [];
+        private NativeComponentOperations* Operations
+        {
+            get
+            {
+                if (!Accessible) throw new WorldException(WorldStatus.NotRunning, "operações de componente");
+                if (!_operationsResolved)
+                {
+                    _operationsResolved = true;
+                    ReadOnlySpan<byte> name = "astra.component.operations"u8;
+                    uint version = 0, size = 0; void* table;
+                    fixed (byte* pointer = name) table = access.Extension(access.Context, pointer, name.Length, &version, &size);
+                    if (table != null && version >= 1 && size >= (uint)sizeof(NativeComponentOperations))
+                        _operations = (NativeComponentOperations*)table;
+                }
+                return _operations != null ? _operations
+                    : throw new NotSupportedException("O host não oferece a família astra.component.operations.");
+            }
+        }
+        public bool InvokeComponentMethod(ulong objectId, uint world, uint generation, ulong instanceId, string method,
+            ReadOnlySpan<ComponentValue> arguments, out ComponentValue result)
+        {
+            result = default;
+            var operations = Operations;
+            var bytes = Utf8(method, "método");
+            ComponentValue output;
+            int ok;
+            fixed (byte* name = bytes)
+            fixed (ComponentValue* args = arguments)
+                ok = operations->Invoke(access.Context, objectId, world, generation, instanceId, name, bytes.Length, args, arguments.Length, &output);
+            if (ok == 0) return false;
+            result = output; return true;
+        }
+        public int PollComponentEvents(Span<ComponentEventRecord> destination)
+        {
+            var operations = Operations;
+            if (destination.Length == 0) return 0;
+            var capacity = Math.Min(destination.Length, 64);
+            var raw = stackalloc NativeComponentEvent[capacity];
+            var count = operations->PollEvents(access.Context, raw, capacity);
+            if (count < 0) throw new WorldException(LastStatus, "ler eventos de componente");
+            for (var i = 0; i < count; ++i)
+            {
+                var e = raw[i];
+                var (type, name) = EventName(operations, e.Type, e.Event);
+                destination[i] = new(e.Object, e.World, e.Generation, e.Instance, type, name, e.Count, e.Lost, e.Value0, e.Value1, e.Value2);
+            }
+            return count;
+        }
+        public bool DeclaresComponentEvent(string typeId, string eventId)
+        {
+            var operations = Operations;
+            var bytes = Utf8(typeId + "/" + eventId, "evento");
+            fixed (byte* pointer = bytes) return operations->DeclaresEvent(access.Context, pointer, bytes.Length) != 0;
+        }
+        private (string, string) EventName(NativeComponentOperations* operations, uint type, uint eventIndex)
+        {
+            var key = ((ulong)type << 32) | eventIndex;
+            if (_eventNames.TryGetValue(key, out var cached)) return cached;
+            var buffer = stackalloc byte[512];
+            var length = operations->EventName(access.Context, type, eventIndex, buffer, 512);
+            if (length <= 0 || length > 512) throw new WorldException(WorldStatus.UnknownOperation, "nome de evento");
+            var text = Encoding.UTF8.GetString(buffer, length);
+            var slash = text.IndexOf('/');
+            var names = (text[..slash], text[(slash + 1)..]);
+            _eventNames[key] = names;
+            return names;
+        }
         // Nomes cabem em 63 bytes e ids de tipo em 256; os buffers são o teto do
         // contrato nativo, não uma estimativa.
         private const int NameCapacity = 64;
@@ -1078,7 +1169,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 41 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 42 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

@@ -67,6 +67,61 @@ inline std::string xml(std::string_view text) {
   }
   return out;
 }
+inline std::string valueType(ComponentValueKind kind) {
+  switch(kind) {
+  case ComponentValueKind::None: return "void";
+  case ComponentValueKind::Boolean: return "bool";
+  case ComponentValueKind::Integer: return "long";
+  case ComponentValueKind::Number: return "double";
+  case ComponentValueKind::Vector3: return "Vector3";
+  case ComponentValueKind::Object: return "ObjectReference";
+  }
+  return "void";
+}
+inline std::string wrapValue(ComponentValueKind kind,const std::string &name) {
+  switch(kind) {
+  case ComponentValueKind::Boolean: return "ComponentValue.Boolean("+name+")";
+  case ComponentValueKind::Integer: return "ComponentValue.Integer("+name+")";
+  case ComponentValueKind::Number: return "ComponentValue.Number("+name+")";
+  case ComponentValueKind::Vector3: return "ComponentValue.Vector("+name+")";
+  case ComponentValueKind::Object: return "ComponentValue.Object("+name+")";
+  case ComponentValueKind::None: break;
+  }
+  return "default";
+}
+inline std::string unwrapValue(ComponentValueKind kind,const std::string &call) {
+  switch(kind) {
+  case ComponentValueKind::Boolean: return call+".AsBoolean()";
+  case ComponentValueKind::Integer: return call+".AsInteger()";
+  case ComponentValueKind::Number: return call+".AsNumber()";
+  case ComponentValueKind::Vector3: return call+".AsVector3()";
+  case ComponentValueKind::Object: return "Component.Reference("+call+")";
+  case ComponentValueKind::None: break;
+  }
+  return call;
+}
+// Parâmetros em camelCase; palavras reservadas do C# ganham @.
+inline std::string parameterName(std::string_view id) {
+  auto name=pascal(id);
+  if(!name.empty() && name[0]>='A' && name[0]<='Z') name[0]=static_cast<char>(name[0]-'A'+'a');
+  static constexpr std::string_view reserved[]{"object","string","event","params","base","this","double","long","bool","default","checked"};
+  for(const auto word:reserved) if(name==word) return "@"+name;
+  return name;
+}
+// Um método não pode esconder propriedade gerada nem membro fixo da fachada:
+// nesse caso ganha o prefixo Invoke, de forma determinística.
+inline std::string memberName(const ComponentType &type,std::string_view id) {
+  const auto name=pascal(id);
+  static constexpr std::string_view fixed[]{"TypeId","Wrap","Component","InstanceId","Object","IsAlive","Remove"};
+  bool clash=false;
+  for(const auto word:fixed) clash=clash||name==word;
+  for(const auto &p:type.numbers) clash=clash||pascal(p.id)==name;
+  for(const auto &p:type.booleans) clash=clash||pascal(p.id)==name;
+  for(const auto &p:type.enums) clash=clash||pascal(p.id)==name||pascal(p.id)+"Option"==name;
+  for(const auto &p:type.references) clash=clash||pascal(p.id)==name;
+  for(const auto &p:type.triples) clash=clash||pascal(p.id)==name;
+  return clash?"Invoke"+name:name;
+}
 inline std::string number(float value) {
   std::string text=std::to_string(value);
   while(text.size()>1 && text.back()=='0') text.pop_back();
@@ -81,6 +136,7 @@ inline std::string componentCSharpApi() {
     "// GERADO por scene::componentCSharpApi() a partir de native/scene/schemas/*.h — não edite.\n"
     "// Regenerar: aether_tests --write-component-api managed/Astra.Scripting/Generated/Components.g.cs\n"
     "#nullable enable\n"
+    "using System;\n"
     "using System.Numerics;\n\n"
     "namespace Astra.Components;\n\n"
     "/// <summary>Fachada tipada de um tipo de componente nativo.</summary>\n"
@@ -181,6 +237,32 @@ inline std::string componentCSharpApi() {
       out+=doc(p.name,{},"Opção por slot");
       out+="    public uint Get"+pascal(p.id)+"(uint slot) => Component.GetSlotEnum(\""+std::string(p.id)+"\", slot);\n";
       out+="    public void Set"+pascal(p.id)+"(uint slot, uint value) => Component.SetSlotEnum(\""+std::string(p.id)+"\", value, slot);\n";
+    }
+    // Métodos e eventos saem do mesmo descritor que o runtime valida; um id
+    // renomeado no C++ muda a assinatura C# e quebra a compilação do jogo, em
+    // vez de falhar só no aparelho.
+    for(const auto &m:type.methods) {
+      out+=doc(m.name,{},m.help?m.help:"");
+      out+="    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>\n";
+      std::string parameters,arguments;
+      for(const auto &parameter:m.parameters) {
+        if(!parameters.empty()) {parameters+=", ";}
+        const std::string name=csharp::parameterName(parameter.id);
+        parameters+=csharp::valueType(parameter.kind)+" "+name;
+        arguments+=", "+csharp::wrapValue(parameter.kind,name);
+      }
+      const auto result=m.result;
+      const std::string call="Component.Invoke(\""+std::string(m.id)+"\""+arguments+")";
+      out+="    public "+csharp::valueType(result)+" "+csharp::memberName(type,m.id)+"("+parameters+")";
+      if(result==ComponentValueKind::None) out+=" => "+call+";\n";
+      else out+=" => "+csharp::unwrapValue(result,call)+";\n";
+    }
+    for(const auto &e:type.events) {
+      std::string payload;
+      for(const auto &value:e.payload) payload+=(payload.empty()?"":", ")+std::string(value.name)+": "+componentValueKindName(value.kind);
+      out+=doc(e.name,{},std::string(e.help?e.help:"")+(payload.empty()?"":". Payload: "+payload));
+      out+="    public ComponentSubscription On"+pascal(e.id)+"(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, \""+
+           std::string(e.id)+"\", handler);\n";
     }
     out+="}\n";
   }

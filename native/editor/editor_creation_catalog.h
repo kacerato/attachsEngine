@@ -159,6 +159,14 @@ inline const CreationComponent tween[]{{"astra.tween.transform",tweenDestination
 inline const CreationValue connectedTweenValues[]{{"astra.tween.transform","position_y",2.f},{"astra.tween.transform","relative",true},{"astra.tween.transform","finished_action",u32{1}}};
 inline const CreationComponent connectedTween[]{{"astra.tween.transform",connectedTweenValues}};
 inline const CreationComponent audioSource[]{{"astra.audio.source"}};
+// Gatilho sonoro: o sensor emite trigger_enter e a Conexão de evento chama
+// AudioSource.play no próprio objeto (receptor vazio). Composição pura de tipos
+// existentes; o receptor pode ser trocado na Inspeção.
+inline constexpr std::string_view eventConnection="astra.logic.event_connection";
+inline const CreationValue soundTriggerBody[]{{body,"motion",Static},{body,"sensor",true}};
+inline const CreationValue soundTriggerConnection[]{{eventConnection,"event",u32{3}},{eventConnection,"action",u32{4}},{eventConnection,"method",u32{1}}};
+inline const CreationComponent soundTrigger[]{{body,soundTriggerBody},{collider},{"astra.audio.source"},{eventConnection,soundTriggerConnection}};
+inline const CreationComponent eventConnectionRecipe[]{{eventConnection}};
 inline const CreationComponent audioListener[]{{"astra.audio.listener"}};
 inline const CreationComponent audioBus[]{{"astra.audio.bus"}};
 inline const CreationValue static2D[]{{"astra.physics2d.body","motion",u32{0}}};
@@ -192,7 +200,7 @@ inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água"
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,77> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,79> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -255,6 +263,10 @@ inline const std::array<EditorCreationEntry,77> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::connectedSensor2D,CreationPose::ViewTarget,0,"astra.physics2d.event_connection","receiver","Area2D Sensor Evento",scene::PrimitiveType::Count,false,{},"astra.physics2d.event_connection"},
   {"physics.connected_sensor",EditorWidget::None,3,"Sensor conectado","Ativa o receptor selecionado quando outro corpo entra. Sem receptor, configure a referência na Inspeção.",ui::UiIcon::EventPhysicsConnection,
     runtime::ObjectKind::Folder,recipe::connectedSensor,CreationPose::ViewTarget,0,recipe::physicsConnection,"receiver","Trigger Area3D Evento Conexao",scene::PrimitiveType::Count,false,{},recipe::physicsConnection},
+  {"gameplay.event_connection",EditorWidget::None,5,"Conexão de evento","Liga um evento deste objeto a ativar objetos ou chamar métodos, sem script.",ui::UiIcon::ComponentEventConnection,
+    runtime::ObjectKind::Folder,recipe::eventConnectionRecipe,CreationPose::ViewTarget,0,recipe::eventConnection,"receiver","UnityEvent Signal Evento Conexao",scene::PrimitiveType::Count,false,{},recipe::eventConnection},
+  {"gameplay.sound_trigger",EditorWidget::None,5,"Gatilho sonoro","Sensor que toca o próprio som quando outro corpo entra.",ui::UiIcon::EventSoundTrigger,
+    runtime::ObjectKind::Folder,recipe::soundTrigger,CreationPose::ViewTarget,0,{},{},"Trigger Audio Som Evento",scene::PrimitiveType::Count,false,{},recipe::eventConnection},
   {"gameplay.timer",EditorWidget::None,5,"Timer","Dispara eventos para comportamentos em intervalos configuráveis.",ui::UiIcon::ComponentTimer,
     runtime::ObjectKind::Folder,recipe::timerRecipe,CreationPose::ViewTarget,0,{},{},"Timer"},
   {"geometry.sphere",EditorWidget::None,1,"Esfera","Diâmetro 1 m · colisão esférica.",ui::UiIcon::PrimitiveSphere,

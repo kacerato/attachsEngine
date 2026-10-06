@@ -109,7 +109,17 @@ inline constexpr std::array<ComponentResourceBinding,1> colliderResources{{
    },
    {"Forma","","Vazio usa a malha visual; escolha uma malha simplificada para a física",colliderIsMesh},true}
 }};
+// Acontecimentos do solver Jolt. Instância zero: o backend informa o objeto,
+// não qual das formas repetíveis do objeto tocou. Stay fica fora: um evento
+// por par e passo físico encheria a fila sem informação nova para conexões.
+inline constexpr std::array<ComponentParameter,1> physicsOtherPayload{{{"other","Outro objeto",ComponentValueKind::Object}}};
+inline constexpr std::array<ComponentEvent,4> physicsContactEvents{{
+  {"trigger_enter","Sensor: entrou","Outro corpo começou a sobrepor este sensor",physicsOtherPayload},
+  {"trigger_exit","Sensor: saiu","Outro corpo deixou de sobrepor este sensor",physicsOtherPayload},
+  {"collision_enter","Colisão: começou","Contato sólido começou; entregue aos dois objetos",physicsOtherPayload},
+  {"collision_exit","Colisão: terminou","Contato sólido terminou; entregue aos dois objetos",physicsOtherPayload},
+}};
 inline const ComponentType Collider::descriptor{
-  "astra.physics.collider",7,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources
+  "astra.physics.collider",7,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources,{},{},{},{},physicsContactEvents
 };
 }

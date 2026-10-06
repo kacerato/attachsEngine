@@ -132,7 +132,7 @@ AE_TEST(gui_script_bridge_play_commands_events_and_lifetime) {
   GuiDocument authored;const auto button=authored.create(GuiKind::Button);std::string error;
   auto n=*authored.find(button);n.name="start";authored.update(n,error);
   play.configureGui(authored);play.setScriptRuntime(scriptApi(),"/test");
-  AE_EXPECT_TRUE(play.start(scene,map)&&access.version==41&&access.available(),"real Play publishes complete ABI41");
+  AE_EXPECT_TRUE(play.start(scene,map)&&access.version==42&&access.available(),"real Play publishes complete ABI42");
   scene::ScriptGuiState state;
   const auto call=[&](u32 world,u32 node,u32 operation,std::string_view text={},float value=0) {
     return access.guiCommand(access.context,world,node,operation,reinterpret_cast<const u8*>(text.data()),static_cast<int>(text.size()),value,&state);

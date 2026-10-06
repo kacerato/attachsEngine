@@ -226,6 +226,64 @@ struct ComponentTriple {
   // Fixed three-float transport; Vector2 has exactly two persisted channels.
   u32 dimensions() const noexcept {return kind==ComponentTripleKind::Vector2?2:3;}
 };
+// Comportamento do componente que NÃO é propriedade: operações (tocar, parar,
+// reiniciar) e acontecimentos (terminou, disparou, entrou). O descritor diz o
+// que existe, com argumentos tipados; a função efetiva mora no runtime
+// (runtime/component_operations.h), que recusa descritor sem implementação e
+// implementação sem descritor. Referência do princípio: Godot 4.5 ClassDB, que
+// registra métodos e sinais junto das propriedades.
+//
+// O conjunto de tipos de valor é fechado de propósito: ele atravessa a ABI dos
+// scripts e a autoria de conexões, e cada tipo novo exige os dois lados.
+enum class ComponentValueKind : u32 { None=0, Boolean=1, Integer=2, Number=3, Vector3=4, Object=5 };
+inline const char *componentValueKindName(ComponentValueKind kind) {
+  switch(kind) {
+  case ComponentValueKind::None: return "nada";
+  case ComponentValueKind::Boolean: return "booleano";
+  case ComponentValueKind::Integer: return "inteiro";
+  case ComponentValueKind::Number: return "número";
+  case ComponentValueKind::Vector3: return "vetor";
+  case ComponentValueKind::Object: return "objeto";
+  }
+  return "?";
+}
+// Valor transportado por método e evento. Layout fixo de 24 bytes, espelhado em
+// managed/Astra.Scripting/ComponentOperations.cs: não reordenar.
+struct ComponentOperationValue {
+  u32 kind=0,reserved=0;
+  union {double number;i64 integer;u64 object;u32 boolean;float vector[4];};
+  ComponentOperationValue() : vector{0,0,0,0} {}
+  static ComponentOperationValue makeBoolean(bool v) {ComponentOperationValue r;r.kind=u32(ComponentValueKind::Boolean);r.boolean=v?1u:0u;return r;}
+  static ComponentOperationValue makeInteger(i64 v) {ComponentOperationValue r;r.kind=u32(ComponentValueKind::Integer);r.integer=v;return r;}
+  static ComponentOperationValue makeNumber(double v) {ComponentOperationValue r;r.kind=u32(ComponentValueKind::Number);r.number=v;return r;}
+  static ComponentOperationValue makeObject(u64 v) {ComponentOperationValue r;r.kind=u32(ComponentValueKind::Object);r.object=v;return r;}
+  static ComponentOperationValue makeVector(float x,float y,float z) {ComponentOperationValue r;r.kind=u32(ComponentValueKind::Vector3);r.vector[0]=x;r.vector[1]=y;r.vector[2]=z;return r;}
+  ComponentValueKind valueKind() const noexcept {return static_cast<ComponentValueKind>(kind);}
+};
+static_assert(sizeof(ComponentOperationValue)==24);
+struct ComponentParameter {
+  std::string_view id;
+  const char *name;
+  ComponentValueKind kind;
+  std::string_view unit{};
+};
+// Métodos existem só no mundo de Play: não há mundo a operar durante a edição.
+struct ComponentMethod {
+  std::string_view id;
+  const char *name;
+  const char *help;
+  std::span<const ComponentParameter> parameters{};
+  ComponentValueKind result=ComponentValueKind::None;
+};
+// Payload limitado a três valores; o produtor é identificado pelo runtime.
+inline constexpr u32 kComponentEventPayloadLimit=3;
+struct ComponentEvent {
+  std::string_view id;
+  const char *name;
+  const char *help;
+  std::span<const ComponentParameter> payload{};
+};
+
 // Descriptors have static lifetime. IDs and versions are archive contracts;
 // pointer identity is only a checked, process-local type token (no RTTI).
 struct ComponentType {
@@ -246,7 +304,18 @@ struct ComponentType {
   std::span<const ComponentSlotNumber> slotNumbers{};
   std::span<const ComponentSlotEnum> slotEnums{};
   std::span<const ComponentCollection> collections{};
+  // Operações e acontecimentos do componente em Play; ver ComponentMethod.
+  std::span<const ComponentMethod> methods{};
+  std::span<const ComponentEvent> events{};
 };
+inline const ComponentMethod *findComponentMethod(const ComponentType &type,std::string_view id) {
+  for(const auto &method:type.methods) if(method.id==id) return &method;
+  return nullptr;
+}
+inline const ComponentEvent *findComponentEvent(const ComponentType &type,std::string_view id) {
+  for(const auto &event:type.events) if(event.id==id) return &event;
+  return nullptr;
+}
 inline bool sameComponentCollectionStructure(const ComponentValue &a,const ComponentValue &b) {
   if(&a.type()!=&b.type()) return false;
   for(const auto &collection:a.type().collections) {

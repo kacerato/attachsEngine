@@ -30,7 +30,7 @@ AE_TEST(audio_script_observes_real_offline_voice_and_rejects_stale_lifetime) {
   play.configureAudio([clip](resources::AssetGuid,std::string&)->std::shared_ptr<const resources::AudioClip>{return clip;},runtime::SceneAudio::Output::Offline);
   play.setScriptRuntime(audioApi(),"/test");
   AE_EXPECT_TRUE(play.start(doc,resources),"real Play bridge");
-  AE_EXPECT_TRUE(audioAccess.version==38&&audioAccess.available(),"complete ABI38");
+  AE_EXPECT_TRUE(audioAccess.version==scene::ScriptSceneAccess{}.version&&audioAccess.available(),"complete core ABI");
   auto truncated=audioAccess;truncated.size=offsetof(scene::ScriptSceneAccess,audioCommand);
   AE_EXPECT_TRUE(!truncated.available(),"transport requires appended ABI callback");
   auto old=audioAccess;old.size=offsetof(scene::ScriptSceneAccess,audioSnapshot);

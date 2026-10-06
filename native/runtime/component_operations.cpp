@@ -1,0 +1,183 @@
+#include "runtime/component_operations.h"
+
+#include "runtime/scene_audio.h"
+#include "runtime/scene_paths.h"
+#include "runtime/scene_timers.h"
+#include "runtime/scene_tweens.h"
+#include "scene/audio.h"
+#include "scene/component_schema.h"
+#include "scene/path_follow.h"
+#include "scene/timer.h"
+#include "scene/transform_tween.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace ae::runtime {
+namespace {
+using Value=scene::ComponentOperationValue;
+using Arguments=std::span<const Value>;
+
+// Cada função reutiliza o mesmo serviço chamado pela ABI específica do
+// componente; as duas portas produzem o mesmo efeito por construção.
+WorldStatus timerOperation(const ComponentOperationServices &s,ComponentHandle h,u32 operation,float seconds,Value *result,int field) {
+  if(!s.timers) return WorldStatus::NotRunning;
+  SceneTimers::State state;
+  const auto status=s.timers->command(*s.world,h,operation,seconds,state);
+  if(status!=WorldStatus::Ok) return status;
+  if(field==1) *result=Value::makeNumber(state.running?std::max(0.0,state.remaining):0.0);
+  else if(field==2) *result=Value::makeBoolean(state.running);
+  return WorldStatus::Ok;
+}
+WorldStatus tweenOperation(const ComponentOperationServices &s,ComponentHandle h,u32 operation,Value *result) {
+  if(!s.tweens) return WorldStatus::NotRunning;
+  SceneTweens::State state;
+  const auto status=s.tweens->command(*s.world,h,operation,state);
+  if(status==WorldStatus::Ok && result) *result=Value::makeNumber(state.elapsed);
+  return status;
+}
+WorldStatus audioOperation(const ComponentOperationServices &s,ComponentHandle h,SceneAudio::Command command,double seconds=0) {
+  if(!s.audio) return WorldStatus::NotRunning;
+  return s.audio->command(*s.world,h,command,seconds);
+}
+WorldStatus pathOperation(const ComponentOperationServices &s,ComponentHandle h,u32 operation,Value &result) {
+  if(!s.paths) return WorldStatus::NotRunning;
+  bool ok=false;
+  if(operation==0) ok=s.paths->restart(*s.world,h.object.id);
+  else if(operation==1) ok=s.paths->stop(*s.world,h.object.id);
+  else if(operation==2) {double distance=0;ok=s.paths->progress(*s.world,h.object.id,distance);if(ok)result=Value::makeNumber(distance);}
+  else {bool playing=false;ok=s.paths->playing(*s.world,h.object.id,playing);if(ok)result=Value::makeBoolean(playing);}
+  return ok?WorldStatus::Ok:WorldStatus::Rejected;
+}
+
+const std::array<ComponentMethodBinding,20> bindings{{
+  {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    const double seconds=a[0].number;
+    if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
+    return timerOperation(s,h,1,static_cast<float>(seconds),nullptr,0);}},
+  {&scene::Timer::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return timerOperation(s,h,2,0,nullptr,0);}},
+  {&scene::Timer::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return timerOperation(s,h,3,0,nullptr,0);}},
+  {&scene::Timer::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return timerOperation(s,h,4,0,nullptr,0);}},
+  {&scene::Timer::descriptor,"remaining",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return timerOperation(s,h,0,0,&r,1);}},
+  {&scene::Timer::descriptor,"running",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return timerOperation(s,h,0,0,&r,2);}},
+  {&scene::TransformTween::descriptor,"restart",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,1,nullptr);}},
+  {&scene::TransformTween::descriptor,"cancel",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,2,nullptr);}},
+  {&scene::TransformTween::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,3,nullptr);}},
+  {&scene::TransformTween::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,4,nullptr);}},
+  {&scene::TransformTween::descriptor,"elapsed",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return tweenOperation(s,h,0,&r);}},
+  {&scene::AudioSource::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Play);}},
+  {&scene::AudioSource::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Pause);}},
+  {&scene::AudioSource::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Resume);}},
+  {&scene::AudioSource::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Stop);}},
+  {&scene::AudioSource::descriptor,"seek",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!std::isfinite(a[0].number) || a[0].number<0) return WorldStatus::InvalidArgument;
+    return audioOperation(s,h,SceneAudio::Command::Seek,a[0].number);}},
+  {&scene::PathFollow::descriptor,"restart",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,0,r);}},
+  {&scene::PathFollow::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,1,r);}},
+  {&scene::PathFollow::descriptor,"progress",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,2,r);}},
+  {&scene::PathFollow::descriptor,"playing",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,3,r);}},
+}};
+
+const ComponentMethodBinding *findBinding(const scene::ComponentType &type,std::string_view method) {
+  for(const auto &binding:bindings) if(binding.type==&type && binding.method==method) return &binding;
+  return nullptr;
+}
+bool payloadMatches(std::span<const scene::ComponentParameter> declared,std::span<const Value> values) {
+  if(declared.size()!=values.size()) return false;
+  for(usize i=0;i<declared.size();++i) {
+    if(values[i].valueKind()!=declared[i].kind) return false;
+    if(declared[i].kind==scene::ComponentValueKind::Number && !std::isfinite(values[i].number)) return false;
+    if(declared[i].kind==scene::ComponentValueKind::Vector3 &&
+       !(std::isfinite(values[i].vector[0])&&std::isfinite(values[i].vector[1])&&std::isfinite(values[i].vector[2]))) return false;
+    if(declared[i].kind==scene::ComponentValueKind::Boolean && values[i].boolean>1) return false;
+  }
+  return true;
+}
+} // namespace
+
+std::span<const ComponentMethodBinding> componentMethodBindings() {return bindings;}
+
+WorldStatus invokeComponentMethod(const ComponentOperationServices &services,ComponentHandle component,
+                                  std::string_view method,std::span<const Value> arguments,Value &result) {
+  result=Value{};
+  if(!services.world || !services.world->running()) return WorldStatus::NotRunning;
+  const auto valid=services.world->validate(component.object);
+  if(valid!=WorldStatus::Ok) return valid;
+  const auto *value=services.world->readComponent(component);
+  if(!value) return WorldStatus::ComponentMissing;
+  const auto &type=value->type();
+  const auto *declared=scene::findComponentMethod(type,method);
+  if(!declared) return WorldStatus::UnknownOperation;
+  if(!payloadMatches(declared->parameters,arguments)) return WorldStatus::InvalidArgument;
+  const auto *binding=findBinding(type,method);
+  if(!binding || !binding->invoke) return WorldStatus::UnknownOperation;
+  const auto status=binding->invoke(services,component,arguments,result);
+  if(status!=WorldStatus::Ok) {result=Value{};return status;}
+  // O retorno também é contrato: uma função que devolve outro tipo é defeito.
+  if(result.valueKind()!=declared->result) {result=Value{};return WorldStatus::Rejected;}
+  return WorldStatus::Ok;
+}
+
+std::vector<std::string> auditComponentOperations() {
+  std::vector<std::string> issues;
+  for(const auto &schema:scene::componentSchemas) {
+    const auto &type=*schema.type;
+    for(usize i=0;i<type.methods.size();++i) {
+      const auto &method=type.methods[i];
+      if(method.id.empty()) issues.push_back(std::string(type.id)+": método sem identidade");
+      for(usize j=0;j<i;++j) if(type.methods[j].id==method.id) issues.push_back(std::string(type.id)+"."+std::string(method.id)+": repetido");
+      usize found=0;
+      for(const auto &binding:bindings) if(binding.type==&type && binding.method==method.id) ++found;
+      if(found!=1) issues.push_back(std::string(type.id)+"."+std::string(method.id)+": "+std::to_string(found)+" implementações");
+    }
+    for(usize i=0;i<type.events.size();++i) {
+      const auto &event=type.events[i];
+      if(event.id.empty()) issues.push_back(std::string(type.id)+": evento sem identidade");
+      if(event.payload.size()>scene::kComponentEventPayloadLimit) issues.push_back(std::string(type.id)+"."+std::string(event.id)+": payload acima do limite");
+      for(usize j=0;j<i;++j) if(type.events[j].id==event.id) issues.push_back(std::string(type.id)+"."+std::string(event.id)+": repetido");
+    }
+  }
+  for(const auto &binding:bindings) {
+    bool registered=false;
+    for(const auto &schema:scene::componentSchemas) registered=registered||schema.type==binding.type;
+    if(!registered || !scene::findComponentMethod(*binding.type,binding.method))
+      issues.push_back(std::string(binding.type->id)+"."+std::string(binding.method)+": implementação sem método declarado");
+  }
+  return issues;
+}
+
+void ComponentEventQueue::reset() {
+  records_.clear();next_=1;dropped_=0;cursor_={1,1};attached_={};
+}
+void ComponentEventQueue::attach(Consumer consumer,bool attached) {
+  attached_[index(consumer)]=attached;
+  // Um consumidor que chega agora só vê o que acontecer depois.
+  if(attached) cursor_[index(consumer)]=next_;
+  trim();
+}
+bool ComponentEventQueue::emit(GameWorld &world,ObjectId object,u64 instance,const scene::ComponentType &type,
+                               std::string_view event,std::span<const Value> payload) {
+  if(!attached_[0] && !attached_[1]) return true;
+  const auto handle=world.handle(object);
+  if(world.validate(handle)!=WorldStatus::Ok) return false;
+  usize eventIndex=type.events.size();
+  for(usize i=0;i<type.events.size();++i) if(type.events[i].id==event) {eventIndex=i;break;}
+  if(eventIndex==type.events.size() || !payloadMatches(type.events[eventIndex].payload,payload)) return false;
+  if(records_.size()>=Capacity) {records_.pop_front();++dropped_;}
+  ComponentEventRecord record;
+  record.sequence=next_++;record.object=handle;record.instance=instance;record.type=&type;
+  record.event=static_cast<u32>(eventIndex);record.count=static_cast<u32>(payload.size());
+  std::copy(payload.begin(),payload.end(),record.values.begin());
+  records_.push_back(record);
+  return true;
+}
+usize ComponentEventQueue::pending(Consumer consumer) const noexcept {
+  return next_>cursor_[index(consumer)]?static_cast<usize>(next_-cursor_[index(consumer)]):0;
+}
+void ComponentEventQueue::trim() {
+  u64 floor=next_;
+  for(usize i=0;i<attached_.size();++i) if(attached_[i]) floor=std::min(floor,cursor_[i]);
+  while(!records_.empty() && records_.front().sequence<floor) records_.pop_front();
+}
+
+} // namespace ae::runtime

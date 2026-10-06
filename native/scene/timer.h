@@ -52,8 +52,27 @@ inline constexpr std::array<ComponentObjectReference,1> timerReferences{{
     [](const ComponentValue &v){return static_cast<const Timer &>(v).elapsedAction!=0;},nullptr,{},"runtime/scene_timers.h -> GameWorld::setActive"},
    [](const ComponentValue &v){const auto &timer=static_cast<const Timer &>(v);return timer.enabled && timer.elapsedAction!=0;}}
 }};
+// Operações sobre o agendador de Play (runtime/scene_timers.h). Intervalo zero
+// em start mantém o valor autorado; positivo altera só o intervalo em execução.
+inline constexpr std::array<ComponentParameter,1> timerStartParameters{{
+  {"interval","Intervalo",ComponentValueKind::Number,"s"}
+}};
+inline constexpr std::array<ComponentParameter,1> timerElapsedPayload{{
+  {"count","Disparos",ComponentValueKind::Integer}
+}};
+inline constexpr std::array<ComponentMethod,6> timerMethods{{
+  {"start","Iniciar","Reinicia a contagem; intervalo zero usa o autorado",timerStartParameters},
+  {"stop","Parar","Interrompe e zera a contagem"},
+  {"pause","Pausar","Congela a contagem sem perder o restante"},
+  {"resume","Retomar","Continua a contagem pausada"},
+  {"remaining","Restante","Segundos até o próximo disparo; zero quando parado",{},ComponentValueKind::Number},
+  {"running","Em execução","Verdadeiro enquanto conta, inclusive pausado",{},ComponentValueKind::Boolean},
+}};
+inline constexpr std::array<ComponentEvent,1> timerEvents{{
+  {"elapsed","Disparou","Um evento por quadro; Disparos conta intervalos vencidos no quadro",timerElapsedPayload}
+}};
 inline const ComponentType Timer::descriptor{
   "astra.time.timer",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Timer>();},
-  timerNumbers,timerBooleans,timerEnums,nullptr,true,timerReferences
+  timerNumbers,timerBooleans,timerEnums,nullptr,true,timerReferences,{},{},{},{},{},timerMethods,timerEvents
 };
 }

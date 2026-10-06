@@ -1,6 +1,7 @@
 #pragma once
 #include "runtime/game_world.h"
 #include "runtime/object_activation_connection.h"
+#include "runtime/component_operations.h"
 #include "scene/transform_tween.h"
 #include <map>
 #include <set>
@@ -13,6 +14,8 @@ public:
  using Key=std::pair<ObjectId,u64>;
  const State*state(ObjectId id,u64 instance)const{auto i=states_.find({id,instance});return i==states_.end()?nullptr:&i->second;}
  void reset(){states_.clear();knownWorld_=0;cachedRevision_=~u64{0};ids_.clear();}
+ // Fila de eventos do Play; nula quando nenhum consumidor existe.
+ void setEvents(ComponentEventQueue*events)noexcept{events_=events;}
  WorldStatus command(GameWorld&w,ComponentHandle h,u32 operation,State&out){
   const auto valid=w.validate(h.object);if(valid!=WorldStatus::Ok)return valid;
   const auto*v=w.readComponent(h);if(!v)return WorldStatus::ComponentMissing;
@@ -59,12 +62,13 @@ public:
     else {
       s.status=completed?Status::Completed:Status::Running;
       if(completed&&c.finishedAction){s.connectionInvoked=true;s.connectionStatus=applyObjectActivationConnection(w,static_cast<ObjectId>(c.finishedTarget),c.finishedAction);}
+      if(completed&&events_)events_->emit(w,id,c.instanceId(),scene::TransformTween::descriptor,"completed");
     }
    }
   }
   for(auto i=states_.begin();i!=states_.end();)if(!seen.contains(i->first))i=states_.erase(i);else++i;
   return true;
  }
-private:std::map<Key,State>states_;u32 knownWorld_=0;u64 cachedRevision_=~u64{0};std::vector<ObjectId>ids_;
+private:ComponentEventQueue*events_=nullptr;std::map<Key,State>states_;u32 knownWorld_=0;u64 cachedRevision_=~u64{0};std::vector<ObjectId>ids_;
 };
 }

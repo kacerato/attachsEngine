@@ -481,6 +481,8 @@ add_library(aether_runtime STATIC
   runtime/scene_audio.cpp
   runtime/scene_paths.cpp
   runtime/script_bridge.cpp
+  runtime/component_operations.cpp
+  runtime/scene_event_connections.cpp
   runtime/runtime_rendering_state.cpp
   runtime/scene_animation.cpp
 )
@@ -773,6 +775,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
+    ../tests/native/test_component_operations.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_highlevel_example_games.cpp
     ../tests/native/test_scene_components.cpp
@@ -856,6 +859,11 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  # Os fixtures de Play instanciam o schema tipado inteiro; vários objetos de
+  # depuração passam do limite de seções do COFF. Só o formato do objeto muda.
+  if(MINGW)
+    target_compile_options(aether_tests PRIVATE -Wa,-mbig-obj)
+  endif()
   # Os assets de interface sao gerados por ferramenta e lidos por codigo nativo;
   # o unico teste que prova que os dois lados concordam e o que abre o arquivo de
   # verdade. Passar a raiz do repositorio evita que ele dependa do diretorio de

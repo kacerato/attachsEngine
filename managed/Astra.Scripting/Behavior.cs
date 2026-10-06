@@ -601,6 +601,16 @@ public abstract class Behavior
     /// <typeparamref name="T"/>, ou null. `T` pode ser uma interface: é assim
     /// que um objeto interage com outro sem conhecer o tipo concreto dele.
     /// </summary>
+    /// <summary>
+    /// Assina um evento declarado pelo tipo de <paramref name="source"/>. O
+    /// handler roda no thread de script, no próximo despacho (FixedUpdate,
+    /// Update ou LateUpdate) depois da emissão; exceção isola este comportamento
+    /// como qualquer callback. Termina com Dispose ou quando este comportamento sai.
+    /// </summary>
+    public ComponentSubscription Connect(Component source, string eventId, Action<ComponentEventArgs> handler) =>
+        (_registry as IComponentEventHost ?? throw new InvalidOperationException("Eventos de componente exigem um comportamento em Play."))
+            .Connect(this, source, eventId, handler);
+
     protected T? FindBehavior<T>(GameObject? target) where T : class =>
         target is { IsAlive: true } && target.BelongsTo(Scene) ? _registry?.FindBehavior(target.ObjectId, typeof(T)) as T : null;
 

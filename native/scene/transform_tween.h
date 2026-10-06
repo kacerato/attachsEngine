@@ -38,5 +38,16 @@ inline constexpr std::array<ComponentObjectReference,1>tweenReferences{{
   [](const ComponentValue&v){const auto&c=static_cast<const TransformTween&>(v);return c.enabled&&c.finishedAction!=0;}}
 }};
 inline constexpr std::array<ComponentTriple,3>tweenTriples{{{"position_destination","Posição destino",{"position_x","position_y","position_z"}},{"rotation_destination","Rotação destino",{"rotation_x","rotation_y","rotation_z"}},{"scale_destination","Escala destino",{"scale_x","scale_y","scale_z"}}}};
-inline const ComponentType TransformTween::descriptor{"astra.tween.transform",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TransformTween>();},tweenNumbers,tweenBooleans,tweenEnums,nullptr,false,tweenReferences,tweenTriples};
+// Operações sobre o avaliador de Play (runtime/scene_tweens.h).
+inline constexpr std::array<ComponentMethod,5> tweenMethods{{
+ {"restart","Reiniciar","Recomeça da pose atual, conservando a pausa"},
+ {"cancel","Cancelar","Interrompe sem voltar à pose inicial"},
+ {"pause","Pausar","Congela o progresso"},
+ {"resume","Retomar","Continua o progresso pausado"},
+ {"elapsed","Decorrido","Segundos desde o início, incluindo o atraso",{},ComponentValueKind::Number},
+}};
+inline constexpr std::array<ComponentEvent,1> tweenEvents{{
+ {"completed","Concluiu","Emitido uma vez quando as repetições finitas terminam, depois da pose final"}
+}};
+inline const ComponentType TransformTween::descriptor{"astra.tween.transform",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TransformTween>();},tweenNumbers,tweenBooleans,tweenEnums,nullptr,false,tweenReferences,tweenTriples,{},{},{},{},tweenMethods,tweenEvents};
 }

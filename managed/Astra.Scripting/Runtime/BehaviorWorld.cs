@@ -13,8 +13,60 @@ public sealed record BehaviorFailure(ulong ObjectId, ulong InstanceId, string Ph
 public sealed record BehaviorEdit(bool Enabled, IReadOnlyDictionary<string, JsonElement>? Properties);
 
 /// <summary>Owns one isolated script assembly and its instances for a Play session.</summary>
-public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHost, ISaveHost, ITimeHost
+public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHost, ISaveHost, ITimeHost, IComponentEventHost
 {
+    // Assinaturas de eventos de componente. Limite explícito: uma assinatura por
+    // quadro em um loop seria vazamento, não uso legítimo.
+    private const int SubscriptionLimit = 4096;
+    private readonly List<ComponentSubscription> _subscriptions = [];
+    private readonly ComponentEventRecord[] _eventBuffer = new ComponentEventRecord[64];
+    ComponentSubscription IComponentEventHost.Connect(Behavior owner, Component source, string eventId, Action<ComponentEventArgs> handler)
+    {
+        ArgumentNullException.ThrowIfNull(eventId); ArgumentNullException.ThrowIfNull(handler);
+        if (!Running || _stopping || _scene is null) throw new WorldException(WorldStatus.NotRunning, "assinar evento");
+        if (!owner.IsAlive) throw new WorldException(WorldStatus.StaleHandle, "assinar evento");
+        if (source.Object is null || !source.Object.BelongsTo(_scene)) throw new WorldException(WorldStatus.ForeignWorld, "assinar evento");
+        if (!source.IsAlive) throw new WorldException(WorldStatus.ComponentMissing, "assinar evento");
+        if (_scene is not IComponentOperationAccess access) throw new NotSupportedException("O host não oferece eventos de componente.");
+        if (!access.DeclaresComponentEvent(source.TypeId, eventId))
+            throw new WorldException(WorldStatus.UnknownOperation, $"assinar {source.TypeId}/{eventId}");
+        _subscriptions.RemoveAll(s => !s.Active);
+        if (_subscriptions.Count >= SubscriptionLimit) throw new WorldException(WorldStatus.LimitReached, "assinar evento");
+        var subscription = new ComponentSubscription(owner, source, eventId, handler);
+        _subscriptions.Add(subscription);
+        return subscription;
+    }
+    // Drena a fila nativa mesmo sem assinaturas: um consumidor parado faria a
+    // fila estourar e descartar eventos que conexões autoradas ainda leriam.
+    private void DispatchComponentEvents()
+    {
+        if (!Running || _scene is not IComponentOperationAccess access) return;
+        for (var round = 0; round < 64; ++round)
+        {
+            var count = access.PollComponentEvents(_eventBuffer);
+            for (var i = 0; i < count; ++i) DeliverComponentEvent(_eventBuffer[i]);
+            if (count < _eventBuffer.Length) break;
+        }
+    }
+    private void DeliverComponentEvent(ComponentEventRecord record)
+    {
+        if (_subscriptions.Count == 0 || _scene is null) return;
+        for (int i = 0, count = _subscriptions.Count; i < count; ++i)
+        {
+            var subscription = _subscriptions[i];
+            var source = subscription.Source;
+            if (!subscription.Active || subscription.EventId != record.EventId || source.TypeId != record.TypeId) continue;
+            var emitter = source.Object;
+            if (emitter.ObjectId != record.ObjectId || emitter.World != record.World || emitter.Generation != record.Generation) continue;
+            // Instância zero: o backend informou só o objeto (contatos 3D).
+            if (record.InstanceId != 0 && record.InstanceId != source.InstanceId) continue;
+            var entry = _entries.FirstOrDefault(e => ReferenceEquals(e.Instance, subscription.Owner));
+            if (entry is null || entry.Retired || entry.Failed) { subscription.Active = false; continue; }
+            var args = new ComponentEventArgs(_scene, source, record);
+            Invoke(entry, "Event " + record.TypeId + "/" + record.EventId, _ => subscription.Handler(args));
+        }
+    }
+
     private sealed class ProjectLoadContext() : AssemblyLoadContext("Astra.Project", isCollectible: true)
     {
         protected override Assembly? Load(AssemblyName name) =>
@@ -120,6 +172,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
         if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
         Time.BeginFrame(deltaTime);
         _coroutines?.BeginFrame(deltaTime);
+        DispatchComponentEvents();
         Dispatch("Update", b => b.Update(deltaTime));
         _coroutines?.Tick();
     }
@@ -127,13 +180,14 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
     {
         if (!Running || !float.IsFinite(deltaTime) || deltaTime < 0) return;
         Time.FramePhase();
+        DispatchComponentEvents();
         Dispatch("LateUpdate", b => b.LateUpdate(deltaTime));
     }
     public void FixedUpdate(float deltaTime)
     {
         if (!Running || !float.IsFinite(deltaTime) || deltaTime <= 0) return;
         Time.BeginFixed(deltaTime);
-        try { _coroutines?.BeginFixedStep(); Dispatch("FixedUpdate", b => b.FixedUpdate(deltaTime)); _coroutines?.TickFixed(); }
+        try { _coroutines?.BeginFixedStep(); DispatchComponentEvents(); Dispatch("FixedUpdate", b => b.FixedUpdate(deltaTime)); _coroutines?.TickFixed(); }
         finally { _time?.EndFixed(); }
     }
     public void Application(ApplicationEvent kind, bool value) => Dispatch(kind == ApplicationEvent.Pause ? "ApplicationPause" : "ApplicationFocus", b =>
@@ -181,6 +235,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
         entry.Retired = true;
         entry.Instance.BlockCoroutines();
         _coroutines?.CancelOwner(entry.Instance);
+        foreach (var subscription in _subscriptions) if (ReferenceEquals(subscription.Owner, entry.Instance)) subscription.Active = false;
         Deactivate(entry);
         if (entry.Started) Invoke(entry, "Stop", static b => b.Stop());
         if (entry.Awoken) Invoke(entry, "Destroy", static b => b.Destroy());
@@ -633,6 +688,8 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
         try { for (var i = _entries.Count - 1; i >= 0; --i) Retire(_entries[i]); _saveStore?.Flush(); }
         finally
         {
+            foreach (var subscription in _subscriptions) subscription.Active = false;
+            _subscriptions.Clear();
             --_dispatchDepth; _time?.End(); _time = null; _entries.Clear(); _types.Clear(); _messages.Clear(); _scene = null; _saveStore = null; _started = false;
             var context = _context; _context = null; _coroutines = null; context.Unload(); _stopping = false;
         }

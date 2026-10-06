@@ -70,7 +70,16 @@ inline constexpr std::array<ComponentObjectReference,1> audioSourceReferences{{{
 #include "scene/generated/audio_audioBusBooleans.inc"
 inline constexpr std::array<ComponentObjectReference,1> audioBusReferences{{{"output","Saída","astra.audio.bus",ObjectReferenceScope::Other,"Master",[](const ComponentValue &v){return static_cast<const AudioBus&>(v).output;},[](ComponentValue &v,u64 b){static_cast<AudioBus&>(v).output=b;},{"Mixer"}}}};
 
-inline const ComponentType AudioSource::descriptor{"astra.audio.source",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<AudioSource>();},audioSourceNumbers,audioSourceBooleans,audioSourceEnums,nullptr,false,audioSourceReferences,{},audioSourceResources};
+// Transporte da voz real (runtime/scene_audio.h, miniaudio).
+inline constexpr std::array<ComponentParameter,1> audioSeekParameters{{{"seconds","Posição",ComponentValueKind::Number,"s"}}};
+inline constexpr std::array<ComponentMethod,5> audioSourceMethods{{
+  {"play","Tocar","Recomeça do início"},
+  {"pause","Pausar","Congela o cursor"},
+  {"resume","Retomar","Continua do cursor pausado"},
+  {"stop","Parar","Interrompe e libera a voz"},
+  {"seek","Posicionar","Move o cursor; aplicado pelo mixer",audioSeekParameters},
+}};
+inline const ComponentType AudioSource::descriptor{"astra.audio.source",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<AudioSource>();},audioSourceNumbers,audioSourceBooleans,audioSourceEnums,nullptr,false,audioSourceReferences,{},audioSourceResources,{},{},{},audioSourceMethods};
 inline const ComponentType AudioListener::descriptor{"astra.audio.listener",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<AudioListener>();},audioListenerNumbers,audioListenerBooleans};
 inline const ComponentType AudioBus::descriptor{"astra.audio.bus",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<AudioBus>();},audioBusNumbers,audioBusBooleans,{},nullptr,false,audioBusReferences};
 }

@@ -8,6 +8,7 @@
 #include "editor/editor_curve_view.h"
 #include <sstream>
 #include <iomanip>
+#include "scene/event_connection.h"
 #include "scene/script_behavior.h"
 #include "scene/prefab_link.h"
 #include "editor/editor_water_body_component.h"
@@ -126,6 +127,7 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(runtime::physicsBody(entity)) return UiIcon::ComponentPhysics;
   if(entity.components.find(scene::PhysicsEventConnection2D::descriptor))return UiIcon::EventPhysicsConnection2d;
   if(entity.components.find(scene::PhysicsEventConnection3D::descriptor))return UiIcon::EventPhysicsConnection;
+  if(entity.components.find(scene::EventConnection::descriptor))return UiIcon::ComponentEventConnection;
   if(const auto *timer=static_cast<const scene::Timer*>(entity.components.find(scene::Timer::descriptor)))
     return timer->elapsedAction!=0 ? UiIcon::EventTimeoutConnection : UiIcon::ComponentTimer;
   if(const auto *tween=static_cast<const scene::TransformTween*>(entity.components.find(scene::TransformTween::descriptor)))
@@ -1949,6 +1951,11 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Conexão de evento lê como frase: primeiro o gatilho, depois a resposta.
+  if(&type==&scene::EventConnection::descriptor) {
+    const auto rank=[](std::string_view group){return group=="Quando"?0:group=="Então"?1:2;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   return groups;
 }
 
@@ -3472,6 +3479,15 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       u32 autoplay=~u32{0},loop=~u32{0};for(const auto&f:fields)if(f.kind==0){const auto id=entry.type->booleans[f.index].id;if(id=="autoplay")autoplay=f.index;else if(id=="loop")loop=f.index;}
       if(autoplay!=~u32{0}&&loop!=~u32{0}){std::erase_if(fields,[&](const Field&f){return f.kind==0&&f.index==loop;});for(auto&f:fields)if(f.kind==0&&f.index==autoplay){f.kind=15;f.second=loop;}}
     }
+  }
+  // Ação e receptor primeiro: uma ativação cabe numa página do telefone; método
+  // e valor só existem quando a ação chama método e ficam na sequência.
+  if(entry.type==&scene::EventConnection::descriptor&&!searching&&group=="Então") {
+    const auto rank=[&](const Field &field){
+      if(field.kind==1) return entry.type->enums[field.index].id=="action"?0:2;
+      return field.kind==4?1:3;
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
   }
   if(entry.type->id==std::string_view{"astra.physics2d.joint"}&&!searching&&group=="Conexão") {
     const auto rank=[](const Field &field){return field.kind==1?0:field.kind==4?1:2;};

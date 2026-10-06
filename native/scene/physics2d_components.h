@@ -71,7 +71,16 @@ public:
 #include "scene/generated/physics2d_components_Collider2DBooleans.inc"
 inline constexpr std::array<ComponentEnumOption,3> Collider2DOptions{{{0,"Caixa"},{1,"Círculo"},{2,"Cápsula Y"}}};
 #include "scene/generated/physics2d_components_Collider2DEnums.inc"
-inline const ComponentType Collider2D::descriptor{"astra.physics2d.collider",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider2D>();},Collider2DNumbers,Collider2DBooleans,Collider2DEnums,nullptr,true};
+// Acontecimentos do Box2D. A instância é o colisor que tocou: o solver 2D
+// informa a forma, ao contrário do 3D.
+inline constexpr std::array<ComponentParameter,1> physics2DOtherPayload{{{"other","Outro objeto",ComponentValueKind::Object}}};
+inline constexpr std::array<ComponentEvent,4> physics2DContactEvents{{
+  {"trigger_enter","Sensor: entrou","Outro corpo começou a sobrepor este sensor",physics2DOtherPayload},
+  {"trigger_exit","Sensor: saiu","Outro corpo deixou de sobrepor este sensor",physics2DOtherPayload},
+  {"collision_enter","Colisão: começou","Contato sólido começou; entregue aos dois colisores",physics2DOtherPayload},
+  {"collision_exit","Colisão: terminou","Contato sólido terminou; entregue aos dois colisores",physics2DOtherPayload},
+}};
+inline const ComponentType Collider2D::descriptor{"astra.physics2d.collider",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider2D>();},Collider2DNumbers,Collider2DBooleans,Collider2DEnums,nullptr,true,{},{},{},{},{},{},{},physics2DContactEvents};
 
 class ConstantForce2D final : public ComponentValue {
 public:

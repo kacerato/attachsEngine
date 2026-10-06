@@ -90,7 +90,7 @@ public static class GuiTests
         Assert.Equal(text+3*IntPtr.Size,behavior);
         Assert.Equal(16,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiAction>());Assert.Equal(72,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiTransitions>());
         long action=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiAction").ToInt64(), transitions=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiTransitions").ToInt64();
-        Assert.Equal(behavior+IntPtr.Size,action);Assert.Equal(action+IntPtr.Size,transitions);Assert.Equal(transitions+IntPtr.Size,(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>());
+        Assert.Equal(behavior+IntPtr.Size,action);Assert.Equal(action+IntPtr.Size,transitions);Assert.True(transitions+IntPtr.Size<=(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>(),"campo dentro do núcleo; o tamanho total é conferido em ComponentOperationsTests");
     }
     [Test] public static void Gui_ContainerImageAndCanvasTypedApiPreservesIndependentFields()
     {

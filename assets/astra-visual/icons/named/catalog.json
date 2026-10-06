@@ -1538,6 +1538,18 @@
       "dark_ui_ready": true,
       "generation": "gui-behavior-v1",
       "source": "tools/generate-gui-behavior-icons.py; existing solid mark primitives"
+    },
+    "component/event-connection": {
+      "category": "component",
+      "name": "event-connection",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "event/sound-trigger": {
+      "category": "event",
+      "name": "sound-trigger",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

@@ -229,7 +229,7 @@ struct ScriptGuiTransitions {
 static_assert(sizeof(ScriptGuiTransitions)==72);
 
 struct ScriptSceneAccess {
-  u32 version=41,size=sizeof(ScriptSceneAccess);
+  u32 version=42,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -404,8 +404,12 @@ struct ScriptSceneAccess {
   // op 0 count, 1 read, 2 append, 3 replace, 4 remove, 5 move to value.target.
   int (*guiAction)(void *,u32,u32,u32,u32,ScriptGuiAction *)=nullptr;
   int (*guiTransitions)(void *,u32,u32,u32,ScriptGuiTransitions *)=nullptr;
+  // v42: ÚLTIMO campo do núcleo. Funções novas entram como famílias nomeadas
+  // (scene/script_extensions.h): devolve a tabela da família e escreve versão e
+  // tamanho dela, ou nulo quando este host não a oferece.
+  const void *(*extension)(void *,const u8 *name,int nameLength,u32 *version,u32 *size)=nullptr;
   bool available() const {
-    return version==41&&size>=sizeof(ScriptSceneAccess)&&exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
+    return version==42&&size>=sizeof(ScriptSceneAccess)&&exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
            getActive&&setActive&&createObject&&destroyObject&&setParent&&componentCount&&componentAt&&
            findComponent&&addComponent&&removeComponent&&getProperty&&setProperty&&
@@ -416,7 +420,7 @@ struct ScriptSceneAccess {
            animationCommand&&getAnimationState&&setAnimationState&&animationClipAt&&
            resourceElementId&&getResourceByElementId&&setResourceByElementId&&
             appendAnimationClip&&removeAnimationClip&&moveAnimationClip&&setParentWithPolicy&&
-            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter&&instantiate&&finishInstantiation&&createPrimitive&&instantiatePrefab&&instantiationAttachments&&setTriple&&body2DCommand&&query2D&&pathPointCommand&&pathRuntimeCommand&&audioSnapshot&&timeSnapshot&&setTimeScale&&groupMembership&&findGroup&&groupAt&&inputBindingCommand&&inputProfile&&inputCaptureCommand&&timerCommand&&tweenCommand&&numberTweenCreate&&numberTweenCommand&&characterSnapshot&&bodyCommand&&fieldQuery&&objectLayer&&inputActionCommand&&audioCommand&&guiCommand&&guiProperties&&guiText&&guiSizing&&guiCanvas&&guiBehavior&&guiAction&&guiTransitions;
+            queueStructuralOperation&&queryOperation&&getActiveSelf&&getTag&&setTag&&compareTag&&findTagged&&addBehavior&&destroyAfter&&instantiate&&finishInstantiation&&createPrimitive&&instantiatePrefab&&instantiationAttachments&&setTriple&&body2DCommand&&query2D&&pathPointCommand&&pathRuntimeCommand&&audioSnapshot&&timeSnapshot&&setTimeScale&&groupMembership&&findGroup&&groupAt&&inputBindingCommand&&inputProfile&&inputCaptureCommand&&timerCommand&&tweenCommand&&numberTweenCreate&&numberTweenCommand&&characterSnapshot&&bodyCommand&&fieldQuery&&objectLayer&&inputActionCommand&&audioCommand&&guiCommand&&guiProperties&&guiText&&guiSizing&&guiCanvas&&guiBehavior&&guiAction&&guiTransitions&&extension;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
@@ -455,7 +459,8 @@ static_assert(offsetof(ScriptSceneAccess,guiCanvas)==offsetof(ScriptSceneAccess,
 static_assert(offsetof(ScriptSceneAccess,guiBehavior)==offsetof(ScriptSceneAccess,guiCanvas)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,guiAction)==offsetof(ScriptSceneAccess,guiBehavior)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,guiTransitions)==offsetof(ScriptSceneAccess,guiAction)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,guiTransitions)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,extension)==offsetof(ScriptSceneAccess,guiTransitions)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,extension)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 // Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.

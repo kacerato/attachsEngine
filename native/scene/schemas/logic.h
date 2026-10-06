@@ -3,6 +3,7 @@
 #pragma once
 #include "scene/script_behavior.h"
 #include "scene/timer.h"
+#include "scene/event_connection.h"
 #include "scene/transform_constraints.h"
 #include "scene/transform_tween.h"
 #include "scene/spring_constraint.h"

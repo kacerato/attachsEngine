@@ -22,6 +22,8 @@
 #include "runtime/scene_number_tweens.h"
 #include "runtime/runtime_rendering_state.h"
 #include "scene/script_runtime.h"
+#include "scene/script_extensions.h"
+#include "runtime/component_operations.h"
 #include "resources/asset_registry.h"
 #include "resources/environment_profile.h"
 
@@ -90,6 +92,13 @@ public:
   void setTweens(SceneTweens *tweens) noexcept {tweens_=tweens;}
   void setTimers(SceneTimers *timers) noexcept { timers_=timers; }
   void setPaths(ScenePaths *paths) noexcept { paths_ = paths; }
+  // Fila de eventos de componente do Play; os scripts a leem pela família
+  // `astra.component.operations` da ABI.
+  void setEvents(ComponentEventQueue *events) noexcept {
+    if(events_ && events_!=events) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
+    events_=events;
+    if(events_ && running_) events_->attach(ComponentEventQueue::Consumer::Scripts,true);
+  }
   bool update(float elapsed);
   bool lateUpdate(float elapsed);
   bool lifecycle(scene::ScriptLifecycleEvent event, bool value);
@@ -113,11 +122,15 @@ public:
 private:
   void collectDiagnostics();
   void installAccess();
+  void installExtensions();
+  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_};}
   QueryFilter queryFilter(const scene::ScriptQueryFilter &filter) const;
   static QueryShapeDesc queryShape(const scene::ScriptShapeQuery &shape);
   static void copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity);
   scene::ScriptRuntimeApi api_{};
   scene::ScriptSceneAccess access_{};
+  scene::ScriptComponentOperations componentOperations_{};
+  ComponentEventQueue *events_=nullptr;
   std::string root_, diagnostics_;
   LogSink logSink_;
   GameWorld *world_ = nullptr;

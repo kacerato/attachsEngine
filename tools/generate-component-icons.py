@@ -289,6 +289,11 @@ ICONS["physics/field-radial"] = f'<circle cx="64" cy="64" r="45" {stroke(4)}/><e
 
 ICONS["path/orientation"] = f'<path d="M18 88c25-31 53-35 92-12" {stroke(6)}/><circle cx="60" cy="66" r="6" fill="{INK}"/><path d="M60 59V20M49 32l11-12 11 12M80 28c15 7 22 21 17 35M87 56l10 7 9-8" {stroke(5,ACCENT)}/>'
 ICONS["input/response"] = f'<path d="M36 79V42a8 8 0 0 1 16 0v31l6-9c3-5 11-3 11 3v-6c0-7 12-7 12 0v7c0-7 12-7 12 0v19c0 15-9 23-24 23H56L29 86c-7-9 0-18 7-7Z" {stroke(5)}/><path d="M75 18a27 27 0 1 1 22 41M91 22v17l10 7" {stroke(5,ACCENT)}/>'
+# Conexão de evento: emissor com ondas de sinal (INK), raio e seta que levam à
+# ação no receptor (ACCENT). Genérico de propósito: não é sensor nem timer.
+# Receita "Gatilho sonoro": sensor de caixa tracejado (INK) e ondas de som (ACCENT).
+ICONS["event/sound-trigger"] = f'<path d="M18 40h40v48H18z" {stroke(5, extra='stroke-dasharray="8 7"')}/><path d="M66 56h10l14-12v40L76 72H66z" {stroke(5)}/><path d="M98 50a20 20 0 0 1 0 28M106 40a32 32 0 0 1 0 48" {stroke(5,ACCENT)}/><circle cx="38" cy="64" r="6" fill="{ACCENT}"/>'
+ICONS["component/event-connection"] = f'<circle cx="20" cy="64" r="10" {stroke(6)}/><path d="M36 46a26 26 0 0 1 0 36M45 36a38 38 0 0 1 0 56" {stroke(5)}/><path d="M70 38l-9 26h13l-9 26" {stroke(6,ACCENT)}/><path d="M80 64h10M85 57l7 7-7 7" {stroke(5,ACCENT)}/><rect x="98" y="46" width="20" height="36" rx="4" {stroke(5)}/><circle cx="108" cy="64" r="3.5" fill="{INK}"/>'
 
 def browser() -> str:
     candidates = [
@@ -312,10 +317,19 @@ def rasterize(executable: str, svg: Path, png: Path) -> None:
             "<html><body style='margin:0;background:transparent'>"
             f"<img src='{svg.resolve().as_uri()}' width='512' height='512'></body></html>",
             encoding="utf-8")
-        subprocess.run([executable, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-                        "--default-background-color=00000000", "--window-size=512,512",
-                        f"--screenshot={png.resolve()}", page.resolve().as_uri()],
-                       check=True, capture_output=True, timeout=60)
+        if png.exists():
+            png.unlink()
+        try:
+            subprocess.run([executable, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+                            "--default-background-color=00000000", "--window-size=512,512",
+                            f"--screenshot={png.resolve()}", page.resolve().as_uri()],
+                           check=True, capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            # Com outra sessão do navegador aberta, o headless às vezes grava a
+            # captura e não encerra; o processo é morto pelo timeout. Vale a
+            # captura nova (o arquivo antigo foi apagado acima); sem ela, falha.
+            if not png.exists():
+                raise
     if not png.exists():
         raise SystemExit(f"rasterização falhou: {svg}")
 

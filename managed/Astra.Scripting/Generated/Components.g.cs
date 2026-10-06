@@ -1,6 +1,7 @@
 // GERADO por scene::componentCSharpApi() a partir de native/scene/schemas/*.h — não edite.
 // Regenerar: aether_tests --write-component-api managed/Astra.Scripting/Generated/Components.g.cs
 #nullable enable
+using System;
 using System.Numerics;
 
 namespace Astra.Components;
@@ -798,6 +799,23 @@ public readonly struct TransformTween : IComponentFacade<TransformTween>
         get => Component.GetReference("finished_target");
         set => Component.SetReference("finished_target", value);
     }
+    /// <summary>Reiniciar. Recomeça da pose atual, conservando a pausa</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Restart() => Component.Invoke("restart");
+    /// <summary>Cancelar. Interrompe sem voltar à pose inicial</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Cancel() => Component.Invoke("cancel");
+    /// <summary>Pausar. Congela o progresso</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Pause() => Component.Invoke("pause");
+    /// <summary>Retomar. Continua o progresso pausado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Resume() => Component.Invoke("resume");
+    /// <summary>Decorrido. Segundos desde o início, incluindo o atraso</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Elapsed() => Component.Invoke("elapsed").AsNumber();
+    /// <summary>Concluiu. Emitido uma vez quando as repetições finitas terminam, depois da pose final</summary>
+    public ComponentSubscription OnCompleted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "completed", handler);
 }
 
 /// <summary>Timer: Dispara eventos temporizados e ações persistentes de ativação de objetos. Família Lógica · Tempo.</summary>
@@ -866,6 +884,135 @@ public readonly struct GameTimer : IComponentFacade<GameTimer>
     {
         get => Component.GetReference("elapsed_target");
         set => Component.SetReference("elapsed_target", value);
+    }
+    /// <summary>Iniciar. Reinicia a contagem; intervalo zero usa o autorado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Start(double interval) => Component.Invoke("start", ComponentValue.Number(interval));
+    /// <summary>Parar. Interrompe e zera a contagem</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Stop() => Component.Invoke("stop");
+    /// <summary>Pausar. Congela a contagem sem perder o restante</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Pause() => Component.Invoke("pause");
+    /// <summary>Retomar. Continua a contagem pausada</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Resume() => Component.Invoke("resume");
+    /// <summary>Restante. Segundos até o próximo disparo; zero quando parado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Remaining() => Component.Invoke("remaining").AsNumber();
+    /// <summary>Em execução. Verdadeiro enquanto conta, inclusive pausado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Running() => Component.Invoke("running").AsBoolean();
+    /// <summary>Disparou. Um evento por quadro; Disparos conta intervalos vencidos no quadro. Payload: Disparos: inteiro</summary>
+    public ComponentSubscription OnElapsed(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "elapsed", handler);
+}
+
+/// <summary>Conexão de evento: Evento deste objeto aciona objetos ou métodos, sem script. Família Lógica · Eventos.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Events.UnityEvent.html</remarks>
+public readonly struct EventConnection : IComponentFacade<EventConnection>
+{
+    public static string TypeId => "astra.logic.event_connection";
+    public static EventConnection Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public EventConnection(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Valor (s). Timer: intervalo (zero usa o autorado). Áudio: posição do cursor</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Argument
+    {
+        get => Component.GetFloat("argument");
+        set => Component.SetFloat("argument", value);
+    }
+    /// <summary>Ativa. Desligada não reage a eventos; a configuração é preservada</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Uma vez. Reage só ao primeiro evento de cada execução de Play</summary>
+    public bool Once
+    {
+        get => Component.GetBool("once");
+        set => Component.SetBool("once", value);
+    }
+    public enum EventOption : uint
+    {
+        Nenhum = 0,
+        TimerDisparou = 1,
+        TweenConcluiu = 2,
+        Sensor3DEntrou = 3,
+        Sensor3DSaiu = 4,
+        Colisao3DComecou = 5,
+        Colisao3DTerminou = 6,
+        Sensor2DEntrou = 7,
+        Sensor2DSaiu = 8,
+        Colisao2DComecou = 9,
+        Colisao2DTerminou = 10,
+    }
+    /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
+    public EventOption Event
+    {
+        get => (EventOption)Component.GetEnum("event");
+        set => Component.SetEnum("event", (uint)value);
+    }
+    public enum ActionOption : uint
+    {
+        Desconectado = 0,
+        AtivarObjeto = 1,
+        DesativarObjeto = 2,
+        AlternarObjeto = 3,
+        ChamarMetodo = 4,
+    }
+    /// <summary>Ação. Executada no ponto seguro seguinte ao evento, antes do próximo despacho de scripts</summary>
+    public ActionOption Action
+    {
+        get => (ActionOption)Component.GetEnum("action");
+        set => Component.SetEnum("action", (uint)value);
+    }
+    public enum MethodOption : uint
+    {
+        Nenhum = 0,
+        AudioTocar = 1,
+        AudioParar = 2,
+        AudioPausar = 3,
+        AudioRetomar = 4,
+        AudioPosicionar = 5,
+        TimerIniciar = 6,
+        TimerParar = 7,
+        TimerPausar = 8,
+        TimerRetomar = 9,
+        TweenReiniciar = 10,
+        TweenCancelar = 11,
+        TweenPausar = 12,
+        TweenRetomar = 13,
+        PercursoReiniciar = 14,
+        PercursoParar = 15,
+    }
+    /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
+    public MethodOption Method
+    {
+        get => (MethodOption)Component.GetEnum("method");
+        set => Component.SetEnum("method", (uint)value);
+    }
+    /// <summary>Receptor. Objeto ativado ou dono do componente chamado; vazio usa o próprio emissor</summary>
+    public ObjectReference Receiver
+    {
+        get => Component.GetReference("receiver");
+        set => Component.SetReference("receiver", value);
+    }
+    /// <summary>Outro objeto. Opcional: só contatos com este outro objeto</summary>
+    public ObjectReference OtherFilter
+    {
+        get => Component.GetReference("other_filter");
+        set => Component.SetReference("other_filter", value);
     }
 }
 
@@ -3210,6 +3357,14 @@ public readonly struct Collider : IComponentFacade<Collider>
     /// <summary>Malha de colisão. Recurso do projeto por slot</summary>
     public AssetGuid GetCollisionMesh(uint slot = 0) => Component.GetResource("collision_mesh", slot);
     public void SetCollisionMesh(AssetGuid value, uint slot = 0) => Component.SetResource("collision_mesh", value, slot);
+    /// <summary>Sensor: entrou. Outro corpo começou a sobrepor este sensor. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnTriggerEnter(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "trigger_enter", handler);
+    /// <summary>Sensor: saiu. Outro corpo deixou de sobrepor este sensor. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnTriggerExit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "trigger_exit", handler);
+    /// <summary>Colisão: começou. Contato sólido começou; entregue aos dois objetos. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnCollisionEnter(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_enter", handler);
+    /// <summary>Colisão: terminou. Contato sólido terminou; entregue aos dois objetos. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnCollisionExit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_exit", handler);
 }
 
 /// <summary>Junta: Nove mecanismos Jolt com limites, referenciais e motores. Família Física 3D · Juntas.</summary>
@@ -5028,6 +5183,14 @@ public readonly struct Collider2D : IComponentFacade<Collider2D>
         get => (ShapeOption)Component.GetEnum("shape");
         set => Component.SetEnum("shape", (uint)value);
     }
+    /// <summary>Sensor: entrou. Outro corpo começou a sobrepor este sensor. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnTriggerEnter(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "trigger_enter", handler);
+    /// <summary>Sensor: saiu. Outro corpo deixou de sobrepor este sensor. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnTriggerExit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "trigger_exit", handler);
+    /// <summary>Colisão: começou. Contato sólido começou; entregue aos dois colisores. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnCollisionEnter(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_enter", handler);
+    /// <summary>Colisão: terminou. Contato sólido terminou; entregue aos dois colisores. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnCollisionExit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_exit", handler);
 }
 
 /// <summary>Audio Source: Clipe de projeto com reprodução e espaço acústico. Família Áudio · Reprodução.</summary>
@@ -5179,6 +5342,21 @@ public readonly struct AudioSource : IComponentFacade<AudioSource>
     /// <summary>Clipe WAV. Recurso do projeto por slot</summary>
     public AssetGuid GetClip(uint slot = 0) => Component.GetResource("clip", slot);
     public void SetClip(AssetGuid value, uint slot = 0) => Component.SetResource("clip", value, slot);
+    /// <summary>Tocar. Recomeça do início</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Play() => Component.Invoke("play");
+    /// <summary>Pausar. Congela o cursor</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Pause() => Component.Invoke("pause");
+    /// <summary>Retomar. Continua do cursor pausado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Resume() => Component.Invoke("resume");
+    /// <summary>Parar. Interrompe e libera a voz</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Stop() => Component.Invoke("stop");
+    /// <summary>Posicionar. Move o cursor; aplicado pelo mixer</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Seek(double seconds) => Component.Invoke("seek", ComponentValue.Number(seconds));
 }
 
 /// <summary>Audio Listener: Pose e volume de escuta escolhidos por prioridade. Família Áudio · Escuta.</summary>
@@ -5437,4 +5615,16 @@ public readonly struct PathFollow : IComponentFacade<PathFollow>
         get => Component.GetReference("target");
         set => Component.SetReference("target", value);
     }
+    /// <summary>Reiniciar. Volta à distância inicial e avança</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Restart() => Component.Invoke("restart");
+    /// <summary>Parar. Congela pose e progresso</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Stop() => Component.Invoke("stop");
+    /// <summary>Progresso. Distância percorrida no mundo</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Progress() => Component.Invoke("progress").AsNumber();
+    /// <summary>Em movimento. Verdadeiro enquanto avança</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Playing() => Component.Invoke("playing").AsBoolean();
 }

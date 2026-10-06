@@ -210,9 +210,68 @@ std::string ScriptBridge::attachments(const SceneGraph &graph,ObjectId root) {
 // O adaptador inteiro vive aqui: cada lambda recebe o contexto, traduz o id em
 // handle do mundo e guarda o motivo da recusa em `lastStatus_`, para que o lado
 // C# possa dizer "referência vencida" em vez de "false".
+void ScriptBridge::installExtensions() {
+  componentOperations_ = scene::ScriptComponentOperations{};
+  componentOperations_.invoke=[](void *context,u64 object,u32 worldId,u32 generation,u64 instance,const u8 *method,int methodLength,
+                                 const scene::ComponentOperationValue *arguments,int count,scene::ComponentOperationValue *result)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(object>std::numeric_limits<ObjectId>::max()||!method||methodLength<=0||methodLength>256||count<0||
+       count>static_cast<int>(scene::kComponentEventPayloadLimit)||(count&&!arguments)||!result) {
+      self.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    const ComponentHandle handle{{worldId,static_cast<ObjectId>(object),generation},instance};
+    self.lastStatus_=invokeComponentMethod(self.operationServices(),handle,viewOf(method,methodLength),
+                                           std::span(arguments,static_cast<usize>(count)),*result);
+    return self.lastStatus_==WorldStatus::Ok;
+  };
+  componentOperations_.pollEvents=[](void *context,scene::ScriptComponentEvent *events,int capacity)->int {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!self.world_){self.lastStatus_=WorldStatus::NotRunning;return -1;}
+    if(capacity<0||(capacity&&!events)){self.lastStatus_=WorldStatus::InvalidArgument;return -1;}
+    if(!self.events_||!capacity) return 0;
+    int written=0;
+    self.events_->consume(ComponentEventQueue::Consumer::Scripts,[&](const ComponentEventRecord &record,u64 lost) {
+      auto &out=events[written++];
+      out=scene::ScriptComponentEvent{};
+      out.object=record.object.id;out.instance=record.instance;out.world=record.object.world;out.generation=record.object.generation;
+      out.type=static_cast<u32>(scene::componentSchemas.size());
+      for(usize i=0;i<scene::componentSchemas.size();++i) if(scene::componentSchemas[i].type==record.type) {out.type=static_cast<u32>(i);break;}
+      out.event=record.event;out.count=record.count;out.lost=static_cast<u32>(std::min<u64>(lost,std::numeric_limits<u32>::max()));
+      for(u32 i=0;i<record.count;++i) out.values[i]=record.values[i];
+    },static_cast<usize>(capacity));
+    return written;
+  };
+  componentOperations_.eventName=[](void *,u32 type,u32 event,u8 *buffer,int capacity)->int {
+    if(type>=scene::componentSchemas.size()) return -1;
+    const auto &descriptor=*scene::componentSchemas[type].type;
+    if(event>=descriptor.events.size()) return -1;
+    const std::string name=std::string(descriptor.id)+"/"+std::string(descriptor.events[event].id);
+    if(buffer && capacity>0) std::copy_n(name.data(),std::min<usize>(name.size(),static_cast<usize>(capacity)),buffer);
+    return static_cast<int>(name.size());
+  };
+  componentOperations_.declaresEvent=[](void *,const u8 *name,int length)->int {
+    const auto text=viewOf(name,length);const auto slash=text.find('/');
+    if(slash==std::string_view::npos) return 0;
+    const auto *schema=scene::findComponentSchema(text.substr(0,slash));
+    return schema && scene::findComponentEvent(*schema->type,text.substr(slash+1))?1:0;
+  };
+  access_.extension=[](void *context,const u8 *name,int length,u32 *version,u32 *size)->const void * {
+    auto &self=*static_cast<ScriptBridge *>(context);
+    if(!name||length<=0||length>256) return nullptr;
+    if(viewOf(name,length)==scene::kScriptComponentOperations) {
+      if(version) *version=self.componentOperations_.version;
+      if(size) *size=self.componentOperations_.size;
+      return &self.componentOperations_;
+    }
+    return nullptr;
+  };
+}
+
 void ScriptBridge::installAccess() {
   access_ = scene::ScriptSceneAccess{};
   access_.context = this;
+  installExtensions();
   access_.exists = [](void *c, u64 id) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
     return id <= std::numeric_limits<ObjectId>::max() && s.world_->graph().exists(static_cast<ObjectId>(id));
@@ -1431,10 +1490,12 @@ bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &
     diagnostics_ = "Política gráfica de execução não configurada"; world_=nullptr;physics_=nullptr;input_=nullptr;return false;
   }
   installAccess();
+  if(events_) events_->attach(ComponentEventQueue::Consumer::Scripts,true);
   const auto data = attachments(world.graph());
   if (api_.start(reinterpret_cast<const u8 *>(root_.data()), static_cast<int>(root_.size()),
       reinterpret_cast<const u8 *>(data.data()), static_cast<int>(data.size()), &access_) != 0) {
     collectDiagnostics();
+    if(events_) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
     world_ = nullptr;
     physics_ = nullptr;
     rendering_.end();
@@ -1621,12 +1682,15 @@ bool ScriptBridge::timer(ObjectId object,u64 instance,u32 count) {
 
 void ScriptBridge::stop() {
   if (running_) api_.stop();
+  if (events_) events_->attach(ComponentEventQueue::Consumer::Scripts,false);
   rendering_.end();
   running_ = false;
   world_ = nullptr;
   physics_ = nullptr;
   input_ = nullptr;
   access_ = scene::ScriptSceneAccess{};
+  // A tabela da família continua instalada: uma cópia retida pelo runtime
+  // gerenciado recusa por `world_` nulo (NotRunning) em vez de saltar para nulo.
 }
 
 } // namespace ae::runtime

@@ -405,7 +405,7 @@ AE_TEST(play_active_self_persists_and_inactive_scripts_reach_the_runtime) {
   AE_EXPECT_TRUE(FakeRuntime::attachments.find("project.Activation") != std::string::npos,
                  "instância incluída para permitir a primeira ativação");
   const auto &abi = FakeRuntime::sceneAccess;
-  AE_EXPECT_TRUE(abi.version == 24 && abi.available(), "contrato ABI completo");
+  AE_EXPECT_TRUE(abi.version == scene::ScriptSceneAccess{}.version && abi.available(), "contrato ABI completo");
   AE_EXPECT_EQ(abi.getActiveSelf(abi.context, child), 1, "estado local chega à ABI");
   AE_EXPECT_EQ(abi.getActive(abi.context, child), 0, "ancestral inativo chega à ABI");
   const auto revision = play.world().structuralRevision();

@@ -22,5 +22,12 @@ public:
 inline constexpr std::array<ComponentEnumOption,2> pathFollowModes{{{0,"Velocidade mundial"},{1,"Duração do percurso"}}};
 #include "scene/generated/path_follow_pathFollowEnums.inc"
 inline constexpr std::array<ComponentObjectReference,1> pathFollowReferences{{{"target","Caminho","astra.path",ObjectReferenceScope::Other,"Escolher Path",[](const ComponentValue&v){return static_cast<const PathFollow&>(v).target;},[](ComponentValue&v,u64 id){static_cast<PathFollow&>(v).target=id;},{"Percurso"},[](const ComponentValue&v){return static_cast<const PathFollow&>(v).enabled;}}}};
-inline const ComponentType PathFollow::descriptor{"astra.path.follow",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<PathFollow>();},pathFollowNumbers,pathFollowBooleans,pathFollowEnums,nullptr,false,pathFollowReferences};
+// Operações sobre o seguidor de Play (runtime/scene_paths.h).
+inline constexpr std::array<ComponentMethod,4> pathFollowMethods{{
+ {"restart","Reiniciar","Volta à distância inicial e avança"},
+ {"stop","Parar","Congela pose e progresso"},
+ {"progress","Progresso","Distância percorrida no mundo",{},ComponentValueKind::Number},
+ {"playing","Em movimento","Verdadeiro enquanto avança",{},ComponentValueKind::Boolean},
+}};
+inline const ComponentType PathFollow::descriptor{"astra.path.follow",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<PathFollow>();},pathFollowNumbers,pathFollowBooleans,pathFollowEnums,nullptr,false,pathFollowReferences,{},{},{},{},{},pathFollowMethods};
 }
