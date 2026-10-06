@@ -85,6 +85,9 @@ public final class AetherActivity extends NativeActivity {
         intent.putExtra("aether.material_preview", false);
         intent.putExtra("aether.water_fft", false);
         super.onCreate(state);
+        // Teclas de volume ajustam a mídia (o fluxo do Play) mesmo sem som tocando;
+        // sem isso cada fabricante escolhe o fluxo padrão (toque, em vários aparelhos).
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
     }
 
     @Override protected void onResume() {

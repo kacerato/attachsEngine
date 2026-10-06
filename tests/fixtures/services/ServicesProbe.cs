@@ -50,7 +50,7 @@ public sealed class ServicesProbe : Behavior
                 else Log("HAPTICS unavailable");
                 stage = 2; started = now;
             }
-            else if (stage == 2 && now - started > 3)
+            else if (stage == 2 && now - started > 6)
             {
                 Log("loading Fase2");
                 Scenes.Load("Fase2");

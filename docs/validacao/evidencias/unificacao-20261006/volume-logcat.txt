@@ -1,0 +1,11 @@
+SERVICES scene=editor project=scenes/Fase2,scenes/editor
+SERVICES sensor-enter other=5
+SERVICES AUDIO PASS
+SERVICES view 2772x1178.6 dpi=520 camera=2 safeReported=False
+SERVICES RAY PASS hit=Alvo distance=5.25
+SERVICES HAPTICS requested 300ms
+SERVICES loading Fase2
+SERVICES SCENE PASS active=Fase2
+vulkan-errors(E Aether.Vulkan): 0
+AudioFlinger: AT::add 16:34:55.591 -> AT::remove 16:35:01.978 (stream 3, usage 1)
+Teclas com editor aberto e sem som: volControlStream=3; música 150 -> 140 (2x volume-) -> 150 (restaurado)

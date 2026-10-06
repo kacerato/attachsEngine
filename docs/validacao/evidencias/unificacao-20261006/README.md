@@ -46,3 +46,18 @@ Play por toque no aparelho; registro em `pendencias-logcat.txt`.
 Ainda não verificado: raio a partir de um toque real na tela (a sonda usa o
 centro da vista) e área segura (`safeReported=False`: depende de `WindowInsets`
 no shell Java).
+
+## Volume baixo (06/10/2026, terceira rodada)
+
+Relato: som do Gatilho sonoro muito baixo e as teclas não aumentavam.
+
+| Causa medida | Correção | Depois |
+|---|---|---|
+| Tom de teste com pico −18,1 dBFS (RMS −24,6) e parciais em 440/660 Hz, faixa que alto-falante de celular reproduz mal | `generate_tone.py`: pico −6 dBFS, parciais 880/1320 Hz | Pico −6,4 dBFS, RMS −12,9 dBFS (+11,7 dB) |
+| Mídia já estava em 150/150 (o `ADJUST_RAISE` do usuário chegou ao sistema): o limite era o sinal, não o volume do Android | — | — |
+| Sem `setVolumeControlStream`, sem som tocando, o fluxo das teclas é escolha do fabricante (`volControlStream=-1`) | `AetherActivity`: `STREAM_MUSIC` | `volControlStream=3`; mídia 150 → 140 → 150 com as teclas |
+| A sonda trocava de cena 3 s depois do som | Troca após 6 s | Faixa ativa 6,4 s no AudioFlinger |
+
+A cadeia de ganho do motor foi conferida em 1,0 (fonte, ouvinte, sem bus,
+Flat sem atenuação). Registro em `volume-logcat.txt`. Audibilidade não medida
+por microfone.

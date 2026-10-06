@@ -1,6 +1,6 @@
 # Aceite de áudio Android com autoria real
 
-Importe astra-audio-probe.wav pelo fluxo Audio / Importar WAV (SAF). Tom original PCM16 stereo48k, 6 segundos; generate_tone.py reproduz o asset offline sem dependências. Copie AudioProbe.cs para scripts do projeto e anexe acceptance.audio a um objeto. O script não cria objetos/componentes/áudio.
+Importe astra-audio-probe.wav pelo fluxo Audio / Importar WAV (SAF). Tom original PCM16 stereo48k, 6 segundos, pico -6 dBFS em 880/1320 Hz (faixa que alto-falante de celular reproduz); generate_tone.py reproduz o asset offline sem dependências. Copie AudioProbe.cs para scripts do projeto e anexe acceptance.audio a um objeto. O script não cria objetos/componentes/áudio.
 
 Crie Source com AudioSource Enabled=true, WAV atribuído, Volume=0.5, Mute=false, Loop=false, Pitch=1 e pedido inicial Parar. Dimension2D é válido; para3D deixe Source perto do Listener e dentro min/max distance. Crie AudioListener Enabled=true, Volume=1 e objeto ativo. Bus não atribuído usa master. Salve/reabra antes de Play para provar persistência. Evite scripts concorrentes na mesma voz; autorize foco Android.
 
