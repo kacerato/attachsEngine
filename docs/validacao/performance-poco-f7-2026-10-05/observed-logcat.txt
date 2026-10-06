@@ -1,0 +1,27 @@
+10-05 11:46:16.289 25652 28546 I Aether.Android: [FramePolicy] painel máximo=120.00 Hz.
+10-05 11:46:16.289 25652 28546 I Aether.Android: [PerformancePolicy] sustained requested=true supported=false.
+10-05 11:46:16.293 25652 28546 I Aether.Android: [PerformancePolicy] ADPF prefer_power_efficiency=false resultado=0.
+10-05 11:46:16.293 25652 28546 I Aether.Android: [PerformancePolicy] ADPF ativo thread=28546 target_ms=8.333 update_ms=16.667 game_mode=2 gpu_work=true.
+10-05 11:46:16.295 25652 28546 I Aether.Android: [ThermalPolicy] sample=1 status=0 headroom=0.589 forecast_s=10 pressure=none changed=false.
+10-05 11:46:16.297 25652 28546 I Aether.Android: [FramePolicy] render=120 Hz (8.333 ms), fixed tick=60 Hz, CPU<=6.500 ms, GPU<=7.333 ms.
+10-05 11:46:16.312 25652 28546 I Aether.Android: [FramePolicy] solicitação da surface=120 Hz resultado=0.
+10-05 11:46:16.327 25652 28546 I Aether.Vulkan: [VulkanDiagnostics] validation=enabled debug_utils=enabled
+10-05 11:46:16.355 25652 28546 I Aether.Android: [RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+10-05 11:46:16.355 25652 28546 I Aether.Android: [RenderPolicy] preset=s perfil=3 sombras=on(4 cascatas @4096, 25/9 taps, cache=static margem=1.05 blend=0.10 fade=0.12) ambiente=constante pos=passe malha_agua=ultra(236 seg) textura_mip_bias=0 aniso=8.0 escala=1.00 dinamica=on[0.75,1.00] clamps=1
+10-05 11:46:16.355 25652 28546 I Aether.Android: [RenderPolicy] shadows.cascadeResolution reduzido por capability.
+10-05 11:46:16.355 25652 28546 I Aether.Android: [RenderPolicy] lod=on erro_solido=1.00px erro_coverage=2.00px histerese=0.80 normal_ate=0.0 specular_ate=0.0 mr_ate=0.0 emissive_ate=0.0 variantes_material=on aa=fxaa bloom=0 sharpen=0.20 contraste=1.00 saturacao=1.00
+10-05 11:46:16.355 25652 28546 I Aether.Android: [FramePolicy] solicitação da surface=120 Hz resultado=0.
+10-05 11:46:18.029 25652 28546 I Aether.Android: [ThermalPolicy] applied=none lod=1.00/2.00 shadow=on/4c@4096/25t post=pass scale=1.00 dynamic=[0.75,1.00]
+10-05 11:46:18.036 25652 28546 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=4/4 shadow_cache_hit_frames=0 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-05 11:46:18.123 25652 28546 I Aether.Android: [DynamicResolution] scale=0.950 render=1216x2632 gpu=12.536ms budget=7.333ms.
+10-05 11:46:18.214 25652 28546 I Aether.Android: [DynamicResolution] scale=0.900 render=1152x2488 gpu=12.586ms budget=7.333ms.
+10-05 11:46:18.306 25652 28546 I Aether.Android: [DynamicResolution] scale=0.850 render=1088x2352 gpu=12.355ms budget=7.333ms.
+10-05 11:46:18.395 25652 28546 I Aether.Android: [DynamicResolution] scale=0.800 render=1016x2216 gpu=12.183ms budget=7.333ms.
+10-05 11:46:18.477 25652 28546 I Aether.Android: [DynamicResolution] scale=0.750 render=960x2072 gpu=11.567ms budget=7.333ms.
+10-05 11:46:21.626 25652 28546 I Aether.Android: [Visibility] render=960x2072 scale=0.750 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=0/4 shadow_cache_hit_frames=239 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-05 11:46:24.829 25652 28565 I Aether.Android: [Open] fonte preparada: Fontes/main_sponza/NewSponza_Main_glTF_003.gltf bytes=691352 cache=acerto leitura_fonte_hash_ms=62 leitura_derivado_ms=6738 preparo_ms=6801 gravacao_derivado_ms=0
+10-05 11:46:31.226 25652 28546 I Aether.Android: [Import] fonte reaberta: Fontes/main_sponza/NewSponza_Main_glTF_003.gltf
+10-05 11:46:32.022 25652 28546 I Aether.Android: [ThermalPolicy] sample=2 status=0 headroom=0.624 forecast_s=10 pressure=none changed=false.
+10-05 11:46:32.461 25652 28546 I Aether.Android: [Visibility] render=960x2072 scale=0.750 candidates=382 visible=233 culled=149 submitted_draws=233 triangles_visible=2242538/3738920 triangles_submitted=2242538 shadow_draws=0/0 shadow_cascades=0/4 shadow_cache_hit_frames=478 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-05 11:46:39.712 25652 28546 I Aether.Android: [Visibility] render=960x2072 scale=0.750 candidates=382 visible=162 culled=220 submitted_draws=162 triangles_visible=1923227/3738920 triangles_submitted=1923227 shadow_draws=0/0 shadow_cascades=0/4 shadow_cache_hit_frames=704 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+10-05 11:46:42.037 25652 28546 I Aether.Android: [ThermalPolicy] sample=3 status=0 headroom=0.627 forecast_s=10 pressure=none changed=false.

@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-06",
+  "repository": "https://github.com/kacerato/attachsEngine",
+  "device": "Xiaomi 25053PC47G / onyx",
+  "package": "dev.aether.editor",
+  "installed_apk_sha256": "aed8cb8b3c32ffce290c87786e911f8df614f241622657bb504066cdf6bc5fd0",
+  "scene_original_and_undo_reopen_sha256": "e7e6b94906ef0cc61fbfa53d3507775a310a8033cc27fca5cb91cfdf13813cd5",
+  "checks": [
+    "surface tap opens Collider 12 on CompoundPlayer",
+    "disable selected Collider through actual Inspector",
+    "Undo + Save restores original scene bytes",
+    "cold reopen retains enabled Collider 12 and surface selection",
+    "overlays OFF restores ordinary mesh selection of SecondInstance"
+  ],
+  "screenshots": [
+    {
+      "file": "disabled.png",
+      "sha256": "128a333eb9883f4788c25824d0e19bb608a9f3a8d3aab4ab236af8875ea1237f"
+    },
+    {
+      "file": "inside.png",
+      "sha256": "2a06aef8ecadea499d3f64f13e5130e6f47fb7385eb1632bdd3a2b8be28adff8"
+    },
+    {
+      "file": "reopened.png",
+      "sha256": "52f3197a9bef01c31749908f840637ff10cde222748acc4749d75b17939c607a"
+    },
+    {
+      "file": "visuals-off.png",
+      "sha256": "06c76ab24d64158d1aaf77c4ca36df15114b12a04b7582d35dd04e4221b748fc"
+    }
+  ],
+  "scope": "physical authoring acceptance of previous surface APK; not owners implementation",
+  "not_verified": [
+    "simultaneous physical multi-touch",
+    "new Play gameplay run",
+    "performance soak"
+  ]
+}

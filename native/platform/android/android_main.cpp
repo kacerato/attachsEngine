@@ -338,6 +338,7 @@ struct AndroidShell final {
   ae::renderer::ThermalPressure appliedThermalPressure = ae::renderer::ThermalPressure::None;
   bool renderingCapabilitiesReady = false;
   bool thermalPolicyApplied = false;
+  bool profileLockRenderingQuality=false;
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
   bool windowResizePending = false;
@@ -628,7 +629,9 @@ void flushCameraRouteRecordingIfNeeded(AndroidShell &shell) {
 }
 
 const char *profileSceneId(const AndroidShell &shell) {
-  if (shell.independentWorkspace) return "empty-workspace";
+  if (shell.independentWorkspace)
+    return shell.projectReopening ? "project-loading" :
+        shell.editorSession.isPlaying() ? "authored-project-play" : "authored-project";
   if (shell.oceanPreview) return "ocean";
   if (shell.dirtRoadPreview) return "dirt-road";
   if (shell.materialPreview) return "material-preview";
@@ -1488,10 +1491,12 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
 void applyThermalRenderingPolicy(AndroidShell &shell, bool force) {
   if (!shell.instancedRendererReady || !shell.renderingCapabilitiesReady) return;
   const auto pressure = shell.thermalMonitor.state().pressure;
-  if (!force && shell.thermalPolicyApplied && pressure == shell.appliedThermalPressure) return;
+  if (!force && shell.thermalPolicyApplied &&
+      (pressure == shell.appliedThermalPressure || shell.profileLockRenderingQuality)) return;
 
   shell.activeRenderingPolicy = ae::renderer::resolveRenderingPolicy(
-      shell.activeRenderingSettings, shell.renderingCapabilities, pressure);
+      shell.activeRenderingSettings, shell.renderingCapabilities,
+      shell.profileLockRenderingQuality?ae::renderer::ThermalPressure::None:pressure);
   shell.instancedRenderer.setRuntimeRenderingPolicy(shell.activeRenderingPolicy);
   shell.activeRenderingPolicy=shell.instancedRenderer.activeRenderingPolicy();
   shell.appliedThermalPressure = pressure;
@@ -2172,6 +2177,8 @@ void android_main(android_app *app) {
   shell.firstPersonEnabled = !shell.editorUi && shell.dirtRoadPreview && !shell.oceanPreview && !shell.lockCamera &&
       !ae::platform::android::readBooleanLaunchOption(app->activity, "aether.free_camera");
   shell.instancedRenderer.setRuntimeHudEnabled(shell.firstPersonEnabled);
+  shell.instancedRenderer.setPlayPostUiFusionEnabled(
+      ae::platform::android::readBooleanLaunchOption(app->activity, "aether.play_post_ui_fusion"));
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[SceneSelection] assets=%s controller=%s hud=%d",
       shell.oceanPreview ? "ocean" : (shell.dirtRoadPreview ? "dirt_road" : "other"),
@@ -2226,7 +2233,21 @@ void android_main(android_app *app) {
       ae::platform::android::readBooleanLaunchOption(app->activity,
                                                      "aether.disable_transient_depth"));
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
+  shell.profileLockRenderingQuality=shell.frameProfiler.enabled() &&
+      ae::platform::android::readBooleanLaunchOption(app->activity,"aether.lock_rendering_quality");
+  if(shell.profileLockRenderingQuality) __android_log_print(ANDROID_LOG_INFO,LogTag,
+      "[ProfileQuality] qualidade autoral fixa para A/B; monitor térmico e proteções do Android ativos.");
   shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
+  shell.instancedRenderer.setPostUiFusionEnabled(!ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.disable_post_ui_fusion"));
+  shell.instancedRenderer.setSpatialGeometryEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity,"aether.spatial_geometry") && !ae::platform::android::readBooleanLaunchOption(
+      app->activity,"aether.disable_spatial_geometry"));
+  // Same-quality static editor reuse passed paired energy/image checks on the
+  // device. The diagnostic disable keeps the original path available for A/B.
+  shell.instancedRenderer.setEditorSceneReuseEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity,"aether.editor_scene_reuse",true) && !ae::platform::android::readBooleanLaunchOption(
+      app->activity,"aether.disable_editor_scene_reuse"));
   ae::u32 requestedIsolation = 0;
   if (ae::platform::android::readUnsignedLaunchOption(app->activity,
                                                        "aether.gpu_isolation",
@@ -2234,6 +2255,12 @@ void android_main(android_app *app) {
     shell.gpuCostIsolation = ae::renderer::sanitizeGpuCostIsolation(requestedIsolation);
   }
   shell.instancedRenderer.setGpuCostIsolation(shell.gpuCostIsolation);
+  shell.instancedRenderer.setOpaqueNoClipEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.opaque_no_clip", true));
+  shell.instancedRenderer.setFullDetailSamplingEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.full_detail_sampling"));
+  shell.instancedRenderer.setPointLightingSpecializationEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.point_lighting_specialization", true));
   applyRuntimeControls(shell);
 
   // O projeto aberto no editor decide primeiro (painel Qualidade); as opções
@@ -2640,7 +2667,7 @@ void android_main(android_app *app) {
       // relogio da cena vive na sessao, onde e testavel.
       const bool editorActive = shell.editorUi && shell.instancedRenderer.uiRendererReady();
       shell.editorSession.advanceClock(timeSeconds);
-      const bool editorPlaying = !editorActive || shell.editorSession.isPlaying();
+      bool editorPlaying = !editorActive || shell.editorSession.isPlaying();
       if (editorActive) timeSeconds = shell.editorSession.sceneTime();
       if(!editorActive||!shell.editorSession.gameplayInputFocused()||
          ae::platform::android::editorCodePanelVisible()) shell.gameInput.clear();
@@ -2698,6 +2725,12 @@ void android_main(android_app *app) {
         shell.editorSession.pumpCodeAutoBuild(
             std::chrono::duration<double>(std::chrono::steady_clock::now()-shell.shellStartTime).count());
         updateEditorCodeCompiler(shell);
+        // An explicit locked profiling pose must drive the real editor view,
+        // after project recovery, not only the unused gameplay controller.
+        if (shell.frameProfiler.enabled() && shell.lockCamera && shell.hasLaunchCamera &&
+            !shell.projectReopening && !editorPlaying)
+          shell.editorSession.setCameraPose(shell.launchCamera.position,
+                                            shell.launchCamera.yaw, shell.launchCamera.pitch);
         shell.editorSession.update();
         updateAndroidAudioFocus(shell,shell.editorSession.audioWantsFocus());
         // Painel Qualidade: "Aplicar" grava o arquivo do projeto e refaz o
@@ -3295,6 +3328,9 @@ void android_main(android_app *app) {
           shell.startPlayOnOpen=false;
           __android_log_print(ANDROID_LOG_INFO,LogTag,"[Editor] Play iniciado pela opção aether.start_play.");
         }
+        // Autostart can switch the workspace after the frame's initial mode
+        // snapshot. Publish the Play map and camera in this same frame.
+        editorPlaying = !editorActive || session.isPlaying();
         // R3: o painel mudou o perfil. A prévia volta ao worker com os MESMOS bytes
         // (e o mesmo manifesto de dependências), preparada com o rascunho.
         if(session.takeImportReprepare()) {
@@ -3613,6 +3649,8 @@ void android_main(android_app *app) {
       // sobreposicao sobre uma cena parada em outro lugar, que e exatamente a
       // sensacao de "isto e uma cena rodando, nao um editor".
       ae::platform::FreeCameraState sceneCamera = shell.cameraController.state();
+      // A failed Play publication may have returned the session to editing.
+      editorPlaying = !editorActive || shell.editorSession.isPlaying();
       float sceneNear=0,sceneFar=0,sceneFov=0,sceneOrthoHeight=0;
       ae::u32 sceneEnvironmentMask=~0u;
       ae::u32 exposureCameraEntity=0;
@@ -3816,6 +3854,15 @@ void android_main(android_app *app) {
         context.renderDrawCount = shell.instancedRenderer.profileRenderDrawCount();
         context.lodGroupCount = shell.instancedRenderer.profileLodGroupCount();
         context.hzbEnabled = shell.instancedRenderer.hzbOcclusionEnabled();
+        context.postUiFused = shell.instancedRenderer.postUiFusedLastFrame();
+        context.opaqueNoClip = shell.instancedRenderer.opaqueNoClipLastFrame();
+        context.fullDetailSampling = shell.instancedRenderer.fullDetailSamplingEnabled();
+        context.pointLightingSpecialization = shell.instancedRenderer.pointLightingSpecializationLastFrame();
+        context.spatialChunks = shell.instancedRenderer.spatialGeometryChunkCount();
+        context.sceneReuseEnabled=shell.instancedRenderer.editorSceneReuseEnabled();
+        context.sceneReused=shell.instancedRenderer.editorSceneReusedLastFrame();
+        context.renderingQualityLocked=shell.profileLockRenderingQuality;
+        context.shadowFilterTaps=shell.instancedRenderer.activeRenderingPolicy().shadows.filterTaps;
         context.lodEnabled = shell.instancedRenderer.lodSelectionEnabled();
         context.lodPixelErrorBudget = shell.instancedRenderer.lodPixelErrorBudget();
         context.coverageLodPixelErrorBudget =

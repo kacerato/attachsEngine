@@ -31,6 +31,16 @@ struct PunctualLight {
 };
 static_assert(sizeof(PunctualLight) == 64);
 
+// Validate the uploaded records, after local shadow allocation. This is a
+// compiled shader contract, so a spot, a valid shadow tile or malformed cone
+// must immediately return to the general lighting pipeline.
+inline bool unshadowedPointLighting(std::span<const PunctualLight> lights) noexcept {
+  for (const auto &light : lights)
+    if (light.colorIntensity[3] != 0.0f || light.directionOffset[3] != 1.0f ||
+        !(light.shadow[0] < -0.5f)) return false;
+  return true;
+}
+
 enum class LightModality : u32 { Directional = 0, Point = 1, Spot = 2 };
 
 // Sombra pedida pelo autor, por luz. É o Shadow Type do Light Inspector da
@@ -226,7 +236,12 @@ inline u32 selectPunctualLights(std::span<const SceneLight> lights, const float 
 inline const SceneLight *selectDirectionalLight(std::span<const SceneLight> lights) {
   const SceneLight *chosen = nullptr;
   for (const auto &light : lights) {
-    if (light.modality != LightModality::Directional || !lightContributes(light)) continue;
+    // An authored, enabled directional light at zero energy explicitly suppresses
+    // the renderer's default sun. Local lights at zero energy still consume no slots.
+    // Filtering through lightContributes here resurrected daylight in dark interiors.
+    if (light.modality != LightModality::Directional || !finiteVector(light.position) ||
+        !finiteVector(light.direction) || !finiteVector(light.color) ||
+        !std::isfinite(light.intensity) || light.intensity < 0) continue;
     if (!chosen || light.intensity > chosen->intensity ||
         (light.intensity == chosen->intensity && light.objectId < chosen->objectId))
       chosen = &light;

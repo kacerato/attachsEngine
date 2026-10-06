@@ -8,6 +8,22 @@
 #include <sstream>
 #include <cmath>
 using namespace ae;using namespace ae::ui;
+AE_TEST(gui_joystick_modes_curve_return_and_independent_image_sources) {
+  GuiDocument d;const auto id=d.create(GuiKind::Joystick);auto n=*d.find(id);std::string error;n.offsets={0,0,200,200};n.control.deadzone=0;n.control.exponent=2;n.control.mode=GuiStickMode::Floating;n.control.baseImage="UI/base.png";n.control.knobImage="UI/knob.png";AE_EXPECT_TRUE(d.update(n,error),"editable floating joystick");
+  GuiImageAtlas images;u32 loads=0;images.reconcile(d,1,[&](std::string_view,std::vector<u8>&pixels,u32 &w,u32 &h,std::string &){++loads;w=h=16;pixels.assign(16*16*4,255);return true;});
+  AE_EXPECT_TRUE(loads==2&&images.find(n.control.baseImage)&&images.find(n.control.knobImage),"base and knob use actual project image atlas entries");
+  GuiRuntime r;r.setImages(&images);r.load(d);r.layout({0,0,800,600});r.pointer({1,UiPointerPhase::Down,{60,60}});
+  AE_EXPECT_TRUE(std::abs(r.controlState(id)->value.x)<.001f&&std::abs(r.controlState(id)->origin.x-.3f)<.001f,"floating origin is the initial touch");
+  r.pointer({1,UiPointerPhase::Move,{100,60}});AE_EXPECT_TRUE(std::abs(r.controlState(id)->value.x-.25f)<.001f,"authored exponent transforms half displacement");
+  UiDrawList list;list.begin({0,0,800,600},{});r.draw(list);u32 draws=0;for(const auto &c:list.commands())if(c.image==kUiGuiImage)++draws;AE_EXPECT_EQ(draws,2u,"both authored image resources reach draw commands");
+  r.pointer({1,UiPointerPhase::Up,{100,60}});r.advance(.06);AE_EXPECT_TRUE(r.controlState(id)->value.x==0&&r.controlState(id)->knob.x>0&&r.controlState(id)->knob.x<.5f,"action stops immediately while visual returns separately");r.advance(.2);AE_EXPECT_TRUE(r.controlState(id)->knob.x==0,"return completes");
+  n.control.mode=GuiStickMode::Dynamic;n.control.exponent=1;d.update(n,error);r.load(d);r.layout({0,0,800,600});r.pointer({1,UiPointerPhase::Down,{60,60}});r.pointer({1,UiPointerPhase::Move,{300,60}});
+  AE_EXPECT_TRUE(std::abs(r.controlState(id)->origin.x-1.1f)<.001f&&r.controlState(id)->value.x>.99f,"dynamic center follows beyond the input radius");
+  r.pointer({1,UiPointerPhase::Move,{260,60}});AE_EXPECT_TRUE(std::abs(r.controlState(id)->value.x-.5f)<.001f,"movement is measured from updated origin");
+  n.control.mode=GuiStickMode::Fixed;n.control.gate=GuiStickGate::Square;n.control.axis=GuiStickAxis::Horizontal;d.update(n,error);r.load(d);r.layout({0,0,800,600});r.pointer({1,UiPointerPhase::Down,{180,20}});
+  AE_EXPECT_TRUE(r.controlState(id)->value.x>.99f&&r.controlState(id)->value.y==0,"fixed center and horizontal restriction affect actual signal");
+  n.control.showBase=n.control.showKnob=false;d.update(n,error);r.load(d);r.layout({0,0,800,600});list.begin({0,0,800,600},{});r.draw(list);AE_EXPECT_TRUE(list.commands().empty()&&r.pointer({1,UiPointerPhase::Down,{180,20}}),"fully unpainted joystick remains a functional authored input region");
+}
 AE_TEST(gui_automatic_nested_layout_reflows_resize_hide_order_and_roundtrip) {
   GuiDocument d;std::string error;const auto root=d.create(GuiKind::VBox),row=d.create(GuiKind::HBox,root),a=d.create(GuiKind::Button,row),b=d.create(GuiKind::Button,row),grid=d.create(GuiKind::Grid,root);
   auto n=*d.find(root);n.anchorMax={1,1};n.offsets={0,0,0,0};n.sizing.padding=UiInsets::all(10);d.update(n,error);

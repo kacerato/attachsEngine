@@ -5,10 +5,16 @@ namespace ae::ui {
 void GuiImageAtlas::clear() {sourceRevision_=~u64{0};entries_.clear();std::vector<u8>{}.swap(pixels_);++revision_;}
 const GuiImage *GuiImageAtlas::find(std::string_view path) const {const auto i=entries_.find(path);return i==entries_.end()?nullptr:&i->second;}
 void GuiImageAtlas::reconcile(const GuiDocument &d,u64 source,const Loader &load) {
+  const GuiDocument *documents[]{&d};reconcile(documents,source,load);
+}
+void GuiImageAtlas::reconcile(std::span<const GuiDocument *const> documents,u64 source,const Loader &load) {
   if(sourceRevision_==source) return;
   sourceRevision_=source;entries_.clear();
   std::set<std::string> paths;
-  for(const auto &n:d.nodes()) if(n.kind==GuiKind::Image && !n.image.empty()) paths.insert(n.image);
+  for(const auto *d:documents)if(d)for(const auto &n:d->nodes()) {
+    if(n.kind==GuiKind::Image && !n.image.empty())paths.insert(n.image);
+    if(n.kind==GuiKind::Joystick)for(const auto &path:{n.control.baseImage,n.control.knobImage})if(!path.empty())paths.insert(path);
+  }
   if(paths.empty()){std::vector<u8>{}.swap(pixels_);++revision_;return;}
   pixels_.assign(static_cast<usize>(kSize)*kSize*4,0);
   u32 x=1,y=1,row=0,count=0;

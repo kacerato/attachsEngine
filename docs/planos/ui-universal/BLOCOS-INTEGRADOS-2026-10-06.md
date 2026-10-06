@@ -1,0 +1,25 @@
+# Implementação em grandes blocos — attachsEngine
+
+Pedido: fechar as pendências U01–U10 e ampliar a autoria de malha visual. O universo continua sendo o roadmap original preservado e a extensão de objetos/colisão/controle; esta ordem não elimina requisitos. Repositório confirmado: https://github.com/kacerato/attachsEngine.git, branch codex/gameplay-runtime. U11 anterior tem evidência própria; modelagem visual completa é ampliação nova, ainda não aceita.
+
+## Ordem por dependência
+
+1. **Autoria física durável — U01/U02/U04/U05/U09.** Receita persistente por instância, seleção de fontes tipadas, orçamento, correspondência entre partes, merge da base com edições locais, recursos imutáveis, reimportação opt-in, prefab, histórico, cancelamento e prévia real. Primeiro fechamento: receita + regeneração explícita preservando overrides. Skin/pose e ampliação dos limites exigem sua própria cadeia; não ficam implicitamente suportados.
+2. **Locomoção e representação — U03/U06/U07/U08.** Apoio por forma/contato, degraus/agachar, plataformas, fontes de intenção e arbitragem com foco/lifecycle, orientação visual e animação/root motion. Água, voo e veículos dependem de consumidores físicos adequados e terão critérios distintos, dentro deste bloco.
+3. **UI componível — U10 / R0–R12.** Contratos e migração, instâncias, skins/recursos, entrada/foco, layout, texto/IME/idiomas, bindings, coleções, formulários/inventário, composição espacial, animação, extensões/exportação, acessibilidade e escala. Cada requisito do arquivo original permanece obrigatório; o inventário de progresso não substitui o texto.
+4. **Autoria de malha visual.** Modelo de topologia com arestas/faces/vértices, seleção e edição no viewport, operações de modelagem, UVs, slots/material, normais/tangentes, recursos e instâncias, prefab/reimportação, colisão e custo mobile. Referência de capacidade: Unity ProBuilder 6.0.9. Sem declarar paridade por reutilizar a edição física de U11.
+5. **SDK, reprodução/rede e orçamento — U12/U13/U14.** Contratos e operações seguras, snapshots/posse/correção, limites de determinismo e medições representativas; execução acompanha a estabilização dos blocos anteriores.
+
+## Bloco em execução: receita e regeneração
+
+Fonte + slots + geometria/pose → worker V-HACD → revisão candidata → correspondência de partes → merge base/local/nova → preflight Jolt → registro/publicação imutável → uma transação de cena → arquivo/reabertura → prefab/instância.
+
+A receita pertence ao objeto, com referências enumeráveis que seguem duplicação/prefab. A física executa os Colliders publicados, não a receita nem o worker. A nova base é guardada junto do resultado para uma segunda regeneração não reinterpretar o override como valor herdado. Remoções locais são alterações, não pedidos para recriar componentes silenciosamente. Correspondência espacial é sugestão; ambiguidade precisa de escolha explícita. Recursos ausentes e resultados obsoletos impedem Apply antes da publicação.
+
+NÃO IREI SER SIMPLISTA NO DESIGN. Reutilizar a superfície contextual de colisão, com o viewport dominante. Identidade da parte, vínculo com a revisão anterior e retenção de edição aparecem junto da prévia paginada; nenhuma janela permanente nova. Estados: geração, cancelado, desatualizado, correspondência exata/sugerida/manual, conflito, edição preservada, parte removida e erro de publicação.
+
+Referências estudadas: [Godot 4.5 Import process](https://docs.godotengine.org/en/4.5/tutorials/assets_pipeline/import_process.html), [importador de cenas 4.5-stable](https://github.com/godotengine/godot/blob/4.5-stable/editor/import/3d/resource_importer_scene.cpp), [Unity 6000.0 prefab overrides](https://docs.unity3d.com/6000.0/Documentation/Manual/PrefabInstanceOverrides.html). Princípios: parâmetros persistentes por recurso, fonte separada do derivado, base distinta da edição local e reimportação explícita. A adaptação usa AssetRegistry, import journal, ComponentType, Prefab e EditorHistory reais já existentes.
+
+Aceite: decompor malhas filhas → editar pose/estado/recurso de uma parte e remover outra → mudar uma fonte → regenerar sem mutar a cena → revisar correspondência → Apply preserva UIDs/edições/remoções e Body/visual → um Undo/Redo exato → salvar/reabrir → instanciar prefab e regenerar só a instância → consultas Jolt distinguem parede/cavidade. Conferir erro/staleness/publicação recusada e UI compacta no executável; build/instalação/aceite Android são gates separados.
+
+Estado do primeiro fechamento: **aplicado e aceito em 2026-10-06**, no recorte de receita/regeneração. Cinco cenários direcionados e regressão GUI 105/105; Apply, paginação de todas as partes, um Undo/Redo byte-exatos e reabertura no Android físico; arquivo/GLBs retirados do aparelho reabertos e consultados no Jolt do host. O Apply de prefab publica a revisão física completa e preserva os endereços independentes. Não marcar U05/U09 completos por este recorte. [Relatório e limites](../../validacao/ui-universal-2026-10-06/collision-regeneration/REPORT.md); [registro verificável](../../validacao/ui-universal-2026-10-06/collision-regeneration/acceptance.json).

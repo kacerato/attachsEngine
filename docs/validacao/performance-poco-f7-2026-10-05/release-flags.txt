@@ -1,0 +1,14 @@
+1769:build CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o: CXX_COMPILER__aether_editor_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/editor/editor_session.cpp || cmake_object_order_depends_target_aether_editor
+1770-  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER
+1771-  DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_session.cpp.o.d
+1772-  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+--
+2138:build CMakeFiles/aether_rhi.dir/rhi/device.cpp.o: CXX_COMPILER__aether_rhi_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/rhi/device.cpp || cmake_object_order_depends_target_aether_rhi
+2139-  DEFINES = -DAETHER_ARM_ASR=1 -DAETHER_FSR2=1 -DFFX_GCC
+2140-  DEP_FILE = CMakeFiles\aether_rhi.dir\rhi\device.cpp.o.d
+2141-  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+--
+2427:build CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/instanced_renderer.cpp || cmake_object_order_depends_target_aether_android
+2428-  DEFINES = -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -Daether_android_EXPORTS
+2429-  DEP_FILE = CMakeFiles\aether_android.dir\platform\android\instanced_renderer.cpp.o.d
+2430-  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20

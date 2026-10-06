@@ -29,6 +29,7 @@
 #include "runtime/script_inspection.h"
 #include "runtime/game_view.h"
 #include "editor/editor_document.h"
+#include "editor/editor_gui_tree.h"
 #include "editor/editor_prefab_overrides.h"
 #include "editor/editor_filesystem.h"
 #include "editor/editor_code_workspace.h"
@@ -48,6 +49,7 @@
 namespace ae::runtime {class SceneTimers;class SceneTweens;class ScenePhysics;class GameWorld;}
 namespace ae::editor {
 class EditorMapScene;
+struct ColliderTopology;
 
 // Uma linha do diff de um preset, já com a escolha do autor.
 //
@@ -64,7 +66,21 @@ struct EditorPresetField {
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
 // no próprio identificador.
 enum class EditorWidget : u32 {
+  ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
+  ColliderGeometryFace,ColliderGeometryHidden,ColliderGeometryAdditive,ColliderGeometryUndo,ColliderGeometryRedo,
+  ColliderGeometryCoordinateX,ColliderGeometryCoordinateY,ColliderGeometryCoordinateZ,
+  PhysicsDiagnosticOpen,PhysicsDiagnosticClose,PhysicsDiagnosticRefresh,PhysicsDiagnosticVisual,
+  PhysicsDiagnosticCollision,PhysicsDiagnosticSupport,ColliderGeometryAxisX,ColliderGeometryAxisY,ColliderGeometryAxisZ,ColliderAuthoringDetails,
   TabGui = 0xDB000000u,
+  GuiCanvasEdit = 0xDB000001u,
+  CharacterConversionOpen=0xDB000010u,CharacterConversionApply,CharacterConversionBack,
+  MotorSetupOpen=0xDB000020u,MotorSetupApply,MotorSetupBack,MotorSetupPreserve,MotorSetupFit,MotorSetupConvex,
+  MotorSetupDecompose,MotorBakeStart,MotorBakeCancel,MotorBakeBudgetLow,MotorBakeBudgetMedium,MotorBakeBudgetHigh,
+  MotorBakePrevious,MotorBakeNext,MotorBakeSourcesOpen,MotorBakeSourcesDone,MotorBakeSourcesObject,MotorBakeSourcesHierarchy,
+  MotorBakeSourcePrevious,MotorBakeSourceNext,MotorBakePartBase=0xDB000080u,MotorBakeSourceBase=0xDB000100u,
+  MotorBakeRegenerate=0xDB000300u,MotorBakeConfirmMapping,MotorBakeMappingBase=0xDB000320u,
+  GuiHierarchyRowBase = 0xDD000000u,
+  GuiHierarchyCollapseBase = 0xDE000000u,
   CreationCategoryBase=0x63000000,
   CreationRowBase=0x64000000,
   PrefabOverrideRevertBase=0xD0000000u,
@@ -335,6 +351,7 @@ enum class EditorWidget : u32 {
   CameraLens=0x5E000010u, CameraNear, CameraFar,
   CameraHandleBase=0x5E000020u,
   ComponentHandleBase=0x5E000060u,
+  ColliderHandleBase=0x5E000080u,
   CameraPreviewPin=0x5E000030u, CameraPreviewClose, CameraPreviewResolution, CameraPreviewFrequency, CameraPreviewRetry,
   PresetOpen=0x5E000040u, PresetClose, PresetSave, PresetApply, PresetAdd, PresetRename, PresetDelete, PresetPrevious, PresetNext,
   // Escolha por campo do preset: marcar tudo, desmarcar tudo e paginar o diff.
@@ -554,6 +571,9 @@ inline constexpr u32 TextureInspectorSection=0x00,TextureInspectorCopy=0x10,Text
                      TextureInspectorUsersMore=0x46;
 enum TextureInspectorCard : u32 {TextureCardPreview,TextureCardProperties,TextureCardImport,TextureCardOrigin,TextureCardUsers};
 inline constexpr WidgetRange widgetRanges[]{
+  {EditorWidget::ColliderGeometryOpen,32},
+  {EditorWidget::GuiHierarchyRowBase,0x0010'0000u},
+  {EditorWidget::GuiHierarchyCollapseBase,0x0010'0000u},
   {EditorWidget::TweenRestart,0x0001'0000u},
   {EditorWidget::TimerControlBase,0x0001'0000u},
   {EditorWidget::PathPointSelectBase,kRange},
@@ -771,6 +791,10 @@ struct EditorScreenState final {
   float filePanelRatio=.46f;
   bool filesCollapsed=false;
   EditorEntityId selection = kInvalidEntity;
+  std::span<const EditorGuiRow> guiRows{};
+  EditorGuiTarget guiSelection{};
+  std::vector<EditorGuiTarget> collapsedGui;
+  bool guiInspector=false;
   // Widget sob o dedo agora, para o realce de pressionado.
   u32 pressedWidget = 0;
   EditorGizmoMode tool = EditorGizmoMode::Translate;
@@ -1075,6 +1099,19 @@ struct EditorScreenState final {
   EditorViewport debugView{};
   bool showGrid = true;
   bool showComponentVisuals=true;
+  u32 activeColliderHandle=0; // kind + 1, zero is idle
+  const ColliderTopology *colliderTopology=nullptr;
+  bool colliderAuthoringDetails=false;
+  bool physicsDiagnosticOpen=false,physicsDiagnosticVisual=true,physicsDiagnosticCollision=true,physicsDiagnosticSupport=true;
+  std::string physicsDiagnosticText,physicsDiagnosticError;
+  EditorEntityId physicsDiagnosticTarget=0;
+  float physicsDiagnosticCom[3]{},physicsDiagnosticPoint[3]{},physicsDiagnosticNormal[3]{};
+  bool physicsDiagnosticHasCom=false,physicsDiagnosticHasSupport=false,physicsDiagnosticLive=false;
+  bool physicsDiagnosticHasCapsule=false;
+  float physicsDiagnosticCapsuleBottom[3]{},physicsDiagnosticCapsuleTop[3]{},physicsDiagnosticCapsuleRadius=0;
+  std::vector<std::array<float,3>> physicsDiagnosticProbes;
+  double physicsDiagnosticMs=0,colliderUiMs=0;u64 physicsDiagnosticBuilds=0;
+  std::span<const EditorPickCandidate> colliderHandleOccluders;
   // Opções da câmera editorial, equivalentes à barra de visualização da Scene
   // View. São estado do editor: não alteram o Ambiente salvo nem entram no
   // histórico da cena.
@@ -1189,6 +1226,31 @@ struct EditorScreenState final {
   // unidade para errar.
   float platformImeFraction = 0.0f;
   bool entityMenu = false;
+  EditorEntityId characterConversionTarget=0;
+  std::string characterConversionError;
+  float characterConversionRadius=0,characterConversionHeight=0;
+  EditorEntityId motorSetupTarget=0;
+  u32 motorSetupPolicy=0;
+  std::string motorSetupError,motorSetupSummary;
+  u32 motorBakeBudget=1,motorBakePage=0;
+  // Regeneration reviews identity, local edits and correspondence together.
+  // One part per page keeps every candidate reachable, even when the full
+  // Inspector chrome leaves less room than the surface height suggests.
+  u32 motorBakePartsPerPage() const noexcept { return motorBakeRegenerating||surface.height<600?1u:3u; }
+  bool motorBakeRunning=false,motorBakeReady=false;
+  float motorBakeProgress=0;
+  std::string motorBakeStage;
+  std::vector<bool> motorBakeEnabled;
+  struct MotorBakePreviewPart {std::vector<std::array<float,9>> triangles;};
+  std::vector<MotorBakePreviewPart> motorBakePreview;
+  struct MotorBakeSourceRow {std::string label,error;bool selected=false;};
+  bool motorBakeSourcesOpen=false;
+  u32 motorBakeSourcePage=0,motorBakeSelectedSources=0;
+  std::vector<MotorBakeSourceRow> motorBakeSourceRows;
+  bool motorBakeRecipeAvailable=false,motorBakeRegenerating=false,motorBakeMappingConfirmed=true;
+  std::vector<u64> motorBakePreviousParts,motorBakePartMapping;
+  std::vector<std::string> motorBakePartNotes;
+  std::string motorBakeMappingSummary;
   bool creationMenu=false;
   bool creationAsChild=false;
   bool workspaceMenu=false;

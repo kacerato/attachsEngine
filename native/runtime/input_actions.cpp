@@ -422,7 +422,7 @@ void InputService::submit(const InputDeviceState &state,double unscaledElapsed) 
     else if(value.physicalDown)value.elapsed=std::min(value.elapsed+unscaledElapsed,60.0);
     if(action.interaction==InputInteraction::Press) {
       value.down=physical;value.phase=physical?InputPhase::Performed:InputPhase::Waiting;
-      value.performedPulse=physical&&!value.wasDown;
+      value.performedPulse=(physical&&!value.wasDown)||std::any_of(state.virtualActions.begin(),state.virtualActions.end(),[&](const auto &s){return s.action==action.id&&s.kind==ActionKind::Button&&s.pressCount&&(action.deviceGroups&deviceGroups_&InputTouch);});
       if(!physical)value.elapsed=0;
     } else if(action.interaction==InputInteraction::Hold) {
       value.down=physical&&value.elapsed>=action.duration;
@@ -441,7 +441,7 @@ void InputService::submit(const InputDeviceState &state,double unscaledElapsed) 
   }
 }
 
-float InputService::evaluate(const InputAction &action, const InputDeviceState &state, u32 axis) const {
+float InputService::evaluateHardware(const InputAction &action, const InputDeviceState &state, u32 axis) const {
   float accumulated = 0;
   for (const auto &binding : action.bindings) {
     if (binding.axis != axis || !(sourceGroup(binding.source)&action.deviceGroups&deviceGroups_)) continue;
@@ -474,8 +474,20 @@ float InputService::evaluate(const InputAction &action, const InputDeviceState &
     accumulated += raw * binding.scale;
   }
   accumulated = std::clamp(accumulated, -1.0f, 1.0f);
-  if (action.kind != ActionKind::Button) accumulated = applyDeadzone(accumulated, action.deadzone);
-  return std::clamp(accumulated * action.sensitivity, -1000.0f, 1000.0f);
+  return accumulated;
+}
+float InputService::evaluate(const InputAction &a,const InputDeviceState &state,u32 axis) const {
+  float x=evaluateHardware(a,state,0),y=a.kind==ActionKind::Axis2D?evaluateHardware(a,state,1):0;
+  // Continuous sources use the greatest vector magnitude (hardware wins ties).
+  // Buttons OR their held values; a brief Press pulse survives between frames.
+  if(a.deviceGroups&deviceGroups_&InputTouch)for(const auto &s:state.virtualActions) {
+    if(s.action!=a.id||s.kind!=a.kind||!std::isfinite(s.x)||!std::isfinite(s.y))continue;
+    if(a.kind==ActionKind::Button){x=std::max(x,s.x>0||s.pressCount?1.f:0.f);continue;}
+    if(s.x*s.x+s.y*s.y>x*x+y*y){x=s.x;y=s.y;}
+  }
+  float raw=std::clamp(axis?y:x,-1.f,1.f);
+  if(a.kind!=ActionKind::Button)raw=applyDeadzone(raw,a.deadzone);
+  return std::clamp(raw*a.sensitivity,-1000.f,1000.f);
 }
 
 const InputService::Value *InputService::value(std::string_view action) const {

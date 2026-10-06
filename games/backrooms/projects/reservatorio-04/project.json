@@ -1,0 +1,13 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "mainScene": "scenes/editor.aescene",
+  "editorScene": "scenes/editor.aescene",
+  "project": {
+    "name": "Reservatório 04",
+    "path": "C:\\Users\\donod\\Downloads\\atchengine\\games\\backrooms\\projects\\reservatorio-04",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 4
+  }
+}

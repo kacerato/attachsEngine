@@ -1,0 +1,170 @@
+{
+  "format": 1,
+  "date": "2026-10-05",
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "publication": "local uncommitted work; not pushed in this delivery",
+  "engine_complete": false,
+  "source_plan_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "implementation": {
+    "algorithm": "V-HACD 4",
+    "revision": "f900e42361491f525262d4825e758845e4969897",
+    "solver": "Jolt 5.6.1",
+    "reference": "Godot 4.5 MeshConvexDecompositionSettings",
+    "reference_url": "https://docs.godotengine.org/en/4.5/classes/class_meshconvexdecompositionsettings.html",
+    "chain": [
+      "selected object visual slots",
+      "closed solid validation",
+      "owned worker",
+      "editable preview",
+      "full scene Jolt preflight of actual parts",
+      "transactional GLB and GUID publication",
+      "Collider per part",
+      "Body and motor",
+      "one Undo",
+      "serialization and resource reopening",
+      "authored controls in Play"
+    ],
+    "visual_mesh_preserved": true,
+    "collider_version": 8,
+    "mesh_local_pose_legacy_default": false,
+    "limits": {
+      "triangles": 100000,
+      "parts": 32,
+      "vertices_per_part": [
+        8,
+        64
+      ],
+      "voxel_resolution": [
+        10000,
+        400000
+      ],
+      "closed_oriented_manifold_required": true,
+      "time_budget_cooperative_seconds": [
+        1,
+        120
+      ],
+      "hard_memory_cap": false
+    }
+  },
+  "host": {
+    "build": "passed",
+    "gui_suite": {
+      "passed": 76,
+      "total": 76
+    },
+    "focused_scenarios": [
+      "U cavity collision and per-instance query/disable",
+      "affine local pose under nonuniform scale",
+      "v8 archive and source dependency reopening",
+      "actual Jolt grounding/movement/jump",
+      "cancel/stale/refused publication no mutation",
+      "invalid unrelated physics draft does not block generation but rejects Apply",
+      "open mesh rejection and v7 compatibility"
+    ],
+    "sdk": {
+      "warnings": 0,
+      "errors": 0,
+      "types": 47,
+      "properties": 387,
+      "generated_accessors": 774
+    },
+    "ui": {
+      "800x400": "all eight part pages reached through native pointer routing and toggled",
+      "1280x720": "native preview/Apply captured; earlier same UI before prepare/preflight refactor"
+    },
+    "captures_are": "native UI software rendering; physical captures also include Vulkan scene rendering"
+  },
+  "android": {
+    "build": "BUILD SUCCESSFUL",
+    "apk_sha256": "d900dd744e4cc65ade6ba5ec7e5d1d28d5a5cc3292f32f0dc8b9d76984ba2d3f",
+    "installed_base_apk_sha256": "d900dd744e4cc65ade6ba5ec7e5d1d28d5a5cc3292f32f0dc8b9d76984ba2d3f",
+    "apk_bytes": 256438815,
+    "device": "Xiaomi 25053PC47G / onyx",
+    "connection": "wireless ADB",
+    "project": "UI Convex Parts Final",
+    "project_path": "/storage/emulated/0/Android/data/dev.aether.editor/files/Projetos/UIConvexPartsFinal20261005",
+    "authored_parts": 8,
+    "actor_components_after_apply": 11,
+    "actions": [
+      "generate light preset",
+      "toggle first part off/on",
+      "Apply",
+      "Save",
+      "Undo restores one original visual component",
+      "Redo",
+      "Save",
+      "force stop",
+      "reopen public project",
+      "Play",
+      "joystick move",
+      "jump",
+      "impulse"
+    ],
+    "reopened_scene_bytes_identical": true,
+    "scene_sha256": "a7358c7c19dcefc2e203d7fa452ad0d91c9aeec708e72b02b2908ad7d6bf85f5",
+    "assets_sha256": "dda9f0113703b2e4dd4c8a315f58850ec1160ea5219f43d449278d3f2bff4f26",
+    "collision_glb_sha256": "8037c9de28a53d0e25fc09cb7e8b1e3ce183e660a00992207c20d699670fbc92",
+    "collision_meshes": 8,
+    "observed_hud": {
+      "play": {
+        "x": 0,
+        "y": 0.49,
+        "z": 0,
+        "jumps": 0,
+        "impulses": 0
+      },
+      "move": {
+        "x": 1.97,
+        "y": 0.49,
+        "z": 0,
+        "jumps": 0,
+        "impulses": 0
+      },
+      "jump": {
+        "x": 1.97,
+        "y": 1.94,
+        "z": 0,
+        "jumps": 1,
+        "impulses": 0
+      },
+      "impulse": {
+        "x": 2.24,
+        "y": 0.48,
+        "z": 0,
+        "jumps": 1,
+        "impulses": 1
+      }
+    },
+    "observation_limits": "Sequential ADB input/captures on the physical device; not simultaneous multifinger, performance or thermal acceptance.",
+    "captures": [
+      "device-source.png",
+      "device-budget.png",
+      "device-generating.png",
+      "device-preview.png",
+      "device-disabled.png",
+      "device-applied.png",
+      "device-undo.png",
+      "device-reopened-screen.png",
+      "device-play.png",
+      "device-move.png",
+      "device-jump.png",
+      "device-impulse.png"
+    ]
+  },
+  "examples": [
+    "examples/ui/ConvexParts",
+    "examples/ui/ConvexPartsReady"
+  ],
+  "remaining": [
+    "source slot/descendant selection",
+    "deformed skin source",
+    "viewport part picking/cuts",
+    "regeneration matching with overrides/prefab",
+    "advanced numeric bake GUI",
+    "mobile peak memory/thermal and large input cancellation acceptance",
+    "broader slopes/platforms/multifinger scenarios",
+    "custom center of mass/inertia, motor modes, networking, respawn and full target reconnection",
+    "remaining UI universal roadmap requirements"
+  ]
+}

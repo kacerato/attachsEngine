@@ -1,0 +1,418 @@
+{
+  "runs": [
+    {
+      "run": "01-A",
+      "variant": "A",
+      "windows": 7,
+      "engine_fps": 77.08660671257873,
+      "surface_continuous": true,
+      "displayed_fps": 77.24865483192437,
+      "context": {
+        "schemaVersion": 8,
+        "pid": 10041,
+        "epoch": 5,
+        "scene": "authored-project",
+        "content_fingerprint": "0000000000000000",
+        "target_fps": 120,
+        "gpu_isolation": "full",
+        "camera_locked": true,
+        "camera_mode": "locked",
+        "camera_route_fingerprint": "0000000000000000",
+        "camera_route_frame_ordinal": 0,
+        "camera_route_tick_count": 0,
+        "camera_pose": [
+          -6.101169,
+          5.219586,
+          -8.918053,
+          0.6,
+          0.45
+        ],
+        "draws": 411,
+        "materials": 35,
+        "textures": 72,
+        "triangles": 3749344,
+        "package_version": 0,
+        "render_draws": 411,
+        "lod_groups": 0,
+        "hzb_enabled": false,
+        "lod_enabled": true,
+        "post_ui_fused": true,
+        "lod_error_px": 1.0,
+        "coverage_lod_error_px": 2.0,
+        "render_scale": 0.75,
+        "render_width": 960,
+        "render_height": 2079,
+        "visible_draws": 233,
+        "culled_draws": 149,
+        "submitted_draw_calls": 233,
+        "visible_triangles": 2242538,
+        "submitted_triangles": 2242538,
+        "hzb_tested_draws": 0,
+        "hzb_occluded_draws": 0,
+        "hzb_revived_draws": 0,
+        "hzb_motion_skipped_draws": 0,
+        "hzb_budget_skipped_draws": 0,
+        "instances": 411,
+        "width": 2772,
+        "height": 1280
+      },
+      "gpu_frame_ms": {
+        "mean": 10.772485714285713,
+        "worst_window_p95": 11.8778,
+        "worst_window_p99": 17.8008
+      },
+      "thread_cpu_ms": {
+        "mean": 3.361671428571429,
+        "worst_window_p95": 4.965,
+        "worst_window_p99": 5.3529
+      },
+      "gpu_opaque_ms": {
+        "mean": 7.960014285714286,
+        "worst_window_p95": 8.9867,
+        "worst_window_p99": 14.8908
+      },
+      "gpu_post_ms": {
+        "mean": 2.7864,
+        "worst_window_p95": 2.8691,
+        "worst_window_p99": 3.3858
+      },
+      "gpu_ui_ms": {
+        "mean": 0.00048571428571428577,
+        "worst_window_p95": 0.0005,
+        "worst_window_p99": 0.0005
+      },
+      "visible_triangles": [
+        2242538
+      ],
+      "thermal_pressure": [
+        "none"
+      ],
+      "render_scale_range": [
+        0.75,
+        0.75
+      ],
+      "battery_before_c": 39.9,
+      "battery_after_c": 40.1
+    },
+    {
+      "run": "02-B",
+      "variant": "B",
+      "windows": 7,
+      "engine_fps": 73.93511515062005,
+      "surface_continuous": true,
+      "displayed_fps": 74.16925628804886,
+      "context": {
+        "schemaVersion": 8,
+        "pid": 10365,
+        "epoch": 5,
+        "scene": "authored-project",
+        "content_fingerprint": "0000000000000000",
+        "target_fps": 120,
+        "gpu_isolation": "full",
+        "camera_locked": true,
+        "camera_mode": "locked",
+        "camera_route_fingerprint": "0000000000000000",
+        "camera_route_frame_ordinal": 0,
+        "camera_route_tick_count": 0,
+        "camera_pose": [
+          -6.101169,
+          5.219586,
+          -8.918053,
+          0.6,
+          0.45
+        ],
+        "draws": 411,
+        "materials": 35,
+        "textures": 72,
+        "triangles": 3749344,
+        "package_version": 0,
+        "render_draws": 411,
+        "lod_groups": 0,
+        "hzb_enabled": true,
+        "lod_enabled": true,
+        "post_ui_fused": true,
+        "lod_error_px": 1.0,
+        "coverage_lod_error_px": 2.0,
+        "render_scale": 0.75,
+        "render_width": 960,
+        "render_height": 2079,
+        "visible_draws": 233,
+        "culled_draws": 149,
+        "submitted_draw_calls": 233,
+        "visible_triangles": 2242538,
+        "submitted_triangles": 2242538,
+        "hzb_tested_draws": 0,
+        "hzb_occluded_draws": 0,
+        "hzb_revived_draws": 0,
+        "hzb_motion_skipped_draws": 0,
+        "hzb_budget_skipped_draws": 0,
+        "instances": 411,
+        "width": 2772,
+        "height": 1280
+      },
+      "gpu_frame_ms": {
+        "mean": 11.069857142857144,
+        "worst_window_p95": 12.1755,
+        "worst_window_p99": 21.5985
+      },
+      "thread_cpu_ms": {
+        "mean": 3.4966142857142857,
+        "worst_window_p95": 5.2178,
+        "worst_window_p99": 5.8045
+      },
+      "gpu_opaque_ms": {
+        "mean": 8.196314285714285,
+        "worst_window_p95": 9.0293,
+        "worst_window_p99": 18.6816
+      },
+      "gpu_post_ms": {
+        "mean": 2.846414285714286,
+        "worst_window_p95": 2.9749,
+        "worst_window_p99": 3.6147
+      },
+      "gpu_ui_ms": {
+        "mean": 0.00048571428571428577,
+        "worst_window_p95": 0.0005,
+        "worst_window_p99": 0.0005
+      },
+      "visible_triangles": [
+        2242490
+      ],
+      "thermal_pressure": [
+        "none"
+      ],
+      "render_scale_range": [
+        0.75,
+        0.75
+      ],
+      "battery_before_c": 40.1,
+      "battery_after_c": 41.0
+    },
+    {
+      "run": "03-B",
+      "variant": "B",
+      "windows": 7,
+      "engine_fps": 75.67309546309272,
+      "surface_continuous": true,
+      "displayed_fps": 75.67842449320119,
+      "context": {
+        "schemaVersion": 8,
+        "pid": 10518,
+        "epoch": 5,
+        "scene": "authored-project",
+        "content_fingerprint": "0000000000000000",
+        "target_fps": 120,
+        "gpu_isolation": "full",
+        "camera_locked": true,
+        "camera_mode": "locked",
+        "camera_route_fingerprint": "0000000000000000",
+        "camera_route_frame_ordinal": 0,
+        "camera_route_tick_count": 0,
+        "camera_pose": [
+          -6.101169,
+          5.219586,
+          -8.918053,
+          0.6,
+          0.45
+        ],
+        "draws": 411,
+        "materials": 35,
+        "textures": 72,
+        "triangles": 3749344,
+        "package_version": 0,
+        "render_draws": 411,
+        "lod_groups": 0,
+        "hzb_enabled": true,
+        "lod_enabled": true,
+        "post_ui_fused": true,
+        "lod_error_px": 1.0,
+        "coverage_lod_error_px": 2.0,
+        "render_scale": 0.75,
+        "render_width": 960,
+        "render_height": 2079,
+        "visible_draws": 233,
+        "culled_draws": 149,
+        "submitted_draw_calls": 233,
+        "visible_triangles": 2242538,
+        "submitted_triangles": 2242538,
+        "hzb_tested_draws": 0,
+        "hzb_occluded_draws": 0,
+        "hzb_revived_draws": 0,
+        "hzb_motion_skipped_draws": 0,
+        "hzb_budget_skipped_draws": 0,
+        "instances": 411,
+        "width": 2772,
+        "height": 1280
+      },
+      "gpu_frame_ms": {
+        "mean": 10.974971428571427,
+        "worst_window_p95": 13.5006,
+        "worst_window_p99": 22.4776
+      },
+      "thread_cpu_ms": {
+        "mean": 3.1570571428571426,
+        "worst_window_p95": 4.7576,
+        "worst_window_p99": 5.5058
+      },
+      "gpu_opaque_ms": {
+        "mean": 8.126042857142858,
+        "worst_window_p95": 10.3487,
+        "worst_window_p99": 19.5599
+      },
+      "gpu_post_ms": {
+        "mean": 2.822157142857143,
+        "worst_window_p95": 2.9322,
+        "worst_window_p99": 3.6455
+      },
+      "gpu_ui_ms": {
+        "mean": 0.0005,
+        "worst_window_p95": 0.0005,
+        "worst_window_p99": 0.0005
+      },
+      "visible_triangles": [
+        2242490
+      ],
+      "thermal_pressure": [
+        "none"
+      ],
+      "render_scale_range": [
+        0.75,
+        0.75
+      ],
+      "battery_before_c": 41.0,
+      "battery_after_c": 41.3
+    },
+    {
+      "run": "04-A",
+      "variant": "A",
+      "windows": 8,
+      "engine_fps": 79.2052851381899,
+      "surface_continuous": true,
+      "displayed_fps": 79.04431842944805,
+      "context": {
+        "schemaVersion": 8,
+        "pid": 14042,
+        "epoch": 5,
+        "scene": "authored-project",
+        "content_fingerprint": "0000000000000000",
+        "target_fps": 120,
+        "gpu_isolation": "full",
+        "camera_locked": true,
+        "camera_mode": "locked",
+        "camera_route_fingerprint": "0000000000000000",
+        "camera_route_frame_ordinal": 0,
+        "camera_route_tick_count": 0,
+        "camera_pose": [
+          -6.101169,
+          5.219586,
+          -8.918053,
+          0.6,
+          0.45
+        ],
+        "draws": 411,
+        "materials": 35,
+        "textures": 72,
+        "triangles": 3749344,
+        "package_version": 0,
+        "render_draws": 411,
+        "lod_groups": 0,
+        "hzb_enabled": false,
+        "lod_enabled": true,
+        "post_ui_fused": true,
+        "lod_error_px": 1.0,
+        "coverage_lod_error_px": 2.0,
+        "render_scale": 0.75,
+        "render_width": 960,
+        "render_height": 2079,
+        "visible_draws": 233,
+        "culled_draws": 149,
+        "submitted_draw_calls": 233,
+        "visible_triangles": 2242538,
+        "submitted_triangles": 2242538,
+        "hzb_tested_draws": 0,
+        "hzb_occluded_draws": 0,
+        "hzb_revived_draws": 0,
+        "hzb_motion_skipped_draws": 0,
+        "hzb_budget_skipped_draws": 0,
+        "instances": 411,
+        "width": 2772,
+        "height": 1280
+      },
+      "gpu_frame_ms": {
+        "mean": 10.648625,
+        "worst_window_p95": 11.3461,
+        "worst_window_p99": 21.9349
+      },
+      "thread_cpu_ms": {
+        "mean": 2.89985,
+        "worst_window_p95": 4.6577,
+        "worst_window_p99": 5.1002
+      },
+      "gpu_opaque_ms": {
+        "mean": 7.8843625,
+        "worst_window_p95": 8.2815,
+        "worst_window_p99": 19.0165
+      },
+      "gpu_post_ms": {
+        "mean": 2.7381875,
+        "worst_window_p95": 2.8936,
+        "worst_window_p99": 3.6617
+      },
+      "gpu_ui_ms": {
+        "mean": 0.000475,
+        "worst_window_p95": 0.0005,
+        "worst_window_p99": 0.0005
+      },
+      "visible_triangles": [
+        2242538
+      ],
+      "thermal_pressure": [
+        "none"
+      ],
+      "render_scale_range": [
+        0.75,
+        0.75
+      ],
+      "battery_before_c": 41.3,
+      "battery_after_c": 42.0
+    }
+  ],
+  "aggregates": {
+    "A": {
+      "frames": 9000,
+      "gpu_mean_ms": 10.706426666666665,
+      "gpu_worst_window_p95_ms": 11.8778,
+      "cpu_mean_ms": 3.1153666666666666,
+      "engine_fps": 78.20225912698398
+    },
+    "B": {
+      "frames": 8400,
+      "gpu_mean_ms": 11.022414285714285,
+      "gpu_worst_window_p95_ms": 13.5006,
+      "cpu_mean_ms": 3.326835714285714,
+      "engine_fps": 74.79401035433288
+    }
+  },
+  "image_comparisons": [
+    {
+      "run": "02-B",
+      "reference": "01-A",
+      "max_channel_difference": 0,
+      "changed_pixels": 0,
+      "changed_pixels_gt3": 0,
+      "mean_channel_difference": 0.0
+    },
+    {
+      "run": "03-B",
+      "reference": "01-A",
+      "max_channel_difference": 0,
+      "changed_pixels": 0,
+      "changed_pixels_gt3": 0,
+      "mean_channel_difference": 0.0
+    }
+  ],
+  "percentile_method": "worst window percentile, not aggregate percentile",
+  "power_measured": false,
+  "gpu_reduction_percent": -2.951382649744505,
+  "engine_fps_change_percent": -4.35824848373858
+}

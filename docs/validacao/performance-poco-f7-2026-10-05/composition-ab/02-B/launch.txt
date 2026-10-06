@@ -1,0 +1,3 @@
+Stopping: dev.aether.editor
+Starting: Intent { cmp=dev.aether.editor/.shell.AstraShellActivity (has extras) }
+

@@ -1,0 +1,106 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "checkout": "C:/Users/donod/Downloads/atchengine",
+  "date": "2026-10-04",
+  "delivery": "R4.6: force-based DynamicBodyMotor and atomic cylinder recipe with separate visual",
+  "roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "roadmap_complete": false,
+  "formats": {
+    "aeui_write": 5,
+    "ui_canvas_write": 2,
+    "sdk_native_abi": 43,
+    "layout_changed_this_delivery": false,
+    "dynamic_motor_component_version": 1,
+    "typed_body_dispatch_operations": [
+      100,
+      101,
+      102,
+      103
+    ]
+  },
+  "host": {
+    "target": "aether_gui_tests",
+    "passed": 71,
+    "failed": 0,
+    "evidence": "motor-host.txt",
+    "coverage": [
+      "one rigid-body authority, resource-backed visual, atomic Undo/Redo and archive",
+      "force acceleration/braking, external impulse and rebuild momentum",
+      "instance-scoped motor commands and current-frame script input",
+      "two independent pointers, buffered grounded jump, air jump rejection and focus cancellation",
+      "moving platform point velocity and excluded collision layer",
+      "scoped native scripting ABI for Character and DynamicBodyMotor, isolated sibling Canvas and retired lease"
+    ]
+  },
+  "sdk_example": {
+    "source": "examples/ui/GuiAuthoredControls.cs",
+    "build": "success",
+    "warnings": 0,
+    "errors": 0,
+    "evidence": "motor-exemplo-sdk.txt",
+    "note": "Real Astra.Scripting project; earlier five-scenario GUI SDK suite was not rerun"
+  },
+  "android": {
+    "build": "Gradle :app:assembleDebug, BUILD SUCCESSFUL in 42s",
+    "build_log": "motor-android-build.txt",
+    "application_id": "dev.aether.editor",
+    "apk_path": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "apk_bytes": 268378414,
+    "apk_sha256": "fb2838ec7ba41062a30cf61577f151a0fa390116c551da1f112ee011b6970cf9",
+    "install": "adb install -r: Success",
+    "installed_sha256_verified": true,
+    "installed_hash_method": "sha256sum on pm path base.apk",
+    "device_model": "Xiaomi 25053PC47G",
+    "device_resolution": [
+      2772,
+      1280
+    ],
+    "project": "UI Dynamic Motor v1",
+    "interaction": "ADB synthetic single-pointer gestures on a physical Android device",
+    "observations": [
+      "Motor Inspector groups Locomocao and Chao with functional properties and packed icon",
+      "Canvas picker accepted PlayerDynamic; edited speed 6 to 8 m/s survived Save/reopen",
+      "After scoped bridge fix, actual C# script read actions and DynamicMotor().ReadBodyState()",
+      "Joystick X 0.00 to 3.50; released vector and vx returned to zero",
+      "Jump Y 1.70 with saltos 1",
+      "Independent Impulso action invoked Body impulse via C#; X 3.50 to 3.77, impulsos 1; later vx 0.00 after braking",
+      "Recipe creation and Undo exercised; final revision shortens clipped name/description without behavioral change"
+    ],
+    "capture_revisions": {
+      "before_scoped_bridge_fix": [
+        "motor-play-inicial.png",
+        "motor-movimento.png",
+        "motor-console.png",
+        "motor-script.png"
+      ],
+      "behavioral_acceptance_sha256": "f269a1cbfde8032069d15fc0b09c0dcb778043e3b4376da704168fbeba99c712",
+      "behavioral_acceptance": [
+        "motor-play-final-inicial.png",
+        "motor-play-final-movimento.png",
+        "motor-play-final-salto.png",
+        "motor-play-final-impulso.png",
+        "motor-play-final-frenagem.png"
+      ],
+      "final_label_revision_sha256": "fb2838ec7ba41062a30cf61577f151a0fa390116c551da1f112ee011b6970cf9",
+      "final_label_revision": [
+        "motor-receita-final.png",
+        "motor-receita-final-criada.png",
+        "motor-autoria-final-instalada.png"
+      ]
+    },
+    "authoring_capture_note": "motor-reaberto.png, motor-chao.png and motor-receptor-picker.png precede scoped bridge fix; authoring contracts are unchanged"
+  },
+  "fixed_acceptance_regression": "Scoped Canvas action read still required Character in script bridge; changed to shared receiver predicate and existing ABI scenario now covers both motors",
+  "boundaries": [
+    "World Y vertical; authored probe dimensions must match collider/scale",
+    "Probe support does not prove all ramps, edge cases or collider shapes",
+    "Motor corrects external impulses gradually; it is not a persistent knockback state machine",
+    "Undo remains session-local; no respawn or target-reconnection framework"
+  ],
+  "acceptance_not_proven": [
+    "Physical simultaneous three-finger input and all joystick modes/images on Android",
+    "Ramp/platform acceptance on Android; platform covered by real Jolt host scenario",
+    "Peak external impulse velocity on Android screenshot; capture is after braking",
+    "Hardware pairing, general FixedUpdate event buffer, remote motor Inspector, respawn and remaining roadmap"
+  ]
+}

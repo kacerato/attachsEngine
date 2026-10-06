@@ -199,8 +199,7 @@ AE_TEST(generated_csharp_component_api_matches_the_schema_registry) {
   for (const char c : committed) if (c != '\r') normalized.push_back(c);
   AE_EXPECT_TRUE(normalized == scene::componentCSharpApi(),
                  "Components.g.cs em dia com o schema; rode aether_tests --write-component-api");
-  u32 facades = 0;
-  for (const auto &schema : scene::componentSchemas) facades += schema.apiName.empty() ? 0u : 1u;
-  AE_EXPECT_EQ(facades, static_cast<u32>(scene::componentSchemas.size()) - 1u,
-               "todo tipo anexável tem fachada; só Comportamento usa a classe Behavior");
+  for(const auto &schema:scene::componentSchemas) {
+    AE_EXPECT_TRUE(!schema.listedInAdd||!schema.apiName.empty(),"todo tipo anexável tem fachada; metadados autorais são criados pelo seu fluxo real");
+  }
 }

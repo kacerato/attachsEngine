@@ -29,6 +29,7 @@ public:
   std::string inputText() const;
   bool replaceInput(u32 id,std::string_view text);
   void finishInput(bool accept);
+  void cancelInput();
   bool overlayAt(UiPoint point,const char *mainWindow) const noexcept;
   static int inputCallback(ImGuiInputTextCallbackData *data);
   std::span<const u8> atlas() const noexcept { return atlas_; }

@@ -1,0 +1,4 @@
+AETHER_ASSETS 1 3
+76e068971ffabfe3b003c4c8af9dc6b5 ui_document "UI/main.aeui" "" "fcdc7297ad5fb1d9ec0140cb83f7e7ce4e400d535d4075d0c08f19a3823dbbaa" 1 "" 0 0
+d8d7dd0c8db8a4ee8711d66847e39281 mesh "Sources/concave-u.glb" "Sources/concave-u.glb" "2dbf3e6bf565df9c3ea2897639c2b7ecd3e048acec899079f56b3e8b8b8a7f69" 1 "glb" 0 0
+8be6b2ce8da1dacdd41aed1200af8a14 mesh "Collision/bake-8037c9de28a53d0e25fc09cb7e8b1e3ce183e660a00992207c20d699670fbc92.glb" "Collision/bake-8037c9de28a53d0e25fc09cb7e8b1e3ce183e660a00992207c20d699670fbc92.glb" "8037c9de28a53d0e25fc09cb7e8b1e3ce183e660a00992207c20d699670fbc92" 1 "glb" 1 d8d7dd0c8db8a4ee8711d66847e39281 0

@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 46 schemas; 45 tipos no Add; 45 fachadas geradas.
+**Registro atual:** 49 schemas; 47 tipos no Add; 47 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -23,6 +23,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.time.timer` | Lógica | `Astra.Components.GameTimer` | Add Component |
 | `astra.logic.event_connection` | Lógica | `Astra.Components.EventConnection` | Add Component |
 | `astra.script.behavior` | Lógica | API própria | Fluxo próprio |
+| `astra.ui.canvas` | Renderização | `Astra.Components.UiCanvas` | Add Component |
 | `astra.render.mesh` | Renderização | `Astra.Components.MeshRenderer` | Add Component |
 | `astra.render.skinned_mesh` | Renderização | `Astra.Components.SkinnedMesh` | Add Component |
 | `astra.render.lod_group` | Renderização | `Astra.Components.LodGroup` | Add Component |
@@ -31,6 +32,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.camera` | Câmera | `Astra.Components.Camera` | Add Component |
 | `astra.camera.look` | Câmera | `Astra.Components.CameraLook` | Add Component |
 | `astra.camera.follow` | Câmera | `Astra.Components.CameraFollow` | Add Component |
+| `astra.physics.collision_recipe` | Física 3D | API própria | Fluxo próprio |
 | `astra.physics.field.gravity` | Física 3D | `Astra.Components.GravityField` | Add Component |
 | `astra.physics.field.wind` | Física 3D | `Astra.Components.WindField` | Add Component |
 | `astra.physics.field.drag` | Física 3D | `Astra.Components.DragField` | Add Component |
@@ -41,6 +43,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.physics.character` | Física 3D | `Astra.Components.Character` | Add Component |
 | `astra.physics.collider` | Física 3D | `Astra.Components.Collider` | Add Component |
 | `astra.physics.joint` | Física 3D | `Astra.Components.Joint` | Add Component |
+| `astra.physics.dynamic_motor` | Física 3D | `Astra.Components.DynamicBodyMotor` | Add Component |
 | `astra.animation` | Animação | `Astra.Components.Animation` | Add Component |
 | `astra.physics2d.field.gravity` | Física 2D | `Astra.Components.GravityField2D` | Add Component |
 | `astra.physics2d.field.wind` | Física 2D | `Astra.Components.WindField2D` | Add Component |
@@ -375,6 +378,41 @@ Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NE
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `enabled` | Ativo | booleano | Execução | verdadeiro | verdadeiro \| falso |  | runtime/script_bridge.cpp → runtime .NET | comportamento | não | não | não |
+
+## Canvas UI · `astra.ui.canvas` v2
+
+Instância independente de documento de UI, na tela ou no objeto. **Consumidor:** runtime/scene_gui.cpp → instâncias, layout, desenho e entrada. **Invalida:** desenho, entrada.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/class-Canvas.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `document` | Documento UI | ui_document | não | não | não |
+
+**Propriedades**
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `offset_x` | Posição X | número | Apresentação | 0 | -100000 … 100000 | m | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `offset_y` | Posição Y | número | Apresentação | 0 | -100000 … 100000 | m | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `offset_z` | Posição Z | número | Apresentação | 0 | -100000 … 100000 | m | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `rotation_x` | Rotação X | número | Apresentação | 0 | -36000 … 36000 | ° | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `rotation_y` | Rotação Y | número | Apresentação | 0 | -36000 … 36000 | ° | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `rotation_z` | Rotação Z | número | Apresentação | 0 | -36000 … 36000 | ° | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `width` | Largura | número | Canvas | 800 | 1 … 16384 | px | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `height` | Altura | número | Canvas | 600 | 1 … 16384 | px | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `units_per_pixel` | Unidades por pixel | número | Canvas | 0.005 | 0.00001 … 10 | m/px | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `order` | Ordem | número | Canvas | 0 | -10000 … 10000 |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | não | não | não |
+| `enabled` | Habilitado | booleano | Canvas | verdadeiro | verdadeiro \| falso |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | não | não | não |
+| `occlusion` | Oclusão no mundo | booleano | Canvas | verdadeiro | verdadeiro \| falso |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | sim | não | não |
+| `mode` | Apresentação | enumeração | Canvas | Tela | Tela \| Mundo / objeto |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | não | não | não |
+| `movement_space` | Espaço do movimento | enumeração | Entrada | Mundo | Mundo \| Local do jogador \| Camera de entrada |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | não | não | não |
+| `input_receiver` | Jogador / receptor | referência | Entrada | Acoes globais | objeto compatível com o receptor |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | não | não | não |
+| `input_camera` | Camera de entrada | referência | Entrada | Nenhuma | astra.camera |  | runtime/scene_gui.cpp → instâncias, layout, desenho e entrada | desenho, entrada | não | não | não |
 
 ## Malha · `astra.render.mesh` v9
 
@@ -716,6 +754,158 @@ Posiciona a câmera após física e animação. **Consumidor:** runtime/scene_ca
 | `enabled` | Ativo | booleano | Resposta | verdadeiro | verdadeiro \| falso |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 | `target` | Alvo | referência | Posição | Escolher objeto | qualquer objeto · fora da subárvore |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 
+## Receita de colisão · `astra.physics.collision_recipe` v1
+
+Fontes e base das partes para regeneração explícita preservando edições. **Consumidor:** editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp. **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/tutorials/assets_pipeline/import_process.html).
+
+**Durante Play:** estrutura não alterável; propriedades não alteráveis.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.physics.body` | Adicione Corpo físico a este objeto |
+
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `bake_source` | Revisão gerada | mesh | não | não | não |
+| `baseline_mesh` | Malha base da parte | mesh | não | não | não |
+
+**Propriedades**
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `source_0` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_1` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_2` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_3` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_4` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_5` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_6` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_7` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_8` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_9` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_10` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_11` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_12` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_13` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_14` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_15` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_16` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_17` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_18` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_19` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_20` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_21` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_22` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_23` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_24` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_25` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_26` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_27` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_28` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_29` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_30` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_31` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_32` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_33` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_34` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_35` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_36` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_37` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_38` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_39` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_40` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_41` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_42` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_43` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_44` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_45` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_46` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_47` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_48` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_49` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_50` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_51` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_52` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_53` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_54` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_55` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_56` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_57` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_58` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_59` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_60` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_61` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_62` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_63` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_64` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_65` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_66` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_67` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_68` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_69` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_70` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_71` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_72` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_73` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_74` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_75` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_76` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_77` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_78` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_79` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_80` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_81` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_82` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_83` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_84` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_85` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_86` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_87` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_88` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_89` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_90` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_91` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_92` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_93` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_94` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_95` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_96` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_97` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_98` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_99` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_100` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_101` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_102` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_103` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_104` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_105` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_106` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_107` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_108` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_109` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_110` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_111` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_112` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_113` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_114` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_115` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_116` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_117` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_118` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_119` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_120` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_121` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_122` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_123` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_124` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_125` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_126` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+| `source_127` | Fonte da colisão | referência | Fontes | Fonte ausente | qualquer objeto |  | editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp | nada | sim | não | não |
+
 ## Campo de gravidade · `astra.physics.field.gravity` v1
 
 Gravidade local em volume sobre corpos dinâmicos. **Consumidor:** runtime/scene_physics_fields.inl → Jolt. **Invalida:** nada.
@@ -921,6 +1111,7 @@ Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → Characte
 |---|---|---|
 | Incompatível | `astra.physics.body` | Incompatível com corpo físico |
 | Incompatível | `astra.physics.collider` | O personagem traz a própria cápsula; remova o Colisor 3D |
+| Incompatível | `astra.physics.dynamic_motor` | Escolha Character ou motor de corpo dinâmico |
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -935,7 +1126,7 @@ Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → Characte
 | `gravity` | Gravidade | número | Locomoção | 9.81 | 0 … 1000 | m/s² | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 | `inherit_platform_horizontal` | Impulso ao sair | booleano | Chão | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 
-## Colisor 3D · `astra.physics.collider` v7
+## Colisor 3D · `astra.physics.collider` v8
 
 Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. **Invalida:** forma física.
 
@@ -974,6 +1165,7 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | `convex` | Convexo | booleano | Forma | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `weld_vertices` | Soldar vértices iguais | booleano | Cozimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `optimize_cooking` | Otimizar para o jogo | booleano | Cozimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
+| `mesh_local_pose` | Pose local da malha | booleano | Forma | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `shape` | Forma | enumeração | Forma | Caixa | Caixa \| Esfera \| Cápsula \| Malha \| Cilindro |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 | `owner` | Corpo proprietário | referência | Vínculo | Neste objeto | astra.physics.body · neste objeto ou ancestral |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 
@@ -1093,6 +1285,34 @@ Nove mecanismos Jolt com limites, referenciais e motores. **Consumidor:** runtim
 | `angular_z_motion` | Movimento | enumeração | Rotação Z | Travado | Travado \| Limitado \| Livre |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
 | `angular_z_motor` | Motor | enumeração | Rotação Z | Desligado | Desligado \| Velocidade \| Posição \| Posição e velocidade |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
 | `connected_body` | Conectar corpo | referência | Âncoras | Escolher corpo | astra.physics.body · outro objeto |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não | não |
+
+## Motor dinâmico · `astra.physics.dynamic_motor` v2
+
+Locomoção por força e salto com apoio sobre Corpo físico dinâmico. **Consumidor:** runtime/scene_dynamic_motor.cpp → forças/impulsos antes de cada passo Jolt. **Invalida:** corpo físico.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_rigidbody3d.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.physics.body` | Adicione Corpo físico dinâmico ao receptor |
+| Incompatível | `astra.physics.character` | Incompatível com personagem cápsula |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `speed` | Velocidade | número | Locomoção | 6 | 0 … 100 | m/s | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `acceleration` | Aceleração | número | Locomoção | 24 | 0 … 1000 | m/s² | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `braking` | Frenagem | número | Locomoção | 36 | 0 … 1000 | m/s² | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `air_control` | Controle no ar | número | Locomoção | 0.25 | 0 … 1 |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `jump_speed` | Velocidade do salto | número | Locomoção | 6 | 0 … 100 | m/s | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `probe_height` | Centro até os pés | número | Chão | 1 | 0.01 … 100 | m | runtime/scene_dynamic_motor.cpp | corpo físico | sim | não | não |
+| `probe_distance` | Alcance abaixo dos pés | número | Chão | 0.15 | 0.001 … 2 | m | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `support_radius` | Raio de sondagem | número | Chão | 0.3 | 0 … 10 | m | runtime/scene_dynamic_motor.cpp | corpo físico | sim | não | não |
+| `max_slope` | Rampa máxima | número | Chão | 50 | 0 … 89 | ° | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `enabled` | Habilitado | booleano | Locomoção | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `inherit_platform_velocity` | Acompanhar plataforma | booleano | Chão | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `automatic_support` | Apoio pela colisão | booleano | Chão | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
 
 ## Animação · `astra.animation` v4
 

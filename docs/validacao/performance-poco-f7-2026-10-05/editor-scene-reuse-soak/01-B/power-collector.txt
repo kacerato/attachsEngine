@@ -1,0 +1,4 @@
+Warning: No PTY. CTRL+C won't gracefully stop the trace. If you are running perfetto via adb shell, use the -tt arg (adb shell -t perfetto ...) or consider using the helper script tools/record_android_trace from the Perfetto repository.
+
+[111.196]    perfetto_cmd.cc:1149 Connected to the Perfetto traced service, TTL: 1200s
+[311.233]    perfetto_cmd.cc:1312 Wrote 48922 bytes into /data/misc/perfetto-traces/astra-editor-power-665aca3df56a46ecb44cc5bf83b72324.pftrace

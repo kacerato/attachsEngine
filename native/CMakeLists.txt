@@ -80,6 +80,14 @@ if(AETHER_PHYSICS_DETERMINISTIC)
 endif()
 add_subdirectory(third_party/JoltPhysics/Build EXCLUDE_FROM_ALL)
 
+# Exception-enabled boundary for offline authoring. Pinned upstream header is
+# compiled once; its exceptions are caught before returning to engine code.
+find_package(Threads REQUIRED)
+add_library(aether_convex_bake STATIC resources/convex_bake.cpp)
+target_include_directories(aether_convex_bake PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(aether_convex_bake PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(aether_convex_bake PUBLIC Threads::Threads)
+
 # --- Box2D v3.1.1 (somente benchmark comparativo do item 4.1.6) -----------
 # Entra antes das flags estritas da engine pelo mesmo motivo do Jolt: warnings
 # de código de terceiros não podem quebrar nossos alvos. A biblioteca NÃO é
@@ -449,11 +457,12 @@ target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc PUBLIC 
 # para que geometria importada no aparelho e geometria cozida no computador
 # percorram o MESMO caminho depois daqui.
 target_link_libraries(aether_assets PUBLIC aether_core aether_renderer)
+target_link_libraries(aether_assets PUBLIC aether_convex_bake)
 
 if(NOT ANDROID)
   # Only descriptors and GUID/archive primitives: regenerating the scripting API
   # must not rebuild/link the renderer, editor, physics or the full test runner.
-  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp)
+  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp scene/collision_recipe.cpp)
   target_include_directories(aether_component_contract_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   add_dependencies(aether_component_contract_probe aether_component_codegen_check)
   if(MINGW)
@@ -468,6 +477,7 @@ endif()
 # armazenamento do documento autoral, entao nao existe uma segunda definicao de
 # "objeto de cena" para manter em sincronia.
 add_library(aether_runtime STATIC
+  scene/collision_recipe.cpp
   runtime/scene_graph.cpp
   runtime/prefab.cpp
   runtime/input_actions.cpp
@@ -477,6 +487,8 @@ add_library(aether_runtime STATIC
   runtime/scene_lights.cpp
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
+  runtime/scene_dynamic_motor.cpp
+  runtime/scene_physics_diagnostic.cpp
   runtime/scene_physics2d.cpp
   runtime/scene_audio.cpp
   runtime/scene_paths.cpp
@@ -485,6 +497,8 @@ add_library(aether_runtime STATIC
   runtime/scene_event_connections.cpp
   runtime/runtime_rendering_state.cpp
   runtime/scene_animation.cpp
+  runtime/scene_gui.cpp
+  runtime/scene_gui_input.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend aether_ui)
@@ -503,7 +517,12 @@ add_library(aether_editor STATIC
   editor/editor_document.cpp
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
+  editor/editor_gui_tree.cpp
   editor/editor_session.cpp
+  editor/editor_character_authoring.cpp
+  editor/editor_dynamic_motor_authoring.cpp
+  editor/editor_collision_regeneration.cpp
+  editor/editor_collider_authoring.cpp
   editor/editor_prefab.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
@@ -542,6 +561,7 @@ target_include_directories(aether_imgui SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR
 
 add_library(aether_ui STATIC
   ui/gui_document.cpp
+  ui/gui_controls.cpp
   ui/gui_images.cpp
   ui/gui_world.cpp
   ui/gui_workbench.cpp
@@ -759,6 +779,7 @@ if(NOT ANDROID)
     ../tests/native/test_rendering_settings_file.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
+    ../tests/native/test_lighting_specialization.cpp
     ../tests/native/test_runtime_environment.cpp
     ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
@@ -900,10 +921,22 @@ if(NOT ANDROID)
   endif()
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
   add_executable(aether_gui_tests ../tests/native/family_base_main.cpp ../tests/native/test_gui.cpp ../tests/native/test_gui_expansion.cpp
+    ../tests/native/test_scene_gui.cpp
+    ../tests/native/test_character_authoring.cpp
+    ../tests/native/test_dynamic_body_motor.cpp
+    ../tests/native/test_convex_bake.cpp
+    ../tests/native/test_collision_regeneration.cpp
+    ../tests/native/test_collider_occlusion.cpp
+    ../tests/native/test_collider_handles.cpp
+    ../tests/native/test_u11_integral.cpp
+    ../tests/native/test_query_contracts.cpp
+    ../tests/native/test_script_physics2d.cpp
     ../tests/native/test_ui_draw_list.cpp ../tests/native/test_ui_instance_builder.cpp)
   target_include_directories(aether_gui_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_gui_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
   target_link_libraries(aether_gui_tests PRIVATE aether_editor aether_ui aether_renderer)
+  add_executable(aether_scene_gui_host ../tests/native/scene_gui_host.cpp)
+  target_link_libraries(aether_scene_gui_host PRIVATE aether_runtime aether_ui aether_renderer)
   add_executable(aether_gui_preview ../tests/native/gui_preview_main.cpp)
   target_include_directories(aether_gui_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_gui_preview PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
@@ -971,6 +1004,11 @@ if(NOT ANDROID)
   endif()
   add_executable(component_scene_fixture EXCLUDE_FROM_ALL ../tests/native/component_scene_fixture.cpp)
   target_link_libraries(component_scene_fixture PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  add_executable(sponza_scene_author EXCLUDE_FROM_ALL ../tools/sponza_scene_author.cpp)
+  target_link_libraries(sponza_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(sponza_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
   target_include_directories(aether_ui_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_ui_preview PRIVATE
     AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")

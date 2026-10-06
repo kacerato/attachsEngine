@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-05",
+  "device": "POCO F7",
+  "project": "Sponza",
+  "candidateOnlyLightingSha256": "638E491F78926A539F7B4620537253BB7646F06E52B50D33DB748DC0AB8BDE92",
+  "candidateSolidSha256": "7665DA6EAD0F8AD18384DA6099A3CE512CE501A7A8E78587DA1A00DEE771D349",
+  "finalApkSha256": "0574357EAF9E3B4B13C555B402C15330599223BA7D257BC22EDF4A1336402902",
+  "sceneSha256": "10F98AC40F3F4B5CB02CFD960059498BB57FBF8828F9F3BB8AA719961ED468BC",
+  "renderSettingsSha256": "0A0E76B1456C0D2C36C7B944078073EC93810C05A4EC819A5176AA9588784928",
+  "nativeRenderScale": 1,
+  "comparisonOrder": [
+    "A",
+    "B",
+    "B",
+    "A"
+  ],
+  "gpuReductionPercent": 10.20985829783535,
+  "zeroDifferentPixels": true,
+  "framesA": 2400,
+  "framesB": 2400,
+  "editorSceneReuseFrames": 0,
+  "powerMeasured": false,
+  "chargerConnectedByUserChoice": true,
+  "thermalOverride": false,
+  "installedFinalVerified": true,
+  "defaultAcceptancePassed": true,
+  "enduranceAccepted": false,
+  "target120FpsAccepted": false,
+  "normalDisplayedFps": 61.964933681803586,
+  "normalRenderScale": 0.75,
+  "normalShadowFilterTaps": 9,
+  "playerControlsChecked": [
+    "joystick",
+    "look",
+    "jump",
+    "stop"
+  ]
+}

@@ -1,0 +1,6 @@
+occlusion pointer: selected=3 wall=4 part=3 bounds=0 geometry=0 actualMeshHit=0 distance=0 undo=0 archiveEqual=1
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp:83: visible wall wins over hidden linked surface; navigation changes no authored bytes
+PASS collider_occlusion_real_triangles_clipping_identity_and_lazy_geometry
+PASS collider_occlusion_contour_perspective_world_depth_and_visible_portions
+FAIL collider_occlusion_pointer_visibility_locks_archive_undo_solver_and_hole
+2/3 scenarios passed

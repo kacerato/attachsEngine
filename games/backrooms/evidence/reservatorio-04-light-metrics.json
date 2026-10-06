@@ -1,0 +1,27 @@
+{
+  "spots": {
+    "meanSrgbLuma": 2.1752870046508557,
+    "p95SrgbLuma": 6.0,
+    "pixelsAtOrBelow3of255": 0.7520071247155061
+  },
+  "dark": {
+    "meanSrgbLuma": 1.7413077903486494,
+    "p95SrgbLuma": 6.0,
+    "pixelsAtOrBelow3of255": 0.7567359447294797
+  },
+  "flashlight": {
+    "meanSrgbLuma": 2.015281750473032,
+    "p95SrgbLuma": 6.4882,
+    "pixelsAtOrBelow3of255": 0.7271371897555227
+  },
+  "restored": {
+    "meanSrgbLuma": 1.9822771309226443,
+    "p95SrgbLuma": 6.0,
+    "pixelsAtOrBelow3of255": 0.7500874097041264
+  },
+  "directional": {
+    "meanSrgbLuma": 1.7370911318282274,
+    "p95SrgbLuma": 6.0,
+    "pixelsAtOrBelow3of255": 0.7566309931121753
+  }
+}

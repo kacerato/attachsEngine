@@ -1,0 +1,152 @@
+{
+  "recorded_at_utc": "2026-10-06T02:33:38.018095+00:00",
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "base_commit": "d12c2ea2ed4f19a690ed99410ed865407aec024a",
+  "publication": "local working tree; not committed or pushed this round; preexisting user changes preserved",
+  "scope": "U11 contextual picking of actual Collider overlay contours on the selected object",
+  "status": "implemented and validated within this bounded scope; U11 and universal roadmap partial",
+  "engine_complete": false,
+  "original_plan_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "roadmap_counts": {
+    "planned": 140,
+    "partial": 20,
+    "complete": 4,
+    "unsupported": 0
+  },
+  "source_snapshots": [
+    {
+      "path": "native/editor/editor_component_visuals.h",
+      "sha256": "2b2379aa320ec11cb8fc3b041a3c02be148da2858630a08cf47aee19a4c28540"
+    },
+    {
+      "path": "native/editor/editor_session.cpp",
+      "sha256": "16d25cb1152a904ad7f48b89990e3eed4f37a37023bde85bc8fd70d8a3f52e14"
+    },
+    {
+      "path": "native/editor/editor_screen.cpp",
+      "sha256": "d2131273a7cf14619cc0fa4252be7f4ce899042b550b80a17bc6219cc4f1c269"
+    },
+    {
+      "path": "tests/native/test_convex_bake.cpp",
+      "sha256": "f6f165d96ca1170d59a55b0b65f215439fc14d83d05d179236063b5b6c9f84f0"
+    }
+  ],
+  "host": {
+    "build": "aether_gui_tests and aether_gui_preview completed",
+    "targeted": "2/2 passed",
+    "ui_authorship_regression": "80/80 passed",
+    "behaviors": [
+      "real projected contours under nonuniform parent scale/rotation",
+      "outside viewport, empty interior and behind-camera rejection",
+      "persistent-ID tie break after component reorder",
+      "unavailable preserved Collider record rejected by descriptor identity",
+      "pointer routing selects component without changing owner/history/archive",
+      "selected-only disable, archive reopen, Jolt ray miss; Undo restores original archive and Jolt collider hit"
+    ],
+    "whole_engine_suite_run": false
+  },
+  "android": {
+    "device": "Xiaomi 25053PC47G (onyx)",
+    "resolution": [
+      2772,
+      1280
+    ],
+    "package": "dev.aether.editor",
+    "variant": "Release/RelWithDebInfo",
+    "build_success": true,
+    "install_success": true,
+    "apk_bytes": 221596713,
+    "apk_sha256": "391b7f8df7c04c5eeb6bb57d38b9e4871e20bc401527af230a858c7008fe05e6",
+    "installed_sha256": "391b7f8df7c04c5eeb6bb57d38b9e4871e20bc401527af230a858c7008fe05e6",
+    "project": "UI Hierarchy Sources v1 / UIHierarchySources20261005",
+    "accepted": [
+      "tap contour opens Collider 18, keeps CompoundPlayer owner and all 18 components",
+      "focused contour white; other parts gray; hint readable above navigation/status",
+      "disable selected Collider 18 while owner stays enabled",
+      "Undo restores enabled checkbox and exact original scene bytes",
+      "explicit Save and cold reopen preserve scene bytes; contour tap opens Collider 17 in reopened view",
+      "turn overlays off and tap mesh selects SecondInstance normally; restore overlays/context"
+    ],
+    "disabled_scene_sha256": "e73ccf19f8b186b0ff01e1bafc9348c8bf839496f0dec7205609c8d4a46d8c5d",
+    "undo_saved_reopened_scene_sha256": "e7e6b94906ef0cc61fbfa53d3507775a310a8033cc27fca5cb91cfdf13813cd5",
+    "new_play_solver_acceptance": false,
+    "captures": [
+      {
+        "path": "device-accepted-picked.png",
+        "sha256": "98c7e098f2837583f4575da3b4716913a35219142f76218e159e168d63fdf5fb"
+      },
+      {
+        "path": "device-accepted-disabled.png",
+        "sha256": "ffbf55df3527f55645f4c5070901d7e262372b898a5b449c2cb6faaf3f559064"
+      },
+      {
+        "path": "device-accepted-undo.png",
+        "sha256": "ae00609898879467038dd1d6e410e2524d76740a7ab3b6791eab336306d7c58b"
+      },
+      {
+        "path": "device-accepted-reopened.png",
+        "sha256": "900f40bbba03301bac166573e6bd683c09c2228658a834d01e0a6198bd2bf9a4"
+      },
+      {
+        "path": "device-accepted-visuals-off.png",
+        "sha256": "1ac0f306f727a0c27b871e5f9c6a0dbc94433a6c797d82c8d5cb8c68cb41b144"
+      }
+    ],
+    "iteration_note": "device-final-picked.png is an intermediate rejected layout, not acceptance of the final APK"
+  },
+  "video_analysis": {
+    "url": "https://www.youtube.com/watch?v=bh9ArKrPY8w",
+    "method": "paused browser player, one-frame advance; actual timestamps and screenshot hashes",
+    "consecutive_frames": 100,
+    "from_seconds": 90.033333,
+    "to_seconds": 93.3333,
+    "all_consecutive_frames_reviewed": true,
+    "entire_video_reviewed_frame_by_frame": false,
+    "other_intervals": "context sampling only; invalid/buffered captures excluded",
+    "other_cited_video": "Mzt1rEEdeOI remains visually unreviewed",
+    "report": "docs/planos/ui-universal/ANALISE-VIDEO-COLLIDERS-2026-10-05.md"
+  },
+  "performance_preservation": {
+    "protected_files": 268,
+    "changed": 0,
+    "scope": "Android platform, renderer, shaders, Jolt bridge and HZB test",
+    "new_fps_memory_thermal_comparison": false
+  },
+  "logs": [
+    "ui-contour-host-typed-final.log",
+    "ui-contour-typed-focused.log",
+    "ui-contour-regression-typed-final.log",
+    "ui-contour-android-typed-final.log",
+    "ui-contour-install-typed-final.log",
+    "ui-contour-installed-typed-sha256.log",
+    "device-proof.txt"
+  ],
+  "remaining": [
+    "surface/depth and occlusion-aware picking",
+    "cross-descendant Collider owners",
+    "center-of-mass/support diagnostics",
+    "skin/animated pose collision bake",
+    "regeneration with overrides/prefabs/reimport and dynamic rebuild",
+    "broader multi-touch, memory and thermal device acceptance",
+    "remaining video intervals and World Space visual analysis",
+    "140 planned and 20 partial original roadmap requirements"
+  ],
+  "references": [
+    {
+      "engine": "Unity",
+      "version": "6000.0",
+      "url": "https://docs.unity3d.com/6000.0/Documentation/Manual/compound-colliders-introduction.html"
+    },
+    {
+      "engine": "Godot",
+      "version": "4.5",
+      "url": "https://docs.godotengine.org/en/4.5/classes/class_collisionobject3d.html"
+    },
+    {
+      "engine": "Godot source",
+      "version": "4.5-stable",
+      "url": "https://github.com/godotengine/godot/blob/4.5-stable/editor/scene/3d/gizmos/physics/collision_shape_3d_gizmo_plugin.cpp"
+    }
+  ]
+}

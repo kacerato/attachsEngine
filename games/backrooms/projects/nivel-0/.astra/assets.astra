@@ -1,0 +1,4 @@
+AETHER_ASSETS 1 3
+da6bad7749f649913eecf6202a77bcca mesh "Assets/signage.glb" "Assets/signage.glb" "988c29f3cd55a20d3a941a27514a2a0ca27b935779b3e608ca8a00d5c82c345c" 1 "glb" 0 0
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "ac5cf0603d3e376ded237af74ea18a51eb2815cffe1cf22c188b8777fd6173cf" 1 "glb" 0 0
+89aee633c9f798c6405e664da641d17a audio_clip "Audio/electrical.wav" "Audio/electrical.wav" "a4884e80563b8ddc184b960b1350295cd729fa27be2189adc24a4d1b6ce4608c" 1 "WAV_PCM_STEREO_F32_48000_V1" 0 0

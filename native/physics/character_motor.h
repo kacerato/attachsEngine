@@ -41,7 +41,7 @@ public:
   bool configureMotion(float speed,float gravity,float stepHeight,float floorSnapLength,bool inheritPlatformHorizontal=false);
   // Scalar state only: never carries old-world Jolt contacts, bodies or handles.
   struct MotionState {AetherVec3 velocity{};float pendingJump=0,accumulator=0;AetherVec3 resolvedVelocity{};bool hasMeasuredStep=false;AetherVec3 platformCarry{};};
-  struct RuntimeState {AetherVec3 position{},velocity{},motorVelocity{},groundVelocity{},groundNormal{};AetherCharacterGroundState groundState=AetherCharacterGroundState::InAir;bool hasMeasuredStep=false;};
+  struct RuntimeState {AetherVec3 position{},velocity{},motorVelocity{},groundVelocity{},groundNormal{},groundPoint{},capsuleBottom{},capsuleTop{};float capsuleRadius=0;AetherCharacterGroundState groundState=AetherCharacterGroundState::InAir;bool hasMeasuredStep=false,hasGroundPoint=false,hasCapsule=false;AetherBodyHandle groundBody=AetherBodyHandle_Invalid;};
   bool runtimeState(RuntimeState &out) const;
   MotionState motionState() const;
   bool restoreMotionState(const MotionState &state);

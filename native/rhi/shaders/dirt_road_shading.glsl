@@ -19,6 +19,12 @@ layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
 // morto. Como spec constant ele desaparece do binario do perfil que usa AEEN v3.
 // Zero e "decidir em runtime", preservando o comportamento anterior.
 layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
+// Only solid, non-transitioning draws may omit the clipping contract.
+layout(constant_id=3) const uint OPAQUE_NO_CLIP=0u;
+layout(constant_id=4) const uint FULL_DETAIL_SAMPLING=0u;
+// Only selected when every uploaded punctual light is a point without an
+// allocated local shadow. Directional lighting and its cascades stay intact.
+layout(constant_id=5) const uint UNSHADOWED_POINT_LIGHTING=0u;
 const float PI=3.141592653589793;
 const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
@@ -165,12 +171,14 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
     // Cone do spot pre-calculado na CPU: escala e deslocamento em vez de dois
     // cossenos por fragmento. Pontual usa escala 0 e deslocamento 1, o que da
     // exatamente 1 em qualquer direcao -- mesma conta, sem desvio por tipo.
-    mediump float cone=clamp(dot(directionOffset.xyz,-l)*colorIntensity.w+directionOffset.w,0.0,1.0);
+    mediump float cone=UNSHADOWED_POINT_LIGHTING!=0u?1.0:
+        clamp(dot(directionOffset.xyz,-l)*colorIntensity.w+directionOffset.w,0.0,1.0);
     cone*=cone;
     // A sombra so e buscada onde a luz ainda chega: fora do cone ou do
     // alcance, o atlas nao tem o que dizer e a busca seria desperdicio.
     if(cone<=0.0) continue;
-    mediump float visible=localShadowVisibility(shadow,position,n,-toLight);
+    mediump float visible=UNSHADOWED_POINT_LIGHTING!=0u?1.0:
+        localShadowVisibility(shadow,position,n,-toLight);
     mediump vec3 radiance=colorIntensity.rgb*(window*cone*visible/safeSquared);
     sum+=directLight(n,v,l,radiance,base,f0,f90,metal,rough);
   }
@@ -216,11 +224,16 @@ mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
   return mix(color,vec3(0.92,0.97,1.0),foam);
 }
 void main() {
-  if(aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
+  if(OPAQUE_NO_CLIP==0u && aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
   uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
   aetherWriteTemporalMasks(0.0,0.0);
-  if((flags&MATERIAL_WATER)!=0u) {
+  // The specialized solid family has already validated water/impostor/LOD
+  // eligibility against the effective material and uploaded instance. Fold
+  // their shader programs too; leaving uniform-false paths here still costs
+  // registers and instruction scheduling on the mobile compiler.
+  bool generalSurface=OPAQUE_NO_CLIP==0u || UNSHADOWED_POINT_LIGHTING==0u;
+  if(generalSurface && (flags&MATERIAL_WATER)!=0u) {
     aetherWaterTemporalMasks(1.0,0.0);
     mediump vec3 color=toneMapEnvironment(shadeWater(vPosition,normalize(vNormal)));
     if((frame.materialFlags.z&1u)!=0u)
@@ -232,7 +245,7 @@ void main() {
   // Compute derivatives before any lane can discard at an alpha edge. Water
   // returned above without touching material textures or their derivatives.
   highp vec2 impostorDx=dFdx(vUv0),impostorDy=dFdy(vUv0);
-  bool impostor=(flags&MATERIAL_IMPOSTOR)!=0u && (frame.materialFlags.y>>16u)!=0u;
+  bool impostor=generalSurface && (flags&MATERIAL_IMPOSTOR)!=0u && (frame.materialFlags.y>>16u)!=0u;
   highp vec2 impostorUv=vUv0;
   if(impostor) {
     impostorUv=aetherImpostorViewUv(flags,vUv0,vUv1,vColor.a,gl_FragCoord.xy);
@@ -251,14 +264,14 @@ void main() {
   // imediatamente após o único sample obrigatório evita executar normal, MR,
   // sombra e PBR em folhas que jamais podem produzir um pixel. O branch é
   // uniforme por material batch e preserva exatamente a cobertura do prepass.
-  if((flags&16u)!=0u) {
+  if(OPAQUE_NO_CLIP==0u && (flags&16u)!=0u) {
     mediump float alphaCutoff=float((frame.materialFlags.y>>8u)&255u)/255.0;
     if(base.a<alphaCutoff) discard;
   }
   // Fully transparent atlas texels cannot affect the framebuffer. Rejecting
   // them before normal/PBR work preserves the exact 8-bit alpha result and is
   // particularly important for dense forest cards.
-  if((flags&1u)!=0u && base.a<(1.0/255.0)) discard;
+  if(OPAQUE_NO_CLIP==0u && (flags&1u)!=0u && base.a<(1.0/255.0)) discard;
   // BaseColorOnly keeps the exact alpha/depth coverage and geometry while
   // avoiding material/lighting fetches. The branch is uniform for the full run.
   if(isolation==3u) {
@@ -275,8 +288,21 @@ void main() {
   mediump float mrDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.x);
   mediump vec4 mr=vec4(1);
-  if(hasMaterialFeature(flags,4u) && mrDetailWeight>0.0)
-    mr=mix(vec4(1),texture(MR_MAP,selectedUv(2)),mrDetailWeight);
+  // Distance may reduce spatial detail, never change the BRDF into the scalar
+  // defaults. White ORM turned textured conductors into rough bare metal and
+  // erased occlusion as the camera crossed the quality band. Preserve the
+  // filtered material statistics using the texture's mip chain instead.
+  if(hasMaterialFeature(flags,4u)) {
+    highp vec2 uv=selectedUv(2);
+    // Evaluate implicit derivatives before the new per-pixel branch. A full
+    // detail sample has weight one; its coarsest mip contributes exactly zero.
+    mediump vec4 fine=mrDetailWeight>0.0?texture(MR_MAP,uv):vec4(1.0);
+    if(FULL_DETAIL_SAMPLING!=0u && mrDetailWeight>=1.0) mr=fine;
+    else {
+      mediump vec4 coarse=textureLod(MR_MAP,uv,float(textureQueryLevels(MR_MAP)-1));
+      mr=mrDetailWeight>0.0?mix(coarse,fine,mrDetailWeight):coarse;
+    }
+  }
   bool materialExtension=aetherHasMaterialExtension();
   // R4: canais do mapa escolhidos no material; sem extensão, o do glTF (G e B).
   uint roughnessChannel=materialExtension?uint(aetherMaterialRow(9u).x+0.5):1u;
@@ -341,11 +367,11 @@ void main() {
   // A luz direta é exatamente zero no hemisfério oposto. Consultar 1/9/25
   // texels de sombra nesse caso só gasta banda; o branch remove trabalho sem
   // mudar um único valor final.
-  mediump float sunVisibility=dot(n,environment.sunDirectionIntensity.xyz)>0.0?
+  mediump float sunVisibility=isolation!=5u && dot(n,environment.sunDirectionIntensity.xyz)>0.0?
       directionalShadow(vPosition,n,viewDepth):1.0;
   mediump vec3 color=directLight(n,v,environment.sunDirectionIntensity.xyz,sunRadiance,
                          base.rgb,f0,f90,metal,rough)*sunVisibility;
-  color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
+  if(isolation!=4u) color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
   mediump float nv=max(dot(n,v),0.0);
   mediump vec3 diffuseIrradiance=environmentAmbientDiffuse(n)*occlusion;
 #ifdef OCCLUSION_MAP
@@ -363,9 +389,13 @@ void main() {
   // on wet, polished and metallic surfaces.
   mediump float specularDetailWeight=environment.quality.w>0.5?
       materialDetailWeight(cameraDistance,environment.quality.y):0.0;
-  if(isolation!=2u && f90>0.0 && specularDetailWeight>0.0 && (metal>.01 || rough<.65)) {
+  if(isolation!=2u && f90>0.0 && environment.quality.w>0.5) {
     mediump vec3 reflection=reflect(-v,n);
-    mediump vec3 specularEnvironment=environmentRadiance(reflection,rough*environment.parameters.z);
+    // Fade angular detail into the coarsest prefiltered probe, retaining
+    // reflected energy. Roughness is continuous; it must not switch IBL off.
+    mediump float probeLod=mix(environment.parameters.z,
+        rough*environment.parameters.z,specularDetailWeight);
+    mediump vec3 specularEnvironment=environmentRadiance(reflection,probeLod);
     mediump vec2 integratedBrdf=environmentBrdf(nv,rough);
     // The split-sum LUT already integrates Schlick's angular term. Applying
     // Fresnel again double-counted it; scaling the result by the dielectric
@@ -373,7 +403,7 @@ void main() {
     mediump vec3 integratedSpecular=environment.parameters.w>1.5?
         f0*integratedBrdf.x+vec3(f90*integratedBrdf.y):
         fresnel(f0,f90,nv)*integratedBrdf.x;
-    color+=specularEnvironment*integratedSpecular*specularDetailWeight*occlusion;
+    color+=specularEnvironment*integratedSpecular*occlusion;
   }
   mediump float emissiveDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.y);

@@ -85,6 +85,7 @@ inline bool referenceAccepts(const SceneGraph &graph, ObjectId source,
   const auto id = static_cast<ObjectId>(target);
   const auto *object = graph.find(id);
   if (!object || (!property.requiredType.empty() && !object->components.find(property.requiredType))) return false;
+  if(property.acceptsComponents&&!property.acceptsComponents(object->components))return false;
   if (property.scope == scene::ObjectReferenceScope::Other && id == source) return false;
   if (property.scope == scene::ObjectReferenceScope::OtherNonDescendant &&
       (id == source || graph.isDescendantOf(id,source))) return false;
@@ -135,6 +136,7 @@ inline ComponentReferenceUse componentRemovalReferenceUse(const SceneGraph &grap
   const auto *object=graph.find(target);
   const auto *removed=object?object->components.findInstance(removedInstance):nullptr;
   if(!removed) return {};
+  auto surviving=object->components;surviving.removeInstance(removedInstance);
   for(usize i=0;i<object->components.size();++i) {
     const auto *other=object->components.at(i);
     if(other->instanceId()!=removedInstance && other->type().id==removed->type().id) return {};
@@ -146,8 +148,9 @@ inline ComponentReferenceUse componentRemovalReferenceUse(const SceneGraph &grap
       const auto *value=source->components.at(i);
       if(id==target && value->instanceId()==removedInstance) continue;
       for(const auto &property:value->type().references)
-        if(property.requiredType==removed->type().id && property.read && property.read(*value)==target &&
-           referenceAccepts(graph,id,property,target)) return {id,value->instanceId(),property.id};
+        if(property.read && property.read(*value)==target && referenceAccepts(graph,id,property,target) &&
+           (property.requiredType==removed->type().id ||
+            (property.acceptsComponents&&!property.acceptsComponents(surviving)))) return {id,value->instanceId(),property.id};
     }
   }
   return {};

@@ -72,7 +72,7 @@ public static class ComponentOperationsTests
         Assert.Equal(112, Marshal.SizeOf<NativeBehaviorRuntime.NativeComponentEvent>());
         Assert.Equal(8 + 4 * IntPtr.Size, Marshal.SizeOf<NativeBehaviorRuntime.NativeComponentOperations>());
         var extension = Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("Extension").ToInt64();
-        Assert.Equal(Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiTransitions").ToInt64() + IntPtr.Size, extension);
+        Assert.Equal(Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiInstanceRequest").ToInt64() + IntPtr.Size, extension);
         Assert.Equal(extension + IntPtr.Size, (long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>());
         Assert.Equal(2.5, ComponentValue.Number(2.5).AsNumber());
         Assert.Equal(new Vector3(1, 2, 3), ComponentValue.Vector(new(1, 2, 3)).AsVector3());

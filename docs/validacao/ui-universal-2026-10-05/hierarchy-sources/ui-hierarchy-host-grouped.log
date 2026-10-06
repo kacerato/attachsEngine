@@ -1,0 +1,21 @@
+[1/20] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/20] Building CXX object CMakeFiles/aether_convex_bake.dir/resources/convex_bake.cpp.obj
+[3/20] Linking CXX static library libaether_convex_bake.a
+[4/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_character_authoring.cpp.obj
+[5/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_dynamic_motor_authoring.cpp.obj
+[6/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[7/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[8/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[9/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[10/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[11/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[12/20] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[13/20] Linking CXX static library libaether_editor.a
+[14/20] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_gui.cpp.obj
+[15/20] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_character_authoring.cpp.obj
+[16/20] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_dynamic_body_motor.cpp.obj
+[17/20] Building CXX object CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj
+[18/20] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_convex_bake.cpp.obj
+[19/20] Linking CXX executable aether_gui_preview.exe
+[20/20] Linking CXX executable aether_gui_tests.exe

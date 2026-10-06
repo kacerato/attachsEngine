@@ -1,0 +1,12 @@
+AETHER_ASSETS 1 11
+c5cc1ab3e2cd3c79b1d6e088a3764403 mesh "Assets/dead_tree_trunk.glb" "Assets/dead_tree_trunk.glb" "6d71aad27e7b68669122850a3154a1cd18c861497a25b040baa4d188025b93b1" 1 "glb" 0 0
+91d7730ecb125a3afff00d33f3f7ec99 mesh "Assets/fern_02.glb" "Assets/fern_02.glb" "7e4a4ff2f8b53f946968d824d5bc799ccbcc1bf30c766a8513e9e1d38486ce73" 1 "glb" 0 0
+24649909df6d468adf08d6e6f3c37ad9 mesh "Assets/fir_tree_01.glb" "Assets/fir_tree_01.glb" "05ad800ccd1ec35e700eb98ef7b2faac7fabe43feb2fad02e9db9fdc0aefcec2" 1 "glb" 0 0
+5d60cd2819ac8a61cf48bebd3ba1635b environment_map "Assets/forest_slope.hdr" "Assets/forest_slope.hdr" "da386580216b050b8ad43559af5a0deaf52240b6fd2f327192db4ff2e9adc813" 1 "AEM_IMPORT 1 1024 128 64 128 128" 0 0
+5eb7911ea6d9d41b76ad4d5125695584 mesh "Assets/pine_tree_01.glb" "Assets/pine_tree_01.glb" "27a0a0475e3a16d3de44cca039166dc31b97aee816d04cb421b7db2211d91182" 1 "glb" 0 0
+cf6cb2ffdaf3e488db719b254681fc3d mesh "Assets/rock_moss_set_01.glb" "Assets/rock_moss_set_01.glb" "451599a92e375059fda4c11fc9265e35dde547df6dbc65a6f0572b4d72ae9e88" 1 "glb" 0 0
+da6bad7749f649913eecf6202a77bcca mesh "Assets/signage.glb" "Assets/signage.glb" "f564fd3ddcdb27c371aafd87cdffdb3e2d52c5654c872adfafc0ac143e590232" 1 "glb" 0 0
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "db5ec9337639d90e1a0b940b3544781b8ef4ebadb454f5d99403cbef1547c88c" 1 "glb" 0 0
+7f11db4f5e8d19c0354e4b650c5a9faf audio_clip "Audio/beacon1.wav" "Audio/beacon1.wav" "f52cbe9de46cd0aecc05ca562bdd67ae5c7e75045af15473a04422d77fe9bdb1" 1 "WAV_PCM_STEREO_F32_48000_V1" 0 0
+d4d282c418c002eeb5e27c8627e9159c audio_clip "Audio/beacon2.wav" "Audio/beacon2.wav" "727fc33c0cb349f68d6318139898e52454a315f5abc8917f26195f82c411393c" 1 "WAV_PCM_STEREO_F32_48000_V1" 0 0
+12b105ea97d760caee22e385a5bc462a audio_clip "Audio/beacon3.wav" "Audio/beacon3.wav" "f35e08e632dd6fa331c7d29f1f57a73d950da650be70ebe4fa76ac5673cdbb64" 1 "WAV_PCM_STEREO_F32_48000_V1" 0 0

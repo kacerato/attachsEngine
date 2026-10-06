@@ -1,0 +1,57 @@
+[
+  {
+    "run": "01-0",
+    "mode": "full",
+    "gpuMeanMs": 20.8951,
+    "opaqueMeanMs": 17.1682,
+    "postMeanMs": 3.3998999999999997,
+    "displayedFps": 43.31054298683045,
+    "maximumPresentGapMs": 41.628334,
+    "continuous": true,
+    "powerMeasured": false
+  },
+  {
+    "run": "02-4",
+    "mode": "no-punctual",
+    "gpuMeanMs": 17.34265,
+    "opaqueMeanMs": 13.5749,
+    "postMeanMs": 3.4408000000000003,
+    "displayedFps": 41.833039149641756,
+    "maximumPresentGapMs": 5553.195571,
+    "continuous": true,
+    "powerMeasured": false
+  },
+  {
+    "run": "03-5",
+    "mode": "no-directional-shadow",
+    "gpuMeanMs": 18.182199999999998,
+    "opaqueMeanMs": 14.303199999999999,
+    "postMeanMs": 3.5498,
+    "displayedFps": 49.89073264341324,
+    "maximumPresentGapMs": 33.302605,
+    "continuous": true,
+    "powerMeasured": false
+  },
+  {
+    "run": "04-0",
+    "mode": "full",
+    "gpuMeanMs": 21.02235,
+    "opaqueMeanMs": 17.2329,
+    "postMeanMs": 3.4615,
+    "displayedFps": 43.16125036240937,
+    "maximumPresentGapMs": 41.62823,
+    "continuous": true,
+    "powerMeasured": false
+  },
+  {
+    "run": "repeat-no-punctual",
+    "mode": "no-punctual",
+    "gpuMeanMs": 17.26523333333333,
+    "opaqueMeanMs": 13.5222,
+    "postMeanMs": 3.4151000000000002,
+    "displayedFps": 50.28287143379123,
+    "maximumPresentGapMs": 41.628228,
+    "continuous": true,
+    "powerMeasured": false
+  }
+]

@@ -1,0 +1,11 @@
+PASS u11_topology_publish_isolated_uid_solver_history_and_reopen
+PASS u11_topology_vertex_cancel_stale_occlusion_gesture_and_compact
+PASS u11_physics_diagnostic_com_support_authority_cache_and_lifecycle
+U11_SCALE mesh triangles=100000 vertices=50451 faces=1 build_ms=401.512 validate_ms=356.338 bvh_pick_ms=0.012
+U11_SCALE parts=1 solver_build_ms=1.038 diagnostic_ms=0.042 contours_ms=0.029 segments=68 probes=6
+U11_SCALE parts=16 solver_build_ms=0.940 diagnostic_ms=0.166 contours_ms=0.322 segments=1088 probes=16
+U11_SCALE parts=64 solver_build_ms=1.044 diagnostic_ms=0.346 contours_ms=0.619 segments=4352 probes=64
+U11_SCALE parts=256 solver_build_ms=2.617 diagnostic_ms=1.351 contours_ms=1.503 segments=9600 probes=256
+PASS u11_scale_full_geometry_budget_and_256_part_solver
+PASS u11_concave_topology_cavity_and_disabled_invalid_publication
+5/5 scenarios passed

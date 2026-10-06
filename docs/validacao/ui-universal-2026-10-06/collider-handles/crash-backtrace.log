@@ -1,0 +1,10 @@
+[New Thread 27808.0x9c44]
+[New Thread 27808.0x59c0]
+
+Thread 1 received signal SIGSEGV, Segmentation fault.
+0x00007ff6d63b7272 in ae::test::detail::sampleRgba8(std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, float, float, float*)::{lambda(unsigned int, unsigned int)#1}::operator()(unsigned int, unsigned int) const ()
+#0  0x00007ff6d63b7272 in ae::test::detail::sampleRgba8(std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, float, float, float*)::{lambda(unsigned int, unsigned int)#1}::operator()(unsigned int, unsigned int) const ()
+#1  0x00007ff6d5f10b9c in ae::test::detail::sampleRgba8(std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, float, float, float*) ()
+#2  0x00007ff6d5f0de00 in ae::test::rasterizeUi(std::span<ae::ui::UiInstance const, 18446744073709551615ull>, ae::ui::UiFont const&, ae::ui::UiIconAtlas const&, ae::test::UiSoftwareTarget&, std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, std::span<unsigned char const, 18446744073709551615ull>, unsigned int) ()
+#3  0x00007ff6d57fa29c in collider_handles_occlusion_visibility_modes_and_compact_touch_targets() ()
+#4  0x00007ff6d57b1823 in main ()

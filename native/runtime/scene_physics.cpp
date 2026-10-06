@@ -23,6 +23,7 @@ AetherVec3 transformPhysicsPoint(const float *m,const float *v,bool direction=fa
 }
 void ScenePhysics::stop() {
   characters_.clear();
+  dynamicMotors_.clear();
   if(world_) AetherPhysics_DestroyWorld(world_);
   world_=nullptr;ownerWorldId_=0;bindings_.clear();objects_.clear();events_.clear();accumulated_=0;jointCount_=0;
   fieldCandidates_.clear();fieldFrames_.clear();fieldRevision_=std::numeric_limits<u64>::max();
@@ -36,7 +37,7 @@ namespace {
 // malha do MeshFilter) no referencial da parte, com a escala aplicada. Vértices
 // iguais são soldados: a malha de desenho repete o vértice por triângulo, e a
 // de colisão precisa das arestas compartilhadas para não prender em costuras.
-bool collisionMesh(const CollisionGeometrySource &geometry,const scene::Collider &collider,const scene::MeshRenderer *render,const float scale[3],
+bool collisionMesh(const CollisionGeometrySource &geometry,const scene::Collider &collider,const scene::MeshRenderer *render,const float matrix[16],
                    std::vector<AetherVec3> &vertices,std::vector<u32> &indices) {
   std::vector<float> triangles;
   if(collider.collisionMesh.valid()) {
@@ -52,7 +53,7 @@ bool collisionMesh(const CollisionGeometrySource &geometry,const scene::Collider
   }
   if(triangles.empty()||triangles.size()%9) return false;
   // Escala espelhada inverte a ordem dos vértices; a face continua para fora.
-  const bool mirrored=scale[0]*scale[1]*scale[2]<0;
+  const bool mirrored=matrix[0]*(matrix[5]*matrix[10]-matrix[9]*matrix[6])-matrix[4]*(matrix[1]*matrix[10]-matrix[9]*matrix[2])+matrix[8]*(matrix[1]*matrix[6]-matrix[5]*matrix[2])<0;
   struct Key {u32 bits[3];bool operator==(const Key &o) const {return bits[0]==o.bits[0]&&bits[1]==o.bits[1]&&bits[2]==o.bits[2];}};
   struct Hash {usize operator()(const Key &k) const {return (static_cast<usize>(k.bits[0])*73856093u)^(static_cast<usize>(k.bits[1])*19349663u)^(static_cast<usize>(k.bits[2])*83492791u);}};
   std::unordered_map<Key,u32,Hash> welded;if(collider.weldVertices) welded.reserve(triangles.size()/3);
@@ -60,7 +61,8 @@ bool collisionMesh(const CollisionGeometrySource &geometry,const scene::Collider
   for(usize t=0;t<triangles.size();t+=9) {
     u32 corner[3];
     for(u32 v=0;v<3;++v) {
-      const float p[3]{triangles[t+v*3]*scale[0],triangles[t+v*3+1]*scale[1],triangles[t+v*3+2]*scale[2]};
+      const auto transformed=transformPhysicsPoint(matrix,triangles.data()+t+v*3);
+      const float p[3]{transformed.x,transformed.y,transformed.z};
       if(!std::isfinite(p[0])||!std::isfinite(p[1])||!std::isfinite(p[2])) return false;
       if(collider.weldVertices) {
         Key key{};std::memcpy(key.bits,p,sizeof(key.bits));
@@ -95,6 +97,12 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
   const auto fail=[&](const SceneObject &entity,const std::string &reason) {error_=std::string(entity.name)+": "+reason;stop();return false;};
   for(const auto id:ids) {
     const auto &entity=*document.find(id);
+    if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor);motor&&document.activeInHierarchy(id)) {
+      const auto &settings=static_cast<const scene::DynamicBodyMotor&>(*motor);const auto *body=physicsBody(entity);
+      if(!settings.valid()||!body||characterComponent(entity)||
+         (settings.enabled&&(body->motion!=scene::BodyMotion::Dynamic||body->sensor||body->freezePosition[0]||body->freezePosition[2]||(settings.jumpSpeed>0&&body->freezePosition[1]))))
+        return fail(entity,"Motor dinâmico requer Body dinâmico sólido e eixos de locomoção livres; não combine com Character");
+    }
     const auto *force=entity.components.find(scene::ConstantForce::descriptor);
     if(!force || !document.activeInHierarchy(id)) continue;
     const auto &value=static_cast<const scene::ConstantForce&>(*force);
@@ -147,6 +155,8 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     if(const auto *error=bodyHierarchyForPhysics(document,id)) return fail(entity,error);
     auto found=colliders.find(id);
     if(found==colliders.end()) return fail(entity,"corpo sem colisores vinculados");
+    if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor);motor&&static_cast<const scene::DynamicBodyMotor&>(*motor).enabled&&found->second.empty())
+      return fail(entity,"motor sem colisores ativos vinculados ao corpo");
     float world[16],bodyFrame[16];Transform transform;
     if(const auto *error=bodyFrameForPhysics(document,id,world,transform,bodyFrame)) return fail(entity,error);
     std::vector<AetherCompoundPartV3> parts;parts.reserve(found->second.size());
@@ -168,11 +178,12 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
         case scene::ColliderShape::Mesh: {
           if(const auto *error=colliderMeshForPhysics(document,source.object,c,id)) return fail(object,error);
           if(!geometry) return fail(object,"geometria de colisão indisponível neste mundo");
-          if(!collisionMesh(*geometry,c,meshRenderer(object),partTransform.scale,meshVertices[index],meshIndices[index]))
+          float meshMatrix[16];if(!colliderMeshMatrixForPhysics(document,source.object,c,bodyFrame,meshMatrix))return fail(object,"Matriz de colisão não finita");
+          if(!collisionMesh(*geometry,c,meshRenderer(object),meshMatrix,meshVertices[index],meshIndices[index]))
             return fail(object,"malha sem triângulos válidos para colisão");
           part.geometry=c.convex?AetherPartGeometry::ConvexHull:AetherPartGeometry::TriangleMesh;
           part.cooking.flags=c.optimizeCooking?static_cast<u32>(AetherMeshCookingOptimizeRuntime):0u;
-          part.cooking.hullTolerance=c.hullTolerance*std::max({x,y,z});
+          part.cooking.hullTolerance=c.hullTolerance*std::max({std::hypot(meshMatrix[0],meshMatrix[1],meshMatrix[2]),std::hypot(meshMatrix[4],meshMatrix[5],meshMatrix[6]),std::hypot(meshMatrix[8],meshMatrix[9],meshMatrix[10])});
           part.cooking.activeEdgeAngleDegrees=c.activeEdgeAngle;
           part.vertices=meshVertices[index].data();part.vertexCount=static_cast<u32>(meshVertices[index].size());
           part.indices=meshIndices[index].data();part.indexCount=static_cast<u32>(meshIndices[index].size());
@@ -198,8 +209,8 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     if(body->motion!=scene::BodyMotion::Static) AetherPhysics_SetLinearVelocity(world_,handle,{body->velocityX,body->velocityY,body->velocityZ});
     objects_.emplace(handle,id);
     gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
-    std::vector<u64> instances;instances.reserve(found->second.size());
-    for(const auto &source:found->second) instances.push_back(source.value->instanceId());
+    std::vector<Binding::ColliderIdentity> instances;instances.reserve(found->second.size());
+    for(const auto &source:found->second) instances.push_back({source.object,source.value->instanceId()});
     // A camada de gameplay do objeto vale para o corpo inteiro. Dois colisores
     // do mesmo corpo não podem estar em camadas diferentes: o Jolt filtra por
     // corpo, e prometer o contrário seria uma propriedade sem efeito.
@@ -208,6 +219,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
                          body->motion!=scene::BodyMotion::Static,std::move(instances),
                          {body->velocityX,body->velocityY,body->velocityZ}});
+    if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor))dynamicMotors_.push_back({id,motor->instanceId()});
   }
   // All bodies exist now, including static anchors and forward references.
   for(auto id:ids) {
@@ -293,7 +305,9 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
     std::copy(c.world,c.world+16,motion.pose);std::copy(c.shapeFingerprint,c.shapeFingerprint+4,motion.shape);characterMotions.push_back(motion);
   }
   const double accumulated=accumulated_;
+  const auto dynamicInput=dynamicMotors_;
   if(!start(world,geometry)) return false;
+  for(auto &m:dynamicMotors_)for(const auto &old:dynamicInput)if(m.id==old.id&&m.instance==old.instance){m.right=old.right;m.forward=old.forward;m.yaw=old.yaw;m.scriptRight=old.scriptRight;m.scriptForward=old.scriptForward;m.scriptYaw=old.scriptYaw;m.scriptMoveActive=old.scriptMoveActive;break;}
   accumulated_=accumulated;
   for(const auto &motion:motions) for(const auto &binding:bindings_) {
     if(binding.id!=motion.id||!binding.moving) continue;
@@ -317,6 +331,7 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
   return true;
 }
 void ScenePhysics::releaseObject(ObjectId id) {
+  std::erase_if(dynamicMotors_,[&](const auto &m){return m.id==id;});
   for(auto i=bindings_.begin();i!=bindings_.end();++i) if(i->id==id) {
     if(world_) AetherPhysics_DestroyBody(world_,i->body);
     objects_.erase(i->body);bindings_.erase(i);break;
@@ -346,6 +361,23 @@ AetherShapeDesc nativeShape(const QueryShapeDesc &shape) {
 }
 bool finite3(const float *v) {return v&&std::isfinite(v[0])&&std::isfinite(v[1])&&std::isfinite(v[2]);}
 float length3(const float *v) {return std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);}
+AetherQuat queryRotation(const QueryShapeDesc &shape) {
+  const float *q=shape.rotation;
+  const float inv=1/std::sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+  return {q[0]*inv,q[1]*inv,q[2]*inv,q[3]*inv};
+}
+}
+bool validPhysicsQueryVector(const float *v) {return finite3(v);}
+bool validPhysicsQueryRay(const float *origin,const float *translation) {
+  return finite3(origin)&&finite3(translation)&&std::isfinite(length3(translation))&&length3(translation)>0;
+}
+bool validPhysicsQueryShape(const QueryShapeDesc &s) {
+  const auto kind=static_cast<u32>(s.kind);
+  if(kind>3||!finite3(s.halfExtent)||!finite3(s.rotation)||!std::isfinite(s.rotation[3])||
+     !std::isfinite(s.radius)||!std::isfinite(s.halfHeight)) return false;
+  const float q=s.rotation[0]*s.rotation[0]+s.rotation[1]*s.rotation[1]+s.rotation[2]*s.rotation[2]+s.rotation[3]*s.rotation[3];
+  return std::isfinite(q)&&q>0&&(kind==0?(s.halfExtent[0]>0&&s.halfExtent[1]>0&&s.halfExtent[2]>0):s.radius>0)&&
+         (kind<2||s.halfHeight>0);
 }
 QueryHit ScenePhysics::describeHit(AetherBodyHandle body,u32 subShapeId) const {
   QueryHit hit{};
@@ -353,13 +385,14 @@ QueryHit ScenePhysics::describeHit(AetherBodyHandle body,u32 subShapeId) const {
   u64 part=0;
   if(AetherPhysics_GetSubShapeUserDataV1(const_cast<AetherPhysicsWorld *>(world_),body,subShapeId,&part))
     for(const auto &binding:bindings_)
-      if(binding.body==body&&part<binding.colliderInstances.size()) {
-        hit.colliderInstance=binding.colliderInstances[static_cast<usize>(part)];break;
+      if(binding.body==body&&part<binding.colliders.size()) {
+        const auto &identity=binding.colliders[static_cast<usize>(part)];
+        hit.colliderInstance=identity.instance;hit.colliderObject=identity.object;break;
       }
   return hit;
 }
 bool ScenePhysics::rayCast(const float origin[3],const float direction[3],const QueryFilter &filter,QueryHit &out) const {
-  if(!world_||!finite3(origin)||!finite3(direction)) return false;
+  if(!world_||!validPhysicsQueryRay(origin,direction)) return false;
   AetherBodyHandle ignore=AetherBodyHandle_Invalid;
   for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
   const auto native=nativeFilter(filter,ignore);
@@ -372,13 +405,13 @@ bool ScenePhysics::rayCast(const float origin[3],const float direction[3],const 
   out.distance=hit.fraction*length3(direction);
   out.point[0]=hit.point.x;out.point[1]=hit.point.y;out.point[2]=hit.point.z;
   out.normal[0]=hit.normal.x;out.normal[1]=hit.normal.y;out.normal[2]=hit.normal.z;
-  out.hasNormal=true;
+  out.hasNormal=hit.fraction>0&&length3(out.normal)>1e-6f;
   out.isSensor=hit.isSensor!=0;
   return true;
 }
 u32 ScenePhysics::rayCastAll(const float origin[3],const float direction[3],const QueryFilter &filter,
                              QueryHit *out,u32 capacity) const {
-  if(!world_||!finite3(origin)||!finite3(direction)) return 0;
+  if(!world_||!validPhysicsQueryRay(origin,direction)) return 0;
   AetherBodyHandle ignore=AetherBodyHandle_Invalid;
   for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
   const auto native=nativeFilter(filter,ignore);
@@ -394,21 +427,21 @@ u32 ScenePhysics::rayCastAll(const float origin[3],const float direction[3],cons
     out[i].distance=hits[i].fraction*range;
     out[i].point[0]=hits[i].point.x;out[i].point[1]=hits[i].point.y;out[i].point[2]=hits[i].point.z;
     out[i].normal[0]=hits[i].normal.x;out[i].normal[1]=hits[i].normal.y;out[i].normal[2]=hits[i].normal.z;
-    out[i].hasNormal=true;
+    out[i].hasNormal=hits[i].fraction>0&&length3(out[i].normal)>1e-6f;
     out[i].isSensor=hits[i].isSensor!=0;
   }
   return static_cast<u32>(total);
 }
 bool ScenePhysics::shapeCast(const QueryShapeDesc &shape,const float origin[3],const float direction[3],
                              const QueryFilter &filter,QueryHit &out) const {
-  if(!world_||!finite3(origin)||!finite3(direction)) return false;
+  if(!world_||!validPhysicsQueryRay(origin,direction)||!validPhysicsQueryShape(shape)) return false;
   AetherBodyHandle ignore=AetherBodyHandle_Invalid;
   for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
   const auto native=nativeFilter(filter,ignore);
   const auto nativeDesc=nativeShape(shape);
   AetherShapeQueryHit hit{};u32 subShape=0,sensor=0;
   if(!AetherPhysics_ShapeCastClosestV2(const_cast<AetherPhysicsWorld *>(world_),&nativeDesc,
-      {origin[0],origin[1],origin[2]},{shape.rotation[0],shape.rotation[1],shape.rotation[2],shape.rotation[3]},
+      {origin[0],origin[1],origin[2]},queryRotation(shape),
       {direction[0],direction[1],direction[2]},&native,&hit,&subShape,&sensor)) return false;
   out=describeHit(hit.body,subShape);
   if(!out.object) return false;
@@ -428,7 +461,7 @@ bool ScenePhysics::shapeCast(const QueryShapeDesc &shape,const float origin[3],c
 }
 u32 ScenePhysics::overlap(const QueryShapeDesc &shape,const float origin[3],const QueryFilter &filter,
                           QueryHit *out,u32 capacity) const {
-  if(!world_||!finite3(origin)) return 0;
+  if(!world_||!finite3(origin)||!validPhysicsQueryShape(shape)) return 0;
   AetherBodyHandle ignore=AetherBodyHandle_Invalid;
   for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
   const auto native=nativeFilter(filter,ignore);
@@ -436,7 +469,7 @@ u32 ScenePhysics::overlap(const QueryShapeDesc &shape,const float origin[3],cons
   std::vector<AetherShapeQueryHit> hits(capacity);
   std::vector<u32> subShapes(capacity),sensors(capacity);
   const auto total=AetherPhysics_OverlapShapeV2(const_cast<AetherPhysicsWorld *>(world_),&nativeDesc,
-      {origin[0],origin[1],origin[2]},{shape.rotation[0],shape.rotation[1],shape.rotation[2],shape.rotation[3]},
+      {origin[0],origin[1],origin[2]},queryRotation(shape),
       &native,capacity?hits.data():nullptr,capacity?subShapes.data():nullptr,capacity?sensors.data():nullptr,
       static_cast<i32>(capacity));
   if(total<=0) return 0;
@@ -457,6 +490,7 @@ bool ScenePhysics::setCharacterMove(ObjectId id,float right,float forward,float 
 }
 void ScenePhysics::beginScriptInputFrame() {
   for(auto &c:characters_) c.scriptMoveActive=false;
+  for(auto &m:dynamicMotors_)m.scriptMoveActive=false;
 }
 bool ScenePhysics::setCharacterScriptMove(ObjectId id,float right,float forward,float yaw) {
   if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)||
@@ -484,8 +518,18 @@ WorldStatus ScenePhysics::bodyCommand(const GameWorld &world,ObjectHandle handle
   if(ownerWorldId_!=world.worldId())return WorldStatus::ForeignWorld;
   const auto status=world.validate(handle);if(status!=WorldStatus::Ok)return status;
   const auto *owner=world.find(handle);const auto *component=owner->components.findInstance(instance);
-  if(!component||component->type().id!=scene::PhysicsBody::descriptor.id)return WorldStatus::ComponentMissing;
+  if(!component)return WorldStatus::ComponentMissing;
   if(!world.activeInHierarchy(handle))return WorldStatus::Rejected;
+  if(op>=100&&op<=103) {
+    if(component->type().id!=scene::DynamicBodyMotor::descriptor.id)return WorldStatus::ComponentMissing;
+    if(!static_cast<const scene::DynamicBodyMotor&>(*component).enabled)return WorldStatus::ComponentUnavailable;
+    auto found=std::find_if(dynamicMotors_.begin(),dynamicMotors_.end(),[&](const auto &m){return m.id==handle.id&&m.instance==instance;});
+    if(found==dynamicMotors_.end())return WorldStatus::ComponentUnavailable;
+    if(op==100&&!setDynamicMotorScriptMove(handle.id,value.x,value.y,value.z))return WorldStatus::InvalidArgument;
+    if(op==101&&!jumpDynamicMotor(handle.id))return WorldStatus::Rejected;
+    if(op==102)found->scriptMoveActive=false;
+    op=0; // Same real body snapshot as PhysicsBodyRuntime; no repacked fake state.
+  } else if(component->type().id!=scene::PhysicsBody::descriptor.id)return WorldStatus::ComponentMissing;
   for(const auto &binding:bindings_)if(binding.id==handle.id)return AetherPhysics_BodyCommandV1(world_,binding.body,op,value,point,&out)?WorldStatus::Ok:WorldStatus::Rejected;
   return WorldStatus::Rejected;
 }
@@ -510,13 +554,13 @@ bool ScenePhysics::moveKinematic(ObjectId id,const float *v) {
 }
 #include "runtime/scene_physics_fields.inl"
 bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32),bool (*contact)(void *,const ContactEvent &)) {
-  if(!world_ || !std::isfinite(elapsed) || elapsed<0) return false;
+  if(!world_ || !std::isfinite(elapsed) || elapsed<0) {error_="Mundo físico ausente ou delta de tempo inválido";return false;}
   constexpr double fixed=1.0/60.0;
   // Bound catch-up after surface/lifecycle stalls; never feed a large dt to Jolt.
   accumulated_+=std::min(elapsed,.25);
   while(accumulated_+1e-9>=fixed) {
-    if(beforeStep&&!beforeStep(context,static_cast<float>(fixed))) return false;
-    if(!applyContinuousForces(world)||!applyPhysicsFields(world,static_cast<float>(fixed))) return false;
+    if(beforeStep&&!beforeStep(context,static_cast<float>(fixed))) {if(error_.empty())error_="Callback FixedUpdate, reconciliação ou Physics2D recusou o passo";return false;}
+    if(!applyDynamicMotors(world,static_cast<float>(fixed))||!applyContinuousForces(world)||!applyPhysicsFields(world,static_cast<float>(fixed))) return false;
     for(auto &c:characters_) {
       const auto*entity=world.graph().find(c.id);const auto*settings=entity?characterComponent(*entity):nullptr;
       if(!settings||!c.motor->configureMotion(settings->speed,settings->gravity,settings->stepHeight,settings->floorSnapLength,settings->inheritPlatformHorizontal))return false;
@@ -527,7 +571,7 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       const float yaw=scripted?c.scriptYaw:c.yaw;
       if(!c.motor->update(right,forward,yaw,static_cast<float>(fixed))) return false;
     }
-    if(AetherPhysics_StepV2(world_,static_cast<float>(fixed),1)!=0) return false;
+    if(const auto result=AetherPhysics_StepV2(world_,static_cast<float>(fixed),1);result!=0) {error_="Solver físico recusou o passo: "+std::to_string(result);return false;}
     accumulated_-=fixed;
     if(!synchronizePoses(world)) return false;
     if(trigger) {
@@ -612,7 +656,7 @@ bool ScenePhysics::synchronizePoses(GameWorld &world) {
   for(const auto &binding:bindings_) {
     if(!binding.moving) continue;
     AetherVec3 p;AetherQuat q;
-    if(!AetherPhysics_TryGetBodyPoseV2(world_,binding.body,&p,&q)) return false;
+    if(!AetherPhysics_TryGetBodyPoseV2(world_,binding.body,&p,&q)) {error_="Não foi possível ler a pose do corpo "+std::to_string(binding.id);return false;}
     float world[16]{
       (1-2*(q.y*q.y+q.z*q.z))*binding.scale[0],2*(q.x*q.y+q.w*q.z)*binding.scale[0],2*(q.x*q.z-q.w*q.y)*binding.scale[0],0,
       2*(q.x*q.y-q.w*q.z)*binding.scale[1],(1-2*(q.x*q.x+q.z*q.z))*binding.scale[1],2*(q.y*q.z+q.w*q.x)*binding.scale[1],0,
@@ -621,9 +665,10 @@ bool ScenePhysics::synchronizePoses(GameWorld &world) {
     // inverter, ignorar é correto — publicar pose de quem não existe não é.
     const auto *entity=document.find(binding.id);if(!entity) continue;
     float parent[16]{};parent[0]=parent[5]=parent[10]=parent[15]=1;
-    if(entity->parent && !worldMatrix(document,entity->parent,parent)) return false;
+    if(entity->parent && !worldMatrix(document,entity->parent,parent)) {error_=std::string(entity->name)+": transformação do pai físico inválida";return false;}
     Transform local;
-    if(!localTransformForWorld(world,parent,local)||!document.setTransform(binding.id,local)) return false;
+    if(!localTransformForWorld(world,parent,local)) {error_=std::string(entity->name)+": pose física não pode ser representada no referencial do pai";return false;}
+    if(!document.setTransform(binding.id,local)) {error_=std::string(entity->name)+": publicação da pose física recusada";return false;}
   }
   for(auto &c:characters_) {
     const auto eye=c.motor->eyePosition();c.world[12]=eye.x;c.world[13]=eye.y-c.eyeHeight;c.world[14]=eye.z;

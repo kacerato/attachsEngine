@@ -105,7 +105,7 @@ AE_TEST(component_operations_abi42_family_invokes_real_timer_and_delivers_elapse
   EditorMapScene resources;EditorPlayScene play;play.setScriptRuntime(OperationsRuntime::api(),"/project");
   AE_EXPECT_TRUE(play.start(doc,resources)&&resolved,"family resolved by name; unknown family is null, not a failed session");
   AE_EXPECT_TRUE(version==1&&size==sizeof(scene::ScriptComponentOperations),"family carries its own version and size");
-  AE_EXPECT_TRUE(OperationsRuntime::access.version==42&&OperationsRuntime::access.available(),"core frozen at v42 with extension resolver");
+  AE_EXPECT_TRUE(OperationsRuntime::access.version==45&&OperationsRuntime::access.available(),"core frozen at v45 with extension resolver");
   auto incomplete=OperationsRuntime::access;incomplete.extension=nullptr;AE_EXPECT_TRUE(!incomplete.available(),"resolver is part of the core");
 
   scene::ComponentOperationValue result;

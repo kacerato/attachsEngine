@@ -1,0 +1,107 @@
+{
+  "runs": [
+    {
+      "run": "01-A",
+      "scope": "whole device, battery HAL",
+      "isolated_app_power": false,
+      "power_rails_available": false,
+      "unplugged_at_endpoints": true,
+      "samples": 31,
+      "elapsed_s": 29.398074833,
+      "mean_battery_power_mw": 6453.967322071038,
+      "battery_energy_j": 189.734214303981,
+      "power_measured": true,
+      "charge_start_uah": 1175000.0,
+      "charge_end_uah": 1164000.0,
+      "charge_delta_uah": -11000.0,
+      "valid_discharge_comparison": true,
+      "tracks": {
+        "batt.capacity_pct": {
+          "samples": 31,
+          "min": 21.0,
+          "max": 21.0
+        },
+        "batt.charge_uah": {
+          "samples": 31,
+          "min": 1164000.0,
+          "max": 1175000.0
+        },
+        "batt.current_ua": {
+          "samples": 31,
+          "min": 1443000.0,
+          "max": 2458000.0
+        },
+        "batt.power_mw": {
+          "samples": 31,
+          "min": 5337.0,
+          "max": 9040.0
+        },
+        "batt.voltage_uv": {
+          "samples": 31,
+          "min": 3676000.0,
+          "max": 3702000.0
+        }
+      }
+    },
+    {
+      "run": "02-B",
+      "scope": "whole device, battery HAL",
+      "isolated_app_power": false,
+      "power_rails_available": false,
+      "unplugged_at_endpoints": true,
+      "samples": 31,
+      "elapsed_s": 29.204206082,
+      "mean_battery_power_mw": 3292.553289537666,
+      "battery_energy_j": 96.15640480362501,
+      "power_measured": true,
+      "charge_start_uah": 1150000.0,
+      "charge_end_uah": 1145000.0,
+      "charge_delta_uah": -5000.0,
+      "valid_discharge_comparison": true,
+      "tracks": {
+        "batt.capacity_pct": {
+          "samples": 31,
+          "min": 21.0,
+          "max": 21.0
+        },
+        "batt.charge_uah": {
+          "samples": 31,
+          "min": 1145000.0,
+          "max": 1150000.0
+        },
+        "batt.current_ua": {
+          "samples": 31,
+          "min": 645000.0,
+          "max": 1167000.0
+        },
+        "batt.power_mw": {
+          "samples": 31,
+          "min": 2396.0,
+          "max": 4328.0
+        },
+        "batt.voltage_uv": {
+          "samples": 31,
+          "min": 3705000.0,
+          "max": 3716000.0
+        }
+      }
+    }
+  ],
+  "power_source": "Perfetto battery current and voltage counters",
+  "scope": "whole device; not isolated GPU/app power",
+  "aggregates": {
+    "A": {
+      "runs": 1,
+      "elapsed_s": 29.398074833,
+      "energy_j": 189.734214303981,
+      "mean_battery_power_w": 6.453967322071039
+    },
+    "B": {
+      "runs": 1,
+      "elapsed_s": 29.204206082,
+      "energy_j": 96.15640480362501,
+      "mean_battery_power_w": 3.292553289537666
+    }
+  },
+  "observed_power_reduction_percent": 48.98404151694549
+}

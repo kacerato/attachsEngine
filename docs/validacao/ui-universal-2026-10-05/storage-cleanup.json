@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-05T14:34:56.379545+00:00",
+  "drive": "C:",
+  "before_observed_free_bytes": 0,
+  "final_measured_free_bytes": 40586014720,
+  "final_measured_free_gib": 37.8,
+  "completed": [
+    {
+      "method": "ninja -C build/collection-contracts-host -t clean",
+      "regenerable_build_files_removed": 533
+    },
+    {
+      "method": "npm cache clean --force --cache C:\\Users\\donod\\AppData\\Local\\npm-cache",
+      "status": "success"
+    },
+    {
+      "method": "git lfs prune --verify-remote --verify-unreachable --when-unverified=continue",
+      "verified_remote_objects_removed": 2004,
+      "objects_not_verified_remote_preserved": 996,
+      "retained_by_lfs_policy": 713,
+      "dry_run_done": true,
+      "logical_candidate_bytes_note": "56 GB reported by LFS is not the physical space reclaimed"
+    },
+    {
+      "method": "Git LFS native automatic aged temporary file cleanup",
+      "status": "completed during LFS invocations"
+    }
+  ],
+  "preserved": [
+    "source code",
+    "projects",
+    "user downloads/assets",
+    "Git commits/history",
+    "unverified LFS objects",
+    "current build configuration and final APK",
+    "current validation captures"
+  ],
+  "blocked": "Automatic approval review rejected direct filesystem deletion of build/temp items; native audited cleaners were used instead.",
+  "remaining_issue": "Generated Android/managed build outputs are tracked; background Git diff/LFS filters can recreate large temporary copies. Repository build-output hygiene is still pending.",
+  "reference": "https://github.com/git-lfs/git-lfs/blob/v3.7.1/docs/man/git-lfs-prune.adoc"
+}

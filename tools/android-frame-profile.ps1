@@ -380,7 +380,7 @@ function ConvertFrom-FrameProfileContextLog {
             # representam o caminho de qualidade completo.
             $context | Add-Member -NotePropertyName gpu_isolation -NotePropertyValue 'full'
         }
-        if ($context.gpu_isolation -notin @('full', 'no-normal', 'no-ibl', 'base-color')) {
+        if ($context.gpu_isolation -notin @('full', 'no-normal', 'no-ibl', 'base-color', 'no-punctual', 'no-directional-shadow')) {
             throw 'FrameProfileContext contém gpu_isolation inválido.'
         }
         if ($context.PSObject.Properties.Name -notcontains 'camera_mode') {

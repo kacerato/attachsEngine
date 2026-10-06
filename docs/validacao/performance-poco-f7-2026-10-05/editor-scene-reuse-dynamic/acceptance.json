@@ -1,0 +1,307 @@
+{
+  "profile_windows": {
+    "logcat-camera-lighting.txt": [
+      {
+        "epoch": 5,
+        "window": 1,
+        "present_fps": 120.168787,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 2,
+        "present_fps": 120.099992,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 3,
+        "present_fps": 120.129996,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 4,
+        "present_fps": 120.10095,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 5,
+        "present_fps": 120.100951,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 6,
+        "present_fps": 120.111072,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 7,
+        "present_fps": 120.126436,
+        "visible_draws": 233,
+        "visible_triangles": 2242538,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 8,
+        "present_fps": 114.032,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 547
+      },
+      {
+        "epoch": 5,
+        "window": 9,
+        "present_fps": 120.101433,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 10,
+        "present_fps": 120.089319,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 11,
+        "present_fps": 120.072717,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 12,
+        "present_fps": 120.162787,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 13,
+        "present_fps": 120.08827,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 14,
+        "present_fps": 118.898177,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 15,
+        "present_fps": 119.139336,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 16,
+        "present_fps": 120.10245,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 17,
+        "present_fps": 119.724156,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 18,
+        "present_fps": 120.136936,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 19,
+        "present_fps": 120.114016,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 20,
+        "present_fps": 120.066821,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 21,
+        "present_fps": 120.137853,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 7,
+        "window": 22,
+        "present_fps": 120.141355,
+        "visible_draws": 180,
+        "visible_triangles": 1980907,
+        "scene_reused_frames": 599
+      }
+    ],
+    "logcat-runtime-stopped.txt": [
+      {
+        "epoch": 4,
+        "window": 1,
+        "present_fps": 120.15189,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 4,
+        "window": 2,
+        "present_fps": 120.137445,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 4,
+        "window": 3,
+        "present_fps": 120.09627,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 4,
+        "window": 4,
+        "present_fps": 120.087743,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 600
+      },
+      {
+        "epoch": 5,
+        "window": 5,
+        "present_fps": 102.041401,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 0
+      },
+      {
+        "epoch": 5,
+        "window": 6,
+        "present_fps": 116.10035,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 0
+      },
+      {
+        "epoch": 5,
+        "window": 7,
+        "present_fps": 120.395395,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 0
+      },
+      {
+        "epoch": 5,
+        "window": 8,
+        "present_fps": 120.110144,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 0
+      },
+      {
+        "epoch": 5,
+        "window": 9,
+        "present_fps": 120.095624,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 0
+      },
+      {
+        "epoch": 5,
+        "window": 10,
+        "present_fps": 120.114283,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 0
+      },
+      {
+        "epoch": 6,
+        "window": 11,
+        "present_fps": 120.073412,
+        "visible_draws": 2,
+        "visible_triangles": 24,
+        "scene_reused_frames": 600
+      }
+    ]
+  },
+  "viewport_images": {
+    "01-idle.png vs 02-camera-moved.png": {
+      "viewport_crop": [
+        900,
+        210,
+        1800,
+        740
+      ],
+      "changed_pixels": 474514,
+      "max_channel_difference": 229
+    },
+    "04-root-selected.png vs 05-lighting-off.png": {
+      "viewport_crop": [
+        900,
+        210,
+        1800,
+        740
+      ],
+      "changed_pixels": 432657,
+      "max_channel_difference": 157
+    },
+    "04-root-selected.png vs 06-lighting-restored.png": {
+      "viewport_crop": [
+        900,
+        210,
+        1800,
+        740
+      ],
+      "changed_pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  "sponza_play": "blocked by existing root MeshCollider missing its collision mesh",
+  "runtime_project": "RuntimeGameplay0910",
+  "authoring_edits": false
+}

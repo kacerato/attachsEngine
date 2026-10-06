@@ -1,0 +1,43 @@
+{
+  "run": "01-B",
+  "scope": "whole device, battery HAL",
+  "isolated_app_power": false,
+  "power_rails_available": false,
+  "unplugged_at_endpoints": true,
+  "samples": 1201,
+  "elapsed_s": 1199.802547511,
+  "mean_battery_power_mw": 2925.30864956583,
+  "battery_energy_j": 3509.792770005046,
+  "power_measured": true,
+  "charge_start_uah": 1056000.0,
+  "charge_end_uah": 789000.0,
+  "charge_delta_uah": -267000.0,
+  "valid_discharge_comparison": true,
+  "tracks": {
+    "batt.capacity_pct": {
+      "samples": 1201,
+      "min": 15.0,
+      "max": 19.0
+    },
+    "batt.charge_uah": {
+      "samples": 1201,
+      "min": 789000.0,
+      "max": 1056000.0
+    },
+    "batt.current_ua": {
+      "samples": 1201,
+      "min": 576000.0,
+      "max": 2783000.0
+    },
+    "batt.power_mw": {
+      "samples": 1201,
+      "min": 2125.0,
+      "max": 10202.0
+    },
+    "batt.voltage_uv": {
+      "samples": 1201,
+      "min": 3658000.0,
+      "max": 3711000.0
+    }
+  }
+}

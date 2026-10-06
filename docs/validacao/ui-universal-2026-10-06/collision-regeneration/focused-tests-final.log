@@ -1,0 +1,7 @@
+PASS collision_recipe_regeneration_history_reopen_and_real_solver
+PASS collision_recipe_prefab_instance_references_and_independence
+PASS collision_recipe_mapping_staleness_missing_source_and_publish_refusal
+PASS collision_recipe_real_glb_reimport_and_physical_mesh_override
+Collision recipe UI captures: C:/Users/donod/Downloads/atchengine/native/../build/collision-recipe-1762285210550600
+PASS collision_recipe_compact_review_pointer_and_visual_capture
+5/5 scenarios passed

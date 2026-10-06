@@ -1,0 +1,5 @@
+AETHER_ASSETS 1 4
+a68aad35054c3d5dc4f4536fddf5cff5 mesh "Assets/modular_industrial_pipes_01.glb" "Assets/modular_industrial_pipes_01.glb" "da5905484c8aafd6526d4dee96e507042637b61b399eefdd53ddd6479aafdde3" 1 "glb" 0 0
+da6bad7749f649913eecf6202a77bcca mesh "Assets/signage.glb" "Assets/signage.glb" "aa3f77fb203fca1704e51ae1bae9b9317eb399aa9f96c210e52c8d78b3999a18" 1 "glb" 0 0
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "a359df05afde07aa1d83724e4c27600a4ad09af4899c2f90d7b109a419e43847" 1 "glb" 0 0
+89aee633c9f798c6405e664da641d17a audio_clip "Audio/electrical.wav" "Audio/electrical.wav" "a4884e80563b8ddc184b960b1350295cd729fa27be2189adc24a4d1b6ce4608c" 1 "WAV_PCM_STEREO_F32_48000_V1" 0 0

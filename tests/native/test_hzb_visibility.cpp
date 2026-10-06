@@ -8,6 +8,30 @@
 using namespace ae;
 using namespace ae::renderer;
 
+AE_TEST(Hzb_rotated_editor_viewport_maps_into_depth_attachment_and_invalid_input_fails_open) {
+  const float camera[3]{0,0,0}, center[3]{0,0,10};
+  PerspectiveVisibilitySettings settings{};
+  const auto frustum=buildPerspectiveFrustum(camera,0,0,1,settings);
+  const HzbScreenTransform rotations[]{{1,0,0,1},{0,-1,1,0},{-1,0,0,-1},{0,1,-1,0}};
+  for(auto transform:rotations) {
+    const auto full=projectBoundsToHzbScreenRect(frustum,center,1,transform);
+    transform.viewportX=.2f;transform.viewportY=.1f;
+    transform.viewportWidth=.4f;transform.viewportHeight=.6f;
+    const auto editor=projectBoundsToHzbScreenRect(frustum,center,1,transform);
+    AE_EXPECT_TRUE(full.valid && editor.valid,"projeção válida em todas as rotações");
+    AE_EXPECT_TRUE(std::abs(editor.minU-(.2f+.4f*full.minU))<.00001f &&
+                   std::abs(editor.maxU-(.2f+.4f*full.maxU))<.00001f &&
+                   std::abs(editor.minV-(.1f+.6f*full.minV))<.00001f &&
+                   std::abs(editor.maxV-(.1f+.6f*full.maxV))<.00001f,
+                   "coordenadas seguem o viewport físico sem alterar profundidade");
+    AE_EXPECT_TRUE(editor.nearDepth==full.nearDepth,"profundidade independe do retângulo");
+    transform.viewportWidth=0;
+    AE_EXPECT_TRUE(!projectBoundsToHzbScreenRect(frustum,center,1,transform).valid,"viewport vazio falha aberto");
+    transform.viewportWidth=std::numeric_limits<float>::quiet_NaN();
+    AE_EXPECT_TRUE(!projectBoundsToHzbScreenRect(frustum,center,1,transform).valid,"viewport não finito falha aberto");
+  }
+}
+
 AE_TEST(Hzb_pyramid_max_reduction_is_exact_across_levels) {
   const float base[16] = {
       0, 1, 2, 3,
@@ -31,6 +55,25 @@ AE_TEST(Hzb_pyramid_max_reduction_is_exact_across_levels) {
 
   const HzbMipLevel &mip2 = pyramid.mips[2];
   AE_EXPECT_TRUE(pyramid.texels[mip2.offset] == 15.0f, "topo da pirâmide é o máximo global");
+}
+
+AE_TEST(Hzb_off_axis_bounds_include_far_face_towards_projection_center) {
+  const float camera[3]{0,0,0};
+  PerspectiveVisibilitySettings settings{};
+  settings.boundsScale=1;settings.boundsMargin=0;
+  const auto frustum=buildPerspectiveFrustum(camera,0,0,1,settings);
+  for(float side:{-1.f,1.f}) {
+    const float center[3]{3*side,3*side,10};
+    const auto rect=projectBoundsToHzbScreenRect(frustum,center,1);
+    AE_EXPECT_TRUE(rect.valid,"limite deslocado do eixo é válido");
+    AE_EXPECT_TRUE(side>0?rect.maxV<.5f:rect.minV>.5f,
+                   "Y segue a inversão Vulkan do shader antes de rotacionar");
+    const float inner=.5f+side/(11*frustum.tangentHalfVertical);
+    if(side>0) AE_EXPECT_TRUE(rect.minU<=inner+.00001f && rect.maxV>=1-inner-.00001f,
+                             "face distante positiva permanece dentro do retângulo");
+    else AE_EXPECT_TRUE(rect.maxU>=inner-.00001f && rect.minV<=1-inner+.00001f,
+                        "face distante negativa permanece dentro do retângulo");
+  }
 }
 
 AE_TEST(Hzb_pyramid_rejects_invalid_input) {

@@ -1,0 +1,183 @@
+{
+  "runs": [
+    {
+      "run": "01-B",
+      "variant": "B",
+      "windows": 119,
+      "engine_fps": 60.05551814262152,
+      "surface_continuous": false,
+      "displayed_fps": null,
+      "context": {
+        "schemaVersion": 8,
+        "pid": 1411,
+        "epoch": 6,
+        "scene": "authored-project",
+        "content_fingerprint": "0000000000000000",
+        "target_fps": 60,
+        "gpu_isolation": "full",
+        "camera_locked": true,
+        "camera_mode": "locked",
+        "camera_route_fingerprint": "0000000000000000",
+        "camera_route_frame_ordinal": 0,
+        "camera_route_tick_count": 0,
+        "camera_pose": [
+          -6.101169,
+          5.219586,
+          -8.918053,
+          0.6,
+          0.45
+        ],
+        "draws": 411,
+        "materials": 35,
+        "textures": 72,
+        "triangles": 3749344,
+        "package_version": 0,
+        "render_draws": 411,
+        "lod_groups": 0,
+        "hzb_enabled": false,
+        "lod_enabled": true,
+        "post_ui_fused": true,
+        "spatial_chunks": 0,
+        "scene_reuse_enabled": true,
+        "rendering_quality_locked": true,
+        "shadow_filter_taps": 25,
+        "lod_error_px": 1.0,
+        "coverage_lod_error_px": 2.0,
+        "render_scale": 0.75,
+        "render_width": 960,
+        "render_height": 2079,
+        "visible_draws": 233,
+        "culled_draws": 149,
+        "submitted_draw_calls": 233,
+        "visible_triangles": 2242538,
+        "submitted_triangles": 2242538,
+        "hzb_tested_draws": 0,
+        "hzb_occluded_draws": 0,
+        "hzb_revived_draws": 0,
+        "hzb_motion_skipped_draws": 0,
+        "hzb_budget_skipped_draws": 0,
+        "instances": 411,
+        "width": 2772,
+        "height": 1280
+      },
+      "gpu_frame_ms": {
+        "mean": 9.528699159663864,
+        "worst_window_p95": 9.7326,
+        "worst_window_p99": 11.4219
+      },
+      "thread_cpu_ms": {
+        "mean": 2.091431092436975,
+        "worst_window_p95": 4.3781,
+        "worst_window_p99": 5.2804
+      },
+      "gpu_opaque_ms": {
+        "mean": 0.0015983193277310924,
+        "worst_window_p95": 0.0016,
+        "worst_window_p99": 0.0016
+      },
+      "gpu_post_ms": {
+        "mean": 9.497442016806723,
+        "worst_window_p95": 9.7012,
+        "worst_window_p99": 11.3895
+      },
+      "gpu_ui_ms": {
+        "mean": 0.0015983193277310924,
+        "worst_window_p95": 0.0016,
+        "worst_window_p99": 0.0028
+      },
+      "visible_triangles": [
+        2242538
+      ],
+      "scene_reused_frames": 71400,
+      "scene_reuse_ratio": 1.0,
+      "thermal_pressure": [
+        "none"
+      ],
+      "render_scale_range": [
+        0.75,
+        0.75
+      ],
+      "memory": {
+        "ram_rss_bytes": {
+          "min": 218046464,
+          "max": 794714112
+        },
+        "gpu_engine_used_bytes": {
+          "min": 580297216,
+          "max": 580297216
+        },
+        "gpu_buffer_used_bytes": {
+          "min": 146362496,
+          "max": 146362496
+        },
+        "gpu_texture_used_bytes": {
+          "min": 123539840,
+          "max": 123539840
+        },
+        "gpu_render_target_used_bytes": {
+          "min": 310394880,
+          "max": 310394880
+        }
+      },
+      "power": {
+        "run": "01-B",
+        "scope": "whole device, battery HAL",
+        "isolated_app_power": false,
+        "power_rails_available": false,
+        "unplugged_at_endpoints": true,
+        "samples": 1201,
+        "elapsed_s": 1199.802547511,
+        "mean_battery_power_mw": 2925.30864956583,
+        "battery_energy_j": 3509.792770005046,
+        "power_measured": true,
+        "charge_start_uah": 1056000.0,
+        "charge_end_uah": 789000.0,
+        "charge_delta_uah": -267000.0,
+        "valid_discharge_comparison": true,
+        "tracks": {
+          "batt.capacity_pct": {
+            "samples": 1201,
+            "min": 15.0,
+            "max": 19.0
+          },
+          "batt.charge_uah": {
+            "samples": 1201,
+            "min": 789000.0,
+            "max": 1056000.0
+          },
+          "batt.current_ua": {
+            "samples": 1201,
+            "min": 576000.0,
+            "max": 2783000.0
+          },
+          "batt.power_mw": {
+            "samples": 1201,
+            "min": 2125.0,
+            "max": 10202.0
+          },
+          "batt.voltage_uv": {
+            "samples": 1201,
+            "min": 3658000.0,
+            "max": 3711000.0
+          }
+        }
+      },
+      "battery_before_c": 43.7,
+      "battery_after_c": 42.6
+    }
+  ],
+  "aggregates": {
+    "B": {
+      "frames": 71400,
+      "gpu_mean_ms": 9.528699159663864,
+      "gpu_worst_window_p95_ms": 9.7326,
+      "cpu_mean_ms": 2.091431092436975,
+      "engine_fps": 60.05551814262152
+    }
+  },
+  "image_comparisons": [],
+  "percentile_method": "worst window percentile, not aggregate percentile",
+  "power_measured": true,
+  "power_discharge_valid": true,
+  "power_scope": "whole device, not isolated app/GPU"
+}

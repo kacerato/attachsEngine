@@ -396,6 +396,11 @@ ae::i32 AetherPhysics_GetBodyFieldStateV1(AetherPhysicsWorld *,AetherBodyHandle,
 // and leaves outputs untouched; read under one body lock.
 ae::i32 AetherPhysics_TryGetBodyPoseV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
                                       AetherVec3 *position, AetherQuat *rotation);
+inline constexpr ae::u32 AetherBodyGroundProbeCapacityV1=261; // five rays + 256 compound parts
+// Surface samples plus the actual lowest support point of each convex leaf.
+// Output buffer has the declared capacity. Empty compound areas are omitted; stale
+// handles leave outputs untouched. Bounds select samples, never grant support.
+ae::i32 AetherPhysics_TryGetBodyGroundProbesV1(AetherPhysicsWorld *,AetherBodyHandle,AetherVec3 *,ae::u32 *);
 // Explicit per-body energy policy. Does not implicitly wake a sleeping body.
 ae::i32 AetherPhysics_SetAllowSleepingV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
                                          ae::u32 allowed);
@@ -864,6 +869,12 @@ AetherVec3 AetherPhysics_GetCharacterGroundVelocity(AetherPhysicsWorld *world, A
 /// Normal da superfície de contato (chão ou rampa) — {0,0,0} se InAir ou handle inválido. Útil
 /// para decidir a direção de deslizamento quando GroundState é OnSteepGround.
 AetherVec3 AetherPhysics_GetCharacterGroundNormal(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+// Actual CharacterVirtual contact point, available only with a ground state.
+ae::i32 AetherPhysics_TryGetCharacterGroundPointV1(AetherPhysicsWorld *,AetherCharacterHandle,AetherVec3 *);
+// Invalid when no solid ground body belongs to this character's current world.
+AetherBodyHandle AetherPhysics_GetCharacterGroundBodyV1(AetherPhysicsWorld *,AetherCharacterHandle);
+// Checked geometry of the CURRENT solver shape, including crouching; world units.
+ae::i32 AetherPhysics_TryGetCharacterCapsuleV1(AetherPhysicsWorld *,AetherCharacterHandle,AetherVec3 *,AetherVec3 *,float *);
 
 /// Troca entre a cápsula standingHalfHeight/crouchingHalfHeight de AetherCharacterDesc,
 /// checando primeiro se há espaço livre para a forma nova (JPH::CharacterVirtual::SetShape com

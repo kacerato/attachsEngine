@@ -8,7 +8,7 @@
 namespace ae::platform::android {
 namespace { constexpr const char *LogTag = "Aether.Android"; }
 // Leitura somente no lançamento; nenhuma referência JNI é retida no loop.
-bool readBooleanLaunchOption(ANativeActivity *activity, const char *option) {
+bool readBooleanLaunchOption(ANativeActivity *activity, const char *option, bool defaultValue) {
   if (activity == nullptr || activity->vm == nullptr || option == nullptr) return false;
   JNIEnv *env = nullptr;
   bool attachedHere = false;
@@ -23,7 +23,7 @@ bool readBooleanLaunchOption(ANativeActivity *activity, const char *option) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LaunchOptions] JNI indisponível.");
     return false;
   }
-  bool enabled = false;
+  bool enabled = defaultValue;
   const bool localFrame = env->PushLocalFrame(8) == JNI_OK;
   const bool ok = localFrame && [&]() {
     jclass activityClass = env->GetObjectClass(activity->clazz);
@@ -39,7 +39,7 @@ bool readBooleanLaunchOption(ANativeActivity *activity, const char *option) {
     if (getBoolean == nullptr) return false;
     jstring key = env->NewStringUTF(option);
     if (key == nullptr) return false;
-    enabled = env->CallBooleanMethod(intent, getBoolean, key, JNI_FALSE) == JNI_TRUE;
+    enabled = env->CallBooleanMethod(intent, getBoolean, key, defaultValue ? JNI_TRUE : JNI_FALSE) == JNI_TRUE;
     return !env->ExceptionCheck();
   }();
   if (env->ExceptionCheck()) env->ExceptionClear();

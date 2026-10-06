@@ -1,0 +1,32 @@
+{
+  "video_sha256": "cf2474bb9f5d6d6da38647c9cff6cee63e5a0a3bb4693aaab7e5ccea80997693",
+  "decoded_frames": 235,
+  "extracted_frames": 235,
+  "skipped_frames": 0,
+  "duration_last_pts": 3.884356,
+  "sheets": [
+    "sheet-00.png",
+    "sheet-01.png",
+    "sheet-02.png",
+    "sheet-03.png",
+    "sheet-04.png",
+    "sheet-05.png",
+    "sheet-06.png",
+    "sheet-07.png"
+  ],
+  "review_status": "every indexed frame cell visually inspected; repeated frames retained",
+  "apk_sha256": "74cc3895afa18fc7f0bb31ebb65e5a91616e812baf3a0f26711cafa0bf5b7011",
+  "observations": {
+    "first_motion_frame": 43,
+    "validated_release_frame": 103,
+    "held_until_frame": 234,
+    "final_x": 3.192,
+    "y": 0,
+    "z": -0.5,
+    "target": "LeftBox / Collider 4:1; simultaneous pointer on Sphere hierarchy did not select it"
+  },
+  "hierarchy_roi_changed_pixel_range": [
+    0,
+    23452
+  ]
+}

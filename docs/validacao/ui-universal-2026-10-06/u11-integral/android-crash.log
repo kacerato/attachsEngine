@@ -1,0 +1,32 @@
+--------- beginning of crash
+F/libc    (19041): Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 21937 (Thread-18), pid 19041 (v.aether.editor)
+F/DEBUG   (21941): *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+F/DEBUG   (21941): Build fingerprint: 'POCO/onyx_global/onyx:16/BP2A.250605.031.A3/OS3.0.303.0.WOLMIXM:user/release-keys'
+F/DEBUG   (21941): Revision: '0'
+F/DEBUG   (21941): ABI: 'arm64'
+F/DEBUG   (21941): Timestamp: 2026-10-06 12:33:27.342571349-0300
+F/DEBUG   (21941): Process uptime: 178s
+F/DEBUG   (21941): Cmdline: dev.aether.editor
+F/DEBUG   (21941): pid: 19041, tid: 21937, name: Thread-18  >>> dev.aether.editor <<<
+F/DEBUG   (21941): uid: 11091
+F/DEBUG   (21941): tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+F/DEBUG   (21941): pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+F/DEBUG   (21941): signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000
+F/DEBUG   (21941): Cause: null pointer dereference
+F/DEBUG   (21941):     x0  0000007a43609ae0  x1  0000000000000000  x2  0000007d95f0d6c4  x3  0000007a4357df18
+F/DEBUG   (21941):     x4  0000000000000060  x5  b400007c8bb48ea7  x6  0000000072756f6a  x7  0000007a4357dd62
+F/DEBUG   (21941):     x8  0000000000000000  x9  aa02bb1ebebd86a6  x10 0000007d95f0da1c  x11 00000000586001e6
+F/DEBUG   (21941):     x12 0000000000060006  x13 000000000000006f  x14 000000000000006e  x15 b400007c2bb62240
+F/DEBUG   (21941):     x16 00000079b2979c90  x17 00000079b2216388  x18 00000079b12c4000  x19 0000007a43609aa8
+F/DEBUG   (21941):     x20 0000007a43609ae0  x21 0000000000000000  x22 0000007a43610a90  x23 0000007a4360f2c8
+F/DEBUG   (21941):     x24 0000000000000001  x25 0000000000000055  x26 0000007a4360d178  x27 0000007a43612780
+F/DEBUG   (21941):     x28 0000007a4360c010  x29 0000007a4357df20
+F/DEBUG   (21941):     lr  00000079b22163ec  sp  0000007a4357df20  pc  00000079b221640c  pst 0000000060001000
+F/DEBUG   (21941): 6 total frames
+F/DEBUG   (21941): backtrace:
+F/DEBUG   (21941):       #00 pc 00000000009b840c  /data/app/~~U6AiEnxroXSrS3YKSSqstw==/dev.aether.editor-lP3ENB9iR8D3W96ELQ9PlQ==/lib/arm64/libaether_android.so (ae::editor::EditorCodeWorkspace::clear()+132) (BuildId: a87f91187546cff70749782c9fb63c9d6ca42302)
+F/DEBUG   (21941):       #01 pc 00000000009e8058  /data/app/~~U6AiEnxroXSrS3YKSSqstw==/dev.aether.editor-lP3ENB9iR8D3W96ELQ9PlQ==/lib/arm64/libaether_android.so (ae::editor::EditorSession::setProjectDirectory(char const*)+748) (BuildId: a87f91187546cff70749782c9fb63c9d6ca42302)
+F/DEBUG   (21941):       #02 pc 00000000008f3dc0  /data/app/~~U6AiEnxroXSrS3YKSSqstw==/dev.aether.editor-lP3ENB9iR8D3W96ELQ9PlQ==/lib/arm64/libaether_android.so (android_main+4968) (BuildId: a87f91187546cff70749782c9fb63c9d6ca42302)
+F/DEBUG   (21941):       #03 pc 0000000000c060dc  /data/app/~~U6AiEnxroXSrS3YKSSqstw==/dev.aether.editor-lP3ENB9iR8D3W96ELQ9PlQ==/lib/arm64/libaether_android.so (BuildId: a87f91187546cff70749782c9fb63c9d6ca42302)
+F/DEBUG   (21941):       #04 pc 0000000000082d74  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+184) (BuildId: 223a572c9f034c6a9337d8b3bedc75f3)
+F/DEBUG   (21941):       #05 pc 00000000000751f0  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 223a572c9f034c6a9337d8b3bedc75f3)

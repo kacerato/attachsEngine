@@ -4,6 +4,19 @@
   "table": "physics3dSchemas",
   "entries": [
     {
+      "type": "CollisionRecipe",
+      "name": "Receita de colisão",
+      "description": "Fontes e base das partes para regeneração explícita preservando edições",
+      "requirements": {"cpp": "jointRequirements"},
+      "propertiesInPlay": {"cpp": "PlayMutability::Never"},
+      "consumer": "editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp",
+      "subfamily": "Autoria",
+      "icon": "physics/collision-recipe",
+      "searchTerms": "Bake Reimport Regenerate Receita Colisão",
+      "reference": "https://docs.godotengine.org/en/4.5/tutorials/assets_pipeline/import_process.html",
+      "listedInAdd": false
+    },
+    {
       "type": "GravityField",
       "name": "Campo de gravidade",
       "description": "Gravidade local em volume sobre corpos dinâmicos",
@@ -166,6 +179,29 @@
       "searchTerms": "HingeJoint SliderJoint SpringJoint FixedJoint ConeTwistJoint3D Generic6DOFJoint3D",
       "reference": "https://docs.godotengine.org/en/4.5/classes/class_generic6dofjoint3d.html",
       "apiName": "Joint"
+    },
+    {
+      "type": "DynamicBodyMotor",
+      "name": "Motor dinâmico",
+      "description": "Locomoção por força e salto com apoio sobre Corpo físico dinâmico",
+      "requirements": {
+        "cpp": "dynamicMotorRequirements"
+      },
+      "conflicts": {
+        "cpp": "bodyConflicts"
+      },
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_dynamic_motor.cpp → forças/impulsos antes de cada passo Jolt",
+      "invalidates": {
+        "cpp": "Invalidate::PhysicsBody"
+      },
+      "subfamily": "Corpos",
+      "icon": "component/dynamic-body-motor",
+      "searchTerms": "DynamicBodyMotor Rigidbody RigidBody3D Jogador Motor",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_rigidbody3d.html",
+      "apiName": "DynamicBodyMotor"
     }
   ],
   "defaults": {

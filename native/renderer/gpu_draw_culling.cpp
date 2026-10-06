@@ -236,10 +236,17 @@ GpuCullOutcome cullDrawRecordReference(const GpuCullParameters &parameters,
   const bool orthographic = (parameters.flags & GpuCullOrthographic) != 0;
   const float invHorizontal = 1.0f / (orthographic ? parameters.orthographicHalfWidth : nearDepth * parameters.tangentHalfHorizontal);
   const float invVertical = 1.0f / (orthographic ? parameters.orthographicHalfHeight : nearDepth * parameters.tangentHalfVertical);
-  const float ndcX[2] = {(viewX - expandedRadius) * invHorizontal,
+  float ndcX[2] = {(viewX - expandedRadius) * invHorizontal,
                          (viewX + expandedRadius) * invHorizontal};
-  const float ndcY[2] = {(viewY - expandedRadius) * invVertical,
-                         (viewY + expandedRadius) * invVertical};
+  float ndcY[2] = {(-viewY - expandedRadius) * invVertical,
+                         (-viewY + expandedRadius) * invVertical};
+  const float farDepth=viewZ+expandedRadius+parameters.viewDepthGuard;
+  const float farHorizontal=1.f/(orthographic?parameters.orthographicHalfWidth:farDepth*parameters.tangentHalfHorizontal);
+  const float farVertical=1.f/(orthographic?parameters.orthographicHalfHeight:farDepth*parameters.tangentHalfVertical);
+  ndcX[0]=std::min(ndcX[0],(viewX-expandedRadius)*farHorizontal);
+  ndcX[1]=std::max(ndcX[1],(viewX+expandedRadius)*farHorizontal);
+  ndcY[0]=std::min(ndcY[0],(-viewY-expandedRadius)*farVertical);
+  ndcY[1]=std::max(ndcY[1],(-viewY+expandedRadius)*farVertical);
   for (u32 i = 0; i < 2; ++i)
     if (!finite(ndcX[i]) || !finite(ndcY[i])) return notOccluded();
 

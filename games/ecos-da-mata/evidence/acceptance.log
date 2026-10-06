@@ -1,0 +1,40 @@
+--------- beginning of main
+10-01 15:20:19.934 19161 23167 I Astra.Script: 808: FOREST READY | ECOS DA MATA | siga os sinais; segure Calibrar perto de cada estação por 2s. Soltar/caminhar para longe cancela. 3 estações abrem a saída. Limite: 10 minutos.
+10-01 15:20:20.055 19161 23167 I Astra.Script: 808: FOREST AUDIO WAIT | backend output/cursor not observed yet
+10-01 15:20:20.066 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,0.0,-24.0 grounded=False calibrated=0/3 target=0 phase=Waiting progress=0.00 remaining=600.0
+10-01 15:20:20.458 19161 23167 I Astra.Script: 808: FOREST AUDIO BACKEND | state=Playing cursor=0.16 output=True
+10-01 15:20:24.888 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-24.0 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=595.0
+10-01 15:20:29.941 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-24.0 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=590.0
+10-01 15:20:34.962 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-24.0 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=585.0
+10-01 15:20:39.975 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-18.3 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=579.9
+10-01 15:20:45.024 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-18.3 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=574.9
+10-01 15:20:50.087 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-18.3 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=569.8
+10-01 15:20:55.091 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-18.3 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=564.8
+10-01 15:21:00.097 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-18.3 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=559.8
+10-01 15:21:05.138 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-18.3 grounded=True calibrated=0/3 target=0 phase=Disabled progress=0.00 remaining=554.8
+10-01 15:21:06.649 19161 23167 I Astra.Script: 808: FOREST TARGET station=1 | segure Calibrar por 2s
+10-01 15:21:10.201 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-8.3 grounded=True calibrated=0/3 target=1 phase=Waiting progress=0.00 remaining=549.7
+10-01 15:21:15.225 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-8.3 grounded=True calibrated=0/3 target=1 phase=Waiting progress=0.00 remaining=544.7
+10-01 15:21:20.275 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-8.3 grounded=True calibrated=0/3 target=1 phase=Waiting progress=0.00 remaining=539.7
+10-01 15:21:21.418 19161 23167 I Astra.Script: 808: FOREST HOLD START station=1
+10-01 15:21:22.069 19161 23167 I Astra.Script: 808: FOREST CANCEL RELEASE station=1
+10-01 15:21:22.544 19161 23167 I Astra.Script: 808: FOREST HOLD START station=1
+10-01 15:21:24.555 19161 23167 I Astra.Script: 808: FOREST CALIBRATED station=1 total=1/3 nativeProgress=1
+10-01 15:21:25.339 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-8.3 grounded=True calibrated=1/3 target=0 phase=Disabled progress=0.00 remaining=534.6
+10-01 15:21:30.368 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-8.3 grounded=True calibrated=1/3 target=0 phase=Disabled progress=0.00 remaining=529.6
+10-01 15:21:35.390 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,-7.4 grounded=True calibrated=1/3 target=0 phase=Disabled progress=0.00 remaining=524.5
+10-01 15:21:36.565 19161 23167 I Astra.Script: 808: FOREST TARGET station=2 | segure Calibrar por 2s
+10-01 15:21:37.451 19161 23167 I Astra.Script: 808: FOREST HOLD START station=2
+10-01 15:21:39.445 19161 23167 I Astra.Script: 808: FOREST CALIBRATED station=2 total=2/3 nativeProgress=1
+10-01 15:21:40.459 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,0.4 grounded=True calibrated=2/3 target=0 phase=Disabled progress=0.00 remaining=519.5
+10-01 15:21:45.463 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,0.4 grounded=True calibrated=2/3 target=0 phase=Disabled progress=0.00 remaining=514.4
+10-01 15:21:50.507 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.0,-0.0,0.4 grounded=True calibrated=2/3 target=0 phase=Disabled progress=0.00 remaining=509.4
+10-01 15:21:55.510 19161 23167 I Astra.Script: 808: FOREST STATUS position=-0.7,-0.0,8.0 grounded=True calibrated=2/3 target=0 phase=Disabled progress=0.00 remaining=504.4
+10-01 15:21:56.057 19161 23167 I Astra.Script: 808: FOREST TARGET station=3 | segure Calibrar por 2s
+10-01 15:21:58.000 19161 23167 I Astra.Script: 808: FOREST HOLD START station=3
+10-01 15:21:59.965 19161 23167 I Astra.Script: 808: FOREST CALIBRATED station=3 total=3/3 nativeProgress=1
+10-01 15:21:59.965 19161 23167 I Astra.Script: 808: FOREST EXIT OPENING | native tween requested
+10-01 15:22:00.537 19161 23167 I Astra.Script: 808: FOREST STATUS position=-1.5,-0.0,13.6 grounded=True calibrated=3/3 target=0 phase=Disabled progress=0.00 remaining=499.4
+10-01 15:22:01.625 19161 23167 I Astra.Script: 808: FOREST EXIT OPEN | tween completed; physical barrier removed
+10-01 15:22:05.555 19161 23167 I Astra.Script: 808: FOREST STATUS position=0.8,-0.0,14.5 grounded=True calibrated=3/3 target=0 phase=Disabled progress=0.00 remaining=494.4
+10-01 15:22:10.454 19161 23167 I Astra.Script: 808: FOREST WIN | rede calibrada; extração concluída; remaining=0.0

@@ -80,6 +80,7 @@ public static class GuiTests
         Assert.Equal(56,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiProperties>());
         Assert.Equal(68,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiSizing>());
         Assert.Equal(44,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiCanvas>());
+        Assert.Equal(72,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiControl>());
         long audio=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("AudioCommand").ToInt64();
         long command=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiCommand").ToInt64();
         long properties=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiProperties").ToInt64();
@@ -90,7 +91,8 @@ public static class GuiTests
         Assert.Equal(text+3*IntPtr.Size,behavior);
         Assert.Equal(16,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiAction>());Assert.Equal(72,Marshal.SizeOf<NativeBehaviorRuntime.NativeGuiTransitions>());
         long action=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiAction").ToInt64(), transitions=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiTransitions").ToInt64();
-        Assert.Equal(behavior+IntPtr.Size,action);Assert.Equal(action+IntPtr.Size,transitions);Assert.True(transitions+IntPtr.Size<=(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>(),"campo dentro do núcleo; o tamanho total é conferido em ComponentOperationsTests");
+        Assert.Equal(behavior+IntPtr.Size,action);Assert.Equal(action+IntPtr.Size,transitions);long instance=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiInstance").ToInt64(), request=Marshal.OffsetOf<NativeBehaviorRuntime.SceneAccess>("GuiInstanceRequest").ToInt64();
+        Assert.Equal(transitions+IntPtr.Size,instance);Assert.Equal(instance+IntPtr.Size,request);Assert.True(request+IntPtr.Size<=(long)Marshal.SizeOf<NativeBehaviorRuntime.SceneAccess>(),"campo dentro do núcleo; o tamanho total é conferido em ComponentOperationsTests");
     }
     [Test] public static void Gui_ContainerImageAndCanvasTypedApiPreservesIndependentFields()
     {

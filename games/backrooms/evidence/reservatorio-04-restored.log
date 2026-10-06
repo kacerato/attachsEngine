@@ -1,0 +1,20 @@
+--------- beginning of main
+10-01 16:00:57.507 14374 18896 I Astra.Script: 144: LIGHTPROBE STAGE=0 0=spots 1=dark 2=flashlight 3=spots-restored 4=directional
+10-01 16:00:57.517 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=0.0 GPU=12.43 frame=230.56 shadow=1 aa=Fxaa effective=True clamps=0
+10-01 16:01:01.324 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=2.0 GPU=40.54 frame=50.31 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:03.366 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=4.1 GPU=40.60 frame=48.27 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:05.399 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=6.1 GPU=40.55 frame=46.54 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:07.294 14374 18896 I Astra.Script: 144: LIGHTPROBE STAGE=1 0=spots 1=dark 2=flashlight 3=spots-restored 4=directional
+10-01 16:01:07.413 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=8.1 GPU=35.62 frame=37.88 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:09.452 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=10.2 GPU=34.77 frame=39.92 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:11.477 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=12.2 GPU=36.38 frame=38.70 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:13.493 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=14.2 GPU=35.93 frame=40.84 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:15.321 14374 18896 I Astra.Script: 144: LIGHTPROBE STAGE=2 0=spots 1=dark 2=flashlight 3=spots-restored 4=directional
+10-01 16:01:15.518 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=2 elapsed=16.2 GPU=36.23 frame=38.19 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:17.554 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=2 elapsed=18.3 GPU=36.29 frame=40.09 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:19.590 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=2 elapsed=20.3 GPU=38.29 frame=45.73 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:21.592 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=2 elapsed=22.3 GPU=36.18 frame=41.71 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:24.846 14374 18896 I Astra.Script: 144: LIGHTPROBE STAGE=3 0=spots 1=dark 2=flashlight 3=spots-restored 4=directional
+10-01 16:01:25.162 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=3 elapsed=24.3 GPU=38.11 frame=45.10 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:27.198 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=3 elapsed=26.4 GPU=38.61 frame=48.53 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:29.205 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=3 elapsed=28.4 GPU=41.26 frame=46.00 shadow=1 aa=Temporal effective=True clamps=0

@@ -1,0 +1,5 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp:79: visible wall wins over hidden linked surface; navigation changes no authored bytes
+PASS collider_occlusion_real_triangles_clipping_identity_and_lazy_geometry
+PASS collider_occlusion_contour_perspective_world_depth_and_visible_portions
+FAIL collider_occlusion_pointer_visibility_locks_archive_undo_solver_and_hole
+2/3 scenarios passed

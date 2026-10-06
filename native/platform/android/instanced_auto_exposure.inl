@@ -165,11 +165,13 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   }
   const bool jumped=!std::isfinite(timeSeconds)||!view.cameraValid || timeSeconds<view.previousTime ||
       timeSeconds-view.previousTime>1.0f;
-  const bool reset=!view.enabled||jumped||view.activeWidth!=activeWidth||
-      view.activeHeight!=activeHeight||view.allocatedWidth!=allocatedWidth||
-      view.allocatedHeight!=allocatedHeight||view.sceneEpoch!=sceneEpoch||
-      view.cameraEntity!=cameraEntity||temporalCameraCut(camera,view.previousCamera)||
-      (index==0&&view.paused!=autoExposurePaused_);
+  // Histogram dimensions, orbit motion, pause and TAA history cuts do not
+  // change the eye's adapted exposure. Resetting on dynamic-resolution changes
+  // snapped EV directly to the newly measured target and caused brightness
+  // pumping under load. Only a new scene/view or a restarted clock resets it.
+  const bool reset=!view.enabled||!view.cameraValid||
+      timeSeconds<view.previousTime||view.sceneEpoch!=sceneEpoch||
+      view.cameraEntity!=cameraEntity;
   VkBufferMemoryBarrier previous[2]{};
   for(u32 i=0;i<2;++i) {
     previous[i].sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -218,7 +220,7 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   push.metering[2]=look.autoExposureTargetGrey;
   push.metering[3]=frame->environment.parameters[0];
   push.adaptation[0]=jumped||(index==0&&autoExposurePaused_)?0.0f:
-      std::max(0.0f,timeSeconds-view.previousTime);
+      std::clamp(timeSeconds-view.previousTime,0.0f,0.1f);
   push.adaptation[1]=look.autoExposureSpeedUp;push.adaptation[2]=look.autoExposureSpeedDown;
   push.adaptation[3]=reset?1.0f:0.0f;
   push.range[0]=look.autoExposureLowPercent;push.range[1]=look.autoExposureHighPercent;

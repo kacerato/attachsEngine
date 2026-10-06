@@ -214,8 +214,19 @@ HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, co
   const float invVertical = 1.0f / (projectionDivisor(frustum,nearDepth) * projectionHalfHeight(frustum));
   float ndcMinX = (viewX - expandedRadius) * invHorizontal;
   float ndcMaxX = (viewX + expandedRadius) * invHorizontal;
-  float ndcMinY = (viewY - expandedRadius) * invVertical;
-  float ndcMaxY = (viewY + expandedRadius) * invVertical;
+  // dirt_road.vert flips view Y before the surface transform (Vulkan viewport).
+  float ndcMinY = (-viewY - expandedRadius) * invVertical;
+  float ndcMaxY = (-viewY + expandedRadius) * invVertical;
+  // The near face alone does NOT enclose off-axis spheres: a positive min-X
+  // projects closer to the center on the far face. Project both depth faces of
+  // the enclosing view-space box before taking extrema (also valid for ortho).
+  const float farDepth=viewZ+expandedRadius;
+  const float farHorizontal=1.f/(projectionDivisor(frustum,farDepth)*projectionHalfWidth(frustum));
+  const float farVertical=1.f/(projectionDivisor(frustum,farDepth)*projectionHalfHeight(frustum));
+  ndcMinX=std::min(ndcMinX,(viewX-expandedRadius)*farHorizontal);
+  ndcMaxX=std::max(ndcMaxX,(viewX+expandedRadius)*farHorizontal);
+  ndcMinY=std::min(ndcMinY,(-viewY-expandedRadius)*farVertical);
+  ndcMaxY=std::max(ndcMaxY,(-viewY+expandedRadius)*farVertical);
   if (!std::isfinite(ndcMinX) || !std::isfinite(ndcMaxX) || !std::isfinite(ndcMinY) ||
       !std::isfinite(ndcMaxY)) return result;
   // Transform all four corners, then rebuild the conservative AABB in the
@@ -242,10 +253,16 @@ HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, co
   surfaceMaxY = std::clamp(surfaceMaxY, -1.0f, 1.0f);
   if (surfaceMinX >= surfaceMaxX || surfaceMinY >= surfaceMaxY) return result;
 
-  result.minU = surfaceMinX * 0.5f + 0.5f;
-  result.maxU = surfaceMaxX * 0.5f + 0.5f;
-  result.minV = surfaceMinY * 0.5f + 0.5f;
-  result.maxV = surfaceMaxY * 0.5f + 0.5f;
+  if (!std::isfinite(screenTransform.viewportX) || !std::isfinite(screenTransform.viewportY) ||
+      !std::isfinite(screenTransform.viewportWidth) || !std::isfinite(screenTransform.viewportHeight) ||
+      screenTransform.viewportX < 0 || screenTransform.viewportY < 0 ||
+      screenTransform.viewportWidth <= 0 || screenTransform.viewportHeight <= 0 ||
+      screenTransform.viewportX + screenTransform.viewportWidth > 1.00001f ||
+      screenTransform.viewportY + screenTransform.viewportHeight > 1.00001f) return result;
+  result.minU = screenTransform.viewportX + (surfaceMinX * 0.5f + 0.5f) * screenTransform.viewportWidth;
+  result.maxU = screenTransform.viewportX + (surfaceMaxX * 0.5f + 0.5f) * screenTransform.viewportWidth;
+  result.minV = screenTransform.viewportY + (surfaceMinY * 0.5f + 0.5f) * screenTransform.viewportHeight;
+  result.maxV = screenTransform.viewportY + (surfaceMaxY * 0.5f + 0.5f) * screenTransform.viewportHeight;
   // Exact CPU counterpart of dirt_road.vert's perspective projection:
   // clipZ=(far*z-near*far)/(far-near), clipW=z. The HZB stores clipZ/clipW,
   // not view-space z. Expanded bounds already make this the nearest possible

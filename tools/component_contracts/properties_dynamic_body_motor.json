@@ -1,0 +1,253 @@
+{
+  "format": 1,
+  "source": "native/scene/dynamic_body_motor.h",
+  "tables": [
+    {
+      "name": "dynamicMotorNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "speed",
+          "label": "Velocidade",
+          "member": "speed",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 100,
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "acceleration",
+          "label": "Aceleração",
+          "member": "acceleration",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 1000,
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s²",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "braking",
+          "label": "Frenagem",
+          "member": "braking",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 1000,
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s²",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "air_control",
+          "label": "Controle no ar",
+          "member": "airControl",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 1,
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "jump_speed",
+          "label": "Velocidade do salto",
+          "member": "jumpSpeed",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 100,
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "probe_height",
+          "label": "Centro até os pés",
+          "member": "probeHeight",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": 100,
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Chão",
+            "unit": "m",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            },
+            "visible": {
+              "cpp": "dynamicMotorManualSupport"
+            },
+            "help": "Usado somente quando Apoio pela colisão está desligado."
+          }
+        },
+        {
+          "id": "probe_distance",
+          "label": "Alcance abaixo dos pés",
+          "member": "probeDistance",
+          "min": {
+            "cpp": "0.001f"
+          },
+          "max": 2,
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Chão",
+            "unit": "m",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "support_radius",
+          "label": "Raio de sondagem",
+          "member": "supportRadius",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 10,
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Chão",
+            "unit": "m",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            },
+            "visible": {
+              "cpp": "dynamicMotorManualSupport"
+            },
+            "help": "Usado somente quando Apoio pela colisão está desligado."
+          }
+        },
+        {
+          "id": "max_slope",
+          "label": "Rampa máxima",
+          "member": "maxSlopeDegrees",
+          "min": {
+            "cpp": "0"
+          },
+          "max": 89,
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Chão",
+            "unit": "°",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "DynamicBodyMotor"
+      }
+    },
+    {
+      "name": "dynamicMotorBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Habilitado",
+          "member": "enabled",
+          "presentation": {
+            "group": "Locomoção",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "inherit_platform_velocity",
+          "label": "Acompanhar plataforma",
+          "member": "inheritPlatformVelocity",
+          "presentation": {
+            "group": "Chão",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        },
+        {
+          "id": "automatic_support",
+          "label": "Apoio pela colisão",
+          "member": "automaticSupport",
+          "presentation": {
+            "group": "Chão",
+            "help": "Sonda a superfície real do colisor do solver, com escala, rotação e partes compostas. Cinco amostras; alcance abaixo da forma em metros.",
+            "consumer": "runtime/scene_dynamic_motor.cpp",
+            "invalidates": {
+              "cpp": "0u"
+            }
+          }
+        }
+      ],
+      "defaults": {
+        "type": "DynamicBodyMotor"
+      }
+    }
+  ]
+}

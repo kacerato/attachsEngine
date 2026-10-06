@@ -377,6 +377,33 @@ bool EditorMapScene::collisionHullPreview(std::span<const u32> slots,float toler
   out.vertexCount=entry->vertexCount;out.faceCount=entry->faceCount;out.diagnostic=entry->diagnostic;
   return entry->diagnostic.empty()&&!entry->triangles.empty();
 }
+bool EditorMapScene::intersectColliderMesh(std::span<const u32> slots,bool convex,float tolerance,
+    const EditorRay &ray,const float pose[16],float &distance) const {
+  if(!ray.valid || slots.empty())return false;
+  if(convex) {
+    CollisionHullPreview preview;if(!collisionHullPreview(slots,tolerance,preview))return false;
+    auto entry=std::find_if(collisionHullCache_.begin(),collisionHullCache_.end(),[&](const auto &item) {
+      return item.tolerance==tolerance && item.slots.size()==slots.size() &&
+          std::equal(item.slots.begin(),item.slots.end(),slots.begin());
+    });
+    if(entry==collisionHullCache_.end())return false;
+    if(!entry->pickMesh) {
+      auto mesh=std::make_shared<EditorPickMesh>();if(!mesh->build(entry->triangles))return false;
+      entry->pickMesh=std::move(mesh);
+    }
+    return entry->pickMesh->intersect(ray.origin,ray.direction,pose,distance,ray.minimumDistance,ray.maximumDistance);
+  }
+  bool hit=false;float nearest=ray.maximumDistance;
+  for(const auto slot:slots) {
+    std::span<const EditorPickMesh::Triangle> triangles;float relative[16],model[16],depth;
+    if(!localGeometry(slot,triangles,relative))return false;
+    runtime::multiplyMatrix(pose,relative,model);
+    const auto mesh=pickMesh(slot-1);
+    if(mesh && mesh->intersect(ray.origin,ray.direction,model,depth,ray.minimumDistance,nearest)) {nearest=depth;hit=true;}
+  }
+  if(hit)distance=nearest;
+  return hit;
+}
 bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
   return pickSlotGeometry(document,id,0,out);
 }

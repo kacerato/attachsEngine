@@ -1,0 +1,71 @@
+> Task :app:publishManagedCore UP-TO-DATE
+> Task :app:verifyPackagedOpenSsl
+> Task :app:prepareEngineAssets UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :app:mergeReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:createReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+
+> Task :app:processReleaseMainManifest
+C:\Users\donod\Downloads\atchengine\android\app\src\main\AndroidManifest.xml:21:9-41 Warning:
+	android:extractNativeLibs should not be specified in this source AndroidManifest.xml file. See https://d.android.com/guide/topics/manifest/application-element#extractNativeLibs for more information.
+The AGP Upgrade Assistant can remove the attribute from the AndroidManifest.xml file and update the build file accordingly. See https://d.android.com/studio/build/agp-upgrade-assistant for more information.
+
+> Task :app:processReleaseManifest UP-TO-DATE
+> Task :app:processReleaseManifestForPackage UP-TO-DATE
+> Task :app:processReleaseResources UP-TO-DATE
+
+> Task :app:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:buildCMakeRelWithDebInfo[arm64-v8a][aether_android,aether_transform]
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:lintVitalReportRelease
+> Task :app:mergeReleaseNativeLibs
+> Task :app:dexBuilderRelease
+> Task :app:lintVitalRelease
+> Task :app:desugarReleaseFileDependencies UP-TO-DATE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:mergeExtDexRelease UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:mergeReleaseGlobalSynthetics UP-TO-DATE
+> Task :app:mergeReleaseShaders UP-TO-DATE
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols
+> Task :app:mergeReleaseAssets
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:extractReleaseVersionControlInfo UP-TO-DATE
+> Task :app:processReleaseJavaRes NO-SOURCE
+> Task :app:mergeReleaseJavaResource UP-TO-DATE
+> Task :app:optimizeReleaseResources UP-TO-DATE
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningRelease UP-TO-DATE
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:mergeReleaseNativeDebugMetadata
+> Task :app:compressReleaseAssets
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleRelease
+
+BUILD SUCCESSFUL in 7m 17s
+53 actionable tasks: 19 executed, 34 up-to-date

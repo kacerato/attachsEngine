@@ -1,0 +1,20 @@
+[
+  {
+    "slug": "nivel-0",
+    "entities": 133,
+    "assets": 3,
+    "maximumGraphics": false
+  },
+  {
+    "slug": "reservatorio-04",
+    "entities": 181,
+    "assets": 4,
+    "maximumGraphics": true
+  },
+  {
+    "slug": "ultimo-turno",
+    "entities": 147,
+    "assets": 4,
+    "maximumGraphics": false
+  }
+]

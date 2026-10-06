@@ -158,9 +158,14 @@ somente recursos que precisam de compartilhamento: Theme, Sprite/Font e Template
 Estado de Pressed/foco/rolagem é runtime; referências e defaults são authoring;
 medidas e geometria são caches. Não salvar ponteiro, GPU handle ou ID de janela.
 
-AEUI 3 deve ser introduzido quando surgirem novos dados persistentes, com migração
-AEUI 1/2 e defaults documentados. Manter IDs, referências remapeáveis e erros
-por campo. Estruturas novas da ABI são anexadas com layout/versão verificados.
+AEUI 4 já persiste as ações ordenadas e transições; AEUI 1/2/3 continuam legíveis
+com defaults documentados. A apresentação por entidade usa o componente
+`astra.ui.canvas` v1 no arquivo de cena e uma referência GUID a `UiDocument`;
+não exige regravar o documento de UI em outro formato. ABI 42 acrescenta o
+endereçamento por instância sem deslocar os campos anteriores. Uma próxima
+versão de AEUI dependerá do contrato de skins/layout/hit e de migração testada.
+Manter IDs, referências remapeáveis e erros por campo. Estruturas novas da ABI
+são anexadas com layout/versão verificados.
 Extensões não reconhecidas geram erro explícito, nunca controle vazio silencioso.
 
 ## A — Aparência livre, temas e partes

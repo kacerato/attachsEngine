@@ -27,7 +27,15 @@ bool GuiWorkbench::save() {
   if (!storage_ || previewing_) return false;
   history_.commit(document_);
   if(!storage_(document_,resource_,true,diagnostic_)) return false;
-  diagnostic_="Interface salva";return true;
+  markSaved();diagnostic_="Interface salva";return true;
+}
+bool GuiWorkbench::openResource(std::string_view path) {
+  if(path==resource_)return true;
+  if(dirty()){diagnostic_="Salve o documento atual antes de trocar de canvas";return false;}
+  if(!storage_ || path.empty() || path.size()>=sizeof(resource_) || path.find('\0')!=std::string_view::npos)return false;
+  GuiDocument candidate;
+  if(!storage_(candidate,path,false,diagnostic_))return false;
+  cancelPointers();immediate_.cancelInput();document_=std::move(candidate);setResource(path);history_.clear();select(0);setPreview(false);markSaved();return true;
 }
 bool GuiWorkbench::setResource(std::string_view path) {
   if(path.empty() || path.size()>=sizeof(resource_) || path.find('\0')!=std::string_view::npos) return false;
@@ -71,7 +79,65 @@ void GuiWorkbench::setPreview(bool enabled) {
   history_.commit(document_); previewing_=enabled;
   if (enabled) { preview_.load(document_);preview_.setImages(images_); preview_.layout(canvas_); lastEvent_.clear(); }
 }
+GuiId GuiWorkbench::create(GuiKind kind) {
+  if(previewing_)return 0;
+  history_.commit(document_);history_.begin(document_);
+  const auto *parent=document_.find(selection_);
+  const auto id=document_.create(kind,parent&&(parent->kind==GuiKind::Panel||guiContainer(parent->kind))?parent->id:0);
+  if(id){selection_=id;canvasSettings_=false;}
+  history_.commit(document_);return id;
+}
+bool GuiWorkbench::command(NodeCommand command) {
+  const auto *node=document_.find(selection_);if(!node || previewing_)return false;
+  const auto parent=node->parent;
+  history_.commit(document_);history_.begin(document_);bool changed=false;
+  switch(command) {
+    case NodeCommand::Up:changed=document_.reorder(selection_,-1);break;
+    case NodeCommand::Down:changed=document_.reorder(selection_,1);break;
+    case NodeCommand::Duplicate:if(const auto id=document_.duplicate(selection_)){selection_=id;changed=true;}break;
+    case NodeCommand::Remove:changed=document_.remove(selection_);if(changed)selection_=parent;break;
+  }
+  history_.commit(document_);return changed;
+}
+bool GuiWorkbench::drawInspector(const UiRect &area,const UiRect &surface,UiDrawList &list,
+                                 std::string_view owner,u32 sharedInstances,float dt) {
+  area_=area;canvas_={};embedded_=true;canvasSettings_=false;previewing_=false;
+  if(area.isEmpty())return false;
+  immediate_.begin(surface.right(),surface.bottom(),dt);
+  ImGui::SetNextWindowPos({area.x,area.y});ImGui::SetNextWindowSize({area.width,area.height});
+  ImGui::Begin("UI Inspector##attachs",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings);
+  const float cell=std::max(40.f,(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x)*.5f);
+  const bool back=ImGui::Button("< Objeto / Canvas",{cell,36});
+  ImGui::SameLine();
+  if(ImGui::Button("Salvar UI",{cell,36}))save();
+  ImGui::TextWrapped("%.*s / UI",static_cast<int>(owner.size()),owner.data());
+  ImGui::TextWrapped("%s%s | Fonte comum: %u Canvas",resource_,dirty()?" *":"",sharedInstances);
+  if(ImGui::Button("+ Elemento",{cell,36}))ImGui::OpenPopup("create_context");
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!selection_);
+  if(ImGui::Button("Acoes do elemento",{cell,36}))ImGui::OpenPopup("element_context");
+  ImGui::EndDisabled();
+  if(ImGui::BeginPopup("create_context")) {
+    for(u32 i=0;i<kGuiKindCount;++i)if(ImGui::MenuItem(guiKindName(static_cast<GuiKind>(i))))create(static_cast<GuiKind>(i));
+    ImGui::EndPopup();
+  }
+  if(ImGui::BeginPopup("element_context")) {
+    ImGui::TextUnformatted("Altera a fonte de todos os Canvas vinculados.");
+    ImGui::Separator();
+    if(ImGui::MenuItem("Duplicar"))command(NodeCommand::Duplicate);
+    if(ImGui::MenuItem("Subir"))command(NodeCommand::Up);
+    if(ImGui::MenuItem("Descer"))command(NodeCommand::Down);
+    ImGui::Separator();
+    if(ImGui::MenuItem("Excluir"))command(NodeCommand::Remove);
+    ImGui::EndPopup();
+  }
+  ImGui::Separator();
+  ImGui::BeginChild("context_properties",{0,0});properties();
+  if(!diagnostic_.empty())ImGui::TextWrapped("%s",diagnostic_.c_str());
+  ImGui::EndChild();ImGui::End();immediate_.end(list);return back;
+}
 void GuiWorkbench::tree() {
+  // The scene Inspector uses the same document and history as this workbench.
   ImGui::TextUnformatted("ELEMENTOS");
   ImGui::Separator();
   if (ImGui::Button("+ Criar",{-1,36})) ImGui::OpenPopup("create");
@@ -111,20 +177,64 @@ void GuiWorkbench::properties() {
   ImGui::TextUnformatted("PROPRIEDADES"); ImGui::Separator();
   if(canvasSettings_){canvasProperties();return;}
   const auto *stored=document_.find(selection_);
-  if (!stored) { ImGui::TextWrapped("Selecione na lista ou toque em um elemento no canvas. Arraste para posicionar."); return; }
+  if (!stored) { ImGui::TextWrapped("%s",embedded_?"Crie um elemento ou selecione um filho deste Canvas na Hierarquia.":"Selecione na lista ou toque em um elemento no canvas. Arraste para posicionar."); return; }
   GuiNode node=*stored;
   ImGui::PushID(static_cast<int>(node.id));
   const auto iconAt=ImGui::GetCursorScreenPos();
-  const auto icon=guiContainer(node.kind)?UiIcon::UiAutoLayout:node.kind==GuiKind::Image?UiIcon::AssetsTexture:UiIcon::UiInterfaceCanvas;
+  const auto icon=node.kind==GuiKind::Joystick?UiIcon::UiJoystick:node.kind==GuiKind::ActionButton?UiIcon::UiActionButton:node.kind==GuiKind::LookArea?UiIcon::UiLookArea:guiContainer(node.kind)?UiIcon::UiAutoLayout:node.kind==GuiKind::Image?UiIcon::AssetsTexture:UiIcon::UiInterfaceCanvas;
   insertPropertyIcon(immediate_,propertyIconDrawing_,area_,icon,iconAt,20);ImGui::Dummy({20,20});ImGui::SameLine();
   ImGui::Text("%s / ID %u",guiKindName(node.kind),node.id);
   ImGui::SetNextItemWidth(-1);
   bool changed=editString("Nome",node.name,257,immediate_);bool previewMotion=false;
-  if(!guiContainer(node.kind) && node.kind!=GuiKind::Image)changed=editString("Texto",node.text,4097,immediate_)||changed;
+  if(!guiContainer(node.kind) && node.kind!=GuiKind::Image && node.kind!=GuiKind::Joystick && node.kind!=GuiKind::LookArea)changed=editString("Texto",node.text,4097,immediate_)||changed;
+  if(guiInputKind(node.kind)&&ImGui::CollapsingHeader("Entrada do jogo",ImGuiTreeNodeFlags_DefaultOpen)) {
+    auto &c=node.control;const bool button=node.kind==GuiKind::ActionButton;
+    const auto choices=inputActions_?inputActions_():std::vector<InputActionChoice>{};bool valid=false;
+    for(const auto &a:choices)if(a.id==c.action&&a.button==button&&(!button||a.press))valid=true;
+    if(ImGui::BeginCombo("Acao",c.action.empty()?"Escolha uma acao":c.action.c_str())) {
+      for(const auto &a:choices)if(a.button==button&&(!button||a.press))if(ImGui::Selectable(a.id.c_str(),a.id==c.action)){c.action=a.id;changed=true;}
+      if(choices.empty())ImGui::TextWrapped("Configure as acoes de entrada da cena.");
+      ImGui::EndCombo();
+    }
+    if(!valid)ImGui::TextWrapped("Vinculo ausente ou incompativel. Vetores exigem Axis2D; botao exige Button/Press.");
+    ImGui::TextWrapped("Jogador e camera sao referencias no componente Canvas. Sem jogador, a acao pertence ao mapa global.");
+    if(node.kind==GuiKind::Joystick) {
+      int mode=static_cast<int>(c.mode);if(ImGui::Combo("Origem",&mode,"Fixa\0Flutuante no toque\0Dinamica acompanha o dedo\0")){c.mode=static_cast<GuiStickMode>(mode);changed=true;}
+      changed=ImGui::DragFloat("Raio de entrada",&c.inputRadius,1,1,8192)||changed;
+      changed=ImGui::SliderFloat("Zona morta",&c.deadzone,0,std::max(0.f,.99f-c.outerDeadzone))||changed;
+    }
+    if(!button&&ImGui::TreeNode("Resposta avancada")) {
+      changed=ImGui::DragFloat("Sensibilidade",&c.sensitivity,.01f,.001f,1000)||changed;
+      if(node.kind==GuiKind::Joystick) {
+        int axis=static_cast<int>(c.axis),gate=static_cast<int>(c.gate);
+        if(ImGui::Combo("Eixos",&axis,"Livre\0Horizontal\0Vertical\0")){c.axis=static_cast<GuiStickAxis>(axis);changed=true;}
+        if(ImGui::Combo("Limite",&gate,"Circular\0Quadrado\0")){c.gate=static_cast<GuiStickGate>(gate);changed=true;}
+        changed=ImGui::SliderFloat("Corte externo",&c.outerDeadzone,0,std::max(0.f,.99f-c.deadzone))||changed;
+        changed=ImGui::SliderFloat("Expoente",&c.exponent,.1f,8)||changed;
+      }
+      ImGui::TreePop();
+    }
+    if(node.kind==GuiKind::Joystick&&ImGui::TreeNode("Visual do joystick")) {
+      changed=editColor("Cor da base",node.foreground)||changed;
+      changed=editColor("Cor do puxador",node.accent)||changed;
+      changed=ImGui::Checkbox("Mostrar base",&c.showBase)||changed;changed=ImGui::Checkbox("Mostrar puxador",&c.showKnob)||changed;
+      changed=ImGui::DragFloat("Raio da base",&c.baseRadius,1,0,8192)||changed;
+      changed=ImGui::DragFloat("Raio do puxador",&c.knobRadius,1,0,8192)||changed;
+      changed=ImGui::SliderFloat("Retorno (s)",&c.returnSeconds,0,10)||changed;
+      changed=editString("Imagem da base",c.baseImage,1025,immediate_)||changed;
+      if(ImGui::Button("Escolher base")){imageTarget_=1;imagePaths_=imageChoices_?imageChoices_():std::vector<std::string>{};ImGui::OpenPopup("images");}
+      changed=editString("Imagem do puxador",c.knobImage,1025,immediate_)||changed;
+      if(ImGui::Button("Escolher puxador")){imageTarget_=2;imagePaths_=imageChoices_?imageChoices_():std::vector<std::string>{};ImGui::OpenPopup("images");}
+      ImGui::TreePop();
+    }
+    if(previewing_)if(const auto *state=preview_.controlState(node.id))ImGui::Text("Valor %.3f / %.3f | dedo %u | %s",state->value.x,state->value.y,state->pointer,state->down?"capturado":"solto");
+  }
   auto editPair=[&](const char *label,UiPoint &v){float values[]{v.x,v.y};ImGui::TextUnformatted(label);ImGui::SetNextItemWidth(-1);const bool edit=ImGui::DragFloat2((std::string("##")+label).c_str(),values,1,0,100000);keepActiveFieldVisible();v={values[0],values[1]};return edit;};
   if(node.kind==GuiKind::Image && ImGui::CollapsingHeader("Imagem",ImGuiTreeNodeFlags_DefaultOpen)) {
     changed=editString("Recurso do projeto",node.image,1025,immediate_)||changed;
-    if(ImGui::Button("Escolher imagem")){imagePaths_=imageChoices_?imageChoices_():std::vector<std::string>{};ImGui::OpenPopup("images");}
+    if(ImGui::Button("Escolher imagem")){imageTarget_=0;imagePaths_=imageChoices_?imageChoices_():std::vector<std::string>{};ImGui::OpenPopup("images");}
+  }
+  if(node.kind==GuiKind::Image||node.kind==GuiKind::Joystick) {
     // Follow the available editor surface when Android's IME changes its height.
     ImGui::SetNextWindowPos({area_.x+area_.width*.5f,area_.y+16},ImGuiCond_Always,{.5f,0});
     ImGui::SetNextWindowSize({std::max(120.f,std::min(580.f,area_.width-32)),std::max(100.f,std::min(440.f,area_.height-32))},ImGuiCond_Always);
@@ -147,19 +257,22 @@ void GuiWorkbench::properties() {
       ImGuiListClipper clipper;clipper.Begin(static_cast<int>(matches.size()));
       while(clipper.Step())for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
         const auto &path=imagePaths_[matches[static_cast<usize>(i)]];
-        if(ImGui::Selectable(path.c_str(),path==node.image)) {node.image=path;changed=true;ImGui::CloseCurrentPopup();}
+        auto &selected=imageTarget_==1?node.control.baseImage:imageTarget_==2?node.control.knobImage:node.image;
+        if(ImGui::Selectable(path.c_str(),path==selected)) {selected=path;changed=true;ImGui::CloseCurrentPopup();}
       }
       ImGui::EndChild();ImGui::EndPopup();
     }
+  }
+  if(node.kind==GuiKind::Image) {
     int fit=static_cast<int>(node.imageFit);if(ImGui::Combo("Ajuste",&fit,"Esticar\0Conter\0Cobrir\0")){node.imageFit=static_cast<GuiImageFit>(fit);changed=true;}
     changed=editColor("Tinta",node.imageTint)||changed;
     if(const auto *image=images_?images_->find(node.image):nullptr){if(!image->error.empty())ImGui::TextWrapped("%s",image->error.c_str());else ImGui::Text("%u x %u pixels",image->width,image->height);}
   }
   if(ImGui::CollapsingHeader("Interacao",ImGuiTreeNodeFlags_DefaultOpen)) {
-    const bool builtIn=node.kind==GuiKind::Button || node.kind==GuiKind::Toggle || node.kind==GuiKind::Slider;
+    const bool builtIn=node.kind==GuiKind::Button || node.kind==GuiKind::Toggle || node.kind==GuiKind::Slider || guiInputKind(node.kind);
     if(builtIn)ImGui::TextUnformatted("Controle com entrada propria");
-    if(node.kind!=GuiKind::Button)changed=ImGui::Checkbox(builtIn?"Emitir clique adicional":"Clicavel",&node.interaction.clickable)||changed;
-    if(node.interaction.clickable || node.kind==GuiKind::Button) {
+    if(node.kind!=GuiKind::Button&&node.kind!=GuiKind::ActionButton)changed=ImGui::Checkbox(builtIn?"Emitir clique adicional":"Clicavel",&node.interaction.clickable)||changed;
+    if(node.interaction.clickable || node.kind==GuiKind::Button || node.kind==GuiKind::ActionButton) {
       ImGui::TextUnformatted("Ao clicar");
       int action=static_cast<int>(node.interaction.action);ImGui::SetNextItemWidth(-1);
       if(ImGui::Combo("##click_action",&action,"Evento para script\0Alternar visibilidade\0Alternar habilitado\0Definir valor\0Iniciar animacao\0Parar e restaurar animacao\0")){node.interaction.action=static_cast<GuiClickAction>(action);changed=true;}
@@ -219,7 +332,7 @@ void GuiWorkbench::properties() {
       if(ImGui::Button("Subir") && actionSelection_>0){std::swap(node.actions[actionSelection_],node.actions[actionSelection_-1]);--actionSelection_;changed=true;}
       ImGui::SameLine();if(ImGui::Button("Descer") && actionSelection_+1<static_cast<int>(node.actions.size())){std::swap(node.actions[actionSelection_],node.actions[actionSelection_+1]);++actionSelection_;changed=true;}
       if(ImGui::Button("Remover acao")){node.actions.erase(node.actions.begin()+actionSelection_);changed=true;}
-      if(event==0 && !node.interaction.clickable && node.kind!=GuiKind::Button)ImGui::TextWrapped("Ative Clicavel em Interacao para emitir clique.");
+      if(event==0 && !node.interaction.clickable && node.kind!=GuiKind::Button && node.kind!=GuiKind::ActionButton)ImGui::TextWrapped("Ative o clique em Interacao para emitir esse evento.");
       if(event==1 && node.kind!=GuiKind::Toggle && node.kind!=GuiKind::Slider && node.kind!=GuiKind::Progress)ImGui::TextWrapped("Este tipo nao emite alteracao de valor.");
     }
   }
@@ -257,7 +370,7 @@ void GuiWorkbench::properties() {
       int easing=static_cast<int>(m.easing);if(ImGui::Combo("Curva",&easing,"Linear\0Suave\0Acelerar\0Desacelerar\0")){m.easing=static_cast<GuiEasing>(easing);changed=true;}
       changed=ImGui::Checkbox("Iniciar automaticamente",&m.autoPlay)||changed;
       changed=ImGui::Checkbox("Repetir",&m.loop)||changed;changed=ImGui::Checkbox("Ir e voltar",&m.pingPong)||changed;
-      if(ImGui::Button("Pre-visualizar animacao",{-1,0}))previewMotion=true;
+      if(!embedded_ && ImGui::Button("Pre-visualizar animacao",{-1,0}))previewMotion=true;
       ImGui::TextWrapped("Parar restaura a pose de autoria. Use Interagir para testar as acoes.");
     }
   }
@@ -337,14 +450,14 @@ void GuiWorkbench::properties() {
       changed=true;
     }
     changed=editColor("Fundo",node.background)||changed;
-    if(node.kind!=GuiKind::Image && !guiContainer(node.kind)) {
+    if(node.kind!=GuiKind::Image && !guiContainer(node.kind) && node.kind!=GuiKind::Joystick && node.kind!=GuiKind::LookArea) {
       changed=editColor("Texto / Controle",node.foreground)||changed;
       changed=ImGui::DragFloat("Fonte",&node.fontSize,0.5f,6,128,"%.1f")||changed;
       keepActiveFieldVisible();
     }
     if(node.kind==GuiKind::Button || node.kind==GuiKind::Toggle || node.kind==GuiKind::Slider || node.kind==GuiKind::Progress)
       changed=editColor("Destaque",node.accent)||changed;
-    changed=ImGui::DragFloat("Raio",&node.radius,0.5f,0,512,"%.1f")||changed;
+    changed=ImGui::DragFloat(node.kind==GuiKind::Joystick?"Raio do fundo":"Raio",&node.radius,0.5f,0,512,"%.1f")||changed;
     keepActiveFieldVisible();
   }
   if (changed) { history_.begin(document_); document_.update(node,diagnostic_); }
@@ -371,7 +484,7 @@ void GuiWorkbench::canvasProperties() {
   if(changed){history_.begin(document_);document_.setCanvas(canvas,diagnostic_);}if(!ImGui::IsAnyItemActive())history_.commit(document_);
 }
 void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &list,float dt) {
-  area_=area; if (area.isEmpty()) return;
+  embedded_=false;area_=area; if (area.isEmpty()) return;
   immediate_.begin(surface.right(),surface.bottom(),dt);
   ImGui::SetNextWindowPos({area.x,area.y}); ImGui::SetNextWindowSize({area.width,area.height});
   ImGui::Begin("Interface##attachs",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings);
@@ -384,11 +497,11 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
   bool preview=previewing_;
   if (ImGui::Checkbox("Interagir",&preview)) setPreview(preview);
   ImGui::SameLine();
-  ImGui::BeginDisabled(previewing_ || !history_.canUndo());
-  if (ImGui::Button("Desfazer")) history_.undo(document_);
+  ImGui::BeginDisabled(previewing_ || !(historyAvailable_?historyAvailable_(false):history_.canUndo()));
+  if (ImGui::Button("Desfazer")) {history_.commit(document_);if(historyAction_)historyAction_(false);else history_.undo(document_);}
   ImGui::EndDisabled(); ImGui::SameLine();
-  ImGui::BeginDisabled(previewing_ || !history_.canRedo());
-  if (ImGui::Button("Refazer")) history_.redo(document_);
+  ImGui::BeginDisabled(previewing_ || !(historyAvailable_?historyAvailable_(true):history_.canRedo()));
+  if (ImGui::Button("Refazer")) {if(historyAction_)historyAction_(true);else history_.redo(document_);}
   ImGui::EndDisabled();
   if(!tools_.empty()) {
     ImGui::SameLine();
@@ -405,7 +518,10 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
   ImGui::BeginDisabled(!storage_ || previewing_);
   if (ImGui::Button("Salvar")) save();
   ImGui::SameLine();
-  if (ImGui::Button("Abrir")) { history_.begin(document_); if (storage_(document_,resource_,false,diagnostic_)) selection_=0; history_.commit(document_); }
+  if (ImGui::Button("Abrir")) {
+    if(dirty())diagnostic_="Salve o documento atual antes de reabrir";
+    else {GuiDocument candidate;if(storage_(candidate,resource_,false,diagnostic_)){cancelPointers();document_=std::move(candidate);history_.clear();selection_=0;markSaved();}}
+  }
   ImGui::EndDisabled();
   ImGui::Separator();
   const bool compact=area.width<950;
@@ -473,9 +589,10 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
   immediate_.end(list);
 }
 bool GuiWorkbench::pointer(const UiPointerEvent &e) {
-  if(!captured_ && e.phase==UiPointerPhase::Move && area_.contains(e.position)) { immediate_.pointer(e);return true; }
+  const bool overlay=immediate_.overlayAt(e.position,embedded_?"UI Inspector##attachs":"Interface##attachs");
+  if(!captured_ && e.phase==UiPointerPhase::Move && (area_.contains(e.position)||overlay)) { immediate_.pointer(e);return true; }
   if(e.phase==UiPointerPhase::Down) {
-    if(captured_ || !area_.contains(e.position)) return false;
+    if(captured_ || (!area_.contains(e.position)&&!overlay)) return false;
     captured_=true;pointerId_=e.pointerId;
     canvasPointer_=canvas_.contains(e.position) && !immediate_.overlayAt(e.position,"Interface##attachs");
     if(canvasPointer_ && !previewing_) {

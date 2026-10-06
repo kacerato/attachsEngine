@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <time.h>
 #include <unistd.h>
@@ -66,6 +67,29 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
                                   const FrameProfileContext &context,
                                   u32 instances, u32 width, u32 height) {
   if (!enabled_) return;
+  const char *scene = context.sceneId != nullptr ? context.sceneId : "unknown";
+  // Reopening publishes a different render scene after the first frames.
+  // Never attribute its windows to the loading context. Camera motion, visible
+  // draws and DRS vary normally and must not restart a window every frame.
+  const bool identityChanged = identityValid_ &&
+      (std::strcmp(identityScene_, scene) != 0 ||
+       identityFingerprint_ != context.contentFingerprint || identityInstances_ != instances ||
+       identityRenderDraws_ != context.renderDrawCount || identityWidth_ != width ||
+       identityHeight_ != height || identityPostUiFused_ != context.postUiFused ||
+       (context.cameraLocked && (identityCameraPosition_[0]!=context.cameraPosition[0] ||
+        identityCameraPosition_[1]!=context.cameraPosition[1] || identityCameraPosition_[2]!=context.cameraPosition[2] ||
+        identityCameraYaw_!=context.cameraYaw || identityCameraPitch_!=context.cameraPitch)));
+  if (identityChanged) reset();
+  identityValid_ = true;
+  identityScene_ = scene;
+  identityFingerprint_ = context.contentFingerprint;
+  identityInstances_ = instances;
+  identityRenderDraws_ = context.renderDrawCount;
+  identityWidth_ = width;
+  identityHeight_ = height;
+  identityPostUiFused_ = context.postUiFused;
+  std::copy(context.cameraPosition,context.cameraPosition+3,identityCameraPosition_);
+  identityCameraYaw_=context.cameraYaw;identityCameraPitch_=context.cameraPitch;
   profiler::FrameCounters counters{};
   if (!readClock(CLOCK_MONOTONIC, counters.wallNs) ||
       !readClock(CLOCK_PROCESS_CPUTIME_ID, counters.processCpuNs) ||
@@ -75,8 +99,11 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     return;
   }
   if (contextPending_) {
-    const char *scene = context.sceneId != nullptr ? context.sceneId : "unknown";
-    __android_log_print(ANDROID_LOG_INFO, LogTag,
+    // log_print formats into a 1024-byte buffer on this Android runtime.
+    // Preserve the whole context in one log_write record (below Logcat's
+    // payload limit), including the flags that identify an A/B capture.
+    char contextJson[3072];
+    const int contextLength = std::snprintf(contextJson, sizeof(contextJson),
         "[FrameProfileContext] {\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,"
         "\"scene\":\"%s\",\"content_fingerprint\":\"%016llx\",\"target_fps\":%u,"
         "\"gpu_isolation\":\"%s\","
@@ -86,7 +113,9 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         "\"camera_pose\":[%.6f,%.6f,%.6f,%.6f,%.6f],"
         "\"draws\":%u,\"materials\":%u,\"textures\":%u,\"triangles\":%u,"
         "\"package_version\":%u,\"render_draws\":%u,\"lod_groups\":%u,"
-        "\"hzb_enabled\":%s,\"lod_enabled\":%s,"
+        "\"hzb_enabled\":%s,\"lod_enabled\":%s,\"post_ui_fused\":%s,\"spatial_chunks\":%u,"
+        "\"opaque_no_clip\":%s,\"full_detail_sampling\":%s,\"point_lighting_specialization\":%s,\"scene_reuse_enabled\":%s,"
+        "\"rendering_quality_locked\":%s,\"shadow_filter_taps\":%u,"
         "\"lod_error_px\":%.3f,\"coverage_lod_error_px\":%.3f,"
         "\"render_scale\":%.3f,\"render_width\":%u,\"render_height\":%u,"
         "\"visible_draws\":%u,\"culled_draws\":%u,\"submitted_draw_calls\":%u,"
@@ -107,6 +136,13 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         context.textureCount, context.triangleCount, context.packageVersion,
         context.renderDrawCount, context.lodGroupCount,
         context.hzbEnabled ? "true" : "false", context.lodEnabled ? "true" : "false",
+        context.postUiFused ? "true" : "false",
+        context.spatialChunks,
+        context.opaqueNoClip ? "true" : "false",
+        context.fullDetailSampling ? "true" : "false",
+        context.pointLightingSpecialization ? "true" : "false",
+        context.sceneReuseEnabled?"true":"false",
+        context.renderingQualityLocked?"true":"false",context.shadowFilterTaps,
         context.lodPixelErrorBudget, context.coverageLodPixelErrorBudget,
         context.renderScale, context.renderWidth, context.renderHeight,
         context.visibleDrawCount,
@@ -117,6 +153,11 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         context.hzbSkippedCameraMotionDrawCount,
         context.hzbSkippedBudgetDrawCount,
         instances, width, height);
+    if (contextLength > 0 && static_cast<usize>(contextLength) < sizeof(contextJson)) {
+      __android_log_write(ANDROID_LOG_INFO, LogTag, contextJson);
+    } else {
+      __android_log_write(ANDROID_LOG_ERROR, LogTag, "[FrameProfileContext] contexto excede limite; coleta rejeitada.");
+    }
     contextPending_ = false;
   }
   if (phases.gpuFrameMs > 0.0) {
@@ -145,6 +186,9 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     }
     renderScaleLast_ = scale;
     ++renderScaleSamples_;
+    if(context.sceneReused) ++sceneReusedFrames_;
+    if(context.opaqueNoClip && !context.sceneReused) ++opaqueNoClipFrames_;
+    if(context.pointLightingSpecialization && !context.sceneReused) ++pointLightingFrames_;
   }
   if (result != profiler::FrameSampleResult::WindowReady) return;
   profiler::FrameProfileSummary summary{};
@@ -159,14 +203,14 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
       "{\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
       "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f,"
-      "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu",
+      "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu,\"scene_reused_frames\":%u,\"opaque_no_clip_frames\":%u,\"point_lighting_frames\":%u",
       ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(++window_), build,
       instances, width, height,
       summary.samples, summary.elapsedMs, summary.presentFps, summary.warmupSamples,
       summary.warmupProcessCpuMaxMs,
       static_cast<unsigned long long>(context.cameraRouteFrameOrdinal),
       context.visibleDrawCount,
-      static_cast<unsigned long long>(context.visibleTriangleCount));
+      static_cast<unsigned long long>(context.visibleTriangleCount),sceneReusedFrames_,opaqueNoClipFrames_,pointLightingFrames_);
   if (used < 0 || static_cast<size_t>(used) >= sizeof(json)) return;
   // Vetor compacto [mean,p50,p95,p99,max] por métrica. Cada entrada do Logcat é
   // truncada em silêncio perto de 1023 bytes, e a janela v3 já ocupava 937 com
@@ -331,6 +375,9 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   collapsedAttributionFrames_ = 0;
   attributionSampleFrames_ = 0;
   renderScaleSamples_ = 0;
+  sceneReusedFrames_=0;
+  opaqueNoClipFrames_=0;
+  pointLightingFrames_=0;
 }
 
 } // namespace ae::platform::android

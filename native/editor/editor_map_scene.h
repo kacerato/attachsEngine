@@ -122,6 +122,10 @@ public:
   // a tolerância cria uma entrada distinta, sem cozinhar novamente por frame.
   bool collisionHullPreview(std::span<const u32> assetSlots,float hullTolerance,
                             CollisionHullPreview &out) const;
+  // Authoring-surface query: full source triangles or cooked preview hull,
+  // never the visual bounds sphere. BVHs follow the existing resource caches.
+  bool intersectColliderMesh(std::span<const u32> assetSlots,bool convex,float hullTolerance,
+                             const EditorRay &ray,const float pose[16],float &distance) const;
   bool pickGeometry(const runtime::SceneGraph &document, EditorEntityId id, EditorPickCandidate &out) const;
   bool pickSlotGeometry(const runtime::SceneGraph &document, EditorEntityId id, u32 slot, EditorPickCandidate &out) const;
   // Materiais do projeto (MaterialAsset) disponíveis para resolver slots. Trocar
@@ -323,6 +327,7 @@ private:
     std::vector<u32> slots;
     float tolerance=0;
     std::vector<EditorPickMesh::Triangle> triangles;
+    std::shared_ptr<const EditorPickMesh> pickMesh;
     std::string diagnostic;
     u32 inputPointCount=0,vertexCount=0,faceCount=0;
   };

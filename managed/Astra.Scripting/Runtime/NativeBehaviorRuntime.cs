@@ -46,6 +46,11 @@ public static unsafe class NativeBehaviorRuntime
         public float NormalX,NormalY,NormalScale,NormalOpacity,PressedX,PressedY,PressedScale,PressedOpacity,DisabledX,DisabledY,DisabledScale,DisabledOpacity;
         public uint NormalTint,PressedTint,DisabledTint;
     }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeGuiControl {
+        public uint Mode,Axis,Gate,ShowBase,ShowKnob,Pressed,Pointer,Device;
+        public float InputRadius,BaseRadius,KnobRadius,Deadzone,OuterDeadzone,Exponent,Sensitivity,ReturnSeconds,X,Y;
+    }
     /// <summary>Espelho de <c>ae::scene::ScriptQueryFilter</c>.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeQueryFilter
@@ -86,7 +91,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v42). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v45). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -222,7 +227,9 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*,uint,uint,uint,NativeGuiBehavior*,int> GuiBehavior;
         public delegate* unmanaged<void*,uint,uint,uint,uint,NativeGuiAction*,int> GuiAction;
         public delegate* unmanaged<void*,uint,uint,uint,NativeGuiTransitions*,int> GuiTransitions;
-        // v42 — último campo do núcleo; o resto entra por famílias nomeadas.
+        public delegate* unmanaged<void*,uint,ulong,ulong,ulong> GuiInstance;
+        public delegate* unmanaged<void*,uint,ulong,uint,uint,uint,uint,void*,uint,byte*,int,float,int> GuiInstanceRequest;
+        // v45 — último campo do núcleo; o resto entra por famílias nomeadas.
         public delegate* unmanaged<void*, byte*, int, uint*, uint*, void*> Extension;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
@@ -242,7 +249,7 @@ public static unsafe class NativeBehaviorRuntime
             ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
             AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
             SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null && GetActiveSelf != null &&
-            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null && AudioCommand != null && GuiCommand != null && GuiProperties != null && GuiText != null && GuiSizing != null && GuiCanvas != null && GuiBehavior != null && GuiAction != null && GuiTransitions != null && Extension != null;
+            GetTag != null && SetTag != null && CompareTag != null && FindTagged != null && AddBehavior != null && DestroyAfter != null && Instantiate != null && FinishInstantiation != null && CreatePrimitive != null && InstantiatePrefab != null && InstantiationAttachments != null && SetTriple != null && Body2DCommand != null && Query2D != null && PathPointCommand != null && PathRuntimeCommand != null && AudioSnapshot != null && TimeSnapshot != null && SetTimeScale != null && GroupMembership != null && FindGroup != null && GroupAt != null && InputBindingCommand != null && InputProfile != null && InputCaptureCommand != null && TimerCommand != null && TweenCommand != null && NumberTweenCreate != null && NumberTweenCommand != null && CharacterSnapshot != null && BodyCommand != null && FieldQuery != null && ObjectLayer != null && InputActionCommand != null && AudioCommand != null && GuiCommand != null && GuiProperties != null && GuiText != null && GuiSizing != null && GuiCanvas != null && GuiBehavior != null && GuiAction != null && GuiTransitions != null && GuiInstance != null && GuiInstanceRequest != null && Extension != null;
     }
 
     /// <summary>Família <c>astra.component.operations</c> v1 (native/scene/script_extensions.h).</summary>
@@ -339,8 +346,8 @@ public static unsafe class NativeBehaviorRuntime
         public float Delta,UnscaledDelta,TimeScale,FrameScale;
     }
 
-    private sealed class SceneAdapter(SceneAccess access) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess, IComponentOperationAccess,
-        IGameViewAccess, IDebugDrawAccess, IHierarchyChangeAccess, IHapticsAccess, IProjectScenesAccess
+    private sealed class SceneAdapter(SceneAccess access,ulong guiInstance=0,ISceneAccess? guiSource=null) : ISceneAccess, IAudioVoiceAccess, ITimeSceneAccess, IGuiAccess, IGuiAdvancedAccess, IGuiBehaviorAccess, IGuiStateAccess, IGuiInstanceAccess, IGuiControlAccess, IGuiInputAccess,
+        IComponentOperationAccess, IGameViewAccess, IDebugDrawAccess, IHierarchyChangeAccess, IHapticsAccess, IProjectScenesAccess
     {
         // index negativo lê a cena ativa; senão o nome na posição do catálogo.
         private string ReadSceneName(NativeSceneOperations* scenes, int index)
@@ -521,7 +528,7 @@ public static unsafe class NativeBehaviorRuntime
         private static readonly byte[] EnabledProperty = "enabled"u8.ToArray();
         private bool _active = true;
         private readonly int _ownerThread = Environment.CurrentManagedThreadId;
-        private bool Accessible => _active && Environment.CurrentManagedThreadId == _ownerThread;
+        private bool Accessible => _active && Environment.CurrentManagedThreadId == _ownerThread && (guiSource is not SceneAdapter source || source.Accessible);
         public void Invalidate() => _active = false;
         public SimulationTimeState ReadTime() {
             if(!Accessible) throw new WorldException(WorldStatus.NotRunning,"Time.Read");
@@ -890,6 +897,40 @@ public static unsafe class NativeBehaviorRuntime
             if(!Accessible) return false;
             return access.AudioCommand(access.Context,id,world,generation,instance,(uint)command,seconds)!=0;
         }
+        private readonly Dictionary<ulong,WeakReference<SceneAdapter>> guiScopes=[];
+        public ulong GuiInstanceId=>guiInstance;
+        public ISceneAccess GuiSource=>guiSource??this;
+        public ISceneAccess GuiForCanvas(uint world,ulong owner,ulong component) {
+            if(guiSource is SceneAdapter root)return root.GuiForCanvas(world,owner,component);
+            if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"scene UI");
+            ulong id=access.GuiInstance(access.Context,world,owner,component);
+            if(id==0)throw new WorldException(LastStatus,"scene UI instance");
+            if(!guiScopes.TryGetValue(id,out var reference)||!reference.TryGetTarget(out var scope)) {
+                // The lookup cache cannot retain every canvas ever destroyed.
+                // Existing wrappers still reject expired leases in native code.
+                foreach(var key in guiScopes.Keys.ToArray()) {
+                    NativeGuiCanvas probe=default;
+                    if(!guiScopes[key].TryGetTarget(out _)||access.GuiInstanceRequest(access.Context,world,key,4,0,0,0,&probe,(uint)sizeof(NativeGuiCanvas),null,0,0)==0)guiScopes.Remove(key);
+                }
+                scope=new(access,id,GuiSource);guiScopes[id]=new(scope);
+                access.GuiInstance(access.Context,world,owner,component);
+            }
+            return scope;
+        }
+        private int GuiDispatch(uint request,uint world,uint node,uint op,uint index,void* payload,uint size,byte* text=null,int length=0,float value=0) {
+            if(guiInstance!=0||request>=8)return access.GuiInstanceRequest(access.Context,world==0?WorldId:world,guiInstance,request,node,op,index,payload,size,text,length,value);
+            return request switch {
+                0=>access.GuiCommand(access.Context,world,node,op,text,length,value,(NativeGuiState*)payload),
+                1=>access.GuiProperties(access.Context,world,node,op,(NativeGuiProperties*)payload),
+                2=>access.GuiText(access.Context,world,node,op,text,length),
+                3=>access.GuiSizing(access.Context,world,node,op,(NativeGuiSizing*)payload),
+                4=>access.GuiCanvas(access.Context,world,op,(NativeGuiCanvas*)payload),
+                5=>access.GuiBehavior(access.Context,world,node,op,(NativeGuiBehavior*)payload),
+                6=>access.GuiAction(access.Context,world,node,op,index,(NativeGuiAction*)payload),
+                7=>access.GuiTransitions(access.Context,world,node,op,(NativeGuiTransitions*)payload),
+                _=>throw new ArgumentOutOfRangeException(nameof(request))
+            };
+        }
         public bool GuiCommand(uint world,uint node,uint operation,string text,float value,GuiKind createKind,
             out GuiSnapshot snapshot,out GuiEventKind eventKind)
         {
@@ -899,7 +940,7 @@ public static unsafe class NativeBehaviorRuntime
             if(bytes.Length>4096 || text.Contains('\0')) throw new ArgumentException("UI text exceeds 4096 bytes or contains NUL.",nameof(text));
             NativeGuiState result=new() { Kind=(uint)createKind };
             fixed(byte* pointer=bytes) {
-                if(access.GuiCommand(access.Context,world,node,operation,pointer,bytes.Length,value,&result)==0) return false;
+                if(GuiDispatch(0,world,node,operation,0,&result,(uint)sizeof(NativeGuiState),pointer,bytes.Length,value)==0) return false;
             }
             snapshot=new(result.World,result.Node,(GuiKind)result.Kind,result.Visible!=0,result.Enabled!=0,result.Value,result.Minimum,result.Maximum);
             eventKind=(GuiEventKind)result.Event;return true;
@@ -913,20 +954,20 @@ public static unsafe class NativeBehaviorRuntime
                 Background=style.Background,Foreground=style.Foreground,Accent=style.Accent,ClipChildren=style.ClipChildren?1u:0u,
                 FontSize=style.FontSize,Radius=style.Radius
             };
-            if(access.GuiProperties(access.Context,world,node,write?1u:0u,&result)==0) return false;
+            if(GuiDispatch(1,world,node,write?1u:0u,0,&result,(uint)sizeof(NativeGuiProperties))==0) return false;
             layout=new(new(result.AnchorMinX,result.AnchorMinY),new(result.AnchorMaxX,result.AnchorMaxY),new(result.Left,result.Top,result.Right,result.Bottom));
             style=new(result.Background,result.Foreground,result.Accent,result.ClipChildren!=0,result.FontSize,result.Radius);return true;
         }
         public bool GuiSizing(uint world,uint node,bool write,ref GuiSizing sizing,ref GuiImageStyle image) {
             if(!Accessible)return false;
             NativeGuiSizing raw=new(){MinX=sizing.Minimum.X,MinY=sizing.Minimum.Y,PrefX=sizing.Preferred.X,PrefY=sizing.Preferred.Y,FlexX=sizing.Flexible.X,FlexY=sizing.Flexible.Y,Left=sizing.Padding.X,Top=sizing.Padding.Y,Right=sizing.Padding.Z,Bottom=sizing.Padding.W,SpaceX=sizing.Spacing.X,SpaceY=sizing.Spacing.Y,Alignment=(uint)sizing.Alignment,Columns=sizing.Columns,Ignore=sizing.Ignore?1u:0u,ImageFit=(uint)image.Fit,ImageTint=image.Tint};
-            if(access.GuiSizing(access.Context,world,node,write?1u:0u,&raw)==0)return false;
+            if(GuiDispatch(3,world,node,write?1u:0u,0,&raw,(uint)sizeof(NativeGuiSizing))==0)return false;
             sizing=new(new(raw.MinX,raw.MinY),new(raw.PrefX,raw.PrefY),new(raw.FlexX,raw.FlexY),new(raw.Left,raw.Top,raw.Right,raw.Bottom),new(raw.SpaceX,raw.SpaceY),(GuiAlignment)raw.Alignment,raw.Columns,raw.Ignore!=0);image=new((GuiImageFit)raw.ImageFit,raw.ImageTint);return true;
         }
         public bool GuiCanvas(uint world,bool write,ref GuiCanvas canvas) {
             if(!Accessible)return false;
             NativeGuiCanvas raw=new(){Mode=(uint)canvas.Mode,Width=canvas.Resolution.X,Height=canvas.Resolution.Y,X=canvas.Position.X,Y=canvas.Position.Y,Z=canvas.Position.Z,Rx=canvas.Rotation.X,Ry=canvas.Rotation.Y,Rz=canvas.Rotation.Z,Units=canvas.UnitsPerPixel,Occlusion=canvas.Occlusion?1u:0u};
-            if(access.GuiCanvas(access.Context,world,write?1u:0u,&raw)==0)return false;
+            if(GuiDispatch(4,world,0,write?1u:0u,0,&raw,(uint)sizeof(NativeGuiCanvas))==0)return false;
             canvas=new((GuiCanvasMode)raw.Mode,new(raw.Width,raw.Height),new(raw.X,raw.Y,raw.Z),new(raw.Rx,raw.Ry,raw.Rz),raw.Units,raw.Occlusion!=0);return true;
         }
         public bool GuiBehavior(uint world,uint node,bool write,ref GuiInteraction interaction,ref GuiAnimation animation) {
@@ -935,7 +976,7 @@ public static unsafe class NativeBehaviorRuntime
                 Enabled=animation.Enabled?1u:0u,AutoPlay=animation.AutoPlay?1u:0u,Loop=animation.Loop?1u:0u,PingPong=animation.PingPong?1u:0u,Easing=(uint)animation.Easing,Duration=animation.Duration,Delay=animation.Delay,
                 FromX=animation.From.Position.X,FromY=animation.From.Position.Y,FromScale=animation.From.Scale,FromOpacity=animation.From.Opacity,
                 ToX=animation.To.Position.X,ToY=animation.To.Position.Y,ToScale=animation.To.Scale,ToOpacity=animation.To.Opacity};
-            if(access.GuiBehavior(access.Context,world,node,write?1u:0u,&raw)==0)return false;
+            if(GuiDispatch(5,world,node,write?1u:0u,0,&raw,(uint)sizeof(NativeGuiBehavior))==0)return false;
             interaction=new(raw.Clickable!=0,(GuiClickAction)raw.Action,raw.Target,raw.Value);
             animation=new(raw.Enabled!=0,raw.AutoPlay!=0,raw.Loop!=0,raw.PingPong!=0,(GuiEasing)raw.Easing,raw.Duration,raw.Delay,new(new(raw.FromX,raw.FromY),raw.FromScale,raw.FromOpacity),new(new(raw.ToX,raw.ToY),raw.ToScale,raw.ToOpacity));return true;
         }
@@ -943,7 +984,7 @@ public static unsafe class NativeBehaviorRuntime
         public int GuiAction(uint world,uint node,uint operation,uint index,ref GuiActionBinding binding) {
             if(!Accessible)return -1;
             NativeGuiAction raw=new(){Event=(uint)binding.Event,Action=(uint)binding.Action,Target=binding.Target,Value=binding.Value};
-            int result=access.GuiAction(access.Context,world,node,operation,index,&raw);
+            int result=GuiDispatch(6,world,node,operation,index,&raw,(uint)sizeof(NativeGuiAction));
             if(result>=0)binding=new((GuiEventKind)raw.Event,(GuiClickAction)raw.Action,raw.Target,raw.Value);return result;
         }
         public bool GuiTransitions(uint world,uint node,bool write,ref GuiTransitions transitions) {
@@ -953,19 +994,47 @@ public static unsafe class NativeBehaviorRuntime
                 NormalX=t.Normal.Pose.Position.X,NormalY=t.Normal.Pose.Position.Y,NormalScale=t.Normal.Pose.Scale,NormalOpacity=t.Normal.Pose.Opacity,NormalTint=t.Normal.Tint,
                 PressedX=t.Pressed.Pose.Position.X,PressedY=t.Pressed.Pose.Position.Y,PressedScale=t.Pressed.Pose.Scale,PressedOpacity=t.Pressed.Pose.Opacity,PressedTint=t.Pressed.Tint,
                 DisabledX=t.Disabled.Pose.Position.X,DisabledY=t.Disabled.Pose.Position.Y,DisabledScale=t.Disabled.Pose.Scale,DisabledOpacity=t.Disabled.Pose.Opacity,DisabledTint=t.Disabled.Tint};
-            if(access.GuiTransitions(access.Context,world,node,write?1u:0u,&raw)==0)return false;
+            if(GuiDispatch(7,world,node,write?1u:0u,0,&raw,(uint)sizeof(NativeGuiTransitions))==0)return false;
             transitions=new(raw.Enabled!=0,raw.Duration,(GuiEasing)raw.Easing,new(new(new(raw.NormalX,raw.NormalY),raw.NormalScale,raw.NormalOpacity),raw.NormalTint),new(new(new(raw.PressedX,raw.PressedY),raw.PressedScale,raw.PressedOpacity),raw.PressedTint),new(new(new(raw.DisabledX,raw.DisabledY),raw.DisabledScale,raw.DisabledOpacity),raw.DisabledTint));return true;
         }
         public string ReadGuiText(uint world,uint node,bool name)=>ReadGuiString(world,node,name?1u:0u);
+        public bool GuiControl(uint world,uint node,bool write,ref GuiControlSettings settings,out GuiControlSnapshot snapshot) {
+            snapshot=default;if(!Accessible)return false;var c=settings;
+            NativeGuiControl raw=new(){Mode=(uint)c.Mode,Axis=(uint)c.Axis,Gate=(uint)c.Gate,ShowBase=c.ShowBase?1u:0u,ShowKnob=c.ShowKnob?1u:0u,InputRadius=c.InputRadius,BaseRadius=c.BaseRadius,KnobRadius=c.KnobRadius,Deadzone=c.Deadzone,OuterDeadzone=c.OuterDeadzone,Exponent=c.Exponent,Sensitivity=c.Sensitivity,ReturnSeconds=c.ReturnSeconds};
+            if(GuiDispatch(8,world,node,write?1u:0u,0,&raw,(uint)sizeof(NativeGuiControl))==0)return false;
+            settings=new((GuiStickMode)raw.Mode,(GuiStickAxis)raw.Axis,(GuiStickGate)raw.Gate,raw.InputRadius,raw.BaseRadius,raw.KnobRadius,raw.Deadzone,raw.OuterDeadzone,raw.Exponent,raw.Sensitivity,raw.ReturnSeconds,raw.ShowBase!=0,raw.ShowKnob!=0);
+            snapshot=new(new(raw.X,raw.Y),raw.Pressed!=0,raw.Pointer,raw.Device);return true;
+        }
+        public string ReadGuiControlText(uint world,uint node,uint field) {
+            if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"UI input binding");
+            int length=GuiDispatch(9,world,node,0,field,null,0);
+            if(length<0)throw new WorldException(LastStatus,"UI input binding");
+            if(length>1024)throw new InvalidOperationException("UI input string exceeds contract.");
+            byte[] bytes=new byte[length];fixed(byte* buffer=bytes)if(GuiDispatch(9,world,node,0,field,null,0,buffer,length)!=length)throw new WorldException(LastStatus,"UI input binding");
+            return Encoding.UTF8.GetString(bytes);
+        }
+        public bool WriteGuiControlText(uint world,uint node,uint field,string value) {
+            if(!Accessible)return false;byte[] bytes=Encoding.UTF8.GetBytes(value);
+            if(bytes.Length>1024||value.Contains('\0'))throw new ArgumentException("Invalid UI input string.",nameof(value));
+            fixed(byte* text=bytes)return GuiDispatch(9,world,node,1,field,null,0,text,bytes.Length)>=0;
+        }
+        private void GuiInputQuery(uint world,string action,uint request,uint query,void* output,uint size) {
+            ArgumentException.ThrowIfNullOrEmpty(action);if(!Accessible)throw new WorldException(WorldStatus.NotRunning,"Canvas input");
+            var bytes=Encoding.UTF8.GetBytes(action);if(bytes.Length>48||action.Contains('\0'))throw new ArgumentException("Invalid action identifier.",nameof(action));
+            fixed(byte* name=bytes)if(GuiDispatch(request,world,0,query,0,output,size,name,bytes.Length)==0)throw new WorldException(LastStatus,"Canvas input");
+        }
+        public Vector2 ReadGuiInputAxis(uint world,string action){float* axes=stackalloc float[2];GuiInputQuery(world,action,10,0,axes,8);return new(axes[0],axes[1]);}
+        public bool ReadGuiInputButton(uint world,string action,uint query){uint down=0;GuiInputQuery(world,action,11,query,&down,4);return down!=0;}
+        public InputActionState ReadGuiInputState(uint world,string action){InputActionState state=new(){Size=32};GuiInputQuery(world,action,12,0,&state,32);return state;}
         public string ReadGuiImage(uint world,uint node)=>ReadGuiString(world,node,2);
         private string ReadGuiString(uint world,uint node,uint field)
         {
             if(!Accessible) throw new WorldException(WorldStatus.NotRunning,"read UI text");
-            int length=access.GuiText(access.Context,world,node,field,null,0);
+            int length=GuiDispatch(2,world,node,field,0,null,0);
             if(length<0) throw new WorldException(LastStatus,"read UI text");
             if(length>4096) throw new InvalidOperationException("Native UI string exceeds its contract.");
             byte[] bytes=new byte[length];
-            fixed(byte* buffer=bytes) if(access.GuiText(access.Context,world,node,field,buffer,length)!=length)
+            fixed(byte* buffer=bytes) if(GuiDispatch(2,world,node,field,0,null,0,buffer,length)!=length)
                 throw new WorldException(LastStatus,"read UI text");
             return Encoding.UTF8.GetString(bytes);
         }
@@ -1315,7 +1384,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 42 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 45 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

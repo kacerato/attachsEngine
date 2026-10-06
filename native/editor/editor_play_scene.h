@@ -6,6 +6,7 @@
 #include "runtime/scene_physics.h"
 #include "runtime/input_actions.h"
 #include "runtime/script_bridge.h"
+#include "runtime/scene_gui.h"
 #include "runtime/scene_animation.h"
 #include "runtime/scene_timers.h"
 #include "runtime/scene_physics_connections.h"
@@ -59,6 +60,21 @@ class EditorPlayScene final {
   };
 public:
   ~EditorPlayScene(){stop();}
+  // Authoring preflight uses the same geometry adapter and solver as Play,
+  // without executing scripts or altering the authored document.
+  static bool validatePhysics(const EditorDocument &document,const EditorMapScene &resources,std::string &error) {
+    runtime::GameWorld world;runtime::ScenePhysics physics;CollisionGeometry geometry(resources);
+    if(!world.load(document)){error="Não foi possível validar a cena candidata";return false;}
+    if(!physics.start(world,&geometry)){error=physics.error();return false;}
+    error.clear();return true;
+  }
+  static bool previewPhysics(const EditorDocument &document,const EditorMapScene &resources,
+      runtime::GameWorld &world,runtime::ScenePhysics &physics,std::string &error) {
+    physics.stop();world.clear();CollisionGeometry geometry(resources);
+    if(!world.load(document)){error="Cena autoral inválida";return false;}
+    if(!physics.start(world,&geometry)){error=physics.error();return false;}
+    error.clear();return true;
+  }
   void setScriptRuntime(scene::ScriptRuntimeApi api,const std::string &root) {scripts_.configure(api,root);}
   void configureAudio(runtime::SceneAudio::ClipLoader loader,runtime::SceneAudio::Output output=runtime::SceneAudio::Output::Device){audio_.configure(std::move(loader),output);}
   void setPrefabLoader(runtime::ScriptBridge::PrefabLoader loader) {scripts_.setPrefabLoader(std::move(loader));}
@@ -88,6 +104,7 @@ public:
   void setScriptLogSink(runtime::ScriptBridge::LogSink sink) {scripts_.setLogSink(std::move(sink));}
   const std::string &scriptDiagnostics() const {return scripts_.diagnostics();}
   const std::string &physicsError() const {return physics2D_.error().empty()?physics_.error():physics2D_.error();}
+  const std::string &frameError() const {return frameError_;}
   bool active() const noexcept { return active_; }
   // O grafo EM EXECUÇÃO. Tem o nome antigo porque os consumidores de leitura do
   // editor (câmera de cena, extração de desenho) aceitam qualquer `SceneGraph`.
@@ -99,7 +116,7 @@ public:
   // por ele que personagem e câmera recebem o que o projeto configurou.
   runtime::InputService &input() noexcept { return input_; }
   const runtime::InputService &input() const noexcept { return input_; }
-  void submitInput(const runtime::InputDeviceState &state,double unscaledElapsed=0) { if(active_) input_.submit(state,unscaledElapsed); }
+  void submitInput(const runtime::InputDeviceState &state,double unscaledElapsed=0) { if(active_)sceneGui_.submitInput(world_,input_,state,unscaledElapsed); }
   // Foco: quando a interface consome o toque, o gameplay lê zero e nenhum botão
   // fica preso — a pausa e o cancelamento usam o mesmo caminho.
   void setInputFocus(bool focused) { input_.setGameplayFocus(focused&&!applicationPaused_&&applicationFocused_); }
@@ -143,7 +160,9 @@ public:
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);
+    sceneGui_.reconcile(world_);
     scripts_.setGui(&gui_);
+    scripts_.setSceneGui(&sceneGui_);
     // Audio outlives scripts; early Awake queries have no diagnostic until reconciliation.
     std::array<runtime::PrimitiveResource,6> primitives{};
     for(u32 i=0;i<resources.assetCount();++i) {
@@ -193,7 +212,9 @@ public:
     tweens_.setEvents(nullptr);
     events_.reset();
     eventConnections_.reset();
+    scripts_.setSceneGui(nullptr);
     gui_.load(ui::GuiDocument{});
+    sceneGui_.reset();
     paths_.reset();
     animator_.reset();
     timers_.reset();physicsConnections_.reset();
@@ -219,7 +240,7 @@ public:
     auto *components=world_.poseGraph().editComponents(id);
     return components && components->replaceInstance(after.instanceId(),after);
   }
-  void pause(bool value) {if(active_){paused_=value;if(value){input_.setGameplayFocus(false);gui_.cancelPointers();}updateAudioPause();}}
+  void pause(bool value) {if(active_){paused_=value;if(value){input_.setGameplayFocus(false);gui_.cancelPointers();sceneGui_.cancelPointers();}updateAudioPause();}}
   void setAudioFocus(bool focused){audioFocused_=focused;updateAudioPause();}
   bool audioWantsFocus()const{return active_&&!paused_&&!applicationPaused_&&applicationFocused_&&audio_.wantsDevice();}
   bool step() {return active_ && paused_ && advanceFrame(1.0/60.0,true);}
@@ -227,6 +248,8 @@ public:
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
   bool jumpCharacter(EditorEntityId id) {return active_&&!paused_&&physics_.jumpCharacter(id,&world_);}
+  bool setDynamicMotorMove(EditorEntityId id,float right,float forward,float yaw) {return active_&&physics_.setDynamicMotorMove(id,right,forward,yaw);}
+  bool jumpDynamicMotor(EditorEntityId id) {return active_&&!paused_&&physics_.jumpDynamicMotor(id);}
   bool advance(double elapsed) {
     if(!active_) return false;
     if(paused_) return true;
@@ -234,6 +257,7 @@ public:
   }
   // Pausa/foco do aplicativo; vale também com o Play pausado pelo editor.
   bool applicationEvent(scene::ScriptLifecycleEvent event,bool value) {
+    if((event==scene::ScriptLifecycleEvent::ApplicationPause&&value)||(event==scene::ScriptLifecycleEvent::ApplicationFocus&&!value)){gui_.cancelPointers();sceneGui_.cancelPointers();}
     if(event==scene::ScriptLifecycleEvent::ApplicationPause)applicationPaused_=value;
     else applicationFocused_=value;
     input_.setGameplayFocus(!applicationPaused_&&applicationFocused_&&!paused_);
@@ -275,6 +299,8 @@ public:
   runtime::SceneAudio &audio() noexcept {return audio_;}
   void configureGui(const ui::GuiDocument &document) { if(!active_) gui_.load(document); }
   ui::GuiRuntime &gui() noexcept { return gui_; }
+  runtime::SceneGui &sceneGui() noexcept {return sceneGui_;}
+  void configureSceneGui(runtime::SceneGui::Loader loader) {if(!active_)sceneGui_.configure(std::move(loader));}
   const runtime::SceneAudio &audio() const noexcept {return audio_;}
   const runtime::ScenePhysics &physics() const noexcept {return physics_;}
   runtime::ScenePhysics2D &physics2D() noexcept {return physics2D_;}
@@ -288,15 +314,24 @@ private:
   // Referência de lifecycle: Unity 6.0 (6000.0), Event function execution order:
   // https://docs.unity3d.com/6000.0/Documentation/Manual/execution-order.html
   bool advanceFrame(double elapsed,bool editorStep=false) {
-    if(!world_.beginFrame(elapsed,editorStep)) return false;
+    frameError_.clear();
+    const auto stage=[&](bool ok,const char *name){
+      if(ok)return true;
+      frameError_=std::string("Play interrompido em ")+name;
+      if(!scripts_.diagnostics().empty())frameError_+=" · "+scripts_.diagnostics();
+      else if(!physicsError().empty())frameError_+=" · "+physicsError();
+      return false;
+    };
+    if(!stage(world_.beginFrame(elapsed,editorStep),"relógio"))return false;
     const double frameElapsed=world_.clock().delta();
     debugLines_.advance(frameElapsed);
     const float scriptElapsed=world_.clock().delta();
     gui_.advance(frameElapsed);
-    return runScripts(scriptElapsed) && advanceTimers(frameElapsed,std::min(elapsed,.25)) && animate(scriptElapsed) &&
-           reconcilePhysics() && physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
-           scripts_.lateUpdate(scriptElapsed) && drainCommands() && reconcilePhysics() &&
-           paths_.advance(world_,frameElapsed) && tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)) && numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)) && drainCommands() && constraints_.advance(world_,frameElapsed) && cameraFollow_.advance(world_,frameElapsed) && audio_.advance(world_,std::min(elapsed,.25));
+    sceneGui_.advance(world_,frameElapsed);
+    return stage(runScripts(scriptElapsed),"Update") && stage(advanceTimers(frameElapsed,std::min(elapsed,.25)),"timers") && stage(animate(scriptElapsed),"animação") &&
+           stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent),"física / FixedUpdate") && drainCommands() &&
+           stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") &&
+           stage(paths_.advance(world_,frameElapsed),"paths") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.
@@ -356,6 +391,7 @@ private:
   }
   static bool fixedStep(void *context,float dt) {
     auto &self=*static_cast<EditorPlayScene *>(context);
+    self.sceneGui_.driveCharacters(self.world_,self.physics_);
     return self.scripts_.fixedUpdate(dt) && self.drainCommands() && self.reconcilePhysics() && self.physics2D_.advance(dt,self.world_,nullptr,&self,event2D);
   }
   static bool event2D(void *context,const runtime::Physics2DEvent &event){
@@ -372,10 +408,12 @@ private:
     return self.scripts_.contact(contact)&&self.drainCommands();
   }
   runtime::GameWorld world_;
+  std::string frameError_;
   runtime::ScenePhysics physics_;
   runtime::ScenePhysics2D physics2D_;
   runtime::SceneAudio audio_;
   ui::GuiRuntime gui_;
+  runtime::SceneGui sceneGui_;
   runtime::ScriptBridge scripts_;
   runtime::InputService input_;
   std::vector<runtime::ObjectId> destroyed_;

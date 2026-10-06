@@ -3,15 +3,39 @@
 #include "ui/ui_draw_list.h"
 #include "ui/ui_input.h"
 #include <iosfwd>
+#include <functional>
 #include <string>
 #include <vector>
 #include <unordered_map>
 
 namespace ae::ui {
 using GuiId = u32;
-enum class GuiKind : u8 { Panel, Text, Button, Toggle, Slider, Progress, Image, HBox, VBox, Grid };
-inline constexpr u32 kGuiKindCount=10;
+enum class GuiKind : u8 { Panel, Text, Button, Toggle, Slider, Progress, Image, HBox, VBox, Grid, Joystick, ActionButton, LookArea };
+inline constexpr u32 kGuiKindCount=13;
 bool guiContainer(GuiKind kind) noexcept;
+bool guiInputKind(GuiKind kind) noexcept;
+enum class GuiStickMode : u8 { Fixed, Floating, Dynamic };
+enum class GuiStickAxis : u8 { Free, Horizontal, Vertical };
+enum class GuiStickGate : u8 { Circle, Square };
+struct GuiControl final {
+  std::string action;
+  GuiStickMode mode=GuiStickMode::Fixed;
+  GuiStickAxis axis=GuiStickAxis::Free;
+  GuiStickGate gate=GuiStickGate::Circle;
+  float inputRadius=80,baseRadius=80,knobRadius=28,deadzone=.12f,outerDeadzone=0,exponent=1,sensitivity=1,returnSeconds=.12f;
+  bool showBase=true,showKnob=true;
+  std::string baseImage,knobImage;
+  bool operator==(const GuiControl &) const = default;
+};
+bool validGuiControl(const GuiControl &,std::string &error);
+void writeGuiControl(std::ostream &,const GuiControl &);
+bool readGuiControl(std::istream &,GuiControl &);
+struct GuiControlState final {
+  GuiId node=0;UiPoint value{},knob{},origin{.5f,.5f},last{};
+  bool down=false;u32 pointer=0,presses=0;UiPointerDevice device=UiPointerDevice::Touch;
+  u64 cancellation=0;
+  float returnTime=0;UiPoint returnFrom{};GuiControl config{};
+};
 enum class GuiAlignment : u8 { Start, Center, End, Stretch };
 enum class GuiImageFit : u8 { Stretch, Contain, Cover };
 enum class GuiCanvasMode : u8 { Screen, World };
@@ -91,6 +115,7 @@ struct GuiNode final {
   // Additional ordered listeners; the legacy click action executes first.
   std::vector<GuiActionBinding> actions;
   GuiTransitions transitions{};
+  GuiControl control{};
 };
 
 class GuiDocument final {
@@ -112,6 +137,7 @@ public:
   u64 revision() const noexcept { return revision_; }
   const GuiCanvas &canvas() const noexcept {return canvas_;}
   bool setCanvas(const GuiCanvas &canvas,std::string &error);
+  void restoreSnapshot(const GuiDocument &snapshot);
 private:
   GuiCanvas canvas_{};
   std::vector<GuiNode> nodes_;
@@ -124,6 +150,8 @@ private:
 // Snapshot history is bounded. One property drag is one operation, not one per frame.
 class GuiHistory final {
 public:
+  using Commit=std::function<bool(const GuiDocument &,const GuiDocument &)>;
+  void setCommit(Commit commit){commit_=std::move(commit);}
   void begin(const GuiDocument &document);
   bool commit(const GuiDocument &document);
   bool undo(GuiDocument &document);
@@ -135,6 +163,7 @@ private:
   GuiDocument before_;
   bool editing_ = false;
   std::vector<GuiDocument> undo_, redo_;
+  Commit commit_;
 };
 
 struct GuiEvent final { GuiId node = 0; GuiEventKind kind = GuiEventKind::Click; float value = 0; };
@@ -163,9 +192,21 @@ public:
   bool setEnabled(GuiId id, bool enabled);
   bool poll(GuiEvent &event);
   u32 droppedEvents() const noexcept { return droppedEvents_; }
-  bool captures(u32 pointerId) const noexcept { return pressed_ && pointer_==pointerId; }
-  void cancelPointers() noexcept { pressed_=0;motionDirty_=true; }
+  static constexpr u32 kMaximumPointers=32;
+  bool captures(u32 pointerId,UiPointerDevice device=UiPointerDevice::Touch) const noexcept;
+  u32 captureCount() const noexcept {return static_cast<u32>(captures_.size());}
+  void cancelPointers() noexcept;
+  const UiRect &viewport() const {return canvas_;}
+  const GuiControlState *controlState(GuiId id) const;
+  std::span<const GuiControlState> controls() const {return controls_;}
+  u32 takeControlPresses(GuiId id);
+  UiPoint takeLookDelta(GuiId id);
 private:
+  bool controlPointer(const UiPointerEvent &);
+  void reconcileControls();
+  void advanceControls(double seconds);
+  void drawControl(UiDrawList &,const GuiNode &,const GuiPlacement &) const;
+  std::vector<GuiControlState> controls_;
   void changeValue(GuiId id, float value, bool emit);
   void emit(GuiEvent event);
   void click(GuiId id);
@@ -195,10 +236,9 @@ private:
   UiRect canvas_{};
   u64 layoutRevision_=~u64{0};
   const GuiImageAtlas *images_=nullptr;
-  GuiId pressed_ = 0;
-  UiRect captureBounds_{},captureClip_{};
-  bool pressedInside_=false;
-  float captureScale_=1;
-  u32 pointer_ = 0, droppedEvents_ = 0;
+  struct Capture {GuiId node=0;u32 pointer=0;UiPointerDevice device=UiPointerDevice::Touch;UiRect bounds{},clip{};float scale=1;bool inside=true;};
+  std::vector<Capture> captures_;
+  bool pressed(GuiId id) const noexcept;
+  u32 droppedEvents_ = 0;
 };
 } // namespace ae::ui

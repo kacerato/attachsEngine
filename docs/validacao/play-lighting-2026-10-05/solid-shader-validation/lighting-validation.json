@@ -1,0 +1,30 @@
+[
+  {
+    "shader": "dirt_road",
+    "unshadowedPointLighting": false,
+    "shadowSampleInstructions": 29,
+    "bytes": 76300,
+    "spirvValidated": true
+  },
+  {
+    "shader": "dirt_road",
+    "unshadowedPointLighting": true,
+    "shadowSampleInstructions": 12,
+    "bytes": 51520,
+    "spirvValidated": true
+  },
+  {
+    "shader": "dirt_road_fallback",
+    "unshadowedPointLighting": false,
+    "shadowSampleInstructions": 29,
+    "bytes": 73008,
+    "spirvValidated": true
+  },
+  {
+    "shader": "dirt_road_fallback",
+    "unshadowedPointLighting": true,
+    "shadowSampleInstructions": 12,
+    "bytes": 48432,
+    "spirvValidated": true
+  }
+]

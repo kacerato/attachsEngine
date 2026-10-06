@@ -31,6 +31,8 @@
 #include "editor/editor_component_visuals.h"
 #include "editor/editor_camera_handles.h"
 #include "editor/editor_component_handles.h"
+#include "editor/editor_collider_handles.h"
+#include "editor/editor_collider_topology.h"
 #include "editor/editor_import_reconcile.h"
 #include "runtime/scene_environment.h"
 #include <bit>
@@ -1394,6 +1396,8 @@ void buildPlayDebugLines(ScreenBuilder &builder) {
   }
 }
 
+namespace {std::string fitMiddle(const UiDrawList &,const std::string &,float,const UiTypeStyle &);}
+#include "editor/editor_collider_authoring_ui.inl"
 void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   const EditorScreenState &state = builder.state;
   if (state.view == nullptr || !isViewportValid(*state.view)) return;
@@ -1407,14 +1411,27 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   // renderer/grid_plan.h e editor/editor_grid.h. Aqui ficam só as ferramentas
   // e o HUD, que são coisas diferentes de "desenho no mundo".
 
-  if(state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity) {
+  if((state.workspace==EditorWorkspace::Scene||state.physicsDiagnosticOpen) && (state.showComponentVisuals||state.physicsDiagnosticOpen) && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
     const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative);
+    const auto *inspectedObject=state.document->find(state.selection);
+    const auto *inspected=inspectedObject?inspectedObject->components.findInstance(state.expandedNative):nullptr;
+    const bool colliderInspection=inspected && (&inspected->type()==&scene::Collider::descriptor || &inspected->type()==&scene::PhysicsBody::descriptor) &&
+        !state.multiSelect && state.selectionSet.size()<=1 && !state.guiSelection.valid();
     for(const auto &v:visuals) {
       if(!componentVisualVisible(*state.document,v.entity,state.hiddenLayers,state.sceneHidden))continue;
       const auto color=v.enabled?theme.color.accent:theme.color.textMuted;
+      if(state.physicsDiagnosticOpen && (v.icon==UiIcon::PhysicsCharacterGround || v.icon==UiIcon::PhysicsCharacterPlatformCarry))continue;
       for(const auto &line:v.segments) {
-        UiPoint a,b;if(projectSegmentToScreen(*state.view,line.a,line.b,a,b)) builder.list.addLine(a,b,line.emphasis==2?theme.color.text:line.emphasis==1?theme.color.axisY:color,line.emphasis?2.f:1.3f);
+        auto lineColor=line.emphasis==2?theme.color.text:line.emphasis==1?theme.color.axisY:color;
+        float width=line.emphasis?2.f:1.3f;
+        if(state.physicsDiagnosticOpen && v.icon==UiIcon::ComponentCollider && !state.physicsDiagnosticCollision)continue;
+        if(state.colliderTopology && v.icon==UiIcon::ComponentCollider && v.entity==state.selection && v.instance==state.expandedNative)continue;
+        if(colliderInspection && v.icon==UiIcon::ComponentCollider) {
+          const bool focused=v.entity==state.selection && v.instance==state.expandedNative;
+          lineColor=focused?theme.color.text:withAlpha(theme.color.textMuted,.5f);width=focused?2.f:1.f;
+        }
+        UiPoint a,b;if(projectSegmentToScreen(*state.view,line.a,line.b,a,b)) builder.list.addLine(a,b,lineColor,width);
       }
       if(!v.marker) continue;
       const auto p=projectWorldToScreen(*state.view,v.origin);
@@ -1428,18 +1445,70 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
         builder.router.addRegion(icon,widgetId(EditorWidget::ComponentVisualBase)+v.entity,32);
     }
   }
+  if(state.motorBakeReady&&state.motorSetupTarget==state.selection&&!state.cameraViewEntity) {
+    float world[16];if(editorWorldMatrix(*state.document,state.selection,world)) {
+      const UiColor colors[]{theme.color.accent,theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+      for(usize part=0;part<state.motorBakePreview.size();++part) {
+        const auto color=part<state.motorBakeEnabled.size()&&state.motorBakeEnabled[part]?colors[part%4]:theme.color.textMuted;
+        for(const auto &triangle:state.motorBakePreview[part].triangles)for(u32 edge=0;edge<3;++edge) {
+          float a[3],b[3];const auto *p=triangle.data()+edge*3,*q=triangle.data()+((edge+1)%3)*3;
+          for(u32 k=0;k<3;++k){a[k]=world[12+k]+world[k]*p[0]+world[4+k]*p[1]+world[8+k]*p[2];b[k]=world[12+k]+world[k]*q[0]+world[4+k]*q[1]+world[8+k]*q[2];}
+          UiPoint from,to;if(projectSegmentToScreen(*state.view,a,b,from,to))builder.list.addLine(from,to,color,1.4f);
+        }
+      }
+    }
+  }
   // Collider outlines now share the component visual registry. Joint anchors
   // retain their specialized connection view until that provider is migrated.
   const auto *selectedVisual=state.document->find(state.selection);
   const auto *expandedVisual=selectedVisual?selectedVisual->components.findInstance(state.expandedNative):nullptr;
+  if(state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity &&
+     !state.multiSelect && state.selectionSet.size()<=1 && !state.guiSelection.valid() && expandedVisual &&
+     (&expandedVisual->type()==&scene::Collider::descriptor || &expandedVisual->type()==&scene::PhysicsBody::descriptor) &&
+     componentVisualSelectable(*state.document,state.selection,state.hiddenLayers,state.unpickableLayers,state.sceneHidden,state.scenePickOff)) {
+    // A contextual instruction, not another permanent panel. The instance ID
+    // matches the Inspector and the emphasized contour; ordinary taps still pick meshes.
+    const auto bodyId=colliderInspectionBody(*state.document,state.selection,state.expandedNative);
+    const auto *bodyObject=state.document->find(bodyId);
+    const bool collider=&expandedVisual->type()==&scene::Collider::descriptor;
+    const auto *shape=collider?static_cast<const scene::Collider*>(expandedVisual):nullptr;
+    const std::string hint=state.physicsDiagnosticOpen?"Diagnóstico · COM e apoio são leituras do solver":
+        shape&&shape->shape==scene::ColliderShape::Mesh&&state.tool!=EditorGizmoMode::Select&&
+        (state.tool==EditorGizmoMode::Scale||!shape->meshLocalPose)?
+        (state.tool==EditorGizmoMode::Scale?"Malha · dimensões pertencem ao recurso":"Malha · ative Pose local no Inspector"):
+        collider&&state.tool!=EditorGizmoMode::Select?
+        "Colisor "+std::to_string(expandedVisual->instanceId())+" · "+
+        (state.tool==EditorGizmoMode::Translate?"Centro local":state.tool==EditorGizmoMode::Rotate?"Rotação local":"Dimensões simétricas")+" · arraste a alça":bodyObject?
+        "Corpo "+std::string(bodyObject->name)+" · toque na forma para editar":
+        "Colisor "+std::to_string(expandedVisual->instanceId())+" · toque na forma para trocar";
+    // This draw list exposes Regular metrics. Keep measurement, middle
+    // truncation and glyph rendering on the same weight: measuring Regular
+    // and drawing Medium clipped the last letter on the physical device.
+    auto hintStyle=theme.type.caption;hintStyle.medium=false;
+    // Above all navigation variants (normal, compact and narrow), and apart
+    // from the status row. Device captures caught both overlaps at -24/-50.
+    // The short viewport's vertical tool strip reaches this row; leave its
+    // touch targets clear rather than placing the hint underneath them.
+    const float hintInset=viewport.height<500?64.f:8.f;
+    const UiRect hintRect{viewport.x+hintInset,viewport.bottom()-116,
+        std::min(viewport.width-160,measureTextWidth(hint,builder.list.fontMetrics(),hintStyle)+16),20};
+    if(hintRect.width>0) {
+      builder.list.addRect(hintRect,withAlpha(theme.color.surface,.9f),2);
+      const auto text=deflate(hintRect,UiInsets{6,0,6,0});
+      builder.label(text,fitMiddle(builder.list,hint,text.width,hintStyle),theme.color.textDim,hintStyle);
+    }
+  }
   if(state.showComponentVisuals && !state.cameraViewEntity && expandedVisual && &expandedVisual->type()==&scene::Joint::descriptor) buildPhysicsOverlay(builder);
   if(state.workspace==EditorWorkspace::Scene) {
     const UiRect controls{viewport.right()-42,viewport.y+8,34,34};
     builder.iconButton(controls,UiIcon::EditorAuthorCamera,widgetId(state.cameraViewEntity?EditorWidget::CameraViewClose:EditorWidget::ComponentVisualsToggle),state.cameraViewEntity || state.showComponentVisuals);
   }
   const EditorEntity *entity = state.document->find(state.selection);
-  if (entity != nullptr && state.tool != EditorGizmoMode::Select &&
-      state.workspace == EditorWorkspace::Scene && !state.cameraViewEntity && !(waterRoute(*entity).count && state.waterTab==1)) {
+  const bool colliderEditing=entity && (state.showComponentVisuals||state.colliderTopology) && !state.cameraViewEntity &&
+      !state.multiSelect && state.selectionSet.size()<=1 && !state.guiSelection.valid() && expandedVisual &&
+      &expandedVisual->type()==&scene::Collider::descriptor;
+  if (entity != nullptr && !state.guiSelection.valid() && state.tool != EditorGizmoMode::Select &&
+      state.workspace == EditorWorkspace::Scene && !state.cameraViewEntity && !colliderEditing && !(waterRoute(*entity).count && state.waterTab==1)) {
     EditorGizmoSettings settings{};
     settings.screenLengthPixels = 72.0f;
     float world[16];
@@ -1549,6 +1618,74 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       builder.list.addRect({point.screen.x-5,point.screen.y-5,10,10},theme.color.accent,4);
       builder.label({point.screen.x+18,point.screen.y-12,88,24},labels[index],theme.color.text,theme.type.caption);
       builder.router.addRegion(target,widgetId(EditorWidget::ComponentHandleBase)+index);
+    }
+  }
+  buildColliderTopologyOverlay(builder,viewport);
+  buildPhysicsDiagnosticOverlay(builder);
+  if(colliderEditing && !state.colliderTopology && !state.physicsDiagnosticOpen && state.workspace==EditorWorkspace::Scene &&
+     componentVisualSelectable(*state.document,entity->id,state.hiddenLayers,state.unpickableLayers,state.sceneHidden,state.scenePickOff)) {
+      const UiColor colors[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+      std::array<UiPoint,9> gripCenters{};u32 gripCount=0;
+    for(u32 index=0;index<static_cast<u32>(ColliderHandleKind::Count);++index) {
+      const auto kind=static_cast<ColliderHandleKind>(index);ColliderHandle handle;
+      if(!colliderHandleMatchesTool(kind,state.tool)||!colliderHandleGeometry(*state.document,entity->id,
+          expandedVisual->instanceId(),kind,*state.view,handle))continue;
+      const u32 axis=index<6?index/2:index<9?index-6:index-9;
+      const auto color=state.activeColliderHandle==index+1?theme.color.accent:colors[axis];
+      const auto visible=[&](const float *world,UiPoint &pixel) {
+        const auto p=projectWorldToScreen(*state.view,world);pixel=p.screen;
+        const auto ray=screenPointToRay(*state.view,pixel);float depth=0;
+        for(u32 i=0;i<3;++i)depth+=(world[i]-ray.origin[i])*ray.direction[i];
+        return p.valid && viewport.contains(pixel) &&
+            !colliderPointOccluded(state.colliderHandleOccluders,*state.view,pixel,entity->id,depth);
+      };
+      if(handle.rotation) {
+        float previous[3];colliderRingPoint(handle,0,previous);
+        for(u32 segment=1;segment<=48;++segment) {
+          float point[3],middle[3];colliderRingPoint(handle,segment*6.28318530718f/48,point);
+          colliderRingPoint(handle,(segment-.5f)*6.28318530718f/48,middle);
+          UiPoint a,b,m;float angle;
+          if(visible(middle,m)&&colliderRingAngle(*state.view,handle,m,angle)&&
+             projectSegmentToScreen(*state.view,previous,point,a,b)) {
+            builder.list.addLine(a,b,color,2.f);
+            const UiRect target{m.x-10,m.y-10,20,20};
+            if(viewport.contains({target.x,target.y})&&viewport.contains({target.right(),target.bottom()}))
+              builder.router.addRegion(target,widgetId(EditorWidget::ColliderHandleBase)+index);
+          }
+          std::copy(point,point+3,previous);
+        }
+        } else {
+          UiPoint point;float parameter;
+          if(!visible(handle.point,point)||!cameraHandleRayParameter(*state.view,handle,point,parameter))continue;
+          const auto anchor=point;
+          const auto origin=projectWorldToScreen(*state.view,handle.origin);
+          if(!origin.valid)continue;
+          const float dx=point.x-origin.screen.x,dy=point.y-origin.screen.y;
+          const float length=std::sqrt(dx*dx+dy*dy);
+          if(length<1.f)continue;
+          // Tiny shapes still need distinct touch targets. Keep each grip on its
+          // projected axis and connect it to the real shape instead of allowing
+          // overlapping rectangles to route a visible X grip to the Y channel.
+          float distance=std::max(length,40.f);bool separated=false;
+          for(u32 attempt=0;attempt<9;++attempt,distance+=34.f) {
+            point={origin.screen.x+dx*distance/length,origin.screen.y+dy*distance/length};
+            separated=true;
+            for(u32 n=0;n<gripCount;++n)if(std::abs(point.x-gripCenters[n].x)<34.f&&
+                std::abs(point.y-gripCenters[n].y)<34.f){separated=false;break;}
+            if(separated)break;
+          }
+          if(!separated||!cameraHandleRayParameter(*state.view,handle,point,parameter))continue;
+          const UiRect target{point.x-16,point.y-16,32,32};
+          if(!viewport.contains({target.x,target.y})||!viewport.contains({target.right(),target.bottom()}))continue;
+          gripCenters[gripCount++]=point;
+          if(std::abs(point.x-anchor.x)>.5f||std::abs(point.y-anchor.y)>.5f)
+            builder.list.addLine(anchor,point,color,1.f);
+        if(index>=6) {UiPoint a,b;if(projectSegmentToScreen(*state.view,handle.origin,handle.point,a,b))builder.list.addLine(a,b,color,2);}
+        // A discrete grip and generous touch area, not a card over the mesh.
+        builder.list.addRect({point.x-7,point.y-7,14,14},theme.color.surface,2);
+        builder.list.addRect({point.x-5,point.y-5,10,10},color,index<6?1.f:5.f);
+        builder.router.addRegion(target,widgetId(EditorWidget::ColliderHandleBase)+index);
+      }
     }
   }
   builder.list.popClip();
@@ -1770,13 +1907,25 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
       if(name.find(query)!=std::string::npos)
         for(auto parent=entity;parent;parent=document.find(parent->parent)) matches.insert(parent->id);
     }
+    for(const auto &row:builder.state.guiRows)if(editorSearchKey(row.name+" "+row.path).find(query)!=std::string::npos)
+      for(auto parent=document.find(row.target.owner);parent;parent=document.find(parent->parent))matches.insert(parent->id);
   }
   builder.list.pushClip(content);
   outVisibleRows = static_cast<u32>(std::max(0.0f, content.height) / kRowHeight);
 
+  using GuiParent=std::tuple<EditorEntityId,u64,ui::GuiId>;
+  std::map<GuiParent,std::vector<usize>> guiChildrenByParent;
+  std::map<EditorEntityId,std::vector<usize>> guiRoots;
+  for(usize i=0;i<builder.state.guiRows.size();++i) {
+    const auto &row=builder.state.guiRows[i];
+    if(!row.target.node)guiRoots[row.target.owner].push_back(i);
+    else guiChildrenByParent[{row.target.owner,row.target.component,row.parent}].push_back(i);
+  }
+
   struct Frame final {
     EditorEntityId entity;
     u32 depth;
+    usize gui=~usize{0};
   };
   std::vector<Frame> stack;
   const auto roots = document.childrenOf(document.root());
@@ -1787,12 +1936,37 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
   while (!stack.empty()) {
     const Frame frame = stack.back();
     stack.pop_back();
+    if(frame.gui!=~usize{0}) {
+      const auto &entry=builder.state.guiRows[frame.gui];
+      const bool collapsed=std::find(builder.state.collapsedGui.begin(),builder.state.collapsedGui.end(),entry.target)!=builder.state.collapsedGui.end();
+      const auto descendants=guiChildrenByParent.find({entry.target.owner,entry.target.component,entry.target.node});
+      const bool children=descendants!=guiChildrenByParent.end();
+      if(children&&(!collapsed||filtering))for(auto i=descendants->second.rbegin();i!=descendants->second.rend();++i)
+        stack.push_back({frame.entity,frame.depth+1,*i});
+      ++rows;if(skipped<builder.state.hierarchyScroll){++skipped;continue;}
+      if(content.height<kRowHeight)continue;
+      const auto row=takeTop(content,kRowHeight);const bool selected=builder.state.guiSelection==entry.target;
+      if(selected)builder.list.addRect(row,theme.color.accent,theme.radius.thumb);
+      auto inner=deflate(row,UiInsets::symmetric(theme.spacing.tiny,0));
+      takeLeft(inner,std::min(float(frame.depth)*14.f,std::max(0.f,inner.width-80.f)));
+      const auto fold=takeLeft(inner,28);
+      if(children)builder.list.addImage(centred(fold,12,12),static_cast<UiImageId>(collapsed?UiIcon::EditorAuthorAdd:UiIcon::EditorAuthorChevron),selected?theme.color.accentInk:theme.color.textDim);
+      const auto icon=!entry.target.node?UiIcon::UiInterfaceCanvas:entry.kind==ui::GuiKind::Joystick?UiIcon::UiJoystick:entry.kind==ui::GuiKind::ActionButton?UiIcon::UiActionButton:entry.kind==ui::GuiKind::LookArea?UiIcon::UiLookArea:entry.kind==ui::GuiKind::Image?UiIcon::AssetsTexture:ui::guiContainer(entry.kind)?UiIcon::UiAutoLayout:UiIcon::UiInterfaceCanvas;
+      builder.list.addImage(centred(takeLeft(inner,22),15,15),static_cast<UiImageId>(icon),selected?theme.color.accentInk:theme.color.accent);
+      builder.label(inner,entry.name.c_str(),selected?theme.color.accentInk:entry.error.empty()?theme.color.text:theme.color.warning,theme.type.body);
+      builder.router.addRegion(row,widgetId(EditorWidget::GuiHierarchyRowBase)+entry.token);
+      if(children)builder.router.addRegion(fold,widgetId(EditorWidget::GuiHierarchyCollapseBase)+entry.token);
+      continue;
+    }
     const EditorEntity *entity = document.find(frame.entity);
     if (entity == nullptr || (filtering && !matches.contains(frame.entity))) continue;
     const auto children = document.childrenOf(frame.entity);
     const bool collapsed = std::find(builder.state.collapsedEntities.begin(), builder.state.collapsedEntities.end(), frame.entity) != builder.state.collapsedEntities.end();
     if (!collapsed || filtering) for (usize index = children.size(); index > 0; --index)
       stack.push_back({children[index - 1], frame.depth + 1});
+    const auto uiRoots=guiRoots.find(frame.entity);const bool guiChildren=uiRoots!=guiRoots.end();
+    if(guiChildren&&(!collapsed||filtering))for(auto i=uiRoots->second.rbegin();i!=uiRoots->second.rend();++i)
+      stack.push_back({frame.entity,frame.depth+1,*i});
 
     ++rows;
     // A rolagem descarta as primeiras linhas em vez de deslocar o desenho: a
@@ -1804,7 +1978,7 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     if (content.height < kRowHeight) continue;
 
     const UiRect row = takeTop(content, kRowHeight);
-    const bool selected = builder.state.selection == frame.entity;
+    const bool selected = builder.state.selection == frame.entity && !builder.state.guiSelection.valid();
     const bool secondary = !selected && builder.state.isSelected(frame.entity);
     if (selected) builder.list.addRect(row, theme.color.accent, theme.radius.thumb);
     else if (secondary) {
@@ -1829,7 +2003,7 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
                              builder.state.sceneHiddenHas(frame.entity);
     const UiColor ink = selected ? theme.color.accentInk : layerHidden ? theme.color.textFaint : theme.color.text;
     const UiRect twisty = takeLeft(rowContent, 28.0f);
-    if (!children.empty())
+    if (!children.empty() || guiChildren)
       builder.list.addImage(centred(twisty, 12.0f, 12.0f),
                             static_cast<UiImageId>(collapsed ? UiIcon::EditorAuthorAdd : UiIcon::EditorAuthorChevron),
                             selected ? theme.color.accentInk : theme.color.textDim);
@@ -1874,7 +2048,7 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     // primeira, então quem entra depois fica por cima. O olho precisa ganhar do
     // fundo da linha, senão tocar nele seleciona em vez de alternar.
     builder.router.addRegion(row, hierarchyRowWidget(frame.entity));
-    if (!children.empty()) builder.router.addRegion(twisty,widgetId(EditorWidget::HierarchyCollapseBase)+frame.entity);
+    if (!children.empty() || guiChildren) builder.router.addRegion(twisty,widgetId(EditorWidget::HierarchyCollapseBase)+frame.entity);
     builder.router.addRegion(eye, hierarchyEyeWidget(frame.entity));
     builder.router.addRegion(hand, hierarchyPickWidget(frame.entity));
   }
@@ -3085,6 +3259,11 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   const auto &theme=builder.theme;
   const auto *component=entity.components.at(index);if(!component || &component->type()!=entry.type) return;
   const auto &state=builder.state;
+  if(entry.type==&scene::Collider::descriptor||entry.type==&scene::PhysicsBody::descriptor||entry.type==&scene::Character::descriptor){
+    auto tools=takeTop(content,38);
+    if(entry.type==&scene::Collider::descriptor){const float half=tools.width*.5f;colliderToolButton(builder,takeLeft(tools,half),"Geometria",EditorWidget::ColliderGeometryOpen,UiIcon::EditorColliderFace,false,state.workspace!=EditorWorkspace::Play);}
+    colliderToolButton(builder,tools,"Diagnóstico",EditorWidget::PhysicsDiagnosticOpen,UiIcon::PhysicsDiagnostic);
+  }
   if(entry.type==&scene::Timer::descriptor && state.timerRuntime && !builder.multiEdit && content.height>=52) {
     const auto *live=state.timerRuntime->state(entity.id,component->instanceId());
     const auto &timer=static_cast<const scene::Timer&>(*component);
@@ -3333,9 +3512,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     if((mesh&&!searching&&!lightmap)||(binding.kind!=resources::AssetType::Mesh&&!lightmap&&
              binding.kind!=resources::AssetType::EnvironmentProfile&&
              binding.kind!=resources::AssetType::EnvironmentMap&&
-             binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip)||!show(binding.presentation)) continue;
+             binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip&&binding.kind!=resources::AssetType::UiDocument)||!show(binding.presentation)) continue;
     for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
   }
+  if(entry.type==&scene::UiCanvas::descriptor && !searching && group=="Canvas")fields.push_back({3,widgetId(EditorWidget::GuiCanvasEdit)});
   if(mesh && !builder.state.meshTab && !searching) {
     fields.push_back({3,widgetId(EditorWidget::MeshChoose)});
     fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
@@ -3961,6 +4141,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
           builder.router.addRegion(enabledReset,widgetId(EditorWidget::ComponentFieldResetBase)+index+(10u<<8)+(f.second<<12)+(f.slot<<20));
         }
       }
+    } else if(f.index==widgetId(EditorWidget::GuiCanvasEdit)) {
+      builder.label(slot,"Editar documento UI",theme.color.text,theme.type.caption);
+      builder.list.addImage(centred(takeRight(slot,26),18,18),static_cast<UiImageId>(UiIcon::UiInterfaceCanvas),theme.color.accent);
+      if(static_cast<const scene::UiCanvas&>(*component).document.valid())builder.router.addRegion(hit,f.index);
     } else if(f.index==widgetId(EditorWidget::MeshChoose)) {
       builder.list.addImage(centred(takeRight(slot,30),22,22),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.text);
       const auto ref=meshAsset(entity);const auto text=ref?"Malha "+std::to_string(ref):"Escolher malha";
@@ -4069,13 +4253,14 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
        resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":
        resourceBinding&&resourceBinding->kind==resources::AssetType::Texture?"Buscar textura":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip?"Buscar WAV":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::UiDocument?"Buscar documento UI":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AnimationClip?"Buscar clipe":"Buscar malha"):
       state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
   if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
                        resourceBinding->kind==resources::AssetType::EnvironmentMap||
-                       resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip)) {
+                       resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip||resourceBinding->kind==resources::AssetType::UiDocument)) {
     if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
       const auto action=deflate(takeTop(content,40),UiInsets::all(2));
       builder.list.addRect(action,theme.color.accent,theme.radius.control);
@@ -4096,7 +4281,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     const u32 page=std::min(state.meshPage,pages-1);
     auto clear=takeTop(content,34);builder.label(clear,
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":
-        resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":"Sem mapa HDRI",
+        resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":resourceBinding->kind==resources::AssetType::UiDocument?"Sem documento UI · canvas inativo":"Sem mapa HDRI",
         theme.color.textDim,theme.type.caption);
     builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
     for(u32 row=page*perPage;row<matches.size()&&row<(page+1)*perPage;++row) {
@@ -4104,7 +4289,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       auto slot=takeTop(content,50);const auto hit=slot;
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       if(selectedResource==record.guid) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
-      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:UiIcon::LightingSun),0xffffffff);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:UiIcon::LightingSun),0xffffffff);
       const auto slash=record.path.find_last_of('/');const auto name=record.path.substr(slash==std::string::npos?0:slash+1);
       builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
       builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
@@ -4114,7 +4299,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
         (resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV corresponde à busca":"Nenhum recurso corresponde à busca"):
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?
         "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::Texture?
-        "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
+        "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":resourceBinding->kind==resources::AssetType::UiDocument?"Salve uma interface .aeui para registrar o documento":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
     if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
@@ -5045,6 +5230,11 @@ void buildCreationSheet(ScreenBuilder &builder,EditorScreenLayout &layout) {
           list.addImage(centred(takeLeft(inner,20),16,16),static_cast<UiImageId>(editorIconByName(schema->icon)),0xffffffff);
           builder.label(inner,schema->name,theme.color.text,theme.type.caption);
           x+=chip+6;
+        }
+        if(scene::validPrimitive(selected.childVisual)) {
+          const auto row=takeBottom(body,42);
+          list.addImage(centred({row.x,row.y,32,row.height},22,22),static_cast<UiImageId>(UiIcon::PrimitiveCylinder),0xffffffff);
+          builder.label({row.x+38,row.y,row.width-38,row.height},"Cilindro · sem Body/Collider",theme.color.textDim,theme.type.caption);
         }
       }
     } else {
@@ -6087,7 +6277,9 @@ void buildPrefabOverrides(ScreenBuilder &builder,UiRect content) {
       const auto apply=deflate(takeRight(actions,actions.width*.5f),UiInsets{4,2,0,2});
       const bool enabled=!stale&&difference.applyable;
       builder.list.addRect(apply,enabled?withAlpha(origin==PrefabOverrideOrigin::Conflict?theme.color.warning:theme.color.accent,.16f):theme.color.raised,theme.radius.control);
-      builder.label(apply,origin==PrefabOverrideOrigin::Conflict?"Substituir fonte":"Aplicar fonte",
+      const auto *component=object?object->components.findInstance(difference.component):nullptr;
+      const bool revision=component&&&component->type()==&scene::CollisionRecipe::descriptor;
+      builder.label(apply,origin==PrefabOverrideOrigin::Conflict?"Substituir fonte":revision?"Aplicar revisão":"Aplicar fonte",
                     enabled?(origin==PrefabOverrideOrigin::Conflict?theme.color.warning:theme.color.accent):theme.color.textMuted,theme.type.caption,UiAlign::Center);
       if(enabled) builder.router.addRegion(apply,widgetId(EditorWidget::PrefabOverrideApplyBase)+i);
     }
@@ -6126,12 +6318,178 @@ void buildPrefabOverrides(ScreenBuilder &builder,UiRect content) {
 
 void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
-  auto title=takeTop(content,36),close=takeRight(title,36);
-  builder.label(title,"Ações do objeto",theme.color.text,theme.type.body);
-  builder.label(close,"x",theme.color.textDim,theme.type.body,UiAlign::Center);
-  builder.router.addRegion(close,widgetId(EditorWidget::InspectorMenu));
+  const bool compactReview=state.motorSetupTarget==entity.id&&state.motorSetupPolicy==3&&state.motorBakeReady&&!state.motorBakeSourcesOpen&&state.surface.height<600;
+  if(!compactReview) {
+    auto title=takeTop(content,36),close=takeRight(title,36);
+    builder.label(title,"Ações do objeto",theme.color.text,theme.type.body);
+    builder.label(close,"x",theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(close,widgetId(EditorWidget::InspectorMenu));
+  }
+  if(state.motorSetupTarget==entity.id) {
+    if(state.motorSetupPolicy==3&&state.motorBakeSourcesOpen) {
+      auto footer=takeBottom(content,40);builder.label(footer,"Concluir escolha das fontes",theme.color.accent,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(footer,widgetId(EditorWidget::MotorBakeSourcesDone));
+      builder.label(takeTop(content,32),"Fontes para a colisão",theme.color.text,theme.type.body);
+      auto actions=takeTop(content,32),own=takeLeft(actions,actions.width/2);
+      builder.label(own,"Só este objeto",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(own,widgetId(EditorWidget::MotorBakeSourcesObject));
+      builder.label(actions,"Disponíveis",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(actions,widgetId(EditorWidget::MotorBakeSourcesHierarchy));
+      const auto blocked=std::count_if(state.motorBakeSourceRows.begin(),state.motorBakeSourceRows.end(),[](const auto &row){return !row.error.empty();});
+      builder.label(takeTop(content,24),"Fontes: "+std::to_string(state.motorBakeSelectedSources)+" · bloqueadas: "+std::to_string(blocked),theme.color.textDim,theme.type.caption);
+      if(!state.motorSetupError.empty())builder.label(takeTop(content,24),fitMiddle(builder.list,state.motorSetupError,content.width,theme.type.caption),theme.color.warning,theme.type.caption);
+      const usize pageSize=state.motorBakePartsPerPage(),count=state.motorBakeSourceRows.size();
+      if(!count){builder.label(takeTop(content,24),"Sem malhas nesta hierarquia",theme.color.warning,theme.type.caption);return;}
+      const usize page=std::min<usize>(state.motorBakeSourcePage,(count-1)/pageSize),begin=page*pageSize;
+      auto nav=count>pageSize?takeBottom(content,32):UiRect{};
+      for(usize i=begin;i<std::min(begin+pageSize,count)&&content.height>=44;++i) {
+        const auto &source=state.motorBakeSourceRows[i];auto row=takeTop(content,44);
+        auto mark=takeLeft(row,24);builder.label(mark,source.error.empty()?(source.selected?"+":"-"):"!",source.error.empty()?(source.selected?theme.color.accent:theme.color.textDim):theme.color.warning,theme.type.body,UiAlign::Center);
+        builder.label(takeTop(row,22),fitMiddle(builder.list,source.label,row.width,theme.type.caption),source.selected?theme.color.text:theme.color.textDim,theme.type.caption);
+        builder.label(row,source.error.empty()?(source.selected?"Incluída · toque para remover":"Fora do bake · toque para incluir"):fitMiddle(builder.list,source.error,row.width,theme.type.caption),source.error.empty()?theme.color.textDim:theme.color.warning,theme.type.caption);
+        if(source.error.empty()||source.selected)builder.router.addRegion({mark.x,mark.y,mark.width+row.width,44},widgetId(EditorWidget::MotorBakeSourceBase)+static_cast<u32>(i));
+      }
+      if(nav.height>0){auto previous=takeLeft(nav,nav.width/2);builder.label(previous,"Anterior",page?theme.color.textDim:theme.color.textMuted,theme.type.caption,UiAlign::Center);builder.label(nav,"Próximas fontes",begin+pageSize<count?theme.color.textDim:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        if(page)builder.router.addRegion(previous,widgetId(EditorWidget::MotorBakeSourcePrevious));
+        if(begin+pageSize<count)builder.router.addRegion(nav,widgetId(EditorWidget::MotorBakeSourceNext));}
+      return;
+    }
+    auto footer=takeBottom(content,44),back=takeLeft(footer,80);
+    builder.label(back,"Voltar",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(back,widgetId(EditorWidget::MotorSetupBack));
+    if(state.motorSetupError.empty()&&(state.motorSetupPolicy!=3||state.motorBakeReady)) {
+      builder.list.addRect(footer,theme.color.accent,theme.radius.control);
+      builder.label(footer,"Aplicar · 1 Undo",theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(footer,widgetId(EditorWidget::MotorSetupApply));
+    }
+    const bool compactBake=state.motorSetupPolicy==3&&state.surface.height<600;
+    if(compactReview&&!state.motorSetupError.empty())builder.label(takeBottom(content,20),fitMiddle(builder.list,state.motorSetupError,content.width,theme.type.caption),theme.color.warning,theme.type.caption);
+    auto heading=takeTop(content,compactBake?26:40);
+    if(state.motorSetupPolicy==3&&state.motorBakeReady) {
+      auto sources=takeRight(heading,70);builder.label(sources,"Fontes",theme.color.accent,theme.type.caption,UiAlign::Center);builder.router.addRegion(sources,widgetId(EditorWidget::MotorBakeSourcesOpen));
+    }
+    builder.list.addImage(centred(takeLeft(heading,32),24,24),static_cast<UiImageId>(state.motorSetupPolicy==3?(state.motorBakeRecipeAvailable?UiIcon::PhysicsCollisionRecipe:UiIcon::ComponentConvexParts):UiIcon::ComponentDynamicBodyMotor),0xffffffff);
+    builder.label(heading,state.motorSetupPolicy==3?(compactBake?"Colisão":state.motorBakeRecipeAvailable?"Regenerar colisão":"Colisão"):"Locomoção no objeto",theme.color.text,theme.type.body);
+    const auto paragraph=[&](std::string_view text,UiColor color) {
+      for(const auto &line:wrapText(builder.list,text,content.width,theme.type.caption)) {
+        if(content.height<22)break;
+        builder.label(takeTop(content,22),line.c_str(),color,theme.type.caption);
+      }
+      takeTop(content,8);
+    };
+    if(!compactBake)paragraph(entity.name,theme.color.textDim);
+    auto choices=takeTop(content,compactBake?(state.motorBakeReady?0:30):38);const float width=choices.width/4;
+    const char *labels[]{"Preservar","Ajustar","Convexo","Decompor"};
+    const EditorWidget widgets[]{EditorWidget::MotorSetupPreserve,EditorWidget::MotorSetupFit,EditorWidget::MotorSetupConvex,EditorWidget::MotorSetupDecompose};
+    for(u32 i=0;i<4&&choices.height>0;++i) {
+      auto choice=takeLeft(choices,width);
+      if(i==state.motorSetupPolicy)builder.list.addRect(deflate(choice,UiInsets::all(2)),theme.color.accent,theme.radius.control);
+      builder.label(choice,labels[i],i==state.motorSetupPolicy?theme.color.accentInk:theme.color.textDim,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(choice,widgetId(widgets[i]));
+    }
+    if(!compactBake)takeTop(content,8);
+    if(state.motorSetupPolicy==3) {
+      if(!state.motorBakeReady&&!state.motorBakeRunning) {
+        auto sources=takeTop(content,compactBake?28:32);
+        builder.label(sources,"Fontes · "+std::to_string(state.motorBakeSelectedSources)+" selecionadas",theme.color.accent,theme.type.caption);
+        builder.router.addRegion(sources,widgetId(EditorWidget::MotorBakeSourcesOpen));
+      }
+      auto budgets=takeTop(content,compactBake?(state.motorBakeReady?0:30):34);const float size=budgets.width/3;
+      const char *names[]{"Leve · 8","Equilibrado · 16","Detalhado · 32"};
+      const char *compactNames[]{"8 partes","16 partes","32 partes"};
+      for(u32 i=0;i<3&&budgets.height>0;++i){auto r=takeLeft(budgets,size);if(i==state.motorBakeBudget)builder.list.addRect(deflate(r,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+        builder.label(r,compactBake?compactNames[i]:names[i],i==state.motorBakeBudget?theme.color.text:theme.color.textDim,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(r,widgetId(EditorWidget::MotorBakeBudgetLow)+i);}
+      if(!compactBake||(!state.motorBakeReady&&state.motorBakeBudget==3)) {
+        std::string custom="Receita personalizada";
+        if(const auto *recipe=scene::collisionRecipe(entity.components);state.motorBakeBudget==3&&recipe) {
+          const auto &s=recipe->settings;char text[160];std::snprintf(text,sizeof(text),"Receita · %u partes · %u voxels · %u vértices · %.3g%% · %us",s.maximumParts,s.voxelResolution,s.maximumVertices,s.volumeErrorPercent,s.timeBudgetSeconds);custom=text;
+        }
+        if(compactBake) {
+          const auto *recipe=scene::collisionRecipe(entity.components);
+          const auto text=recipe?"Personalizado · "+std::to_string(recipe->settings.maximumParts)+" partes · "+std::to_string(recipe->settings.timeBudgetSeconds)+"s":custom;
+          builder.label(takeTop(content,20),fitMiddle(builder.list,text,content.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+        } else paragraph(state.motorBakeBudget==3?custom:state.motorBakeBudget==0?"50 mil voxels · 32 vértices/casco · 1% volume":state.motorBakeBudget==1?"100 mil voxels · 32 vértices/casco · 1% volume":"400 mil voxels · 64 vértices/casco · 1% volume",theme.color.textDim);
+      }
+      if(state.motorBakeRunning) {
+        auto progress=takeTop(content,4);builder.list.addRect(progress,theme.color.raised,2);progress.width*=state.motorBakeProgress;builder.list.addRect(progress,theme.color.accent,2);
+        if(compactBake)builder.label(takeTop(content,20),fitMiddle(builder.list,state.motorBakeStage,content.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+        else paragraph(state.motorBakeStage,theme.color.textDim);
+      }
+      auto generate=takeTop(content,compactReview?32:compactBake?28:36);
+      if(compactReview&&state.motorBakeRegenerating) {
+        const auto confirm=takeRight(generate,generate.width/2);
+        builder.label(confirm,state.motorBakeMappingConfirmed?"Confirmado":"Confirmar",state.motorBakeMappingConfirmed?theme.color.textDim:theme.color.accent,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(confirm,widgetId(EditorWidget::MotorBakeConfirmMapping));
+      }
+      builder.label(generate,compactReview?"Gerar novamente":state.motorBakeRunning?"Cancelar geração":state.motorBakeReady?"Gerar novamente":state.motorBakeRecipeAvailable?"Regenerar · preservar edições":"Gerar prévia",theme.color.accent,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(generate,widgetId(state.motorBakeRunning?EditorWidget::MotorBakeCancel:state.motorBakeRecipeAvailable?EditorWidget::MotorBakeRegenerate:EditorWidget::MotorBakeStart));
+      if(state.motorBakeReady) {
+        if(state.motorBakeRegenerating) {
+          auto confirm=takeTop(content,compactReview?0:32);
+          if(confirm.height>0) {
+          builder.label(confirm,state.motorBakeMappingConfirmed?"Correspondências confirmadas":"Confirmar correspondências",state.motorBakeMappingConfirmed?theme.color.textDim:theme.color.accent,theme.type.caption,UiAlign::Center);
+          builder.router.addRegion(confirm,widgetId(EditorWidget::MotorBakeConfirmMapping));
+          }
+          if(!compactBake)paragraph(state.motorBakeMappingSummary,theme.color.textDim);
+        }
+        if(compactBake)builder.label(takeTop(content,20),std::to_string(state.motorBakePreview.size())+" partes · toque para alternar",theme.color.text,theme.type.caption);
+        else paragraph(std::to_string(state.motorBakePreview.size())+" partes · toque para ativar/desativar",theme.color.text);
+        const usize pageSize=state.motorBakePartsPerPage();
+        const usize page=std::min<usize>(state.motorBakePage,(state.motorBakeEnabled.size()-1)/pageSize);
+        const usize begin=page*pageSize;
+        auto navigation=state.motorBakeEnabled.size()>pageSize?takeBottom(content,32):UiRect{};
+        for(usize i=begin;i<std::min(begin+pageSize,state.motorBakeEnabled.size())&&content.height>=(state.motorBakeRegenerating?64:32);++i) {
+          const bool removed=i<state.motorBakePartNotes.size()&&state.motorBakePartNotes[i].starts_with("Remoção local");
+          auto row=takeTop(content,32);const auto label=std::string(removed?"Removida localmente":state.motorBakeEnabled[i]?"Ativa":"Desativada")+" · parte "+std::to_string(i+1);
+          builder.label(row,label.c_str(),state.motorBakeEnabled[i]?theme.color.accent:theme.color.textMuted,theme.type.caption);
+          if(!removed)builder.router.addRegion(row,widgetId(EditorWidget::MotorBakePartBase)+static_cast<u32>(i));
+          if(state.motorBakeRegenerating&&i<state.motorBakePartMapping.size()) {
+            auto mapping=takeTop(content,32);const auto previous=state.motorBakePartMapping[i];
+            const auto text=previous?"Vínculo: Colisor #"+std::to_string(previous):"Vínculo: nova parte";
+            builder.label(mapping,text,theme.color.text,theme.type.caption);
+            builder.router.addRegion(mapping,widgetId(EditorWidget::MotorBakeMappingBase)+static_cast<u32>(i));
+            if(!compactBake&&i<state.motorBakePartNotes.size()&&!state.motorBakePartNotes[i].empty())paragraph(state.motorBakePartNotes[i],theme.color.textDim);
+          }
+        }
+        if(navigation.height>0){auto previous=takeLeft(navigation,navigation.width/2);
+          builder.label(previous,"Anterior",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.label(navigation,"Próximas partes",theme.color.textDim,theme.type.caption,UiAlign::Center);
+          builder.router.addRegion(previous,widgetId(EditorWidget::MotorBakePrevious));builder.router.addRegion(navigation,widgetId(EditorWidget::MotorBakeNext));}
+      }
+    }
+    if(!compactReview&&(!compactBake||!state.motorSetupError.empty()))paragraph(state.motorSetupError.empty()?state.motorSetupSummary:state.motorSetupError,state.motorSetupError.empty()?theme.color.text:theme.color.warning);
+    return;
+  }
+  if(state.characterConversionTarget==entity.id) {
+    auto footer=takeBottom(content,44);
+    const auto back=takeLeft(footer,80);
+    builder.label(back,"Voltar",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(back,widgetId(EditorWidget::CharacterConversionBack));
+    if(state.characterConversionError.empty()) {
+      builder.list.addRect(footer,theme.color.accent,theme.radius.control);
+      builder.label(footer,"Converter · 1 Undo",theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(footer,widgetId(EditorWidget::CharacterConversionApply));
+    }
+    const auto paragraph=[&](std::string_view text,UiColor color) {
+      for(const auto &line:wrapText(builder.list,text,content.width,theme.type.caption)) {
+        if(content.height<22) break;
+        builder.label(takeTop(content,22),line.c_str(),color,theme.type.caption);
+      }
+      takeTop(content,8);
+    };
+    builder.list.addImage(centred(takeTop(content,42),32,32),static_cast<UiImageId>(UiIcon::ComponentCharacter),0xffffffff);
+    paragraph(std::string("Character > ")+entity.name,theme.color.text);
+    paragraph("A raiz controla a cápsula. A malha selecionada permanece como filho visual, com material, identidade e filhos preservados.",theme.color.textDim);
+    if(!state.characterConversionError.empty()) paragraph(state.characterConversionError,theme.color.warning);
+    else {
+      paragraph("Body/Collider serão retirados do visual. Undo restaura seus valores, a hierarquia e a ordem anteriores.",theme.color.textDim);
+      paragraph("Cápsula sugerida: raio "+decimalText(state.characterConversionRadius,2)+" m; altura "+decimalText(state.characterConversionHeight,2)+" m. Ajustável depois da conversão.",theme.color.accent);
+      paragraph("A cápsula é uma aproximação da geometria; não conserva a forma de colisão do Body. Scripts que buscam Body por código precisam ser adaptados.",theme.color.textMuted);
+    }
+    return;
+  }
   const bool root=entity.id==state.document->root();
   const struct {const char *label;EditorWidget widget;bool enabled;} actions[]{
+      {scene::collisionRecipe(entity.components)?"Regenerar colisão…":"Configurar locomoção…",EditorWidget::MotorSetupOpen,!root&&!builder.multiEdit&&state.workspace!=EditorWorkspace::Play},
+      {"Criar raiz Character…",EditorWidget::CharacterConversionOpen,!root&&runtime::meshRenderer(entity)&&!builder.multiEdit},
       {"Renomear",EditorWidget::RenameSelection,true},
       {"Duplicar",EditorWidget::DuplicateSelection,!root},
       {"Excluir",EditorWidget::DeleteSelection,!root},
@@ -7015,6 +7373,9 @@ void buildComponentOverview(ScreenBuilder &builder,UiRect content,const EditorEn
 
 
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
+  if(builder.state.guiInspector) {
+    builder.list.addRect(panel,builder.theme.color.surface);builder.router.addBlocker(panel);return;
+  }
   if (builder.state.importPanel) {
     builder.list.addRect(panel, builder.theme.color.surface);
     builder.router.addBlocker(panel);
@@ -7172,6 +7533,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     buildInspectorDebug(builder,content,*entity);
     return;
   }
+  if((builder.state.colliderTopology&&builder.state.colliderTopology->object==target)||builder.state.physicsDiagnosticOpen){buildColliderAuthoringInspector(builder,content);return;}
   if(builder.state.pathEditorOpen) {
     const auto *path=entity->components.findInstance(builder.state.pathInstance);
     if(path&&&path->type()==&scene::Path::descriptor) {
@@ -8873,6 +9235,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   const bool playing=state.workspace==EditorWorkspace::Play;
   if(!playing) buildViewportOverlay(builder, layout.viewport);
+  else if(state.physicsDiagnosticOpen) {
+    list.pushClip(layout.viewport);
+    buildPhysicsDiagnosticOverlay(builder,true);
+    list.popClip();
+  }
   // Tinta de Play (Unity: Play Mode tint): os painéis mostram o mundo vivo, e
   // isso fica visível sem ler nada. A faixa do Inspector diz o que acontece
   // com a edição e, quando o mundo recusa, o motivo.
@@ -9129,15 +9496,21 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.qualityPanel) buildQualityPanel(builder,layout.viewport);
   if(state.lightExplorer) buildLightExplorer(builder,layout.viewport);
   if (state.entityMenu) {
-    const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(180.0f,layout.viewport.width), std::min(315.0f,layout.viewport.height-56.0f)};
+    const auto *selected=state.document?state.document->find(state.selection):nullptr;
+    const bool convert=selected&&runtime::meshRenderer(*selected)&&state.workspace==EditorWorkspace::Scene;
+    const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(240.0f,layout.viewport.width), std::min(convert?370.0f:333.0f,layout.viewport.height-56.0f)};
     builder.list.addRect(menu, theme.color.raised, theme.radius.control);
     UiRect rows=menu;
     const char *names[]={"Duplicar selecionado","Criar grupo","Excluir selecionado","Mover acima","Mover abaixo","Mudar pai","Mover para raiz","Renomear","Propriedades"};
     const EditorWidget actions[]={EditorWidget::DuplicateSelection,EditorWidget::CreateGroup,EditorWidget::DeleteSelection,EditorWidget::MoveEarlier,EditorWidget::MoveLater,EditorWidget::ReparentSelection,EditorWidget::MoveToRoot,EditorWidget::RenameSelection,EditorWidget::HierarchyProperties};
     for(u32 i=0;i<9;++i) {
-      const auto row=takeTop(rows,menu.height/9.0f);
+      const auto row=takeTop(rows,menu.height/(convert?10.f:9.f));
       builder.label(row,names[i],theme.color.text,theme.type.body,UiAlign::Center);
       router.addRegion(row,widgetId(actions[i]));
+    }
+    if(convert) {
+      builder.label(rows,"Criar raiz Character…",theme.color.accent,theme.type.caption,UiAlign::Center);
+      router.addRegion(rows,widgetId(EditorWidget::CharacterConversionOpen));
     }
   }
   // Janelas que não bloqueiam o editor (Inspectors focados, histórico, camadas

@@ -1,0 +1,11 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_u11_integral.cpp:344: real asymmetric COM, geometry probes and query support, static authority is Free
+PASS u11_topology_publish_isolated_uid_solver_history_and_reopen
+PASS u11_topology_vertex_cancel_stale_occlusion_gesture_and_compact
+FAIL u11_physics_diagnostic_com_support_authority_cache_and_lifecycle
+U11_SCALE mesh triangles=100000 vertices=50451 faces=1 build_ms=438.303 validate_ms=528.451 bvh_pick_ms=0.016
+U11_SCALE parts=1 solver_build_ms=1.838 diagnostic_ms=0.100 contours_ms=0.065 segments=68 probes=6
+U11_SCALE parts=16 solver_build_ms=2.582 diagnostic_ms=0.194 contours_ms=0.470 segments=1088 probes=16
+U11_SCALE parts=64 solver_build_ms=2.782 diagnostic_ms=0.545 contours_ms=1.705 segments=4352 probes=64
+U11_SCALE parts=256 solver_build_ms=5.378 diagnostic_ms=2.330 contours_ms=4.154 segments=9600 probes=256
+PASS u11_scale_full_geometry_budget_and_256_part_solver
+3/4 scenarios passed

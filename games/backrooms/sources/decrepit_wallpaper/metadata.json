@@ -1,0 +1,846 @@
+{
+  "Diffuse": {
+    "8k": {
+      "jpg": {
+        "size": 38962690,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_diff_8k.jpg",
+        "md5": "d9f0a644f15cc17fd5a15a61ee0f2d6d"
+      },
+      "png": {
+        "size": 344150875,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_diff_8k.png",
+        "md5": "b3c8055b9dfae6d2306d22d99a2173a8"
+      },
+      "exr": {
+        "size": 58385195,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_diff_8k.exr",
+        "md5": "61532064a9360d33f61717084378620f"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 12579986,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_diff_4k.jpg",
+        "md5": "b7619c942a2ede90fe50eb967dee2511"
+      },
+      "png": {
+        "size": 89106026,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_diff_4k.png",
+        "md5": "b64316ca0eab2e6058c8faf776b17784"
+      },
+      "exr": {
+        "size": 20381829,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_diff_4k.exr",
+        "md5": "c796621afeea3fd3f62ad4a2f1d87539"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 3325490,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+        "md5": "6d8cef16eecb7b4c84d77008ffc375b5"
+      },
+      "png": {
+        "size": 22519986,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.png",
+        "md5": "bb6f2a93e2f8ab578bcd35b02f1d285e"
+      },
+      "exr": {
+        "size": 6072622,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.exr",
+        "md5": "05627e5a9b9ec3a6f036cf37c8a81655"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 814172,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_diff_1k.jpg",
+        "md5": "25db62cc09d0350756e60c0127853bbb"
+      },
+      "png": {
+        "size": 5610562,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_diff_1k.png",
+        "md5": "2b9c971228cf2f048b66f5b646f437ab"
+      },
+      "exr": {
+        "size": 1611019,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_diff_1k.exr",
+        "md5": "9557a69b7dd2f7eb778d420dc492811b"
+      }
+    }
+  },
+  "nor_dx": {
+    "8k": {
+      "jpg": {
+        "size": 34787994,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_8k.jpg",
+        "md5": "04bf6f14b8c0c594b053bb3c3ff6fc32"
+      },
+      "png": {
+        "size": 303240546,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_8k.png",
+        "md5": "51d2cfb9cf191a60e6a32b346a781838"
+      },
+      "exr": {
+        "size": 64414702,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_8k.exr",
+        "md5": "7df6b457a39f65c4341d2ad11d9e5d29"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 10731718,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_4k.jpg",
+        "md5": "88de4ebb19916aadd978c5e0ca872b25"
+      },
+      "png": {
+        "size": 82859162,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_4k.png",
+        "md5": "c51a967d0031cdc2395d29697179e0c9"
+      },
+      "exr": {
+        "size": 22346163,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_4k.exr",
+        "md5": "3fe3ebd651f7be044b918e6fec659b21"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 2896883,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_2k.jpg",
+        "md5": "83c04338e5f0e5f9941375952a7e0546"
+      },
+      "png": {
+        "size": 21066418,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_2k.png",
+        "md5": "9866d53b2b3094bf8b4ca8d6aa51f990"
+      },
+      "exr": {
+        "size": 6475656,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_2k.exr",
+        "md5": "30f55febc9ffb0d75d61a33a1dc032d7"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 688788,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_1k.jpg",
+        "md5": "bd9a97df66b765f2c568b9edf54789d7"
+      },
+      "png": {
+        "size": 5265723,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_1k.png",
+        "md5": "5c5f78437cafd525708c23b20f6cb487"
+      },
+      "exr": {
+        "size": 1631646,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_nor_dx_1k.exr",
+        "md5": "2a7e463830175f20cf373548b792fb24"
+      }
+    }
+  },
+  "nor_gl": {
+    "8k": {
+      "jpg": {
+        "size": 34791042,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_8k.jpg",
+        "md5": "fd0d17715d3568634ced7a52377e745d"
+      },
+      "png": {
+        "size": 318927338,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_8k.png",
+        "md5": "0326a41f31de2b828f174d8010a2ca46"
+      },
+      "exr": {
+        "size": 64411319,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_8k.exr",
+        "md5": "f3ec6e3d80d3822b049da99e8860249c"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 10747233,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_4k.jpg",
+        "md5": "c6ff17b62ab68ab0443025fc64f42351"
+      },
+      "png": {
+        "size": 82858806,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_4k.png",
+        "md5": "20e974f598a0461fb216856ffe83ec7a"
+      },
+      "exr": {
+        "size": 22346927,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_4k.exr",
+        "md5": "bcdad994b56db68d9b4a74a3b0942b91"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 2906832,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.jpg",
+        "md5": "8ae2cd9b5d40327c6a0193fa9fd97058"
+      },
+      "png": {
+        "size": 21066930,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.png",
+        "md5": "3834a263d4aab4adf413ee4074991a46"
+      },
+      "exr": {
+        "size": 6478471,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.exr",
+        "md5": "5132ef1f51c752ed2eb661cce953a134"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 691701,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_1k.jpg",
+        "md5": "1f8002bef047744e4d27e2f998e6caa2"
+      },
+      "png": {
+        "size": 5265490,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_1k.png",
+        "md5": "7ab5dd89abf01228807d8a07bb8aeb24"
+      },
+      "exr": {
+        "size": 1632630,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_1k.exr",
+        "md5": "24929cde807f00d318c59c727834342a"
+      }
+    }
+  },
+  "blend": {
+    "8k": {
+      "blend": {
+        "include": {
+          "textures/decrepit_wallpaper_disp_8k.png": {
+            "size": 46068428,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_disp_8k.png",
+            "md5": "38ea87df1485640bf3c4dee0d3faa85a"
+          },
+          "textures/decrepit_wallpaper_nor_gl_8k.exr": {
+            "size": 64411319,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_8k.exr",
+            "md5": "f3ec6e3d80d3822b049da99e8860249c"
+          },
+          "textures/decrepit_wallpaper_diff_8k.jpg": {
+            "size": 38962690,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_diff_8k.jpg",
+            "md5": "d9f0a644f15cc17fd5a15a61ee0f2d6d"
+          },
+          "textures/decrepit_wallpaper_rough_8k.exr": {
+            "size": 16913194,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_rough_8k.exr",
+            "md5": "a47b0a5dbfee9921d73a8c9456dac7c1"
+          }
+        },
+        "size": 216344,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/blend/8k/decrepit_wallpaper/decrepit_wallpaper_8k.blend",
+        "md5": "610e8b4fe1fd7cbc42a2687c6c991943"
+      }
+    },
+    "4k": {
+      "blend": {
+        "include": {
+          "textures/decrepit_wallpaper_rough_4k.exr": {
+            "size": 5536093,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_rough_4k.exr",
+            "md5": "bae16f90af882979b0b08916155c0c5c"
+          },
+          "textures/decrepit_wallpaper_diff_4k.jpg": {
+            "size": 12579986,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_diff_4k.jpg",
+            "md5": "b7619c942a2ede90fe50eb967dee2511"
+          },
+          "textures/decrepit_wallpaper_disp_4k.png": {
+            "size": 18909616,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_disp_4k.png",
+            "md5": "0e864145c05a5115457c4d3475194f46"
+          },
+          "textures/decrepit_wallpaper_nor_gl_4k.exr": {
+            "size": 22346927,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_4k.exr",
+            "md5": "bcdad994b56db68d9b4a74a3b0942b91"
+          }
+        },
+        "size": 216546,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/blend/4k/decrepit_wallpaper/decrepit_wallpaper_4k.blend",
+        "md5": "5b72c92af4f55a0bb2ffc249de2ad2c3"
+      }
+    },
+    "2k": {
+      "blend": {
+        "include": {
+          "textures/decrepit_wallpaper_nor_gl_2k.exr": {
+            "size": 6478471,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.exr",
+            "md5": "5132ef1f51c752ed2eb661cce953a134"
+          },
+          "textures/decrepit_wallpaper_rough_2k.exr": {
+            "size": 1498077,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_rough_2k.exr",
+            "md5": "ac8eb9e135622d388f4c0861c738c8fe"
+          },
+          "textures/decrepit_wallpaper_disp_2k.png": {
+            "size": 5448717,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_disp_2k.png",
+            "md5": "a22d6712db59f57f6d81e7d5c66c76cb"
+          },
+          "textures/decrepit_wallpaper_diff_2k.jpg": {
+            "size": 3325490,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+            "md5": "6d8cef16eecb7b4c84d77008ffc375b5"
+          }
+        },
+        "size": 216341,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/blend/2k/decrepit_wallpaper/decrepit_wallpaper_2k.blend",
+        "md5": "e950e146f1cb813ef161302b23ffa69c"
+      }
+    },
+    "1k": {
+      "blend": {
+        "include": {
+          "textures/decrepit_wallpaper_rough_1k.exr": {
+            "size": 369672,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_rough_1k.exr",
+            "md5": "81ba6befe24fce19e1e2361e344e352e"
+          },
+          "textures/decrepit_wallpaper_nor_gl_1k.exr": {
+            "size": 1632630,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_1k.exr",
+            "md5": "24929cde807f00d318c59c727834342a"
+          },
+          "textures/decrepit_wallpaper_disp_1k.png": {
+            "size": 1473765,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_disp_1k.png",
+            "md5": "92590700030fda709fbecf20f2c33653"
+          },
+          "textures/decrepit_wallpaper_diff_1k.jpg": {
+            "size": 814172,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_diff_1k.jpg",
+            "md5": "25db62cc09d0350756e60c0127853bbb"
+          }
+        },
+        "size": 216592,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/blend/1k/decrepit_wallpaper/decrepit_wallpaper_1k.blend",
+        "md5": "8dd50a222ba96a49b986fd6ebe298a65"
+      }
+    }
+  },
+  "gltf": {
+    "8k": {
+      "gltf": {
+        "include": {
+          "textures/decrepit_wallpaper_nor_gl_8k.jpg": {
+            "size": 34791042,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_8k.jpg",
+            "md5": "fd0d17715d3568634ced7a52377e745d"
+          },
+          "textures/decrepit_wallpaper_diff_8k.jpg": {
+            "size": 38962690,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_diff_8k.jpg",
+            "md5": "d9f0a644f15cc17fd5a15a61ee0f2d6d"
+          },
+          "textures/decrepit_wallpaper_arm_8k.jpg": {
+            "size": 25652011,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_arm_8k.jpg",
+            "md5": "07ca86222809bfde31708b0d3764520d"
+          },
+          "decrepit_wallpaper.bin": {
+            "size": 2369428,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/8k/decrepit_wallpaper/decrepit_wallpaper.bin",
+            "md5": "3a2b38bfb0787e29b1c487a03f066b96"
+          }
+        },
+        "size": 2829,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/8k/decrepit_wallpaper/decrepit_wallpaper_8k.gltf",
+        "md5": "0565777da1bd47932aae31d1c7577336"
+      }
+    },
+    "4k": {
+      "gltf": {
+        "include": {
+          "textures/decrepit_wallpaper_arm_4k.jpg": {
+            "size": 7533114,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_arm_4k.jpg",
+            "md5": "7d18a5a68626d8d836f8a8d1a82e6640"
+          },
+          "textures/decrepit_wallpaper_diff_4k.jpg": {
+            "size": 12579986,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_diff_4k.jpg",
+            "md5": "b7619c942a2ede90fe50eb967dee2511"
+          },
+          "decrepit_wallpaper.bin": {
+            "size": 2369428,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/8k/decrepit_wallpaper/decrepit_wallpaper.bin",
+            "md5": "3a2b38bfb0787e29b1c487a03f066b96"
+          },
+          "textures/decrepit_wallpaper_nor_gl_4k.jpg": {
+            "size": 10747233,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_4k.jpg",
+            "md5": "c6ff17b62ab68ab0443025fc64f42351"
+          }
+        },
+        "size": 2829,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/4k/decrepit_wallpaper/decrepit_wallpaper_4k.gltf",
+        "md5": "014360f40f9c35d3a1d0c7e54f8c2c11"
+      }
+    },
+    "2k": {
+      "gltf": {
+        "include": {
+          "decrepit_wallpaper.bin": {
+            "size": 2369428,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/8k/decrepit_wallpaper/decrepit_wallpaper.bin",
+            "md5": "3a2b38bfb0787e29b1c487a03f066b96"
+          },
+          "textures/decrepit_wallpaper_nor_gl_2k.jpg": {
+            "size": 2906832,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.jpg",
+            "md5": "8ae2cd9b5d40327c6a0193fa9fd97058"
+          },
+          "textures/decrepit_wallpaper_arm_2k.jpg": {
+            "size": 1948954,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_arm_2k.jpg",
+            "md5": "3cc15a37a1c66fa295bfc541e5034d74"
+          },
+          "textures/decrepit_wallpaper_diff_2k.jpg": {
+            "size": 3325490,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+            "md5": "6d8cef16eecb7b4c84d77008ffc375b5"
+          }
+        },
+        "size": 2829,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/2k/decrepit_wallpaper/decrepit_wallpaper_2k.gltf",
+        "md5": "a24af3bef29537237036d594ee0cbd09"
+      }
+    },
+    "1k": {
+      "gltf": {
+        "include": {
+          "textures/decrepit_wallpaper_arm_1k.jpg": {
+            "size": 470742,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_arm_1k.jpg",
+            "md5": "35cff245dfdd5f671745926e0ad1c387"
+          },
+          "textures/decrepit_wallpaper_nor_gl_1k.jpg": {
+            "size": 691701,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_1k.jpg",
+            "md5": "1f8002bef047744e4d27e2f998e6caa2"
+          },
+          "decrepit_wallpaper.bin": {
+            "size": 2369428,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/8k/decrepit_wallpaper/decrepit_wallpaper.bin",
+            "md5": "3a2b38bfb0787e29b1c487a03f066b96"
+          },
+          "textures/decrepit_wallpaper_diff_1k.jpg": {
+            "size": 814172,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_diff_1k.jpg",
+            "md5": "25db62cc09d0350756e60c0127853bbb"
+          }
+        },
+        "size": 2829,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/gltf/1k/decrepit_wallpaper/decrepit_wallpaper_1k.gltf",
+        "md5": "a85c0e94e85dca3f65f76d6472081471"
+      }
+    }
+  },
+  "arm": {
+    "8k": {
+      "jpg": {
+        "size": 25652011,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_arm_8k.jpg",
+        "md5": "07ca86222809bfde31708b0d3764520d"
+      },
+      "png": {
+        "size": 223709588,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_arm_8k.png",
+        "md5": "7e9ea866b4c755ca9d18a421ab105c70"
+      },
+      "exr": {
+        "size": 36514091,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_arm_8k.exr",
+        "md5": "5a1fd55797bdb6fba21bacc660fd3ae0"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 7533114,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_arm_4k.jpg",
+        "md5": "7d18a5a68626d8d836f8a8d1a82e6640"
+      },
+      "png": {
+        "size": 62388671,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_arm_4k.png",
+        "md5": "ed3ec6fc20c258b084940a863acb792d"
+      },
+      "exr": {
+        "size": 11704846,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_arm_4k.exr",
+        "md5": "822eece9456f062083f4d165c4d8bcc4"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 1948954,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_arm_2k.jpg",
+        "md5": "3cc15a37a1c66fa295bfc541e5034d74"
+      },
+      "png": {
+        "size": 15919971,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_arm_2k.png",
+        "md5": "2cfeda711c91d34b61029dfbb060c150"
+      },
+      "exr": {
+        "size": 3204697,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_arm_2k.exr",
+        "md5": "9cc1bc78e2ea30c49231e30b3b568aae"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 470742,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_arm_1k.jpg",
+        "md5": "35cff245dfdd5f671745926e0ad1c387"
+      },
+      "png": {
+        "size": 3997561,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_arm_1k.png",
+        "md5": "1e2f37a4846044072b08f2f61cc1b55e"
+      },
+      "exr": {
+        "size": 787494,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_arm_1k.exr",
+        "md5": "b00c168ee9df78e27d7ff9d1dfa892cd"
+      }
+    }
+  },
+  "AO": {
+    "8k": {
+      "jpg": {
+        "size": 21574765,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_ao_8k.jpg",
+        "md5": "d5553f761cf5e6b9becb2eae0161d0f1"
+      },
+      "png": {
+        "size": 101623909,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_ao_8k.png",
+        "md5": "1d8f16043f4aae176aed0dcb9936ad46"
+      },
+      "exr": {
+        "size": 18227487,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_ao_8k.exr",
+        "md5": "d33eb70881b98c25452dc965c87a1d63"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 6247536,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_ao_4k.jpg",
+        "md5": "d8cc8339016f7cde483d13fea2becdb2"
+      },
+      "png": {
+        "size": 27036000,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_ao_4k.png",
+        "md5": "cd254b8d40a1e9e8c3cd54b485279895"
+      },
+      "exr": {
+        "size": 5682588,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_ao_4k.exr",
+        "md5": "b0e1a739487e8ab2162534c5d9ec80b0"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 1770378,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_ao_2k.jpg",
+        "md5": "b3dadef9acd1a727e459d7a08bdc6e9f"
+      },
+      "png": {
+        "size": 6900554,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_ao_2k.png",
+        "md5": "19bba0d1b9b335383e5b9ac066a8be26"
+      },
+      "exr": {
+        "size": 1669825,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_ao_2k.exr",
+        "md5": "74d689ec0436a72ef7fd61814157e29b"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 454453,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_ao_1k.jpg",
+        "md5": "0e3c09df1fa81259e92e382cc9a25b86"
+      },
+      "png": {
+        "size": 1739997,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_ao_1k.png",
+        "md5": "d6182b564e629b050250120dbb1857eb"
+      },
+      "exr": {
+        "size": 447044,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_ao_1k.exr",
+        "md5": "f618b46b72ea04c6e92f81a4649ceff9"
+      }
+    }
+  },
+  "Displacement": {
+    "8k": {
+      "jpg": {
+        "size": 4044283,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_disp_8k.jpg",
+        "md5": "f712411e3f3c13996e314a5a00d90025"
+      },
+      "png": {
+        "size": 46068428,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_disp_8k.png",
+        "md5": "38ea87df1485640bf3c4dee0d3faa85a"
+      },
+      "exr": {
+        "size": 3572482,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_disp_8k.exr",
+        "md5": "28cc16b580e03bda92302f3ca78fb977"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 1510579,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_disp_4k.jpg",
+        "md5": "a0dd2406dd021d9c7d612d2d97d269c7"
+      },
+      "png": {
+        "size": 18909616,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_disp_4k.png",
+        "md5": "0e864145c05a5115457c4d3475194f46"
+      },
+      "exr": {
+        "size": 1350185,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_disp_4k.exr",
+        "md5": "a758751f8cfd9bfa3144742a4638ca4c"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 525309,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_disp_2k.jpg",
+        "md5": "b64acf5cb9e5403683c78d8ba2fb4c5a"
+      },
+      "png": {
+        "size": 5448717,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_disp_2k.png",
+        "md5": "a22d6712db59f57f6d81e7d5c66c76cb"
+      },
+      "exr": {
+        "size": 497013,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_disp_2k.exr",
+        "md5": "c9d0b750f950bf388e437e63da8386b4"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 164879,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_disp_1k.jpg",
+        "md5": "0d8e680e64bf03636f9fe1b457b97ee7"
+      },
+      "png": {
+        "size": 1473765,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_disp_1k.png",
+        "md5": "92590700030fda709fbecf20f2c33653"
+      },
+      "exr": {
+        "size": 162300,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_disp_1k.exr",
+        "md5": "c78f3d30d3f284210d3eb3b7d816ce76"
+      }
+    }
+  },
+  "Rough": {
+    "8k": {
+      "jpg": {
+        "size": 19168928,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_rough_8k.jpg",
+        "md5": "908769858943af14ee6f6091365702a8"
+      },
+      "png": {
+        "size": 95273129,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_rough_8k.png",
+        "md5": "caa5f350e9a9ffd19af8aea85c062617"
+      },
+      "exr": {
+        "size": 16913194,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_rough_8k.exr",
+        "md5": "a47b0a5dbfee9921d73a8c9456dac7c1"
+      }
+    },
+    "4k": {
+      "jpg": {
+        "size": 6249124,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_rough_4k.jpg",
+        "md5": "ddf3f79c918528a1c4baac5797aa8c3f"
+      },
+      "png": {
+        "size": 27078224,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_rough_4k.png",
+        "md5": "8377fe6573aee16806f40806ca3c75f9"
+      },
+      "exr": {
+        "size": 5536093,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_rough_4k.exr",
+        "md5": "bae16f90af882979b0b08916155c0c5c"
+      }
+    },
+    "2k": {
+      "jpg": {
+        "size": 1660507,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_rough_2k.jpg",
+        "md5": "08511294c9cdbaa4e50c28ac05ae2248"
+      },
+      "png": {
+        "size": 6838734,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_rough_2k.png",
+        "md5": "15948052aa2aac3578d88202e4d3035a"
+      },
+      "exr": {
+        "size": 1498077,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_rough_2k.exr",
+        "md5": "ac8eb9e135622d388f4c0861c738c8fe"
+      }
+    },
+    "1k": {
+      "jpg": {
+        "size": 402582,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_rough_1k.jpg",
+        "md5": "9d0adc4ca540ee91f91925f8ec059722"
+      },
+      "png": {
+        "size": 1702746,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_rough_1k.png",
+        "md5": "10bda0a56409a23bf8d5ba6a387ab58c"
+      },
+      "exr": {
+        "size": 369672,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_rough_1k.exr",
+        "md5": "81ba6befe24fce19e1e2361e344e352e"
+      }
+    }
+  },
+  "mtlx": {
+    "8k": {
+      "mtlx": {
+        "include": {
+          "textures/decrepit_wallpaper_disp_8k.png": {
+            "size": 46068428,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/8k/decrepit_wallpaper/decrepit_wallpaper_disp_8k.png",
+            "md5": "38ea87df1485640bf3c4dee0d3faa85a"
+          },
+          "textures/decrepit_wallpaper_nor_gl_8k.exr": {
+            "size": 64411319,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_8k.exr",
+            "md5": "f3ec6e3d80d3822b049da99e8860249c"
+          },
+          "textures/decrepit_wallpaper_diff_8k.jpg": {
+            "size": 38962690,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/decrepit_wallpaper/decrepit_wallpaper_diff_8k.jpg",
+            "md5": "d9f0a644f15cc17fd5a15a61ee0f2d6d"
+          },
+          "textures/decrepit_wallpaper_rough_8k.exr": {
+            "size": 16913194,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/8k/decrepit_wallpaper/decrepit_wallpaper_rough_8k.exr",
+            "md5": "a47b0a5dbfee9921d73a8c9456dac7c1"
+          }
+        },
+        "size": 4781,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/mtlx/8k/decrepit_wallpaper/decrepit_wallpaper_8k.mtlx",
+        "md5": "2c7f925135f51bf44f07ffd249f182cf"
+      }
+    },
+    "4k": {
+      "mtlx": {
+        "include": {
+          "textures/decrepit_wallpaper_rough_4k.exr": {
+            "size": 5536093,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_rough_4k.exr",
+            "md5": "bae16f90af882979b0b08916155c0c5c"
+          },
+          "textures/decrepit_wallpaper_diff_4k.jpg": {
+            "size": 12579986,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/decrepit_wallpaper/decrepit_wallpaper_diff_4k.jpg",
+            "md5": "b7619c942a2ede90fe50eb967dee2511"
+          },
+          "textures/decrepit_wallpaper_disp_4k.png": {
+            "size": 18909616,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/4k/decrepit_wallpaper/decrepit_wallpaper_disp_4k.png",
+            "md5": "0e864145c05a5115457c4d3475194f46"
+          },
+          "textures/decrepit_wallpaper_nor_gl_4k.exr": {
+            "size": 22346927,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/4k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_4k.exr",
+            "md5": "bcdad994b56db68d9b4a74a3b0942b91"
+          }
+        },
+        "size": 4781,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/mtlx/4k/decrepit_wallpaper/decrepit_wallpaper_4k.mtlx",
+        "md5": "5359911583a735df4b5b7cc1129aacd7"
+      }
+    },
+    "2k": {
+      "mtlx": {
+        "include": {
+          "textures/decrepit_wallpaper_nor_gl_2k.exr": {
+            "size": 6478471,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.exr",
+            "md5": "5132ef1f51c752ed2eb661cce953a134"
+          },
+          "textures/decrepit_wallpaper_rough_2k.exr": {
+            "size": 1498077,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/2k/decrepit_wallpaper/decrepit_wallpaper_rough_2k.exr",
+            "md5": "ac8eb9e135622d388f4c0861c738c8fe"
+          },
+          "textures/decrepit_wallpaper_disp_2k.png": {
+            "size": 5448717,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_disp_2k.png",
+            "md5": "a22d6712db59f57f6d81e7d5c66c76cb"
+          },
+          "textures/decrepit_wallpaper_diff_2k.jpg": {
+            "size": 3325490,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+            "md5": "6d8cef16eecb7b4c84d77008ffc375b5"
+          }
+        },
+        "size": 4781,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/mtlx/2k/decrepit_wallpaper/decrepit_wallpaper_2k.mtlx",
+        "md5": "3e67d0dec4c3aef1d2a9c844a3685287"
+      }
+    },
+    "1k": {
+      "mtlx": {
+        "include": {
+          "textures/decrepit_wallpaper_rough_1k.exr": {
+            "size": 369672,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_rough_1k.exr",
+            "md5": "81ba6befe24fce19e1e2361e344e352e"
+          },
+          "textures/decrepit_wallpaper_nor_gl_1k.exr": {
+            "size": 1632630,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/exr/1k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_1k.exr",
+            "md5": "24929cde807f00d318c59c727834342a"
+          },
+          "textures/decrepit_wallpaper_disp_1k.png": {
+            "size": 1473765,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/decrepit_wallpaper/decrepit_wallpaper_disp_1k.png",
+            "md5": "92590700030fda709fbecf20f2c33653"
+          },
+          "textures/decrepit_wallpaper_diff_1k.jpg": {
+            "size": 814172,
+            "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/decrepit_wallpaper/decrepit_wallpaper_diff_1k.jpg",
+            "md5": "25db62cc09d0350756e60c0127853bbb"
+          }
+        },
+        "size": 4781,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/mtlx/1k/decrepit_wallpaper/decrepit_wallpaper_1k.mtlx",
+        "md5": "60f0c4a23df12853d538153fa807e3e9"
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@
 #include "scene/lod_group.h"
 #include "scene/mesh_renderer.h"
 #include "scene/skinned_mesh.h"
+#include "scene/ui_canvas.h"
 
 namespace ae::scene {
 inline constexpr std::array<ComponentRule, 1> skinnedMeshRequirements{{

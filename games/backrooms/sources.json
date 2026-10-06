@@ -1,0 +1,94 @@
+[
+  {
+    "asset": "dirty_carpet",
+    "license": "CC0",
+    "page": "https://polyhaven.com/a/dirty_carpet",
+    "resolution": "2k",
+    "files": [
+      {
+        "role": "Diffuse",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_carpet/dirty_carpet_diff_2k.jpg",
+        "sha256": "6337d3ef1a11ca8bea2d31b86da15a65f10ae92c7f3345fae62924bae194f6c0"
+      },
+      {
+        "role": "nor_gl",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/dirty_carpet/dirty_carpet_nor_gl_2k.png",
+        "sha256": "d8a5589659e189254304016f775053e6dad29b24fc727dc53054ce85f027c13f"
+      },
+      {
+        "role": "arm",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/dirty_carpet/dirty_carpet_arm_2k.png",
+        "sha256": "314958099154a1c7281004b1d89ad0c05920544805d0ca7b2c4c946d451ee51a"
+      }
+    ]
+  },
+  {
+    "asset": "decrepit_wallpaper",
+    "license": "CC0",
+    "page": "https://polyhaven.com/a/decrepit_wallpaper",
+    "resolution": "2k",
+    "files": [
+      {
+        "role": "Diffuse",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+        "sha256": "6a16d2c30016b98cce1176e85c64075fe48255d0302e7d7b9f71198fbe818cf1"
+      },
+      {
+        "role": "nor_gl",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.png",
+        "sha256": "5a7477948de3cd28d2d2c415293d515afb981864d30cfd5a910c5d792fbbf998"
+      },
+      {
+        "role": "arm",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_arm_2k.png",
+        "sha256": "98cc4406cb3c13cc4789b7fa3121ec5b99ba6742b399ddbdf03ca91cf82cd27f"
+      }
+    ]
+  },
+  {
+    "asset": "dirty_tiles",
+    "license": "CC0",
+    "page": "https://polyhaven.com/a/dirty_tiles",
+    "resolution": "2k",
+    "files": [
+      {
+        "role": "Diffuse",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_tiles/dirty_tiles_diff_2k.jpg",
+        "sha256": "f6a8277364de17e8cd1fd5f4b44640d77ecd1f3f9e06bc67593a213da6b3fb44"
+      },
+      {
+        "role": "nor_gl",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/dirty_tiles/dirty_tiles_nor_gl_2k.png",
+        "sha256": "44ff3a5721fb6e3016f3409d0fd355c0f766b7eb6eb7dc4cfc56a2e6e99b7b0d"
+      },
+      {
+        "role": "arm",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/dirty_tiles/dirty_tiles_arm_2k.png",
+        "sha256": "9e6914d5c4b7b06325837100f5fc0eb625dae78bab0d6bea8f1175526d4c5ba6"
+      }
+    ]
+  },
+  {
+    "asset": "yellow_plaster",
+    "license": "CC0",
+    "page": "https://polyhaven.com/a/yellow_plaster",
+    "resolution": "2k",
+    "files": [
+      {
+        "role": "Diffuse",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/yellow_plaster/yellow_plaster_diff_2k.jpg",
+        "sha256": "17bfd8be29801531ea5477bfa6c4545ea68adcad3f589093193b643617ae34ee"
+      },
+      {
+        "role": "nor_gl",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/yellow_plaster/yellow_plaster_nor_gl_2k.png",
+        "sha256": "98fde52abb92adfc7cd84b8bd4c9e77aaddc7aef9a56c2372469a2d4c8f28b8a"
+      },
+      {
+        "role": "arm",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/yellow_plaster/yellow_plaster_arm_2k.png",
+        "sha256": "8bb27bc3288f639d3f24a60cf79488d42e643964be62414f6fc204b3ef80b40c"
+      }
+    ]
+  }
+]

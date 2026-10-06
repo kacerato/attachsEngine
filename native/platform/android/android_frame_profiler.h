@@ -12,7 +12,7 @@ bool readFrameProfilingOption(ANativeActivity *activity);
 
 // Identity emitted separately from compact frame windows so Logcat's entry
 // limit cannot truncate either record. Strings are stable literals owned by
-// the caller; record() consumes them synchronously and retains no pointer.
+// the caller. The profiler retains the scene literal to detect publication.
 struct FrameProfileContext final {
   const char *sceneId = "unknown";
   u64 contentFingerprint = 0;
@@ -51,6 +51,14 @@ struct FrameProfileContext final {
   u32 renderDrawCount = 0;
   u32 lodGroupCount = 0;
   bool hzbEnabled = false;
+  bool postUiFused = false;
+  bool opaqueNoClip = false;
+  bool fullDetailSampling = false;
+  bool pointLightingSpecialization = false;
+  u32 spatialChunks = 0;
+  bool sceneReuseEnabled=false,sceneReused=false;
+  bool renderingQualityLocked=false;
+  u32 shadowFilterTaps=0;
   bool lodEnabled = false;
   float lodPixelErrorBudget = 0.0f;
   float coverageLodPixelErrorBudget = 0.0f;
@@ -87,6 +95,9 @@ public:
     collapsedAttributionFrames_ = 0;
     attributionSampleFrames_ = 0;
     renderScaleSamples_ = 0;
+    sceneReusedFrames_=0;
+    opaqueNoClipFrames_=0;
+    pointLightingFrames_=0;
     renderScaleMinimum_ = 1.0f;
     renderScaleMaximum_ = 1.0f;
     renderScaleLast_ = 1.0f;
@@ -99,12 +110,23 @@ private:
   u32 epoch_ = 0;
   u64 window_ = 0;
   bool contextPending_ = true;
+  bool identityValid_ = false;
+  const char *identityScene_ = nullptr;
+  u64 identityFingerprint_ = 0;
+  u32 identityInstances_ = 0, identityRenderDraws_ = 0;
+  u32 identityWidth_ = 0, identityHeight_ = 0;
+  bool identityPostUiFused_ = false;
+  float identityCameraPosition_[3]{};
+  float identityCameraYaw_=0,identityCameraPitch_=0;
   // Frames da janela corrente em que os timestamps por região colapsaram (ver
   // profiler::gpuPassAttributionCollapsed). Publicado junto das regiões para
   // que ninguém otimize em cima de uma divisão que o hardware não fez.
   u32 collapsedAttributionFrames_ = 0;
   u32 attributionSampleFrames_ = 0;
   u32 renderScaleSamples_ = 0;
+  u32 sceneReusedFrames_=0;
+  u32 opaqueNoClipFrames_=0;
+  u32 pointLightingFrames_=0;
   float renderScaleMinimum_ = 1.0f;
   float renderScaleMaximum_ = 1.0f;
   float renderScaleLast_ = 1.0f;

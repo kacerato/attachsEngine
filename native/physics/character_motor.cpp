@@ -141,6 +141,9 @@ bool CharacterMotor::runtimeState(RuntimeState &out) const {
   if(!isReady())return false;
   out={};AetherPhysics_GetCharacterTransform(world_,character_,&out.position,nullptr);
   out.velocity=resolvedVelocity_;out.hasMeasuredStep=hasMeasuredStep_;out.motorVelocity=AetherPhysics_GetCharacterVelocity(world_,character_);
+  out.hasGroundPoint=AetherPhysics_TryGetCharacterGroundPointV1(world_,character_,&out.groundPoint)!=0;
+  out.groundBody=AetherPhysics_GetCharacterGroundBodyV1(world_,character_);
+  out.hasCapsule=AetherPhysics_TryGetCharacterCapsuleV1(world_,character_,&out.capsuleBottom,&out.capsuleTop,&out.capsuleRadius)!=0;
   out.groundState=AetherPhysics_GetCharacterGroundState(world_,character_);out.groundVelocity=AetherPhysics_GetCharacterGroundVelocity(world_,character_);out.groundNormal=AetherPhysics_GetCharacterGroundNormal(world_,character_);return true;
 }
 

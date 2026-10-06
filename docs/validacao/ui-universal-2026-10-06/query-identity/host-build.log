@@ -1,0 +1,18 @@
+[0/1] Re-running CMake...
+Interprocedural optimizations are turned on
+-- CMake C compiler: GNU
+-- CMake C++ compiler: GNU
+-- CMake system name: Windows
+-- CMake host system processor: AMD64
+-- Box2D on MinGW
+-- Configuring done (5.9s)
+-- Generating done (0.5s)
+-- Build files have been written to: C:/Users/donod/Downloads/atchengine/build/editor-host
+[1/8] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/8] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_query_contracts.cpp.obj
+[3/8] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_script_physics2d.cpp.obj
+[4/8] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.obj
+[5/8] Linking CXX static library libaether_runtime.a
+[6/8] Linking CXX executable aether_gui_preview.exe
+[7/8] Linking CXX executable aether_gui_tests.exe
