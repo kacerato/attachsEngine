@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-06",
+  "repository": "https://github.com/kacerato/attachsEngine",
+  "implementation": "Body-linked authored collider selection with object/component identity",
+  "host": {
+    "build": "completed",
+    "final_directed_scenarios": "6/6",
+    "gui_regression": "84/84 before final caption weight refinement; final UI recaptured at both resolutions",
+    "solver": "Jolt shared compound, selected-child disable, sibling retention, undo, native archive reopen"
+  },
+  "apk": {
+    "variant": "Release/RelWithDebInfo",
+    "sha256": "f7c52a1c2de972d11d3f581ac6dd17ee09cd905ecf6e627f6c92700182e942f9",
+    "bytes": 221601521,
+    "installed_hash_matches": true
+  },
+  "physical": {
+    "device": "Xiaomi 25053PC47G / onyx",
+    "resolution": "2772x1280 landscape",
+    "checks": [
+      "Body without own Collider shows linked descendants",
+      "surface tap selects LeftBox/Collider1 through intermediate folder",
+      "sibling surface tap selects RightCylinder/Collider1",
+      "Inspector identifies Cylinder and physical owner SharedBody",
+      "only selected RightCylinder collider disabled and saved",
+      "Undo + Save restores exact original scene hash",
+      "cold reopen and surface tap restore enabled RightCylinder collider",
+      "overlays OFF restores ordinary renderer selection",
+      "final contextual text recaptured after matching font metrics/rendering weight"
+    ],
+    "scene_original_sha256": "febaf0db75ac85187527872edc9e05b5367472794b1f2f876c4d0da929193d85",
+    "screenshots": [
+      {
+        "file": "device-accepted-body.png",
+        "sha256": "d408cd74de39d1fac1f39b9c4d1f44818b47576821c2537ae487583657ee8ea1"
+      },
+      {
+        "file": "device-accepted-disabled.png",
+        "sha256": "baee164031e1ebff74e6652d6481395617e68c2d397655fd1b10d6595d3ceecf"
+      },
+      {
+        "file": "device-accepted-left.png",
+        "sha256": "c5da53adb2528599242e1ba6e811eacb1901ef5bb5183c3ed12c2cf8753abe3d"
+      },
+      {
+        "file": "device-accepted-link.png",
+        "sha256": "1cb576e50846fbec3fc353f995a9cec336c8bbfe13113a10452fe84603d6894f"
+      },
+      {
+        "file": "device-accepted-off.png",
+        "sha256": "6954bd172c83f0740fdb7a1fb7c5441d432580300e8136dabd387c74e8dcf788"
+      },
+      {
+        "file": "device-accepted-reopened.png",
+        "sha256": "71bf51250552f9e761932492de113e7d1e7778718e5d1db3f9dad7a60b446884"
+      },
+      {
+        "file": "device-accepted-right.png",
+        "sha256": "71bf51250552f9e761932492de113e7d1e7778718e5d1db3f9dad7a60b446884"
+      }
+    ]
+  },
+  "intermediate_captures": {
+    "pattern": "device-initial/root/body/left/right.png",
+    "apk_sha256": "1ec1947a212c650459d2f6dde65a8c045b57f3933cdb754a20d011955ef2998b",
+    "status": "rejected as final design acceptance due to clipped last letter"
+  },
+  "protected_performance_sources": {
+    "count": 268,
+    "changed": 0,
+    "not_a_performance_benchmark": true
+  },
+  "source_snapshot": [
+    {
+      "path": "native/editor/editor_component_visuals.h",
+      "sha256": "3779cfdbef372bbd579181cd471bfc7d4bc492fe5d91863055ed3d71737159b1"
+    },
+    {
+      "path": "native/editor/editor_session.cpp",
+      "sha256": "80efe309f2e23228987c8523c7f85bd17463bbb485177b44966a2fcba79154e6"
+    },
+    {
+      "path": "native/editor/editor_screen.cpp",
+      "sha256": "e2380e0f389c14757d0b3e18316b7abf0aedae18b859659545e158bab52fb9bc"
+    },
+    {
+      "path": "tests/native/test_convex_bake.cpp",
+      "sha256": "c63b357f3b62f71bb081c9673f9a3673918e7f28cd59d523b83806d5db36650a"
+    },
+    {
+      "path": "tests/native/gui_preview_main.cpp",
+      "sha256": "912f15573c5e41468ce565b051b34c5334e53fe5989fa5d5136371ec114d37ba"
+    }
+  ],
+  "remaining": [
+    "runtime QueryHit authoring-object identity",
+    "scene occlusion policy",
+    "direct collider handles/faces/vertices",
+    "large-scale profiling",
+    "simultaneous physical multi-touch and prolonged acceptance",
+    "skin and regeneration with overrides",
+    "remaining original universal UI roadmap"
+  ],
+  "engine_complete": false,
+  "u11_complete": false,
+  "publication": "local changes; no commit/push in this round"
+}

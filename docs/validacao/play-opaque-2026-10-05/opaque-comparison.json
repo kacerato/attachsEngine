@@ -1,0 +1,42 @@
+{
+  "aggregates": {
+    "A": {
+      "frames": 3600,
+      "gpu_mean_ms": 18.57688333333333,
+      "gpu_worst_window_p95_ms": 19.4691,
+      "cpu_mean_ms": 6.421966666666666,
+      "engine_fps": 48.23524579102228
+    },
+    "B": {
+      "frames": 4800,
+      "gpu_mean_ms": 16.0165625,
+      "gpu_worst_window_p95_ms": 16.648,
+      "cpu_mean_ms": 4.898825,
+      "engine_fps": 56.44801206139576
+    }
+  },
+  "image_comparisons": [
+    {
+      "run": "02-B",
+      "reference": "01-A",
+      "max_channel_difference": 0,
+      "changed_pixels": 0,
+      "changed_pixels_gt3": 0,
+      "mean_channel_difference": 0.0
+    },
+    {
+      "run": "03-B",
+      "reference": "01-A",
+      "max_channel_difference": 0,
+      "changed_pixels": 0,
+      "changed_pixels_gt3": 0,
+      "mean_channel_difference": 0.0
+    }
+  ],
+  "percentile_method": "worst window percentile, not aggregate percentile",
+  "power_measured": false,
+  "power_discharge_valid": false,
+  "power_scope": "whole device, not isolated app/GPU",
+  "gpu_reduction_percent": 13.78229484134852,
+  "engine_fps_change_percent": 17.0264837168137
+}

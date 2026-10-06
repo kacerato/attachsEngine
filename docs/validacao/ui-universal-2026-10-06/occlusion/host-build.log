@@ -1,0 +1,56 @@
+[0/1] Re-running CMake...
+Interprocedural optimizations are turned on
+-- CMake C compiler: GNU
+-- CMake C++ compiler: GNU
+-- CMake system name: Windows
+-- CMake host system processor: AMD64
+-- Box2D on MinGW
+-- Configuring done (6.6s)
+-- Generating done (1.4s)
+-- Build files have been written to: C:/Users/donod/Downloads/atchengine/build/editor-host
+[1/31] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_camera.cpp.obj
+[3/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.obj
+[4/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.obj
+[5/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_character_authoring.cpp.obj
+[6/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_dynamic_motor_authoring.cpp.obj
+[7/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[8/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[9/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[10/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.obj
+[11/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[12/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[13/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[14/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_view.cpp.obj
+[15/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[16/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_history.cpp.obj
+[17/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_gui_expansion.cpp.obj
+[18/31] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[19/31] Linking CXX static library libaether_editor.a
+[20/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_gui.cpp.obj
+[21/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_character_authoring.cpp.obj
+[22/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_gui.cpp.obj
+[23/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_dynamic_body_motor.cpp.obj
+[24/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_query_contracts.cpp.obj
+[25/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj
+FAILED: [code=1] CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj 
+C:\Users\donod\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\c++.exe -DAETHER_REPOSITORY_ROOT=\"C:/Users/donod/Downloads/atchengine/native/..\" -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -IC:/Users/donod/Downloads/atchengine/native/../tests/native -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/build/editor-host/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/Downloads/atchengine/native/third_party/imgui -g -std=c++20 -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -Wa,-mbig-obj -g0 -MD -MT CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj -MF CMakeFiles\aether_gui_tests.dir\C_\Users\donod\Downloads\atchengine\tests\native\test_collider_occlusion.cpp.obj.d -o CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj -c C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp: In function 'void collider_occlusion_contour_perspective_world_depth_and_visible_portions()':
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp:55:26: error: 'buildOrthographicFrustum' is not a member of 'ae::renderer'
+   55 |   view.frustum=renderer::buildOrthographicFrustum(eye,0,0,2,3);
+      |                          ^~~~~~~~~~~~~~~~~~~~~~~~
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp: In function 'void collider_occlusion_pointer_visibility_locks_archive_undo_solver_and_hole()':
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp:90:92: error: assignment of member 'ae::editor::EditorScreenState::hiddenLayers' in read-only object
+   90 |   value=*g.find(wall);value.layer=7;g.applyEntityValues(wall,value);s.screen().hiddenLayers=1u<<7;
+      |                                                                     ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp:91:134: error: assignment of member 'ae::editor::EditorScreenState::hiddenLayers' in read-only object
+   91 |   AE_EXPECT_TRUE(focus(),"hidden layer");tap();AE_EXPECT_EQ(s.selection(),part,"hidden layer never occludes");s.screen().hiddenLayers=0;
+      |                                                                                                               ~~~~~~~~~~~~~~~~~~~~~~~^~
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp:93:78: error: assignment of member 'ae::scene::MeshRenderer::enabled' in read-only object
+   93 |   value.visible=true;auto *render=editor::meshRenderer(value);render->enabled=false;g.applyEntityValues(wall,value);
+      |                                                               ~~~~~~~~~~~~~~~^~~~~~
+[26/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_convex_bake.cpp.obj
+[27/31] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_script_physics2d.cpp.obj
+[28/31] Building CXX object CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj
+ninja: build stopped: subcommand failed.

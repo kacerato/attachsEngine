@@ -1,0 +1,65 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "checkout": "C:/Users/donod/Downloads/atchengine",
+  "date": "2026-10-04",
+  "delivery": "R4.5: Character creation recipe and transactional mesh conversion with session Undo/Redo",
+  "roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "roadmap_complete": false,
+  "formats": {"aeui_write": 5, "ui_canvas_write": 2, "sdk_native_abi": 43, "changed_this_delivery": false},
+  "host": {
+    "target": "aether_gui_tests", "passed": 68, "failed": 0,
+    "evidence": "character-host.txt",
+    "new_scenarios": [
+      "character_cylinder_recipe_atomic_history_archive_and_real_motor",
+      "character_conversion_preserves_visual_children_references_and_undo",
+      "character_conversion_rejects_dependencies_references_and_invalid_pose_without_mutation"
+    ]
+  },
+  "sdk_example": {
+    "source": "examples/ui/GuiAuthoredControls.cs", "build": "success", "warnings": 0, "errors": 0,
+    "evidence": "character-exemplo-sdk.txt",
+    "note": "Compiled against actual Astra.Scripting project. Previous five GUI SDK tests were not rerun in this delivery."
+  },
+  "android": {
+    "build": "Gradle :app:assembleDebug, BUILD SUCCESSFUL in 57s",
+    "build_log": "character-android-build.txt",
+    "application_id": "dev.aether.editor",
+    "apk_path": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "apk_bytes": 268322536,
+    "apk_sha256": "d04268c86338ccc237c7350623ac9eb7a38d23e931dbe837c09cadb026407f1b",
+    "install": "adb install -r: Success",
+    "installed_sha256_verified": true,
+    "installed_hash_method": "adb shell sha256sum on pm path base.apk; identical to local SHA256",
+    "device_model": "Xiaomi 25053PC47G", "device_resolution": [2772, 1280],
+    "project": "UI Character Conversion v3",
+    "interaction": "ADB synthetic single-pointer gestures on the physical Android device",
+    "observations": [
+      "Context menu and Inspector preview converted DynamicCylinder ID 2 to visual child under Character ID 6",
+      "Undo restored Body/Collider; Redo restored the Character composition",
+      "Canvas picker assigned Character ID 6 explicitly; Save and project reopen preserved the graph and reference",
+      "Play after reopen: joystick changed Player X from 0.00 to 3.05; action vector returned to zero on release",
+      "ActionButton: Player Y 0.82 and saltos 1, visual above its shadow",
+      "Create/Physics Personagem cilindrico produced a Character and Visual cilindrico child with only MeshRenderer; Undo removed the composition together",
+      "Returned to Edit Mode and saved the converted scene without the extra recipe test actor"
+    ],
+    "captures": [
+      "character-menu.png", "character-previa.png", "character-convertido.png", "character-undo.png", "character-redo.png",
+      "character-receptor-picker.png", "character-receptor-atribuido.png", "character-reaberto.png",
+      "character-play-inicial.png", "character-play-movimento.png", "character-play-salto.png",
+      "character-receita.png", "character-receita-criada.png", "character-receita-visual.png", "character-autoria-final.png"
+    ]
+  },
+  "boundaries": [
+    "Undo is session-local, not a persisted reverse-conversion backup after closing a project",
+    "Capsule dimensions approximate loaded geometry; original collider shape is not preserved as Character collision",
+    "Prefab requires explicit unlinking; animated/deformed visuals did not receive acceptance",
+    "Singular/sheared transforms, missing geometry, unsupported dimensions and incompatible dependencies/references are rejected",
+    "Arbitrary script code that looks up Body is not rewritten automatically"
+  ],
+  "acceptance_not_proven": [
+    "Physical simultaneous three-finger input, modal arbitration and focus transitions",
+    "All joystick modes and arbitrary base/knob images on Android",
+    "DynamicBodyMotor, hardware pairing and general FixedUpdate event buffering",
+    "The remaining universal UI roadmap"
+  ]
+}

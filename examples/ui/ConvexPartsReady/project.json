@@ -1,0 +1,12 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "project": {
+    "name": "UI Convex Parts Ready",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 2
+  },
+  "mainScene": "scenes/editor.aescene",
+  "editorScene": "scenes/editor.aescene"
+}

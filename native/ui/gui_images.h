@@ -11,6 +11,7 @@ public:
   static constexpr u32 kSize=2048,kMaximumImages=64;
   using Loader=std::function<bool(std::string_view,std::vector<u8>&,u32&,u32&,std::string&)>;
   void reconcile(const GuiDocument &document,u64 sourceRevision,const Loader &load);
+  void reconcile(std::span<const GuiDocument *const> documents,u64 sourceRevision,const Loader &load);
   void clear();
   const GuiImage *find(std::string_view path) const;
   std::span<const u8> pixels() const {return pixels_;}

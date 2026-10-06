@@ -1,0 +1,263 @@
+{
+  "format": 1,
+  "date": "2026-10-06",
+  "block": "U05/U09 persistent recipe and explicit collision regeneration",
+  "status": "accepted_bounded_block",
+  "engine_complete": false,
+  "u05_complete": false,
+  "u09_complete": false,
+  "repository": {
+    "remote": "https://github.com/kacerato/attachsEngine.git",
+    "branch": "codex/gameplay-runtime",
+    "publication": "Local implementation; no commit/push in this block; existing user changes retained."
+  },
+  "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+  "original_roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "capabilities": {
+    "new_internal_authoring_component_types": 1,
+    "new_add_menu_types": 0,
+    "registered_schemas": 48,
+    "add_types_and_managed_facades": 46,
+    "new_integrated_icons": 1,
+    "chain": "typed sources/settings/baselines -> real V-HACD -> correspondence/merge -> Jolt preflight -> immutable journaled resource -> one history transaction -> archive/reopen -> prefab physical revision publication"
+  },
+  "host": {
+    "focused_final": "5/5 scenarios passed; actual geometry, local fields/removals, real GLB reimport, manual mesh override, prefab instances/source Apply/propagation/new instantiation, refusals, pointer UI compact and full",
+    "gui_regression": "105/105 after pagination correction; final compact-label-only refinement followed by 5/5 focused scenarios",
+    "contracts": "48 schemas / 573 numeric-boolean bindings / 535 enum options; archives passed; managed API current",
+    "retained_android_project": "Native archive/source hash reopen and actual host Jolt ray queries passed"
+  },
+  "device": {
+    "model": "Xiaomi 25053PC47G / POCO F7 / onyx",
+    "android": 16,
+    "orientation": "landscape",
+    "resolution": [
+      2772,
+      1280
+    ],
+    "project": "CollisionRecipe20261006",
+    "owner": 2,
+    "left_source": 3,
+    "collider_uids": [
+      3,
+      4
+    ],
+    "scenario": "Source X -2.5 + local center X 0.3 + second Collider disabled -> regenerate/review both pages/confirm/Apply/save -> exact Undo/Redo -> cold reopen",
+    "accepted": "Authoring, native publication/preflight and persistence on physical Android",
+    "play_gameplay_acceptance": false
+  },
+  "archive_sha256": {
+    "device-before-regeneration.aescene": "75bf7194bf177ecefc0a404b26075dd62d60b1b1b7963651e13da9ef34957215",
+    "device-preview-final.aescene": "75bf7194bf177ecefc0a404b26075dd62d60b1b1b7963651e13da9ef34957215",
+    "device-applied.aescene": "be213829702b0007685d09925ac57dae5a53fd5cbda88dec7d03545be895f400",
+    "device-undo.aescene": "75bf7194bf177ecefc0a404b26075dd62d60b1b1b7963651e13da9ef34957215",
+    "device-redo.aescene": "be213829702b0007685d09925ac57dae5a53fd5cbda88dec7d03545be895f400"
+  },
+  "reviewed_screens": [
+    {
+      "file": "13-fixed-cold-open.png",
+      "sha256": "7b8134272d8c74d221790f9f7b8bb4f38fd7494f2f39311c57b66e80d579f197",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Cold open of isolated project on final installed APK; editable hierarchy and viewport."
+    },
+    {
+      "file": "14-fixed-review.png",
+      "sha256": "528173c9b17c5d40785e30bda67da4eff0ab9d7d605b078f7e2624660f1a3182",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Persisted custom budget; first candidate and old Collider UID; all-parts navigation; no Apply before confirmation."
+    },
+    {
+      "file": "15-fixed-second-part.png",
+      "sha256": "6af3d84a5fb6ec8cf2ad5dd5f7069f31176a4109abbd1f17ebff4bef81c71c34",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Actual Next pointer/touch route reaches second part; disabled state and Collider UID 4 preserved."
+    },
+    {
+      "file": "16-fixed-confirmed.png",
+      "sha256": "587a94c888d0cb4244b20699930a53baecf1bc27c3a189f634ca2418c97841f7",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Explicit correspondence confirmation exposes Apply; disabled second part stays disabled."
+    },
+    {
+      "file": "17-fixed-applied.png",
+      "sha256": "6c47f4a09c9d53bbaf88324cb0f2d886355b0a10cb74426ba315ce695f8b4e06",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Applied geometry and local center X 0.3; published immutable GLB; saved state."
+    },
+    {
+      "file": "18-fixed-reopened.png",
+      "sha256": "268f85b3fb123abd14497b4c3dba52186390215f4d95a57215706f8f12c44e98",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Cold reopen retains Body, motor, hierarchy, stable Collider UIDs and disabled Collider 4."
+    },
+    {
+      "file": "19-fixed-recipe-reopened.png",
+      "sha256": "2defa697c8763f1a0d6adeca4a536aef93d0948cbd80084616a580aa8991d524",
+      "apk_sha256": "ede3f59913bea6cd97083a419596d81ae415f1ba3162761647a46bd049a4cc45",
+      "reviewed": true,
+      "observation": "Cold reopened recipe restores 2 sources and exact custom budget; explicit regeneration route and actual integrated icon."
+    }
+  ],
+  "reviewed_host_screens": [
+    {
+      "file": "start-compact.png",
+      "sha256": "b6ec64eb2c3c147f0d8635a8de63cc734e48c29fef5adabd92815d018834fe87",
+      "reviewed": true,
+      "renderer": "actual native UI DrawList with software raster; scene meshes are not software-shaded"
+    },
+    {
+      "file": "review-compact.png",
+      "sha256": "bf81ff63297edef776bd92c60f9b85cd84370777ada0c41c4d762c13ca202d27",
+      "reviewed": true,
+      "renderer": "actual native UI DrawList with software raster; scene meshes are not software-shaded"
+    },
+    {
+      "file": "confirmed-compact.png",
+      "sha256": "c68ec03668174764df778730af4b5b54dc9a757f53c73b49c41c5c75c3fe72a6",
+      "reviewed": true,
+      "renderer": "actual native UI DrawList with software raster; scene meshes are not software-shaded"
+    },
+    {
+      "file": "next-compact.png",
+      "sha256": "a4859e7515b3a09c044df8935ed767ae8628a22c31147443900d5573c6be98b0",
+      "reviewed": true,
+      "renderer": "actual native UI DrawList with software raster; scene meshes are not software-shaded"
+    },
+    {
+      "file": "next-full.png",
+      "sha256": "52fdda792f893aa5ea42cd71e28c309611cc31724e462161620ee9b989a69a2f",
+      "reviewed": true,
+      "renderer": "actual native UI DrawList with software raster; scene meshes are not software-shaded"
+    }
+  ],
+  "video": {
+    "recorded": false,
+    "frames_reviewed": 0
+  },
+  "source_files": [
+    {
+      "path": "native/scene/collision_recipe.h",
+      "sha256": "b6929fce2350c067ecd602bc0761fffcfa74c702c66ada8664c773df81fe0a36"
+    },
+    {
+      "path": "native/scene/collision_recipe.cpp",
+      "sha256": "8d1a49cf9e5b6d995278f5cfa4bf497f177705c259cafa842ac62f5f9487107a"
+    },
+    {
+      "path": "native/scene/schemas/physics3d.h",
+      "sha256": "28c93cac1b7bcd533c3f0a62230ba0a6e48be7efd3d2369dcf334eef227b810f"
+    },
+    {
+      "path": "native/scene/generated/physics3d_schemas.inc",
+      "sha256": "d9e296efc17878de66f7ce65ba65098584fc3beb8ff79a3b36f959390d5a7c6d"
+    },
+    {
+      "path": "native/editor/editor_collision_regeneration.cpp",
+      "sha256": "e1253b180eb6f3110ae5fe9972dbb71638e83479c14892c21a2e8970f23a9c2b"
+    },
+    {
+      "path": "native/editor/editor_dynamic_motor_authoring.cpp",
+      "sha256": "cd0f6a2732d661ee98c4b4926c8b6f111427b72a024252c32fc229fafd831c54"
+    },
+    {
+      "path": "native/editor/editor_prefab_overrides.cpp",
+      "sha256": "933edb11a8760d54a0574974633ed13926065307aa56638b65f47a829def3b58"
+    },
+    {
+      "path": "native/editor/editor_session.cpp",
+      "sha256": "880b04c50fd36627d352ff1500fe2c9a35f96dbeffc6b9ff26825ec826be31c6"
+    },
+    {
+      "path": "native/editor/editor_session.h",
+      "sha256": "c763c9404cf9b61902134e7f4431bdbd6b1e2478a04c88e202045c8a3667bbfb"
+    },
+    {
+      "path": "native/editor/editor_screen.cpp",
+      "sha256": "508c7afc7d498b3e3a96e370981604afb58ae8ccef58c60c7db2e48850f3e340"
+    },
+    {
+      "path": "native/editor/editor_screen.h",
+      "sha256": "53b7f1194c52723ef37bf856b2b1862974b5a00c8b78fb6d5fdb176f84c30262"
+    },
+    {
+      "path": "native/resources/convex_bake.h",
+      "sha256": "4328b7568ead94940952ab5eac9f02a1fc0a4f34a6893afdf8d0c2bf3f9079c6"
+    },
+    {
+      "path": "native/resources/convex_bake.cpp",
+      "sha256": "de3d24b91e0a424e999f91d869e0fe8b0548e28807dff59c63d0d54274918e7f"
+    },
+    {
+      "path": "native/CMakeLists.txt",
+      "sha256": "e75141cec4d843f7ac82b2e29d83f5d6bb7791e485c8bf7f7093085e2eff0eba"
+    },
+    {
+      "path": "tests/native/test_collision_regeneration.cpp",
+      "sha256": "c5625b80cff0c75d0b56f1fa6846ff19c00f9fdace02e0889d0cb59adac05577"
+    },
+    {
+      "path": "tests/native/gui_preview_main.cpp",
+      "sha256": "f86c94db4f7ed4fe9d6803d6bebc9c89ec477760ef67472e6e28146d7504b57b"
+    },
+    {
+      "path": "tests/native/test_component_contracts.cpp",
+      "sha256": "e51578daf8320846923b7942fd7cde4b05060f153ed38f6e43eec0d0aba0dafa"
+    },
+    {
+      "path": "tools/component_contracts/physics3d.json",
+      "sha256": "ae3f9c806aaf3fc812297dc24f2cefca9a279ba4624fdcd04e3dc64b0e5180dd"
+    },
+    {
+      "path": "tools/generate-collision-recipe-icon.py",
+      "sha256": "ad7b3c1d4d0bb26fafc30d9ef4ebae7d79401effce07bce2174dd19899d3cc49"
+    },
+    {
+      "path": "assets/astra-visual/icons/named/physics/collision-recipe.png",
+      "sha256": "a3375564296cba2cb48367d014d8a36bcc68ee68c70c4b8709b9f2f9a37f079d"
+    },
+    {
+      "path": "assets/astra-visual/ui/astra-ui-icons.aeui",
+      "sha256": "fb5e08ad5ab11f5dc64ad9a00830ec7e42c7a4c6f7975fc1c19b03b0f841a8ad"
+    },
+    {
+      "path": "native/ui/ui_icon_id.h",
+      "sha256": "e48a5a94ae9168089d3377eb9aa914a1219e9d6700632c7a95d64ab4511bf741"
+    },
+    {
+      "path": "tools/validation/verify-collision-regeneration.py",
+      "sha256": "e4ca0ee8d1634bb4e699b44253d338d9fc791762889028b85e835a1feecf7285"
+    }
+  ],
+  "logs": {
+    "host-device-fix-build.log": "6985f50816185ca4969852d0e9538278e15c6669f90d2df7c4d2e7c15762dbbf",
+    "host-compact-label-build.log": "a71c6d01f78e6e7cd1c1e0bad71e032279b148e291c88f433ab7b27b2454a204",
+    "android-compact-label-build.log": "0b92d8f5065416bd7e3a26c376b7291bf461f293dc8c36db34b2e399d1855463",
+    "install-final.log": "c4aa470acafcf8576c15b0f0b5ae7e852d1ec5413372d0e6a9272e788e1306d3",
+    "focused-tests-final.log": "0649bba0c4789f3b31679b3ed3d6a54d032f40e218198f053d98804bed460988",
+    "gui-regression-device-fix.log": "5d904899883a5b0f068fdc44a0f553c3d4392bb865791c1029a0f91232ace323",
+    "contracts.log": "7a28d5e02a8d8722029782a690d400443457574aea513c4457038c45f044c29d",
+    "retained-project-reopen.log": "88032d491bc07b071c99a6539c1cd98b5cbdffb90a254c06aff6e39d14d8fa51"
+  },
+  "remaining": [
+    "Skin/pose baking and expansion/measurement of authoring budgets",
+    "Remaining U01-U05 authored fit/support/decomposition/hierarchy and overrides",
+    "U06-U08 movement modes, control arbitration and animation/appearance integration",
+    "Remaining U09 reimport contracts beyond explicit regeneration for supported rigid geometry",
+    "Complete U10/R0-R12 composable UI roadmap",
+    "Full visual mesh modelling/ProBuilder authoring",
+    "U12-U14 SDK/reproduction/network/budgets"
+  ],
+  "limits": [
+    "Supported closed rigid solids; selected slots on one object are grouped into one solid",
+    "Recipe settings remain bounded by real ConvexBakeSettings limits; not arbitrary scale",
+    "Preview above 3200 triangles is sampled and labeled; publication and solver keep full geometry",
+    "No automatic collision mutation during reimport; correspondence confirmation is explicit",
+    "Renderer/shaders: 210 saved reference files identical; no new FPS/thermal measurement"
+  ]
+}

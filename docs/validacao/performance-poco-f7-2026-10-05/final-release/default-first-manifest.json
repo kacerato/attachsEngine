@@ -1,0 +1,120 @@
+{
+  "createdUtc": "2026-10-05T20:09:08.9406614Z",
+  "apkPath": "build/performance-poco-f7-20261005/editor-performance-final.apk",
+  "apkSha256": "05D487602CDB41D5A6B67AC8E2B55DF372475A3B798B523C866B583DA3B9EDC4",
+  "installed": true,
+  "installation": "update -r; no data deletion",
+  "device": "POCO F7 / 25053PC47G / onyx",
+  "sourceGitHead": "d12c2ea2ed4f19a690ed99410ed865407aec024a",
+  "workspaceClean": false,
+  "unrelatedWorkspaceChanges": "pre-existing; not validated by these measurements",
+  "editorSceneReuseDefault": true,
+  "hzbDefault": false,
+  "spatialGeometryDefault": false,
+  "renderingQualityLockDefault": false,
+  "certificateSha256": "9dd308380ab1606fa4e328a1d62fb9edda5abdf6cf7e5696bc8ccbf7c83bc66e",
+  "releaseOptimized": true,
+  "debuggable": false,
+  "validationLayersPackaged": false,
+  "deviceAcceptance": {
+    "staticImage": "pixel identical in paired runs and endurance crop",
+    "cameraAndLighting": "passed with real input and capture",
+    "playStop": "passed in RuntimeGameplay0910; Sponza blocked by pre-existing invalid MeshCollider",
+    "endurance": "20 min, stable internal frames and GPU memory, 44.0 to 42.6 C battery",
+    "longDisplayedContinuity": "partial; SurfaceFlinger collector gaps",
+    "sameCadencePowerABBA": "4.446 to 2.590 W whole device; -41.75 percent",
+    "normalDefaultLaunch": "passed on 05D487...: free camera, quality lock false, scale 1, 120.11 displayed FPS for 36.42 s continuous; initial ADB failure omitted"
+  },
+  "benchmarkApks": [
+    {
+      "evidence": "spatial-geometry-ab",
+      "apk": "structural-candidate.apk",
+      "sha256": "C93853486A77D801FD7FB41390A2A3D172E4B9AC01D7DA306C3CDC74397A4B29"
+    },
+    {
+      "evidence": "editor-scene-reuse-ab",
+      "apk": "editor-scene-reuse.apk",
+      "sha256": "33E8BEFEAD7A5F5C7F7CFF4AFC3B8172AECFA0B889C3B16F8236D6381D6B03F4"
+    },
+    {
+      "evidence": "editor-scene-reuse-second-view",
+      "apk": "editor-scene-reuse-context.apk",
+      "sha256": "917BE7D87448E9483E3F2E053A2E53304FD9D507D19F06BF58010FC9D7CA9DE4"
+    },
+    {
+      "evidence": "editor-scene-reuse-soak",
+      "apk": "editor-scene-reuse-context.apk",
+      "sha256": "917BE7D87448E9483E3F2E053A2E53304FD9D507D19F06BF58010FC9D7CA9DE4"
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "android/app/src/main/java/dev/aether/editor/shell/AstraShellActivity.java",
+      "sha256": "72B6201A116CD25F1D561DECF55E7A319C1854D9E4E25DE58207E392F0191B16"
+    },
+    {
+      "path": "native/platform/android/android_frame_profiler.cpp",
+      "sha256": "138F9F49F535972CB6DA1A0C9B59CBE992EF2B9679D50966AAF3186225F1F303"
+    },
+    {
+      "path": "native/platform/android/android_frame_profiler.h",
+      "sha256": "583DFB04B6A3CC8B464264E84E601DBDE4AC3E992D9DA12CC5019AB031CCBF4E"
+    },
+    {
+      "path": "native/platform/android/android_main.cpp",
+      "sha256": "E15D3980D90A9645CC2F9B217554705EEC0EA6F95EA01761376BE6D4E074B139"
+    },
+    {
+      "path": "native/platform/android/instanced_renderer.cpp",
+      "sha256": "7B03BBB99DF115D20136F959F72FF9A69C1DD32A6E4622232327031C11B4A539"
+    },
+    {
+      "path": "native/platform/android/instanced_renderer.h",
+      "sha256": "68C04EB9F3954B3015DD98E3B83563CFB4BF15A95C8218213AF5D66C5E6F1C7C"
+    },
+    {
+      "path": "native/renderer/gpu_draw_culling.cpp",
+      "sha256": "4E64A75B90D1FE2B52CC6D5714A7240245D7D11B132878030FF3198096B9734D"
+    },
+    {
+      "path": "native/renderer/hzb_visibility.cpp",
+      "sha256": "BD760AE83EEA8C1B8ABB4354602CCA0DFD1537AEF8B75B731DBFD9A393AA338D"
+    },
+    {
+      "path": "native/renderer/hzb_visibility.h",
+      "sha256": "84CBB3A195CDEF04CCE2B32D0C615596A4F00A348F9DCB92C60706DB43A5F631"
+    },
+    {
+      "path": "native/rhi/shaders/draw_cull_spirv.h",
+      "sha256": "E786BDA510494BDBA51CFE30E7F3C00A0FB4F089D07AAA2B6195D0659C1F2030"
+    },
+    {
+      "path": "native/rhi/shaders/draw_cull.comp",
+      "sha256": "CB3EBA10E932DBBBA364E44051F3FD0AA2A67CF80F91B08519667F2D9EAE4140"
+    },
+    {
+      "path": "tests/native/test_hzb_visibility.cpp",
+      "sha256": "F247D923887F9BF45AA6B44C02657F9EC0F081DA6B4134DF6D341A4138E3393C"
+    },
+    {
+      "path": "tools/analyze-editor-power.py",
+      "sha256": "F3F84C134097AF19D785212764CC8E38DCFE91905E2A6D07E53416DDBC3313EF"
+    },
+    {
+      "path": "tools/android-frame-profile.ps1",
+      "sha256": "8208A4339E3E646C7B6FFDE2EB7017E146D7DC9B2C56FB35CF0FBCDF0B33F286"
+    },
+    {
+      "path": "tools/compare-editor-performance.py",
+      "sha256": "88DA3696F242A14521BD7BBEBDCF2EDA82510DA3DB0526512BB2EB4AAE080AAA"
+    },
+    {
+      "path": "tools/measure-editor-composition.ps1",
+      "sha256": "41F5FD173EC9925715779AE8DBDA4E33403629E5C703AF41ECB7DEF30618BBB8"
+    },
+    {
+      "path": "tools/plot-editor-endurance.py",
+      "sha256": "68E792BD4D1159553041E083C8DBBC8432302D0B706F2F4AED67AE6B39C76541"
+    }
+  ]
+}

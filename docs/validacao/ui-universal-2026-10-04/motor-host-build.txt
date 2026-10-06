@@ -1,0 +1,10 @@
+[1/9] Checking generated component contracts
+47 types / 10 family tables; 385 property declarations / 76 tables; 770 generated accessors; all outputs current
+[2/9] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[3/9] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_character_authoring.cpp.obj
+[4/9] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[5/9] Linking CXX static library libaether_editor.a
+[6/9] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_dynamic_body_motor.cpp.obj
+[7/9] Building CXX object CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj
+[8/9] Linking CXX executable aether_gui_tests.exe
+[9/9] Linking CXX executable aether_gui_preview.exe

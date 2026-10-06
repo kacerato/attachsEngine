@@ -1,0 +1,12 @@
+{
+  "reference": "editor-scene-reuse-ab/01-A/screen.png",
+  "endurance": "editor-scene-reuse-soak/01-B/screen.png",
+  "viewport_crop": [
+    900,
+    210,
+    1800,
+    740
+  ],
+  "changed_pixels": 0,
+  "max_channel_difference": 0
+}

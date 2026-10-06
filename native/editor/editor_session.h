@@ -23,6 +23,7 @@
 #include "editor/editor_value_library.h"
 #include "editor/editor_curve_view.h"
 #include "resources/curve3d.h"
+#include "resources/convex_bake.h"
 #include "runtime/scene_lights.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
@@ -31,6 +32,8 @@
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_camera_handles.h"
 #include "editor/editor_component_handles.h"
+#include "editor/editor_collider_handles.h"
+#include "editor/editor_collider_topology.h"
 #include "editor/editor_camera_preview.h"
 #include "editor/editor_camera_look.h"
 #include "platform/first_person_controller.h"
@@ -320,14 +323,20 @@ public:
   bool handlePointer(const ui::UiPointerEvent &event);
   const ui::GuiImageAtlas &guiImages() const {return guiImages_;}
   void refreshGuiImages();
+  bool loadGuiDocument(resources::AssetGuid asset,ui::GuiDocument &document,std::string &error) const;
+  bool publishGuiDocument(std::string_view relative,const std::string &text,std::string &error);
   bool guiPlayPointer(const ui::UiPointerEvent &event);
   EditorViewport guiPlayView() const;
   ui::GuiWorkbench &gui() noexcept { return gui_; }
+  bool selectGuiElement(const EditorGuiTarget &target);
+  void refreshGuiTree();
+  void drawGuiAuthoring(const ui::UiFontMetrics &metrics);
+  bool guiAuthorPointer(const ui::UiPointerEvent &event);
   const ui::ImmediateGui &immediateGui() const noexcept { return const_cast<EditorSession *>(this)->gui_.immediate(); }
   void openGui() { state_.workspace=EditorWorkspace::Gui;state_.workspaceMenu=false; }
-  bool guiActive() const noexcept { return state_.workspace==EditorWorkspace::Gui; }
-  void guiKey(int imguiKey,bool down) { if(state_.workspace==EditorWorkspace::Gui) gui_.key(imguiKey,down); }
-  void guiWheel(float x,float y) { if(state_.workspace==EditorWorkspace::Gui) gui_.wheel(x,y); }
+  bool guiActive() const noexcept { return state_.workspace==EditorWorkspace::Gui || (state_.workspace==EditorWorkspace::Scene && state_.guiInspector); }
+  void guiKey(int imguiKey,bool down) { if(guiActive()) gui_.key(imguiKey,down); }
+  void guiWheel(float x,float y) { if(guiActive()) gui_.wheel(x,y); }
   void cancelPointers();
   void usePlatformTextInput(bool enabled) { state_.platformTextInput=enabled; }
   void usePlatformCodeView(bool enabled) {state_.platformCodeView=enabled;}
@@ -424,6 +433,33 @@ public:
   const EditorViewport &view() const noexcept { return view_; }
   EditorDocument &document() noexcept { return document_; }
   const EditorMapScene &mapScene() const noexcept { return mapScene_; }
+  enum class MotorCollisionPolicy : u32 { Preserve,FitPrimitive,ConvexMesh,Decompose };
+  bool configureDynamicMotor(EditorEntityId object,MotorCollisionPolicy collision,std::string &error);
+  bool previewDynamicMotor(EditorEntityId object,MotorCollisionPolicy collision,EditorEntity &candidate,std::string &summary,std::string &error) const;
+  bool beginMotorDecomposition(EditorEntityId object,resources::ConvexBakeSettings settings,std::string &error);
+  bool beginMotorRegeneration(EditorEntityId object,std::string &error);
+  bool setMotorDecompositionPartMapping(u32 part,u64 previousCollider,std::string &error);
+  bool confirmMotorDecompositionMapping(std::string &error);
+  struct MotorBakeSource {
+    EditorEntityId object=0;u32 slot=0;
+    friend bool operator==(const MotorBakeSource &,const MotorBakeSource &)=default;
+  };
+  struct MotorBakeSourceOption {MotorBakeSource source;std::string label,error;};
+  // Selection is editor authoring state. Apply publishes only immutable shapes,
+  // keeping the source hierarchy and its visual components untouched.
+  std::vector<MotorBakeSourceOption> motorDecompositionSources(EditorEntityId object) const;
+  bool selectMotorDecompositionSources(EditorEntityId object,std::span<const MotorBakeSource> sources,std::string &error);
+  std::span<const MotorBakeSource> selectedMotorDecompositionSources() const noexcept {return motorBakeSources_;}
+  void cancelMotorDecomposition();
+  resources::ConvexBakeProgress motorDecompositionProgress() const;
+  bool applyMotorDecomposition(std::string &error);
+  bool beginColliderTopology(EditorEntityId,u64,std::string &);
+  bool applyColliderTopology(std::string &);
+  void cancelColliderTopology();
+  bool selectColliderTopology(u32 element,bool additive=false);
+  bool editColliderTopologyCoordinate(u32 axis,float value,std::string &);
+  const ColliderTopology &colliderTopology()const noexcept{return colliderTopology_;}
+  void openPhysicsDiagnostic(bool open);
   bool insertPathPoint(runtime::ObjectId object,u64 instance,u64 beforeId,const resources::CurvePoint3D &point,u64 &outId);
   bool removePathPoint(runtime::ObjectId object,u64 instance,u64 pointId);
   bool movePathPoint(runtime::ObjectId object,u64 instance,u64 pointId,u64 beforeId);
@@ -628,7 +664,8 @@ public:
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
                          resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse,
                          std::span<const resources::AssetGuid> excludedNodes={},
-                         std::span<const FolderCompanion> companions={}, std::string_view contentHash={});
+                         std::span<const FolderCompanion> companions={}, std::string_view contentHash={},
+                         std::span<const resources::AssetGuid> sourceDependencies={});
   // `prepared` é o perfil com que o worker preparou `model`.
   // `sourceReport`: a medição malha a malha (G6-A) já feita no trabalhador. Numa
   // cena grande ela custa segundos (Sponza: 2,7 s no host) e, feita aqui na
@@ -1074,17 +1111,21 @@ public:
     }
     const auto *controlled=playScene_.document().find(state_.selection);
     for(auto *ancestor=viewEntity;ancestor;ancestor=playScene_.document().find(ancestor->parent))
-      if(characterComponent(*ancestor)) {controlled=ancestor;break;}
+      if(characterComponent(*ancestor)||ancestor->components.find(scene::DynamicBodyMotor::descriptor)) {controlled=ancestor;break;}
     if(!controlled) controlled=playScene_.document().find(state_.selection);
     if(controlled && characterComponent(*controlled)) {
       if(!playScene_.setCharacterMove(controlled->id,move[0],move[1],view.entity?view.yaw:0)) return false;
       if(input.justPressed(map.jumpAction())) playScene_.jumpCharacter(controlled->id);
     }
+    else if(controlled&&controlled->components.find(scene::DynamicBodyMotor::descriptor)) {
+      if(!playScene_.setDynamicMotorMove(controlled->id,move[0],move[1],view.entity?view.yaw:0))return false;
+      if(input.justPressed(map.jumpAction()))playScene_.jumpDynamicMotor(controlled->id);
+    }
     if(state_.playStepRequested) {
       state_.playStepRequested=false;
       if(!playScene_.step()) return false;
     }
-    if(!playScene_.advance(elapsed)) return false;
+    if(!playScene_.advance(elapsed)) {state_.status=playScene_.frameError();reportProblem(EditorConsoleSeverity::Error,state_.status);return false;}
     const auto &connectionDiagnostic=playScene_.physicsConnections().diagnostic();
     if(connectionDiagnostic!=reportedPhysicsConnectionDiagnostic_) {
       reportedPhysicsConnectionDiagnostic_=connectionDiagnostic;
@@ -1092,7 +1133,7 @@ public:
     }
     state_.playTimeScale=playScene_.world().clock().scale();
     if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
-    if(!playScene_.extract(mapScene_,out)) return false;
+    if(!playScene_.extract(mapScene_,out)) {reportProblem(EditorConsoleSeverity::Error,"Play: recurso da malha não pôde ser extraído");return false;}
     applyLodGroups(playScene_.document(),out);
     return true;
   }
@@ -1239,6 +1280,8 @@ public:
   // histórico. Recusa sem efeito quando a composição, um valor inicial ou a
   // hierarquia física não são válidos; o motivo vai para o status.
   EditorEntityId createRecipe(u32 index, EditorEntityId parent);
+  bool prepareCharacterConversion(EditorEntityId visual,EditorEntity &root,EditorEntity &child,std::string &error) const;
+  EditorEntityId convertToCharacter(EditorEntityId visual);
   resources::AssetGuid createPrefab(EditorEntityId root,std::string &error);
   bool unpackPrefab(EditorEntityId selected,std::string &error);
   bool inspectPrefabOverrides(EditorEntityId selected,PrefabOverrideView &view,std::string &error);
@@ -1398,6 +1441,35 @@ private:
                    std::span<const resources::AssetGuid> excludedNodes);
   bool applyCollisionMeshRecipes(ImportedSource &source, const resources::ImportProfile &profile,
                                  std::string &diagnostic) const;
+  void refreshMotorDecomposition();
+  bool collectColliderTopology(EditorEntityId,u64,std::vector<EditorPickMesh::Triangle> &,std::string &)const;
+  bool pickColliderTopology(ui::UiPoint);
+  bool handleColliderAuthoringInput(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
+  void refreshColliderAuthoring();
+  ColliderTopology colliderTopology_;EditorSceneVersion colliderTopologyVersion_{};std::string colliderTopologyRoot_;
+  std::vector<ColliderTopology::Point> topologyDragBase_;EditorCameraHandle topologyDragHandle_{};EditorViewport topologyDragView_{};
+  bool topologyDragOpen_=false;u32 topologyDragPointer_=0,topologyDragAxis_=0;float topologyDragStart_=0,topologyDragScale_=1;
+  struct PhysicsPreview {runtime::GameWorld world;runtime::ScenePhysics physics;};
+  std::unique_ptr<PhysicsPreview> diagnosticScene_;EditorSceneVersion diagnosticVersion_{};
+  std::string diagnosticRoot_;double diagnosticLastTime_=-1;
+  bool collectMotorGeometry(EditorEntityId,std::vector<float> &,std::vector<std::string> &,std::vector<resources::ConvexBakeOrigin> &,std::string &) const;
+  void refreshMotorBakeSources(EditorEntityId);
+  EditorEntityId motorBakeSourcesObject_=0;
+  std::vector<MotorBakeSource> motorBakeSources_;
+  bool motorBakeSourcesExplicit_=false;
+  EditorSceneVersion motorBakeSourcesVersion_{};
+  bool prepareDynamicMotor(EditorEntityId,MotorCollisionPolicy,EditorEntity &,std::string &,std::string &) const;
+  std::unique_ptr<resources::ConvexBakeJob> motorBake_;
+  EditorEntityId motorBakeObject_=0;
+  EditorSceneVersion motorBakeVersion_{};
+  std::string motorBakeRoot_,motorBakeSourceHash_;
+  bool motorBakePreviewed_=false;
+  resources::ConvexBakeSettings motorBakeSettings_{};
+  bool motorBakeRegenerating_=false;
+  std::vector<u64> motorBakePartMapping_;
+  bool buildMotorBakeCandidate(std::span<const resources::AssetGuid>,resources::AssetGuid,EditorEntity &,std::string &) const;
+  void initializeMotorBakeMapping();
+  void refreshMotorBakeCandidate();
   bool generateCollisionMesh(EditorEntityId entity, u64 componentInstance, u8 trianglePercent,
                               float maximumError, std::string &diagnostic);
   bool applyCollisionMeshEdit(const resources::AssetGuid &source,const resources::ImportProfile &profile,
@@ -1585,6 +1657,15 @@ private:
   runtime::ObjectTags projectTags_;
   EditorDocument document_;
   ui::GuiWorkbench gui_;
+  EditorGuiTree guiTree_;
+  ui::GuiRuntime guiAuthorView_;
+  u64 guiAuthorRevision_=~u64{0};
+  resources::AssetGuid guiAuthorAsset_{};
+  u64 guiAuthorGraphRevision_=~u64{0};
+  EditorGuiTarget guiAuthorTarget_{};
+  bool guiAuthorPrepared_=false;
+  struct GuiAuthorPointer {u32 id;ui::UiPointerDevice device;};
+  std::vector<GuiAuthorPointer> guiAuthorPointers_;
   ui::GuiImageAtlas guiImages_;
   ui::GuiWorldFrame guiWorld_;
   ui::UiDrawList guiWorldDrawing_;
@@ -1653,6 +1734,12 @@ private:
   EditorEntity componentDragInitial_{};
   EditorComponentHandle componentDragHandle_{};
   EditorViewport componentDragView_{};
+  bool colliderDragOpen_=false;
+  u32 colliderDragPointer_=0;
+  float colliderDragStart_=0,colliderDragLastAngle_=0,colliderDragAngle_=0;
+  EditorEntity colliderDragInitial_{};
+  ColliderHandle colliderDragHandle_{};
+  EditorViewport colliderDragView_{};
   EditorEntityId cameraGestureEntity_=0;
   u64 cameraGestureInstance_=0;
   void pilotCamera(ui::UiPoint delta,float dolly,bool translate);

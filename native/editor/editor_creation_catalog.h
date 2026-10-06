@@ -74,6 +74,8 @@ struct EditorCreationEntry {
   std::span<const resources::CurvePoint3D> pathPoints{};
   // Componente que recebe a edição inicial da composição, sem mudar a seleção do objeto.
   std::string_view authoringComponent{};
+  // A visual child shares resources, never the parent's physical authority.
+  scene::PrimitiveType childVisual=scene::PrimitiveType::Count;
   bool composed() const {return action==EditorWidget::None;}
 };
 
@@ -81,7 +83,7 @@ namespace recipe {
 using scene::ComponentPropertyValue;
 inline constexpr std::string_view body="astra.physics.body",collider="astra.physics.collider",
   light="astra.render.light",camera="astra.camera",follow="astra.camera.follow",
-  character="astra.physics.character",timer="astra.time.timer";
+  character="astra.physics.character",dynamicMotor="astra.physics.dynamic_motor",timer="astra.time.timer";
 inline constexpr u32 Static=0,Kinematic=1,Dynamic=2;       // scene::BodyMotion
 inline constexpr u32 Box=0,Sphere=1,Capsule=2,Cylinder=4;             // scene::ColliderShape
 inline constexpr u32 Directional=0,Point=1,Spot=2;         // scene::LightKind
@@ -113,6 +115,9 @@ AE_BODY_RECIPE(dynamicCylinder,Dynamic,Cylinder,false)
 AE_BODY_RECIPE(triggerCylinder,Static,Cylinder,true)
 AE_BODY_RECIPE(kinematicCylinder,Kinematic,Cylinder,false)
 #undef AE_BODY_RECIPE
+inline const CreationValue motorBody[]{{body,"motion",Dynamic},{body,"freeze_rotation_x",true},{body,"freeze_rotation_y",true},{body,"freeze_rotation_z",true},{body,"mass",70.f},{body,"linear_damping",0.f}};
+inline const CreationValue motorCollider[]{{collider,"shape",Cylinder},{collider,"radius",.45f},{collider,"half_height",1.f}};
+inline const CreationComponent motorCylinder[]{{body,motorBody},{collider,motorCollider},{dynamicMotor}};
 inline const CreationValue mechanismBody[]{{body,"motion",Dynamic}};
 #define AE_JOINT_RECIPE(name,kind) \
  inline const CreationValue name##Joint[]{{"astra.physics.joint","kind",u32{kind}}}; \
@@ -192,7 +197,7 @@ inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água"
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,77> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,79> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -251,6 +256,10 @@ inline const std::array<EditorCreationEntry,77> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::kinematicSphere,CreationPose::ViewTarget,0,{},{},"Kinematic AnimatableBody3D"},
   {"physics.character",EditorWidget::None,3,"Personagem","Controlador físico com cápsula própria.",ui::UiIcon::ComponentCharacter,
     runtime::ObjectKind::Folder,recipe::characterRecipe,CreationPose::ViewTarget,1,{},{},"CharacterController CharacterBody3D"},
+  {"physics.character_cylinder",EditorWidget::None,3,"Personagem cilíndrico","Raiz Character com cilindro visual.",ui::UiIcon::ComponentCharacter,
+    runtime::ObjectKind::Folder,recipe::characterRecipe,CreationPose::ViewTarget,0,{},{},"Character Cylinder Jogador Cilindro",scene::PrimitiveType::Count,false,{},recipe::character,scene::PrimitiveType::Cylinder},
+  {"physics.motor_cylinder",EditorWidget::None,3,"Cilindro com motor","Exemplo físico; configure locomoção em qualquer objeto pelas suas ações.",ui::UiIcon::ComponentDynamicBodyMotor,
+    runtime::ObjectKind::Folder,recipe::motorCylinder,CreationPose::ViewTarget,1,{},{},"DynamicCylinder DynamicBodyMotor Rigidbody Jogador Cilindro",scene::PrimitiveType::Count,false,{},recipe::dynamicMotor,scene::PrimitiveType::Cylinder},
   {"physics2d.connected_sensor",EditorWidget::None,3,"Sensor 2D conectado","Ativa o receptor selecionado ao entrar no sensor XY.",ui::UiIcon::EventPhysicsConnection2d,
     runtime::ObjectKind::Folder,recipe::connectedSensor2D,CreationPose::ViewTarget,0,"astra.physics2d.event_connection","receiver","Area2D Sensor Evento",scene::PrimitiveType::Count,false,{},"astra.physics2d.event_connection"},
   {"physics.connected_sensor",EditorWidget::None,3,"Sensor conectado","Ativa o receptor selecionado quando outro corpo entra. Sem receptor, configure a referência na Inspeção.",ui::UiIcon::EventPhysicsConnection,
@@ -349,7 +358,7 @@ inline std::vector<u8> creationAlwaysAvailable() {
   std::vector<u8> available(editorCreationCatalog.size(),0);
   for(u32 i=0;i<editorCreationCatalog.size();++i) {
     const auto action=editorCreationCatalog[i].action;
-    if(scene::validPrimitive(editorCreationCatalog[i].primitive)) continue;
+    if(scene::validPrimitive(editorCreationCatalog[i].primitive)||scene::validPrimitive(editorCreationCatalog[i].childVisual)) continue;
     if(action!=EditorWidget::CreateCube && action!=EditorWidget::CreateGround &&
        action!=EditorWidget::CreateFiniteWater && action!=EditorWidget::CreateOceanWater &&
        action!=EditorWidget::CreateRiverWater && action!=EditorWidget::CreateBuoyantBox &&

@@ -25,11 +25,21 @@ public final class AstraShellActivity extends Activity implements ShellView.List
      * só passa o que a bancada usa, nunca qualquer "aether.*".
      */
     private static final String[] BOOLEAN_MEASUREMENT_OPTIONS = {
-        "aether.disable_dynamic_resolution", "aether.lock_camera", "aether.start_play"
+        "aether.disable_dynamic_resolution", "aether.lock_camera", "aether.start_play",
+        "aether.disable_post_ui_fusion", "aether.hzb_occlusion", "aether.disable_spatial_geometry",
+        "aether.spatial_geometry", "aether.editor_scene_reuse", "aether.disable_editor_scene_reuse",
+        "aether.lock_rendering_quality", "aether.play_post_ui_fusion", "aether.opaque_no_clip",
+        "aether.full_detail_sampling", "aether.point_lighting_specialization"
     };
-    private static final String[] FLOAT_MEASUREMENT_OPTIONS = { "aether.resolution_scale" };
+    private static final String[] FLOAT_MEASUREMENT_OPTIONS = {
+        "aether.resolution_scale", "aether.target_fps", "aether.camera_x", "aether.camera_y",
+        "aether.camera_z", "aether.camera_yaw", "aether.camera_pitch"
+    };
     private static final String[] STRING_MEASUREMENT_OPTIONS = {
         "aether.anti_aliasing", "aether.upscaling", "aether.temporal_quality"
+    };
+    private static final String[] INTEGER_MEASUREMENT_OPTIONS = {
+        "aether.gpu_isolation"
     };
 
     private FrameLayout root;
@@ -156,6 +166,8 @@ public final class AstraShellActivity extends Activity implements ShellView.List
             if (launch.hasExtra(key)) intent.putExtra(key, launch.getFloatExtra(key, 1.0f));
         for (String key : STRING_MEASUREMENT_OPTIONS)
             if (launch.getStringExtra(key) != null) intent.putExtra(key, launch.getStringExtra(key));
+        for (String key : INTEGER_MEASUREMENT_OPTIONS)
+            if (launch.hasExtra(key)) intent.putExtra(key, launch.getIntExtra(key, 0));
         intent.putExtra("astra.project_path", project.path);
         intent.putExtra("astra.project_name", project.name);
         startActivity(intent);

@@ -1,0 +1,3 @@
+PASS collider_surface_primitives_depth_affine_clipping_and_identity
+PASS collider_surface_mesh_hull_cavity_pose_resource_and_reopen
+2/2 scenarios passed

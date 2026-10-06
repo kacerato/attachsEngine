@@ -1,0 +1,6 @@
+lib/arm64-v8a/libaether_android.so
+lib/arm64-v8a/libaether_transform.so
+lib/arm64-v8a/libc++_shared.so
+lib/arm64-v8a/libcrypto.so.astra.so
+lib/arm64-v8a/libhostfxr.so
+lib/arm64-v8a/libssl.so.astra.so

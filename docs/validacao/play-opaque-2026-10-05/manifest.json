@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-05",
+  "device": "POCO F7",
+  "apk": "build/play-opaque-20261005/play-opaque-final.apk",
+  "sha256": "52F5F9305160D27FD25338558C586D4F926B0EB045C5A7672E1394E4008E29E8",
+  "installedHashVerified": true,
+  "opaqueNoClipDefault": true,
+  "fullDetailSamplingDefault": false,
+  "nativeABBA": {
+    "renderScale": 1,
+    "gpuBeforeMs": 25.37245,
+    "gpuAfterMs": 21.07535,
+    "gpuReductionPercent": 16.9360861879716,
+    "displayedBefore": [
+      35.88,
+      36.25
+    ],
+    "displayedAfter": [
+      42.84,
+      43.02
+    ],
+    "changedPixels": 0,
+    "framesEach": 2400,
+    "newFamilyFramesB": 2400,
+    "cachedPlayFrames": 0
+  },
+  "partialResolutionABBA": {
+    "renderScale": 0.75,
+    "gpuBeforeMs": 18.57688333333333,
+    "gpuAfterMs": 16.0165625,
+    "changedPixels": 0
+  },
+  "normalSession": {
+    "displayedFps": 55.538429971016,
+    "continuous": true,
+    "capturedSeconds": 29.997246967,
+    "qualityLocked": false,
+    "existingAdaptiveScale": 0.75,
+    "existingAdaptiveShadowFilter": 9,
+    "countsAsIsolatedGain": false
+  },
+  "projectFilesUnchanged": true,
+  "shaderValidationPassed": true,
+  "releaseBuildPassed": true,
+  "powerMeasured": false,
+  "thermalEnduranceAccepted": false,
+  "fps120Accepted": false
+}

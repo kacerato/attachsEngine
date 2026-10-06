@@ -173,11 +173,34 @@ vec3 reconstructScene(vec2 uv) {
   return applySceneFog(uv,clamp(result,minimum,maximum));
 }
 
+vec3 aoViewPosition(vec2 uv,float depth) {
+  vec2 outputUv=uv/max(post.sourceTransform.xy,vec2(1e-6));
+  vec2 physicalNdc=(outputUv-environment.postViewport.xy)/
+      max(environment.postViewport.zw,vec2(1e-6))*2.0-1.0;
+  int packed=int(floor(post.grade.w));
+  vec4 surface=vec4(float((packed>>0)&3)-1.0,float((packed>>2)&3)-1.0,
+                   float((packed>>4)&3)-1.0,float((packed>>6)&3)-1.0);
+  physicalNdc-=post.currentCamera.zw;
+  vec2 ndc=vec2(dot(surface.xz,physicalNdc),dot(surface.yw,physicalNdc));
+  float halfHeight=max(environment.worldToViewRow0.w,0.0);
+  vec2 xy=vec2(ndc.x*post.sourceTransform.w,-ndc.y);
+  return vec3(xy*(halfHeight>0.0?halfHeight:
+      depth/max(abs(post.sourceTransform.z),1e-6)),depth);
+}
+
 float screenSpaceAmbientOcclusion(vec2 uv) {
   if(environment.sceneAo.x<0.5 || postFlag(128.0)) return 1.0;
   float rawDepth=texture(sceneDepth,clampSourceUv(uv)).r;
-  if(rawDepth>=0.999999) return 1.0;
   float center=viewDistance(uv);
+  vec3 position=aoViewPosition(uv,center);
+  // Compare samples against the local tangent plane. Comparing only their
+  // depth incorrectly occluded every sloping floor and changed its brightness
+  // as the camera rotated. Evaluate derivatives before the sky branch.
+  vec3 normal=cross(dFdx(position),dFdy(position));
+  float normalLength=length(normal);
+  if(rawDepth>=0.999999 || normalLength<1e-8) return 1.0;
+  normal/=normalLength;
+  if(dot(normal,-position)<0.0) normal=-normal;
   float radius=max(environment.sceneAo.y,0.05);
   float radiusPixels=clamp(radius*abs(post.sourceTransform.z)/
       max(center*post.texelFlags.y*2.0,1.0e-5),1.0,48.0);
@@ -193,10 +216,15 @@ float screenSpaceAmbientOcclusion(vec2 uv) {
   for(int index=0;index<12;++index) {
     float ring=.35+.65*float((index%3)+1)/3.0;
     vec2 offset=rotation*directions[index]*post.texelFlags.xy*radiusPixels*ring;
-    float sampleDistance=viewDistance(uv+offset);
-    float delta=center-sampleDistance;
-    float range=max(0.0,1.0-abs(delta)/radius);
-    occlusion+=step(environment.sceneAoDetail.x,delta)*range;
+    vec2 sampleUv=uv+offset;
+    if(any(notEqual(sampleUv,clampSourceUv(sampleUv))) ||
+       texture(sceneDepth,sampleUv).r>=0.999999) continue;
+    vec3 delta=aoViewPosition(sampleUv,viewDistance(sampleUv))-position;
+    float distance=length(delta);
+    float height=dot(normal,delta);
+    float range=max(0.0,1.0-distance/radius);
+    float horizon=max(0.0,(height-environment.sceneAoDetail.x)/max(distance,1e-5));
+    occlusion+=horizon*range;
   }
   float visibility=clamp(1.0-occlusion*(environment.sceneAo.z/12.0),0.0,1.0);
   return pow(visibility,max(environment.sceneAo.w,0.1));

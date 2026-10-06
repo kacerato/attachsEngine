@@ -4,6 +4,18 @@
   "table": "renderingSchemas",
   "entries": [
     {
+      "type": "UiCanvas",
+      "name": "Canvas UI",
+      "description": "Instância independente de documento de UI, na tela ou no objeto",
+      "consumer": "runtime/scene_gui.cpp → instâncias, layout, desenho e entrada",
+      "invalidates": {"cpp": "Invalidate::Draw|Invalidate::Input"},
+      "subfamily": "Interface",
+      "icon": "ui/interface-canvas",
+      "searchTerms": "Canvas UI HUD interface WorldCanvas",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/class-Canvas.html",
+      "apiName": "UiCanvas"
+    },
+    {
       "type": "MeshRenderer",
       "name": "Malha",
       "description": "Geometria e material",

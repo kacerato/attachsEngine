@@ -869,6 +869,107 @@ public readonly struct GameTimer : IComponentFacade<GameTimer>
     }
 }
 
+/// <summary>Canvas UI: Instância independente de documento de UI, na tela ou no objeto. Família Renderização · Interface.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/class-Canvas.html</remarks>
+public readonly struct UiCanvas : IComponentFacade<UiCanvas>
+{
+    public static string TypeId => "astra.ui.canvas";
+    public static UiCanvas Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public UiCanvas(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento local</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Rotação local</summary>
+    public Vector3 Rotation
+    {
+        get => new(Component.GetFloat("rotation_x"), Component.GetFloat("rotation_y"), Component.GetFloat("rotation_z"));
+        set => Component.SetVector3("rotation", value);
+    }
+    /// <summary>Resolução</summary>
+    public Vector2 Resolution
+    {
+        get => new(Component.GetFloat("width"), Component.GetFloat("height"));
+        set => Component.SetVector2("resolution", value);
+    }
+    /// <summary>Unidades por pixel (m/px). Aplica-se ao Canvas no mundo; Tela usa o viewport.</summary>
+    /// <remarks>Faixa válida: 0.00001 a 10.</remarks>
+    public float UnitsPerPixel
+    {
+        get => Component.GetFloat("units_per_pixel");
+        set => Component.SetFloat("units_per_pixel", value);
+    }
+    /// <summary>Ordem</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float Order
+    {
+        get => Component.GetFloat("order");
+        set => Component.SetFloat("order", value);
+    }
+    /// <summary>Habilitado</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Oclusão no mundo. Depth e hit de Canvas no mundo.</summary>
+    public bool Occlusion
+    {
+        get => Component.GetBool("occlusion");
+        set => Component.SetBool("occlusion", value);
+    }
+    public enum ModeOption : uint
+    {
+        Tela = 0,
+        MundoObjeto = 1,
+    }
+    /// <summary>Apresentação</summary>
+    public ModeOption Mode
+    {
+        get => (ModeOption)Component.GetEnum("mode");
+        set => Component.SetEnum("mode", (uint)value);
+    }
+    public enum MovementSpaceOption : uint
+    {
+        Mundo = 0,
+        LocalDoJogador = 1,
+        CameraDeEntrada = 2,
+    }
+    /// <summary>Espaço do movimento</summary>
+    public MovementSpaceOption MovementSpace
+    {
+        get => (MovementSpaceOption)Component.GetEnum("movement_space");
+        set => Component.SetEnum("movement_space", (uint)value);
+    }
+    /// <summary>Jogador / receptor. Character ou motor de corpo dinâmico ativo.</summary>
+    public ObjectReference InputReceiver
+    {
+        get => Component.GetReference("input_receiver");
+        set => Component.SetReference("input_receiver", value);
+    }
+    /// <summary>Camera de entrada</summary>
+    public ObjectReference InputCamera
+    {
+        get => Component.GetReference("input_camera");
+        set => Component.SetReference("input_camera", value);
+    }
+    /// <summary>Documento UI. Recurso do projeto por slot</summary>
+    public AssetGuid GetDocument(uint slot = 0) => Component.GetResource("document", slot);
+    public void SetDocument(AssetGuid value, uint slot = 0) => Component.SetResource("document", value, slot);
+}
+
 /// <summary>Malha: Geometria e material. Família Renderização · Geometria.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-MeshRenderer.html</remarks>
 public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
@@ -3187,6 +3288,12 @@ public readonly struct Collider : IComponentFacade<Collider>
         get => Component.GetBool("optimize_cooking");
         set => Component.SetBool("optimize_cooking", value);
     }
+    /// <summary>Pose local da malha. Aplica centro e rotação locais à geometria física; não altera a malha visual. Desligado mantém a pose legada do objeto.</summary>
+    public bool MeshLocalPose
+    {
+        get => Component.GetBool("mesh_local_pose");
+        set => Component.SetBool("mesh_local_pose", value);
+    }
     public enum ShapeOption : uint
     {
         Caixa = 0,
@@ -3870,6 +3977,106 @@ public readonly struct Joint : IComponentFacade<Joint>
     {
         get => Component.GetReference("connected_body");
         set => Component.SetReference("connected_body", value);
+    }
+}
+
+/// <summary>Motor dinâmico: Locomoção por força e salto com apoio sobre Corpo físico dinâmico. Família Física 3D · Corpos.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_rigidbody3d.html</remarks>
+public readonly struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
+{
+    public static string TypeId => "astra.physics.dynamic_motor";
+    public static DynamicBodyMotor Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public DynamicBodyMotor(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Velocidade (m/s)</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float Speed
+    {
+        get => Component.GetFloat("speed");
+        set => Component.SetFloat("speed", value);
+    }
+    /// <summary>Aceleração (m/s²)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float Acceleration
+    {
+        get => Component.GetFloat("acceleration");
+        set => Component.SetFloat("acceleration", value);
+    }
+    /// <summary>Frenagem (m/s²)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float Braking
+    {
+        get => Component.GetFloat("braking");
+        set => Component.SetFloat("braking", value);
+    }
+    /// <summary>Controle no ar</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float AirControl
+    {
+        get => Component.GetFloat("air_control");
+        set => Component.SetFloat("air_control", value);
+    }
+    /// <summary>Velocidade do salto (m/s)</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float JumpSpeed
+    {
+        get => Component.GetFloat("jump_speed");
+        set => Component.SetFloat("jump_speed", value);
+    }
+    /// <summary>Centro até os pés (m). Usado somente quando Apoio pela colisão está desligado.</summary>
+    /// <remarks>Faixa válida: 0.01 a 100.</remarks>
+    public float ProbeHeight
+    {
+        get => Component.GetFloat("probe_height");
+        set => Component.SetFloat("probe_height", value);
+    }
+    /// <summary>Alcance abaixo dos pés (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 2.</remarks>
+    public float ProbeDistance
+    {
+        get => Component.GetFloat("probe_distance");
+        set => Component.SetFloat("probe_distance", value);
+    }
+    /// <summary>Raio de sondagem (m). Usado somente quando Apoio pela colisão está desligado.</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float SupportRadius
+    {
+        get => Component.GetFloat("support_radius");
+        set => Component.SetFloat("support_radius", value);
+    }
+    /// <summary>Rampa máxima (°)</summary>
+    /// <remarks>Faixa válida: 0 a 89.</remarks>
+    public float MaxSlope
+    {
+        get => Component.GetFloat("max_slope");
+        set => Component.SetFloat("max_slope", value);
+    }
+    /// <summary>Habilitado</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Acompanhar plataforma</summary>
+    public bool InheritPlatformVelocity
+    {
+        get => Component.GetBool("inherit_platform_velocity");
+        set => Component.SetBool("inherit_platform_velocity", value);
+    }
+    /// <summary>Apoio pela colisão. Sonda a superfície real do colisor do solver, com escala, rotação e partes compostas. Cinco amostras; alcance abaixo da forma em metros.</summary>
+    public bool AutomaticSupport
+    {
+        get => Component.GetBool("automatic_support");
+        set => Component.SetBool("automatic_support", value);
     }
 }
 

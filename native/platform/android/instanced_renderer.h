@@ -158,8 +158,11 @@ public:
   void setSceneViewport(const ui::UiRect &rect) {
     const auto next = ui::intersect(rect, {0,0,1,1});
     if(next.x!=sceneViewport_.x || next.y!=sceneViewport_.y ||
-       next.width!=sceneViewport_.width || next.height!=sceneViewport_.height)
+       next.width!=sceneViewport_.width || next.height!=sceneViewport_.height) {
       temporalHistoryInitialized_=false;
+      hzbPyramidValid_=false;hzbPyramidCameraValid_=false;hzbRecordedCameraValid_=false;
+      hzbPreviousFrameEligible_=false;
+    }
     sceneViewport_ = next;
   }
   ui::UiRect physicalSceneViewport() const;
@@ -178,7 +181,13 @@ public:
   // Zero selects perspective; positive values are a world-space half height.
   // Orthographic currently uses spatial AA and CPU visibility (no GPU HZB).
   void setSceneOrthographicHalfHeight(float halfHeight);
-  void setEditorBackground(bool enabled) { editorBackground_=enabled; }
+  void setEditorBackground(bool enabled) {
+    if(editorBackground_!=enabled) {
+      editorSceneCacheValid_=false;
+      hzbPyramidValid_=false;hzbPyramidCameraValid_=false;hzbPreviousFrameEligible_=false;
+    }
+    editorBackground_=enabled;
+  }
   void setEditorViewportOptions(bool lighting,bool effects,bool sky,bool fog,bool post) {
     editorSceneLighting_=lighting;editorSceneEffects_=effects;editorSceneSky_=sky;
     editorSceneFog_=fog;editorScenePost_=post;
@@ -188,6 +197,7 @@ public:
     if (environment.valid()) sceneEnvironment_ = environment;
   }
   void setEnvironmentMaps(std::span<const std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>> maps) {
+    editorSceneCacheValid_=false;
     environmentMaps_.assign(maps.begin(),maps.end());
   }
   const std::string &environmentMapDiagnostic() const { return environmentMapDiagnostic_; }
@@ -217,7 +227,13 @@ public:
   // A grade editorial. Ela é desenhada DENTRO da cena, com teste e escrita de
   // profundidade, e não na lista de interface: é o que faz uma caixa opaca
   // esconder as linhas atrás dela.
-  void setEditorGrid(const renderer::GridPlan &plan) { editorGrid_ = plan; }
+  void setEditorGrid(const renderer::GridPlan &plan) {
+    if(plan.enabled!=editorGrid_.enabled || plan.planeHeight!=editorGrid_.planeHeight ||
+       plan.minorSpacing!=editorGrid_.minorSpacing || plan.majorSpacing!=editorGrid_.majorSpacing ||
+       plan.minorOpacity!=editorGrid_.minorOpacity || plan.fadeDistance!=editorGrid_.fadeDistance)
+      editorSceneCacheValid_=false;
+    editorGrid_ = plan;
+  }
   // Reconstrói a biblioteca de autoria com as primitivas internas MAIS a
   // geometria importada no aparelho, e refaz tudo o que depende da lista de
   // desenhos. Só por ação explícita do usuário: espera a GPU ficar ociosa antes
@@ -294,16 +310,16 @@ public:
     return dirtRoadPreview_ ? dirtRoadResources_.packageFingerprint() : 0;
   }
   u32 profileDrawCount() const {
-    return dirtRoadPreview_ ? dirtRoadResources_.header().drawCount : 0;
+    return dirtRoadPreview_ ? static_cast<u32>(sourceMapDraws_.size()) : 0;
   }
   u32 profileMaterialCount() const {
-    return dirtRoadPreview_ ? dirtRoadResources_.header().materialCount : 0;
+    return dirtRoadPreview_ ? static_cast<u32>(dirtRoadResources_.materials().size()) : 0;
   }
   u32 profileTextureCount() const {
-    return dirtRoadPreview_ ? dirtRoadResources_.header().textureCount : 0;
+    return dirtRoadPreview_ ? dirtRoadResources_.textureCount() : 0;
   }
   u32 profileTriangleCount() const {
-    return dirtRoadPreview_ ? dirtRoadResources_.header().triangleCount : 0;
+    return dirtRoadPreview_ ? profileSourceTriangleCount_ : 0;
   }
   u32 profilePackageVersion() const {
     return dirtRoadPreview_ ? dirtRoadResources_.header().version : 0;
@@ -318,16 +334,31 @@ public:
   // Diagnostic only: computed on demand at lifecycle/mutation checkpoints.
   u64 snapshotFingerprint() const;
   void setFrameProfilingEnabled(bool enabled) { frameProfilingEnabled_ = enabled; }
+  // Same-APK diagnostic comparison; never a quality setting.
+  void setPostUiFusionEnabled(bool enabled) { postUiFusionEnabled_ = enabled; }
+  bool postUiFusedLastFrame() const { return postUiFusedLastFrame_; }
+  void setSpatialGeometryEnabled(bool enabled) { spatialGeometryEnabled_=enabled; }
+  void setEditorSceneReuseEnabled(bool enabled) { editorSceneReuseEnabled_=enabled;editorSceneCacheValid_=false; }
+  bool editorSceneReuseEnabled() const {return editorSceneReuseEnabled_;}
+  bool editorSceneReusedLastFrame() const {return editorSceneReusedLastFrame_;}
+  u32 spatialGeometryChunkCount() const { return static_cast<u32>(spatialGeometryChunks_.size()); }
   // Chave diagnóstica A/B. O padrão da engine permanece ativado; jogos não
   // precisam configurar nada para receber o caminho otimizado.
   void setCoveragePrepassEnabled(bool enabled) { coveragePrepassEnabled_ = enabled; }
   void setGpuCostIsolation(renderer::GpuCostIsolation mode) { gpuCostIsolation_ = mode; }
+  void setOpaqueNoClipEnabled(bool enabled) { opaqueNoClipEnabled_ = enabled; }
+  bool opaqueNoClipLastFrame() const { return opaqueNoClipLastFrame_; }
+  void setFullDetailSamplingEnabled(bool enabled) { fullDetailSamplingEnabled_ = enabled; }
+  bool fullDetailSamplingEnabled() const { return fullDetailSamplingEnabled_; }
+  void setPointLightingSpecializationEnabled(bool enabled) { pointLightingSpecializationEnabled_ = enabled; }
+  bool pointLightingSpecializationLastFrame() const { return pointLightingSpecializationLastFrame_; }
   // Chave diagnóstica de A/B, no mesmo espírito de GpuCostIsolation: força o
   // anexo de profundidade a ser alocado como render target comum, mesmo quando
   // o render graph provou que ninguém o lê. Existe para medir o que o caminho
   // memoryless entrega; nunca é um preset de qualidade.
   void setDisableTransientDepth(bool disabled) { disableTransientDepth_ = disabled; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
+  void setPlayPostUiFusionEnabled(bool enabled) { playPostUiFusionEnabled_ = enabled; }
   void setSpectralWaterEnabled(bool enabled) { spectralWaterEnabled_ = enabled; }
   void setWaterAuthoringEnabled(bool enabled) { waterAuthoringEnabled_ = enabled; }
   // Diagnóstico de atribuição: força o formato largo de inclinação para que o
@@ -445,6 +476,7 @@ public:
   // sun configuration changes. A câmera não precisa invalidar manualmente: o
   // renderer testa contenção de cada cascata antes de reutilizá-la.
   void invalidateStaticShadowCache() {
+    editorSceneCacheValid_=false;
     shadowCacheInitialized_ = false;
     shadowCascadeDirtyMask_ = 0xffffffffu;
   }
@@ -599,6 +631,8 @@ private:
   // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
   void createUiRenderer(AAssetManager *assets);
   void recordUiOverlay(u32 imageIndex);
+  bool prepareUiOverlay(u32 imageIndex);
+  void recordUiContents();
   bool createPostResources();
   void destroyPostResources();
   bool createMotionResources();
@@ -661,7 +695,7 @@ private:
   bool recordTemporalUpscale(const platform::FreeCameraState &camera, float timeSeconds);
   // `upscaledInput`: a cor de entrada é a saída do Arm ASR/FSR 2 na resolução
   // final, já composta (névoa e AO); o pós só faz a parte de exibição.
-  void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera,
+  bool recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera,
                          bool upscaledInput = false);
   bool createAutoExposureResources();
   void destroyAutoExposureResources();
@@ -819,6 +853,17 @@ private:
   // remove only normal-map work after an entire draw bound leaves the global
   // normal-detail radius.
   VkPipeline opaqueDistantPipeline_ = VK_NULL_HANDLE;
+  VkPipeline opaqueNoClipPipeline_ = VK_NULL_HANDLE;
+  VkPipeline opaqueNoClipDistantPipeline_ = VK_NULL_HANDLE;
+  VkPipeline opaqueNoClipMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
+  bool opaqueNoClipEnabled_ = true;
+  bool fullDetailSamplingEnabled_ = false;
+  bool opaqueNoClipLastFrame_ = false;
+  VkPipeline pointLightingPipeline_ = VK_NULL_HANDLE;
+  VkPipeline pointLightingDistantPipeline_ = VK_NULL_HANDLE;
+  VkPipeline pointLightingMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
+  bool pointLightingSpecializationEnabled_ = true;
+  bool pointLightingSpecializationLastFrame_ = false;
   VkPipeline coverageDistantPipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentDistantPipeline_ = VK_NULL_HANDLE;
   // Lazily populated only for feature combinations present in the cooked map.
@@ -840,6 +885,7 @@ private:
   VkPipeline runtimeHudPipeline_ = VK_NULL_HANDLE;
   static constexpr u32 kMaxFramebuffers = 8;
   VkRenderPass postRenderPass_ = VK_NULL_HANDLE;
+  VkRenderPass editorPostRenderPass_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout postSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool postDescriptorPool_ = VK_NULL_HANDLE;
   VkDescriptorSet postDescriptorSet_ = VK_NULL_HANDLE;
@@ -962,21 +1008,24 @@ private:
   u32 framebufferCount_ = 0;
 
   u32 renderTargetWidth() const {
+    // Attachment extents belong to the resource epoch. Thermal pressure only
+    // changes the rectangle drawn into them; post sampling must still divide
+    // by the allocated image size, otherwise it reads the uncleared margins.
     return std::max(1u, static_cast<u32>(static_cast<float>(swapchain_->width()) *
-                                        renderingPolicy_.resolutionScale));
+                                        resourceRenderingPolicy_.resolutionScale));
   }
   u32 renderTargetHeight() const {
     return std::max(1u, static_cast<u32>(static_cast<float>(swapchain_->height()) *
-                                        renderingPolicy_.resolutionScale));
+                                        resourceRenderingPolicy_.resolutionScale));
   }
   u32 renderWidth() const {
-    return dynamicResolution_.scale() >= renderingPolicy_.resolutionScale - 1.0e-4f
+    return dynamicResolution_.scale() >= resourceRenderingPolicy_.resolutionScale - 1.0e-4f
                ? renderTargetWidth()
                : std::min(renderTargetWidth(), renderer::scaledRenderExtent(
                                                    swapchain_->width(), dynamicResolution_.scale()));
   }
   u32 renderHeight() const {
-    return dynamicResolution_.scale() >= renderingPolicy_.resolutionScale - 1.0e-4f
+    return dynamicResolution_.scale() >= resourceRenderingPolicy_.resolutionScale - 1.0e-4f
                ? renderTargetHeight()
                : std::min(renderTargetHeight(), renderer::scaledRenderExtent(
                                                     swapchain_->height(), dynamicResolution_.scale()));
@@ -1063,6 +1112,9 @@ private:
   FillInstanceBufferFn fillInstanceBuffer_ = nullptr;
   double lastFillMicroseconds_ = 0.0;
   bool frameProfilingEnabled_ = false;
+  u32 profileSourceTriangleCount_ = 0;
+  bool postUiFusionEnabled_ = true;
+  bool postUiFusedLastFrame_ = false;
   // Timestamps de GPU acompanham o perfil. Uma tentativa de desacoplar os dois
   // para alimentar cadência adaptativa foi medida e retirada — ver
   // PROFILING-ANDROID.md, "Cadência adaptativa rejeitada".
@@ -1074,6 +1126,7 @@ private:
   bool adpfGpuTimingEnabled_ = false;
   bool coveragePrepassEnabled_ = true;
   bool runtimeHudEnabled_ = false;
+  bool playPostUiFusionEnabled_ = false;
 
   // Interface do editor. Os bytes dos assets ficam vivos porque UiFont e
   // UiIconAtlas apontam para dentro deles (ver a nota de tempo de vida em
@@ -1127,6 +1180,22 @@ private:
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;
   bool rebuildDrawOrders();
+  bool rebuildSpatialGeometry();
+  struct SpatialSourceRange {u32 first=0,count=0;};
+  std::vector<SpatialSourceRange> spatialSourceRanges_;
+  std::vector<renderer::MapDrawRecord> spatialGeometryChunks_;
+  rhi::VulkanBuffer spatialIndexBuffer_,spatialIndirectBuffer_;
+  std::vector<VkDrawIndexedIndirectCommand> spatialCommands_;
+  // Candidate path stays opt-in until the same-device visual/performance A/B.
+  bool spatialGeometryEnabled_=false;
+  // Reuses the existing offscreen color/depth, never the present image or UI.
+  // No extra render target; exact camera/uniform identity, fail-open for dynamics.
+  bool editorSceneReuseEnabled_=true,editorSceneCacheValid_=false,editorSceneReusedLastFrame_=false;
+  platform::FreeCameraState editorSceneCachedCamera_{};
+  std::vector<u8> editorSceneCachedUniform_;
+  u32 editorSceneCachedWidth_=0,editorSceneCachedHeight_=0,editorSceneCachedOptions_=0;
+  float editorSceneCachedTime_=0;
+  u32 spatialIndirectCapacity_=0,spatialMaxDrawCount_=0;
   std::vector<renderer::SceneLight> sceneLights_;
   renderer::SceneEnvironment sceneEnvironment_{};
   std::vector<std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>> environmentMaps_;
@@ -1269,6 +1338,8 @@ private:
   bool hzbPyramidCameraValid_ = false;
   bool hzbFrameEligible_ = false;
   bool hzbPreviousFrameEligible_ = false;
+  platform::FreeCameraState hzbLastEditorCamera_{};
+  bool hzbLastEditorCameraValid_ = false;
   // Indexed directly by drawIndex into dirtRoadResources_.draws() (stable
   // across frames: render chunks are built once at load, never reordered).
   // Sized/reset in createInstanceBuffer() alongside instanceCount_.

@@ -1,0 +1,66 @@
+{
+  "createdUtc": "2026-10-05T16:38:14.5250698Z",
+  "apkPath": "build/performance-poco-f7-20261005/structural-candidate.apk",
+  "apkSha256": "C93853486A77D801FD7FB41390A2A3D172E4B9AC01D7DA306C3CDC74397A4B29",
+  "installed": false,
+  "spatialGeometryDefault": false,
+  "deviceAcceptance": "pending-adb-reconnection",
+  "sourceFiles": [
+    {
+      "path": "native/platform/android/instanced_renderer.h",
+      "sha256": "372824984752D75F4D0975CC50B68C7500299C3299C23F4C141A954771578BA8"
+    },
+    {
+      "path": "native/platform/android/instanced_renderer.cpp",
+      "sha256": "197F269718CA697460A9F1095327BF4B55E2A29738C57AD85BB752FD758C9892"
+    },
+    {
+      "path": "native/platform/android/android_main.cpp",
+      "sha256": "FB20843B6E94E8EAFC6EB523832F016998D6932D7C6541DFDDDC0B9014935D0B"
+    },
+    {
+      "path": "native/platform/android/android_frame_profiler.h",
+      "sha256": "98F38BF9E7B9B7D9F2BA2D5E9A76CCF51452AB050AF92FA4284E16D7AFF4F7AB"
+    },
+    {
+      "path": "native/platform/android/android_frame_profiler.cpp",
+      "sha256": "A36A36D8BFC6059C3E0AABCA6ACB979FB25A7308D2761E3F0DE819D1C75B693C"
+    },
+    {
+      "path": "android/app/src/main/java/dev/aether/editor/shell/AstraShellActivity.java",
+      "sha256": "EE15811776EC6DB1EAF3C80EAAA6D0040206EA31BF56213F91317BDEF2830576"
+    },
+    {
+      "path": "native/renderer/hzb_visibility.h",
+      "sha256": "84CBB3A195CDEF04CCE2B32D0C615596A4F00A348F9DCB92C60706DB43A5F631"
+    },
+    {
+      "path": "native/renderer/hzb_visibility.cpp",
+      "sha256": "BD760AE83EEA8C1B8ABB4354602CCA0DFD1537AEF8B75B731DBFD9A393AA338D"
+    },
+    {
+      "path": "native/renderer/gpu_draw_culling.cpp",
+      "sha256": "4E64A75B90D1FE2B52CC6D5714A7240245D7D11B132878030FF3198096B9734D"
+    },
+    {
+      "path": "native/rhi/shaders/draw_cull.comp",
+      "sha256": "CB3EBA10E932DBBBA364E44051F3FD0AA2A67CF80F91B08519667F2D9EAE4140"
+    },
+    {
+      "path": "native/rhi/shaders/draw_cull_spirv.h",
+      "sha256": "E786BDA510494BDBA51CFE30E7F3C00A0FB4F089D07AAA2B6195D0659C1F2030"
+    },
+    {
+      "path": "tests/native/test_hzb_visibility.cpp",
+      "sha256": "F247D923887F9BF45AA6B44C02657F9EC0F081DA6B4134DF6D341A4138E3393C"
+    },
+    {
+      "path": "tools/measure-editor-composition.ps1",
+      "sha256": "937F46A3AF536AE72289CFCBA1D81C4EEB861311E48612E427CD4AF69C87D771"
+    },
+    {
+      "path": "tools/compare-editor-performance.py",
+      "sha256": "079EF4D00B54ABFE66194D3106F2CCF145E7873947C62B1AFD2D155919E80CC5"
+    }
+  ]
+}

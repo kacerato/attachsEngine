@@ -95,13 +95,14 @@ struct EditorPickResult final {
 // Primeiro acerto ao longo do raio. Empates de distância ficam com o candidato
 // registrado antes, o que torna a seleção determinística entre frames.
 EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
-                             const EditorRay &ray) noexcept;
+                             const EditorRay &ray,u32 ignoredObject=0,
+                             bool requireGeometry=false) noexcept;
 
 // Distância da câmera até o ponto, em unidades de mundo. É o que o gizmo usa
 // para manter tamanho constante na tela.
 float distanceToCamera(const EditorViewport &viewport, const float world[3]) noexcept;
 
-// Projeta um SEGMENTO, recortando-o no plano próximo antes de dividir.
+// Projeta um SEGMENTO, recortando-o no intervalo e nos lados da câmera antes de dividir.
 //
 // Sem o recorte, uma linha da grade que passa por baixo da câmera teria uma
 // ponta atrás dela, e a divisão perspectiva jogaria essa ponta para o lado

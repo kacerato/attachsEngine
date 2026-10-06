@@ -1,0 +1,2 @@
+02fa99d59fde13bedcd58fe5f0abe78396ae9dcb2c4b1d61ecc24cdb90a4cd1a  /sdcard/Android/data/dev.aether.editor/files/Projetos/Sponza/scenes/editor.aescene
+0a0e76b1456c0d2c36c7b944078073ec93810c05a4ec819a5176aa9588784928  /sdcard/Android/data/dev.aether.editor/files/Projetos/Sponza/.astra/rendering.astra

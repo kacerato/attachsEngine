@@ -33,6 +33,7 @@
 #include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/Shape/ConvexShape.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Constraints/PointConstraint.h>
@@ -1286,6 +1287,46 @@ ae::i32 AetherPhysics_TryGetBodyPoseV2(AetherPhysicsWorld *world, AetherBodyHand
   return 1;
 }
 
+ae::i32 AetherPhysics_TryGetBodyGroundProbesV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *points,ae::u32 *count) {
+  if(!world||handle==AetherBodyHandle_Invalid||!points||!count)return 0;
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(),JPH::BodyID(handle));
+  if(!lock.Succeeded())return 0;
+  const auto &body=lock.GetBody();const auto shape=body.GetTransformedShape();
+  const auto bounds=body.GetWorldSpaceBounds();const auto center=bounds.GetCenter(),extent=bounds.GetExtent();
+  const float x=extent.GetX()*.65f,z=extent.GetZ()*.65f;
+  const float offsets[5][2]{{0,0},{x,0},{-x,0},{0,z},{0,-z}};
+  AetherVec3 result[AetherBodyGroundProbeCapacityV1];ae::u32 size=0;
+  for(const auto &offset:offsets) {
+    const JPH::RRayCast ray{JPH::RVec3(center.GetX()+offset[0],bounds.mMin.GetY()-.02f,center.GetZ()+offset[1]),JPH::Vec3(0,2*extent.GetY()+.04f,0)};
+    JPH::RayCastResult hit;
+    if(shape.CastRay(ray,hit)) {const auto p=ray.GetPointOnRay(hit.mFraction);result[size++]={static_cast<float>(p.GetX()),static_cast<float>(p.GetY()),static_cast<float>(p.GetZ())};}
+  }
+  // Bounds-based rays alone miss tilted corners and separated diagonal parts.
+  // Visit actual leaves, without a heap-allocated hit list, and ask each convex
+  // shape for its world-down support point (including its convex radius).
+  class Bottoms final : public JPH::TransformedShapeCollector {
+  public:
+    Bottoms(AetherVec3 *p,ae::u32 &n):points(p),count(n){}
+    void AddHit(const JPH::TransformedShape &leaf) override {
+      if(leaf.mShape->GetType()!=JPH::EShapeType::Convex)return;
+      if(count>=AetherBodyGroundProbeCapacityV1){overflow=true;ForceEarlyOut();return;}
+      const auto transform=leaf.GetCenterOfMassTransform();
+      const auto down=transform.Multiply3x3Transposed(JPH::Vec3(0,-1,0));
+      JPH::ConvexShape::SupportBuffer buffer;
+      const auto *convex=static_cast<const JPH::ConvexShape*>(leaf.mShape.GetPtr());
+      const auto *support=convex->GetSupportFunction(JPH::ConvexShape::ESupportMode::IncludeConvexRadius,buffer,leaf.GetShapeScale());
+      const auto p=transform*support->GetSupport(down);
+      points[count++]={static_cast<float>(p.GetX()),static_cast<float>(p.GetY()),static_cast<float>(p.GetZ())};
+    }
+    bool overflow=false;
+  private:
+    AetherVec3 *points;ae::u32 &count;
+  } bottoms(result,size);
+  shape.CollectTransformedShapes(bounds,bottoms);
+  if(bottoms.overflow)return 0;
+  std::copy(result,result+size,points);*count=size;return 1;
+}
+
 void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 velocity) {
   if (world == nullptr || handle == AetherBodyHandle_Invalid) return;
   world->physicsSystem.GetBodyInterface().SetLinearVelocity(JPH::BodyID(handle), ToJolt(velocity));
@@ -2011,6 +2052,35 @@ AetherVec3 AetherPhysics_GetCharacterGroundNormal(AetherPhysicsWorld *world, Aet
   CharacterSlot *slot = ResolveCharacterSlot(world, handle);
   if (slot == nullptr) return {0.0f, 0.0f, 0.0f};
   return FromJolt(slot->character->GetGroundNormal());
+}
+
+ae::i32 AetherPhysics_TryGetCharacterGroundPointV1(AetherPhysicsWorld *world,AetherCharacterHandle handle,AetherVec3 *out) {
+  auto *slot=ResolveCharacterSlot(world,handle);if(!slot||!out)return 0;
+  const auto state=slot->character->GetGroundState();
+  if(state!=JPH::CharacterBase::EGroundState::OnGround&&state!=JPH::CharacterBase::EGroundState::OnSteepGround)return 0;
+  const auto p=slot->character->GetGroundPosition();*out={float(p.GetX()),float(p.GetY()),float(p.GetZ())};return 1;
+}
+AetherBodyHandle AetherPhysics_GetCharacterGroundBodyV1(AetherPhysicsWorld *world,AetherCharacterHandle handle) {
+  auto *slot=ResolveCharacterSlot(world,handle);
+  if(!slot || slot->character->GetGroundState()!=JPH::CharacterBase::EGroundState::OnGround)
+    return AetherBodyHandle_Invalid;
+  const auto id=slot->character->GetGroundBodyID();
+  return id.IsInvalid()?AetherBodyHandle_Invalid:id.GetIndexAndSequenceNumber();
+}
+ae::i32 AetherPhysics_TryGetCharacterCapsuleV1(AetherPhysicsWorld *world,AetherCharacterHandle handle,AetherVec3 *bottom,AetherVec3 *top,float *radius) {
+  auto *slot=ResolveCharacterSlot(world,handle);
+  if(!slot || !bottom || !top || !radius)return 0;
+  const auto *shape=slot->character->GetShape();
+  if(!shape || shape->GetSubType()!=JPH::EShapeSubType::RotatedTranslated)return 0;
+  const auto *offset=static_cast<const JPH::RotatedTranslatedShape *>(shape);
+  if(offset->GetInnerShape()->GetSubType()!=JPH::EShapeSubType::Capsule)return 0;
+  const auto *capsule=static_cast<const JPH::CapsuleShape *>(offset->GetInnerShape());
+  const auto rotation=slot->character->GetRotation();
+  const auto center=slot->character->GetPosition()+rotation*offset->GetPosition();
+  const auto axis=rotation*(offset->GetRotation()*JPH::Vec3(0,capsule->GetHalfHeightOfCylinder(),0));
+  const auto a=center-axis,b=center+axis;
+  *bottom={float(a.GetX()),float(a.GetY()),float(a.GetZ())};
+  *top={float(b.GetX()),float(b.GetY()),float(b.GetZ())};*radius=capsule->GetRadius();return 1;
 }
 
 ae::i32 AetherPhysics_SetCharacterCrouching(AetherPhysicsWorld *world, AetherCharacterHandle handle, ae::i32 crouching) {

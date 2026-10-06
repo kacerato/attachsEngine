@@ -35,10 +35,13 @@ struct QueryFilter {
 };
 
 struct QueryHit {
+  // Body owner; filtering and body commands retain this identity.
   ObjectId object = kInvalidObject;
   // Instância do componente Colisor que respondeu, quando o corpo foi montado a
   // partir de colisores autorados. Zero quando o backend não sabe dizer.
   u64 colliderInstance = 0;
+  // Authored shape identity is this object together with the local component ID.
+  ObjectId colliderObject = kInvalidObject;
   float point[3]{};
   float normal[3]{};
   float distance = 0;
@@ -57,6 +60,9 @@ struct QueryShapeDesc {
   float halfHeight = .5f;
   float rotation[4]{0, 0, 0, 1};
 };
+bool validPhysicsQueryVector(const float *value);
+bool validPhysicsQueryRay(const float *origin,const float *translation);
+bool validPhysicsQueryShape(const QueryShapeDesc &shape);
 
 // Fase de um contato sólido entregue ao consumidor, no mesmo vocabulário dos
 // sensores: 0 Enter, 1 Stay, 2 Exit.
@@ -127,6 +133,22 @@ public:
   // personagem preserva movimento se instância, cápsula e pose não mudaram.
   bool rebuild(GameWorld &world, const CollisionGeometrySource *geometry);
   bool setCharacterMove(ObjectId id, float right, float forward, float yaw);
+  bool setDynamicMotorMove(ObjectId id,float right,float forward,float yaw);
+  bool setDynamicMotorScriptMove(ObjectId id,float right,float forward,float yaw);
+  bool jumpDynamicMotor(ObjectId id);
+  struct DynamicMotorState {bool grounded=false,hasMeasuredStep=false;ObjectId support=0;float normal[3]{0,1,0},supportVelocity[3]{},move[2]{},point[3]{};};
+  bool dynamicMotorState(ObjectId id,DynamicMotorState &out) const;
+  struct Diagnostic {
+    ObjectId object=0,support=0;TransformAuthority authority=TransformAuthority::Free;
+    bool hasBody=false,hasCharacter=false,hasSupport=false,motorSupport=false;
+    AetherBodyStateV1 body{};physics::CharacterMotor::RuntimeState character{};
+    u32 colliderCount=0,probeCount=0;
+    u32 shapeCounts[5]{};
+    AetherVec3 probes[AetherBodyGroundProbeCapacityV1]{},supportPoint{},supportNormal{};
+  };
+  // Read-only, explicit inspection. Geometry probes are solver shape support
+  // points; an ordinary body's ray hit is a query, not a contact/grounded claim.
+  bool diagnostic(const GameWorld &,ObjectId,float probeDistance,Diagnostic &) const;
   // Novo quadro de scripts: descarta comando anterior. Um comando emitido em
   // Update vale para todos os subpassos físicos desse quadro; FixedUpdate pode
   // substituí-lo antes do subpasso corrente.
@@ -146,6 +168,9 @@ public:
   ObjectId objectForBody(AetherBodyHandle body) const;
 
 private:
+  bool applyDynamicMotors(GameWorld &,float);
+  struct DynamicMotorBinding {ObjectId id=0;u64 instance=0;float right=0,forward=0,yaw=0;bool pendingJump=false;DynamicMotorState state{};float scriptRight=0,scriptForward=0,scriptYaw=0;bool scriptMoveActive=false;};
+  std::vector<DynamicMotorBinding> dynamicMotors_;
   bool applyPhysicsFields(GameWorld &,float);
   std::vector<std::pair<ObjectId,u64>> fieldCandidates_;
   std::vector<PhysicsFieldFrame> fieldFrames_;
@@ -159,7 +184,8 @@ private:
     bool moving;
     // Instâncias de Colisor na MESMA ordem das partes do composto: é o que
     // transforma "subforma 2" de volta em "o segundo colisor deste objeto".
-    std::vector<u64> colliderInstances;
+    struct ColliderIdentity { ObjectId object; u64 instance; };
+    std::vector<ColliderIdentity> colliders;
     // Velocidade inicial autorada quando o corpo foi criado; `rebuild` compara
     // com a atual para saber se o pedido foi mudar a velocidade.
     float authoredVelocity[3]{};

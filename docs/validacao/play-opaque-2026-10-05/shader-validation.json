@@ -1,0 +1,30 @@
+[
+  {
+    "shader": "dirt_road",
+    "opaqueNoClip": false,
+    "kills": 3,
+    "bytes": 77528,
+    "spirvValidated": true
+  },
+  {
+    "shader": "dirt_road",
+    "opaqueNoClip": true,
+    "kills": 0,
+    "bytes": 76300,
+    "spirvValidated": true
+  },
+  {
+    "shader": "dirt_road_fallback",
+    "opaqueNoClip": false,
+    "kills": 3,
+    "bytes": 74236,
+    "spirvValidated": true
+  },
+  {
+    "shader": "dirt_road_fallback",
+    "opaqueNoClip": true,
+    "kills": 0,
+    "bytes": 73008,
+    "spirvValidated": true
+  }
+]

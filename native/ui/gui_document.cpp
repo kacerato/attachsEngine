@@ -13,7 +13,7 @@ namespace {
 u64 nextRevision() { static std::atomic<u64> counter{0};return counter.fetch_add(1,std::memory_order_relaxed)+1; }
 }
 const char *guiKindName(GuiKind kind) noexcept {
-  static constexpr const char *names[]{"Panel", "Text", "Button", "Toggle", "Slider", "Progress", "Image", "HBox", "VBox", "Grid"};
+  static constexpr const char *names[]{"Panel", "Text", "Button", "Toggle", "Slider", "Progress", "Image", "HBox", "VBox", "Grid", "Joystick", "ActionButton", "LookArea"};
   const auto index = static_cast<u32>(kind);
   return index < kGuiKindCount ? names[index] : "Invalid";
 }
@@ -40,6 +40,13 @@ GuiId GuiDocument::create(GuiKind kind, GuiId parent) {
   for(u32 suffix=1;findByName(node.name);++suffix) node.name=base+"_"+std::to_string(suffix);
   node.text = kind == GuiKind::Panel || guiContainer(kind) ? "" : guiKindName(kind);
   if (kind == GuiKind::Image) {node.text="";node.background=0;node.offsets={24,24,224,224};}
+  if(guiInputKind(kind)) {
+    node.background=0;
+    if(kind==GuiKind::Joystick){node.text="";node.offsets={24,24,224,224};}
+    if(kind==GuiKind::LookArea){node.text="";node.control.showBase=node.control.showKnob=false;node.control.action="Olhar";}
+    if(kind==GuiKind::Joystick)node.control.action="Mover";
+    if(kind==GuiKind::ActionButton){node.control.action="Saltar";node.background=0xFF343C49;}
+  }
   if (kind == GuiKind::Panel || guiContainer(kind)) { node.offsets = {24, 24, 344, 264}; node.background = 0xE6242830; }
   if (kind == GuiKind::Text) node.background = 0;
   if (kind == GuiKind::Toggle) node.value = 0;
@@ -57,6 +64,7 @@ bool GuiDocument::validate(std::string &error) const {
   for(float v:c.position) if(!std::isfinite(v) || std::abs(v)>1000000) {error="Invalid canvas position";return false;}
   for(float v:c.rotation) if(!std::isfinite(v) || std::abs(v)>36000) {error="Invalid canvas rotation";return false;}
   for (const auto &n : nodes_) {
+    if(!validGuiControl(n.control,error))return false;
     const auto &m=n.motion;
     if(static_cast<u32>(n.interaction.action)>5 || !std::isfinite(n.interaction.value) || static_cast<u32>(m.easing)>3 ||
        !std::isfinite(m.duration) || m.duration<.01f || m.duration>3600 || !std::isfinite(m.delay) || m.delay<0 || m.delay>3600) {error="Invalid UI behavior in "+n.name;return false;}
@@ -145,7 +153,7 @@ bool GuiDocument::reorder(GuiId id,int direction) {
   nodes_=std::move(ordered);rebuildIndex();revision_=nextRevision();return true;
 }
 void GuiDocument::write(std::ostream &s) const {
-  s << "AEUI 4 " << nodes_.size() << ' ' << nextId_ << '\n' << std::setprecision(9);
+  s << "AEUI 5 " << nodes_.size() << ' ' << nextId_ << '\n' << std::setprecision(9);
   const auto &c=canvas_;
   s<<static_cast<u32>(c.mode)<<' '<<c.resolution.x<<' '<<c.resolution.y;
   for(float v:c.position)s<<' '<<v;
@@ -169,13 +177,13 @@ void GuiDocument::write(std::ostream &s) const {
     for(const auto &a:n.actions)s<<' '<<static_cast<u32>(a.event)<<' '<<static_cast<u32>(a.action)<<' '<<a.target<<' '<<a.value;
     const auto &t=n.transitions;s<<' '<<t.enabled<<' '<<t.duration<<' '<<static_cast<u32>(t.easing);
     for(const auto &v:{t.normal,t.pressed,t.disabled})s<<' '<<v.pose.x<<' '<<v.pose.y<<' '<<v.pose.scale<<' '<<v.pose.opacity<<' '<<v.tint;
-    s<<'\n';
+    s<<' ';writeGuiControl(s,n.control);s<<'\n';
   }
 }
 bool GuiDocument::read(std::istream &s, std::string &error) {
   GuiDocument candidate;
   std::string magic; u32 version = 0, count = 0;
-  if (!(s >> magic >> version >> count >> candidate.nextId_) || magic != "AEUI" || version<1 || version>4 || count > kMaximumNodes) {
+  if (!(s >> magic >> version >> count >> candidate.nextId_) || magic != "AEUI" || version<1 || version>5 || count > kMaximumNodes) {
     error = "Unsupported/corrupt AEUI header"; return false;
   }
   if(version>=2) {
@@ -188,7 +196,7 @@ bool GuiDocument::read(std::istream &s, std::string &error) {
       >> n.anchorMin.x >> n.anchorMin.y >> n.anchorMax.x >> n.anchorMax.y
       >> n.offsets.x >> n.offsets.y >> n.offsets.width >> n.offsets.height
       >> n.background >> n.foreground >> n.accent >> n.fontSize >> n.radius
-      >> n.value >> n.minimum >> n.maximum >> n.visible >> n.enabled >> n.clipChildren) || kind >= (version==1?6:kGuiKindCount)) {
+      >> n.value >> n.minimum >> n.maximum >> n.visible >> n.enabled >> n.clipChildren) || kind >= (version==1?6u:version<5?10u:kGuiKindCount)) {
       error = "Corrupt AEUI node " + std::to_string(i); return false;
     }
     if(version>=2) {
@@ -210,6 +218,7 @@ bool GuiDocument::read(std::istream &s, std::string &error) {
       if(!(s>>t.enabled>>t.duration>>easing) || easing>3){error="Corrupt UI state transition";return false;}t.easing=static_cast<GuiEasing>(easing);
       for(auto *v:{&t.normal,&t.pressed,&t.disabled})if(!(s>>v->pose.x>>v->pose.y>>v->pose.scale>>v->pose.opacity>>v->tint)){error="Corrupt UI state style";return false;}
     }
+    if(version>=5&&!readGuiControl(s,n.control)){error="Corrupt UI control";return false;}
     n.kind = static_cast<GuiKind>(kind); candidate.nodes_.push_back(std::move(n));
   }
   s >> std::ws;
@@ -224,20 +233,29 @@ bool GuiHistory::commit(const GuiDocument &d) {
   editing_ = false;
   std::ostringstream a, b; before_.write(a); d.write(b);
   if (a.str() == b.str()) return false;
+  if(commit_) {
+    if(commit_(before_,d))return true;
+    editing_=true;return false; // retry after an open scene gesture finishes
+  }
   if (undo_.size() == 64) undo_.erase(undo_.begin());
   undo_.push_back(std::move(before_)); redo_.clear(); return true;
 }
 bool GuiHistory::undo(GuiDocument &d) {
   commit(d); if (undo_.empty()) return false;
-  redo_.push_back(d); d = std::move(undo_.back()); undo_.pop_back(); return true;
+  redo_.push_back(d); d.restoreSnapshot(undo_.back()); undo_.pop_back(); return true;
 }
 bool GuiHistory::redo(GuiDocument &d) {
   if (redo_.empty()) return false;
-  undo_.push_back(d); d = std::move(redo_.back()); redo_.pop_back(); return true;
+  undo_.push_back(d); d.restoreSnapshot(redo_.back()); redo_.pop_back(); return true;
 }
 void GuiHistory::clear() { undo_.clear(); redo_.clear(); editing_ = false; }
+void GuiDocument::restoreSnapshot(const GuiDocument &snapshot) {
+  const auto floor=std::max(nextId_,snapshot.nextId_);*this=snapshot;
+  // Undo may restore an old node, but a new branch must never reuse its ID.
+  nextId_=floor;revision_=nextRevision();
+}
 
-void GuiRuntime::load(const GuiDocument &d,bool animate) { document_ = d; placements_.clear();placementByNode_.clear();layoutRevision_=~u64{0};events_.clear();pressed_=0;droppedEvents_=0;motions_.clear();basePlacements_.clear();motionDirty_=true;motionRevision_=~u64{0};animate_=animate;diagnostic_.clear();states_.clear();pendingActions_.clear();dispatching_=false;syncMotions(); }
+void GuiRuntime::load(const GuiDocument &d,bool animate) { document_ = d; placements_.clear();placementByNode_.clear();layoutRevision_=~u64{0};events_.clear();captures_.clear();droppedEvents_=0;motions_.clear();basePlacements_.clear();motionDirty_=true;motionRevision_=~u64{0};animate_=animate;diagnostic_.clear();states_.clear();controls_.clear();pendingActions_.clear();dispatching_=false;syncMotions(); }
 void GuiRuntime::syncMotions() {
   if(motionRevision_==document_.revision())return;
   motionRevision_=document_.revision();motionDirty_=true;
@@ -283,7 +301,7 @@ GuiStateStyle GuiRuntime::stateStyle(GuiId id) const {
 }
 void GuiRuntime::syncState(const GuiNode &n,bool enabled) {
   if(!animate_ || !n.transitions.enabled)return;
-  const auto state=!enabled?GuiVisualState::Disabled:pressed_==n.id && pressedInside_?GuiVisualState::Pressed:GuiVisualState::Normal;
+  const auto state=!enabled?GuiVisualState::Disabled:pressed(n.id)?GuiVisualState::Pressed:GuiVisualState::Normal;
   const auto target=state==GuiVisualState::Disabled?n.transitions.disabled:state==GuiVisualState::Pressed?n.transitions.pressed:n.transitions.normal;
   auto [at,inserted]=states_.try_emplace(n.id);
   if(inserted){at->second={n.transitions,state,target,target,n.transitions.duration};return;}
@@ -293,6 +311,7 @@ void GuiRuntime::advance(double seconds) {
   syncMotions();if(!std::isfinite(seconds) || seconds<=0)return;
   // Synchronize changed enable/configuration before consuming this frame's clock.
   layout(canvas_);
+  advanceControls(seconds);
   bool changed=false;
   for(auto &[id,s]:states_) if(s.elapsed<s.config.duration){s.elapsed=std::min(double(s.config.duration),s.elapsed+seconds);changed=true;}
   for(auto &[id,s]:motions_) if(s.running) {
@@ -413,22 +432,24 @@ void GuiRuntime::layout(const UiRect &canvas) {
     }
     if(n.parent){const auto *pp=placement(n.parent);p.clip=nodes[document_.indexOf(n.parent)].clipChildren?intersect(pp->clip,pp->bounds):pp->clip;}
   }
-  if(pressed_) {
-    const auto *p=placement(pressed_);const auto *n=document_.find(pressed_);
-    if(!p || !p->enabled || !n || (!n->interaction.clickable && n->kind!=GuiKind::Button && n->kind!=GuiKind::Toggle && n->kind!=GuiKind::Slider)) {pressed_=0;motionDirty_=true;}
-  }
+  if(std::erase_if(captures_,[&](const Capture &c){
+    const auto *p=placement(c.node);const auto *n=document_.find(c.node);
+    return !p || !p->enabled || !n || (!n->interaction.clickable && n->kind!=GuiKind::Button && n->kind!=GuiKind::Toggle && n->kind!=GuiKind::Slider && !guiInputKind(n->kind));
+  }))motionDirty_=true;
+  reconcileControls();
 }
 void GuiRuntime::draw(UiDrawList &list) const {
   for (const auto &p : placements_) {
     const auto *n = document_.find(p.node); if (!n || p.bounds.isEmpty() || p.opacity<=0) continue;
     if(!list.pushClip(p.clip)) continue;
+    if(n->kind==GuiKind::Joystick){drawControl(list,*n,p);list.popClip();continue;}
     const UiRect r = p.bounds;const float scale=p.scale;
     const auto fade=[&](UiColor c){c=multiplyTint(c,p.tint);return (c&0x00FFFFFF)|(static_cast<UiColor>(std::lround((c>>24)*p.opacity))<<24);};
     const UiColor accent=fade(n->accent),foreground=fade(n->foreground);
     UiColor color = fade(n->background);
     if (!n->transitions.enabled && !p.enabled) color = (color & 0x00FFFFFF) | ((color >> 25) << 24);
     // Interaction changes the tint, never the authored background opacity.
-    if (!n->transitions.enabled && pressed_ == n->id && pressedInside_) color = (n->accent & 0x00FFFFFF) | (color & 0xFF000000);
+    if (!n->transitions.enabled && pressed(n->id)) color = (n->accent & 0x00FFFFFF) | (color & 0xFF000000);
     if (color >> 24) list.addRect(r, color, n->radius*scale);
     if(n->kind==GuiKind::Image) {
       const auto *image=images_?images_->find(n->image):nullptr;
@@ -457,7 +478,7 @@ void GuiRuntime::draw(UiDrawList &list) const {
       label.height = r.height*0.6f;
     }
     UiTypeStyle style{}; style.size = n->fontSize*scale;
-    const bool centered = n->kind == GuiKind::Button;
+    const bool centered = n->kind == GuiKind::Button || n->kind == GuiKind::ActionButton;
     list.addText(label, n->text, foreground, style, centered ? UiAlign::Center : UiAlign::Start);
     list.popClip();
   }
@@ -466,7 +487,7 @@ GuiId GuiRuntime::hit(UiPoint point, bool interactiveOnly) const noexcept {
   for (auto it = placements_.rbegin(); it != placements_.rend(); ++it) {
     const auto *n = document_.find(it->node);
     if (!n || !it->bounds.contains(point) || !it->clip.contains(point)) continue;
-    if (interactiveOnly && (!it->enabled || it->opacity<=0 || (!n->interaction.clickable && n->kind != GuiKind::Button && n->kind != GuiKind::Toggle && n->kind != GuiKind::Slider))) continue;
+    if (interactiveOnly && (!it->enabled || it->opacity<=0 || (!n->interaction.clickable && n->kind != GuiKind::Button && n->kind != GuiKind::Toggle && n->kind != GuiKind::Slider && !guiInputKind(n->kind)))) continue;
     return it->node;
   }
   return 0;
@@ -518,29 +539,41 @@ void GuiRuntime::dispatch(GuiEvent event) {
   pendingActions_.clear();dispatching_=false;
 }
 void GuiRuntime::click(GuiId id) {const auto *n=document_.find(id);if(n)dispatch({id,GuiEventKind::Click,n->value});}
+bool GuiRuntime::captures(u32 pointer,UiPointerDevice device) const noexcept {
+  return std::any_of(captures_.begin(),captures_.end(),[&](const Capture &c){return c.pointer==pointer&&c.device==device;});
+}
+bool GuiRuntime::pressed(GuiId id) const noexcept {
+  return std::any_of(captures_.begin(),captures_.end(),[&](const Capture &c){return c.node==id&&c.inside;});
+}
 bool GuiRuntime::pointer(const UiPointerEvent &e) {
+  // Remember consumption before reconciliation can retire the captured target.
+  const bool wasCaptured=captures(e.pointerId,e.device);
   layout(canvas_);
+  auto locate=[&](){return std::find_if(captures_.begin(),captures_.end(),[&](const Capture &c){return c.pointer==e.pointerId&&c.device==e.device;});};
   if(e.phase==UiPointerPhase::Down) {
-    if(pressed_)return false;
-    pressed_=hit(e.position,true);pointer_=e.pointerId;
-    if(const auto *p=placement(pressed_)){captureBounds_=p->bounds;captureClip_=p->clip;captureScale_=p->scale;pressedInside_=true;motionDirty_=true;layout(canvas_);}
+    if(wasCaptured)return true; // repeated Down never steals or duplicates a click
+    const auto id=hit(e.position,true);const auto *p=placement(id);
+    if(!id||!p)return false;
+    // A value control has one owner; distinct controls can run concurrently.
+    if(std::any_of(captures_.begin(),captures_.end(),[&](const Capture &c){return c.node==id;}))return true;
+    if(captures_.size()>=kMaximumPointers){diagnostic_="UI pointer capture limit exceeded";return true;}
+    captures_.push_back({id,e.pointerId,e.device,p->bounds,p->clip,p->scale,true});motionDirty_=true;layout(canvas_);
   }
-  if(!pressed_ || pointer_!=e.pointerId)return false;
-  const GuiId id=pressed_;const auto *n=document_.find(id);const auto *p=placement(id);
-  if(!n || !p || !p->enabled){cancelPointers();return true;}
-  if(e.phase==UiPointerPhase::Cancel){cancelPointers();layout(canvas_);return true;}
-  // Capture geometry is frozen for this gesture: a shrinking pressed pose cannot oscillate hit state.
-  pressedInside_=captureBounds_.contains(e.position) && captureClip_.contains(e.position);motionDirty_=true;
-  const auto kind=n->kind;const auto clickable=n->interaction.clickable;const float value=n->value,minimum=n->minimum,maximum=n->maximum;
+  auto at=locate();if(at==captures_.end())return wasCaptured;
+  const auto id=at->node;const auto *n=document_.find(id);const auto *p=placement(id);
+  if(n&&guiInputKind(n->kind))return controlPointer(e);
+  auto release=[&](){const auto i=locate();if(i!=captures_.end())captures_.erase(i);motionDirty_=true;};
+  if(!n || !p || !p->enabled || e.phase==UiPointerPhase::Cancel){release();layout(canvas_);return true;}
+  at->inside=at->bounds.contains(e.position)&&at->clip.contains(e.position);motionDirty_=true;
+  const auto capture=*at;const auto kind=n->kind;const auto clickable=n->interaction.clickable;
+  const float value=n->value,minimum=n->minimum,maximum=n->maximum;
   if(kind==GuiKind::Slider) {
-    const float t=std::clamp((e.position.x-captureBounds_.x-10*captureScale_)/std::max(1.f,captureBounds_.width-20*captureScale_),0.f,1.f);
+    const float t=std::clamp((e.position.x-capture.bounds.x-10*capture.scale)/std::max(1.f,capture.bounds.width-20*capture.scale),0.f,1.f);
     changeValue(id,minimum+(maximum-minimum)*t,true);
   }
   if(e.phase==UiPointerPhase::Up) {
-    const bool inside=pressedInside_;cancelPointers();
-    // ValueChanged listeners may disable/hide this element while dragging.
-    layout(canvas_);const auto *current=placement(id);
-    if(inside && current && current->enabled) {
+    release();layout(canvas_);const auto *current=placement(id);
+    if(capture.inside && current && current->enabled) {
       if(kind==GuiKind::Toggle)changeValue(id,value==maximum?minimum:maximum,true);
       if(kind==GuiKind::Button || clickable)click(id);
     }

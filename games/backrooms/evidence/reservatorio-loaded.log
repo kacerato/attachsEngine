@@ -1,0 +1,8 @@
+--------- beginning of main
+10-01 15:46:30.504 30282  6630 I Astra.Script: 141: BACKROOMS READY mode=1 | válvulas na ordem 2, 1, 3
+10-01 15:46:30.587 30282  6630 I Astra.Script: 141: BACKROOMS STATUS pos=0.00,0.00,2.00 steps=0 time=180.0 flashlight=True target=0 hold=0.00 render=1280x2772 gpuMs=12.46 frameMs=268.53 shadows=1 aa=Fxaa clamps=0
+10-01 15:46:38.146 30282  6630 I Astra.Script: 141: BACKROOMS STATUS pos=0.00,-0.00,2.00 steps=0 time=180.0 flashlight=True target=0 hold=0.00 render=1280x2772 gpuMs=41.65 frameMs=55.10 shadows=1 aa=Temporal clamps=0
+10-01 15:46:43.175 30282  6630 I Astra.Script: 141: BACKROOMS STATUS pos=0.00,-0.00,2.00 steps=0 time=180.0 flashlight=True target=0 hold=0.00 render=1280x2772 gpuMs=44.78 frameMs=58.27 shadows=1 aa=Temporal clamps=0
+10-01 15:46:48.182 30282  6630 I Astra.Script: 141: BACKROOMS STATUS pos=0.00,-0.00,2.00 steps=0 time=180.0 flashlight=True target=0 hold=0.00 render=1280x2772 gpuMs=41.35 frameMs=57.15 shadows=1 aa=Temporal clamps=0
+10-01 15:46:53.199 30282  6630 I Astra.Script: 141: BACKROOMS STATUS pos=0.00,-0.00,2.00 steps=0 time=180.0 flashlight=True target=0 hold=0.00 render=1280x2772 gpuMs=41.91 frameMs=55.92 shadows=1 aa=Temporal clamps=0
+10-01 15:46:58.213 30282  6630 I Astra.Script: 141: BACKROOMS STATUS pos=0.00,-0.00,2.00 steps=0 time=180.0 flashlight=True target=0 hold=0.00 render=1280x2772 gpuMs=45.39 frameMs=59.30 shadows=1 aa=Temporal clamps=0

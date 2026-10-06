@@ -1,0 +1,5 @@
+V-HACD 4 single-header implementation
+https://github.com/kmammou/v-hacd
+Commit: f900e42361491f525262d4825e758845e4969897
+License: BSD-3-Clause (LICENSE)
+Upstream header unmodified. Authoring worker only; no decomposition in simulation.

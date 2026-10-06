@@ -1,0 +1,13 @@
+{
+  "format": "ASTRA-PROJECT-1",
+  "resourceSource": "independent",
+  "mainScene": "scenes/editor.aescene",
+  "editorScene": "scenes/editor.aescene",
+  "project": {
+    "name": "Ecos da Mata",
+    "path": "C:\\Users\\donod\\Downloads\\atchengine\\games\\ecos-da-mata\\project",
+    "template": "empty",
+    "scenes": 1,
+    "assets": 10
+  }
+}

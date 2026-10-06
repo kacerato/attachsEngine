@@ -1,0 +1,122 @@
+{
+  "block": "U11 geometric collider selection occlusion",
+  "status": "closed",
+  "repository": "https://github.com/kacerato/attachsEngine",
+  "branch": "codex/gameplay-runtime",
+  "publication": "local, no commit or push in this continuation",
+  "native": {
+    "passed": 92,
+    "total": 92,
+    "focused_cases": 3,
+    "real_jolt": true,
+    "criteria": [
+      "real triangles and lazy BVH",
+      "missing geometry has no bounds obstacle",
+      "self visual exemption with authored identity",
+      "negative scale/shear/clipping",
+      "perspective and orthographic contour depth",
+      "partial contour visibility",
+      "actual Inspector and pointer workflow",
+      "visible locked obstacle preserves focus",
+      "editor eye/layer hiding releases selection",
+      "archive unchanged by navigation",
+      "Inspector edit persists into Jolt",
+      "one undo restores exact archive and physics identity",
+      "imported concave visual hole passes, solid arm blocks"
+    ]
+  },
+  "android": {
+    "device": "Xiaomi 25053PC47G / onyx",
+    "apk_sha256": "fceb000fc4964ca00f2ec2088512099b3216e15b52850e581ab44539a8fcc521",
+    "installed_base_matches": true,
+    "project": "UI Occlusion v1",
+    "scene_sha256": "878ade71a6b27e5487ca2842cb8b36b650c3f9d3e440d054b350517b03509063",
+    "disabled_scene_sha256": "70ba6f61960aab7adbc093530569f65b4d9d3a71dc516da84e658ba2a5e4b29f",
+    "review": {
+      "method": "Individual real device screenshots inspected visually; scene archives compared separately",
+      "device": "Xiaomi 25053PC47G / onyx, landscape 2772x1280",
+      "apk_sha256": "fceb000fc4964ca00f2ec2088512099b3216e15b52850e581ab44539a8fcc521",
+      "steps": [
+        {
+          "screenshot": "device-body-final.png",
+          "accepted": true,
+          "observation": "SharedBody Inspector open; LeftBox behind actual VisibleWall; diagnostic outlines retain Body context without adding a panel.",
+          "screenshot_sha256": "5a2f606e49d266d14adaabbfe9eff18b6b84db8063fe50e602f2293e4eb18778"
+        },
+        {
+          "screenshot": "device-wall-final.png",
+          "accepted": true,
+          "observation": "Tap at 1160,655 selects the foreground VisibleWall instead of hidden LeftBox Collider.",
+          "screenshot_sha256": "3dd3d66a7366f992296aaa148d0b97f6d6b33ef31564e9dde3bb5726a97ee397"
+        },
+        {
+          "screenshot": "device-locked-final.png",
+          "accepted": true,
+          "observation": "Same tap with visible wall locked preserves SharedBody focus. Full readable status directs access via Hierarchy or hide.",
+          "screenshot_sha256": "f59179dea55381c7a32a4dcf8e98f3ab54080bbcdd7407f2e65ca7109778072e"
+        },
+        {
+          "screenshot": "device-left-final.png",
+          "accepted": true,
+          "observation": "Hide wall via Hierarchy eye; same tap opens LeftBox Collider UID1; own visual geometry permits selection. Body linkage hint and active state visible.",
+          "screenshot_sha256": "12bee9923dbbb402d6c5d09c64e59c34c96f5e2acf837ccaabe0c2259fce054f"
+        },
+        {
+          "screenshot": "device-disabled-final.png",
+          "accepted": true,
+          "observation": "Actual Inspector enable edit and Save leave Collider UID1 disabled while visual cube remains. Pulled archive differs only in that Collider enabled field.",
+          "screenshot_sha256": "0165a53d187eea3650828e61ee1333e20e05992e4860a334336979313a5f5f8d"
+        },
+        {
+          "screenshot": "device-undone-final.png",
+          "accepted": true,
+          "observation": "One Undo and Save restore enabled Collider and exact original scene SHA. No extra authored undo entries from selection/eye/lock.",
+          "screenshot_sha256": "31b413ccfe72cf4552cb7a33373d72aaab6457eef3fd48891a5f1c65b4197e65"
+        },
+        {
+          "screenshot": "device-reopened-final.png",
+          "accepted": true,
+          "observation": "Cold process restart and saved Occlusion view; Body focus then same tap opens active LeftBox Collider UID1. Hidden and locked wall preferences persist; reopened scene SHA equals original.",
+          "screenshot_sha256": "12bee9923dbbb402d6c5d09c64e59c34c96f5e2acf837ccaabe0c2259fce054f"
+        },
+        {
+          "screenshot": "device-overlays-off-final.png",
+          "accepted": true,
+          "observation": "Component visuals disabled using right camera-icon toggle; ordinary viewport tap selects LeftBox object with collapsed Inspector and no collider contours. Layer-eye panel is a different control; intermediate capture is excluded.",
+          "screenshot_sha256": "34d43dbbf84372c775a3d1bfb56cefaf525d95058180bd7822ab67df020c6ddf"
+        },
+        {
+          "screenshot": "device-restored-final.png",
+          "accepted": true,
+          "observation": "Restore component visuals, show and unlock wall; Body context and same tap again select VisibleWall. Device left in Edit with original authored scene.",
+          "screenshot_sha256": "ea8d82044dbc9b19453d6c779c29bec78051d19d7b00aec1cbb4c9bf6ec16dc8"
+        }
+      ],
+      "limits": "Physical acceptance is authoring selection/edit/undo/save/reopen. Concave imported opening, clipping, Jolt effects and perspective segment mathematics accepted on host. No new Play gameplay, thermal benchmark or frame-by-frame video acceptance claimed."
+    }
+  },
+  "protected_sources": {
+    "count": 268,
+    "changed": 0
+  },
+  "source_hashes": {
+    "native/editor/editor_view.h": "93ef5f0637a002bc1d3002bec9d880a43563b90c85420d9d7bc653e86019cb57",
+    "native/editor/editor_view.cpp": "1a3337a24a73ddc292da6674d0d7cf51fa61143420aaf02a99fc0306c009b3e9",
+    "native/editor/editor_component_visuals.h": "4ccb670fc79c2dcf68d7dbfd7e41800679a5982dcbfebfb9ae9fc656bc9b6651",
+    "native/editor/editor_session.cpp": "dd302133bacaf936de4839000ab35a1a5909899cdefe47101977f69a3638acf8",
+    "native/CMakeLists.txt": "e451d84855358fd385021a08bdac4ee0cdc974d715ffd5ad0300cbc0273ff46d",
+    "tests/native/test_collider_occlusion.cpp": "dde42ba3c91a37402d658bea124b72e8ff2ec965911e3893784af05811d1a38b",
+    "tests/native/collider_occlusion_fixture.h": "13aa0a2208d64f7c7f194bf1b211a3a311dc6ceda87be6744bc966e9517a38ea",
+    "tests/native/gui_preview_main.cpp": "2d955dd93360712bea98f0af02c448e95b5a79fbf908b24caecf57b4a6f4a86f"
+  },
+  "original_roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "scope": "geometric authoring selection; diagnostics can retain x-ray lines; hierarchy remains deliberate access; editor-only hiding does not change Play UI depth",
+  "remaining_u11": [
+    "viewport shape dimension/pose handles",
+    "faces/vertices authoring",
+    "visual/collision/COM/support/authority diagnostics",
+    "distribution and shape budgets"
+  ],
+  "video": "No new video; individual real device captures inspected. No frame-by-frame video claim.",
+  "engine_complete": false
+}

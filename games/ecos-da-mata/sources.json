@@ -1,0 +1,52 @@
+[
+  {
+    "model": "pine_tree_01",
+    "page": "https://polyhaven.com/a/pine_tree_01",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/pine_tree_01/pine_tree_01_1k.gltf",
+    "license": "CC0 1.0",
+    "size": 958106396,
+    "sha256": "4f3540da4efda63e0fc5ce303fff68adc769f49166f52c6f60ed97526a22d7f1",
+    "nodes": 3,
+    "meshes": 3
+  },
+  {
+    "model": "fir_tree_01",
+    "page": "https://polyhaven.com/a/fir_tree_01",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fir_tree_01/fir_tree_01_1k.gltf",
+    "license": "CC0 1.0",
+    "size": 487346836,
+    "sha256": "b896a2111cc437044babd06a0e32c25a1031d851cc40b0dddd94561eb566da5d",
+    "nodes": 3,
+    "meshes": 3
+  },
+  {
+    "model": "fern_02",
+    "page": "https://polyhaven.com/a/fern_02",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fern_02/fern_02_1k.gltf",
+    "license": "CC0 1.0",
+    "size": 1143580,
+    "sha256": "7e4a4ff2f8b53f946968d824d5bc799ccbcc1bf30c766a8513e9e1d38486ce73",
+    "nodes": 4,
+    "meshes": 4
+  },
+  {
+    "model": "dead_tree_trunk",
+    "page": "https://polyhaven.com/a/dead_tree_trunk",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dead_tree_trunk/dead_tree_trunk_1k.gltf",
+    "license": "CC0 1.0",
+    "size": 4786520,
+    "sha256": "6d71aad27e7b68669122850a3154a1cd18c861497a25b040baa4d188025b93b1",
+    "nodes": 1,
+    "meshes": 1
+  },
+  {
+    "model": "rock_moss_set_01",
+    "page": "https://polyhaven.com/a/rock_moss_set_01",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_moss_set_01/rock_moss_set_01_1k.gltf",
+    "license": "CC0 1.0",
+    "size": 1933008,
+    "sha256": "451599a92e375059fda4c11fc9265e35dde547df6dbc65a6f0572b4d72ae9e88",
+    "nodes": 6,
+    "meshes": 6
+  }
+]

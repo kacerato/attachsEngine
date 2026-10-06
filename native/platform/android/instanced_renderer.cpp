@@ -2,6 +2,7 @@
 #include "platform/android/android_texture_loader.h"
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
+#include "renderer/spatial_render_chunks.h"
 
 #include "rhi/shaders/editor_grid_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"
@@ -598,11 +599,14 @@ bool InstancedRenderer::createPipeline() {
     // current projection from the frame uniform. A prefiltered default can
     // retain the octahedral specialization because all imported HDRIs share it.
     u32 environmentProjection;
+    u32 opaqueNoClip;
+    u32 fullDetailSampling;
+    u32 unshadowedPointLighting;
   };
   MaterialSpecialization materialSpecialization{
       static_cast<u32>(gpuCostIsolation_), renderer::DynamicMaterialFeatureMask,
-      0u};
-  VkSpecializationMapEntry specializationEntries[3]{};
+      0u, 0u, fullDetailSamplingEnabled_ ? 1u : 0u, 0u};
+  VkSpecializationMapEntry specializationEntries[6]{};
   specializationEntries[0].constantID = 0;
   specializationEntries[0].offset = offsetof(MaterialSpecialization, isolation);
   specializationEntries[0].size = sizeof(u32);
@@ -612,8 +616,17 @@ bool InstancedRenderer::createPipeline() {
   specializationEntries[2].constantID = 2;
   specializationEntries[2].offset = offsetof(MaterialSpecialization, environmentProjection);
   specializationEntries[2].size = sizeof(u32);
+  specializationEntries[3].constantID = 3;
+  specializationEntries[3].offset = offsetof(MaterialSpecialization, opaqueNoClip);
+  specializationEntries[3].size = sizeof(u32);
+  specializationEntries[4].constantID = 4;
+  specializationEntries[4].offset = offsetof(MaterialSpecialization, fullDetailSampling);
+  specializationEntries[4].size = sizeof(u32);
+  specializationEntries[5].constantID = 5;
+  specializationEntries[5].offset = offsetof(MaterialSpecialization, unshadowedPointLighting);
+  specializationEntries[5].size = sizeof(u32);
   VkSpecializationInfo gpuIsolationInfo{};
-  gpuIsolationInfo.mapEntryCount = 3;
+  gpuIsolationInfo.mapEntryCount = 6;
   gpuIsolationInfo.pMapEntries = specializationEntries;
   gpuIsolationInfo.dataSize = sizeof(materialSpecialization);
   gpuIsolationInfo.pData = &materialSpecialization;
@@ -784,6 +797,20 @@ bool InstancedRenderer::createPipeline() {
 
     pipelineOk = createScenePipeline(&pipeline_) == VK_SUCCESS;
     if (pipelineOk && dirtRoadPreview_) {
+      if (opaqueNoClipEnabled_) {
+        materialSpecialization.opaqueNoClip = 1u;
+        pipelineOk = createScenePipeline(&opaqueNoClipPipeline_) == VK_SUCCESS;
+        if (pipelineOk && pointLightingSpecializationEnabled_) {
+          materialSpecialization.unshadowedPointLighting = 1u;
+          if (createScenePipeline(&pointLightingPipeline_) != VK_SUCCESS) {
+            pointLightingSpecializationEnabled_ = false;
+            __android_log_print(ANDROID_LOG_WARN, LogTag,
+                "[Lighting] point specialization unavailable; general solid pipeline retained.");
+          }
+          materialSpecialization.unshadowedPointLighting = 0u;
+        }
+        materialSpecialization.opaqueNoClip = 0u;
+      }
       // MASK global em duas fases: primeiro apenas alpha+depth; depois PBR só
       // na camada visível (EQUAL). Preserva pixels e evita sombrear as muitas
       // folhas ocultas por outras folhas.
@@ -842,6 +869,20 @@ bool InstancedRenderer::createPipeline() {
         if (pipelineOk) pipelineOk = createDistantPipeline(0, &opaqueDistantPipeline_);
         if (pipelineOk) pipelineOk = createDistantPipeline(1, &coverageDistantPipeline_);
         if (pipelineOk) pipelineOk = createDistantPipeline(2, &transparentDistantPipeline_);
+        if (pipelineOk && opaqueNoClipEnabled_) {
+          materialSpecialization.opaqueNoClip = 1u;
+          pipelineOk = createDistantPipeline(0, &opaqueNoClipDistantPipeline_);
+          if (pipelineOk && pointLightingSpecializationEnabled_) {
+            materialSpecialization.unshadowedPointLighting = 1u;
+            if (!createDistantPipeline(0, &pointLightingDistantPipeline_)) {
+              pointLightingSpecializationEnabled_ = false;
+              __android_log_print(ANDROID_LOG_WARN, LogTag,
+                  "[Lighting] distant point specialization unavailable; general solid pipeline retained.");
+            }
+            materialSpecialization.unshadowedPointLighting = 0u;
+          }
+          materialSpecialization.opaqueNoClip = 0u;
+        }
       }
       materialSpecialization.isolation = static_cast<u32>(gpuCostIsolation_);
       materialSpecialization.featureMask = renderer::DynamicMaterialFeatureMask;
@@ -881,6 +922,21 @@ bool InstancedRenderer::createPipeline() {
         if (pipelineOk) pipelineOk = createMaterialVariants(0, opaqueMaterialPipelines_);
         if (pipelineOk) pipelineOk = createMaterialVariants(1, coverageMaterialPipelines_);
         if (pipelineOk) pipelineOk = createMaterialVariants(2, transparentMaterialPipelines_);
+        if (pipelineOk && opaqueNoClipEnabled_) {
+          materialSpecialization.opaqueNoClip = 1u;
+          pipelineOk = createMaterialVariants(0, opaqueNoClipMaterialPipelines_);
+          if (pipelineOk && pointLightingSpecializationEnabled_) {
+            materialSpecialization.unshadowedPointLighting = 1u;
+            if (!createMaterialVariants(0, pointLightingMaterialPipelines_)) {
+              pointLightingSpecializationEnabled_ = false;
+              __android_log_print(ANDROID_LOG_WARN, LogTag,
+                  "[Lighting] material point specialization unavailable; general solid pipeline retained.");
+            }
+            materialSpecialization.featureMask = renderer::DynamicMaterialFeatureMask;
+            materialSpecialization.unshadowedPointLighting = 0u;
+          }
+          materialSpecialization.opaqueNoClip = 0u;
+        }
       }
       if (pipelineOk && waterSubpassActive_) {
         // Água tem vertex shader próprio mesmo no provedor analítico: é ele
@@ -1689,8 +1745,8 @@ void InstancedRenderer::recordRuntimeHud(u32 imageIndex,const renderer::RuntimeH
   vkCmdEndRenderPass(commandBuffer_);
 }
 
-void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
-  if(!uiRenderer_.isReady() || uiInstances_.empty() || imageIndex>=uiFramebuffers_.size()) return;
+bool InstancedRenderer::prepareUiOverlay(u32 imageIndex) {
+  if(!uiRenderer_.isReady() || uiInstances_.empty() || imageIndex>=uiFramebuffers_.size()) return false;
   uiRenderer_.setSceneDepth(depthImage_.view(),postDepthSampler_.handle(),swapchain_->width(),swapchain_->height());
   if(uiGuiPending_) {
     rhi::VulkanUploadContext upload;
@@ -1716,9 +1772,19 @@ void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
     upload.shutdown();
     pendingUiPreview_.clear();
   }
+  return true;
+}
+
+void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
+  if(!prepareUiOverlay(imageIndex)) return;
   VkRenderPassBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;begin.renderPass=uiRenderPass_;
   begin.framebuffer=uiFramebuffers_[imageIndex];begin.renderArea.extent={swapchain_->width(),swapchain_->height()};
   vkCmdBeginRenderPass(commandBuffer_,&begin,VK_SUBPASS_CONTENTS_INLINE);
+  recordUiContents();
+  vkCmdEndRenderPass(commandBuffer_);
+}
+
+void InstancedRenderer::recordUiContents() {
   const VkViewport viewport{0,0,float(swapchain_->width()),float(swapchain_->height()),0,1};
   const VkRect2D scissor{{0,0},{swapchain_->width(),swapchain_->height()}};
   vkCmdSetViewport(commandBuffer_,0,1,&viewport);vkCmdSetScissor(commandBuffer_,0,1,&scissor);
@@ -1726,7 +1792,6 @@ void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
   const bool srgb=swapchain_->imageFormat()==VK_FORMAT_B8G8R8A8_SRGB || swapchain_->imageFormat()==VK_FORMAT_R8G8B8A8_SRGB;
   uiRenderer_.record(commandBuffer_,uiInstances_,uiSurfaceWidth_>0?uiSurfaceWidth_:float(display.width),
                      uiSurfaceHeight_>0?uiSurfaceHeight_:float(display.height),swapchain_->surfaceTransform(),srgb);
-  vkCmdEndRenderPass(commandBuffer_);
 }
 
 float InstancedRenderer::sceneAspectRatio() const {
@@ -1849,7 +1914,8 @@ bool InstancedRenderer::createPostResources() {
                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   VkRenderPassCreateInfo renderPass{};
   renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   renderPass.attachmentCount = outputCount;
@@ -1859,6 +1925,16 @@ bool InstancedRenderer::createPostResources() {
   renderPass.dependencyCount = 1;
   renderPass.pDependencies = &dependency;
   if (vkCreateRenderPass(device_, &renderPass, nullptr, &postRenderPass_) != VK_SUCCESS) return false;
+
+  // Compatible single-output pass with a fast tile clear. Its framebuffer and
+  // pipelines are shared with the normal post pass; preview/history targets
+  // retain their own load/layout contracts.
+  if (outputCount == 1 && !fsrActive_) {
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    if (vkCreateRenderPass(device_, &renderPass, nullptr, &editorPostRenderPass_) != VK_SUCCESS)
+      return false;
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  }
 
   // A prévia da Camera usa a mesma subpass/pipeline do pós principal, mas sua
   // saída continua sendo uma textura amostrada pelo UI em vez de uma imagem de
@@ -2037,10 +2113,18 @@ bool InstancedRenderer::createPostResources() {
   return ok;
 }
 
-void InstancedRenderer::recordPostProcess(u32 imageIndex,
+bool InstancedRenderer::recordPostProcess(u32 imageIndex,
                                            const platform::FreeCameraState &camera,
                                            bool upscaledInput) {
-  if (!renderingPolicy_.post.dedicatedPass || postPipeline_ == VK_NULL_HANDLE) return;
+  if (!renderingPolicy_.post.dedicatedPass || postPipeline_ == VK_NULL_HANDLE) return false;
+  // UI and a single-output final post share compatible render passes. Recording
+  // both before the store avoids reloading the full swapchain image in a second
+  // tile pass. TAA has a second history output; FSR1 has an intermediate target;
+  // The authored Play GUI is already in uiInstances_ and keeps the same order.
+  // The separate first-person runtime HUD retains its original path.
+  const bool mergeUi = postUiFusionEnabled_ && (editorBackground_ || playPostUiFusionEnabled_) && !temporalAaActive_ &&
+      !fsrActive_ && !runtimeHudEnabled_ && editorPostRenderPass_ != VK_NULL_HANDLE &&
+      prepareUiOverlay(imageIndex);
   if (temporalAaActive_ && !temporalHistoryLayoutInitialized_) {
     // The temporal descriptor is statically referenced by the shader. Dynamic
     // control flow that rejects an invalid first-frame history does not make an
@@ -2064,6 +2148,19 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   VkRenderPassBeginInfo begin{};
   begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass = postRenderPass_;
+  VkClearValue backgroundClear{};
+  if (mergeUi) {
+    begin.renderPass = editorPostRenderPass_;
+    float background[3]{.028f,.032f,.039f};
+    const bool srgbTarget = swapchain_->imageFormat() == VK_FORMAT_B8G8R8A8_SRGB ||
+                            swapchain_->imageFormat() == VK_FORMAT_R8G8B8A8_SRGB;
+    for (u32 channel=0;channel<3;++channel)
+      backgroundClear.color.float32[channel] = srgbTarget ? background[channel] :
+          1.055f * std::pow(background[channel], 1.f / 2.4f) - .055f;
+    backgroundClear.color.float32[3] = 1;
+    begin.clearValueCount = 1;
+    begin.pClearValues = &backgroundClear;
+  }
   begin.framebuffer = postFramebuffers_[imageIndex];
   const u32 postWidth = fsrActive_ ? renderWidth() : swapchain_->width();
   const u32 postHeight = fsrActive_ ? renderHeight() : swapchain_->height();
@@ -2072,6 +2169,16 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   VkViewport viewport{0.0f, 0.0f, static_cast<float>(postWidth),
                       static_cast<float>(postHeight), 0.0f, 1.0f};
   VkRect2D scissor{{0, 0}, {postWidth, postHeight}};
+  if (mergeUi && editorBackground_ && !sceneViewport_.isEmpty()) {
+    // Keep the fullscreen UV transform. Clip only rasterization; changing the
+    // viewport itself would rescale/reposition reconstruction and break DRS.
+    const auto cameraViewport = physicalSceneViewport();
+    const u32 left = static_cast<u32>(std::clamp(std::floor(cameraViewport.x * postWidth), 0.f, float(postWidth)));
+    const u32 top = static_cast<u32>(std::clamp(std::floor(cameraViewport.y * postHeight), 0.f, float(postHeight)));
+    const u32 right = static_cast<u32>(std::clamp(std::ceil((cameraViewport.x + cameraViewport.width) * postWidth), float(left), float(postWidth)));
+    const u32 bottom = static_cast<u32>(std::clamp(std::ceil((cameraViewport.y + cameraViewport.height) * postHeight), float(top), float(postHeight)));
+    scissor = {{static_cast<i32>(left), static_cast<i32>(top)}, {right-left, bottom-top}};
+  }
   vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipeline_);
@@ -2141,7 +2248,13 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   vkCmdPushConstants(commandBuffer_, postPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, sizeof(push), &push);
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+  if (mergeUi) {
+    endGpuRegion(GpuPassClass::Post);
+    beginGpuRegion(GpuPassClass::Ui);
+    recordUiContents();
+  }
   vkCmdEndRenderPass(commandBuffer_);
+  if (mergeUi) endGpuRegion(GpuPassClass::Ui);
   if (temporalAaActive_) {
     if (temporalPoseSupported && recordTemporalHistoryCopy()) {
       temporalPreviousCamera_ = camera;
@@ -2153,6 +2266,7 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
       temporalHistoryInitialized_ = false;
     }
   }
+  return mergeUi;
 }
 
 bool InstancedRenderer::recordTemporalHistoryCopy() {
@@ -2228,6 +2342,7 @@ void InstancedRenderer::destroyPostResources() {
   if (postSetLayout_ != VK_NULL_HANDLE)
     vkDestroyDescriptorSetLayout(device_, postSetLayout_, nullptr);
   if (postRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_, postRenderPass_, nullptr);
+  if (editorPostRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_, editorPostRenderPass_, nullptr);
   if (previewPostRenderPass_ != VK_NULL_HANDLE)
     vkDestroyRenderPass(device_, previewPostRenderPass_, nullptr);
   postPipeline_ = VK_NULL_HANDLE;
@@ -2236,6 +2351,7 @@ void InstancedRenderer::destroyPostResources() {
   postDescriptorSet_ = VK_NULL_HANDLE;
   postSetLayout_ = VK_NULL_HANDLE;
   postRenderPass_ = VK_NULL_HANDLE;
+  editorPostRenderPass_ = VK_NULL_HANDLE;
   previewPostRenderPass_ = VK_NULL_HANDLE;
   postDepthSampler_.shutdown();
   postSampler_.shutdown();
@@ -2774,6 +2890,7 @@ bool InstancedRenderer::createCommandResources() {
 }
 
 void InstancedRenderer::destroyFramebuffers() {
+  editorSceneCacheValid_=false;
   for (u32 i = 0; i < framebufferCount_; ++i) {
     if (framebuffers_[i] != VK_NULL_HANDLE) {
       vkDestroyFramebuffer(device_, framebuffers_[i], nullptr);
@@ -3079,6 +3196,7 @@ void InstancedRenderer::destroyHzbResources() {
   hzbPyramidCameraValid_ = false;
   hzbFrameEligible_ = false;
   hzbPreviousFrameEligible_ = false;
+  hzbLastEditorCameraValid_ = false;
   hzbLevelDims_ = {};
 }
 
@@ -4611,6 +4729,12 @@ void InstancedRenderer::shutdown() {
   for (u32 variant = 0; variant < renderer::MaterialFeatureVariantCount; ++variant) {
     if (opaqueMaterialPipelines_[variant] != VK_NULL_HANDLE)
       vkDestroyPipeline(device_, opaqueMaterialPipelines_[variant], nullptr);
+    if (opaqueNoClipMaterialPipelines_[variant] != VK_NULL_HANDLE)
+      vkDestroyPipeline(device_, opaqueNoClipMaterialPipelines_[variant], nullptr);
+    opaqueNoClipMaterialPipelines_[variant] = VK_NULL_HANDLE;
+    if (pointLightingMaterialPipelines_[variant] != VK_NULL_HANDLE)
+      vkDestroyPipeline(device_, pointLightingMaterialPipelines_[variant], nullptr);
+    pointLightingMaterialPipelines_[variant] = VK_NULL_HANDLE;
     if (coverageMaterialPipelines_[variant] != VK_NULL_HANDLE)
       vkDestroyPipeline(device_, coverageMaterialPipelines_[variant], nullptr);
     if (transparentMaterialPipelines_[variant] != VK_NULL_HANDLE)
@@ -4619,6 +4743,20 @@ void InstancedRenderer::shutdown() {
     coverageMaterialPipelines_[variant] = VK_NULL_HANDLE;
     transparentMaterialPipelines_[variant] = VK_NULL_HANDLE;
   }
+  if (opaqueNoClipPipeline_ != VK_NULL_HANDLE)
+    vkDestroyPipeline(device_, opaqueNoClipPipeline_, nullptr);
+  if (opaqueNoClipDistantPipeline_ != VK_NULL_HANDLE)
+    vkDestroyPipeline(device_, opaqueNoClipDistantPipeline_, nullptr);
+  opaqueNoClipPipeline_ = VK_NULL_HANDLE;
+  opaqueNoClipDistantPipeline_ = VK_NULL_HANDLE;
+  opaqueNoClipLastFrame_ = false;
+  if (pointLightingPipeline_ != VK_NULL_HANDLE)
+    vkDestroyPipeline(device_, pointLightingPipeline_, nullptr);
+  if (pointLightingDistantPipeline_ != VK_NULL_HANDLE)
+    vkDestroyPipeline(device_, pointLightingDistantPipeline_, nullptr);
+  pointLightingPipeline_ = VK_NULL_HANDLE;
+  pointLightingDistantPipeline_ = VK_NULL_HANDLE;
+  pointLightingSpecializationLastFrame_ = false;
   if (pipelineLayout_ != VK_NULL_HANDLE) {
     vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
     pipelineLayout_ = VK_NULL_HANDLE;
@@ -4644,8 +4782,12 @@ void InstancedRenderer::shutdown() {
   waterRippleBuffer_.reset();
   materialUvTransformBuffer_.reset();
   environmentUniform_.reset();
+  editorSceneCachedUniform_.clear();editorSceneCacheValid_=false;editorSceneReusedLastFrame_=false;
   indirectBuffer_.reset();
   indirectCommands_.clear();
+  spatialIndexBuffer_.reset();spatialIndirectBuffer_.reset();
+  spatialGeometryChunks_.clear();spatialSourceRanges_.clear();spatialCommands_.clear();
+  spatialIndirectCapacity_=0;
   indirectSolidBatches_.clear();
   indirectCoverageBatches_.clear();
   useMultiDrawIndirect_ = false;
@@ -4825,6 +4967,7 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
       bindlessRegistry_.rewriteTexture(slot,dirtRoadResources_.view(package+t),dirtRoadResources_.sampler(package+t),
                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     streamingLoaded_[t]=target;
+    editorSceneCacheValid_=false;
     ++applied;uploaded+=renderer::textureStreamingChainBytes(streamingTextures_[t],target);
   }
   if(failed && !streamingFailureLogged_) {
@@ -5016,12 +5159,79 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // Os descritores de culling e compactação apontavam para o buffer indireto
   // que acabou de ser substituído. Recriá-los é obrigatório; deixá-los velhos
   // faria a GPU escrever contagens de desenho em memória liberada.
+  if(hzbWorkloadEligible_ && frameAttachmentPolicy_.depthSampled && !createHzbResources()) {
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[HZB] importação sem produtor válido; visibilidade permanece por frustum.");
+    destroyHzbResources();
+  }
   if(!createDrawCullResources() || !createDrawCompactionResources()) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] recursos de culling recusaram o pacote novo.");
     return false;
   }
   __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] pacote absorvido: %u desenhos, %zu vertices.",
       instanceCount_,dirtRoadResources_.pickingVertices().size()/renderer::MapVertexStride);
+  if(!rebuildSpatialGeometry()) {
+    spatialIndexBuffer_.reset();spatialIndirectBuffer_.reset();spatialIndirectCapacity_=0;
+    spatialGeometryChunks_.clear();spatialSourceRanges_.clear();
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[SpatialGeometry] preparação recusada; desenhos originais preservados.");
+  }
+  return true;
+}
+
+bool InstancedRenderer::rebuildSpatialGeometry() {
+  spatialIndexBuffer_.reset();spatialIndirectBuffer_.reset();spatialIndirectCapacity_=0;
+  spatialGeometryChunks_.clear();spatialSourceRanges_.clear();spatialCommands_.clear();
+  if(!spatialGeometryEnabled_) return true;
+  const auto &features=rhiDevice_->deviceFeatures();
+  if(!features.multiDrawIndirect || !features.drawIndirectFirstInstance) {
+    __android_log_print(ANDROID_LOG_INFO,LogTag,"[SpatialGeometry] consumidor indisponível: multiDrawIndirect=%d drawIndirectFirstInstance=%d; caminho original ativo.",
+        features.multiDrawIndirect,features.drawIndirectFirstInstance);
+    return true;
+  }
+  VkPhysicalDeviceProperties properties{};vkGetPhysicalDeviceProperties(physicalDevice_,&properties);
+  spatialMaxDrawCount_=properties.limits.maxDrawIndirectCount;
+  if(spatialMaxDrawCount_<2) return true;
+  const auto vertices=dirtRoadResources_.pickingVertices();
+  const auto indices=dirtRoadResources_.pickingIndices();
+  spatialSourceRanges_.resize(sourceMapDraws_.size());
+  std::vector<u32> partitionedIndices;
+  renderer::MapPackageView view{};
+  view.header.vertexCount=static_cast<u32>(vertices.size()/renderer::MapVertexStride);
+  view.header.vertexStride=renderer::MapVertexStride;view.vertices=vertices;
+  view.materials=dirtRoadResources_.materials();view.draws.resize(1);
+  renderer::SpatialRenderChunkSettings settings{};settings.opaqueTrianglesPerChunk=2048;
+  for(u32 source=0;source<sourceMapDraws_.size();++source) {
+    const auto &draw=sourceMapDraws_[source];
+    const auto flags=view.materials[draw.materialIndex].flags;
+    if(draw.indexCount<=settings.opaqueTrianglesPerChunk*3 ||
+       (flags&(renderer::MapMaterialBlend|renderer::MapMaterialAlphaMask|renderer::MapMaterialWater|renderer::MapMaterialImpostor))) continue;
+    if(u64(draw.firstIndex)+draw.indexCount>indices.size()) return false;
+    view.draws[0]=draw;view.draws[0].firstIndex=0;
+    std::fill(std::begin(view.draws[0].model),std::end(view.draws[0].model),0.f);
+    view.draws[0].model[0]=view.draws[0].model[5]=view.draws[0].model[10]=view.draws[0].model[15]=1;
+    view.indices=indices.subspan(draw.firstIndex,draw.indexCount);
+    view.header.triangleCount=draw.indexCount/3;
+    renderer::SpatialRenderChunks chunks;
+    if(!renderer::buildSpatialRenderChunks(view,settings,chunks)) return false;
+    const u32 base=static_cast<u32>(partitionedIndices.size());
+    spatialSourceRanges_[source]={static_cast<u32>(spatialGeometryChunks_.size()),static_cast<u32>(chunks.draws.size())};
+    for(auto &chunk:chunks.draws) {chunk.firstIndex+=base;spatialGeometryChunks_.push_back(chunk);}
+    partitionedIndices.insert(partitionedIndices.end(),chunks.indices.begin(),chunks.indices.end());
+  }
+  if(partitionedIndices.empty()) return true;
+  rhi::BufferDesc desc{};desc.memoryClass=rhi::MemoryClass::Buffer;
+  desc.sizeBytes=partitionedIndices.size()*sizeof(u32);
+  desc.usage=VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  if(!memoryAllocator_->createBuffer(desc,&spatialIndexBuffer_) ||
+     !uploadContext_.uploadBuffer(*memoryAllocator_,partitionedIndices.data(),desc.sizeBytes,
+          spatialIndexBuffer_,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT)) return false;
+  spatialIndirectCapacity_=std::min(65536u,std::max(4096u,static_cast<u32>(spatialGeometryChunks_.size())*4));
+  desc={};desc.memoryClass=rhi::MemoryClass::Buffer;
+  desc.sizeBytes=spatialIndirectCapacity_*sizeof(VkDrawIndexedIndirectCommand);
+  desc.usage=VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;desc.cpuAccess=rhi::CpuAccess::SequentialWrite;desc.preferDeviceMemory=false;
+  if(!memoryAllocator_->createBuffer(desc,&spatialIndirectBuffer_) || !spatialIndirectBuffer_.mappedData()) return false;
+  spatialCommands_.reserve(spatialIndirectCapacity_);
+  __android_log_print(ANDROID_LOG_INFO,LogTag,"[SpatialGeometry] fontes=%zu blocos=%zu indices_bytes=%zu comandos=%u tri_por_bloco=%u",
+      spatialSourceRanges_.size(),spatialGeometryChunks_.size(),partitionedIndices.size()*sizeof(u32),spatialIndirectCapacity_,settings.opaqueTrianglesPerChunk);
   return true;
 }
 
@@ -5032,6 +5242,8 @@ bool InstancedRenderer::rebuildDrawOrders() {
   levelZeroSolidDrawOrder_.clear();levelZeroCoverageDrawOrder_.clear();
   cameraWaterHorizonFillActive_=false;
   sourceMapDraws_=dirtRoadResources_.draws();
+  profileSourceTriangleCount_ = 0;
+  for (const auto &draw : sourceMapDraws_) profileSourceTriangleCount_ += draw.indexCount / 3;
   sourceDrawUvMetric_.assign(sourceMapDraws_.size(),-1.0f);
   if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
   instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
@@ -5319,6 +5531,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     environmentMapDiagnostic_=selectedEnvironment?"":"HDRI referenciado indisponível; ambiente padrão ativo.";
   } else environmentMapDiagnostic_.clear();
   if(selectedEnvironment!=activeEnvironmentMap_ && environmentSet_!=VK_NULL_HANDLE) {
+    editorSceneCacheValid_=false;
     // Resource changes are explicit publications, never recurring uploads.
     // Descriptors and old images may still belong to the previous submission.
     if(vkDeviceWaitIdle(device_)!=VK_SUCCESS ||
@@ -5435,8 +5648,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     pendingMapTransformChanged_ = false;
     shadowCascadeDirtyMask_ = 0xffffffffu;
   }
-  if (hzbPreviousFrameEligible_) readHzbPyramidFromPreviousFrame();
-  else {
+  if (mapPosesChanged || authoredAppearanceChanged) {
+    // A moved/removed occluder can expose other objects, not only itself.
+    // Discard the entire old depth evidence before testing any draw.
+    hzbPyramidValid_ = false;hzbPyramidCameraValid_ = false;
+    hzbRecordedCameraValid_ = false;hzbPreviousFrameEligible_ = false;
+    for(auto &state:hzbHysteresis_) state={};
+  } else if (hzbPreviousFrameEligible_) readHzbPyramidFromPreviousFrame();
+  else if (!editorBackground_) {
     hzbPyramidValid_ = false;
     hzbPyramidCameraValid_ = false;
   }
@@ -5465,6 +5684,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (mapTransformsChanged && (fullSceneChanged || !motionVectorsActive_ || uncoveredMotion))
     temporalHistoryInitialized_ = false;
   hzbReadbackRecordedThisFrame_ = false;
+  spatialCommands_.clear();
   const bool temporalPoseSupported=sceneOrthographicHalfHeight_==0;
   // Invalidate cuts before rasterization so the spatial fallback receives an
   // unjittered source. Doing this in the post pass is already too late.
@@ -5836,6 +6056,26 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return rhi::SwapchainStatus::FatalError;
   }
 
+  const auto cachedLook=sceneEnvironment_.active?sceneEnvironment_:
+      renderer::defaultSceneViewEnvironment();
+  const bool sceneCacheEligible=editorSceneReuseEnabled_ && editorBackground_ && dirtRoadPreview_ &&
+      renderingPolicy_.post.dedicatedPass && postPipeline_!=VK_NULL_HANDLE &&
+      !temporalInputsActive_ && !temporalUpscaler_.ready() &&
+      waterDrawOrder_.empty() && skinnedDraws_.empty() && !pendingPreview_.requestId &&
+      !textureStreamingDebugView_ &&
+      !cachedLook.autoExposure;
+  const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
+      (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
+      (textureStreamingDebugView_?32u:0u);
+  const bool sceneUniformMatches=sceneCacheEligible && editorSceneCachedUniform_.size()==sizeof(DirtRoadFrameUniform) &&
+      std::memcmp(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform))==0;
+  editorSceneReusedLastFrame_=sceneCacheEligible && editorSceneCacheValid_ &&
+      !mapTransformsChanged && !mapPosesChanged && !authoredAppearanceChanged && !projectionChanged &&
+      editorSceneCachedWidth_==renderWidth() && editorSceneCachedHeight_==renderHeight() &&
+      editorSceneCachedOptions_==sceneOptions && editorSceneCachedTime_==timeSeconds &&
+      sameCameraPose(camera,editorSceneCachedCamera_) && sceneUniformMatches;
+  if(!sceneCacheEligible) editorSceneCacheValid_=false;
+
   if(pendingPreview_.requestId && !prepareCameraPreview()) {
     completedPreview_=pendingPreview_;pendingPreview_={};previewCompletionSuccess_=false;
   }
@@ -5853,6 +6093,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   beginGpuRegion(GpuPassClass::CameraPreview);
   recordCameraPreview(timeSeconds);
   endGpuRegion(GpuPassClass::CameraPreview);
+  if(!editorSceneReusedLastFrame_) {
   beginGpuRegion(GpuPassClass::WaterSimulation);
   const float spectralTime=spectralWaterCount_>0?
     (authoredWaterTime_>=0?authoredWaterTime_*waterSpectralControls_.timeScale:
@@ -6066,6 +6307,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                  camera.position, draw.boundsCenter, draw.boundsRadius,
                  renderingPolicy_.materialDistance.normalMapMaximumDistance);
     };
+    const auto spatialFrustum=buildFrameFrustum(camera);
     auto drawMapPrimitive = [&](u32 drawIndex, const VkPipeline *variants, VkPipeline fallback,
                                 VkPipeline distantFallback) {
       const auto &draw = dirtRoadResources_.draws()[drawIndex];
@@ -6080,6 +6322,50 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&zero);
       vkCmdBindIndexBuffer(commandBuffer_,route?routeIndices_.handle():dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
       const auto range=drawIndexRange(drawIndex);
+      const u32 source=drawIndex<authoredDrawIdentities_.size()?authoredDrawIdentities_[drawIndex].sourceDrawIndex:drawIndex;
+      auto effectiveMaterial=dirtRoadResources_.materials()[draw.materialIndex];
+      if(drawIndex<authoredMaterials_.size()) effectiveMaterial=renderer::applyMaterialOverride(effectiveMaterial,authoredMaterials_[drawIndex],dirtRoadResources_.packageTextureCount());
+      const bool partitionable=editorBackground_ && spatialGeometryEnabled_ && spatialIndirectCapacity_ &&
+          !route && geometry.buffer==dirtRoadResources_.vertexBuffer() &&
+          range.indexCount==draw.indexCount && range.firstIndex==draw.firstIndex &&
+          !(effectiveMaterial.flags&(renderer::MapMaterialBlend|renderer::MapMaterialAlphaMask|renderer::MapMaterialWater|renderer::MapMaterialImpostor)) &&
+          source<spatialSourceRanges_.size() && spatialSourceRanges_[source].count>1;
+      if(partitionable) {
+        const auto chunks=spatialSourceRanges_[source];
+        if(spatialCommands_.size()+chunks.count<=spatialIndirectCapacity_) {
+          const u32 first=static_cast<u32>(spatialCommands_.size());
+          u64 triangles=0;
+          // sqrt(||M||1 * ||M||inf) is a conservative sphere stretch even for
+          // sheared parents; max column length alone is unsafe for that case.
+          float norm1=0,normInf=0;
+          for(u32 axis=0;axis<3;++axis) {
+            float column=0,row=0;
+            for(u32 other=0;other<3;++other) {column+=std::abs(draw.model[axis*4+other]);row+=std::abs(draw.model[other*4+axis]);}
+            norm1=std::max(norm1,column);normInf=std::max(normInf,row);
+          }
+          const float stretch=std::sqrt(norm1*normInf);
+          for(u32 index=0;index<chunks.count;++index) {
+            const auto &chunk=spatialGeometryChunks_[chunks.first+index];
+            float center[3]{};
+            for(u32 axis=0;axis<3;++axis) center[axis]=draw.model[axis]*chunk.boundsCenter[0]+draw.model[4+axis]*chunk.boundsCenter[1]+draw.model[8+axis]*chunk.boundsCenter[2]+draw.model[12+axis];
+            if(!renderer::isSphereVisible(spatialFrustum,center,chunk.boundsRadius*stretch)) continue;
+            spatialCommands_.push_back({chunk.indexCount,1,chunk.firstIndex,geometry.vertexOffset,drawIndex});
+            triangles+=chunk.indexCount/3;
+          }
+          const u32 count=static_cast<u32>(spatialCommands_.size())-first;
+          if(count) {
+            vkCmdBindIndexBuffer(commandBuffer_,spatialIndexBuffer_.handle(),0,VK_INDEX_TYPE_UINT32);
+            for(u32 submitted=0;submitted<count;) {
+              const u32 batch=std::min(count-submitted,spatialMaxDrawCount_);
+              vkCmdDrawIndexedIndirect(commandBuffer_,spatialIndirectBuffer_.handle(),u64(first+submitted)*sizeof(VkDrawIndexedIndirectCommand),batch,sizeof(VkDrawIndexedIndirectCommand));
+              ++visibilityTelemetry_.submittedDrawCalls;submitted+=batch;
+            }
+          } else {--visibilityTelemetry_.visibleDraws;++visibilityTelemetry_.culledDraws;}
+          visibilityTelemetry_.visibleTriangles-=draw.indexCount/3-triangles;
+          visibilityTelemetry_.submittedTriangles+=triangles;
+          return;
+        }
+      }
     vkCmdDrawIndexed(commandBuffer_,range.indexCount,1,range.firstIndex,geometry.vertexOffset,drawIndex);
       ++visibilityTelemetry_.submittedDrawCalls;
       visibilityTelemetry_.submittedTriangles += range.indexCount / 3;
@@ -6222,7 +6508,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
     const u32 hzbCandidateDraws = static_cast<u32>(
         visibleSolidDrawOrder_.size() + visibleCoverageDrawOrder_.size());
-    hzbFrameEligible_ = sceneViewport_.isEmpty() && (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
+    // CPU projection supports a physical editor viewport. The GPU ABI still
+    // requires a full view and recordDrawCullDispatch retains that guard.
+    hzbFrameEligible_ = (sceneViewport_.isEmpty() || hzbOcclusionEnabled_) &&
+        (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
+        (!editorBackground_ || (skinnedDraws_.empty() && waterDrawOrder_.empty() && coverageDrawOrder_.empty())) &&
         renderer::shouldRunHzb(hzbCandidateDraws, hzbMinimumCandidateDraws_);
     if ((hzbOcclusionEnabled_ || hzbComputeEnabled_) && !hzbFrameEligible_) {
       visibilityTelemetry_.hzbSkippedBudgetDraws = hzbCandidateDraws;
@@ -6245,13 +6535,22 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         for (u32 drawIndex : visible) hzbHysteresis_[drawIndex] = {};
         return;
       }
+      const auto hzbViewport=physicalSceneViewport();
       const renderer::HzbScreenTransform hzbScreenTransform{
           surfaceTransform.xx, surfaceTransform.xy,
-          surfaceTransform.yx, surfaceTransform.yy};
+          surfaceTransform.yx, surfaceTransform.yy,
+          hzbViewport.x,hzbViewport.y,hzbViewport.width,hzbViewport.height};
       usize writeIndex = 0;
       for (usize readIndex = 0; readIndex < visible.size(); ++readIndex) {
         const u32 drawIndex = visible[readIndex];
-        if (dynamicMapDraws_[drawIndex]) {
+        // Imported authoring draws are marked dynamic to protect gameplay.
+        // A static opaque editor draw can use cached depth until a publication
+        // invalidates it. Deformed/coverage/impostor/water draws keep fail-open.
+        const auto flags=dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex].flags;
+        const bool staticEditorDraw=editorBackground_ &&
+            (drawIndex>=drawSkinSlot_.size() || drawSkinSlot_[drawIndex]<0) &&
+            !(flags&(renderer::MapMaterialAlphaMask|renderer::MapMaterialImpostor|renderer::MapMaterialWater));
+        if (dynamicMapDraws_[drawIndex] && !staticEditorDraw) {
           visible[writeIndex++] = drawIndex;
           continue;
         }
@@ -6291,6 +6590,36 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
     std::sort(visibleSolidDrawOrder_.begin(), visibleSolidDrawOrder_.end(), frontToBack);
     std::sort(visibleCoverageDrawOrder_.begin(), visibleCoverageDrawOrder_.end(), frontToBack);
+
+    // Effective materials and current instance records include authored edits
+    // and both authored/imported LOD. Any clipping draw keeps the entire solid
+    // phase on the original family, preserving direct/indirect draw ordering.
+    const auto *solidInstances = static_cast<const renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
+    opaqueNoClipLastFrame_ = opaqueNoClipEnabled_ && opaqueNoClipPipeline_ != VK_NULL_HANDLE &&
+        solidInstances && !visibleSolidDrawOrder_.empty();
+    for (u32 drawIndex : visibleSolidDrawOrder_) {
+      if (!opaqueNoClipLastFrame_) break;
+      const auto &base = dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex];
+      const auto material = drawIndex < authoredMaterials_.size()
+          ? renderer::applyMaterialOverride(base, authoredMaterials_[drawIndex], dirtRoadResources_.packageTextureCount()) : base;
+      if (solidInstances[drawIndex].normalColumns[7] != 0.0f ||
+          (material.flags & (renderer::MapMaterialBlend | renderer::MapMaterialAlphaMask |
+                             renderer::MapMaterialImpostor | renderer::MapMaterialWater)))
+        opaqueNoClipLastFrame_ = false;
+    }
+    const auto *lightingFrame = static_cast<const DirtRoadFrameUniform *>(environmentUniform_.mappedData());
+    pointLightingSpecializationLastFrame_ = opaqueNoClipLastFrame_ &&
+        pointLightingSpecializationEnabled_ && pointLightingPipeline_ != VK_NULL_HANDLE && lightingFrame &&
+        lightingFrame->punctualLightParameters[0] >= 0.0f &&
+        lightingFrame->punctualLightParameters[0] <= static_cast<float>(renderer::MaximumPunctualLights) &&
+        renderer::unshadowedPointLighting(std::span<const renderer::PunctualLight>(
+            lightingFrame->punctualLights, static_cast<u32>(lightingFrame->punctualLightParameters[0])));
+    const auto *solidVariants = pointLightingSpecializationLastFrame_ ? pointLightingMaterialPipelines_ :
+        opaqueNoClipLastFrame_ ? opaqueNoClipMaterialPipelines_ : opaqueMaterialPipelines_;
+    const auto solidPipeline = pointLightingSpecializationLastFrame_ ? pointLightingPipeline_ :
+        opaqueNoClipLastFrame_ ? opaqueNoClipPipeline_ : pipeline_;
+    const auto solidDistantPipeline = pointLightingSpecializationLastFrame_ ? pointLightingDistantPipeline_ :
+        opaqueNoClipLastFrame_ ? opaqueNoClipDistantPipeline_ : opaqueDistantPipeline_;
 
     auto buildIndirectBatches = [&](const std::vector<u32> &visible,
                                     std::vector<IndirectBatch> &batches) {
@@ -6417,11 +6746,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // gravado escreve num destino que ninguem le, e isso e barato o bastante
       // para nao valer uma segunda passagem de gravacao do command buffer.
       compactedSubmission = publishCompactionBatches();
-      submitIndirectBatches(indirectSolidBatches_, opaqueMaterialPipelines_, pipeline_,
-                            opaqueDistantPipeline_);
+      submitIndirectBatches(indirectSolidBatches_, solidVariants, solidPipeline,
+                            solidDistantPipeline);
     } else {
       for (u32 drawIndex : visibleSolidDrawOrder_)
-        drawMapPrimitive(drawIndex, opaqueMaterialPipelines_, pipeline_, opaqueDistantPipeline_);
+        drawMapPrimitive(drawIndex, solidVariants, solidPipeline, solidDistantPipeline);
     }
     // Vegetação alpha-mask sai do mesmo balde que os opacos sólidos. As duas
     // classes têm custo de fragment muito diferente e o programa de margem
@@ -6574,6 +6903,18 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // deferred store is incorrectly charged to the following motion pass.
   if(dirtRoadPreview_) endGpuRegion(GpuPassClass::Transparent);
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
+  if(sceneCacheEligible) {
+    editorSceneCachedUniform_.resize(sizeof(DirtRoadFrameUniform));
+    std::memcpy(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform));
+    editorSceneCachedCamera_=camera;editorSceneCachedTime_=timeSeconds;
+    editorSceneCachedWidth_=renderWidth();editorSceneCachedHeight_=renderHeight();
+    editorSceneCachedOptions_=sceneOptions;editorSceneCacheValid_=true;
+  }
+  } else {
+    // Visibility describes the authored view; submission describes work done.
+    visibilityTelemetry_.submittedDrawCalls=0;visibilityTelemetry_.submittedTriangles=0;
+    shadowSubmittedDraws_=0;shadowRenderedCascades_=0;
+  }
   beginGpuRegion(GpuPassClass::Motion);
   recordMotionPass(camera,timeSeconds);
   endGpuRegion(GpuPassClass::Motion);
@@ -6606,21 +6947,34 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(!renderer::isTemporalUpscaler(temporalUpscalerRequested_))
     executedUpscalerStatus_=renderer::TemporalUpscalerAvailability::Available;
   beginGpuRegion(GpuPassClass::Post);
-  recordPostProcess(imageIndex, camera, upscaledFrame);
-  endGpuRegion(GpuPassClass::Post);
-  recordFsr(imageIndex,camera);
-  beginGpuRegion(GpuPassClass::Ui);
-  recordRuntimeHud(imageIndex, hud);
-  recordUiOverlay(imageIndex);
+  postUiFusedLastFrame_ = recordPostProcess(imageIndex, camera, upscaledFrame);
+  if (!postUiFusedLastFrame_) {
+    endGpuRegion(GpuPassClass::Post);
+    recordFsr(imageIndex,camera);
+    beginGpuRegion(GpuPassClass::Ui);
+    recordRuntimeHud(imageIndex, hud);
+    recordUiOverlay(imageIndex);
+  }
   recordPixelSample(imageIndex);
-  endGpuRegion(GpuPassClass::Ui);
+  if (!postUiFusedLastFrame_) endGpuRegion(GpuPassClass::Ui);
   // Must run after the main pass ends (depthImage_ needs its final write
   // landed, in DEPTH_STENCIL_READ_ONLY_OPTIMAL) and before submit; a no-op
   // when HZB occlusion is disabled or its resources failed to initialize.
   beginGpuRegion(GpuPassClass::Hzb);
-  if (hzbFrameEligible_) recordHzbReductionPass(camera);
+  const bool reuseEditorHzb=editorBackground_ && hzbOcclusionEnabled_ &&
+      hzbPyramidValid_ && hzbPyramidCameraValid_ && sameCameraPose(camera,hzbPyramidCamera_) &&
+      skinnedDraws_.empty() && waterDrawOrder_.empty() && coverageDrawOrder_.empty();
+  const bool editorCameraSettled=!editorBackground_ ||
+      (hzbLastEditorCameraValid_ && sameCameraPose(camera,hzbLastEditorCamera_));
+  if (hzbFrameEligible_ && !reuseEditorHzb && editorCameraSettled) recordHzbReductionPass(camera);
   endGpuRegion(GpuPassClass::Hzb);
-  hzbPreviousFrameEligible_ = hzbFrameEligible_ && hzbReadbackRecordedThisFrame_;
+  hzbPreviousFrameEligible_ = hzbFrameEligible_ && !reuseEditorHzb && editorCameraSettled && hzbReadbackRecordedThisFrame_;
+  hzbLastEditorCamera_=camera;hzbLastEditorCameraValid_=editorBackground_;
+  if(!spatialCommands_.empty()) {
+    const u64 bytes=spatialCommands_.size()*sizeof(VkDrawIndexedIndirectCommand);
+    std::memcpy(spatialIndirectBuffer_.mappedData(),spatialCommands_.data(),bytes);
+    if(!memoryAllocator_->flushBuffer(spatialIndirectBuffer_,0,bytes)) return rhi::SwapchainStatus::FatalError;
+  }
   if (gpuTimingEnabled()) gpuFrameTimer_.end(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
 

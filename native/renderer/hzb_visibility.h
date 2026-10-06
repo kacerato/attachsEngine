@@ -112,15 +112,17 @@ struct HzbScreenTransform final {
   float xy = 0.0f;
   float yx = 0.0f;
   float yy = 1.0f;
+  // Physical normalized viewport AFTER surface rotation. The pyramid spans
+  // the full depth attachment, including clear pixels outside this view.
+  float viewportX = 0, viewportY = 0, viewportWidth = 1, viewportHeight = 1;
 };
 
 // Projects a conservative (frustum.boundsScale/boundsMargin-expanded) world
 // bounding sphere into the HZB's screen space. Deliberately conservative, not
 // exact: a sphere straddling or closer than the near plane is reported
 // invalid rather than risk an undersized rectangle, and the rectangle itself
-// is computed at the sphere's *nearest* possible depth, which can only make
-// it larger than the true projected footprint (larger => safer: it can only
-// make the occlusion test less likely to (wrongly) cull).
+// encloses both depth faces of its view-space bounding box. Projecting only
+// the nearest face underestimates bounds entirely on one side of the axis.
 HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, const float center[3],
                                            float radius,
                                            const HzbScreenTransform &screenTransform = {});

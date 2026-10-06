@@ -8,6 +8,9 @@ root=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('mark',root/'tools/generate-astra-mark-icons.py')
 mark=importlib.util.module_from_spec(spec);spec.loader.exec_module(mark)
 drawings={
+ 'joystick': mark.ring(16,16,13,9)+[('poly',mark.bar((16,16),(22,10),4)),('circle',((22,10),6))],
+ 'action-button': mark.ring(16,16,13,9)+[('poly',[(12,8),(22,16),(12,24)])],
+ 'look-area': [('poly',[(3,16),(10,7),(22,7),(29,16),(22,25),(10,25)]),('punch',((16,16),6)),('circle',((16,16),3))],
  'action-sequence': [('circle',((7,7),3)),('circle',((16,16),3)),('circle',((25,25),3)),
                      ('poly',mark.bar((9,9),(14,14),3)),('poly',mark.bar((18,18),(23,23),3)),
                      ('poly',[(22,12),(29,12),(29,19)])],
@@ -20,4 +23,4 @@ for name,shapes in drawings.items():mark.render(shapes).save(named/'ui'/f'{name}
 path=named/'catalog.json';catalog=json.loads(path.read_text(encoding='utf-8'))
 for name in drawings:catalog['icons'][f'ui/{name}']={'category':'ui','name':name,'dark_ui_ready':True,'generation':'gui-behavior-v1','source':'tools/generate-gui-behavior-icons.py; existing solid mark primitives'}
 path.write_text(json.dumps(catalog,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-print('Generated 2 GUI behavior icons. Run tools/pack-icon-atlas.py.')
+print(f'Generated {len(drawings)} GUI behavior icons. Run tools/pack-icon-atlas.py.')

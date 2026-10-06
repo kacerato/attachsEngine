@@ -129,7 +129,14 @@ private:
 
 
 // Estado bruto de um quadro, publicado pela plataforma.
+struct VirtualActionState final {
+  u64 instance=0;u32 node=0;std::string action;ActionKind kind=ActionKind::Axis2D;
+  float x=0,y=0;u32 pressCount=0;
+};
 struct InputDeviceState {
+  // Complete snapshot of identified authored sources. Missing sources release
+  // their contribution without releasing another source of the same action.
+  std::vector<VirtualActionState> virtualActions;
   // Manche virtual, já normalizado em [-1,1].
   float moveX = 0, moveY = 0;
   // Arraste de olhar do quadro, em frações de tela.
@@ -180,6 +187,11 @@ public:
   bool gameplayFocus() const noexcept { return focus_; }
 
   void submit(const InputDeviceState &state,double unscaledElapsed=0);
+  void copyPolicyFrom(const InputService &other) {
+    if(!(map_==other.map_))setMap(other.map_);
+    enabledOverrides_=other.enabledOverrides_;disabledContexts_=other.disabledContexts_;
+    deviceGroups_=other.deviceGroups_;setGameplayFocus(other.gameplayFocus()&&other.captureStatus()!=InputCaptureStatus::Waiting);
+  }
   bool setActionEnabled(std::string_view action,bool enabled);
   bool restoreActionEnabled(std::string_view action);
   bool actionEnabled(std::string_view action) const;
@@ -208,6 +220,7 @@ private:
   };
   const Value *value(std::string_view action) const;
   float evaluate(const InputAction &action, const InputDeviceState &state, u32 axis) const;
+  float evaluateHardware(const InputAction &action,const InputDeviceState &state,u32 axis) const;
 
   InputActionMap map_,authoredMap_;
   std::vector<Value> values_;

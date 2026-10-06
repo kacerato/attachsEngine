@@ -1,0 +1,10 @@
+--------- beginning of main
+10-01 16:00:57.507 14374 18896 I Astra.Script: 144: LIGHTPROBE STAGE=0 0=spots 1=dark 2=flashlight 3=spots-restored 4=directional
+10-01 16:00:57.517 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=0.0 GPU=12.43 frame=230.56 shadow=1 aa=Fxaa effective=True clamps=0
+10-01 16:01:01.324 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=2.0 GPU=40.54 frame=50.31 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:03.366 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=4.1 GPU=40.60 frame=48.27 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:05.399 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=0 elapsed=6.1 GPU=40.55 frame=46.54 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:07.294 14374 18896 I Astra.Script: 144: LIGHTPROBE STAGE=1 0=spots 1=dark 2=flashlight 3=spots-restored 4=directional
+10-01 16:01:07.413 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=8.1 GPU=35.62 frame=37.88 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:09.452 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=10.2 GPU=34.77 frame=39.92 shadow=1 aa=Temporal effective=True clamps=0
+10-01 16:01:11.477 14374 18896 I Astra.Script: 144: LIGHTPROBE stage=1 elapsed=12.2 GPU=36.38 frame=38.70 shadow=1 aa=Temporal effective=True clamps=0

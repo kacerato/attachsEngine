@@ -202,7 +202,7 @@ inline std::vector<PropertyContract> componentContracts(const ComponentSchema &s
     auto row = propertyContractBase(schema, property.id, property.name, PropertyKind::Reference, property.presentation);
     row.readOnly = row.readOnly || property.write == nullptr;
     row.defaultValue = property.nullLabel ? property.nullLabel : "Nenhum";
-    row.domain = property.requiredType.empty() ? std::string("qualquer objeto") : std::string(property.requiredType);
+    row.domain = property.requiredType.empty() ? std::string(property.acceptsComponents?"objeto compatível com o receptor":"qualquer objeto") : std::string(property.requiredType);
     switch (property.scope) {
     case ObjectReferenceScope::SelfOrAncestor: row.domain += " · neste objeto ou ancestral"; break;
     case ObjectReferenceScope::Other: row.domain += " · outro objeto"; break;

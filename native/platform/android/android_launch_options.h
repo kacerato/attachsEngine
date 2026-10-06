@@ -3,7 +3,7 @@
 
 struct ANativeActivity;
 namespace ae::platform::android {
-bool readBooleanLaunchOption(ANativeActivity *activity, const char *option);
+bool readBooleanLaunchOption(ANativeActivity *activity, const char *option, bool defaultValue = false);
 bool readFloatLaunchOption(ANativeActivity *activity, const char *option, float &value);
 bool readUnsignedLaunchOption(ANativeActivity *activity, const char *option, u32 &value);
 // Copies the string extra into buffer (bufferSize includes the trailing NUL).

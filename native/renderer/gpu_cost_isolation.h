@@ -13,7 +13,9 @@ enum class GpuCostIsolation : u32 {
   NoNormalMap = 1,
   NoSpecularEnvironment = 2,
   BaseColorOnly = 3,
-  Count = 4,
+  NoPunctualLights = 4,
+  NoDirectionalShadow = 5,
+  Count = 6,
 };
 
 inline constexpr GpuCostIsolation sanitizeGpuCostIsolation(u32 value) noexcept {
@@ -28,6 +30,8 @@ inline constexpr const char *gpuCostIsolationName(GpuCostIsolation mode) noexcep
     case GpuCostIsolation::NoNormalMap: return "no-normal";
     case GpuCostIsolation::NoSpecularEnvironment: return "no-ibl";
     case GpuCostIsolation::BaseColorOnly: return "base-color";
+    case GpuCostIsolation::NoPunctualLights: return "no-punctual";
+    case GpuCostIsolation::NoDirectionalShadow: return "no-directional-shadow";
     case GpuCostIsolation::Count: break;
   }
   return "full";

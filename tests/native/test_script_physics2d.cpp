@@ -16,7 +16,7 @@ AE_TEST(physics2d_script_abi_routes_real_solver_queries_and_rejects_stale_handle
  input[0]=1;input[1]=0;input[2]=0;AE_EXPECT_TRUE(physicsAccess.body2DCommand(physicsAccess.context,id,handle.world,handle.generation,3,input,nullptr)==1,"real impulse");physicsAccess.body2DCommand(physicsAccess.context,id,handle.world,handle.generation,0,nullptr,output);AE_EXPECT_TRUE(output[0]>2,"impulse changed body");
  AE_EXPECT_TRUE(physicsAccess.body2DCommand(physicsAccess.context,id,handle.world+1,handle.generation,1,input,nullptr)==0,"foreign world refused");AE_EXPECT_TRUE(physicsAccess.body2DCommand(physicsAccess.context,id,handle.world,handle.generation+1,1,input,nullptr)==0,"stale generation refused");
  scene::ScriptQueryFilter filter;scene::ScriptQueryHit hit;const float from[2]{-2,0},along[2]{4,0},center[2]{};
- AE_EXPECT_TRUE(physicsAccess.query2D(physicsAccess.context,handle.world,0,from,along,0,&filter,&hit,1)==1&&hit.object==id&&hit.collider!=0&&hit.point[2]==0&&hit.normal[2]==0&&(hit.flags&1),"ray carries XY collider and normal");
+ AE_EXPECT_TRUE(physicsAccess.query2D(physicsAccess.context,handle.world,0,from,along,0,&filter,&hit,1)==1&&hit.object==id&&hit.colliderObject==id&&hit.collider!=0&&hit.point[2]==0&&hit.normal[2]==0&&(hit.flags&1),"ray carries XY collider and normal");
  AE_EXPECT_TRUE(physicsAccess.query2D(physicsAccess.context,handle.world,1,center,nullptr,1,&filter,nullptr,0)==1,"overlap count without buffer");AE_EXPECT_TRUE(physicsAccess.query2D(physicsAccess.context,handle.world,1,center,nullptr,1,&filter,&hit,1)==1&&!(hit.flags&1),"overlap omits invented normal");
  AE_EXPECT_TRUE(physicsAccess.query2D(physicsAccess.context,handle.world+1,0,from,along,0,&filter,&hit,1)==-1,"queries reject other worlds");play.stop();
 }

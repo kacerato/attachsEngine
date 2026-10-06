@@ -1,0 +1,13 @@
+
+Loading trace: 0.00 MB
+
+Loading trace: 0.00 MB
+[123.571]     common_flags.cc:525 Trace loaded: 0.00 MB in 0.12s (0.0 MB/s)
+
+
+Trace health issues:
+
+  Import errors
+    power_rail_empty_packet: 1
+
+[123.572]            query.cc:191 Query execution time: 0 ms

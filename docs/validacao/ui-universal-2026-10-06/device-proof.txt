@@ -1,0 +1,11 @@
+Disabled Collider 18, CompoundPlayer 18 components, root remains active
+e73ccf19f8b186b0ff01e1bafc9348c8bf839496f0dec7205609c8d4a46d8c5d  /storage/emulated/0/Android/data/dev.aether.editor/files/Projetos/UIHierarchySources20261005/scenes/editor.aescene
+Undo and explicit Save
+e7e6b94906ef0cc61fbfa53d3507775a310a8033cc27fca5cb91cfdf13813cd5  /storage/emulated/0/Android/data/dev.aether.editor/files/Projetos/UIHierarchySources20261005/scenes/editor.aescene
+Cold reopened UI Hierarchy Sources v1 after Undo + Save
+e7e6b94906ef0cc61fbfa53d3507775a310a8033cc27fca5cb91cfdf13813cd5  /storage/emulated/0/Android/data/dev.aether.editor/files/Projetos/UIHierarchySources20261005/scenes/editor.aescene
+Visuals OFF: normal selection SecondInstance, no part focus; restored visuals ON and root Collider context
+e7e6b94906ef0cc61fbfa53d3507775a310a8033cc27fca5cb91cfdf13813cd5  /storage/emulated/0/Android/data/dev.aether.editor/files/Projetos/UIHierarchySources20261005/scenes/editor.aescene
+
+  mCurrentFocus=Window{cbe1997 u0 dev.aether.editor/dev.aether.editor.AetherActivity}
+

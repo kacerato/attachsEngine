@@ -1,0 +1,26 @@
+{
+  "apk_sha256": "872e6a76b2cfb2b32c9a8393d5c31d22faf8891d6aab2c0c26f36d46f9a7b888",
+  "method": "Capturas reais de 2772x1280 examinadas individualmente após cada ação. Juízo visual manual combinado à comparação dos arquivos nativos; nenhuma inferência por mera existência de imagem.",
+  "steps": [
+    {"screenshot":"final-size-before.png","accepted":true,"observation":"LeftBox/Collider UID1, seis grips distinguíveis e ligados aos pontos reais; meia extensão .5/.5/.5; instrução legível e viewport dominante."},
+    {"screenshot":"final-size-edited.png","accepted":true,"observation":"Arraste X amplia contorno simetricamente; meia extensão X 1.299 no Inspector; caixa visual e três outros objetos não se movem."},
+    {"screenshot":"final-center-before.png","accepted":true,"observation":"Mover troca grips por eixos de centro; aba Pose apresenta centro e rotação zero, dimensão ampliada preservada."},
+    {"screenshot":"final-center-edited.png","accepted":true,"observation":"Arraste X desloca apenas centro do Collider para .5048; visual permanece no lugar; centro Y/Z e rotações zero."},
+    {"screenshot":"final-rotation-before.png","accepted":true,"observation":"Girar apresenta três anéis coloridos no centro local; Pose continua legível sem painel sobre a forma."},
+    {"screenshot":"final-rotation-edited.png","accepted":true,"observation":"Arraste do anel azul altera somente Z para 35.59 graus; contorno gira sem girar a caixa visual; centro preservado."},
+    {"screenshot":"final-undone.png","accepted":true,"observation":"Três cliques Undo revertem um gesto cada; centro e rotações zero, contorno original. Arquivos intermediários iguais aos respectivos estados anteriores e arquivo final byte-idêntico ao original."},
+    {"screenshot":"final-redone.png","accepted":true,"observation":"Três Redo restauram os mesmos valores e contorno; arquivo igual ao combinado salvo antes de Undo."},
+    {"screenshot":"final-reopened-form.png","accepted":true,"observation":"Após abertura COLD, dimensões 1.299/.5/.5 e contorno rotacionado restaurados; visual original preservado."},
+    {"screenshot":"final-reopened-pose.png","accepted":true,"observation":"Reabertura conserva centro .5048 e rotação Z 35.59; arquivo idêntico ao combinado."},
+    {"screenshot":"final-overlays-off.png","accepted":true,"observation":"Overlays OFF retira contornos e grips de Collider, devolve gizmo do objeto e preserva valores no Inspector. Roteamento sem grips invisíveis também comprovado no host."},
+    {"screenshot":"final-cylinder-height.png","accepted":true,"observation":"Cilindro UID1: grip verde amplia só altura do contorno; visual permanece original; arquivo confirma half_height 1→1.34776747, raio .5 intacto."},
+    {"screenshot":"final-cylinder-radius.png","accepted":true,"observation":"Após Undo da altura, grip vermelho amplia só raio: Inspector .836518 e meia altura 1; visual preservado; um Undo retorna ao combinado."},
+    {"screenshot":"final-sphere-focused.png","accepted":true,"observation":"Sphere/Collider UID3 alcançado pela Hierarquia/Inspector e enquadrado pela ação real de seleção; forma e grips legíveis, raio .5."},
+    {"screenshot":"final-sphere-radius.png","accepted":true,"observation":"Grip vermelho amplia raio para .561848; contorno se separa da esfera visual original; arquivo altera apenas raio e Undo restaura combinado."},
+    {"screenshot":"final-capsule-before.png","accepted":true,"observation":"Capsule/Collider UID3 enquadrado e aberto no Inspector; raio e meia altura .5; grip verde no ápice da cápsula, não na junção cilíndrica."},
+    {"screenshot":"final-capsule-height.png","accepted":true,"observation":"Arraste do ápice altera meia altura cilíndrica para .563447, raio .5 preservado; malha original permanece estática."},
+    {"screenshot":"final-capsule-radius.png","accepted":true,"observation":"Após Undo da altura, grip lateral altera raio para .598957, meia altura .5 preservada; ambos os gestos têm um Undo próprio."},
+    {"screenshot":"final-completed.png","accepted":true,"observation":"Fim em modo Edição, LeftBox/Collider1 selecionado, pose combinada restaurada, outras três formas originais; Save final igual ao combinado. Nenhum projeto do usuário foi sobrescrito."}
+  ],
+  "limits": "Aceite físico é de autoria/Inspector/gestos/Save/Undo/Redo/reabertura na revisão final. Cancelamento, segundo dedo, hierarquias afins, ortográfica, oclusão e efeito real no Jolt têm aceite de host. Nenhum novo vídeo, Play físico ou benchmark GPU/thermal nesta rodada."
+}

@@ -1,0 +1,10 @@
+{
+  "samples": 185,
+  "elapsed_s": 1198.8607698,
+  "battery_start_c": 44.0,
+  "battery_end_c": 42.6,
+  "battery_min_c": 42.6,
+  "battery_max_c": 44.0,
+  "charger_seen_in_thermal_samples": false,
+  "scope": "static editor; battery temperature, not SoC; whole-device power"
+}

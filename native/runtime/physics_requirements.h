@@ -13,9 +13,11 @@ inline const char *bodyFrameForPhysics(const SceneGraph &graph,ObjectId id,
 }
 inline const char *colliderPoseForPhysics(const SceneGraph &graph,ObjectId id,
     const scene::Collider &collider,const float frame[16],Transform &pose) {
-  // Malha não tem centro nem rotação próprios (os campos ficam guardados, mas
-  // escondidos): a geometria já está no referencial do objeto.
+  // Primitives require TRS; meshes receive their full affine transform.
   const bool mesh=collider.shape==scene::ColliderShape::Mesh;
+  // Mesh vertices receive the full affine matrix below, including shear from
+  // local rotation under nonuniform object scale. No TRS approximation.
+  if(mesh){pose=Transform{};return nullptr;}
   Transform local;
   if(!mesh) {
     local.position[0]=collider.centerX;local.position[1]=collider.centerY;local.position[2]=collider.centerZ;
@@ -32,6 +34,20 @@ inline const char *colliderPoseForPhysics(const SceneGraph &graph,ObjectId id,
   if(collider.shape==scene::ColliderShape::Cylinder&&std::abs(x-z)>1e-4f*x)
     return "Cilindro requer escalas X e Z iguais";
   return nullptr;
+}
+inline bool colliderMeshMatrixForPhysics(const SceneGraph &graph,ObjectId id,const scene::Collider &c,
+                                        const float frame[16],float out[16]) {
+  Transform local;if(c.meshLocalPose){local.position[0]=c.centerX;local.position[1]=c.centerY;local.position[2]=c.centerZ;
+    local.rotationDegrees[0]=c.rotationX;local.rotationDegrees[1]=c.rotationY;local.rotationDegrees[2]=c.rotationZ;}
+  float localMatrix[16],object[16],world[16];transformMatrix(local,localMatrix);
+  if(!worldMatrix(graph,id,object))return false;
+  multiplyMatrix(object,localMatrix,world);
+  // frame is rigid: inverse rotation is transpose; retain all affine columns.
+  for(u32 column=0;column<4;++column)for(u32 row=0;row<3;++row) {
+    out[column*4+row]=0;for(u32 k=0;k<3;++k)out[column*4+row]+=frame[row*4+k]*(world[column*4+k]-(column==3?frame[12+k]:0));
+    if(!std::isfinite(out[column*4+row]))return false;
+  }
+  out[3]=out[7]=out[11]=0;out[15]=1;return true;
 }
 // O que a forma Malha exige além da pose. Um recurso de colisão explícito vence
 // o Renderizador de malha do objeto; sem nenhum dos dois não há forma, e não se

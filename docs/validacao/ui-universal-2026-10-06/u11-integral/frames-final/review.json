@@ -1,0 +1,31 @@
+{
+  "video_sha256": "d46ed2de295994947de49469f1b8541cc8ebac24e00b1a1d005ebdb2f4e9340b",
+  "decoded_frames": 295,
+  "extracted_frames": 295,
+  "skipped_frames": 0,
+  "duration_last_pts": 4.894633,
+  "sheets": [
+    "sheet-00.png",
+    "sheet-01.png",
+    "sheet-02.png",
+    "sheet-03.png",
+    "sheet-04.png",
+    "sheet-05.png",
+    "sheet-06.png",
+    "sheet-07.png",
+    "sheet-08.png",
+    "sheet-09.png"
+  ],
+  "review_status": "every indexed frame cell visually inspected; repeated frames retained",
+  "apk_sha256": "74cc3895afa18fc7f0bb31ebb65e5a91616e812baf3a0f26711cafa0bf5b7011",
+  "observations": {
+    "cancel_frame": 140,
+    "cancel_restored_x": 1.25,
+    "last_frame": 294,
+    "limit": "Second release is outside this recording; see frames-release-final/review.json"
+  },
+  "hierarchy_roi_changed_pixel_range": [
+    0,
+    22486
+  ]
+}

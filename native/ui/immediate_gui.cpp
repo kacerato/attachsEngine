@@ -123,6 +123,12 @@ bool ImmediateGui::replaceInput(u32 id,std::string_view text) {
 void ImmediateGui::finishInput(bool accept) {
   const int k=accept?ImGuiKey_Enter:ImGuiKey_Escape;key(k,true);key(k,false);
 }
+void ImmediateGui::cancelInput() {
+  activate();replacementId_=0;replacement_.clear();
+  ImGui::ClearActiveID();ImGui::GetIO().InputQueueCharacters.resize(0);
+  auto &events=ImGui::GetCurrentContext()->InputEventsQueue;
+  for(int i=events.Size-1;i>=0;--i)if(events[i].Type==ImGuiInputEventType_Text)events.erase(events.Data+i);
+}
 bool ImmediateGui::overlayAt(UiPoint point,const char *mainWindow) const noexcept {
   activate();const auto *g=ImGui::GetCurrentContext();
   for(int i=g->Windows.Size-1;i>=0;--i) {

@@ -185,10 +185,17 @@ void main() {
     const bool orthographic = (pushConstants.flags & 2u) != 0u;
     const float invHorizontal = 1.0 / (orthographic ? pushConstants.orthographicHalfWidth : nearDepth * pushConstants.tangentHalfHorizontal);
     const float invVertical = 1.0 / (orthographic ? pushConstants.orthographicHalfHeight : nearDepth * pushConstants.tangentHalfVertical);
-    const vec2 ndcX = vec2((viewX - expandedRadius) * invHorizontal,
+    vec2 ndcX = vec2((viewX - expandedRadius) * invHorizontal,
                            (viewX + expandedRadius) * invHorizontal);
-    const vec2 ndcY = vec2((viewY - expandedRadius) * invVertical,
-                           (viewY + expandedRadius) * invVertical);
+    vec2 ndcY = vec2((-viewY - expandedRadius) * invVertical,
+                           (-viewY + expandedRadius) * invVertical);
+    const float farDepth=viewZ+expandedRadius+pushConstants.viewDepthGuard;
+    const float farHorizontal=1.0/(orthographic?pushConstants.orthographicHalfWidth:farDepth*pushConstants.tangentHalfHorizontal);
+    const float farVertical=1.0/(orthographic?pushConstants.orthographicHalfHeight:farDepth*pushConstants.tangentHalfVertical);
+    ndcX.x=min(ndcX.x,(viewX-expandedRadius)*farHorizontal);
+    ndcX.y=max(ndcX.y,(viewX+expandedRadius)*farHorizontal);
+    ndcY.x=min(ndcY.x,(-viewY-expandedRadius)*farVertical);
+    ndcY.y=max(ndcY.y,(-viewY+expandedRadius)*farVertical);
 
     vec2 surfaceMinimum = vec2(3.402823466e+38);
     vec2 surfaceMaximum = vec2(-3.402823466e+38);

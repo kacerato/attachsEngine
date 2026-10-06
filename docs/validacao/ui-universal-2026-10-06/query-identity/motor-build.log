@@ -1,0 +1,5 @@
+[1/4] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/4] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_dynamic_motor.cpp.obj
+[3/4] Linking CXX static library libaether_runtime.a
+[4/4] Linking CXX executable aether_gui_tests.exe

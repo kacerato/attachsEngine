@@ -1,0 +1,608 @@
+{
+  "block": "U11 Collider viewport dimensions and local pose handles",
+  "status": "closed",
+  "repository": "https://github.com/kacerato/attachsEngine",
+  "branch": "codex/gameplay-runtime",
+  "publication": "local; no commit or push in this continuation",
+  "native": {
+    "passed": 95,
+    "total": 95,
+    "focused_cases": 3,
+    "real_jolt": true,
+    "criteria": [
+      "typed dimensions for four primitives; capsule radius/height independent",
+      "mesh local pose opt-in, no fake mesh dimension editing",
+      "nonuniform/sheared hierarchy",
+      "reflected affine ray math; authored negative scale remains unsupported",
+      "perspective/orthographic, singular and near-axial rejection",
+      "actual pointer/Inspector/property/history/archive/Jolt chain",
+      "single Undo, Cancel, lifecycle and second pointer capture",
+      "rotation crossing pi without a jump",
+      "occlusion, eye, Select and overlays OFF",
+      "800x400 real UI raster, distinct 32px grip targets and actual reversible drag"
+    ]
+  },
+  "android": {
+    "device": "Xiaomi 25053PC47G / onyx",
+    "apk_sha256": "872e6a76b2cfb2b32c9a8393d5c31d22faf8891d6aab2c0c26f36d46f9a7b888",
+    "installed_base_matches": true,
+    "project": "UI Collider Handles v1",
+    "original_scene_sha256": "3af459d0959b2de226bea3f962ad4ab933451e4fa598b134a06e29744b6ad172",
+    "combined_scene_sha256": "19c63157d697787cfecfc4dadf56d193503f10cbf5c5f8e550e6e33118e5e2b6",
+    "scene_changes": {
+      "box_size": {
+        "entity": 4,
+        "changed_payload_indices": [
+          1
+        ],
+        "before": [
+          "0",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "0",
+          "1.29923224",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "ef9b70f25fa02d832154d7e23f5757f78b689620ad4894716848a3ae35a48674"
+      },
+      "box_center": {
+        "entity": 4,
+        "changed_payload_indices": [
+          6
+        ],
+        "before": [
+          "0",
+          "1.29923224",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "0",
+          "1.29923224",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.504778028",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "fbf40569744bf04c94aeee729ba2bfafc2a442307ec1033bf6cec59066a9cefb"
+      },
+      "box_rotation": {
+        "entity": 4,
+        "changed_payload_indices": [
+          11
+        ],
+        "before": [
+          "0",
+          "1.29923224",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.504778028",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "0",
+          "1.29923224",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.504778028",
+          "0",
+          "0",
+          "0",
+          "0",
+          "35.5909843",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "19c63157d697787cfecfc4dadf56d193503f10cbf5c5f8e550e6e33118e5e2b6"
+      },
+      "cylinder_height": {
+        "entity": 5,
+        "changed_payload_indices": [
+          5
+        ],
+        "before": [
+          "4",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "1",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "4",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "1.34776747",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "1e31d6f6c5f7436959e1a6894ef7961ca51bf4dd03008b45cd39bd2592ff30c5"
+      },
+      "cylinder_radius": {
+        "entity": 5,
+        "changed_payload_indices": [
+          4
+        ],
+        "before": [
+          "4",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "1",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "4",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.836517811",
+          "1",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "95f809661ba2bb62aa5ad94471733aa01b63938f2303f580cbf8fc54b3910102"
+      },
+      "sphere_radius": {
+        "entity": 6,
+        "changed_payload_indices": [
+          4
+        ],
+        "before": [
+          "1",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "1",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.561848462",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "a68bd03cfd0260b151c9de51629091e3aafaf3ca0ce463d8c5181ac541fb27e8"
+      },
+      "capsule_height": {
+        "entity": 7,
+        "changed_payload_indices": [
+          5
+        ],
+        "before": [
+          "2",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "2",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.563446522",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "406a1a82a59ef64ad4d576f87654d220609e9977df1d3e74a3b1cefe7feb11fd"
+      },
+      "capsule_radius": {
+        "entity": 7,
+        "changed_payload_indices": [
+          4
+        ],
+        "before": [
+          "2",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "after": [
+          "2",
+          "0.5",
+          "0.5",
+          "0.5",
+          "0.59895736",
+          "0.5",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0.00100000005",
+          "5",
+          "2",
+          "1",
+          "0",
+          "-",
+          "1",
+          "1",
+          "0"
+        ],
+        "scene_sha256": "c31205201732ce4bb75a6bc59e3780dd9ca79a5a0af871960bb8dd88b29ea647"
+      }
+    },
+    "review": {
+      "apk_sha256": "872e6a76b2cfb2b32c9a8393d5c31d22faf8891d6aab2c0c26f36d46f9a7b888",
+      "method": "Capturas reais de 2772x1280 examinadas individualmente após cada ação. Juízo visual manual combinado à comparação dos arquivos nativos; nenhuma inferência por mera existência de imagem.",
+      "steps": [
+        {
+          "screenshot": "final-size-before.png",
+          "accepted": true,
+          "observation": "LeftBox/Collider UID1, seis grips distinguíveis e ligados aos pontos reais; meia extensão .5/.5/.5; instrução legível e viewport dominante.",
+          "screenshot_sha256": "328a5f41e2abf1a51984ca68eb25083d1d4519a215f1ff05c7c64ef2cf2f7805"
+        },
+        {
+          "screenshot": "final-size-edited.png",
+          "accepted": true,
+          "observation": "Arraste X amplia contorno simetricamente; meia extensão X 1.299 no Inspector; caixa visual e três outros objetos não se movem.",
+          "screenshot_sha256": "925b369f9c9b9742037378c1e9d0b26a50477e12d561c89ae82515242ac53a29"
+        },
+        {
+          "screenshot": "final-center-before.png",
+          "accepted": true,
+          "observation": "Mover troca grips por eixos de centro; aba Pose apresenta centro e rotação zero, dimensão ampliada preservada.",
+          "screenshot_sha256": "7bc7449a1d4f9e013dca14a8dac4120ccf6a980fc3346107fdcdc5960cb2bce8"
+        },
+        {
+          "screenshot": "final-center-edited.png",
+          "accepted": true,
+          "observation": "Arraste X desloca apenas centro do Collider para .5048; visual permanece no lugar; centro Y/Z e rotações zero.",
+          "screenshot_sha256": "22d556fd76d554d8882ce68a733cace461e630e48e0d3d33c19d0ef306ac8a81"
+        },
+        {
+          "screenshot": "final-rotation-before.png",
+          "accepted": true,
+          "observation": "Girar apresenta três anéis coloridos no centro local; Pose continua legível sem painel sobre a forma.",
+          "screenshot_sha256": "6806b9473b4e59f6482bd2c25d88faac6d825de332f9b8105811dc5c133f986f"
+        },
+        {
+          "screenshot": "final-rotation-edited.png",
+          "accepted": true,
+          "observation": "Arraste do anel azul altera somente Z para 35.59 graus; contorno gira sem girar a caixa visual; centro preservado.",
+          "screenshot_sha256": "b9b6fe12f6fe878c735bf50911edaa125dd5d801d2f489139ff083618cdbd192"
+        },
+        {
+          "screenshot": "final-undone.png",
+          "accepted": true,
+          "observation": "Três cliques Undo revertem um gesto cada; centro e rotações zero, contorno original. Arquivos intermediários iguais aos respectivos estados anteriores e arquivo final byte-idêntico ao original.",
+          "screenshot_sha256": "ab91a455620beae2e37d1e47dd84d9928b3a6f016b7dc68e9440d6755573ed53"
+        },
+        {
+          "screenshot": "final-redone.png",
+          "accepted": true,
+          "observation": "Três Redo restauram os mesmos valores e contorno; arquivo igual ao combinado salvo antes de Undo.",
+          "screenshot_sha256": "b9b6fe12f6fe878c735bf50911edaa125dd5d801d2f489139ff083618cdbd192"
+        },
+        {
+          "screenshot": "final-reopened-form.png",
+          "accepted": true,
+          "observation": "Após abertura COLD, dimensões 1.299/.5/.5 e contorno rotacionado restaurados; visual original preservado.",
+          "screenshot_sha256": "ef002db59a4d68874eae155a2e72e0dc8c97e014ea41939355e6a7e15c365536"
+        },
+        {
+          "screenshot": "final-reopened-pose.png",
+          "accepted": true,
+          "observation": "Reabertura conserva centro .5048 e rotação Z 35.59; arquivo idêntico ao combinado.",
+          "screenshot_sha256": "08c396178762c42b42daba1866317306916ecdb6403c2456c33df70c14c34f5f"
+        },
+        {
+          "screenshot": "final-overlays-off.png",
+          "accepted": true,
+          "observation": "Overlays OFF retira contornos e grips de Collider, devolve gizmo do objeto e preserva valores no Inspector. Roteamento sem grips invisíveis também comprovado no host.",
+          "screenshot_sha256": "3184f11921afbda082b2833c7e51b192077d034399168f7e247b7a9a16112edc"
+        },
+        {
+          "screenshot": "final-cylinder-height.png",
+          "accepted": true,
+          "observation": "Cilindro UID1: grip verde amplia só altura do contorno; visual permanece original; arquivo confirma half_height 1→1.34776747, raio .5 intacto.",
+          "screenshot_sha256": "c70c6b19f5f45368790ce6e9963f067a1e965ae24438a434f09baf9959c55975"
+        },
+        {
+          "screenshot": "final-cylinder-radius.png",
+          "accepted": true,
+          "observation": "Após Undo da altura, grip vermelho amplia só raio: Inspector .836518 e meia altura 1; visual preservado; um Undo retorna ao combinado.",
+          "screenshot_sha256": "08988f3c491f1eada5de92d02fec43fee2b30b58f4d521828f6bbf6642dd92d0"
+        },
+        {
+          "screenshot": "final-sphere-focused.png",
+          "accepted": true,
+          "observation": "Sphere/Collider UID3 alcançado pela Hierarquia/Inspector e enquadrado pela ação real de seleção; forma e grips legíveis, raio .5.",
+          "screenshot_sha256": "cc8cdb2dd74a7254c2b2099d36d7c851598ff33c4c9cffcfc3cad998cca6ca37"
+        },
+        {
+          "screenshot": "final-sphere-radius.png",
+          "accepted": true,
+          "observation": "Grip vermelho amplia raio para .561848; contorno se separa da esfera visual original; arquivo altera apenas raio e Undo restaura combinado.",
+          "screenshot_sha256": "0b51418b144f4418bd6aea690ad5f5744655ce6da4f959f17c393d161c0ba241"
+        },
+        {
+          "screenshot": "final-capsule-before.png",
+          "accepted": true,
+          "observation": "Capsule/Collider UID3 enquadrado e aberto no Inspector; raio e meia altura .5; grip verde no ápice da cápsula, não na junção cilíndrica.",
+          "screenshot_sha256": "66bf7baf46f9df5fcc89e121e7b92a03b01ef62aa896a2a5bf6cbff64eb9f68d"
+        },
+        {
+          "screenshot": "final-capsule-height.png",
+          "accepted": true,
+          "observation": "Arraste do ápice altera meia altura cilíndrica para .563447, raio .5 preservado; malha original permanece estática.",
+          "screenshot_sha256": "04ae86629628f75e3432b365d82a508bcfe38bbf12491aaa6d4771e86275bef8"
+        },
+        {
+          "screenshot": "final-capsule-radius.png",
+          "accepted": true,
+          "observation": "Após Undo da altura, grip lateral altera raio para .598957, meia altura .5 preservada; ambos os gestos têm um Undo próprio.",
+          "screenshot_sha256": "e57b71b64a04403b8b6529e3ef72ba5af8715c235982bb3ba408d3cfa947d902"
+        },
+        {
+          "screenshot": "final-completed.png",
+          "accepted": true,
+          "observation": "Fim em modo Edição, LeftBox/Collider1 selecionado, pose combinada restaurada, outras três formas originais; Save final igual ao combinado. Nenhum projeto do usuário foi sobrescrito.",
+          "screenshot_sha256": "55b5ef8f881eb32ef2040331ebc493d8ee13e64696c4a20eab62ad5c6ed38211"
+        }
+      ],
+      "limits": "Aceite físico é de autoria/Inspector/gestos/Save/Undo/Redo/reabertura na revisão final. Cancelamento, segundo dedo, hierarquias afins, ortográfica, oclusão e efeito real no Jolt têm aceite de host. Nenhum novo vídeo, Play físico ou benchmark GPU/thermal nesta rodada."
+    },
+    "runtime_boundary": "physical authoring/save/history/cold reopen; Jolt behavior accepted on host, no new physical Play claim"
+  },
+  "host_capture": {
+    "path": "host-compact-final.png",
+    "sha256": "b8fdb7fc5610e2d5edf59417e12e2cd18ba0b12d97c80f026cd8755dece45da4",
+    "review": "Actual native editor UI raster reviewed; useful viewport, separated grips and leader lines; no GPU/FPS proof"
+  },
+  "protected_sources": {
+    "count": 268,
+    "changed": 0
+  },
+  "source_hashes": {
+    "native/editor/editor_collider_handles.h": "af73f1a27405d06709ed1f3678b7ede26f1049f3ca2a1418d161cad6b5da0de8",
+    "native/editor/editor_screen.cpp": "6b7c708457e2d5ad9201565f443cd82f035e7876861a11870285c94dfb51e1db",
+    "native/editor/editor_screen.h": "0fa2ddff6a786c5351b3db61880e4e535ddaf78f0d2d4e7c173bc7948a061d24",
+    "native/editor/editor_session.cpp": "b09e279df52b5a5aeb30a0c56448feb73f91ad0bae1cbfdf82d857fd6169ee73",
+    "native/editor/editor_session.h": "6dd0318398e273b7603b5a90aa9186b4196062aca8350b03e4649ef9761eb4cc",
+    "native/CMakeLists.txt": "f2099e67d96cd6420a5dd532767b4e282b118d5ced6c78361fbc1335b938ebd3",
+    "tests/native/test_collider_handles.cpp": "6c159d634a6fa83b32f2b66552ce4b955562bfc51bbcf4c1ba7255c2e9c4bd04",
+    "tests/native/gui_preview_main.cpp": "7cff9859424885267dae6d5d72a8c84c35631bde430f5daeba260df29e745191"
+  },
+  "original_roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "remaining_u11": [
+    "faces/vertices authoring",
+    "visual/collision/COM/support/authority diagnostics",
+    "distribution/shape budgets and scaled mobile acceptance"
+  ],
+  "video": "No new video; individual real device captures inspected; no frame-by-frame video claim",
+  "engine_complete": false
+}

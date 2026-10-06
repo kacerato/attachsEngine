@@ -1,0 +1,210 @@
+{
+  "format": 1,
+  "date": "2026-10-05",
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "base_head": "d12c2ea2ed4f19a690ed99410ed865407aec024a",
+  "publication": "local uncommitted changes; no push in this round",
+  "plan": "docs/planos/ui-universal/U05-FONTES-HIERARQUIA-2026-10-05.md",
+  "host": {
+    "focused": "5/5",
+    "ui_authoring_regression": "78/78",
+    "coverage": [
+      "actual Jolt wall/cavity queries",
+      "affine rotation under nonuniform ancestor scale",
+      "same GUID in distinct objects",
+      "atomic ownership/outside/duplicate selection refusal",
+      "intentional subset versus missing root slot",
+      "touching and overlapping solids",
+      "real immutable GLB origins and dependency publication",
+      "Undo and archive roundtrip",
+      "existing cancellation/stale candidate/renderer refusal and legacy Collider v7"
+    ],
+    "software_ui": [
+      {
+        "size": [
+          800,
+          400
+        ],
+        "parts": 16,
+        "source_pages_and_part_toggles": "real pointer routing",
+        "log": "hierarchy-sources/ui-hierarchy-preview-800-final.log"
+      },
+      {
+        "size": [
+          1280,
+          720
+        ],
+        "parts": 16,
+        "source_pages_and_part_toggles": "real pointer routing",
+        "log": "hierarchy-sources/ui-hierarchy-preview-1280-final.log"
+      }
+    ],
+    "note": "Software UI captures do not render the Vulkan scene; physical captures do. No whole-engine test suite or new performance A/B was run."
+  },
+  "device": {
+    "model": "Xiaomi 25053PC47G / onyx",
+    "resolution": [
+      2772,
+      1280
+    ],
+    "configuration": "Release / native RelWithDebInfo, update install preserving app data",
+    "release_apk_sha256": "57dc28f0ccd363172913d11d1910c6b6a47500773405b0e79050f9a20fa5f2a2",
+    "installed_sha256": "57dc28f0ccd363172913d11d1910c6b6a47500773405b0e79050f9a20fa5f2a2",
+    "bytes": 221595817,
+    "authored_target": {
+      "name": "CompoundPlayer",
+      "id": 3,
+      "renderer": false,
+      "physics_body": 1,
+      "dynamic_motor": 1,
+      "mesh_colliders": 16,
+      "visual_children_retained": true
+    },
+    "authoring": [
+      "select both sources",
+      "exclude/reinclude each source",
+      "generate shared-budget preview",
+      "disable/re-enable preview part",
+      "Apply",
+      "Undo to zero target components",
+      "Redo",
+      "save",
+      "force-stop and reopen by public project route",
+      "save identical scene",
+      "Play",
+      "return to Edit"
+    ],
+    "saved_and_reopened_scene_sha256": "e7e6b94906ef0cc61fbfa53d3507775a310a8033cc27fca5cb91cfdf13813cd5",
+    "play_observed": {
+      "baseline": {
+        "x": 0,
+        "y": 0.53
+      },
+      "after_joystick": {
+        "x": 1.93,
+        "y": 0.53
+      },
+      "after_jump": {
+        "x": 1.93,
+        "y": 1.85,
+        "jump_count": 1
+      },
+      "after_impulse": {
+        "x": 2.19,
+        "y": 0.53,
+        "impulse_count": 1
+      }
+    },
+    "note": "Sequential touch acceptance. No simultaneous multi-touch, TalkBack, thermal or sustained memory acceptance is claimed."
+  },
+  "resource": {
+    "path": "examples/ui/HierarchySourcesReady/Collision/bake-b53508480ad63fe9136e4af66662d139ab10a49d6dd25f630d145c83a7ea88b8.glb",
+    "sha256": "b53508480ad63fe9136e4af66662d139ab10a49d6dd25f630d145c83a7ea88b8",
+    "parts_by_source_object": {
+      "2": 8,
+      "5": 8
+    },
+    "sourceGeometryHash": "67ed42edffb879e7577a720b47a84dba049cc68cf6679f720b01ebd30bde3c09",
+    "origins": [
+      {
+        "objectId": "5",
+        "slot": 0,
+        "firstTriangle": 0,
+        "triangleCount": 28,
+        "meshGuid": "55665193307b204d24883c0f381286a6",
+        "relativeMatrix": [
+          -0.800000012,
+          0,
+          6.99382241e-08,
+          0,
+          0,
+          1,
+          0,
+          0,
+          -6.99382241e-08,
+          0,
+          -0.800000012,
+          0,
+          4,
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "objectId": "2",
+        "slot": 0,
+        "firstTriangle": 28,
+        "triangleCount": 28,
+        "meshGuid": "55665193307b204d24883c0f381286a6",
+        "relativeMatrix": [
+          1.19665623,
+          0,
+          -0.312584907,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0.507950425,
+          0,
+          0.736403883,
+          0,
+          -4,
+          0,
+          0,
+          1
+        ]
+      }
+    ],
+    "recipe": "immutable provenance; not automatic regeneration or prefab override correspondence"
+  },
+  "performance_preservation": {
+    "files": 268,
+    "changed": [],
+    "before": "hierarchy-sources/performance-sources-before.json",
+    "after": "hierarchy-sources/performance-sources-after.json",
+    "scope": "Android platform, renderer, RHI shaders, Jolt bridge and HZB test sources",
+    "performance_ab_run": false
+  },
+  "examples": [
+    "examples/ui/HierarchySources",
+    "examples/ui/HierarchySourcesReady"
+  ],
+  "original_plan_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "limits": [
+    "128 selected source slots; 256 GUI inventory entries plus truncation diagnostic",
+    "100000 total triangles, 32 total parts, at least one part per source object",
+    "shared cooperative time budget; no hard memory cap or instant-cancellation guarantee",
+    "closed oriented geometry per object; separate overlapping/touching objects form a compound, not a Boolean union",
+    "approximate voxel/volume error; no maximum surface-distance guarantee",
+    "negative authored Transform scale remains unsupported"
+  ],
+  "remaining": [
+    "animated skin/pose bake",
+    "viewport source/part picking and vertex cuts",
+    "regeneration with overrides, prefabs and reimport",
+    "momentum-preserving dynamic rebuild",
+    "advanced numeric budget authoring",
+    "broader Android multi-touch, memory and thermal acceptance"
+  ],
+  "engine_complete": false,
+  "references": [
+    {
+      "engine": "Godot",
+      "version": "4.5",
+      "url": "https://docs.godotengine.org/en/4.5/classes/class_meshinstance3d.html"
+    },
+    {
+      "engine": "Godot source",
+      "version": "4.5-stable",
+      "url": "https://github.com/godotengine/godot/blob/4.5-stable/editor/scene/3d/mesh_instance_3d_editor_plugin.cpp"
+    },
+    {
+      "engine": "Unity",
+      "version": "6000.6",
+      "url": "https://docs.unity.com/en-us/engine/6000.6/manual/physics-section/physics-overview/collision-section/collider-shapes/compound-colliders/introduction"
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "recorded_at_utc": "2026-10-06T02:51:07.800505+00:00",
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "base_commit": "d12c2ea2ed4f19a690ed99410ed865407aec024a",
+  "publication": "local changes, no commit/push this round; existing changes retained",
+  "scope": "nearest authored Collider surface on selected object, then existing contour fallback",
+  "status": "implemented and validated on host; Android packaged, physical acceptance pending",
+  "engine_complete": false,
+  "original_roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "roadmap_counts": {
+    "planned": 140,
+    "partial": 20,
+    "complete": 4,
+    "unsupported": 0
+  },
+  "source_snapshots": [
+    {
+      "path": "native/editor/editor_pick_mesh.h",
+      "sha256": "2a823489984155b4df8b4498340908683cdd73f7ced857b03e9e9cc97491984d"
+    },
+    {
+      "path": "native/editor/editor_collider_geometry.h",
+      "sha256": "3fe79873de21b569b4f8673c99094334f481daae0c475d9c54ba79fb8a166f7b"
+    },
+    {
+      "path": "native/editor/editor_map_scene.h",
+      "sha256": "2b2628a4c103aefd6b4f7454f73ad94e3d76632da35f4f57909a44755de9067f"
+    },
+    {
+      "path": "native/editor/editor_map_scene.cpp",
+      "sha256": "1f6bb1a00ae264b16613166a89bb0d51a6e0903c22874fd9af94eed2eccc8c05"
+    },
+    {
+      "path": "native/editor/editor_component_visuals.h",
+      "sha256": "aac4b1afb57bc8feecae3eb1ea92cf0868c2d2293b49a90ddd1c0d90172fdffa"
+    },
+    {
+      "path": "native/editor/editor_session.cpp",
+      "sha256": "6040f6153b7e1bd0d5e0f3ac2f116e1bc6be4150f1a8bf69444b43221ccae3ab"
+    },
+    {
+      "path": "native/editor/editor_screen.cpp",
+      "sha256": "84da1eb0190ffa65dd131d6db1a4e4c3b4dd4a4792817e2dfdc434fd95906e7d"
+    },
+    {
+      "path": "tests/native/test_convex_bake.cpp",
+      "sha256": "32acaa60ea2dcdae80d3b2ab2668094276fd6885363c8f10290aacaccd4a83de"
+    },
+    {
+      "path": "tests/native/gui_preview_main.cpp",
+      "sha256": "0d8cd0ebb8eefcbeae70144afa835246d7688fa7ad9531ab81c7fb1bbd156ee2"
+    }
+  ],
+  "host": {
+    "build": "aether_gui_tests and aether_gui_preview completed",
+    "new_surface_scenarios": "2/2 passed",
+    "contour_pointer_history_solver_regression": "2/2 passed",
+    "ui_authorship_suite": "82/82 passed",
+    "whole_engine_suite_run": false,
+    "behaviors": [
+      "exact authored primitive surfaces, including finite cylinder caps and capsule hemispheres",
+      "inside rays and near/far interval clipping in analytic shapes and triangle BVH",
+      "full affine hierarchy transforms, singular rejection and world-distance ordering",
+      "nearest-depth selection and stable-ID ties independent of component reorder",
+      "triangle U cavity remains empty; cooked whole hull fills it",
+      "independent local mesh pose, archive identity and resource GUID resolution",
+      "missing linked resource and incomplete secondary source refuse proxy/partial hits",
+      "real package replacement invalidates cached hull BVH",
+      "actual interior pointer selects component without changing owner, archive or Undo depth",
+      "selected-only disable, archive reopen, Undo and Jolt hit participation"
+    ],
+    "captures": [
+      {
+        "path": "host-800.png",
+        "sha256": "05ec60ab42fcea6d694681ad31bb49ccf2e87b79aa4bf9f82a50167a483fedcb"
+      },
+      {
+        "path": "host-1280.png",
+        "sha256": "956b5e8296a6138401a41e1828b7376e02c2462630fe090e7603e564510ae3e0"
+      }
+    ],
+    "capture_limit": "native executable software UI and actual projected outlines; no Vulkan scene rendering"
+  },
+  "android": {
+    "variant": "Release/RelWithDebInfo",
+    "build_success": true,
+    "apk_path": "android/app/build/outputs/apk/release/app-release.apk",
+    "apk_sha256": "aed8cb8b3c32ffce290c87786e911f8df614f241622657bb504066cdf6bc5fd0",
+    "apk_bytes": 221599229,
+    "adb_used": false,
+    "installation": "not performed",
+    "installed_sha256": null,
+    "physical_acceptance": "pending: user explicitly said no ADB this round",
+    "next_acceptance": [
+      "verify candidate APK hash before installing",
+      "open UI Hierarchy Sources v1, root Body with 16 real mesh Colliders",
+      "open a Collider, tap inside another hull away from all contour lines",
+      "confirm nearest selected part, owner unchanged, white/gray focus and surface status",
+      "disable only that part, Undo, Save and cold reopen; verify scene bytes",
+      "toggle overlays off, confirm normal mesh selection, restore Edit context",
+      "review compact layout and multi-touch/navigation cancellation on device"
+    ]
+  },
+  "performance": {
+    "protected_sources": 268,
+    "changed": 0,
+    "scope": "Android platform, renderer, shaders, Jolt bridge and HZB test",
+    "new_fps_memory_thermal_comparison": false,
+    "cache": "resource BVH reuse; hull BVH lazy, owned by existing 32-entry cooking cache, invalidated with package"
+  },
+  "video": {
+    "new_frames_reviewed_this_round": 0,
+    "previous_analysis": "docs/planos/ui-universal/ANALISE-VIDEO-COLLIDERS-2026-10-05.md",
+    "previous_scope": "100 consecutive frames of selection transition; rest sampled only",
+    "remaining": "remaining Colliders video intervals and World Space visual analysis"
+  },
+  "limitations": [
+    "authoring selection, not physical contact raycast",
+    "nearest among active object colliders only; no scene renderer occlusion",
+    "contour fallback remains x-ray; no per-face/vertex editing or cross-descendant picking",
+    "does not change backend scale/cooking/authority restrictions",
+    "skin, regeneration/overrides/prefab/reimport and dynamic rebuild remain partial",
+    "mobile cooking/picking memory and thermal budgets unmeasured"
+  ],
+  "logs": [
+    "ui-surface-host-final.log",
+    "ui-surface-focused-final.log",
+    "ui-surface-contour-final.log",
+    "ui-surface-gui-final.log",
+    "ui-surface-preview-800-final.log",
+    "ui-surface-preview-1280-final.log",
+    "ui-surface-android-final.log"
+  ],
+  "references": [
+    {
+      "engine": "Godot",
+      "version": "4.5",
+      "url": "https://docs.godotengine.org/en/4.5/classes/class_editornode3dgizmo.html#class-editornode3dgizmo-method-add-collision-triangles"
+    },
+    {
+      "engine": "Godot source",
+      "version": "4.5-stable",
+      "url": "https://github.com/godotengine/godot/blob/4.5-stable/editor/scene/3d/gizmos/physics/collision_shape_3d_gizmo_plugin.cpp"
+    }
+  ]
+}

@@ -43,6 +43,8 @@ public:
   // Vazio herda as malhas visuais do objeto. Válido escolhe um único recurso
   // de malha para a forma física (por exemplo, uma versão simplificada).
   resources::AssetGuid collisionMesh{};
+  // Opt-in preserves old scenes whose hidden center/rotation were ignored.
+#include "scene/generated/collider_Collider_fields9.inc"
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<Collider>(*this);}
@@ -54,12 +56,12 @@ public:
   void write(std::ostream &out) const override {
     out<<static_cast<u32>(shape);for(const auto &p:descriptor.numbers) out<<' '<<p.read(*this);
     out<<' '<<owner<<' '<<enabled<<' '<<convex<<' '<<(collisionMesh.valid()?collisionMesh.text():std::string("-"))
-       <<' '<<weldVertices<<' '<<optimizeCooking;
+       <<' '<<weldVertices<<' '<<optimizeCooking<<' '<<meshLocalPose;
   }
   bool read(std::istream &in,u32 version) override {
     // v4 acrescentou Malha/Convexo; v5 separa a malha física da visual; v6
     // acrescenta cooking autoral sem reinterpretar os dados antigos.
-    u32 kind=0;if((version<1||version>7) || !(in>>kind) || kind>(version>=7?4u:version>=4?3u:2u)) return false;
+    u32 kind=0;if((version<1||version>8) || !(in>>kind) || kind>(version>=7?4u:version>=4?3u:2u)) return false;
     shape=static_cast<ColliderShape>(kind);
     centerX=centerY=centerZ=rotationX=rotationY=rotationZ=0;owner=0;enabled=true;convex=false;collisionMesh={};
     weldVertices=true;optimizeCooking=true;hullTolerance=.001f;activeEdgeAngle=5.f;
@@ -71,6 +73,7 @@ public:
       std::string guid;if(!(in>>guid) || (guid!="-"&&!resources::AssetGuid::parse(guid,collisionMesh))) return false;
     }
     if(version>=6 && !(in>>weldVertices>>optimizeCooking)) return false;
+    meshLocalPose=false;if(version>=8 && !(in>>meshLocalPose))return false;
     return true;
   }
 };
@@ -83,6 +86,7 @@ inline bool colliderIsTriangleMesh(const ComponentValue &v) {const auto &c=stati
 // A malha já está no referencial do objeto: como no Mesh Collider da Unity, não
 // há centro nem rotação próprios — a pose é a do objeto.
 inline bool colliderIsPrimitive(const ComponentValue &v) {return !colliderIsMesh(v);}
+inline bool colliderHasLocalPose(const ComponentValue &v) {const auto &c=static_cast<const Collider&>(v);return c.shape!=ColliderShape::Mesh||c.meshLocalPose;}
 #include "scene/generated/collider_colliderNumbers.inc"
 inline constexpr std::array<ComponentEnumOption,5> colliderShapeOptions{{{0,"Caixa"},{1,"Esfera"},{2,"Cápsula"},{3,"Malha"},{4,"Cilindro"}}};
 #include "scene/generated/collider_colliderEnums.inc"
@@ -110,6 +114,6 @@ inline constexpr std::array<ComponentResourceBinding,1> colliderResources{{
    {"Forma","","Vazio usa a malha visual; escolha uma malha simplificada para a física",colliderIsMesh},true}
 }};
 inline const ComponentType Collider::descriptor{
-  "astra.physics.collider",7,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources
+  "astra.physics.collider",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources
 };
 }

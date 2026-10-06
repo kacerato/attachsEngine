@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-05",
+  "device": "POCO F7 / onyx",
+  "package": "dev.aether.editor",
+  "apk": "build/sponza-player-20261005/sponza-player.apk",
+  "apkSha256": "69074805E5BC0907CA197FDBDA7FEC6D7AF51688CE35D3C07CC07658966F1181",
+  "install": "adb install -r: Success",
+  "certificateSha256": "9dd308380ab1606fa4e328a1d62fb9edda5abdf6cf7e5696bc8ccbf7c83bc66e",
+  "originalVisualTriangles": 3738920,
+  "authoredVisualTriangles": 3739944,
+  "physicsTriangles": 393416,
+  "hostAcceptance": "passed: real sources/Jolt/SceneGui/walk/jump/look/Stop/round-trip",
+  "deviceAcceptance": "passed: Play, move, look, jump, Stop; severe-pressure viewport full",
+  "thermalTest": "temporary status 3; reset verified IsStatusOverride=false",
+  "renderingSettingsPreservedSha256": "0A0E76B1456C0D2C36C7B944078073EC93810C05A4EC819A5176AA9588784928",
+  "workspace": "dirty: includes pre-existing work; no full-suite claim",
+  "files": [
+    {
+      "path": "native/platform/android/instanced_renderer.h",
+      "sha256": "71DDB8EFF288EA86C7ACA8C0565E994F42B609A43CDBED3E09941E759F6EA0D6"
+    },
+    {
+      "path": "tools/sponza_scene_author.cpp",
+      "sha256": "27AB1DC7BC3788C3BA8DE286AB899166BE9BC8F8E526F1D4E0602FDBB026A6A0"
+    },
+    {
+      "path": "games/sponza-player/patch/scenes/editor.aescene",
+      "sha256": "10F98AC40F3F4B5CB02CFD960059498BB57FBF8828F9F3BB8AA719961ED468BC"
+    },
+    {
+      "path": "games/sponza-player/patch/.astra/assets.astra",
+      "sha256": "16BD1F8BBD03884FCC6A356AFAF0F3161C227A753559E9D114B368FEFB55E788"
+    },
+    {
+      "path": "games/sponza-player/patch/.astra/imports/6c0ca0c97fca384f787f7ac68adbd5c7.profile",
+      "sha256": "2EE1875C67D2EE36CC04C90493FF54FC2A32ECEE89869A98EC77E69DBEDB9103"
+    },
+    {
+      "path": "games/sponza-player/patch/UI/SponzaPlayer.aeui",
+      "sha256": "2A11F64D0A5740908CEAEF1FD97E2E259A0737B18AE0EF73D41BE40C129ED312"
+    }
+  ]
+}

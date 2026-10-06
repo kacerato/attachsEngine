@@ -5,6 +5,7 @@
 #include "editor/editor_scene_camera.h"
 #include "scene/constant_force.h"
 #include "runtime/physics_field_sample.h"
+#include "runtime/physics_requirements.h"
 #include "scene/transform_constraints.h"
 #include "scene/spring_constraint.h"
 #include "scene/transform_tween.h"
@@ -28,6 +29,7 @@ struct ComponentVisual {
   float origin[3]{};
   std::vector<ComponentVisualSegment> segments;
 };
+inline constexpr usize MaximumVisibleColliderSegments=9600;
 using ComponentVisualBuilder=void (*)(const scene::ComponentValue &,const EditorEntity &,const EditorMapScene *,
                                       const float *,float,bool,ComponentVisual &);
 struct ComponentVisualProvider {const scene::ComponentType *type;ui::UiIcon icon;bool marker;ComponentVisualBuilder build;};
@@ -174,9 +176,13 @@ inline void collider(const scene::ComponentValue &value,const EditorEntity &enti
                      const float *world,float,bool detail,ComponentVisual &out) {
   const auto &c=static_cast<const scene::Collider &>(value);out.enabled=c.enabled;if(!detail||!c.valid()) return;
   if(c.shape==scene::ColliderShape::Mesh) {
-    // Mesh Collider usa a pose do objeto; centro/rotação pertencem somente às
-    // primitivas e podem conter valores antigos depois de trocar a Forma.
-    if(resources) meshCollider(c,entity,*resources,world,out);
+    // Legacy mesh pose remains opt-out; authoring can opt in to independent
+    // center/rotation without altering the visual resource.
+    float pose[16];std::copy(world,world+16,pose);
+    if(c.meshLocalPose){EditorTransform t;t.position[0]=c.centerX;t.position[1]=c.centerY;t.position[2]=c.centerZ;
+      t.rotationDegrees[0]=c.rotationX;t.rotationDegrees[1]=c.rotationY;t.rotationDegrees[2]=c.rotationZ;
+      float local[16];editorTransformMatrix(t,local);multiply(world,local,pose);}
+    if(resources) meshCollider(c,entity,*resources,pose,out);
     return;
   }
   EditorTransform t;t.position[0]=c.centerX;t.position[1]=c.centerY;t.position[2]=c.centerZ;
@@ -364,10 +370,159 @@ inline bool componentVisualSelectable(const runtime::SceneGraph &document,Editor
   for(auto *parent=entity;parent;parent=document.find(parent->parent))if(!parent->active)return false;
   return true;
 }
+// Nearest authored Collider surface within the active object's component
+// collection. A disabled part is still editable. Resource absence is a miss,
+// never a renderer-bounds fallback; depth compares world-ray parameters.
+// A component UID is local to its object. Keep the physical body and the
+// authoring object separate; never infer ownership from hierarchy alone.
+inline bool colliderBelongsToBody(const runtime::SceneGraph &document,EditorEntityId id,
+    const scene::Collider &collider,EditorEntityId body) {
+  const auto *object=document.find(body);
+  const auto *value=object?object->components.find(scene::PhysicsBody::descriptor):nullptr;
+  if(!value || &value->type()!=&scene::PhysicsBody::descriptor)return false;
+  return (collider.owner?collider.owner:id)==body &&
+      runtime::referenceAccepts(document,id,scene::colliderReferences[0],collider.owner,true);
+}
+inline EditorEntityId colliderInspectionBody(const runtime::SceneGraph &document,
+    EditorEntityId selected,u64 instance) {
+  const auto *object=document.find(selected);
+  const auto *value=object?object->components.findInstance(instance):nullptr;
+  if(!value)return 0;
+  if(&value->type()==&scene::PhysicsBody::descriptor)return selected;
+  if(&value->type()!=&scene::Collider::descriptor)return 0;
+  const auto &c=static_cast<const scene::Collider&>(*value);
+  if(c.owner>std::numeric_limits<EditorEntityId>::max())return 0;
+  const auto body=c.owner?static_cast<EditorEntityId>(c.owner):selected;
+  return colliderBelongsToBody(document,selected,c,body)?body:0;
+}
+// The authoring object's visual mesh is not an obstacle to editing its own
+// shape. Other objects occlude only through real triangles, never bounds.
+inline bool colliderPointOccluded(std::span<const EditorPickCandidate> occluders,
+    const EditorViewport &view,ui::UiPoint point,EditorEntityId authored,float depth) {
+  if(occluders.empty())return false;
+  const auto hit=pickNearest(occluders,screenPointToRay(view,point),authored,true);
+  return hit.hit && hit.distance<depth-std::max(.0001f,std::abs(depth)*.00001f);
+}
+// Recover the world depth at the closest *projected* point on an outline.
+// Screen interpolation is not world interpolation under perspective. Using
+// the ray through that pixel also handles clipped endpoints and orthographic views.
+inline bool colliderContourWorldDepth(const EditorViewport &view,const ComponentVisualSegment &line,
+    ui::UiPoint screen,float &depth) {
+  const auto ray=screenPointToRay(view,screen);if(!ray.valid)return false;
+  double vv=0,rv=0,ra=0,va=0;
+  for(u32 i=0;i<3;++i){const double v=double(line.b[i])-line.a[i],a=double(line.a[i])-ray.origin[i];
+    vv+=v*v;rv+=ray.direction[i]*v;ra+=ray.direction[i]*a;va+=v*a;}
+  const double denominator=vv-rv*rv;
+  double distance;
+  if(denominator>vv*1e-10)
+    distance=ra+rv*std::clamp((rv*ra-va)/denominator,0.,1.);
+  else distance=std::max(double(ray.minimumDistance),std::min(ra,ra+rv));
+  const double epsilon=std::max(.0001,double(ray.maximumDistance)*1e-6);
+  if(!std::isfinite(distance)||distance<ray.minimumDistance-epsilon||distance>ray.maximumDistance+epsilon)return false;
+  depth=static_cast<float>(std::clamp(distance,double(ray.minimumDistance),double(ray.maximumDistance)));return true;
+}
+inline u64 pickColliderSurface(const runtime::SceneGraph &document,EditorEntityId id,
+    const EditorViewport &view,const EditorMapScene *resources,ui::UiPoint point,
+    EditorEntityId body=0,float *hitDistance=nullptr,std::span<const EditorPickCandidate> occluders={}) {
+  if(!view.rect.contains(point))return 0;
+  const auto ray=screenPointToRay(view,point);if(!ray.valid)return 0;
+  const auto *entity=document.find(id);float world[16];
+  if(!entity || !editorWorldMatrix(document,id,world))return 0;
+  float nearest=ray.maximumDistance;u64 instance=0;
+  for(usize i=0;i<entity->components.size();++i) {
+    const auto *value=entity->components.at(i);
+    if(&value->type()!=&scene::Collider::descriptor)continue;
+    const auto &c=static_cast<const scene::Collider&>(*value);if(!c.valid())continue;
+    if(body && !colliderBelongsToBody(document,id,c,body))continue;
+    float pose[16];std::copy(world,world+16,pose);
+    if(c.shape!=scene::ColliderShape::Mesh || c.meshLocalPose) {
+      EditorTransform t;t.position[0]=c.centerX;t.position[1]=c.centerY;t.position[2]=c.centerZ;
+      t.rotationDegrees[0]=c.rotationX;t.rotationDegrees[1]=c.rotationY;t.rotationDegrees[2]=c.rotationZ;
+      float local[16];editorTransformMatrix(t,local);runtime::multiplyMatrix(world,local,pose);
+    }
+    float depth;bool hit=false;
+    if(c.shape==scene::ColliderShape::Mesh) {
+      if(resources)hit=resources->intersectColliderMesh(visual_detail::meshColliderSlots(c,*entity,*resources),c.convex,c.hullTolerance,ray,pose,depth);
+    } else hit=intersectColliderPrimitive(c,ray,pose,depth);
+    if(hit && !colliderPointOccluded(occluders,view,point,id,depth) &&
+       (depth<nearest || (depth==nearest && (!instance || value->instanceId()<instance)))) {
+      nearest=depth;instance=value->instanceId();
+    }
+  }
+  if(instance && hitDistance)*hitDistance=nearest;
+  return instance;
+}
+// Select the actual drawn collider contour, not the renderer or a bounds proxy.
+// Lines remain useful x-ray diagnostics. Their selection still respects visible
+// scene geometry at the nearest point within the touch tolerance.
+// A tap is cold work: only this object's colliders build their cached previews.
+inline u64 pickColliderContour(const runtime::SceneGraph &document,EditorEntityId id,
+    const EditorViewport &view,const EditorMapScene *resources,ui::UiPoint point,
+    float tolerance=8.f,EditorEntityId body=0,float *hitDistance=nullptr,
+    std::span<const EditorPickCandidate> occluders={}) {
+  if(!view.rect.contains(point)||!std::isfinite(point.x)||!std::isfinite(point.y)||
+     !std::isfinite(tolerance)||tolerance<=0)return 0;
+  const auto *entity=document.find(id);float world[16];
+  if(!entity||!editorWorldMatrix(document,id,world))return 0;
+  double nearest=double(tolerance)*tolerance;u64 instance=0;
+  for(usize i=0;i<entity->components.size();++i) {
+    const auto *value=entity->components.at(i);
+    if(&value->type()!=&scene::Collider::descriptor)continue;
+    if(body && !colliderBelongsToBody(document,id,static_cast<const scene::Collider&>(*value),body))continue;
+    ComponentVisual visual;visual_detail::collider(*value,*entity,resources,world,1,true,visual);
+    for(const auto &line:visual.segments) {
+      ui::UiPoint a,b;if(!projectSegmentToScreen(view,line.a,line.b,a,b))continue;
+      const double x=double(b.x)-a.x,y=double(b.y)-a.y,length=x*x+y*y;
+      const double t=length>0?std::clamp(((double(point.x)-a.x)*x+(double(point.y)-a.y)*y)/length,0.,1.):0.;
+      const double dx=double(point.x)-a.x-t*x,dy=double(point.y)-a.y-t*y,distance=dx*dx+dy*dy;
+      // Persistent identity resolves coincident contours independently of order.
+      if(distance<nearest||(distance==nearest&&(!instance||value->instanceId()<instance))) {
+        const ui::UiPoint closest{static_cast<float>(a.x+t*x),static_cast<float>(a.y+t*y)};
+        float depth;
+        if(!colliderContourWorldDepth(view,line,closest,depth) ||
+           colliderPointOccluded(occluders,view,closest,id,depth))continue;
+        nearest=distance;instance=value->instanceId();
+      }
+    }
+  }
+  if(instance && hitDistance)*hitDistance=static_cast<float>(nearest);
+  return instance;
+}
+struct ColliderVisualHit {EditorEntityId entity=0;u64 instance=0;bool surface=false;};
+inline ColliderVisualHit pickInspectedCollider(const runtime::SceneGraph &document,
+    EditorEntityId selected,u64 inspected,const EditorViewport &view,const EditorMapScene *resources,
+    ui::UiPoint point,u32 hiddenLayers=0,u32 unpickableLayers=0,
+    std::span<const EditorEntityId> hidden={},std::span<const EditorEntityId> pickOff={},
+    std::span<const EditorPickCandidate> occluders={}) {
+  const auto body=colliderInspectionBody(document,selected,inspected);
+  std::vector<EditorEntityId> ids;
+  if(body)document.collectSubtree(body,ids);else ids.push_back(selected);
+  // All surfaces take priority over x-ray contours, including across objects.
+  for(bool surface:{true,false}) {
+    float nearest=std::numeric_limits<float>::max();ColliderVisualHit result;
+    for(const auto id:ids) {
+      if(!componentVisualSelectable(document,id,hiddenLayers,unpickableLayers,hidden,pickOff))continue;
+      float distance=0;
+      const auto instance=surface?pickColliderSurface(document,id,view,resources,point,body,&distance,occluders):
+          pickColliderContour(document,id,view,resources,point,8.f,body,&distance,occluders);
+      if(instance && (distance<nearest || (distance==nearest &&
+          (!result.entity || id<result.entity || (id==result.entity && instance<result.instance))))) {
+        nearest=distance;result={id,instance,surface};
+      }
+    }
+    if(result.entity)return result;
+  }
+  return {};
+}
 inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::SceneGraph &document,
     EditorEntityId selected,float aspect,const EditorMapScene *resources=nullptr,u64 selectedPathInstance=0,u64 selectedPathPoint=0,EditorEntityId selectedPathEntity=0,u64 editedConnectionInstance=0) {
   std::vector<ComponentVisual> result;std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+  // A finite diagnostic drawing budget never truncates the physics/picking
+  // geometry. Give the explicitly inspected object first use of the budget.
+  if(const auto found=std::find(ids.begin(),ids.end(),selected);found!=ids.end())std::rotate(ids.begin(),found,found+1);
+  usize colliderSegmentsUsed=0;
   EditorEntityId referencedPath=0;
+  const auto inspectedBody=colliderInspectionBody(document,selected,editedConnectionInstance);
   if(const auto*object=document.find(selected))for(usize n=0;n<object->components.size();++n)if(object->components.at(n)->type().id==scene::PathFollow::descriptor.id)
     referencedPath=static_cast<EditorEntityId>(static_cast<const scene::PathFollow&>(*object->components.at(n)).target);
   for(auto id:ids) {
@@ -379,10 +534,18 @@ inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::Scene
     u32 markerIndex=0;
     for(usize i=0;i<entity->components.size();++i) {
       const auto *value=entity->components.at(i);
-      for(const auto &provider:componentVisualProviders) if(&value->type()==provider.type && (provider.marker||id==selected)) {
+      const bool linkedCollider=inspectedBody && &value->type()==&scene::Collider::descriptor &&
+          colliderBelongsToBody(document,id,static_cast<const scene::Collider&>(*value),inspectedBody);
+      if(inspectedBody && &value->type()==&scene::Collider::descriptor && !linkedCollider)continue;
+      for(const auto &provider:componentVisualProviders) if(&value->type()==provider.type && (provider.marker||id==selected||linkedCollider)) {
         ComponentVisual v;v.entity=id;v.instance=value->instanceId();v.icon=provider.icon;v.marker=provider.marker;
         if(v.marker) v.markerIndex=markerIndex++;
-        std::copy(world+12,world+15,v.origin);provider.build(*value,*entity,resources,world,aspect,id==selected||id==referencedPath||id==selectedPathEntity,v);
+        const bool collider=&value->type()==&scene::Collider::descriptor;
+        const bool detail=(id==selected||linkedCollider||id==referencedPath||id==selectedPathEntity)&&(!collider||colliderSegmentsUsed<MaximumVisibleColliderSegments);
+        std::copy(world+12,world+15,v.origin);provider.build(*value,*entity,resources,world,aspect,detail,v);
+        if(collider){if(v.segments.size()>MaximumVisibleColliderSegments-colliderSegmentsUsed)v.segments.resize(MaximumVisibleColliderSegments-colliderSegmentsUsed);colliderSegmentsUsed+=v.segments.size();}
+        if(id==selected&&value->type().id==scene::Collider::descriptor.id&&value->instanceId()==editedConnectionInstance)
+          for(auto &line:v.segments)line.emphasis=1;
         if(id==selected&&value->type().id==scene::PathFollow::descriptor.id&&referencedPath){float source[16];if(editorWorldMatrix(document,referencedPath,source)){ComponentVisualSegment link;std::copy(world+12,world+15,link.a);std::copy(source+12,source+15,link.b);link.emphasis=1;v.segments.push_back(link);}}
         if(id==(selectedPathEntity?selectedPathEntity:selected)&&value->type().id==scene::Path::descriptor.id&&value->instanceId()==selectedPathInstance) {
           const auto *point=static_cast<const scene::Path&>(*value).point(selectedPathPoint);

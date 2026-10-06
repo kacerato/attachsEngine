@@ -20,6 +20,8 @@ public struct RawQueryHit
     public float Fraction;
     public uint Flags;
     public uint Reserved;
+    // ABI44: appended after the original 56-byte prefix.
+    public ulong ColliderObject;
 
     public const uint HasNormalFlag = 1;
     public const uint SensorFlag = 2;
@@ -53,7 +55,11 @@ public struct QueryFilter
     public QueryFilter OnlyLayers(params int[] layers)
     {
         LayerMask = 0;
-        foreach (var layer in layers) if (layer is >= 0 and < 32) LayerMask |= 1u << layer;
+        foreach (var layer in layers)
+        {
+            if (layer is < 0 or >= 32) throw new ArgumentOutOfRangeException(nameof(layers));
+            LayerMask |= 1u << layer;
+        }
         return this;
     }
 }
@@ -92,7 +98,26 @@ public readonly record struct RayHit(
     Vector3? Normal,
     float Distance,
     float Fraction,
-    bool IsSensor);
+    bool IsSensor)
+{
+    /// <summary>The Body owner, retained by Object for source compatibility.</summary>
+    public GameObject BodyObject => Object;
+    /// <summary>The authored Collider owner; null when the backend has no shape identity.</summary>
+    public GameObject? ColliderObject { get; init; }
+    /// <summary>Resolve this exact 3D Collider, never another local instance on the Body.
+    /// Null after removal, object destruction or world expiration.</summary>
+    public Components.Collider? Collider
+    {
+        get
+        {
+            if (ColliderObject is not { IsAlive: true } owner || ColliderInstance == 0) return null;
+            foreach (var component in owner.Components())
+                if (component.InstanceId == ColliderInstance && component.TypeId == Components.Collider.TypeId)
+                    return Components.Collider.Wrap(component);
+            return null;
+        }
+    }
+}
 
 /// <summary>
 /// Um contato sólido entregue a um comportamento. Chega aos DOIS objetos do par,
@@ -115,8 +140,9 @@ public readonly struct PhysicsAccess(ISceneAccess scene)
     /// </summary>
     public RayHit? RayCast(Vector3 origin, Vector3 direction, QueryFilter? filter = null)
     {
+        ValidateRay(origin, direction);
         Span<RawQueryHit> single = stackalloc RawQueryHit[1];
-        return scene.RayCast(origin, direction, filter ?? QueryFilter.Default, single) > 0 ? Resolve(single[0]) : null;
+        return Check(scene.RayCast(origin, direction, filter ?? QueryFilter.Default, single)) > 0 ? Resolve(single[0]) : null;
     }
 
     /// <summary>
@@ -127,22 +153,25 @@ public readonly struct PhysicsAccess(ISceneAccess scene)
     public IReadOnlyList<RayHit> RayCastAll(Vector3 origin, Vector3 direction, out bool truncated,
                                             QueryFilter? filter = null, int capacity = DefaultCapacity)
     {
-        capacity = Math.Clamp(capacity, 1, 4096);
+        ValidateRay(origin, direction); capacity = ValidateCapacity(capacity);
         var buffer = new RawQueryHit[capacity];
-        var total = scene.RayCast(origin, direction, filter ?? QueryFilter.Default, buffer);
+        var total = Check(scene.RayCast(origin, direction, filter ?? QueryFilter.Default, buffer));
         truncated = total > capacity;
         return Collect(buffer, total, capacity);
     }
 
-    public RayHit? ShapeCast(ShapeQuery shape, Vector3 origin, Vector3 direction, QueryFilter? filter = null) =>
-        scene.ShapeCast(shape, origin, direction, filter ?? QueryFilter.Default, out var hit) > 0 ? Resolve(hit) : null;
+    public RayHit? ShapeCast(ShapeQuery shape, Vector3 origin, Vector3 direction, QueryFilter? filter = null)
+    {
+        ValidateRay(origin, direction); ValidateShape(shape);
+        return Check(scene.ShapeCast(shape, origin, direction, filter ?? QueryFilter.Default, out var hit)) > 0 ? Resolve(hit) : null;
+    }
 
     public IReadOnlyList<RayHit> Overlap(ShapeQuery shape, Vector3 origin, out bool truncated,
                                          QueryFilter? filter = null, int capacity = DefaultCapacity)
     {
-        capacity = Math.Clamp(capacity, 1, 4096);
+        ValidateVector(origin); ValidateShape(shape); capacity = ValidateCapacity(capacity);
         var buffer = new RawQueryHit[capacity];
-        var total = scene.Overlap(shape, origin, filter ?? QueryFilter.Default, buffer);
+        var total = Check(scene.Overlap(shape, origin, filter ?? QueryFilter.Default, buffer));
         truncated = total > capacity;
         return Collect(buffer, total, capacity);
     }
@@ -177,5 +206,32 @@ public readonly struct PhysicsAccess(ISceneAccess scene)
         (hit.Flags & RawQueryHit.HasNormalFlag) != 0 ? new Vector3(hit.NormalX, hit.NormalY, hit.NormalZ) : null,
         hit.Distance,
         hit.Fraction,
-        (hit.Flags & RawQueryHit.SensorFlag) != 0);
+        (hit.Flags & RawQueryHit.SensorFlag) != 0)
+        { ColliderObject = hit.ColliderObject == 0 ? null : GameObject.Resolve(scene, hit.ColliderObject) };
+
+    private int Check(int result) => result < 0
+        ? throw new WorldException(scene.LastStatus, "consultar física 3D") : result;
+    private static int ValidateCapacity(int capacity) => capacity <= 0
+        ? throw new ArgumentOutOfRangeException(nameof(capacity)) : Math.Min(capacity, 4096);
+    private static void ValidateVector(Vector3 value)
+    {
+        if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z))
+            throw new ArgumentOutOfRangeException(nameof(value));
+    }
+    private static void ValidateRay(Vector3 origin, Vector3 direction)
+    {
+        ValidateVector(origin); ValidateVector(direction);
+        var length = direction.LengthSquared();
+        if (!(length > 0) || !float.IsFinite(length)) throw new ArgumentOutOfRangeException(nameof(direction));
+    }
+    private static void ValidateShape(in ShapeQuery shape)
+    {
+        ValidateVector(shape.HalfExtent);
+        var rotation = shape.Rotation.LengthSquared();
+        if (!Enum.IsDefined(shape.Kind) || !float.IsFinite(rotation) || rotation <= 0 ||
+            !float.IsFinite(shape.Radius) || !float.IsFinite(shape.HalfHeight) ||
+            (shape.Kind == QueryShapeKind.Box ? shape.HalfExtent.X <= 0 || shape.HalfExtent.Y <= 0 || shape.HalfExtent.Z <= 0 : shape.Radius <= 0) ||
+            (shape.Kind is QueryShapeKind.Capsule or QueryShapeKind.Cylinder && shape.HalfHeight <= 0))
+            throw new ArgumentOutOfRangeException(nameof(shape));
+    }
 }

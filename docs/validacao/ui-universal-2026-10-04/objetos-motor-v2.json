@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "recorded_utc": "2026-10-05T02:46:30.003700+00:00",
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "publication": "Local changes; this revision has not been committed or pushed.",
+  "engine_complete": false,
+  "universal_roadmap_complete": false,
+  "original_roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "extension": "docs/planos/ui-universal/ROADMAP-OBJETOS-COLISAO-CONTROLE-UNIVERSAL-2026-10-04.md",
+  "validated_slice": [
+    "Existing-object authoring with preserve/fit/convex policies",
+    "All visual slots measured without changing MeshRenderer",
+    "Compound child colliders owned explicitly; no root Collider required",
+    "Automatic world-down support of each actual convex leaf plus surface samples",
+    "Motor format v2; v1 keeps manual support",
+    "One Undo/Redo and native archive round-trip",
+    "Typed Canvas receiver and generated SDK AutomaticSupport"
+  ],
+  "host": {
+    "focused_motor_scenarios": "5/5",
+    "ui_regression_scenarios": "73/73",
+    "regression_before_fix": "3/5: tilted hull and diagonal compound failed; corrected by actual convex-leaf support points",
+    "sdk_example": "Compiled with 0 warnings, 0 errors",
+    "logs": [
+      "object-motor-host-build.log",
+      "object-motor-tests.log",
+      "object-motor-gui-regression.log",
+      "object-motor-regression-before-fix.log",
+      "object-motor-sdk-build.log",
+      "object-motor-sdk-generation.log",
+      "object-motor-android-build.log"
+    ]
+  },
+  "android": {
+    "model": "Xiaomi 25053PC47G",
+    "package": "dev.aether.editor",
+    "project": "UI Object Motor v2",
+    "build": "BUILD SUCCESSFUL in 1m 3s",
+    "install": "Success observed through adb install -r",
+    "apk_bytes": 268386700,
+    "apk_sha256": "bd0d47ec2166408813c001c38277a757810143f91b3dcc479891b1526a61fc87",
+    "installed_base_apk_sha256": "bd0d47ec2166408813c001c38277a757810143f91b3dcc479891b1526a61fc87",
+    "installed_hash_verification": "adb shell sha256sum; exact match observed",
+    "acceptance": {
+      "visual": "Existing cube mesh, scale [2.7,0.4,1.1], yaw 35 degrees; convex policy applied through actual UI",
+      "persisted": "Motor version 2, automatic support true, Collider Mesh convex, same visual resource and instance IDs after save/reopen; captured archive object-motor-device.aescene",
+      "move": "X 0.00 -> 2.56; released vector and vx zero in screenshot",
+      "jump": "Y 0.20 -> 1.94; jumps 1",
+      "impulse": "X 2.56 -> 2.83; impulses 1; snapshot after braking, not peak velocity",
+      "host_only_cases": "Tilt in two axes, multislot mesh, diagonal compound ownership, empty-gap rejection and legacy migration were validated on host, not on device"
+    },
+    "screenshots": {
+      "object-motor-final-preview.png": "c3f9b3681255dbbe98070bf38f113f113b4f7e80eaaff5b50ed4b85228ca8606",
+      "object-motor-final-support.png": "473a5bd0e71ed8faec9c2faac06225c937e040f4368847bb65c0b415197e50cc",
+      "object-motor-final-initial.png": "c7e54fd20c5a87fcc4a29a1b1b2e1bd1128407465e1bc92ac542a25601221825",
+      "object-motor-final-move.png": "2512527482e0ed057cc678c5bdc30b29baf61231910d1a9c5af33df0a0e27c7a",
+      "object-motor-final-jump.png": "252134cae6a3e0ddaf2fb5f56935878a5b0a8d6af8a577377d18cfa953dbc01a",
+      "object-motor-final-impulse.png": "93414b03a892ddca1c5b66452d38cd7d4f9df4b88f4930cae8b4c3f0c13c3bef"
+    },
+    "preliminary_captures": "Other object-motor screenshots document the preliminary APK 1701b4098f2db42befd9315c0c739be8e5b890bf363667c1f00d89eeba261dec; UI code unchanged, support query subsequently extended. The final-* captures belong to the final APK above."
+  },
+  "remaining": [
+    "Automatic convex decomposition and persistent generated collision resources",
+    "Hierarchy source selection, per-part editing/picking and prefab overrides",
+    "Support by contact manifolds/shapecasts on irregular terrain",
+    "Additional movement modes and control ownership/arbitration",
+    "Animation/root-motion authority integration and visual replacement workflow",
+    "Measured cooking/query budgets for large mobile scenes",
+    "All remaining anchors of the original UI roadmap"
+  ]
+}

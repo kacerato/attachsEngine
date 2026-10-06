@@ -79,8 +79,13 @@ bool localTransformForWorld(const float world[16], const float parent[16], Trans
     // Singularity is zero, not an authoring-unit threshold such as 0.001.
     if (!std::isfinite(value.scale[c]) || value.scale[c] <= 0.0f) return false;
   }
-  const float pitch = std::asin(std::clamp(-local[2] / value.scale[0], -1.0f, 1.0f));
-  const bool pole = std::abs(std::cos(pitch)) < .00001f;
+  // asin loses the small cosine near +/-90 degrees in float precision. A
+  // perfectly valid rotating solver pose then fails reconstruction and stops
+  // Play. Preserve that cosine from the first column instead; shear/reflection
+  // are still rejected by the full reconstruction below.
+  const float cosine = std::hypot(local[0], local[1]) / value.scale[0];
+  const float pitch = std::atan2(-local[2] / value.scale[0], cosine);
+  const bool pole = cosine < .00001f;
   constexpr float degrees = 57.29577951308232f;
   value.rotationDegrees[1] = pitch * degrees;
   value.rotationDegrees[0] = (pole ? std::atan2(-local[9] / value.scale[2], local[5] / value.scale[1])

@@ -5,6 +5,7 @@
 #include "scene/script_behavior.h"
 #include "editor/editor_import_transaction.h"
 #include "scene/mesh_renderer.h"
+#include "scene/collision_recipe.h"
 #include <sstream>
 #include <unordered_set>
 
@@ -483,6 +484,27 @@ bool portableAddress(const EditorEntity &donor,const PrefabOverride &row,const r
       scene::forEachScriptPropertyObject(p,check);
   return valid;
 }
+// A regeneration baseline and its physical parts form one authoring revision.
+// Publishing only the baseline would reinterpret inherited old meshes as local
+// edits on every other instance. Include existing, added and removed members;
+// never pull unrelated colliders, Body, motor, visual or child transforms in.
+std::vector<u64> collisionRevisionMembers(const EditorEntity &donor,const EditorEntity &source,u64 component) {
+  const auto *value=donor.components.findInstance(component);
+  if(!value||&value->type()!=&scene::CollisionRecipe::descriptor)return {};
+  std::vector<u64> ids;
+  const auto append=[&](const scene::CollisionRecipe &recipe){for(const auto &part:recipe.parts)if(std::find(ids.begin(),ids.end(),part.collider)==ids.end())ids.push_back(part.collider);};
+  append(*static_cast<const scene::CollisionRecipe*>(value));
+  if(const auto *old=source.components.findInstance(component);old&&&old->type()==&scene::CollisionRecipe::descriptor)append(*static_cast<const scene::CollisionRecipe*>(old));
+  return ids;
+}
+bool prepareCollisionRevision(EditorEntity &candidate,const EditorEntity &donor,u64 component,std::string &error) {
+  const auto members=collisionRevisionMembers(donor,candidate,component);
+  // Free removed slots first, so replacing a full 64-component object is an
+  // atomic operation rather than an artificial transient-capacity failure.
+  for(auto id:members)if(!donor.components.findInstance(id))candidate.components.removeInstance(id);
+  for(auto id:members)if(donor.components.findInstance(id)&&!adoptComponent(candidate,donor,id)){error="A revisão física não pôde transferir o Colisor #"+std::to_string(id);return false;}
+  return true;
+}
 }
 
 bool EditorSession::inspectPrefabOverrides(EditorEntityId selected,PrefabOverrideView &view,std::string &error) {
@@ -497,13 +519,18 @@ bool EditorSession::inspectPrefabOverrides(EditorEntityId selected,PrefabOverrid
   const bool structural=loadedInstances(*this,view.asset,view.sourceHash,roots,applyError);
   runtime::ObjectCloneMap reverse;for(const auto &[from,to]:comparisonData.mapping) reverse.emplace(to,from);
   for(auto &row:view.rows) {
+    const auto revisionMembers=collisionRevisionMembers(current,source,row.component);
+    if(!revisionMembers.empty()) {
+      row.label+=" + partes";
+      if(std::any_of(view.rows.begin(),view.rows.end(),[&](const auto &part){return std::find(revisionMembers.begin(),revisionMembers.end(),part.component)!=revisionMembers.end()&&part.origin==PrefabOverrideOrigin::Conflict;}))row.origin=PrefabOverrideOrigin::Conflict;
+    }
     row.applyable=structural && row.applicable && row.origin!=PrefabOverrideOrigin::Inherited &&
       portableAddress(current,row,reverse);
     row.applyReason=!structural?applyError:row.origin==PrefabOverrideOrigin::Inherited?"Campo herdado: receba a fonte":
       !row.applicable?"Campo indisponível neste estado":
       !row.applyable?"Este endereço aponta para fora da instância portátil":
       row.origin==PrefabOverrideOrigin::Conflict?"Substituir a fonte exige escolha explícita":
-      row.kind==PrefabOverrideKind::Component?"Aplicar componente completo, com estrutura e identidades":"Aplicar somente este endereço à fonte";
+      !revisionMembers.empty()?"Revisão física: receita + "+std::to_string(revisionMembers.size())+" Colisores; os outros componentes ficam separados":row.kind==PrefabOverrideKind::Component?"Aplicar componente completo, com estrutura e identidades":"Aplicar somente este endereço à fonte";
     if(row.applyable) {
       auto donor=current;donor.components.remove(scene::PrefabLink::descriptor);
       auto candidate=*comparisonData.source.graph().find(scene::prefabLink(document_.find(selected)->components)->sourceObject);
@@ -511,6 +538,7 @@ bool EditorSession::inspectPrefabOverrides(EditorEntityId selected,PrefabOverrid
       const bool membership=row.kind==PrefabOverrideKind::AddedComponent || row.kind==PrefabOverrideKind::RemovedComponent ||
         (row.kind==PrefabOverrideKind::Component && !candidate.components.findInstance(row.component));
       if(!runtime::remapObjectReferences(donor,reverse) ||
+         !prepareCollisionRevision(candidate,donor,row.component,diagnostic) ||
          !(membership?adoptComponent(candidate,donor,row.component):applyDifference(candidate,donor,row,diagnostic)) ||
          !structuralCompositionValid(*comparisonData.source.graph().find(candidate.id),candidate,diagnostic) ||
          !restoredReferencesValid(comparisonData.source.graph(),*comparisonData.source.graph().find(candidate.id),candidate)) {
@@ -666,6 +694,16 @@ bool EditorSession::applyPrefabOverrides(const PrefabOverrideView &view,std::spa
     return false;
   }
   auto authoredGraph=authored.graph();const auto *ownership=scene::prefabLink(document_.find(view.object)->components);
+  // Expand a selected recipe to the concrete delta addresses of its own parts.
+  // Each dependency still passes the existing portability/conflict gates.
+  const auto primary=chosen;
+  for(const auto &row:primary) {
+    const auto members=collisionRevisionMembers(local,*authoredGraph.find(ownership->sourceObject),row.component);
+    for(const auto &part:actual)if(std::find(members.begin(),members.end(),part.component)!=members.end()&&part.origin!=PrefabOverrideOrigin::Inherited&&!std::any_of(chosen.begin(),chosen.end(),[&](const auto &address){return address.sameAddress(part);})) {
+      if(!part.applicable||(part.origin==PrefabOverrideOrigin::Conflict&&!overwriteConflicts)){error="A revisão física possui uma parte indisponível ou conflitante; confirme o lote completo antes de aplicar";return false;}
+      chosen.push_back(part);
+    }
+  }
   runtime::ObjectCloneMap reverse;for(const auto &[from,to]:selected.mapping) reverse.emplace(to,from);
   for(const auto &row:chosen) if(!portableAddress(local,row,reverse)) {
     error="O endereço selecionado aponta para fora da instância; a fonte portátil foi preservada";return false;
@@ -674,7 +712,7 @@ bool EditorSession::applyPrefabOverrides(const PrefabOverrideView &view,std::spa
   if(!runtime::remapObjectReferences(donor,reverse)) {error="Não foi possível normalizar referências da seleção";return false;}
   auto sourceCandidate=*authoredGraph.find(ownership->sourceObject);
   donor.id=sourceCandidate.id;donor.parent=sourceCandidate.parent;
-  std::stable_sort(chosen.begin(),chosen.end(),[](const auto &a,const auto &b){return a.kind!=PrefabOverrideKind::ComponentOrder && b.kind==PrefabOverrideKind::ComponentOrder;});
+  std::stable_sort(chosen.begin(),chosen.end(),[](const auto &a,const auto &b){const auto order=[](const auto &row){return row.kind==PrefabOverrideKind::RemovedComponent?0:row.kind==PrefabOverrideKind::ComponentOrder?2:1;};return order(a)<order(b);});
   for(const auto &row:chosen) {
     const bool membership=row.kind==PrefabOverrideKind::AddedComponent || row.kind==PrefabOverrideKind::RemovedComponent ||
       (row.kind==PrefabOverrideKind::Component && !sourceCandidate.components.findInstance(row.component));

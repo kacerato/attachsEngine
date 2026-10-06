@@ -116,7 +116,7 @@ EditorRay screenPointToRay(const EditorViewport &viewport, ui::UiPoint screen) n
 }
 
 EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
-                             const EditorRay &ray) noexcept {
+                             const EditorRay &ray,u32 ignoredObject,bool requireGeometry) noexcept {
   EditorPickResult result{};
   if (!ray.valid || !std::isfinite(ray.minimumDistance) || !std::isfinite(ray.maximumDistance) ||
       ray.minimumDistance<0 || ray.maximumDistance<ray.minimumDistance) return result;
@@ -127,7 +127,8 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
   std::vector<Hit> hits;
   for (usize index=0;index<candidates.size();++index) {
     const EditorPickCandidate &candidate=candidates[index];
-    if (!candidate.selectable || candidate.id == 0) continue;
+    if (!candidate.selectable || candidate.id == 0 || candidate.id==ignoredObject) continue;
+    if (requireGeometry && !candidate.mesh && !candidate.resolve) continue;
     if (!std::isfinite(candidate.radius) || candidate.radius <= 0.0f) continue;
     if (!isFiniteTriple(candidate.center)) continue;
 
@@ -209,7 +210,7 @@ bool projectSegmentToScreen(const EditorViewport &viewport, const float from[3],
   };
   if(!plane(clip[0][2]-viewport.frustum.nearPlane,clip[1][2]-viewport.frustum.nearPlane)) return false;
   const bool orthographic=renderer::isOrthographic(viewport.frustum);
-  if(orthographic && !plane(viewport.frustum.farPlane-clip[0][2],viewport.frustum.farPlane-clip[1][2])) return false;
+  if(!plane(viewport.frustum.farPlane-clip[0][2],viewport.frustum.farPlane-clip[1][2])) return false;
   for(unsigned axis=0;axis<2;++axis) for(int sign:{-1,1})
     if(!plane((orthographic?1:clip[0][2])+sign*clip[0][axis],(orthographic?1:clip[1][2])+sign*clip[1][axis])) return false;
   const auto project=[&](double t) {

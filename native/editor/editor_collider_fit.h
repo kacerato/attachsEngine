@@ -8,14 +8,21 @@ namespace ae::editor {
 inline bool fitEditorCollider(const EditorMapScene &resources,const EditorDocument &document,
                               EditorEntityId id,EditorCollider &out) {
   const auto *entity=document.find(id);if(!entity) return false;
-  std::span<const EditorPickMesh::Triangle> triangles;float relative[16];
-  if(!resources.localGeometry(meshAsset(*entity),triangles,relative)) return false;
+  const auto *mesh=runtime::meshRenderer(*entity);if(!mesh||!mesh->slotCount())return false;
+  std::vector<std::array<float,3>> points;
+  for(u32 slot=0;slot<mesh->slotCount();++slot) {
+    const auto asset=mesh->slotAsset(slot).valid()?resources.assetSlot(mesh->slotAsset(slot)):mesh->slotMesh(slot);
+    std::span<const EditorPickMesh::Triangle> triangles;float relative[16];
+    if(!asset||!resources.localGeometry(asset,triangles,relative)||triangles.empty())return false;
+    for(const auto &triangle:triangles)for(u32 vertex=0;vertex<3;++vertex) {
+      std::array<float,3> p;
+      for(u32 k=0;k<3;++k) {p[k]=relative[12+k]+relative[k]*triangle[vertex*3]+relative[4+k]*triangle[vertex*3+1]+relative[8+k]*triangle[vertex*3+2];if(!std::isfinite(p[k]))return false;}
+      points.push_back(p);
+    }
+  }
   float low[3]{1e30f,1e30f,1e30f},high[3]{-1e30f,-1e30f,-1e30f};
   const auto visit=[&](auto consumer) {
-    for(const auto &triangle:triangles) for(u32 vertex=0;vertex<3;++vertex) {
-      float p[3];for(u32 k=0;k<3;++k) p[k]=relative[12+k]+relative[k]*triangle[vertex*3]+relative[4+k]*triangle[vertex*3+1]+relative[8+k]*triangle[vertex*3+2];
-      consumer(p);
-    }
+    for(const auto &p:points)consumer(p.data());
   };
   visit([&](const float *p){for(u32 k=0;k<3;++k) {low[k]=std::min(low[k],p[k]);high[k]=std::max(high[k],p[k]);}});
   EditorCollider candidate=out;float center[3],half[3];

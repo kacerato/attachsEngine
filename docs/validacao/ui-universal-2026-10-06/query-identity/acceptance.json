@@ -1,0 +1,155 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "branch": "codex/gameplay-runtime",
+  "date": "2026-10-06",
+  "scope": "U11 authored collider identity across native Jolt queries, script ABI and typed SDK",
+  "status": "bounded query identity implemented; host and physical Android Play accepted; U11 partial",
+  "abi": {
+    "version": 44,
+    "queryHitBytes": 64,
+    "colliderObjectOffset": 56,
+    "legacy": "ABI43 query consumers must rebuild; positional RayHit and Body/Object semantics preserved"
+  },
+  "sources": [
+    {
+      "path": "native/runtime/scene_physics.h",
+      "sha256": "da0e0b4ad4c1336695aa20ae449386e2fef671ddadef4f0011500087ad7756af"
+    },
+    {
+      "path": "native/runtime/scene_physics.cpp",
+      "sha256": "fc6dcb4cedcf8901ad6eac625073a1e70f20633280fbe6fd91bb6b349f84cc76"
+    },
+    {
+      "path": "native/runtime/scene_dynamic_motor.cpp",
+      "sha256": "ec48e01efbf33d7accd1b07c3b718576297a54b234177807dd8489000b7d6939"
+    },
+    {
+      "path": "native/runtime/script_bridge.cpp",
+      "sha256": "62438407eecd323794ed1b5c9d1816212b1309d80ae3b274b147cabfe4cb2922"
+    },
+    {
+      "path": "native/scene/script_runtime.h",
+      "sha256": "9dc01be7b3444d115ed0fa0bbbff98969ccdecef6bbef93979365619092c64d0"
+    },
+    {
+      "path": "native/CMakeLists.txt",
+      "sha256": "d77c232df0b315c9e9b919c3b549e45de5f5039a91d0c33ac8502c7c6abf7dc8"
+    },
+    {
+      "path": "managed/Astra.Scripting/Physics.cs",
+      "sha256": "834a8127ba1dab919de46ae7a9f4ea0d032e1600cc3111a921bb6dab58e365c8"
+    },
+    {
+      "path": "managed/Astra.Scripting/Runtime/NativeBehaviorRuntime.cs",
+      "sha256": "2d5514193cf6f4cb518d0735910820780a60d942cc9f9eb4c90b8fb946f6cf0b"
+    },
+    {
+      "path": "tests/native/test_query_contracts.cpp",
+      "sha256": "3eb57e1b6910cb82671d69b4e5d45f18d058e299fced449c3cc42539aa5ed73c"
+    },
+    {
+      "path": "tests/native/test_script_physics2d.cpp",
+      "sha256": "b5e5041f99a75d9dc9712c52ebe0c3053450392a00bdb303f823176e25aeedba"
+    },
+    {
+      "path": "tests/native/test_gui.cpp",
+      "sha256": "17db8e205d7f88e65bebcdf78ce5b0c6074a52ec47c8c144a065edaaa8e85d4e"
+    },
+    {
+      "path": "tests/native/gui_preview_main.cpp",
+      "sha256": "aeabac0eca282b734089765090664dc97cdce0c722e1fc3393df43257c756860"
+    },
+    {
+      "path": "tests/Aether.Tests/PhysicsQueryContractsTests.cs",
+      "sha256": "8d6a10bb4466d8a21d3a0c2baca7710cfd0dda8dcb700ad686459bcc47f4f817"
+    },
+    {
+      "path": "examples/physics/CompoundQueryProbe.cs",
+      "sha256": "500c5018e8e1457c9bed91be605eafda866e7e3f444d6c013738b1e78ca44e63"
+    }
+  ],
+  "host": {
+    "guiAndAuthoring": "89/89",
+    "compoundAndQueryContractsIncluded": "4/4",
+    "physics2DScriptIncluded": "1/1",
+    "motorAfterInsideRayFix": "5/5",
+    "initialRegression": "88/89; support consumer needed real outside-surface retry; corrected and full run repeated"
+  },
+  "managed": {
+    "scenarios": "4/4",
+    "scope": "typed transport/identity/lifecycle/layout/ABI rejection and real project compilation, not a mocked physics proof"
+  },
+  "android": {
+    "device": "Xiaomi 25053PC47G / onyx",
+    "configuration": "Release / native RelWithDebInfo",
+    "apkSha256": "6b258df339a9da142b3e5804c1932b6efe8a188125d4915627a8b90a4ca6b6cc",
+    "apkBytes": 221603397,
+    "packagedSdkSha256": "607758bed7b097195b4225972e201d544a71d5745dc740e1458e99e93eb26dd8",
+    "sdkAssetBuildId": "b01e4c0400fabb31b59616bc06262b1a418a2be29433a03794078115debd7ef6",
+    "sdkAssetCacheReusedOnColdReopen": true,
+    "appliedScriptGeneration": "b9cb896813a6c3850c8eba089c4ff8fafdfd9a0620198be836cb393d93d7cefb",
+    "scriptCompilerIdentity": "05af83408d354719a5f38b201a8422c0",
+    "installedBaseHashMatches": true,
+    "nativeAndManagedPlayAccepted": true,
+    "project": "API Query Owners v1",
+    "sceneSha256": "987ef171802a5fcaceebfea34692def2f84126d2715f23d186acacaf84c29874",
+    "body": 2,
+    "colliderObjects": [
+      4,
+      5
+    ],
+    "localColliderIds": [
+      1,
+      1
+    ],
+    "typedColliderReads": 7,
+    "proof": "cold reopen reused SDK asset cache and executed the published project script; rays/all/sweep/overlap and typed properties passed",
+    "screenInspected": "device-play-final.png shows real Play and complete PASS message, without PiP or clipping",
+    "motorPhysicalAcceptance": "not repeated in this query fixture; five motor scenarios are host Jolt evidence"
+  },
+  "performance": {
+    "protectedSourceFiles": 268,
+    "changed": 0,
+    "scope": "renderer, RHI, shaders, Android platform, Jolt bridge and HZB sources; not all engine files",
+    "fpsThermalBenchmark": false
+  },
+  "logs": {
+    "host-build": "host-build.log",
+    "fixture-build": "fixture-build.log",
+    "motor-build": "motor-build.log",
+    "gui-regression-initial": "gui-regression-initial.log",
+    "gui-regression": "gui-regression.log",
+    "managed": "managed.log",
+    "motor": "motor.log",
+    "fixture": "fixture.log",
+    "android-build": "android-build.log",
+    "install": "install.log",
+    "installed-sha256": "installed-sha256.log",
+    "launch": "launch.log",
+    "runtime": "runtime.log",
+    "runtime-assets-first-open": "runtime-assets-first-open.log"
+  },
+  "screenshots": [
+    "device-ready-final.png",
+    "device-play-final.png"
+  ],
+  "rejectedAsFinal": {
+    "setupApkSha256": "4aa2a329a03c99a666ea658faacc65d8b9e93c6481d714db5b4aa6e9f2d09eb3",
+    "files": [
+      "device-setup.png",
+      "device-setup-play.png"
+    ]
+  },
+  "roadmapSha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "engine_complete": false,
+  "remaining": [
+    "direct collider handles/faces/vertices",
+    "scene occlusion for authoring picking",
+    "advanced shape distribution and limits",
+    "COM/support diagnostics",
+    "skin and regeneration overrides",
+    "scale/performance/thermal and simultaneous-gesture acceptance",
+    "remaining original roadmap families"
+  ],
+  "publication": "local; no commit or push in this continuation"
+}

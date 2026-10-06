@@ -4,7 +4,7 @@
 namespace ae::ui {
 class GuiWorldFrame final {
 public:
-  bool configure(const GuiCanvas &canvas,const renderer::PerspectiveFrustum &camera,const UiRect &viewport,const UiRect &surface);
+  bool configure(const GuiCanvas &canvas,const renderer::PerspectiveFrustum &camera,const UiRect &viewport,const UiRect &surface,const float *hostMatrix=nullptr);
   // Plane ray parameter is converted to world distance; used for scene picking.
   bool map(UiPoint screen,UiPoint &local,float &distance) const;
   bool project(UiPoint local,UiPoint &screen,float &depth) const;

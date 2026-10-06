@@ -1,0 +1,5 @@
+  FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:172: compact visible grip retains real touch target
+PASS collider_handles_geometry_typed_shapes_local_pose_hierarchy_and_rotation
+PASS collider_handles_pointer_archive_single_undo_cancellation_and_jolt
+FAIL collider_handles_occlusion_visibility_modes_and_compact_touch_targets
+2/3 scenarios passed

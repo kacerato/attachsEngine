@@ -1,0 +1,702 @@
+[
+  {
+    "label": "selection-000",
+    "paused": true,
+    "time": 90.033333,
+    "sha256": "06d396de68c75d1f6428d158f758022be251713c36d0d2111b5ac2c7bfa437a6",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-001",
+    "paused": true,
+    "time": 90.066666,
+    "sha256": "acb9a190852456a2e926e16b9225974a2f57160448935385a4556c1c31fb64f4",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-002",
+    "paused": true,
+    "time": 90.099999,
+    "sha256": "6e13c1d2432589fb68ce8d9a6d7ebf919b7d2703c7b33dad341cfbde2d69f63a",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-003",
+    "paused": true,
+    "time": 90.133332,
+    "sha256": "2f5c68087adc32dd041a193adeb5c8bc18b660ba0068cbba509de4be3a42998b",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-004",
+    "paused": true,
+    "time": 90.166665,
+    "sha256": "8e4bd4488998a618e8bbca9b4a227a26a01a695e8be64c0fb1f98c80ad41cf84",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-005",
+    "paused": true,
+    "time": 90.199998,
+    "sha256": "1889f7ceecf99510962414e4b61a654ae1c93253a1684405268a3f942f6e7f6d",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-006",
+    "paused": true,
+    "time": 90.233331,
+    "sha256": "1e23a0890d6cc90fc9ff9607801591f7702ebb35800b7984d89de8de25c0c678",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-007",
+    "paused": true,
+    "time": 90.266664,
+    "sha256": "349dda13baf57c197f13285f64b457f7c409e20337700bd168d00ba900a2a562",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-008",
+    "paused": true,
+    "time": 90.299997,
+    "sha256": "ec8612cb111c4437854988ffae5d9f4b7f3dd1e51b02c84798becdb09147c3a9",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-009",
+    "paused": true,
+    "time": 90.33333,
+    "sha256": "c07f3bc2a78a6fc00a2d3450d2769ff64a0f698aaa1ef74c6dd9ec63998bfe9f",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-010",
+    "paused": true,
+    "time": 90.366663,
+    "sha256": "6dbcec9601f02b1345f8fd692756591576fd25eee2a4abf24e6e1fa05ad2e1a2",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-011",
+    "paused": true,
+    "time": 90.399996,
+    "sha256": "41ed223670a02bab6c17aeedbc87925284114bfb6cc8ea6db6241f192441e688",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-012",
+    "paused": true,
+    "time": 90.433329,
+    "sha256": "618348a9510ffd85d2aa004693b9f89ecbdd7b3e744f37aead6952a0af0844c9",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-013",
+    "paused": true,
+    "time": 90.466662,
+    "sha256": "76dc78b3430ed306e6465958d508ec52ae30c928a10ed5b9abef02693565aa14",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-014",
+    "paused": true,
+    "time": 90.499995,
+    "sha256": "aba933b9c0bc01dd70b11bec57187d7e7ceb414af7997b97c3539631f962bf49",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-015",
+    "paused": true,
+    "time": 90.533328,
+    "sha256": "3fab4a97b0f04b52fa82d5b9b8e15d5bf37366bf0a50f2a39ff0bb5d0d207fe0",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-016",
+    "paused": true,
+    "time": 90.566661,
+    "sha256": "1bd09e00b460988755076f98236ca214dbe5b09f3dd52ab1c18ebe7f07128ed5",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-017",
+    "paused": true,
+    "time": 90.599994,
+    "sha256": "f789f7588b01658ddacd08f5732f28c23da734e2072511ef25e94395417b0405",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-018",
+    "paused": true,
+    "time": 90.633327,
+    "sha256": "c5c6d6bd882a55710a64bcac0b26591564b811eb14218e28f839e8c7a54d24db",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-019",
+    "paused": true,
+    "time": 90.66666,
+    "sha256": "1df4c54348364b39876c754dfd8bd102557af8832cb1dd10e2ac6ff774c3da95",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-020",
+    "paused": true,
+    "time": 90.699993,
+    "sha256": "6dc4141d9627ec869224ec24b5ba5dc964507641727ead4401578c9f5b522fd9",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-021",
+    "paused": true,
+    "time": 90.733326,
+    "sha256": "f0008226347ee34207f4fe0bbf94e4b4d221f43920b8ba890772a080cb334106",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-022",
+    "paused": true,
+    "time": 90.766659,
+    "sha256": "771cda43af893faf40970951dbf484e0e8f65672a3f2b0d4258e45ad5e3731be",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-023",
+    "paused": true,
+    "time": 90.799992,
+    "sha256": "b6a424c93610ba3aa45156693fff621b1593354d537fa3c05fabf6852e6b89e8",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-024",
+    "paused": true,
+    "time": 90.833325,
+    "sha256": "bbf8252fef38f37f2aec76476bc2da75be7e3f1c68593059905344a06681bd2c",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-025",
+    "paused": true,
+    "time": 90.866658,
+    "sha256": "170d0923c7275f70f1162b03654c10bb5f43f4b6aed21c74e1f0a98536c85f92",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-026",
+    "paused": true,
+    "time": 90.899991,
+    "sha256": "b150db5d6d92f9131fc349dcd22278e3d527723e6f55e54ca1077c96c2bf5fa3",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-027",
+    "paused": true,
+    "time": 90.933324,
+    "sha256": "e0d947af73abefe761cfaab152ec0bf6a9986f4a9b09fbf591cfaccc887b014b",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-028",
+    "paused": true,
+    "time": 90.966657,
+    "sha256": "9e6d3b253be9e2ad2d972c6a69ab8784ba32a0e2812285ea12a5cfa58c5e97a4",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-029",
+    "paused": true,
+    "time": 90.99999,
+    "sha256": "7896751cc0b5a8a0a72c16242b06b9c50e1c009e89869c5ba5cc1d0561e19514",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-030",
+    "paused": true,
+    "time": 91.033323,
+    "sha256": "0280d61506f4119aebeeba93bb3da87296447753b38f6e914dec45b62c6ec759",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-031",
+    "paused": true,
+    "time": 91.066656,
+    "sha256": "7438b4d808d431482aa04a77998de033587736afd72c9c29f97088a3a90204d0",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-032",
+    "paused": true,
+    "time": 91.099989,
+    "sha256": "979f882f90aadc76821aae1a606c4a48a0142a3ba36c9155b7649e18e1ea2a74",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-033",
+    "paused": true,
+    "time": 91.133322,
+    "sha256": "4682bda13e9d226db32dff75d46ac933e0efa5a7c7978b5d4aae122e5dfa9e69",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-034",
+    "paused": true,
+    "time": 91.166655,
+    "sha256": "4f4e4cd1197f2f1b52e1bc6580012b4f9b4ad0c38b46d959e82ac791ea6dcc44",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-035",
+    "paused": true,
+    "time": 91.199988,
+    "sha256": "eed0d9d78b0ff0da489a7a4bd0c650916a8b123c1865e246ef24dd4eeb413eaa",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-036",
+    "paused": true,
+    "time": 91.233321,
+    "sha256": "1f7744665f5064b52c1656e84e26c929b16f667023df309a0eb2d8cf0d6fb5fd",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-037",
+    "paused": true,
+    "time": 91.266654,
+    "sha256": "f422ec72a2a97e3793e79f0f26be2119ee8d6fa2d40dacac59fef2ea9e98b166",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-038",
+    "paused": true,
+    "time": 91.299987,
+    "sha256": "89c98bb9dab03d60ff202f623b48ef2078dded826b34968d92df942e70ad6478",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-039",
+    "paused": true,
+    "time": 91.33332,
+    "sha256": "ce743e9eeb1d0ebf38c523f3244f4854ee2d0b8ce86229140f320ba3908190cd",
+    "observation": "multiple parts selected; MeshFilter/Renderer/Collider inspector"
+  },
+  {
+    "label": "selection-040",
+    "paused": true,
+    "time": 91.366653,
+    "sha256": "6e094571c54e0905e86a16bdea8ec683323592fe0ad87c53be9aed1939961a4a",
+    "observation": "root selected, previous inspector still visible"
+  },
+  {
+    "label": "selection-041",
+    "paused": true,
+    "time": 91.399986,
+    "sha256": "0a6bd62f279658fb435dc182d6c897d0ae3f0a1fe7dee5821e6bf2701989951f",
+    "observation": "root selected, previous inspector still visible"
+  },
+  {
+    "label": "selection-042",
+    "paused": true,
+    "time": 91.433319,
+    "sha256": "f90bdb12d5122cce4f5f079a969880579046cad3974f426696d5cecd55ff80d9",
+    "observation": "root selected, previous inspector still visible"
+  },
+  {
+    "label": "selection-043",
+    "paused": true,
+    "time": 91.466652,
+    "sha256": "d500a07782132a11d92b252e57bc9182d495dec9fbe8c9147d241566a18d7618",
+    "observation": "intermediate mixed inspector content"
+  },
+  {
+    "label": "selection-044",
+    "paused": true,
+    "time": 91.499985,
+    "sha256": "6128e179a5b0739399257d8e681e52687ef525118ff14e2cd921fe7046632c74",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-045",
+    "paused": true,
+    "time": 91.533318,
+    "sha256": "a8dc6716862bdd071c8b79ba959b6f84650c8c0f2b1aca48b80f7f9481285a37",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-046",
+    "paused": true,
+    "time": 91.566651,
+    "sha256": "444a972df641e6791566a2ff3f10cf79d22a1b2da70b3ec3def35878c50b6243",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-047",
+    "paused": true,
+    "time": 91.599984,
+    "sha256": "c56ca5919ef855e3280ffb3cc893a219b683dc65fb5ae623819b86e5ad7748c9",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-048",
+    "paused": true,
+    "time": 91.633317,
+    "sha256": "e44f84175bddf8b6d4f7a5ba84da61df675e88c43194ec8fea94baebd5722029",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-049",
+    "paused": true,
+    "time": 91.66665,
+    "sha256": "0382f24105fde2a45fb49c3109e9a0f941b8635b98a14cf99fbd565a44ea7fb1",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-050",
+    "paused": true,
+    "time": 91.699983,
+    "sha256": "e36a8f8e1bdc2f7450443d1da058fe5fab6db534fcbd8e5e99058afe28d5348b",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-051",
+    "paused": true,
+    "time": 91.733316,
+    "sha256": "2a01ab163ab4e19d1f8fcabf90f43a99549ef06a46bb6af7135a456d2c6536fd",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-052",
+    "paused": true,
+    "time": 91.766649,
+    "sha256": "adecb3f46c01281db3cfa2d2a657ecd0cc664c5028e641a550ca67a3366ce625",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-053",
+    "paused": true,
+    "time": 91.799982,
+    "sha256": "8df7d2e397c5e1b6bad068d74b05ece17829e2ee7b48c6f4ef81b616df86ba6c",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-054",
+    "paused": true,
+    "time": 91.833315,
+    "sha256": "81b70aa53e7f51f5db67687aa562ade0d206b7ba7d93d2a60c2e569f8f62fbd3",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-055",
+    "paused": true,
+    "time": 91.866648,
+    "sha256": "90c5f896245fbf254a05bf1f180bef71aeabf8c91331993f61b03ffc10160922",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-056",
+    "paused": true,
+    "time": 91.899981,
+    "sha256": "1d559dd00a7d7d1d15416821dca5b881f312d0122e90dcc3b5ae023959ca9b07",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-057",
+    "paused": true,
+    "time": 91.933314,
+    "sha256": "4ce18fd4a4ba501b3afc49235f78542deb08f0dbf0a03f7299ce0985cba5a2b8",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-058",
+    "paused": true,
+    "time": 91.966647,
+    "sha256": "ab104abdf1e473dafb604d8dfafac9ddc9d1d1e82375fbe959d94ecd3bd5a6ab",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-059",
+    "paused": true,
+    "time": 91.99998,
+    "sha256": "e7def90191fba76f1aff7508d372d99563445c7977d5a0c1fbd353cd4ee93317",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-060",
+    "paused": true,
+    "time": 92.033313,
+    "sha256": "2a8de3bd7c3c1e4287095f178da7eb616141444c5cbe13c823a3b1fb5b4e481b",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-061",
+    "paused": true,
+    "time": 92.066646,
+    "sha256": "50d3f051f82607eba41412a9e589083064ff1d6d1e309174bea8f644f75531be",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-062",
+    "paused": true,
+    "time": 92.099979,
+    "sha256": "d79cabe2eb02256a2d63456e491a6ee000f5f3c842f31e7a2e81176f2dc0ed42",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-063",
+    "paused": true,
+    "time": 92.133312,
+    "sha256": "14b9f81c0565bd220493feb536be4e4c3b4c75892f05dd188706344df89577c9",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-064",
+    "paused": true,
+    "time": 92.166645,
+    "sha256": "710b879ea513217d528b3083c7d3312dab7454c3e43fe1ebf1c9cb5ff90bb1ce",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-065",
+    "paused": true,
+    "time": 92.199978,
+    "sha256": "992dd7634f6a4cf4a9acf411947620557e233a6f1ca6219d32cc9a0424464677",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-066",
+    "paused": true,
+    "time": 92.233311,
+    "sha256": "be3032afd67393ab27983a344cf98bcfd1829e62381194e9ada0f05c69db88cb",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-067",
+    "paused": true,
+    "time": 92.266644,
+    "sha256": "1bd24baf5a54587035f0745efcba98ee172a496335f528cf3572f123ff321b24",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-068",
+    "paused": true,
+    "time": 92.299977,
+    "sha256": "89f2c3e1d2369aaf8426d6a3f0c7d7ae9456405b7f1e4063d2cc894ebc1b153b",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-069",
+    "paused": true,
+    "time": 92.33331,
+    "sha256": "19b7d0b43667661dabffa9479a1a34c279d6a2157316c19041844710ec3a178a",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-070",
+    "paused": true,
+    "time": 92.366643,
+    "sha256": "f27a7f9427b935acd1a2beee519a4f68ec760bfb0de70235697e835467e8e13c",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-071",
+    "paused": true,
+    "time": 92.399976,
+    "sha256": "e818b5417d21bd6291bb0feb9be844808054f9ed9f4e6cc95a5e16de0c9e9c86",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-072",
+    "paused": true,
+    "time": 92.433309,
+    "sha256": "7adb474d74171bf057ee638e4d07376e27953717045492744ffcc92f7be12884",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-073",
+    "paused": true,
+    "time": 92.466642,
+    "sha256": "4f91b7171e2a6de90ed39d872bc4971476e72763740648e3103c015471d505ec",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-074",
+    "paused": true,
+    "time": 92.499975,
+    "sha256": "7902c967c0a6005d27d231048d3d31545869749186f7f9b4133d9843c170c4f6",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-075",
+    "paused": true,
+    "time": 92.533308,
+    "sha256": "caeff36633f4e89fbe78e03de3d46ddc272667e1896f7676a61c68a96d254858",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-076",
+    "paused": true,
+    "time": 92.566641,
+    "sha256": "0ff420ef1eb48acc8788845c186e0dacceec5ab82a24054c714c83c7aa344ee1",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-077",
+    "paused": true,
+    "time": 92.599974,
+    "sha256": "4f964bce14ed00f9c52ceaa40fb584c8de30b958c8f064fb80de6f5d55f3085d",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-078",
+    "paused": true,
+    "time": 92.633307,
+    "sha256": "cca4ba06238395e91d0c571d0a473065cdc22444d9826c01c43e83371c3289f0",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-079",
+    "paused": true,
+    "time": 92.66664,
+    "sha256": "f859a73b4d9cda993f9b1413c560d0287e2eeb03b118023c5c53ada2349a70e1",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-080",
+    "paused": true,
+    "time": 92.699973,
+    "sha256": "a991b3b3008c621a5da2cf9d7cb285d308f086f8de96f7f384a22a49a11b3bd4",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-081",
+    "paused": true,
+    "time": 92.733306,
+    "sha256": "97b7684940f8dd77922e2aafd2282cbe9eff4674bc4118872f677245fd82bb82",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-082",
+    "paused": true,
+    "time": 92.766639,
+    "sha256": "da8ade1177a4f9e3d5b7603d4e877ca4c68d69fd1169648c253e9834adf1b868",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-083",
+    "paused": true,
+    "time": 92.799972,
+    "sha256": "ee1fcbb123213097e0076d8465899f3358363fe2d45d68776038563c9c81de21",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-084",
+    "paused": true,
+    "time": 92.833305,
+    "sha256": "4ca778cbb5ef5aa97d6c18d8d510328236ef358899e00a08b17244efb4c1d973",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-085",
+    "paused": true,
+    "time": 92.866638,
+    "sha256": "e80c217bda944e63ecf6ca1ae2a7f058d98aa9fae9b5949cd4d8434edc5dc1c6",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-086",
+    "paused": true,
+    "time": 92.899971,
+    "sha256": "1e91ed72b20dd862f2b67086e21855f6df23dcc18904d7ce5413ec2741bee77f",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-087",
+    "paused": true,
+    "time": 92.933304,
+    "sha256": "748bbd8b09865b2b2c2249ce4b8e6dcb93568c2cb0cb36ddbf1fcdd2decfc830",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-088",
+    "paused": true,
+    "time": 92.966637,
+    "sha256": "1b2c482657c1a2a471156e6a8f7f325359ef8746192edbcfb551f4da6138c1ae",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-089",
+    "paused": true,
+    "time": 92.99997,
+    "sha256": "63898af91544a08f8d9a6276ec33ba912491f4bf3e4730a2b0f442399ecf6301",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-090",
+    "paused": true,
+    "time": 93.033303,
+    "sha256": "366d2234d7b8e8477383d4c1285f81df9832a2cb1ed325f5b9a11c98595aa2bf",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-091",
+    "paused": true,
+    "time": 93.066636,
+    "sha256": "2308917ea3cd55df3897951fed63b0346693718923cf8ad5675add7ca3b3da77",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-092",
+    "paused": true,
+    "time": 93.099969,
+    "sha256": "65e4ae62a708d15f16d5d92224ab9276082d44751ec6fa9d8b099c88b9b618f4",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-093",
+    "paused": true,
+    "time": 93.133302,
+    "sha256": "a24a2f3f401fa8680d98e3f253f5ad271d87844581aa5b91dcb793cf1d5ca7b1",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-094",
+    "paused": true,
+    "time": 93.166635,
+    "sha256": "7698409ce0fc63ec2839ce6bd477eeeeeb0922feeaf25829b4fad473bb4f555b",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-095",
+    "paused": true,
+    "time": 93.199968,
+    "sha256": "a7f205c9233eec4d78b22e4ed0be7f1768191a39fb57fcd47601de9a18e15f26",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-096",
+    "paused": true,
+    "time": 93.233301,
+    "sha256": "3590d24f3209e4819d82e9e08f15b2b973d59e66eca5d9b31e01a81a8351e2f6",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-097",
+    "paused": true,
+    "time": 93.266634,
+    "sha256": "bca95b4439011e38c3a77741812bb30bdc2f4eb3e7a1753663961a36d72e83a9",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-098",
+    "paused": true,
+    "time": 93.299967,
+    "sha256": "1969126c5b52edc8ab55d8d05cdfc066e567afdbefa1f016d7ef559253bc50d1",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  },
+  {
+    "label": "selection-099",
+    "paused": true,
+    "time": 93.3333,
+    "sha256": "0c877d7af6b4881e0169931cf1e56baffac3a066472280a387cba26cc4d70a14",
+    "observation": "root selected; Transform inspector without piece Renderer/Collider"
+  }
+]

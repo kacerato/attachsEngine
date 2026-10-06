@@ -1538,6 +1538,69 @@
       "dark_ui_ready": true,
       "generation": "gui-behavior-v1",
       "source": "tools/generate-gui-behavior-icons.py; existing solid mark primitives"
+    },
+    "ui/joystick": {
+      "category": "ui",
+      "name": "joystick",
+      "dark_ui_ready": true,
+      "generation": "gui-behavior-v1",
+      "source": "tools/generate-gui-behavior-icons.py; existing solid mark primitives"
+    },
+    "ui/action-button": {
+      "category": "ui",
+      "name": "action-button",
+      "dark_ui_ready": true,
+      "generation": "gui-behavior-v1",
+      "source": "tools/generate-gui-behavior-icons.py; existing solid mark primitives"
+    },
+    "ui/look-area": {
+      "category": "ui",
+      "name": "look-area",
+      "dark_ui_ready": true,
+      "generation": "gui-behavior-v1",
+      "source": "tools/generate-gui-behavior-icons.py; existing solid mark primitives"
+    },
+    "component/dynamic-body-motor": {
+      "category": "component",
+      "name": "dynamic-body-motor",
+      "dark_ui_ready": true,
+      "generation": "dynamic-motor-v1",
+      "source": "tools/generate-dynamic-motor-icon.py; existing solid mark primitives"
+    },
+    "component/convex-parts": {
+      "category": "component",
+      "name": "convex-parts",
+      "dark_ui_ready": true,
+      "generation": "convex-parts-v1",
+      "source": "tools/generate-convex-parts-icon.py; existing solid mark primitives"
+    },
+    "editor/collider-vertex": {
+      "category": "editor",
+      "name": "collider-vertex",
+      "dark_ui_ready": true,
+      "generation": "collider-authoring-v1",
+      "source": "tools/generate-collider-authoring-icons.py; existing solid mark primitives"
+    },
+    "editor/collider-face": {
+      "category": "editor",
+      "name": "collider-face",
+      "dark_ui_ready": true,
+      "generation": "collider-authoring-v1",
+      "source": "tools/generate-collider-authoring-icons.py; existing solid mark primitives"
+    },
+    "physics/diagnostic": {
+      "category": "physics",
+      "name": "diagnostic",
+      "dark_ui_ready": true,
+      "generation": "collider-authoring-v1",
+      "source": "tools/generate-collider-authoring-icons.py; existing solid mark primitives"
+    },
+    "physics/collision-recipe": {
+      "category": "physics",
+      "name": "collision-recipe",
+      "dark_ui_ready": true,
+      "generation": "collision-recipe-v1",
+      "source": "tools/generate-collision-recipe-icon.py; existing solid mark primitives"
     }
   },
   "unmapped": []

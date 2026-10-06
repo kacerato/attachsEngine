@@ -1,0 +1,64 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine.git",
+  "checkout": "C:/Users/donod/Downloads/atchengine",
+  "date": "2026-10-04",
+  "roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "roadmap_complete": false,
+  "delivery": "R4: authored controls, Character receivers and assigned camera",
+  "formats": {
+    "aeui_write": 5,
+    "aeui_read": [1, 2, 3, 4, 5],
+    "ui_canvas_write": 2,
+    "ui_canvas_read": [1, 2],
+    "sdk_native_abi": 43
+  },
+  "host": {
+    "target": "aether_gui_tests",
+    "passed": 65,
+    "failed": 0,
+    "evidence": "controles-host.txt",
+    "note": "Behavioral run preceded the final labels-only change; Android compilation and capture validate those labels."
+  },
+  "sdk": {
+    "filter": "GuiTests",
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "evidence": "controles-sdk.txt"
+  },
+  "android_final": {
+    "build": "Gradle :app:assembleDebug, BUILD SUCCESSFUL in 19s",
+    "build_log": "controles-android-build.txt",
+    "application_id": "dev.aether.editor",
+    "apk_path": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "apk_bytes": 268318914,
+    "apk_sha256": "a8911b260a6d55935e4b00aa796856920c92a6093914761248fdd79f8c124ef6",
+    "install": "adb install -r: Success",
+    "installed_sha256_verified": true,
+    "installed_hash_method": "adb shell sha256sum on pm path base.apk; matches local SHA256",
+    "device_model": "Xiaomi 25053PC47G",
+    "device_resolution": [2772, 1280],
+    "project": "UI Authored Controls v2",
+    "script": "examples/ui/GuiAuthoredControls.cs",
+    "interaction": "ADB synthetic single-pointer input on the physical Android device",
+    "captures": ["controles-inspector-final.png", "controles-final-play.png"],
+    "runtime_observation": "Joystick changed Player X to 3.05; vector returned to 0.00, 0.00 after release."
+  },
+  "earlier_runtime_evidence": {
+    "apk_sha256": "66f491e7fa5df708e136c0eaf5f37c1c8fc75a713c116b3c9d53771e5e232925",
+    "captures": ["controles-movimento.png", "controles-salto.png", "controles-olhar.png"],
+    "observations": [
+      "Player X 5.97 Y 0.00 Z -1.14 after joystick release",
+      "Player Y 1.12 and saltos 1 after action-button press",
+      "Assigned-camera view rotated after LookArea drag; player position unchanged"
+    ],
+    "subsequent_changes": "Joystick background/knob color and optional click alignment; shorter Inspector labels. These older captures are not labeled as captures of the final APK."
+  },
+  "acceptance_not_proven": [
+    "Physical simultaneous three-finger input, modal arbitration and focus transitions",
+    "Floating/Dynamic joystick modes and arbitrary base/knob images on Android",
+    "DynamicBodyMotor and reversible Character conversion",
+    "Hardware pairing by player and general FixedUpdate event buffering",
+    "The remaining universal UI roadmap"
+  ]
+}

@@ -1,0 +1,3 @@
+PASS collider_owner_pointer_identity_history_archive_and_solver
+PASS collider_owner_scope_barriers_visibility_and_rebind
+2/2 scenarios passed

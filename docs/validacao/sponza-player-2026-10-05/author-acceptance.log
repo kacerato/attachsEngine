@@ -1,0 +1,164 @@
+Library draws=411 ids=411 pivots=1233 names=411
+1 parent=0 Cena p=0,0,0 s=1,1,1
+2 parent=1 NewSponza_Main_glTF_003 p=0,0,0 s=1,1,1 mesh=0 slots=1 guid=00000000000000000000000000000000 triangles=0 BODY=0 COLLIDER=3 ENV diffuse=1 exposure=0 sky=1
+158 parent=1 Objeto vazio p=-8.69469,14.3009,0.726011 s=1,1,1 LIGHT=1 intensity=1000 unit=0
+159 parent=1 Objeto vazio p=0,1.58702,0 s=1,1,1
+3 parent=2 PhysCamera001.Target p=-3.00422,2.76208,0.237373 s=1,1,1
+4 parent=2 SUN.Target p=6.47788,1.02428,-0.759415 s=1,1,1
+5 parent=2 1st_floor p=0,0,0 s=1,1,1
+51 parent=2 2nd_floor p=0,0,0 s=1,1,1
+101 parent=2 3rd_floor p=0,0,0 s=1,1,1
+122 parent=2 PhysCamera002.Target p=-3.15913,7.66303,-0.199155 s=1,1,1
+123 parent=2 PhysCamera003.Target p=-9.66802,2.49274,-2.25535 s=1,1,1
+124 parent=2 PhysCamera004.Target p=-7.16882,6.86903,4.48488 s=1,1,1
+125 parent=2 PhysCamera005.Target p=6.96568,3.32362,-2.21772 s=1,1,1
+126 parent=2 PhysCamera006.Target p=8.55619,6.63418,-0.354514 s=1,1,1
+127 parent=2 master_material p=1.98644,5e-07,13.8639 s=1,1,1 mesh=384 slots=27 guid=db192adb6f6206751556beba4de56bb6 triangles=54
+128 parent=2 HDRI_SKY p=-0.41305,2.0897,-13.7861 s=1,1,1
+129 parent=2 SUN p=-21.7049,43.4143,-6.14988 s=1,1,1
+130 parent=2 lamp_light_1st_floor_12 p=15.6192,3.27584,-0.917435 s=1,1,1
+131 parent=2 lamp_light_1st_floor_11 p=10.0243,4.17139,-4.791 s=1,1,1
+132 parent=2 lamp_light_1st_floor_10 p=6.14183,4.17139,-4.80631 s=1,1,1
+133 parent=2 lamp_light_1st_floor_09 p=2.19358,4.17139,-4.80631 s=1,1,1
+134 parent=2 lamp_light_1st_floor_08 p=-1.84945,4.17139,-4.80631 s=1,1,1
+135 parent=2 lamp_light_1st_floor_07 p=-5.9286,4.17139,-4.80631 s=1,1,1
+136 parent=2 lamp_light_1st_floor_06 p=-9.82472,4.17139,-4.80631 s=1,1,1
+137 parent=2 lamp_light_1st_floor_05 p=10.0243,4.17139,4.75748 s=1,1,1
+138 parent=2 lamp_light_1st_floor_04 p=6.14183,4.17139,4.74217 s=1,1,1
+139 parent=2 lamp_light_1st_floor_03 p=2.19358,4.17139,4.74217 s=1,1,1
+140 parent=2 lamp_light_1st_floor_02 p=-1.84945,4.17139,4.74217 s=1,1,1
+141 parent=2 lamp_light_1st_floor_01 p=-5.9286,4.17139,4.74217 s=1,1,1
+142 parent=2 lamp_light_1st_floor_13 p=-9.82472,4.17139,4.74217 s=1,1,1
+143 parent=2 lamp_light_2nd_floor_08 p=-5.84838,9.28523,4.66503 s=1,1,1
+144 parent=2 lamp_light_2nd_floor_01 p=-9.76595,9.28523,4.74217 s=1,1,1
+145 parent=2 lamp_light_2nd_floor_02 p=2.1615,9.28523,4.66503 s=1,1,1
+146 parent=2 lamp_light_2nd_floor_03 p=10.0753,9.28523,4.72581 s=1,1,1
+147 parent=2 lamp_light_2nd_floor_04 p=10.0753,9.28523,-4.72711 s=1,1,1
+148 parent=2 lamp_light_2nd_floor_05 p=2.09372,9.28523,-4.65407 s=1,1,1
+149 parent=2 lamp_light_2nd_floor_06 p=-5.84765,9.28523,-4.66314 s=1,1,1
+150 parent=2 lamp_light_2nd_floor_07 p=-9.7511,9.28523,-4.72957 s=1,1,1
+151 parent=2 lamp_light_1st_floor_14 p=-13.59,3.86779,0.065918 s=1,1,1
+152 parent=2 PhysCamera001 p=-8.80743,1.59222,-0.858258 s=1,1,1
+153 parent=2 PhysCamera002 p=10.5311,7.35298,1.52825 s=1,1,1
+154 parent=2 PhysCamera003 p=2.70302,1.3549,2.11138 s=1,1,1
+155 parent=2 PhysCamera004 p=-9.59436,6.9211,5.35278 s=1,1,1
+156 parent=2 PhysCamera005 p=-2.23714,0.744055,2.3608 s=1,1,1
+157 parent=2 PhysCamera006 p=-6.59549,10.8791,-0.629061 s=1,1,1
+6 parent=5 arch_stones_01 p=0.14015,4.06916,3.08721 s=1,1,1 mesh=7 slots=2 guid=a55c2b752c4c1e689482a08083c9fd38 triangles=63053
+7 parent=5 arch_stones_02 p=0.140149,4.06916,-3.11476 s=1,1,1 mesh=9 slots=2 guid=06f47aead2a8c8c7172ee683652ec7e6 triangles=63053
+8 parent=5 arch_stones_03 p=0.113765,4.37389,-0.0168814 s=1,1,1 mesh=11 slots=2 guid=26910d431e326441f5c119b5070f6602 triangles=1982
+9 parent=5 ceiling_1stfloor_01 p=0.402122,4.09616,-0.150804 s=1,1,1 mesh=13 slots=3 guid=9597079b994d53fdaf6f7134fcc0a093 triangles=55264
+10 parent=5 ceiling_1stfloor_02 p=15.2726,3.91245,-2.09428 s=1,1,1 mesh=16 slots=5 guid=c19e46ee496fc00d7f0c6257b138cf4c triangles=50963
+11 parent=5 columns_1stfloor_01 p=8.32947,-0.0115141,-0.0318978 s=1,1,1 mesh=21 slots=2 guid=0bf18a9841e5dab71255e296c34856bc triangles=28336
+12 parent=5 columns_1stfloor_02 p=4.20732,-0.0127998,-0.040899 s=1,1,1 mesh=23 slots=2 guid=dadec3bfb947b75fb9c4c920b5cba15f triangles=21780
+13 parent=5 columns_1stfloor_03 p=0.144185,-0.0118298,-0.0362015 s=1,1,1 mesh=25 slots=2 guid=e27a75664e7b8dfcb1ff1b17cb17a27c triangles=22100
+14 parent=5 columns_1stfloor_04 p=-3.89632,-0.0114815,-0.036934 s=1,1,1 mesh=27 slots=2 guid=d20cb131da5507f2fac00ed21d020b60 triangles=20908
+15 parent=5 columns_1stfloor_05 p=-8.08187,-0.0115141,-0.029486 s=1,1,1 mesh=29 slots=2 guid=c4519baeb88035f45b07a477da06de73 triangles=27896
+16 parent=5 lamp_1stfloor_entrance p=15.6108,3.88309,-0.918658 s=1,1,1 mesh=31 slots=2 guid=18efb168294069d1aa15fd808fd7f826 triangles=9436
+17 parent=5 lamps_1stfloor_03 p=-1.85234,4.82332,-4.79582 s=1,1,1 mesh=34 slots=2 guid=e4ba75801314b387d41b2e947e8b8828 triangles=5594
+18 parent=5 ornament_doors_01 p=15.4816,1.52004,1.4645 s=1,1,1 mesh=37 slots=4 guid=d11391771d49694bd81d70374aa24680 triangles=42839
+19 parent=5 ornament_doors_02 p=18.3114,0.887634,-3.91282 s=1,1,1 mesh=41 slots=3 guid=82e5ce84ce89d231ec9e0e4bd6af78fc triangles=26387
+20 parent=5 ornament_doors_03 p=6.19555,1.79438,6.13333 s=1,1,1 mesh=44 slots=3 guid=64356fa51d326fb15dcc5cb32f5034f8 triangles=32848
+21 parent=5 ornament_doors_04 p=2.18166,1.79438,6.13333 s=1,1,1 mesh=47 slots=3 guid=c6f75b0802365a1eb672db6f67aa1f0a triangles=32848
+22 parent=5 ornament_doors_05 p=-1.81836,1.79438,6.13333 s=1,1,1 mesh=50 slots=3 guid=448399e0aa597d87400b775ba35ece34 triangles=32848
+23 parent=5 ornament_doors_06 p=-5.77697,1.79438,6.13333 s=1,1,1 mesh=53 slots=3 guid=631f7a97bd1abc557b9b25c96bc6f795 triangles=32848
+24 parent=5 ornament_doors_07 p=-11.2302,1.79438,4.65764 s=1,1,1 mesh=56 slots=3 guid=4e57ebfc1400330b729512bec5c3c560 triangles=32848
+25 parent=5 ornament_doors_08 p=-9.72021,1.79438,6.1393 s=1,1,1 mesh=59 slots=3 guid=de22c7fde8f5d52bde366b30bd8d2059 triangles=32848
+26 parent=5 ornament_doors_09 p=-2.04853,1.8174,-6.09811 s=1,1,1 mesh=62 slots=4 guid=1772f9c4b1b7bdd3c6247d39552fbe42 triangles=48380
+27 parent=5 ornament_doors_10 p=-9.99221,1.81248,-4.94967 s=1,1,1 mesh=66 slots=6 guid=8c7538fb8bd5bf3ccfe4224152c17897 triangles=23486
+28 parent=5 ornament_stones_01 p=-1.2055,2.87937,-0.133932 s=1,1,1 mesh=72 slots=1 guid=ae3cf7ee29bd6007a5016664e2839489 triangles=62074
+29 parent=5 walls_1stfloor_01 p=2.00932,2.16937,-0.0362372 s=1,1,1 mesh=73 slots=4 guid=bdedf4af855b92f3101f8fa1974ff594 triangles=1383
+30 parent=5 wood_door p=19.4919,0.778618,0.0316568 s=1,1,1 mesh=77 slots=2 guid=652f8104e5110549784304c334f27efa triangles=81971
+31 parent=5 wooden_parts p=14.1603,1.83427,1.42187 s=1,1,1 mesh=79 slots=4 guid=047468df1b6e44ff0d89def8159609df triangles=50454
+32 parent=5 exterior p=1.87786,8.25914,0.496513 s=1,1,1 mesh=83 slots=3 guid=55818fe9fa196d8031a38b9883c19168 triangles=363
+33 parent=5 lamps_1stfloor_04 p=2.18303,4.82332,-4.79582 s=1,1,1 mesh=86 slots=2 guid=bf76c66103b20e049debba3a5e71344c triangles=5594
+34 parent=5 lamps_1stfloor_05 p=6.14651,4.82332,-4.79582 s=1,1,1 mesh=89 slots=2 guid=33bb59fcfd86d23281ea079e01d5334b triangles=5594
+35 parent=5 lamps_1stfloor_06 p=10.0273,4.82332,-4.79582 s=1,1,1 mesh=92 slots=2 guid=ff694eb5cb0ab53fa6bb46ffacc37043 triangles=5594
+36 parent=5 lamps_1stfloor_02 p=-5.92208,4.82332,-4.79454 s=1,1,1 mesh=95 slots=2 guid=c9432950a1c24dfef6f96b9f102134b2 triangles=5594
+37 parent=5 lamps_1stfloor_01 p=-9.82539,4.82332,-4.79454 s=1,1,1 mesh=98 slots=2 guid=65b6ff8a3f9dec93ffa3dba4a31e4de4 triangles=5594
+38 parent=5 lamps_1stfloor_00 p=-13.5982,4.56387,0.0626371 s=1,1,1 mesh=101 slots=2 guid=d6890990230828d66d153f6131d87bb2 triangles=5594
+39 parent=5 lamps_1stfloor_09 p=-1.85234,4.82332,4.73907 s=1,1,1 mesh=104 slots=2 guid=b3aa420f9a9fe346d4e6547f0277be24 triangles=5594
+40 parent=5 lamps_1stfloor_08 p=-5.92208,4.82332,4.74035 s=1,1,1 mesh=107 slots=2 guid=ab73fac76818dfa8768d3f34ab5139dd triangles=5594
+41 parent=5 lamps_1stfloor_07 p=-9.82539,4.82332,4.74035 s=1,1,1 mesh=110 slots=2 guid=631eb23e94426b0ab9f6950722e8837c triangles=5594
+42 parent=5 lamps_1stfloor_12 p=10.1581,4.82332,4.74387 s=1,1,1 mesh=113 slots=2 guid=5c428a21a53c0aa628fcc9fe0337e4ac triangles=5594
+43 parent=5 lamps_1stfloor_10 p=2.18303,4.82332,4.73907 s=1,1,1 mesh=116 slots=2 guid=53f2e2edefa8c7afb8e816cab47f4307 triangles=5594
+44 parent=5 lamps_1stfloor_11 p=6.14651,4.82332,4.73907 s=1,1,1 mesh=119 slots=2 guid=c93fde604e14ec5dbeb70a4d504484fc triangles=5594
+45 parent=5 floor_1stfloor_01 p=4.05542,-0.425194,-0.0454712 s=1,1,1 mesh=122 slots=4 guid=8693f8509719bd07a4e1b8c17e008b84 triangles=3105
+46 parent=5 arch_stones_04 p=2.00932,2.16937,-0.0362372 s=1,1,1 mesh=126 slots=10 guid=60dd92f04dac3c9257405fcbfdaa5c5a triangles=44060
+47 parent=5 arch_stones_05 p=0.113765,4.37389,-0.0168814 s=1,1,1 mesh=136 slots=3 guid=b2bb4501f8b2d99ccf029c087f0ddfb6 triangles=46295
+48 parent=5 lionhead p=-15.9458,0.228044,0.0993808 s=0.469963,0.469963,0.469963 mesh=139 slots=1 guid=c7bd0a3742d96257ac51c40cca0ca734 triangles=84602
+49 parent=5 decals_1st_floor p=-11.1168,1.171,-4.78029 s=1,1,1 mesh=140 slots=1 guid=9cd39f4024d09ec5d1a4deab3c0b1576 triangles=2660
+50 parent=5 walls_1stfloor_02 p=2.00932,2.16937,-0.0362372 s=1,1,1 mesh=141 slots=3 guid=b2278ebf3e095d06227a7943a24a4ac9 triangles=3953
+52 parent=51 column_2ndfloor_19 p=-8.14419,6.10016,0.0216693 s=1,1,1 mesh=144 slots=2 guid=1404077cb32786d98f0cc731fb662c76 triangles=50749
+53 parent=51 column_2ndfloor_20 p=-5.85693,6.10016,3.07245 s=1,1,1 mesh=146 slots=2 guid=6a3132381bdf8998cdc8970166c228d5 triangles=50745
+54 parent=51 column_2ndfloor_18 p=-5.87353,6.10016,-3.08482 s=1,1,1 mesh=148 slots=2 guid=fdf0456fd24c482c66590f8606ea57b3 triangles=50749
+55 parent=51 column_2ndfloor_17 p=-8.06954,6.10854,-2.99211 s=1,1,1 mesh=150 slots=3 guid=ce2c3f6a1070249ad205fa13fa6a759d triangles=52065
+56 parent=51 column_2ndfloor_16 p=-8.06395,6.06661,2.95103 s=1,1,1 mesh=153 slots=3 guid=c69d7e159ee13440ca2320bf5f06f2ec triangles=52008
+57 parent=51 ceiling_2ndfloor p=0.14895,9.55394,-0.0502521 s=1,1,1 mesh=156 slots=5 guid=027b0e6c339c25b1b45ea5f3ad309efb triangles=65885
+58 parent=51 arch_wall_2ndfloor p=0.25838,9.92578,-0.0209689 s=1,1,1 mesh=161 slots=3 guid=63baaebf01b81be8690b9f93a6fd9f45 triangles=74169
+59 parent=51 lamps_2ndfloor_05 p=10.0649,10.3834,4.72007 s=1,1,1 mesh=164 slots=2 guid=4c6e9784aa79d2e86582caf9c3aadb68 triangles=5858
+60 parent=51 stonewalls_2ndfloor_01 p=0.139063,7.85509,0.11463 s=1,1,1 mesh=167 slots=3 guid=2d66ade57ae763722a20fc59baaead1c triangles=400
+61 parent=51 ornament_stones_2ndfloor p=0.153206,8.43797,-0.0290543 s=1,1,1 mesh=170 slots=1 guid=d0eede2ac00ec55048bca4e332de4455 triangles=56880
+62 parent=51 column_2ndfloor_01 p=-3.85965,6.10854,3.10627 s=1,1,1 mesh=171 slots=3 guid=38bd66cac14c7de0a4a8bb4e612d3b49 triangles=44866
+63 parent=51 column_2ndfloor_02 p=0.142972,6.10776,3.10325 s=1,1,1 mesh=174 slots=4 guid=095c84b6702e5508a5aa00d7094d727e triangles=44866
+64 parent=51 column_2ndfloor_03 p=4.15814,6.10854,3.1034 s=1,1,1 mesh=178 slots=4 guid=7ef48f1a76fa601e271cd4e7cf9ffe6c triangles=44706
+65 parent=51 column_2ndfloor_04 p=8.31865,6.10854,2.97919 s=1,1,1 mesh=182 slots=4 guid=9aa1575ecffa7145a16593d01234d916 triangles=52065
+66 parent=51 column_2ndfloor_05 p=-3.85965,6.10854,-3.13147 s=1,1,1 mesh=186 slots=3 guid=15708339345e760c5aa3d92234efcd10 triangles=44706
+67 parent=51 column_2ndfloor_06 p=0.147401,6.10776,-3.12076 s=1,1,1 mesh=189 slots=4 guid=88e7bc3ab64202671e1c1d1d1942eb9a triangles=44866
+68 parent=51 column_2ndfloor_07 p=4.14801,6.10854,-3.1276 s=1,1,1 mesh=193 slots=3 guid=9f3bf61801e3e4edd309888cd037940f triangles=44866
+69 parent=51 column_2ndfloor_08 p=8.3178,6.10854,-2.98284 s=1,1,1 mesh=196 slots=3 guid=837c1971c0ecdac7ed8e6a7b45478532 triangles=52008
+70 parent=51 column_2ndfloor_09 p=-1.85939,6.10016,-3.08482 s=1,1,1 mesh=199 slots=2 guid=6dd9287dee6ad3a62ae033cd9c1bd03a triangles=50749
+71 parent=51 column_2ndfloor_10 p=2.1651,6.10016,-3.08482 s=1,1,1 mesh=201 slots=2 guid=96ffbc7affd4febd4654c8a197a04ef4 triangles=50749
+72 parent=51 column_2ndfloor_11 p=6.15365,6.10016,-3.08482 s=1,1,1 mesh=203 slots=2 guid=7b57ddcdcff3f0e170c2d01f652e273d triangles=50749
+73 parent=51 column_2ndfloor_12 p=-1.86838,6.10016,3.07245 s=1,1,1 mesh=205 slots=2 guid=f9c5477ccd5e0519cfa9ae8b84a5a4d2 triangles=50749
+74 parent=51 column_2ndfloor_13 p=2.15611,6.10016,3.07245 s=1,1,1 mesh=207 slots=2 guid=7c487734fa3f52a2e378a2e88e10469c triangles=50749
+75 parent=51 column_2ndfloor_14 p=6.17025,6.10016,3.07245 s=1,1,1 mesh=209 slots=2 guid=14a252e623d72d60bfe39f652678f572 triangles=50735
+76 parent=51 column_2ndfloor_15 p=8.4205,6.10016,-0.0306159 s=1,1,1 mesh=211 slots=2 guid=c616b49f232fec839bedfe79a26f90be triangles=50749
+77 parent=51 ornament_door_2ndfloor_01 p=2.27433,5.45093,-7.4685 s=1,1,1 mesh=213 slots=6 guid=3e151edafe00a14a1a2ca46807d71fd6 triangles=35897
+78 parent=51 ornament_door_2ndfloor_02 p=-1.84121,5.45093,-7.4685 s=1,1,1 mesh=219 slots=6 guid=1d0d5f56f475c2e39e0f5acf7d375347 triangles=35897
+79 parent=51 ornament_door_2ndfloor_04 p=6.16054,5.43258,-7.45278 s=1,1,1 mesh=225 slots=5 guid=d9cdcafd9a0676cb39b908feed17e280 triangles=26173
+80 parent=51 ornament_door_2ndfloor_05 p=10.0585,5.45093,-7.4685 s=1,1,1 mesh=230 slots=6 guid=8e9ab2cfe830152efab39067738c0265 triangles=35897
+81 parent=51 ornament_door_2ndfloor_06 p=-9.63487,5.45093,-7.4685 s=1,1,1 mesh=236 slots=6 guid=bc75502a8bacff3df1a41b30507803d7 triangles=35897
+82 parent=51 ornament_door_2ndfloor_07 p=-12.4032,5.43764,0.12462 s=1,1,1 mesh=242 slots=5 guid=77918e85072130d3b3b896f4430c432a triangles=32914
+83 parent=51 ornament_door_2ndfloor_08 p=-12.4217,5.45093,-4.70815 s=1,1,1 mesh=247 slots=6 guid=2a052ff16a6bbe7edb5d8b29d505a398 triangles=35897
+84 parent=51 ornament_door_2ndfloor_09 p=-12.4244,5.45093,4.69777 s=1,1,1 mesh=253 slots=6 guid=ce6f4e3b0ce2a25ef7a433abe02a4f91 triangles=35897
+85 parent=51 ornament_door_2ndfloor_10 p=2.25699,5.45093,7.43012 s=1,1,1 mesh=259 slots=6 guid=4d6b6f1a6dcf6daf14225506a4013a1f triangles=35897
+86 parent=51 ornament_door_2ndfloor_11 p=-1.91479,5.45093,7.43012 s=1,1,1 mesh=265 slots=6 guid=5e6dd69e1096205c7c09c4d29e2c1b1a triangles=35897
+87 parent=51 ornament_door_2ndfloor_12 p=-5.84104,5.45093,7.43012 s=1,1,1 mesh=271 slots=6 guid=467de08487f1b8e2626969b8a05d7383 triangles=35897
+88 parent=51 ornament_door_2ndfloor_13 p=-9.69232,5.45093,7.43012 s=1,1,1 mesh=277 slots=6 guid=97dfd9ef5c32060cc0d6f4365c7d3a4b triangles=35897
+89 parent=51 ornament_door_2ndfloor_14 p=10.0402,4.79676,7.40777 s=1,1,1 mesh=283 slots=5 guid=6207e229ef0a951d1be842ceb2d3cf92 triangles=26173
+90 parent=51 ornament_door_2ndfloor_15 p=12.7391,5.42255,4.73601 s=1,1,1 mesh=288 slots=5 guid=820ab450a465e5809aa922b4f177eedc triangles=26173
+91 parent=51 ornament_door_2ndfloor_03 p=-5.74291,5.45093,-7.4685 s=1,1,1 mesh=293 slots=6 guid=fb787e2ddb948d299f79d927875d4038 triangles=35897
+92 parent=51 lamps_2ndfloor_06 p=2.16354,10.3834,4.66425 s=1,1,1 mesh=299 slots=2 guid=6c1d711a76ded50e2245b9496cd844e9 triangles=5858
+93 parent=51 lamps_2ndfloor_07 p=-5.84736,10.3834,4.67038 s=1,1,1 mesh=302 slots=2 guid=e7bfd5d46208101f647ff27dac049b7b triangles=5858
+94 parent=51 lamps_2ndfloor_08 p=-9.77346,10.3834,4.74023 s=1,1,1 mesh=305 slots=2 guid=89b97de4815e1481b67449670a87cc2e triangles=5858
+95 parent=51 lamps_2ndfloor_03 p=2.16345,10.3834,-4.69535 s=1,1,1 mesh=308 slots=2 guid=f449de6df0f09456d0bb87c82eb52473 triangles=5858
+96 parent=51 lamps_2ndfloor_02 p=-5.85259,10.3834,-4.66156 s=1,1,1 mesh=311 slots=2 guid=90f6b593407c421082405602db77eb81 triangles=5858
+97 parent=51 lamps_2ndfloor_01 p=-9.75371,10.3834,-4.72646 s=1,1,1 mesh=314 slots=2 guid=9a20828f4dac5dd7c66dda0bdcf4afff triangles=5858
+98 parent=51 lamps_2ndfloor_04 p=10.0662,10.3834,-4.72452 s=1,1,1 mesh=317 slots=2 guid=cd99225edbada14777d836011bc5318d triangles=5858
+99 parent=51 stonewalls_2ndfloor_02 p=0.139063,7.85509,0.11463 s=1,1,1 mesh=320 slots=2 guid=ec8858ce77809dee6cee2d07de66b096 triangles=76677
+100 parent=51 decals_2nd_floor p=0.167924,8.07901,-0.308495 s=1,1,1 mesh=322 slots=1 guid=c85484bb0271aea7fa796d79a9c87e27 triangles=4512
+102 parent=101 roof_floor_03_01 p=-11.0286,16.175,5.49877 s=1,1,1 mesh=323 slots=2 guid=fd44c9813cd8ea930fa478796068c098 triangles=66547
+103 parent=101 roof_floor_03_02 p=-0.820698,16.175,5.49877 s=1,1,1 mesh=325 slots=2 guid=8282a275e02cc0ec35cb2017133f3c65 triangles=64676
+104 parent=101 orn_windows_01 p=1.02203,12.1847,0.00669388 s=1,1,1 mesh=327 slots=4 guid=3070076593ba82b667fec0c72fe8886f triangles=20494
+105 parent=101 sponza_ornament p=-7.89951,13.3263,-0.0111138 s=1,1,1 mesh=331 slots=1 guid=f5f9132ef76c146bc623b7949380c604 triangles=71594
+106 parent=101 ornament_roof p=0.899391,15.9425,-0.00301392 s=1,1,1 mesh=332 slots=2 guid=fa83d98c9b79c9c9b73b3b745015699c triangles=45713
+107 parent=101 roof_floor_03_09 p=-11.0321,16.1723,-5.47214 s=1,1,1 mesh=334 slots=2 guid=fa272a281a190c55edd8fb750205d2d2 triangles=68012
+108 parent=101 roof_floor_03_10 p=-0.840328,16.175,-5.47674 s=1,1,1 mesh=336 slots=2 guid=67819d56160c63c96451eca830127ec5 triangles=66547
+109 parent=101 roof_floor_03_05 p=10.2044,16.7035,0.144669 s=1,1,1 mesh=338 slots=7 guid=7183d345db80e4df38b73d457c61d130 triangles=68555
+110 parent=101 roof_floor_03_06 p=-11.9657,16.8848,0.0180225 s=1,1,1 mesh=345 slots=4 guid=43a71c197953daf6d3a80bb5cc3a5369 triangles=78981
+Collision objects=70 shapes=227 triangles=393416
+111 parent=101 roof_floor_03_07 p=7.44607,16.175,5.49877 s=1,1,1 mesh=349 slots=2 guid=2dc3856d2892b4b8b2c5b9141a3ff500 triangles=40218
+112 parent=101 roof_floor_03_08 p=7.51724,16.175,-5.47675 s=1,1,1 mesh=351 slots=2 guid=996be79a359548d2279d2d2f74db9c70 triangles=39209
+113 parent=101 walls_floor_03 p=1.44625,13.4525,0.0494467 s=1,1,1 mesh=353 slots=5 guid=9bd5b790681c7b480d636718acff8295 triangles=51483
+114 parent=101 orn_windows_08 p=8.24848,14.9307,0.0340173 s=1,1,1 mesh=358 slots=3 guid=81c9abf7a29851485f37f6208cc9a780 triangles=1624
+115 parent=101 orn_windows_07 p=0.127338,14.9295,-2.91623 s=1,1,1 mesh=361 slots=3 guid=714b4f150683364e8c40ca1dbc96e67c triangles=4872
+116 parent=101 orn_windows_06 p=0.208763,14.9295,2.94205 s=1,1,1 mesh=364 slots=3 guid=e7a479c406928164e1b7aadd8bdd8723 triangles=4872
+117 parent=101 orn_windows_05 p=1.02203,12.1847,0.00669388 s=1,1,1 mesh=367 slots=4 guid=a2e232c429741a8f23af1e55bd918eda triangles=20494
+118 parent=101 orn_windows_04 p=1.02203,12.1847,0.00669388 s=1,1,1 mesh=371 slots=4 guid=6d6012896dfcaa374d2ee1538b01b537 triangles=20494
+119 parent=101 orn_windows_03 p=1.02203,12.1847,0.00669388 s=1,1,1 mesh=375 slots=4 guid=a6beee7d0f115244cf2a81edb0ba5c59 triangles=20494
+120 parent=101 orn_windows_02 p=1.02203,12.1847,0.00669388 s=1,1,1 mesh=379 slots=4 guid=d1e6f53911b717366676311f8235dace triangles=10247
+121 parent=101 decals_3rd_floor p=0.0910236,12.53,0.181522 s=1,1,1 mesh=383 slots=1 guid=12a6e5a048337525ac6bca90ade65699 triangles=966
+TOTAL_AUTHORED_TRIANGLES=3738920 imported_draws=405
+Library draws=630 ids=630 pivots=1890 names=630
+ACCEPTED objects=163 bodies=70 shapes=227 collision_triangles=393416 floor_y=-9.23872e-07 player=160 camera=162 canvas=163 walk_distance=5.70001 jump_height=1.06995 look_yaw=114.438 visual_triangles=3739944

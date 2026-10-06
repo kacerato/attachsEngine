@@ -1,0 +1,22 @@
+[1/21] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[3/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_character_authoring.cpp.obj
+[4/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[5/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_dynamic_motor_authoring.cpp.obj
+[6/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_collider_authoring.cpp.obj
+[7/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[8/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[9/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[10/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[11/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[12/21] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[13/21] Linking CXX static library libaether_editor.a
+[14/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_gui.cpp.obj
+[15/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_character_authoring.cpp.obj
+[16/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_dynamic_body_motor.cpp.obj
+[17/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_convex_bake.cpp.obj
+[18/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj
+[19/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp.obj
+[20/21] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_u11_integral.cpp.obj
+[21/21] Linking CXX executable aether_gui_tests.exe

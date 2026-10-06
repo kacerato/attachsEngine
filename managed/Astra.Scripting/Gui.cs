@@ -1,7 +1,35 @@
 using System.Numerics;
 namespace Astra;
 
-public enum GuiKind : uint { Panel, Text, Button, Toggle, Slider, Progress, Image, HBox, VBox, Grid }
+public enum GuiKind : uint { Panel, Text, Button, Toggle, Slider, Progress, Image, HBox, VBox, Grid, Joystick, ActionButton, LookArea }
+public enum GuiStickMode : uint { Fixed, Floating, Dynamic }
+public enum GuiStickAxis : uint { Free, Horizontal, Vertical }
+public enum GuiStickGate : uint { Circle, Square }
+public readonly record struct GuiControlSettings(GuiStickMode Mode,GuiStickAxis Axis,GuiStickGate Gate,
+    float InputRadius,float BaseRadius,float KnobRadius,float Deadzone,float OuterDeadzone,float Exponent,float Sensitivity,float ReturnSeconds,bool ShowBase,bool ShowKnob) {
+    public static GuiControlSettings Default => new(GuiStickMode.Fixed,GuiStickAxis.Free,GuiStickGate.Circle,80,80,28,.12f,0,1,1,.12f,true,true);
+}
+public readonly record struct GuiControlSnapshot(Vector2 Value,bool Pressed,uint Pointer,uint Device);
+public interface IGuiControlAccess {
+    bool GuiControl(uint world,uint node,bool write,ref GuiControlSettings settings,out GuiControlSnapshot snapshot);
+    string ReadGuiControlText(uint world,uint node,uint field);
+    bool WriteGuiControlText(uint world,uint node,uint field,string value);
+}
+public interface IGuiInputAccess {
+    Vector2 ReadGuiInputAxis(uint world,string action);
+    bool ReadGuiInputButton(uint world,string action,uint query);
+    InputActionState ReadGuiInputState(uint world,string action);
+}
+/// <summary>Read the Canvas receiver's sampled action map. Runtime policy is inherited from Input.</summary>
+public readonly struct GuiInputAccess(ISceneAccess scene) {
+    private IGuiInputAccess Backend=>scene as IGuiInputAccess??throw new NotSupportedException("Canvas receiver input unavailable.");
+    public Vector2 Axis2(string action)=>Backend.ReadGuiInputAxis(scene.WorldId,action);
+    public float Axis(string action)=>Axis2(action).X;
+    public bool Pressed(string action)=>Backend.ReadGuiInputButton(scene.WorldId,action,0);
+    public bool JustPressed(string action)=>Backend.ReadGuiInputButton(scene.WorldId,action,1);
+    public bool JustReleased(string action)=>Backend.ReadGuiInputButton(scene.WorldId,action,2);
+    public InputActionState ActionState(string action)=>Backend.ReadGuiInputState(scene.WorldId,action);
+}
 public enum GuiEventKind : uint { Click = 1, ValueChanged = 2 }
 public readonly record struct GuiSnapshot(uint World,uint Id,GuiKind Kind,bool Visible,bool Enabled,
     float Value,float Minimum,float Maximum);
@@ -58,10 +86,23 @@ public interface IGuiAccess
     bool GuiProperties(uint world,uint node,bool write,ref GuiLayout layout,ref GuiStyle style);
     string ReadGuiText(uint world,uint node,bool name);
 }
+public interface IGuiInstanceAccess {
+    ulong GuiInstanceId {get;}
+    ISceneAccess GuiSource {get;}
+    ISceneAccess GuiForCanvas(uint world,ulong owner,ulong component);
+}
 
 /// <summary>UI in this Play session. Preview/Play owns a copy of the authored .aeui.</summary>
 public sealed class GuiAccess(ISceneAccess scene)
 {
+    public GuiInputAccess Input=>new(scene);
+    public ulong InstanceId => scene is IGuiInstanceAccess i?i.GuiInstanceId:0;
+    public GuiAccess ForCanvas(GameObject owner,ulong componentInstance=0) {
+        ArgumentNullException.ThrowIfNull(owner);
+        if(scene is not IGuiInstanceAccess backend)throw new NotSupportedException("Host does not provide scene UI instances.");
+        if(!owner.BelongsTo(backend.GuiSource)||!owner.IsAlive)throw new WorldException(WorldStatus.StaleHandle,"canvas owner");
+        return new(backend.GuiForCanvas(scene.WorldId,owner.ObjectId,componentInstance));
+    }
     private IGuiAccess Backend => scene as IGuiAccess ?? throw new NotSupportedException("Host does not provide game UI.");
     public string Diagnostic => scene is IGuiBehaviorAccess backend?backend.ReadGuiDiagnostic(scene.WorldId):throw new NotSupportedException("Host does not provide UI diagnostics.");
     public GuiCanvas Canvas {
@@ -98,6 +139,7 @@ public sealed class GuiAccess(ISceneAccess scene)
 /// <summary>Stable ID and world identity; removed nodes and previous Play handles are rejected.</summary>
 public readonly struct GuiElement
 {
+    public ulong InstanceId => Scene is IGuiInstanceAccess i?i.GuiInstanceId:0;
     internal ISceneAccess? Scene { get; }
     internal uint World { get; }
     public uint Id { get; }
@@ -111,6 +153,21 @@ public readonly struct GuiElement
     }
     public GuiSnapshot Snapshot => Command(1);
     public GuiKind Kind => Snapshot.Kind;
+    private (GuiControlSettings Settings,GuiControlSnapshot Snapshot) Control(bool write,GuiControlSettings settings=default) {
+        if(Id==0||Scene is not IGuiControlAccess backend)throw new NotSupportedException("UI input controls unavailable.");
+        if(!backend.GuiControl(World,Id,write,ref settings,out var snapshot))throw new WorldException(Scene.LastStatus,"UI input control");
+        return (settings,snapshot);
+    }
+    public GuiControlSettings ControlSettings {get=>Control(false).Settings;set=>Control(true,value);}
+    public GuiControlSnapshot Input => Control(false).Snapshot;
+    private string ControlText(uint field)=>Scene is IGuiControlAccess b?b.ReadGuiControlText(World,Id,field):throw new NotSupportedException("UI input controls unavailable.");
+    private void ControlText(uint field,string value) {
+        ArgumentNullException.ThrowIfNull(value);
+        if(Scene is not IGuiControlAccess b||!b.WriteGuiControlText(World,Id,field,value))throw new WorldException(Scene?.LastStatus??WorldStatus.InvalidArgument,"UI input binding");
+    }
+    public string InputAction {get=>ControlText(0);set=>ControlText(0,value);}
+    public string BaseImage {get=>ControlText(1);set=>ControlText(1,value);}
+    public string KnobImage {get=>ControlText(2);set=>ControlText(2,value);}
     public float Value { get => Snapshot.Value; set { if(!float.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value));Command(3,value:value); } }
     public bool Visible { get => Snapshot.Visible; set => Command(4,value:value?1:0); }
     public bool Enabled { get => Snapshot.Enabled; set => Command(5,value:value?1:0); }

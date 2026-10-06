@@ -1,0 +1,241 @@
+{
+  "format": 1,
+  "date": "2026-10-06",
+  "package": "U11 — editor e diagnóstico",
+  "status": "accepted_complete",
+  "u11_complete": true,
+  "remaining_u11": [],
+  "engine_complete": false,
+  "repository": {
+    "remote": "https://github.com/kacerato/attachsEngine.git",
+    "branch": "codex/gameplay-runtime",
+    "head_before_publication": "d12c2ea2ed4f19a690ed99410ed865407aec024a",
+    "publication": "local checkout; no commit/push in this block; unrelated user changes preserved"
+  },
+  "plan": "docs/planos/ui-universal/U11-FECHAMENTO-INTEGRAL-2026-10-06.md",
+  "original_roadmap_sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+  "capabilities": {
+    "new_component_types": 0,
+    "new_schema_properties": 0,
+    "new_integrated_icons": 3,
+    "faces_vertices": "full geometry -> BVH source identity -> isolated draft/XYZ/local grips -> Jolt -> immutable GLB/real registry -> same UID/owner -> history/archive",
+    "diagnostics": "GameWorld authority; actual Jolt COM/probes/current Character capsule; accepted motor support or labeled query; cached authoring; 10Hz Play with actual camera",
+    "lifecycle": "exclusive capture, second pointer, Cancel/focus/selection/project/Play, stale/error refusal"
+  },
+  "host": {
+    "focused": {
+      "passed": 5,
+      "total": 5,
+      "log": "focused-tests-final.log"
+    },
+    "regression": {
+      "passed": 100,
+      "total": 100,
+      "log": "gui-regression-final.log"
+    },
+    "build": "host-build-final.log",
+    "source_preservation": "performance-preservation.json",
+    "device_archive_solver": [
+      "retained-face-reopen.log",
+      "retained-vertex-reopen.log"
+    ],
+    "managed_boundary": "ABI44 layout unchanged; C# query identity has prior U11 acceptance. No new SDK expansion claimed."
+  },
+  "android": {
+    "device": "POCO F7 / Xiaomi 25053PC47G / onyx",
+    "os": "Android 16",
+    "orientation": "landscape",
+    "resolution": [
+      2772,
+      1280
+    ],
+    "package": "dev.aether.editor",
+    "build": "Release / arm64-v8a",
+    "build_log": "android-build-final.log",
+    "install_log": "install-final.log",
+    "built_apk_sha256": "74cc3895afa18fc7f0bb31ebb65e5a91616e812baf3a0f26711cafa0bf5b7011",
+    "installed_base_apk_sha256": "74cc3895afa18fc7f0bb31ebb65e5a91616e812baf3a0f26711cafa0bf5b7011",
+    "ui_captures": [
+      {
+        "file": "23-final-character-authoring.png",
+        "sha256": "226b0af65dfeab42352b170b4c1c631e786c01bd953a7328c51c49fe634cbed3",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Current Jolt capsule; pre-step Character, no fake COM or ground."
+      },
+      {
+        "file": "27-final-character-overlay-inspect.png",
+        "sha256": "92d118fa883cd502348acae95f1dacc11231a07ad5f49f6ad544aecaf7ce797c",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Actual Play camera, white capsule, green support owner 9; Character authority; no Body COM."
+      },
+      {
+        "file": "28-final-character-filter-details.png",
+        "sha256": "130249078b4b2de099793b967348ad8583a56489eeeda752e97a5c1578892f38",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Collision filter removes capsule, support remains; More shows cost/cache state."
+      },
+      {
+        "file": "29-final-body-authoring.png",
+        "sha256": "76f0718e0345c83e431f4d585cbcab8c642d8db99f5107d68d93736027c3db78",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Blue visual, white edited hull, yellow actual COM, green query probes; owner 2."
+      },
+      {
+        "file": "30-final-body-play.png",
+        "sha256": "de9086dd382e387db7cc314f53324edf5811dc50b1db98971c7fbb9840a873fd",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Play camera alignment; COM .604/0/1.249; actual motor support owner 9."
+      },
+      {
+        "file": "32-final-curved-conversion.png",
+        "sha256": "55761edd0d190e91b03d45789fee3e74eabfe1b75585b5700f6ad8fbd594f683",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Explicit approximation/conversion; 114 vertices, 128 faces, 224 triangles."
+      },
+      {
+        "file": "33-final-vertex-selected.png",
+        "sha256": "63b1d45f6cd71f210176bd5231b7aad183b0ef99004001e5059bff3a6f036a5f",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Actual vertex picking, coordinates and local grips."
+      },
+      {
+        "file": "34-final-vertex-edited.png",
+        "sha256": "c3aa755fa4df44347a5d8464da811257764dbd01da656f0628e6db855d61d355",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Native numeric edit Y=1.1; validated hull, visual sphere preserved."
+      },
+      {
+        "file": "35-final-vertex-applied.png",
+        "sha256": "e9abf37d3eb3eacecdcc2a03bdb2814204267cbb06fe4af174e0843eab1c8691",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Published immutable resource, same Collider UID3, real Save."
+      },
+      {
+        "file": "37-final-scale256.png",
+        "sha256": "2259bf3438b2b10abdccffa311c2197a6f2342d8dde5f30eb472c3e020cf97dc",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "256 actual Colisores, solver COM/probes, useful viewport."
+      },
+      {
+        "file": "38-final-scale256-cost.png",
+        "sha256": "2284d84f9aae30ff6cebc96d63d109dc04f6073b5e083ae6caf49e06136ed09c",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "253 cylinders + box + sphere + capsule; 256 probes; budget 9600; one authoring build; costs."
+      },
+      {
+        "file": "39-final-diagnostic-closed.png",
+        "sha256": "eb97fb8042aad41ba54fc4c8beae0891b88f96d623349cad36b6cf274b730ffb",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Route closed, diagnostic overlays removed; existing Inspector restored."
+      },
+      {
+        "file": "41-final-face-selection.png",
+        "sha256": "079b750fdc2553ebe9d381c24c42417c2c9ed8be699b0c7f238c654e629fe6f3",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Final APK BVH face picking; 8 vertices/6 faces; X=1.25."
+      },
+      {
+        "file": "42-final-gesture-released.png",
+        "sha256": "ea5a881680ca9dfed0e35a675e42db7d9a2d58a96ce2c06390915ad49fef4bb3",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "After UP X=3.192/Y=0/Z=-.5, real validated hull, target preserved."
+      },
+      {
+        "file": "43-final-completed.png",
+        "sha256": "1bce75266491b977b78438b69f55490507e2a0ed6a4965c3541194a5f2039a8c",
+        "reviewed": true,
+        "accepted": true,
+        "observation": "Saved authoring, no draft; discarded gestures did not change persisted scene."
+      }
+    ],
+    "save_history": {
+      "device-undo": "2bc05d64549da81894a8c9dc0d55ec68c02f4ff65612d3e62d385cd6db4f574a",
+      "device-redo": "3080238caa110c203b984aa4add374d265f5fe21949907da9d01e25b521a645b",
+      "device-vertex-undo": "3080238caa110c203b984aa4add374d265f5fe21949907da9d01e25b521a645b",
+      "device-vertex-redo": "27222429b20275d69b6348f84f4147a304644446cb9aedd6eaa15b73cb36ca2e",
+      "device-final": "27222429b20275d69b6348f84f4147a304644446cb9aedd6eaa15b73cb36ca2e"
+    },
+    "runtime_boundary": "Physical Play COM/support/capsule observed; edited Android archives reimported with real registry/Jolt raycast on host. No physical script query probe or sustained FPS/thermal claim."
+  },
+  "video": {
+    "final_apk_frames_reviewed": 530,
+    "skipped_frames": 0,
+    "records": [
+      {
+        "video": "gestures-final.mp4",
+        "review": "frames-final/review.json",
+        "frames": 295,
+        "sha256": "d46ed2de295994947de49469f1b8541cc8ebac24e00b1a1d005ebdb2f4e9340b"
+      },
+      {
+        "video": "gestures-release-final.mp4",
+        "review": "frames-release-final/review.json",
+        "frames": 235,
+        "sha256": "cf2474bb9f5d6d6da38647c9cff6cee63e5a0a3bb4693aaab7e5ccea80997693"
+      }
+    ],
+    "intermediate_frames_reviewed": 478,
+    "intermediate_record": "frames-gestures/review.json",
+    "method": "Every decoded frame extracted without sampling; every indexed viewport/coordinate cell visually inspected, repeated frames retained, PTS/hash/phase/review per frame. Full boundary frames inspected. ROI compression differences are auxiliary, not standalone state proof. Second gesture cuts before UP in first final recording; separate release recording supplies complete UP/hold."
+  },
+  "contract_limits": {
+    "source_triangles": 100000,
+    "topology_draw_triangles": 800,
+    "topology_draw_points": 512,
+    "component_draw_segments": 9600,
+    "scale_parts_accepted": 256,
+    "curved_primitives": "explicit polygon approximation/conversion to Mesh",
+    "concave": "static mesh preserves cavities; dynamic concave requires U04 decomposition",
+    "measurements": "single host/device samples, not sustained FPS or thermal guarantees"
+  },
+  "prior_vertical_chain_evidence": [
+    "../query-identity/acceptance.json",
+    "../occlusion/acceptance.json",
+    "../collider-handles/acceptance.json",
+    "../body-owners/acceptance.json"
+  ],
+  "icon_atlas_sha256": "31b351fb7dc908042edfc31136926bbd959461d64610e8bbc431a42c918bb739",
+  "source_hashes": {
+    "native/editor/editor_collider_topology.h": "7a3bccb4c51a74aa910ff184316a1eaac1f7fc03254d424e84369068d9ce1cf8",
+    "native/editor/editor_collider_authoring.cpp": "7622e218f59db1d75868f2b2a5421d2aeb9008151380f189fb7a130745f7a8f1",
+    "native/editor/editor_collider_authoring_ui.inl": "a8ba6a1bc183ec6dfcc5f4cd4a2c8939964bd90ae7f7239456d126b21b08512f",
+    "native/editor/editor_pick_mesh.h": "3e921907f4da37fe52ed0b0b14e64d4b993ca2f4435e65a47e87161eb3dbb57e",
+    "native/editor/editor_component_visuals.h": "c6f6075af00b6efd3ceea39ab4745ae8a3ffb8b41afae0c74e19a9ec956404ed",
+    "native/editor/editor_session.cpp": "dda1bc0d3187eaade25b9bba8271c6c19dda0efde08066023afb16e8d6d0f262",
+    "native/editor/editor_session.h": "d9686a526f6e124f1044637ea7affe66dfbb3daede22d5a21578d65bb58890ec",
+    "native/editor/editor_screen.cpp": "2f44c999856637c15367dfc337a5fdbcac81c7d3cc52cc70dad246c3bc57bfdd",
+    "native/editor/editor_screen.h": "2f26288d46c1f02b98f5846ee183d0aefffc090e3ff536c64e30c3505fc3c196",
+    "native/editor/editor_play_scene.h": "0103c5c8182d388646ab79b92d80a274f78bc8d79398aa15b11d9f91433ec1bd",
+    "native/runtime/scene_physics_diagnostic.cpp": "58e54b053904fb7c3319f4f0f7c227a5e58a920d466a1ec32b53fbaf219fcb89",
+    "native/runtime/scene_physics.h": "84008b2bbf6449f5aa96f1b5c92e17e19a7c99fd3bf378b25d851202a04e7bbe",
+    "native/runtime/scene_dynamic_motor.cpp": "50b4e1e878a853d6302243a3cd1ed45c908b1189daf298bf642bc6e3f689b35f",
+    "native/physics/character_motor.cpp": "983cde044da64b28932aa3b988d2eaf7b45d46082fd74525ff6a100bdb55ad96",
+    "native/physics/character_motor.h": "3b0c04a6bf99768b41c03da13040c8b5b55d88db56efa0d2982683a465e5091e",
+    "native/physics/jolt_bridge.cpp": "d5b0d010499bf004323c2b3a9255bff7b8204444e71a131f50c8ea3660690d6d",
+    "native/physics/jolt_bridge.h": "906dff682d6378fa6bdd51d9cd7a0239547e54b1da848b7fad60be31f073f031",
+    "native/resources/convex_bake.cpp": "b5413b453d9ad5662955241365044ceff0fce0dd499f09771fe956a58e6f9880",
+    "native/resources/convex_bake.h": "537dffd100b178df136661d9dc1938c44cca33b47c7fbe1048083c4f2bfef0b6",
+    "native/ui/ui_icon_id.h": "8aba07255927366559f79e3bec76fbc53b12cc825fbc87fd0465c1c5401579b5",
+    "native/ui/ui_icon_id.cpp": "a410497da1d582bcc18d118a634a2a233705eb4911105b3d80787c54f52bdb86",
+    "native/CMakeLists.txt": "779ae1d269e83913d1a897501e320626cbc58f4cd0a47df9788b5467a6381573",
+    "tests/native/test_u11_integral.cpp": "a9d4a18851449babb9f04edb8e27731fd8dd4421e075f15d6b939d88e8978a3c",
+    "tests/native/gui_preview_main.cpp": "5d0206dca2d69fa2d09158f3f620a9099d0eb73c3159e8a45f5aad9a2f7e9444",
+    "tools/validation/U11Touch.java": "99c4cd23349276820e2bbea45a18f0d0391efe76e74f84708a065c04df1597a8",
+    "tools/validation/review-u11-frames.py": "950ee60906a9a59d1c6afdd4f2057edf2621448efffe4db57bb678583fa6cea2",
+    "tools/generate-collider-authoring-icons.py": "426e52eb45d13a2d926be4d1a4056d1b168591493913469cf430b5562663a8bc"
+  }
+}

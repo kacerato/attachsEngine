@@ -1,0 +1,81 @@
+[0/1] Re-running CMake...
+Interprocedural optimizations are turned on
+-- CMake C compiler: GNU
+-- CMake C++ compiler: GNU
+-- CMake system name: Windows
+-- CMake host system processor: AMD64
+-- Box2D on MinGW
+-- Configuring done (24.8s)
+-- Generating done (16.3s)
+-- Build files have been written to: C:/Users/donod/Downloads/atchengine/build/editor-host
+[1/22] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[3/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_character_authoring.cpp.obj
+[4/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[5/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[6/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_dynamic_motor_authoring.cpp.obj
+[7/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[8/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[9/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[10/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[11/22] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[12/22] Linking CXX static library libaether_editor.a
+[13/22] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_gui.cpp.obj
+[14/22] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_character_authoring.cpp.obj
+[15/22] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_dynamic_body_motor.cpp.obj
+[16/22] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_convex_bake.cpp.obj
+[17/22] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj
+[18/22] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp.obj
+FAILED: [code=1] CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp.obj 
+C:\Users\donod\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\c++.exe -DAETHER_REPOSITORY_ROOT=\"C:/Users/donod/Downloads/atchengine/native/..\" -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -IC:/Users/donod/Downloads/atchengine/native/../tests/native -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/build/editor-host/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/Downloads/atchengine/native/third_party/imgui -g -std=c++20 -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -Wa,-mbig-obj -g0 -MD -MT CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp.obj -MF CMakeFiles\aether_gui_tests.dir\C_\Users\donod\Downloads\atchengine\tests\native\test_collider_handles.cpp.obj.d -o CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp.obj -c C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp: In member function 'bool {anonymous}::HandlesFixture::setup()':
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:34:7: error: this 'if' clause does not guard... [-Werror=misleading-indentation]
+   34 |       if(!g.applyEntityValues(id,value))return false;if(n)sibling=id;else part=id;
+      |       ^~
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:34:54: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+   34 |       if(!g.applyEntityValues(id,value))return false;if(n)sibling=id;else part=id;
+      |                                                      ^~
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp: In member function 'const ae::scene::Collider& {anonymous}::HandlesFixture::collider() const':
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:46:85: error: passing 'const ae::editor::EditorSession' as 'this' argument discards qualifiers [-fpermissive]
+   46 |   const scene::Collider &collider() const{return *inspectedCollider(session.document(),part,1);}
+      |                                                                     ~~~~~~~~~~~~~~~~^~
+In file included from C:/Users/donod/Downloads/atchengine/tests/native/convex_bake_fixture.h:2,
+                 from C:/Users/donod/Downloads/atchengine/tests/native/collider_occlusion_fixture.h:2,
+                 from C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:2:
+C:/Users/donod/Downloads/atchengine/native/editor/editor_session.h:433:19: note:   in call to 'ae::editor::EditorDocument& ae::editor::EditorSession::document()'
+  433 |   EditorDocument &document() noexcept { return document_; }
+      |                   ^~~~~~~~
+In file included from C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:1:
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp: In function 'void collider_handles_pointer_archive_single_undo_cancellation_and_jolt()':
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:120:39: error: 'ToolTranslate' is not a member of 'ae::editor::EditorWidget'
+  120 |   AE_EXPECT_TRUE(f.tool(EditorWidget::ToolTranslate)&&f.handle(ColliderHandleKind::CenterX,h),"local center tool");
+      |                                       ^~~~~~~~~~~~~
+C:/Users/donod/Downloads/atchengine/tests/native/harness.h:46:11: note: in definition of macro 'AE_EXPECT_TRUE'
+   46 |     if (!(cond)) {                                                           \
+      |           ^~~~
+C:/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp:140:39: error: 'ToolTranslate' is not a member of 'ae::editor::EditorWidget'
+  140 |   AE_EXPECT_TRUE(f.tool(EditorWidget::ToolTranslate)&&f.handle(ColliderHandleKind::CenterX,h),"commit local center");
+      |                                       ^~~~~~~~~~~~~
+C:/Users/donod/Downloads/atchengine/tests/native/harness.h:46:11: note: in definition of macro 'AE_EXPECT_TRUE'
+   46 |     if (!(cond)) {                                                           \
+      |           ^~~~
+cc1plus.exe: all warnings being treated as errors
+[19/22] Building CXX object CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj
+FAILED: [code=1] CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj 
+C:\Users\donod\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\c++.exe -DAETHER_REPOSITORY_ROOT=\"C:/Users/donod/Downloads/atchengine/native/..\" -DMA_NO_FLAC -DMA_NO_MP3 -DMA_NO_RESOURCE_MANAGER -IC:/Users/donod/Downloads/atchengine/native/../tests/native -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/Box2D/src/../include -IC:/Users/donod/Downloads/atchengine/build/editor-host/third_party/Box2D/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/miniaudio -isystem C:/Users/donod/Downloads/atchengine/native/third_party/imgui -g -std=c++20 -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -Wa,-mbig-obj -g0 -MD -MT CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj -MF CMakeFiles\aether_gui_preview.dir\C_\Users\donod\Downloads\atchengine\tests\native\gui_preview_main.cpp.obj.d -o CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj -c C:/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp
+C:/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp: In function 'int main(int, char**)':
+C:/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp:79:9: error: this 'if' clause does not guard... [-Werror=misleading-indentation]
+   79 |         if(!collider)return 117;collider->owner=2;value.transform.position[0]=n?1.5f:-1.5f;value.transform.position[2]=3;
+      |         ^~
+C:/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp:79:33: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+   79 |         if(!collider)return 117;collider->owner=2;value.transform.position[0]=n?1.5f:-1.5f;value.transform.position[2]=3;
+      |                                 ^~~~~~~~
+C:/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp:96:7: error: this 'if' clause does not guard... [-Werror=misleading-indentation]
+   96 |       if(!s.saveSceneView("Handles"))return 116;s.setCameraPose(curved,0,.2f);if(!s.saveSceneView("Curvas"))return 116;
+      |       ^~
+C:/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp:96:49: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+   96 |       if(!s.saveSceneView("Handles"))return 116;s.setCameraPose(curved,0,.2f);if(!s.saveSceneView("Curvas"))return 116;
+      |                                                 ^
+cc1plus.exe: all warnings being treated as errors
+ninja: build stopped: subcommand failed.

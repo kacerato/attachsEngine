@@ -1,0 +1,34 @@
+{
+  "apk": "build/play-performance-20261005/play-performance-final.apk",
+  "sha256": "C128B72470C81288E45C682E943EC47C1466A1746A58641E7B3493D9D925D766",
+  "build": "Android assembleRelease successful",
+  "install": "adb install -r successful",
+  "candidateDefault": false,
+  "fpsGainAccepted": false,
+  "comparison": "GPU difference 0.2234%, insufficient; initial B context limitation recorded",
+  "deviceAcceptance": "correct Play context/player camera, zero scene reuse, full image; normal editor reopened",
+  "renderingHash": "0A0E76B1456C0D2C36C7B944078073EC93810C05A4EC819A5176AA9588784928",
+  "sceneHash": "10F98AC40F3F4B5CB02CFD960059498BB57FBF8828F9F3BB8AA719961ED468BC",
+  "files": [
+    {
+      "path": "native/platform/android/instanced_renderer.h",
+      "sha256": "EE88BCAE079AD2E7DE0075195AF9CC032DA5346E103FFCCA08A65ADCC9B027C6"
+    },
+    {
+      "path": "native/platform/android/instanced_renderer.cpp",
+      "sha256": "BFBD8A70CF10A5735AB479B9A4224D619DD6AFE91C9418DC57B68794C243B4A2"
+    },
+    {
+      "path": "native/platform/android/android_main.cpp",
+      "sha256": "3D3BA510DD5EC311D34FF26B82CFFCA27FDC75597883CC54DD0BCB2421E534F1"
+    },
+    {
+      "path": "android/app/src/main/java/dev/aether/editor/shell/AstraShellActivity.java",
+      "sha256": "41DAF57A8F8B848ADFB5048BDED7062040936FD675105E133C671F7FA6BB39D0"
+    },
+    {
+      "path": "tools/measure-play-composition.ps1",
+      "sha256": "D868CE22480A6E6CF42A5F01C50D189E8FF6217CCA40371D54CD24C0188CE1B7"
+    }
+  ]
+}

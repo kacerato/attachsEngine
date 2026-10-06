@@ -1,0 +1,10 @@
+
+  GuiTests
+    [32mok[0m   Gui_AppendedNativeAbiAndTypedStructSizes
+    [32mok[0m   Gui_ContainerImageAndCanvasTypedApiPreservesIndependentFields
+    [32mok[0m   Gui_ImageBehaviorApiPreservesCompositionAndRejectsForeignTarget
+    [32mok[0m   Gui_OrderedActionsAndTransitionsAreIndependentlyEditable
+    [32mok[0m   Gui_TypedLayoutStyleTextAndLifetimeRouting
+
+  [32mTUDO VERDE[0m — 5 passaram, 0 falharam, 0 pulados em 68 ms
+

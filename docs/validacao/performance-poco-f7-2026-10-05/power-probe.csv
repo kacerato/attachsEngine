@@ -1,0 +1,19 @@
+
+Loading trace: 0.00 MB
+
+Loading trace: 0.00 MB
+[887.395]     common_flags.cc:525 Trace loaded: 0.00 MB in 0.26s (0.0 MB/s)
+
+
+Trace health issues:
+
+  Import errors
+    power_rail_empty_packet: 1
+
+[887.408]            query.cc:191 Query execution time: 6 ms
+"name","samples","minimum","maximum","mean","elapsed_s"
+"batt.capacity_pct",16,30.000000,30.000000,30.000000,14.610291
+"batt.charge_uah",16,1672000.000000,1673000.000000,1672375.000000,14.610291
+"batt.current_ua",16,473000.000000,635000.000000,523375.000000,14.610291
+"batt.power_mw",16,1783.000000,2393.000000,1971.187500,14.610291
+"batt.voltage_uv",16,3755000.000000,3771000.000000,3767250.000000,14.610291

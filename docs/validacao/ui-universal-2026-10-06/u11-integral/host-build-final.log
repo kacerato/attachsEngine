@@ -1,0 +1,40 @@
+[1/39] Checking generated component contracts
+47 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/39] Building CXX object CMakeFiles/aether_physics.dir/physics/character_motor.cpp.obj
+[3/39] Building CXX object CMakeFiles/aether_physics.dir/physics/collision_cooking.cpp.obj
+[4/39] Building CXX object CMakeFiles/aether_physics.dir/physics/water_buoyancy.cpp.obj
+[5/39] Building CXX object CMakeFiles/aether_physics.dir/physics/jolt_bridge.cpp.obj
+[6/39] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_dynamic_motor.cpp.obj
+[7/39] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.obj
+[8/39] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_physics_diagnostic.cpp.obj
+[9/39] Building CXX object CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.obj
+[10/39] Building CXX object CMakeFiles/aether_runtime.dir/runtime/scene_gui_input.cpp.obj
+[11/39] Linking CXX static library libaether_physics.a
+[12/39] Linking CXX static library libaether_runtime.a
+[13/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.obj
+[14/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.obj
+[15/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_character_authoring.cpp.obj
+[16/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_session.cpp.obj
+[17/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_dynamic_motor_authoring.cpp.obj
+[18/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_collider_authoring.cpp.obj
+[19/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab.cpp.obj
+[20/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_prefab_overrides.cpp.obj
+[21/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_play_edit.cpp.obj
+[22/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_assets.cpp.obj
+[23/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_environment_assets.cpp.obj
+[24/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_path.cpp.obj
+[25/39] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_audio_assets.cpp.obj
+[26/39] Linking CXX static library libaether_editor.a
+[27/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_gui.cpp.obj
+[28/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_gui.cpp.obj
+[29/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_character_authoring.cpp.obj
+[30/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_dynamic_body_motor.cpp.obj
+[31/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_convex_bake.cpp.obj
+[32/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_occlusion.cpp.obj
+[33/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collider_handles.cpp.obj
+[34/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_query_contracts.cpp.obj
+[35/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_script_physics2d.cpp.obj
+[36/39] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_u11_integral.cpp.obj
+[37/39] Linking CXX executable aether_gui_tests.exe
+[38/39] Building CXX object CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj
+[39/39] Linking CXX executable aether_gui_preview.exe

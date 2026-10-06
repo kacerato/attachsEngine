@@ -121,6 +121,10 @@ struct ComponentObjectReference {
   // Execution readiness is separate from authoring validity: incomplete drafts
   // remain editable, serializable and undoable. Never infer this from visibility.
   bool (*requiredForExecution)(const ComponentValue &)=nullptr;
+  // Typed alternatives with real capability constraints (e.g. Character OR
+  // enabled DynamicBodyMotor on a dynamic non-sensor Body). Shared by picker,
+  // authoring, removal checks and runtime readiness.
+  bool (*acceptsComponents)(const Components &)=nullptr;
   bool isRequiredForExecution(const ComponentValue &value) const {
     return requiredForExecution && requiredForExecution(value);
   }

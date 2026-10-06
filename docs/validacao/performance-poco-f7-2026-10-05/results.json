@@ -1,0 +1,50 @@
+{
+  "debug": {
+    "windows": 5,
+    "frames": 3000.0,
+    "elapsedSeconds": 95.82329506700002,
+    "enginePresentFps": 31.307627210089034,
+    "cpuMeanMs": 13.09,
+    "cpuWorstWindowP95Ms": 15.2139,
+    "gpuMeanMs": 21.74588,
+    "gpuWorstWindowP95Ms": 22.287,
+    "opaqueMeanMs": 16.278039999999997,
+    "postMeanMs": 3.1624,
+    "uiMeanMs": 2.26194,
+    "draws": 156,
+    "triangles": 1934309
+  },
+  "releaseStable": {
+    "windows": 25,
+    "frames": 15000.0,
+    "elapsedSeconds": 215.12600325100001,
+    "enginePresentFps": 69.72657778845372,
+    "cpuMeanMs": 2.156808,
+    "cpuWorstWindowP95Ms": 3.1972,
+    "gpuMeanMs": 12.370567999999999,
+    "gpuWorstWindowP95Ms": 14.3821,
+    "opaqueMeanMs": 9.37412,
+    "postMeanMs": 1.736544,
+    "uiMeanMs": 1.236172,
+    "draws": 165,
+    "triangles": 1943158
+  },
+  "debugSurface": {
+    "displayedFps": 31.019845252533333,
+    "elapsedSeconds": 33.011125351,
+    "continuous": true
+  },
+  "releaseFinalSurface": {
+    "displayedFps": 66.68191458984323,
+    "elapsedSeconds": 16.751168692,
+    "continuous": true
+  },
+  "limitations": [
+    "Views differ slightly between launches; no strict same-pose causal A/B.",
+    "Release windows 28 onward change visible geometry; separate from stable view.",
+    "First release SurfaceFlinger collection was discontinuous; final collection was continuous.",
+    "Profiler context was emitted before imported content publication and remains stale; raw frame windows and scene hashes identify Sponza.",
+    "Battery temperature is not SoC temperature.",
+    "No power consumption measurement or 20-30 minute endurance test."
+  ]
+}

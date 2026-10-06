@@ -92,6 +92,9 @@ AE_TEST(gui_imgui_real_mesh_pointer_and_ime_input) {
   AE_EXPECT_TRUE(built.emitted>100 && !built.dropped && im.rejectedCommands()==0,"actual indexed font and geometry reach engine instances");
   AE_EXPECT_TRUE(im.atlas().size()==static_cast<usize>(im.atlasWidth())*im.atlasHeight()*4,"official font atlas uploaded shape");
   AE_EXPECT_TRUE(instances.front().params[2]==static_cast<float>(UiInstanceKind::Triangle),"mesh never replaced with fake native widgets");
+  AE_EXPECT_TRUE(im.replaceInput(id,"late draft"),"queued platform replacement before context change");
+  im.cancelInput();frame();
+  AE_EXPECT_TRUE(std::string(text)=="Editado pelo IME"&&!im.replaceInput(id,"stale"),"context cancellation rejects late IME input and clears queued replacement");
 }
 AE_TEST(gui_workbench_canvas_drag_undo_cancel_and_preview) {
   GuiWorkbench w;UiDrawList list;
@@ -132,7 +135,7 @@ AE_TEST(gui_script_bridge_play_commands_events_and_lifetime) {
   GuiDocument authored;const auto button=authored.create(GuiKind::Button);std::string error;
   auto n=*authored.find(button);n.name="start";authored.update(n,error);
   play.configureGui(authored);play.setScriptRuntime(scriptApi(),"/test");
-  AE_EXPECT_TRUE(play.start(scene,map)&&access.version==41&&access.available(),"real Play publishes complete ABI41");
+  AE_EXPECT_TRUE(play.start(scene,map)&&access.version==44&&access.available(),"real Play publishes complete ABI44");
   scene::ScriptGuiState state;
   const auto call=[&](u32 world,u32 node,u32 operation,std::string_view text={},float value=0) {
     return access.guiCommand(access.context,world,node,operation,reinterpret_cast<const u8*>(text.data()),static_cast<int>(text.size()),value,&state);
@@ -156,6 +159,14 @@ AE_TEST(gui_script_bridge_play_commands_events_and_lifetime) {
   AE_EXPECT_EQ(call(world,0,7,"volume"),1,"runtime API creates actual node");const auto slider=state.node;
   AE_EXPECT_TRUE(call(world,slider,3,{},.75f)==1&&play.gui().document().find(slider)->value==.75f,"value consumer state");
   AE_EXPECT_EQ(call(world,slider,8),1,"remove by stable ID");
+  state.kind=u32(GuiKind::Joystick);AE_EXPECT_EQ(call(world,0,7,"stick"),1,"create input node through bridge");const auto stick=state.node;
+  scene::ScriptGuiControl control;
+  AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world,0,8,stick,0,0,&control,sizeof(control),nullptr,0,0),1,"typed input settings read");
+  control.mode=1;control.deadzone=.25f;control.showBase=0;
+  AE_EXPECT_TRUE(access.guiInstanceRequest(access.context,world,0,8,stick,1,0,&control,sizeof(control),nullptr,0,0)==1&&play.gui().document().find(stick)->control.mode==GuiStickMode::Floating&&!play.gui().document().find(stick)->control.showBase,"numeric input API changes actual runtime copy");
+  const std::string binding="Mover";
+  AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world,0,9,stick,1,0,nullptr,0,reinterpret_cast<u8*>(const_cast<char*>(binding.data())),5,0),5,"named action binds through same scoped protocol");
+  control.deadzone=1;AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world,0,8,stick,1,0,&control,sizeof(control),nullptr,0,0),0,"invalid input config rejected");
   AE_EXPECT_TRUE(call(world,slider,1)==0&&access.lastStatus(access.context)==u32(runtime::WorldStatus::UnknownElement),"removed handle rejected");
   AE_EXPECT_TRUE(call(world+1,button,1)==0&&access.lastStatus(access.context)==u32(runtime::WorldStatus::ForeignWorld),"foreign world rejected");
   state.kind=u32(GuiKind::VBox);AE_EXPECT_EQ(call(world,0,7,"column"),1,"container created through actual ABI");const auto column=state.node;
@@ -190,6 +201,45 @@ AE_TEST(gui_script_bridge_play_commands_events_and_lifetime) {
   AE_EXPECT_TRUE(play.gui().document().canvas().mode==GuiCanvasMode::World && authored.canvas().mode==GuiCanvasMode::Screen,"world configuration preserves authoring isolation");
   play.stop();AE_EXPECT_TRUE(call(world,button,1)==0&&access.lastStatus(access.context)==u32(runtime::WorldStatus::NotRunning),"Stop invalidates handles");
 }
+AE_TEST(gui_scoped_canvas_abi_routes_independent_handles_and_rejects_retired_lease) {
+  for(bool dynamic:{false,true}) {
+  editor::EditorDocument scene;editor::EditorMapScene map;editor::EditorPlayScene play;
+  const auto asset=resources::assetGuidFromSeed("scoped-gui-abi");
+  const auto actor=scene.createEntity(scene.root(),runtime::ObjectKind::Folder,"Receiver");auto receiver=*scene.find(actor);
+  if(dynamic) {
+    auto *body=static_cast<scene::PhysicsBody*>(receiver.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Dynamic;
+    receiver.components.add(scene::Collider::descriptor);receiver.components.add(scene::DynamicBodyMotor::descriptor);
+  } else receiver.components.add(scene::Character::descriptor);
+  scene.applyEntityValues(actor,receiver);
+  auto actions=scene.inputActions();runtime::InputAction fire;fire.id="Atirar";fire.kind=runtime::ActionKind::Button;fire.deadzone=0;fire.bindings={{runtime::InputSource::TouchButton,1,0,0,1,false}};AE_EXPECT_TRUE(actions.add(fire)&&scene.setInputActions(actions),"authored custom action");
+  const auto a=scene.createEntity(scene.root(),runtime::ObjectKind::Folder,"A"),b=scene.createEntity(scene.root(),runtime::ObjectKind::Folder,"B");
+  for(auto id:{a,b}) {
+    auto object=*scene.find(id);auto *canvas=static_cast<scene::UiCanvas*>(object.components.add(scene::UiCanvas::descriptor));canvas->document=asset;
+    if(id==a){canvas->inputReceiver=actor;auto *script=static_cast<scene::ScriptBehavior*>(object.components.add(scene::ScriptBehavior::descriptor));script->scriptType="GuiProbe";script->source="GuiProbe.cs";}
+    scene.applyEntityValues(id,object);
+  }
+  GuiDocument authored;const auto button=authored.create(GuiKind::Button);std::string error;auto n=*authored.find(button);n.name="start";authored.update(n,error);
+  const auto trigger=authored.create(GuiKind::ActionButton);n=*authored.find(trigger);n.control.action="Atirar";n.offsets={300,200,500,300};authored.update(n,error);
+  play.configureGui(authored);play.configureSceneGui([&](resources::AssetGuid id,GuiDocument &out,std::string &){out=authored;return id==asset;});play.setScriptRuntime(scriptApi(),"/test");
+  AE_EXPECT_TRUE(play.start(scene,map),"actual Play publishes scene canvas access");
+  const auto world=play.world().worldId();const auto ia=access.guiInstance(access.context,world,a,0),ib=access.guiInstance(access.context,world,b,0);
+  AE_EXPECT_TRUE(ia&&ib&&ia!=ib,"runtime discovery returns isolated leases");
+  scene::ScriptGuiState state;
+  const auto call=[&](u64 instance,u32 op,std::string_view text={}) {return access.guiInstanceRequest(access.context,world,instance,0,button,op,0,&state,sizeof(state),reinterpret_cast<u8*>(const_cast<char*>(text.data())),static_cast<int>(text.size()),0);};
+  AE_EXPECT_EQ(call(ia,2,"first only"),1,"scoped ABI mutates first canvas");
+  AE_EXPECT_TRUE(play.sceneGui().find(play.world(),ia)->runtime.document().find(button)->text=="first only"&&play.sceneGui().find(play.world(),ib)->runtime.document().find(button)->text=="Button"&&play.gui().document().find(button)->text=="Button","second instance, source and legacy global runtime remain independent");
+  AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world,ia,0,button,1,0,&state,sizeof(state)-1,nullptr,0,0),0,"invalid payload shape rejected before reinterpretation");
+  AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world+1,ia,0,button,1,0,&state,sizeof(state),nullptr,0,0),0,"foreign world rejected");
+  const float eye[3]{0,0,-7};auto view=renderer::buildPerspectiveFrustum(eye,0,0,1.5f);play.sceneGui().prepare(play.world(),view,{0,0,640,480},{0,0,640,480});
+  auto &ui=play.sceneGui().find(play.world(),ia)->runtime;AE_EXPECT_TRUE(ui.pointer({4,UiPointerPhase::Down,{400,250}}),"actual custom-action control pressed");play.submitInput({},1./60);
+  std::string actionName="Atirar";u32 down=0;auto *text=reinterpret_cast<u8*>(actionName.data());
+  AE_EXPECT_TRUE(access.guiInstanceRequest(access.context,world,ia,11,0,0,0,&down,sizeof(down),text,6,0)==1&&down==1,"scoped API observes custom receiver action outside motor roles");
+  AE_EXPECT_TRUE(access.guiInstanceRequest(access.context,world,ib,11,0,0,0,&down,sizeof(down),text,6,0)==1&&down==0,"other Canvas reads its own receiver/global map");
+  play.world().destroyObject(play.world().handle(a));
+  AE_EXPECT_TRUE(call(ia,1)==0&&access.lastStatus(access.context)==u32(runtime::WorldStatus::StaleHandle)&&call(ib,1)==1,"retired lease fails immediately without affecting sibling");
+  play.stop();AE_EXPECT_TRUE(call(ib,1)==0,"Stop releases all scoped GUI handles");
+  }
+}
 AE_TEST(gui_image_actions_persistence_duplication_and_lifecycle) {
   GuiDocument d;std::string error;const auto root=d.create(GuiKind::Panel),image=d.create(GuiKind::Image,root),target=d.create(GuiKind::Text,root);
   auto n=*d.find(image);n.interaction={true,GuiClickAction::ToggleVisible,target,0};d.update(n,error);
@@ -207,7 +257,7 @@ AE_TEST(gui_image_actions_persistence_duplication_and_lifecycle) {
   r.document().remove(root);AE_EXPECT_TRUE(!r.poll(event),"removed event source cannot escape as a stale handle");
   // Legacy images remain decorative; load defaults do not invent click behavior.
   GuiDocument legacy;legacy.create(GuiKind::Image);std::istringstream lines(encoded(legacy));std::string header,canvas,line;
-  std::getline(lines,header);std::getline(lines,canvas);std::getline(lines,line);for(int i=0;i<38;++i)line.erase(line.find_last_of(' '));
+  std::getline(lines,header);std::getline(lines,canvas);std::getline(lines,line);for(int i=0;i<54;++i)line.erase(line.find_last_of(' '));
   std::istringstream v2("AEUI 2 1 2\n"+canvas+"\n"+line+"\n");
   AE_EXPECT_TRUE(restored.read(v2,error)&&!restored.nodes()[0].interaction.clickable&&!restored.nodes()[0].motion.enabled,"v2 migration preserves existing meaning");
 }

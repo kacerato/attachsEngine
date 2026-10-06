@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.aether.editor/.shell.AstraShellActivity (has extras) }
+Status: ok
+LaunchState: COLD
+Activity: dev.aether.editor/.shell.AstraShellActivity
+TotalTime: 838
+WaitTime: 841
+Complete

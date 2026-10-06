@@ -1,0 +1,12 @@
+{
+  "baseline": "docs\\validacao\\ui-universal-2026-10-06\\collider-handles\\performance-before.json",
+  "baseline_paths": 268,
+  "changed": [
+    "native/physics/jolt_bridge.cpp",
+    "native/physics/jolt_bridge.h"
+  ],
+  "renderer_shader_checked": 210,
+  "renderer_shader_changed": [],
+  "boundary": "Compared to the preceding U11 handles block. Runtime/editor diagnostics changed intentionally; no renderer/shader changes for this block. No sustained FPS or thermal claim.",
+  "unchanged_paths": 266
+}

@@ -1,0 +1,2126 @@
+{
+  "format": 1,
+  "source": {
+    "path": "docs/planos/ROADMAP-UI-UNIVERSAL-attachsEngine-2026-10-04.md",
+    "sha256": "61727152c2e8485b5c9f8b59252074d4fda5856d18a5971b865069d8317d6b29",
+    "bytes": 53549,
+    "lines": 632
+  },
+  "scope": "Full source is preserved verbatim, including unnumbered requirements; IDs are execution anchors, not a replacement for the specification.",
+  "engine_complete": false,
+  "summary": {
+    "planned": 140,
+    "partial": 20,
+    "complete": 4,
+    "unsupported": 0
+  },
+  "sections": [
+    {
+      "line": 1,
+      "heading": "# attachsEngine — UI universal integrada à cena"
+    },
+    {
+      "line": 8,
+      "heading": "## 1. Decisão central"
+    },
+    {
+      "line": 16,
+      "heading": "### O primeiro resultado obrigatório"
+    },
+    {
+      "line": 22,
+      "heading": "## 2. Auditoria do estado atual"
+    },
+    {
+      "line": 42,
+      "heading": "## 3. Arquitetura proposta: um modelo, várias apresentações"
+    },
+    {
+      "line": 46,
+      "heading": "### 3.1 Documento, instância e objeto hospedeiro"
+    },
+    {
+      "line": 56,
+      "heading": "### 3.2 Hierarquia unificada sem duplicar a fonte da verdade"
+    },
+    {
+      "line": 89,
+      "heading": "### 3.3 Identidade e referências"
+    },
+    {
+      "line": 106,
+      "heading": "### 3.4 Dados autorais, estado e cache"
+    },
+    {
+      "line": 118,
+      "heading": "## 4. Matriz espacial e de integração com a cena"
+    },
+    {
+      "line": 147,
+      "heading": "## 5. Famílias e propriedades universais"
+    },
+    {
+      "line": 151,
+      "heading": "### 5.1 Base, hierarquia e ciclo de vida"
+    },
+    {
+      "line": 159,
+      "heading": "### 5.2 Layout e transformação"
+    },
+    {
+      "line": 167,
+      "heading": "### 5.3 Aparência, skin e temas"
+    },
+    {
+      "line": 175,
+      "heading": "### 5.4 Imagens, sprites e recursos"
+    },
+    {
+      "line": 183,
+      "heading": "### 5.5 Eventos, gestos e ações"
+    },
+    {
+      "line": 191,
+      "heading": "### 5.6 Foco, dispositivos e acessibilidade"
+    },
+    {
+      "line": 199,
+      "heading": "### 5.7 Texto e entrada completos"
+    },
+    {
+      "line": 209,
+      "heading": "### 5.8 Controles compostos e coleções"
+    },
+    {
+      "line": 217,
+      "heading": "### 5.9 Inventário e formulários"
+    },
+    {
+      "line": 223,
+      "heading": "### 5.10 Bindings e animação"
+    },
+    {
+      "line": 231,
+      "heading": "### 5.11 Renderização e canvas avançado"
+    },
+    {
+      "line": 237,
+      "heading": "## 6. Joystick, jogador e física: contrato fechado"
+    },
+    {
+      "line": 239,
+      "heading": "### 6.1 Fluxo de entrada"
+    },
+    {
+      "line": 257,
+      "heading": "### 6.2 Propriedades do joystick"
+    },
+    {
+      "line": 263,
+      "heading": "### 6.3 Dois modelos válidos de jogador cilíndrico"
+    },
+    {
+      "line": 271,
+      "heading": "### 6.4 UI anexada a corpo em movimento"
+    },
+    {
+      "line": 277,
+      "heading": "## 7. Roadmap executável e rastreabilidade"
+    },
+    {
+      "line": 281,
+      "heading": "### R0 — Contratos e compatibilidade (complementa P0; pré-requisito geral)"
+    },
+    {
+      "line": 294,
+      "heading": "### R1 — Instâncias e hierarquia de cena (antecipa K/M de P5/P6)"
+    },
+    {
+      "line": 309,
+      "heading": "### R2 — Recursos, partes, skins e temas (P1; A/B)"
+    },
+    {
+      "line": 324,
+      "heading": "### R3 — Entrada multicanal e foco (P2/E; transversal)"
+    },
+    {
+      "line": 339,
+      "heading": "### R4 — Joystick e motores (P2/F/G)"
+    },
+    {
+      "line": 354,
+      "heading": "### R5 — Layout responsivo e ferramentas espaciais (P3/C/L)"
+    },
+    {
+      "line": 369,
+      "heading": "### R6 — Texto internacional e edição Android (P3/D)"
+    },
+    {
+      "line": 384,
+      "heading": "### R7 — Bindings, coleções e controles compostos (P4/H/I; antecipa fundamentos de P6)"
+    },
+    {
+      "line": 399,
+      "heading": "### R8 — Inventário, formulários e drag-and-drop de domínio (P4/H/I)"
+    },
+    {
+      "line": 414,
+      "heading": "### R9 — Apresentação avançada e composição 3D (P5/K)"
+    },
+    {
+      "line": 429,
+      "heading": "### R10 — Animação e timeline (P5/J)"
+    },
+    {
+      "line": 444,
+      "heading": "### R11 — Reutilização, extensões, entrega e exportação (P6/L/M)"
+    },
+    {
+      "line": 459,
+      "heading": "### R12 — Acessibilidade, qualidade e escala (P7, iniciado em R0)"
+    },
+    {
+      "line": 474,
+      "heading": "## 8. Bibliotecas e fontes: aproveitar sem criar outra engine"
+    },
+    {
+      "line": 490,
+      "heading": "## 9. Mapa de integração no repositório"
+    },
+    {
+      "line": 509,
+      "heading": "## 10. Matriz de testes de combinações"
+    },
+    {
+      "line": 523,
+      "heading": "### Cenários de aceite obrigatórios"
+    },
+    {
+      "line": 568,
+      "heading": "## 11. Desempenho e medições Android"
+    },
+    {
+      "line": 580,
+      "heading": "## 12. Como executar com múltiplos agentes sem fragmentar o sistema"
+    },
+    {
+      "line": 588,
+      "heading": "## 13. Definição de pronto por capacidade"
+    },
+    {
+      "line": 609,
+      "heading": "## Fontes e proveniência"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "SP01",
+      "source_line": 122,
+      "requirement": "HUD fixo na tela",
+      "acceptance": "Canvas Overlay, safe area, ordem, escala e contexto de jogador.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP02",
+      "source_line": 123,
+      "requirement": "UI limitada a uma câmera ou tela dividida",
+      "acceptance": "ScreenCamera, viewport e câmera de desenho/entrada explícitos.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP03",
+      "source_line": 124,
+      "requirement": "Barra de vida acima de entidade",
+      "acceptance": "Âncora projetada mundo→tela; alvo, offset, distância, saída da tela e oclusão.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP04",
+      "source_line": 125,
+      "requirement": "Painel 3D parado",
+      "acceptance": "Canvas World com matriz da entidade hospedeira e tamanho físico.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP05",
+      "source_line": 126,
+      "requirement": "Painel preso a corpo dinâmico",
+      "acceptance": "Seguir pose final/interpolada usada pelo renderer; não escrever Transform físico.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP06",
+      "source_line": 127,
+      "requirement": "Painel em objeto cinemático",
+      "acceptance": "Seguir a autoridade cinemática e sua hierarquia, sem simulação duplicada.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP07",
+      "source_line": 128,
+      "requirement": "UI presa a osso/socket",
+      "acceptance": "Referência ao esqueleto/socket e pose avaliada; fallback se o osso sumir.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP08",
+      "source_line": 129,
+      "requirement": "Billboard",
+      "acceptance": "Face-camera total ou limitado por eixo, por câmera, com tamanho em mundo ou pixels.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP09",
+      "source_line": 130,
+      "requirement": "UI na superfície de uma malha",
+      "acceptance": "Render texture ou adaptador de superfície; picking por UV/triângulo e limites.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP10",
+      "source_line": 131,
+      "requirement": "UI enrolada em cilindro",
+      "acceptance": "Parametrização curva ou UV; costura, repetição, normal e raio mapeados. Não é o mesmo que SP05.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP11",
+      "source_line": 132,
+      "requirement": "Personagem 3D dentro do inventário",
+      "acceptance": "EmbeddedViewport, câmera/luzes e cena própria ou visão filtrada da cena existente.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP12",
+      "source_line": 133,
+      "requirement": "Minimap, monitor ou câmera de segurança",
+      "acceptance": "Câmera→render target→visual de UI; cadência, resolução e dependências de render.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP13",
+      "source_line": 134,
+      "requirement": "Imagem decorativa no mundo",
+      "acceptance": "SpriteRenderer, material em plano ou decal, conforme intenção; não exigir sistema de botões.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP14",
+      "source_line": 135,
+      "requirement": "Botão que cria objeto",
+      "acceptance": "Comando tipado de instanciar prefab, parâmetros, parent e posição; ponto seguro de mutação.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP15",
+      "source_line": 136,
+      "requirement": "Arrastar item do inventário ao mundo",
+      "acceptance": "Raycast da câmera correta, preview, validação do modelo e transação inventário+spawn.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP16",
+      "source_line": 137,
+      "requirement": "Arrastar objeto do mundo à UI",
+      "acceptance": "Resolver entidade/asset para payload tipado e validar receptor, não mover só textura.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP17",
+      "source_line": 138,
+      "requirement": "Várias instâncias do mesmo menu",
+      "acceptance": "Asset compartilhado, estados/IDs/dados isolados por instância.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP18",
+      "source_line": 139,
+      "requirement": "Dois jogadores",
+      "acceptance": "Contextos, dispositivos, canvases, câmeras e foco separados.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP19",
+      "source_line": 140,
+      "requirement": "UI persistente entre cenas",
+      "acceptance": "Hospedagem em escopo persistente, invalidação de referências e reconexão declarada.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP20",
+      "source_line": 141,
+      "requirement": "Popup fora do recorte do pai",
+      "acceptance": "Camada visual de popup, mantendo vínculo lógico, foco e destino corretos.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP21",
+      "source_line": 142,
+      "requirement": "Conteúdo remoto/assíncrono",
+      "acceptance": "Provider controlado, loading/error/retry, cancelamento e geração de destino.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "SP22",
+      "source_line": 143,
+      "requirement": "Preview no editor e jogo exportado",
+      "acceptance": "Mesmo documento, contratos e runtime; adaptadores de host distintos.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R0.1",
+      "source_line": 285,
+      "requirement": "Fixar snapshot e matriz atual/parcial/planejado, incluindo limitações e evidências.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "docs/planos/ui-universal/CONTRATOS-E-EXECUCAO.md",
+        "tools/track-ui-universal.py"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Concluir auditoria vertical de R2-R12; os 164 IDs nao substituem os requisitos sem numeracao."
+      ]
+    },
+    {
+      "id": "R0.2",
+      "source_line": 286,
+      "requirement": "Corrigir documentação AEUI3 versus AEUI4; negociar próximo formato/ABI e migrações.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "docs/planos/UI-ROADMAP-COMPLETO-2026-10-03.md",
+        "native/scene/script_runtime.h"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Migracao da semantica AEUI4 e novo formato conforme R0.4 ainda pendentes; ABI42 exige SDK correspondente."
+      ]
+    },
+    {
+      "id": "R0.3",
+      "source_line": 287,
+      "requirement": "Definir identidade de instância, referências persistentes e PropertyId estável.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/runtime/scene_gui.h",
+        "managed/Astra.Scripting/Gui.cs"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "PropertyId estavel, referencia externa persistente e remapeamento alem do lease de execucao."
+      ]
+    },
+    {
+      "id": "R0.4",
+      "source_line": 288,
+      "requirement": "Definir e migrar pintura, layout, hit, interação, foco e semântica como dimensões distintas.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R0.5",
+      "source_line": 289,
+      "requirement": "Declarar interfaces de runtime sem dependência de editor e pontos de integração.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/runtime/scene_gui.h",
+        "tests/native/scene_gui_host.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Contratos de temas, layout incremental, foco, gestos e exportacao ainda precisam ser integrados aos respectivos pacotes."
+      ]
+    },
+    {
+      "id": "R0.6",
+      "source_line": 290,
+      "requirement": "Definir lifecycle, fonte da verdade e regras de comandos/threads/filas.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/runtime/scene_gui.cpp",
+        "native/runtime/script_bridge.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Comandos tipados de UI para cena/script nos pontos seguros ainda pendentes."
+      ]
+    },
+    {
+      "id": "R1.1",
+      "source_line": 298,
+      "requirement": "Hospedar documento em entidade com componentes e referências do sistema existente.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/scene/ui_canvas.h",
+        "native/editor/editor_session.cpp",
+        "tools/component_contracts/rendering.json"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Conferir workflow de criacao pelo menu e atribuicao/reabertura no aparelho; componente, recurso, Inspector e abertura do documento foram conferidos."
+      ]
+    },
+    {
+      "id": "R1.2",
+      "source_line": 299,
+      "requirement": "Manter estado runtime independente por instância e catálogo por mundo.",
+      "acceptance": null,
+      "status": "complete",
+      "implementation": [
+        "native/runtime/scene_gui.cpp",
+        "managed/Astra.Scripting/Runtime/NativeBehaviorRuntime.cs"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R1.3",
+      "source_line": 300,
+      "requirement": "Mostrar composição na hierarquia principal por adaptador, sem segunda árvore mutável.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/editor/editor_gui_tree.cpp",
+        "native/editor/editor_screen.cpp",
+        "native/editor/editor_session.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md",
+        "docs/validacao/ui-universal-2026-10-04/inspector-contextual.png"
+      ],
+      "remaining": [
+        "Composicao autoral integrada; falta arvore remota de estado Play e drag de composicao/recursos descritos em 3.2. Nao ha segunda arvore mutavel."
+      ]
+    },
+    {
+      "id": "R1.4",
+      "source_line": 301,
+      "requirement": "Seleção contextual, Inspector, rename, reorder, duplicate, remove e Undo integrados.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_workbench.cpp",
+        "native/ui/gui_document.cpp",
+        "native/ui/immediate_gui.cpp",
+        "native/editor/editor_session.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md",
+        "docs/validacao/ui-universal-2026-10-04/projeto-reaberto.png"
+      ],
+      "remaining": [
+        "Selecao, propriedades, rename, reorder, duplicate, remove e Undo integrados na autoria; falta drag/gizmos no viewport da cena, overrides por instancia e Inspector remoto Play. Exercitar reorder/remove e cancelamentos entre contextos no aparelho."
+      ]
+    },
+    {
+      "id": "R1.5",
+      "source_line": 302,
+      "requirement": "Anexar WorldCanvas à pose de objeto físico e suportar offset/gizmo local.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_world.cpp",
+        "native/runtime/scene_gui.cpp",
+        "native/runtime/transform_math.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Gizmo do plano e offset local; captura prolongada no aparelho, teleporte/respawn/sleep/remoção e demais condicoes de 6.4."
+      ]
+    },
+    {
+      "id": "R1.6",
+      "source_line": 303,
+      "requirement": "Criar/remover instâncias em runtime, invalidar handles e limpar capturas/recursos.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/runtime/scene_gui.cpp",
+        "native/runtime/script_bridge.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Workflow de autoria e API de criacao para composicao de nodes; ampliar evidencia Android de remocao/foco."
+      ]
+    },
+    {
+      "id": "R1.7",
+      "source_line": 304,
+      "requirement": "Duplicar/prefab com remapeamento de IDs e parâmetros de referências externas.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/scene/ui_canvas.h",
+        "tests/native/test_scene_gui.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Referencias externas parametrizadas e remapeamento de nodes/overrides na duplicacao e prefab."
+      ]
+    },
+    {
+      "id": "R1.8",
+      "source_line": 305,
+      "requirement": "Executar um documento simples em host sem editor como prova inicial de entrega.",
+      "acceptance": null,
+      "status": "complete",
+      "implementation": [
+        "native/runtime/scene_gui.cpp",
+        "tests/native/scene_gui_host.cpp",
+        "native/CMakeLists.txt"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md#host-sem-editor"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R2.1",
+      "source_line": 313,
+      "requirement": "Migrar referências de imagem para assets/sub-recursos estáveis, mantendo caminhos antigos importáveis.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.2",
+      "source_line": 314,
+      "requirement": "Páginas de atlas, quota, gutters, sampling e lifetime com fences.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.3",
+      "source_line": 315,
+      "requirement": "Partes visuais opcionais e substituíveis; remover dimensões fixas do desenho dos controles.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.4",
+      "source_line": 316,
+      "requirement": "Nine-slice completo, tiles, regiões, native size e fills com regras de degeneração.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.5",
+      "source_line": 317,
+      "requirement": "Tema, variante, subárvore e override, com reset/origem e prevenção de ciclos.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.6",
+      "source_line": 318,
+      "requirement": "Estados combináveis, sprites por estado, foco separado e transições interrompíveis.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.7",
+      "source_line": 319,
+      "requirement": "Skin editor com preview de estados e edição de partes isoladas.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R2.8",
+      "source_line": 320,
+      "requirement": "Reload/erro/unload sem textura antiga enganosa nem perda de overrides.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R3.1",
+      "source_line": 328,
+      "requirement": "Capturas por dispositivo/pointerId e destino por instância/viewport/player.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_document.cpp",
+        "native/runtime/scene_gui.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Viewports e players distintos; joystick e gestos de tres dedos no aparelho."
+      ]
+    },
+    {
+      "id": "R3.2",
+      "source_line": 329,
+      "requirement": "Eventos, propagação, hit policies e arbitragem explícita de gestos.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R3.3",
+      "source_line": 330,
+      "requirement": "Hit transformado, forma/alpha opcional e coordenação de oclusão no mundo.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_world.cpp",
+        "native/editor/editor_session.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Formas e alpha de hit opcionais; validacao completa de politicas/oclusao no aparelho."
+      ]
+    },
+    {
+      "id": "R3.4",
+      "source_line": 331,
+      "requirement": "Foco, tab/direcional, modal scopes, gamepad, submit/cancel e restauração.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R3.5",
+      "source_line": 332,
+      "requirement": "Cancelamento por perda de app focus, remoção, disable, troca de documento e dispositivo.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_document.cpp",
+        "native/runtime/scene_gui.cpp",
+        "native/editor/editor_play_scene.h"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md"
+      ],
+      "remaining": [
+        "Validacao Android de troca de documento, dispositivo e foco durante gestos simultaneos."
+      ]
+    },
+    {
+      "id": "R3.6",
+      "source_line": 333,
+      "requirement": "Separar foco de editor, UI e gameplay; não zerar todo gameplay por qualquer toque de HUD.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R3.7",
+      "source_line": 334,
+      "requirement": "Registrar comandos tipados de UI→cena/script e validar alvo/argumentos/lifecycle.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R3.8",
+      "source_line": 335,
+      "requirement": "Instrumentar donos de captura e caminho de consumo dos eventos.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R4.1",
+      "source_line": 343,
+      "requirement": "Joystick nos três modos, base/knob livres e parâmetros de curva/deadzone.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_controls.cpp",
+        "native/ui/gui_document.cpp",
+        "native/ui/gui_workbench.cpp",
+        "native/ui/gui_images.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-CONTROLES-E-RECEPTORES.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: continuacao R4"
+      ],
+      "remaining": [
+        "Aceite Android dos modos flutuante/dinamico e imagens independentes; combinacoes de resolucao e lifecycle do roadmap ainda nao validadas no aparelho."
+      ]
+    },
+    {
+      "id": "R4.2",
+      "source_line": 344,
+      "requirement": "OnScreenButton e área de olhar para ações tipadas contínuas e discretas.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_controls.cpp",
+        "native/runtime/scene_gui_input.cpp",
+        "managed/Astra.Scripting/Gui.cs"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-CONTROLES-E-RECEPTORES.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: continuacao R4"
+      ],
+      "remaining": [
+        "Hold/Tap no botao autorado; aceite fisico de tres dedos com modal/foco e dispositivos alternando."
+      ]
+    },
+    {
+      "id": "R4.3",
+      "source_line": 345,
+      "requirement": "Catálogo de actions/players/receivers e picker de câmera/espaço.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/scene/ui_canvas.h",
+        "native/ui/gui_workbench.cpp",
+        "native/runtime/scene_gui_input.cpp",
+        "native/scene/ui_canvas.h: shared typed receiver predicate used by picker, native host and scoped script ABI"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-CONTROLES-E-RECEPTORES.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: continuacao R4"
+      ],
+      "remaining": [
+        "Catalog/PlayerInput hardware pairing per player, arbitrary scripted receivers and two physical players acceptance; Character and DynamicBodyMotor are connected."
+      ]
+    },
+    {
+      "id": "R4.4",
+      "source_line": 346,
+      "requirement": "Agregação de fontes por ação; cancelamento individual; buffer de eventos para FixedUpdate.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/runtime/input_actions.cpp",
+        "native/runtime/scene_gui_input.cpp",
+        "native/ui/gui_controls.cpp"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-CONTROLES-E-RECEPTORES.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: continuacao R4"
+      ],
+      "remaining": [
+        "Buffer geral de eventos para scripts em FixedUpdate, politica configuravel de agregacao e aceitacao fisica de multitouch/cancelamento."
+      ]
+    },
+    {
+      "id": "R4.5",
+      "source_line": 347,
+      "requirement": "Recipe Character + visual Cylinder com conversão reversível.",
+      "acceptance": null,
+      "status": "complete",
+      "implementation": [
+        "native/editor/editor_creation_catalog.h: physics.character_cylinder; raiz Character e filho Cylinder da biblioteca real",
+        "native/editor/editor_session.cpp: createRecipe; disponibilidade de recurso, composicao em uma transacao de historia",
+        "native/editor/editor_character_authoring.cpp: prepareCharacterConversion e convertToCharacter; geometria, grafo, referencias, Undo/Redo",
+        "native/editor/editor_screen.cpp: menu contextual, previa no Inspector e composicao da receita",
+        "tests/native/test_character_authoring.cpp: motor Jolt, arquivo, identidade, referencias, pose, Undo e recusa sem mutacao",
+        "examples/ui/GuiAuthoredControls.cs: leitura do receptor atribuido ao proprio Canvas"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-AUTORIA-CHARACTER.md: limites explicitos; reversao pelo Undo de sessao",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: R4.5, 68/68 host, SDK exemplo e Android",
+        "docs/validacao/ui-universal-2026-10-04/character-pacote.json: hash instalado, Save/reabertura, movimento/salto e criacao pelo menu"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R4.6",
+      "source_line": 348,
+      "requirement": "Recipe DynamicCylinder + visual + DynamicBodyMotor sem dupla autoridade.",
+      "acceptance": null,
+      "status": "complete",
+      "implementation": [
+        "native/scene/dynamic_body_motor.h",
+        "native/runtime/scene_dynamic_motor.cpp",
+        "native/runtime/scene_physics.cpp",
+        "native/runtime/scene_gui_input.cpp",
+        "native/runtime/script_bridge.cpp",
+        "native/editor/editor_creation_catalog.h: physics.motor_cylinder",
+        "native/editor/editor_session.cpp",
+        "managed/Astra.Scripting/DynamicMotorRuntime.cs",
+        "tools/component_contracts/properties_dynamic_body_motor.json"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-MOTOR-DINAMICO.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: R4.6",
+        "docs/validacao/ui-universal-2026-10-04/motor-pacote.json",
+        "tests/native/test_dynamic_body_motor.cpp",
+        "tests/native/test_gui.cpp: scoped ABI on both receiver types"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R4.7",
+      "source_line": 349,
+      "requirement": "Grounding, salto, rampas, plataforma, knockback, respawn e reconexão de alvo.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/runtime/scene_gui_input.cpp: motor Character existente, grounding e fila de salto",
+        "native/runtime/scene_dynamic_motor.cpp: support probing, grounded jump, slope projection and solver platform point velocity; external impulses preserved",
+        "native/editor/editor_dynamic_motor_authoring.cpp: actual decomposed resources, per-part Collider and independent Body/Motor",
+        "native/editor/editor_dynamic_motor_authoring.cpp: typed hierarchy/slot sources, independent body and immutable per-object decomposition provenance"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-CONTROLES-E-RECEPTORES.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: continuacao R4",
+        "docs/validacao/ui-universal-2026-10-04/motor-pacote.json",
+        "docs/validacao/ui-universal-2026-10-05/convex-parts.json",
+        "docs/validacao/ui-universal-2026-10-05/hierarchy-sources.json"
+      ],
+      "remaining": [
+        "Broader ramp/edge/platform acceptance with authored controls on Android; explicit knockback state, respawn and full target reconnection."
+      ]
+    },
+    {
+      "id": "R4.8",
+      "source_line": 350,
+      "requirement": "Debug do vetor, motor/autoridade e erros de vínculo no Inspector.",
+      "acceptance": null,
+      "status": "partial",
+      "implementation": [
+        "native/ui/gui_workbench.cpp",
+        "examples/ui/GuiAuthoredControls.cs",
+        "native/runtime/scene_gui_input.cpp",
+        "native/runtime/scene_physics.h: native support/motor snapshot; example reads actual body state, not a remote Inspector"
+      ],
+      "evidence": [
+        "docs/planos/ui-universal/R4-CONTROLES-E-RECEPTORES.md",
+        "docs/planos/ui-universal/VALIDACAO-2026-10-04.md: continuacao R4"
+      ],
+      "remaining": [
+        "Inspector remoto de motor/autoridade e diagnostico individual de alvo/fonte em Play; hoje ha vetor no preview, diagnostico do hospedeiro e exemplo C# real."
+      ]
+    },
+    {
+      "id": "R5.1",
+      "source_line": 358,
+      "requirement": "Medição/arranjo com min/max/preferred, margem/padding, flex e aspect.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.2",
+      "source_line": 359,
+      "requirement": "Transformação local completa com pivot, rotação e escala XY consistente com hit/clip.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.3",
+      "source_line": 360,
+      "requirement": "Flow/wrap, stack, grid adaptável, split e políticas de overflow.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.4",
+      "source_line": 361,
+      "requirement": "Safe area, DPI, font scale, orientação, teclado e perfis/breakpoints.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.5",
+      "source_line": 362,
+      "requirement": "Detecção de ciclos, diagnóstico de restrições e indicação de eixo controlado pelo pai.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.6",
+      "source_line": 363,
+      "requirement": "Multiseleção, align/distribute/match-size, snap/guides e transações por gesto.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.7",
+      "source_line": 364,
+      "requirement": "Dirty flags específicos e layout incremental sem otimização sem medição.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R5.8",
+      "source_line": 365,
+      "requirement": "Preview por resolução/idioma e casos de tamanho zero/extremo.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.1",
+      "source_line": 373,
+      "requirement": "Font assets/fallback e catálogo de cobertura de glyphs.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.2",
+      "source_line": 374,
+      "requirement": "Bidi, segmentação, shaping, quebra de linha e cache de runs.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.3",
+      "source_line": 375,
+      "requirement": "Multiline, rich text restrito, links, inline images, ellipsis e seleção.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.4",
+      "source_line": 376,
+      "requirement": "Caret e seleção por grapheme; operações de edição e Undo local.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.5",
+      "source_line": 377,
+      "requirement": "Adaptador IME com seleção/composição, paste, keyboard types e resize.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.6",
+      "source_line": 378,
+      "requirement": "Locale/plurais/formatos, troca em runtime e RTL no layout.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.7",
+      "source_line": 379,
+      "requirement": "Validação, placeholder, read-only, senha, submit/cancel e proteção de dados sensíveis.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R6.8",
+      "source_line": 380,
+      "requirement": "Ponte semântica de texto/foco para acessibilidade e testes de retorno do app.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.1",
+      "source_line": 388,
+      "requirement": "Binding tipado, conversões, null/error/default e batch de mudanças.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.2",
+      "source_line": 389,
+      "requirement": "Semântica de commit e prevenção de loops one-way/two-way/eventos.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.3",
+      "source_line": 390,
+      "requirement": "ScrollView/Scrollbar com clipping, inércia e transferência de gesto aninhado.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.4",
+      "source_line": 391,
+      "requirement": "Lista/grid/tree/table normal e virtualizada, com chaves estáveis e provider.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.5",
+      "source_line": 392,
+      "requirement": "Seleção, sort/filter/reorder, paginação, expansão e células de altura variável.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.6",
+      "source_line": 393,
+      "requirement": "Recycling seguro para foco/captura/IME e imagens assíncronas.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.7",
+      "source_line": 394,
+      "requirement": "Empty/loading/error/retry/no-results, incluindo dados que somem durante interação.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R7.8",
+      "source_line": 395,
+      "requirement": "Dropdown/search/tabs/menus/dialogs usando popup/foco compartilhados.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.1",
+      "source_line": 403,
+      "requirement": "Payload tipado, início/preview/validação/commit/cancel do drag-and-drop.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.2",
+      "source_line": 404,
+      "requirement": "Inventário: stack/split/equip/transfer/use/drop e restrições do modelo.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.3",
+      "source_line": 405,
+      "requirement": "Transação de item UI→mundo/prefab com validação de destino.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.4",
+      "source_line": 406,
+      "requirement": "Recepção mundo→UI, múltiplos inventários e rejeição sem duplicação.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.5",
+      "source_line": 407,
+      "requirement": "Form state, campo tipado, erros por campo/cruzados e foco no erro relevante.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.6",
+      "source_line": 408,
+      "requirement": "Validação/submit assíncronos com geração e cancelamento de respostas obsoletas.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.7",
+      "source_line": 409,
+      "requirement": "Persistência do modelo independente do documento e política de reset.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R8.8",
+      "source_line": 410,
+      "requirement": "Exemplo completo de inventário e formulário, touch/gamepad e sem código de ligação repetido.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.1",
+      "source_line": 418,
+      "requirement": "ScreenCamera, world anchors, billboard e identificação por viewport.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.2",
+      "source_line": 419,
+      "requirement": "Múltiplos painéis/câmeras/players, sorting e seleção de instância no mundo.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.3",
+      "source_line": 420,
+      "requirement": "Máscaras retangulares/arredondadas/stencil/alpha com hit coerente.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.4",
+      "source_line": 421,
+      "requirement": "RenderTexture e EmbeddedViewport com resolução/cadência/orçamento.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.5",
+      "source_line": 422,
+      "requirement": "Canvas sobre malha/UV e mapeamento curvo como capability específica.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.6",
+      "source_line": 423,
+      "requirement": "Lado/oclusão/transparência/distância e materiais suportados com fallback declarado.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.7",
+      "source_line": 424,
+      "requirement": "Render graph sem ciclos; recursos por consumidor, não RT por widget.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R9.8",
+      "source_line": 425,
+      "requirement": "Smoke de exportação por modo e diagnóstico de backend ausente.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.1",
+      "source_line": 433,
+      "requirement": "Tracks/keyframes tipados, interpolação apropriada e referência de propriedade estável.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.2",
+      "source_line": 434,
+      "requirement": "Sequências/paralelos/loops/reverse, seek e callbacks de lifecycle.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.3",
+      "source_line": 435,
+      "requirement": "Relógio real/escalado, pausa e política de animação de menus durante pausa do jogo.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.4",
+      "source_line": 436,
+      "requirement": "Resolver script/binding/estado/timeline por propriedade, sem gravar autoria.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.5",
+      "source_line": 437,
+      "requirement": "Sprite animation, rotação/escala XY e animação de partes.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.6",
+      "source_line": 438,
+      "requirement": "Timeline/curvas no editor, preview, Undo e origem do valor inspecionável.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.7",
+      "source_line": 439,
+      "requirement": "Reduced motion e interrupção sem salto indevido ou callback fantasma.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R10.8",
+      "source_line": 440,
+      "requirement": "Invalidação granular: mudar cor não deve recalcular todo layout.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.1",
+      "source_line": 448,
+      "requirement": "Templates com slots, parâmetros públicos e variantes, sem dependências externas implícitas.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.2",
+      "source_line": 449,
+      "requirement": "Overrides por instância, apply/revert e atualização do original sem apagar customizações locais.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.3",
+      "source_line": 450,
+      "requirement": "Pacotes de UI com assets/fontes/temas/bindings e inventário de licenças.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.4",
+      "source_line": 451,
+      "requirement": "Extensão registrada: schema, propriedade, editor, serializer, runtime, input e lifecycle.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.5",
+      "source_line": 452,
+      "requirement": "API autoral e operações automatizadas usam os mesmos comandos/transações do editor.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.6",
+      "source_line": 453,
+      "requirement": "Export resolve dependências e capabilities por plataforma; não embute estado/editor sem necessidade.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.7",
+      "source_line": 454,
+      "requirement": "Migração de versões, hot reload e recuperação de erro sem substituir dados válidos.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R11.8",
+      "source_line": 455,
+      "requirement": "Host de jogo sem EditorPlayScene e testes de equivalência com preview/Play.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.1",
+      "source_line": 463,
+      "requirement": "Árvore semântica e bridge Android, ações acessíveis e IDs estáveis.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.2",
+      "source_line": 464,
+      "requirement": "TalkBack, gamepad/teclado, fonte ampliada, reduced motion e contraste/estado não só por cor.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.3",
+      "source_line": 465,
+      "requirement": "Inspectors de layout/skin/input/binding/recursos com razões de invalidação.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.4",
+      "source_line": 466,
+      "requirement": "CPU/GPU/memória/allocations, p50/p95/p99 e cenas representativas.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.5",
+      "source_line": 467,
+      "requirement": "Orçamentos de nós/páginas/glyphs/masks/draws/RT e falhas controladas ao exceder.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.6",
+      "source_line": 468,
+      "requirement": "Surface loss, background/foreground, memória baixa, rotação e desconexão de dispositivos.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.7",
+      "source_line": 469,
+      "requirement": "Matriz de testes combinatórios, golden captures e rastreabilidade tarefa→evidência.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "R12.8",
+      "source_line": 470,
+      "requirement": "Relatório de capacidades suportadas/parciais/indisponíveis, sem alias de suporte fictício.",
+      "acceptance": null,
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T01",
+      "source_line": 527,
+      "requirement": "Documento antigo AEUI1/2/3/4",
+      "acceptance": "Leitura/migração preserva semântica e IDs previstos.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T02",
+      "source_line": 528,
+      "requirement": "Duas instâncias do mesmo documento",
+      "acceptance": "Click/estado em uma não altera outra.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T03",
+      "source_line": 529,
+      "requirement": "Duplicar prefab com UI/bindings",
+      "acceptance": "Alvos internos remapeados; externos explicitados.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T04",
+      "source_line": 530,
+      "requirement": "UI filha de corpo dinâmico",
+      "acceptance": "Pose acompanha malha sem dupla autoridade.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T05",
+      "source_line": 531,
+      "requirement": "Parent móvel com escala/rotação",
+      "acceptance": "Transform, desenho e picking concordam ou configuração é rejeitada claramente.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T06",
+      "source_line": 532,
+      "requirement": "Alvo destruído durante captura",
+      "acceptance": "Cancel executado; callback não usa handle inválido.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T07",
+      "source_line": 533,
+      "requirement": "Três dedos mover/olhar/saltar",
+      "acceptance": "Ações independentes e consumo discreto correto.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T08",
+      "source_line": 534,
+      "requirement": "App perde foco durante joystick",
+      "acceptance": "Contribuição zera; retorno não cria salto de input.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T09",
+      "source_line": 535,
+      "requirement": "Dois jogadores/câmeras",
+      "acceptance": "Foco, devices e UI não vazam entre contextos.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T10",
+      "source_line": 536,
+      "requirement": "Modal abre durante arrasto",
+      "acceptance": "Cancel/transferência e retorno de foco conforme contrato.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T11",
+      "source_line": 537,
+      "requirement": "Botão só de imagem com alpha zero",
+      "acceptance": "Pintura/hit seguem política explícita, inclusive migração.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T12",
+      "source_line": 538,
+      "requirement": "Checked + Focused + Disabled",
+      "acceptance": "Skin resolvida determinística por parte.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T13",
+      "source_line": 539,
+      "requirement": "Nine-slice menor que suas bordas",
+      "acceptance": "Política de redução válida; sem UV/geom degenerada.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T14",
+      "source_line": 540,
+      "requirement": "Recurso removido/recarregado",
+      "acceptance": "Erro visível e descarte correto da referência antiga.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T15",
+      "source_line": 541,
+      "requirement": "Atlas cheio durante interação",
+      "acceptance": "Falha controlada e sem corrupção de GPU.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T16",
+      "source_line": 542,
+      "requirement": "Portrait→landscape com IME",
+      "acceptance": "Campo, seleção e composição permanecem coerentes.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T17",
+      "source_line": 543,
+      "requirement": "Grapheme/emoji/RTL misturado",
+      "acceptance": "Caret e seleção não dividem unidades indevidamente.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T18",
+      "source_line": 544,
+      "requirement": "Fonte fallback ausente",
+      "acceptance": "Diagnóstico e substituição previsíveis.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T19",
+      "source_line": 545,
+      "requirement": "Lista vazia, um e 10.000 itens",
+      "acceptance": "Empty e seleção corretos; visuais proporcionais à janela.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T20",
+      "source_line": 546,
+      "requirement": "Filtrar lista durante edição IME",
+      "acceptance": "Estado não migra para outro item reciclado.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T21",
+      "source_line": 547,
+      "requirement": "Imagem assíncrona chega após reciclagem",
+      "acceptance": "Não aparece na célula de outro ID.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T22",
+      "source_line": 548,
+      "requirement": "Drag entre inventários, destino rejeita",
+      "acceptance": "Modelo e UI retornam sem duplicar/perder item.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T23",
+      "source_line": 549,
+      "requirement": "Drag item→mundo, raycast inválido",
+      "acceptance": "Nenhum item consumido nem prefab incorreto criado.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T24",
+      "source_line": 550,
+      "requirement": "Submit assíncrono após fechar formulário",
+      "acceptance": "Resposta obsoleta não reativa painel/alvo removido.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T25",
+      "source_line": 551,
+      "requirement": "Binding circular/ação recursiva",
+      "acceptance": "Ciclo limitado/diagnosticado, sem travar frame.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T26",
+      "source_line": 552,
+      "requirement": "Animação interrompida por binding",
+      "acceptance": "Política de dono preserva o valor correto.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T27",
+      "source_line": 553,
+      "requirement": "Pausa jogo com menu animado",
+      "acceptance": "Relógio escolhido respeitado e input seguro.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T28",
+      "source_line": 554,
+      "requirement": "Painel móvel sob dedo",
+      "acceptance": "Alvo capturado e remapeamento local corretos.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T29",
+      "source_line": 555,
+      "requirement": "Máscara aninhada em painel rotacionado",
+      "acceptance": "Pixel apresentado e área interativa compatíveis.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T30",
+      "source_line": 556,
+      "requirement": "UI sobre cilindro com costura UV",
+      "acceptance": "Picking e continuidade respeitam parametrização.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T31",
+      "source_line": 557,
+      "requirement": "Preview3D e câmera de segurança",
+      "acceptance": "Render targets dimensionados, sem ciclo de render.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T32",
+      "source_line": 558,
+      "requirement": "Popup de item dentro de scroll",
+      "acceptance": "Escapa clip visual, mantém owner/foco/contexto.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T33",
+      "source_line": 559,
+      "requirement": "Template atualizado com override local",
+      "acceptance": "Atualização não elimina customização legítima.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T34",
+      "source_line": 560,
+      "requirement": "Extensão ou backend ausente",
+      "acceptance": "Erro de edição/export acionável, sem sucesso falso.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T35",
+      "source_line": 561,
+      "requirement": "Background/surface loss/memória baixa",
+      "acceptance": "Recursos recriados, sem captura/handle antigo vivo.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T36",
+      "source_line": 562,
+      "requirement": "Fluxo TalkBack completo",
+      "acceptance": "Nome/papel/ação/foco corretos, sem depender de pixels.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T37",
+      "source_line": 563,
+      "requirement": "Gamepad sem touch",
+      "acceptance": "Navegar, editar, confirmar e cancelar todos os fluxos publicados.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T38",
+      "source_line": 564,
+      "requirement": "Export sem editor",
+      "acceptance": "Documento/tema/texto/input e recursos funcionam no host de jogo.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T39",
+      "source_line": 565,
+      "requirement": "Spawn/Destroy em callback",
+      "acceptance": "Comando executa em ponto seguro; iteração permanece válida.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    },
+    {
+      "id": "T40",
+      "source_line": 566,
+      "requirement": "Estresse prolongado de abrir/fechar UI",
+      "acceptance": "Memória não cresce continuamente; picos e quotas documentados.",
+      "status": "planned",
+      "implementation": [],
+      "evidence": [],
+      "remaining": []
+    }
+  ],
+  "extensions": {
+    "convex_parts_2026_10_05": {
+      "plan": "docs/planos/ui-universal/U04-COLISAO-DECOMPOSTA-2026-10-05.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-05/convex-parts.json",
+      "status": "bounded implementation validated on host and physical Android; universal chain partial"
+    },
+    "hierarchy_sources_2026_10_05": {
+      "plan": "docs/planos/ui-universal/U05-FONTES-HIERARQUIA-2026-10-05.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-05/hierarchy-sources.json",
+      "status": "bounded implementation validated on host and physical Android; U05/U09 and universal roadmap remain partial"
+    },
+    "collider_contours_2026_10_05": {
+      "plan": "docs/planos/ui-universal/U11-SELECAO-CONTORNOS-2026-10-05.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/collider-contours.json",
+      "video_analysis": "docs/planos/ui-universal/ANALISE-VIDEO-COLLIDERS-2026-10-05.md",
+      "status": "bounded contour picking validated on host and physical Android; U11 and original roadmap remain partial"
+    },
+    "collider_surfaces_2026_10_05": {
+      "plan": "docs/planos/ui-universal/U11-SUPERFICIES-2026-10-05.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-05/surface-picking/collider-surfaces.json",
+      "status": "bounded surface selection validated on host and physical Android on 2026-10-06; U11 partial",
+      "physical_followup": "docs/validacao/ui-universal-2026-10-06/surface-device/acceptance.json"
+    },
+    "collider_body_owners_2026_10_06": {
+      "plan": "docs/planos/ui-universal/U11-CORPOS-E-FILHOS-2026-10-06.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/body-owners/acceptance.json",
+      "status": "body-linked descendant picking, real Inspector edit/history/archive and host Jolt verified; physical Android authoring accepted; U11 and universal roadmap partial"
+    },
+    "collider_query_identity_2026_10_06": {
+      "plan": "docs/planos/ui-universal/U11-IDENTIDADE-QUERIES-2026-10-06.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/query-identity/acceptance.json",
+      "status": "native compound identity, ABI44 and typed collider resolution accepted in 89 host scenarios, four SDK scenarios and physical Android Play; U11 and universal roadmap partial"
+    },
+    "collider_occlusion_2026_10_06": {
+      "plan": "docs/planos/ui-universal/U11-OCLUSAO-2026-10-06.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/occlusion/acceptance.json",
+      "status": "closed block: geometric surface/contour occlusion, actual authoring and persistence/Jolt accepted on host and physical Android; wider U11 and universal roadmap remain open"
+    },
+    "collider_handles_2026_10_06": {
+      "plan": "docs/planos/ui-universal/U11-ALCAS-COLLIDER-2026-10-06.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/collider-handles/acceptance.json",
+      "status": "closed block: typed dimensions/local pose handles, history/persistence/Jolt accepted on host and physical Android authoring; wider U11 and universal roadmap remain open"
+    },
+    "u11_integral_2026_10_06": {
+      "plan": "docs/planos/ui-universal/U11-FECHAMENTO-INTEGRAL-2026-10-06.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/u11-integral/acceptance.json",
+      "status": "accepted_complete",
+      "u11_complete": true,
+      "remaining_u11": [],
+      "host_scenarios_passed": 100,
+      "final_apk_frames_reviewed": 530,
+      "boundary": "Entire U11 extension closed; original UI roadmap and other U packages retain their own statuses; engine_complete false."
+    },
+    "collision_regeneration_2026_10_06": {
+      "plan": "docs/planos/ui-universal/BLOCOS-INTEGRADOS-2026-10-06.md",
+      "evidence": "docs/validacao/ui-universal-2026-10-06/collision-regeneration/acceptance.json",
+      "status": "accepted_bounded_block",
+      "u05_complete": false,
+      "u09_complete": false,
+      "host_scenarios_passed": 105,
+      "focused_final_scenarios_passed": 5,
+      "boundary": "Persistent recipe/regeneration and coherent prefab physical revision closed; remaining U01-U10 and full visual modelling stay open."
+    }
+  }
+}

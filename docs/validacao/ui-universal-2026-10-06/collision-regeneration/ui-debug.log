@@ -1,0 +1,35 @@
+[New Thread 38712.0xbd90]
+[New Thread 38712.0xbc68]
+[New Thread 38712.0x6178]
+[Thread 38712.0x6178 exited with code 0]
+[New Thread 38712.0x67d4]
+[New Thread 38712.0x1dbc]
+[New Thread 38712.0xaedc]
+[New Thread 38712.0x4734]
+[New Thread 38712.0x42a8]
+[New Thread 38712.0x4cf4]
+[New Thread 38712.0x3a68]
+[New Thread 38712.0x7094]
+[New Thread 38712.0xcc64]
+[New Thread 38712.0x93b8]
+[New Thread 38712.0x3554]
+[Thread 38712.0x3554 exited with code 0]
+[Thread 38712.0x67d4 exited with code 0]
+[Thread 38712.0x4cf4 exited with code 0]
+[Thread 38712.0x1dbc exited with code 0]
+[Thread 38712.0x4734 exited with code 0]
+[Thread 38712.0xaedc exited with code 0]
+[Thread 38712.0x42a8 exited with code 0]
+[Thread 38712.0x3a68 exited with code 0]
+[Thread 38712.0x7094 exited with code 0]
+[Thread 38712.0x93b8 exited with code 0]
+[Thread 38712.0xcc64 exited with code 0]
+
+Thread 1 received signal SIGSEGV, Segmentation fault.
+0x00007ff6d1067392 in ae::test::detail::sampleRgba8(std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, float, float, float*)::{lambda(unsigned int, unsigned int)#1}::operator()(unsigned int, unsigned int) const ()
+#0  0x00007ff6d1067392 in ae::test::detail::sampleRgba8(std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, float, float, float*)::{lambda(unsigned int, unsigned int)#1}::operator()(unsigned int, unsigned int) const ()
+#1  0x00007ff6d0b9df4c in ae::test::detail::sampleRgba8(std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, float, float, float*) ()
+#2  0x00007ff6d0b9b1b0 in ae::test::rasterizeUi(std::span<ae::ui::UiInstance const, 18446744073709551615ull>, ae::ui::UiFont const&, ae::ui::UiIconAtlas const&, ae::test::UiSoftwareTarget&, std::span<unsigned char const, 18446744073709551615ull>, unsigned int, unsigned int, std::span<unsigned char const, 18446744073709551615ull>, unsigned int) ()
+#3  0x00007ff6d0452c2e in (anonymous namespace)::capture(ae::editor::EditorSession&, ae::ui::UiFont const&, ae::ui::UiIconAtlas const&, std::filesystem::__cxx11::path const&) ()
+#4  0x00007ff6d04577ed in collision_recipe_compact_review_pointer_and_visual_capture() ()
+#5  0x00007ff6d0411823 in main ()
