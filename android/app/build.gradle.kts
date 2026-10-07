@@ -288,7 +288,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = providers.gradleProperty("astraApplicationId").getOrElse("dev.aether.editor")
+        val configuredApplicationId = providers.gradleProperty("astraApplicationId").getOrElse("dev.aether.editor")
+        applicationId = configuredApplicationId
+        manifestPlaceholders["astraApplicationLabel"] = providers.gradleProperty("astraApplicationLabel")
+            .getOrElse(if (configuredApplicationId == "dev.aether.editor") "Astra" else "Astra Dev")
         buildConfigField("boolean", "INCLUDE_LEGACY_DEMOS", includeLegacyDemos.toString())
         minSdk = 26
         targetSdk = 35

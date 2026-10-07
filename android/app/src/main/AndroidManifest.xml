@@ -25,7 +25,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:hasCode="true"
         android:icon="@mipmap/ic_astra"
-        android:label="Astra"
+        android:label="${astraApplicationLabel}"
         android:theme="@style/AetherTheme">
         <!-- Sem este meta-data o GameManager nao enxerga o game-mode-config e
              o app fica em STANDARD. A diferenca medida entre STANDARD e
