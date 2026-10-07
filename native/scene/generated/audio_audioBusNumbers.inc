@@ -4,5 +4,5 @@ inline constexpr std::array<ComponentNumber, 1> audioBusNumbers{{
   {"Ganho", 0, 1, .01f,
    [](const ComponentValue &value)->const float&{return static_cast<const AudioBus&>(value).volume;},
    [](ComponentValue &value)->float*{return &static_cast<AudioBus&>(value).volume;},
-   "volume", {.group="Mixer", .unit="", .help=nullptr, .visible=nullptr}},
+   "volume", {.group="Mixer", .unit="", .help=nullptr, .visible=nullptr}, true},
 }};

@@ -257,20 +257,22 @@
       "dependencias": "Propriedade elegível; cancelamento e concorrência com física/animação definidos",
       "trabalho_original": "P06",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "implementada_aguarda_aceite",
       "evidencias": [
         "docs/planos/CONSTRAINTS-TWEEN-2026-09-30.md",
         "docs/validacao/evidencias/number-tweens-abi30-20261001/README.md",
         "docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md",
         "native/runtime/scene_tween_sequences.h",
         "tests/native/test_tween_sequences.cpp",
-        "docs/validacao/evidencias/tween-sequence-20261006/aparelho-logcat.txt"
+        "docs/validacao/evidencias/tween-sequence-20261006/aparelho-logcat.txt",
+        "native/scene/property_tween.h",
+        "docs/validacao/evidencias/property-tween-20261006/property-tween-1200.png"
       ],
-      "lacunas": [
-        "Sequência autoral encadeia só Transform Tween; NumberTween e propriedade arbitrária por etapa pendentes.",
-        "Etapa seguinte começa no quadro seguinte ao término da anterior."
-      ],
-      "aceite": {}
+      "lacunas": [],
+      "aceite": {},
+      "limites_validacao": [
+        "Sequência aceita no aparelho em 06/10/2026; Tween de propriedade validado no host, aceite no aparelho pendente (ADB desconectado)."
+      ]
     },
     {
       "id": "F011",

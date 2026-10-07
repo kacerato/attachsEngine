@@ -1,5 +1,8 @@
 #include "harness.h"
 #include "runtime/scene_tween_sequences.h"
+#include "runtime/scene_components.h"
+#include "scene/light.h"
+#include <cmath>
 #include <sstream>
 #include <vector>
 using namespace ae;using namespace ae::runtime;
@@ -89,4 +92,51 @@ AE_TEST(tween_sequence_methods_play_pause_resume_cancel_and_step_through_operati
   AE_EXPECT_TRUE(call("step")==WorldStatus::Ok&&result.integer==1,"play restarts from step 1");
   ComponentOperationServices missing{&w,nullptr,&tweens};
   AE_EXPECT_TRUE(invokeComponentMethod(missing,handle,"play",{},result)==WorldStatus::NotRunning,"host without the evaluator refuses explicitly");
+}
+
+AE_TEST(property_tween_animates_a_tweenable_number_on_another_object_and_joins_a_sequence) {
+  SceneGraph g;
+  const auto lamp=g.createEntity(g.root(),ObjectKind::Folder,"Luz");auto lampValue=*g.find(lamp);
+  auto *light=static_cast<scene::Light*>(lampValue.components.add(scene::Light::descriptor));light->intensity=1;const auto lightInstance=light->instanceId();
+  g.applyEntityValues(lamp,lampValue);
+  const auto add=[&](const char *name,const char *type,const char *property,float destination,bool autoplay,u64 &instance){
+    const auto id=g.createEntity(g.root(),ObjectKind::Folder,name);auto v=*g.find(id);
+    auto *t=static_cast<scene::PropertyTween*>(v.components.add(scene::PropertyTween::descriptor));
+    t->target=lamp;t->componentType=type;t->property=property;t->destination=destination;t->duration=.5f;t->autoplay=autoplay;instance=t->instanceId();
+    g.applyEntityValues(id,v);return id;};
+  u64 fade=0,rival=0,heavy=0;
+  const auto fader=add("Acender","astra.render.light","intensity",5,true,fade);
+  const auto second=add("Rival","astra.render.light","intensity",9,true,rival);
+  const auto refused=add("Massa","astra.render.light","shadow_bias",.01f,true,heavy);
+  scene::PropertyTween copy;std::stringstream payload;static_cast<const scene::PropertyTween*>(g.find(fader)->components.findInstance(fade))->write(payload);
+  AE_EXPECT_TRUE(copy.read(payload,1)&&copy.property=="intensity"&&copy.target==lamp,"versioned property tween round-trips");
+  GameWorld w;AE_EXPECT_TRUE(w.load(g),"real world");SceneTweens tweens;ComponentEventQueue events;
+  events.attach(ComponentEventQueue::Consumer::Scripts,true);tweens.setEvents(&events);
+  const auto intensity=[&]{return static_cast<const scene::Light*>(w.readComponent({w.handle(lamp),lightInstance}))->intensity;};
+  tweens.advance(w,.25,.25);
+  AE_EXPECT_TRUE(std::abs(intensity()-3)<1e-4f,"midpoint written through GameWorld::setTweenNumber");
+  AE_EXPECT_TRUE(tweens.state(second,rival)->status==SceneTweens::Status::CompetingWriter,"second writer of the same property is refused");
+  AE_EXPECT_TRUE(tweens.state(refused,heavy)->status==SceneTweens::Status::PropertyUnavailable,"property without per-frame consumer is refused");
+  tweens.advance(w,.25,.25);
+  AE_EXPECT_TRUE(intensity()==5&&tweens.state(fader,fade)->status==SceneTweens::Status::Completed,"final value and completion");
+  u32 completed=0;events.consume(ComponentEventQueue::Consumer::Scripts,[&](const ComponentEventRecord &r,u64){completed+=r.type==&scene::PropertyTween::descriptor;});
+  AE_EXPECT_EQ(completed,u32{1},"completed emitted once");
+
+  // Etapa de sequência com Transform Tween e Tween de propriedade no mesmo objeto.
+  SceneGraph h;const auto lamp2=h.createEntity(h.root(),ObjectKind::Folder,"Luz");auto v=*h.find(lamp2);
+  auto *l2=static_cast<scene::Light*>(v.components.add(scene::Light::descriptor));l2->intensity=0;const auto l2Instance=l2->instanceId();
+  auto *move=static_cast<scene::TransformTween*>(v.components.add(scene::TransformTween::descriptor));move->autoplay=false;move->duration=.5f;move->destination[0]=1;
+  auto *glow=static_cast<scene::PropertyTween*>(v.components.add(scene::PropertyTween::descriptor));
+  glow->componentType="astra.render.light";glow->property="intensity";glow->destination=2;glow->duration=.5f;glow->autoplay=false;
+  h.applyEntityValues(lamp2,v);
+  const auto seqId=h.createEntity(h.root(),ObjectKind::Folder,"Sequência");auto sv=*h.find(seqId);
+  auto *seq=static_cast<scene::TweenSequence*>(sv.components.add(scene::TweenSequence::descriptor));seq->steps[0]={lamp2,false,0};const auto seqInstance=seq->instanceId();
+  h.applyEntityValues(seqId,sv);
+  AE_EXPECT_TRUE(runtime::referenceAccepts(h,seqId,scene::TweenSequence::descriptor.references[0],lamp2),"step accepts an object with tweens");
+  GameWorld w2;AE_EXPECT_TRUE(w2.load(h),"second world");SceneTweens t2;SceneTweenSequences sequences;
+  for(int i=0;i<10;++i){sequences.advance(w2,t2,.1,.1);t2.advance(w2,.1,.1);}
+  Transform pose;w2.localTransform(w2.handle(lamp2),pose);
+  const auto glowed=static_cast<const scene::Light*>(w2.readComponent({w2.handle(lamp2),l2Instance}))->intensity;
+  AE_EXPECT_TRUE(std::abs(pose.position[0]-1)<1e-4f&&std::abs(glowed-2)<1e-4f,"both tweens of the step ran");
+  AE_EXPECT_TRUE(sequences.state(seqId,seqInstance)->status==SceneTweenSequences::Status::Completed,"sequence waits for both and completes");
 }

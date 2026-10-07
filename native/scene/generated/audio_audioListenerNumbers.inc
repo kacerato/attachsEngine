@@ -4,7 +4,7 @@ inline constexpr std::array<ComponentNumber, 2> audioListenerNumbers{{
   {"Volume global", 0, 1, .01f,
    [](const ComponentValue &value)->const float&{return static_cast<const AudioListener&>(value).volume;},
    [](ComponentValue &value)->float*{return &static_cast<AudioListener&>(value).volume;},
-   "volume", {.group="Escuta", .unit="", .help=nullptr, .visible=nullptr}},
+   "volume", {.group="Escuta", .unit="", .help=nullptr, .visible=nullptr}, true},
   {"Prioridade", 0, 255, 1,
    [](const ComponentValue &value)->const float&{return static_cast<const AudioListener&>(value).priority;},
    [](ComponentValue &value)->float*{return &static_cast<AudioListener&>(value).priority;},

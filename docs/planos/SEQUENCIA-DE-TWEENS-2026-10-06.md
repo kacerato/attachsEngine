@@ -34,8 +34,16 @@ Não existe segundo interpolador: pausa, retomada e cancelamento chegam aos mesm
 | Etapas | 8 etapas fixas apontando objetos com Transform Tween | Adaptação explícita (mesmo padrão de LOD Group e Receita de colisão) |
 | Callback por etapa | Evento `step_started`, consumido por script ou Conexão de evento | Equivalente ao `tween_callback` encadeado |
 | Etapa seguinte | Começa no quadro seguinte ao término da anterior | Adaptação explícita: o Godot reaproveita o tempo restante no mesmo quadro |
-| NumberTween em etapa | Não: NumberTween é trilha criada por script, sem identidade autoral | Pendente; compor por script com `NumberTween.State` |
-| Tween de propriedade arbitrária por etapa | Só pose (Transform Tween) | Pendente |
+| Propriedade numérica em etapa | Tween de propriedade persistente (abaixo); a etapa reinicia todos os tweens do objeto e espera todos | Equivalente ao `tween_property` encadeado |
+| NumberTween de script em etapa | Não: trilha de script sem identidade autoral; o equivalente autoral é o Tween de propriedade | Adaptação explícita |
+
+## Tween de propriedade
+
+Componente `astra.tween.property` v1 (repetível): alvo (vazio = este objeto), propriedade (id do tipo + PropertyId gravados), destino, destino relativo, duração, espera, curva, repetição, ida e volta, autoplay, escala de tempo. Métodos e evento iguais aos do Transform Tween; catálogo da Conexão de evento: evento 13, métodos 20–23.
+
+Só anima propriedades que o descritor declara interpoláveis e que têm consumidor por quadro. A regra é uma só, `runtime::numberTweenable` (`runtime/game_world.h`), usada pelo NumberTween de script, pelo avaliador de Play (`SceneTweens::advanceProperty` → `GameWorld::setTweenNumber`) e pelo seletor do Inspector. Hoje entram cor, intensidade, alcance e ângulos da luz; FOV e tamanho ortográfico da câmera; e, a partir deste bloco, volume, tom e pan do AudioSource, volume do bus e do ouvinte (o mundo de áudio reaplica esses valores a cada passo). Dois tweens na mesma propriedade: o segundo fica em "Outro componente controla a pose"; propriedade sumida ou recusada: "Propriedade ausente ou não interpolável".
+
+No Inspector, a linha "Propriedade" abre um seletor com as propriedades interpoláveis do alvo e o valor atual de cada uma; a escolha grava tipo, PropertyId e o valor atual como destino inicial, com Desfazer. A linha de estado diz "De X até Y · começa no Play" ou o motivo da recusa. Ícone novo `component/tween-property`.
 
 ## Inspector
 
@@ -46,4 +54,5 @@ A captura inicial (`docs/validacao/evidencias/tween-sequence-20261006/`) mostrou
 - Host C++: `tween_sequence_*` 2/2: gravação v1 e recusa de intervalo negativo; ordem, espera, etapa paralela no mesmo quadro, duas passagens com `step_started` 1,2,3,1,2,3 e um único `completed`; falha explícita sem tween e com tween infinito; `play/pause/resume/cancel/step` pela mesma porta da ABI e recusa `NotRunning` sem o avaliador. Suíte 1414/1418; as 4 falhas são anteriores à branch.
 - C#: suíte 521/521 com a fachada regenerada.
 - UI executável: capturas 853×394 e 1200×700 (Etapas, Execução, Adicionar).
+- Tween de propriedade (host): `property_tween_*` 2/2 — intensidade de luz de outro objeto 1→3→5 com `completed` único, segundo escritor recusado, propriedade sem consumidor por quadro recusada, etapa de sequência com Transform Tween e Tween de propriedade juntos; seletor pelo toque real (lista sem `shadow_bias`, escolha grava tipo/PropertyId/destino, Desfazer). Capturas em `docs/validacao/evidencias/property-tween-20261006/`. Aparelho: APK compilado; aceite pendente porque o ADB desconectou durante a sessão (projeto `TweenPropriedade-20261006` e sonda `PropertyProbe.cs` prontos).
 - Aparelho (APK instalado com `install -r`, projeto `Sequencia-20261006` gerado por `aether_ui_preview write-sequence-project`): sonda `SequenceProbe` registrou etapa 2 em 0,84 s depois da 1 em 0,09 s (0,5 s de tween + 0,3 s de espera), etapa 3 no mesmo instante da 2, duas passagens, porta relativa em 2,00 e luz/placa em 1,00, `completed ... PASS`, 0 erros Vulkan (`aparelho-logcat.txt`). Inspector do Play no aparelho com "Concluída" e as etapas (`aparelho-03-inspector-play.png`). Os objetos do teste não têm malha: a vista de jogo não mostra movimento.

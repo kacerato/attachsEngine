@@ -10,6 +10,8 @@
 #include <iomanip>
 #include "scene/event_connection.h"
 #include "scene/tween_sequence.h"
+#include "scene/property_tween.h"
+#include "editor/editor_property_tween.h"
 #include "runtime/scene_tween_sequences.h"
 #include "scene/script_behavior.h"
 #include "scene/prefab_link.h"
@@ -135,6 +137,7 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(const auto *timer=static_cast<const scene::Timer*>(entity.components.find(scene::Timer::descriptor)))
     return timer->elapsedAction!=0 ? UiIcon::EventTimeoutConnection : UiIcon::ComponentTimer;
   if(entity.components.find(scene::TweenSequence::descriptor)) return UiIcon::ComponentTweenSequence;
+  if(entity.components.find(scene::PropertyTween::descriptor)) return UiIcon::ComponentTweenProperty;
   if(const auto *tween=static_cast<const scene::TransformTween*>(entity.components.find(scene::TransformTween::descriptor)))
     return tween->finishedAction!=0?UiIcon::EventTweenCompletion:UiIcon::ComponentTweenTransform;
   return iconForKind(entity.kind);
@@ -3329,7 +3332,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     using S=runtime::SceneTweenSequences::Status;
     const u32 total=sequence.stepCount();
     std::string status;
-    if(!live) status=total==0?std::string{"Aponte a etapa 1 para um objeto com Transform Tween"}:
+    if(!live) status=total==0?std::string{"Aponte a etapa 1 para um objeto com tween"}:
       std::to_string(total)+(total==1?" etapa · ":" etapas · ")+(sequence.autoplay?"começa no Play":"aguarda Tocar");
     else if(live->status==S::Failed) status=live->failure;
     else {
@@ -3496,6 +3499,63 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       builder.label(row,"Decorrido",theme.color.textDim,theme.type.caption);
       takeTop(content,4);
     }
+  }
+  // Tween de propriedade: estado ao vivo e, com o seletor aberto, a lista do
+  // que o alvo deixa interpolar no lugar dos campos.
+  if(entry.type==&scene::PropertyTween::descriptor&&!searching) {
+    const auto &tween=scene::propertyTween(*component);
+    const auto *targetEntity=tween.target?builder.state.document->find(static_cast<EditorEntityId>(tween.target)):&entity;
+    if(builder.state.propertyTweenPicker==component->instanceId()) {
+      auto title=takeTop(content,32),back=takeLeft(title,32);
+      builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(back,widgetId(EditorWidget::PropertyTweenPickerClose));
+      builder.label(title,fitMiddle(builder.list,std::string("Propriedade de ")+(targetEntity?targetEntity->name:"alvo ausente"),title.width,theme.type.caption),
+                    theme.color.text,theme.type.caption);
+      const auto options=targetEntity?tweenablePropertyOptions(targetEntity->components):std::vector<TweenablePropertyOption>{};
+      if(options.empty()) {
+        builder.label(takeTop(content,40),"O alvo não tem propriedade interpolável (luz, câmera, áudio…)",theme.color.textMuted,theme.type.caption);
+        return;
+      }
+      auto footer=takeBottom(content,30),previous=takeLeft(footer,36),next=takeRight(footer,36);
+      const u32 perPage=std::max(1u,static_cast<u32>(content.height/40));
+      const u32 pages=(static_cast<u32>(options.size())+perPage-1)/perPage;
+      const u32 page=std::min(builder.state.meshPage,pages-1);
+      for(u32 i=page*perPage;i<options.size()&&i<(page+1)*perPage;++i) {
+        const auto &option=options[i];auto row=takeTop(content,40);const auto hit=row;
+        const bool current=option.type==tween.componentType&&option.property==tween.property;
+        builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+        if(current) builder.list.addRect({row.x,row.y+4,3,row.height-8},theme.color.accent,1);
+        row=deflate(row,UiInsets{10,2,4,2});
+        char valueText[48];std::snprintf(valueText,sizeof valueText,"%.6g %s",static_cast<double>(option.value),option.unit.c_str());
+        builder.label(takeRight(row,72),valueText,theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.label(takeTop(row,18),option.propertyName.c_str(),theme.color.text,theme.type.caption);
+        builder.label(row,option.componentName.c_str(),theme.color.textDim,theme.type.caption);
+        builder.router.addRegion(hit,widgetId(EditorWidget::PropertyTweenChoiceBase)+i);
+      }
+      builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+      builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+      if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
+      if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
+      builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      return;
+    }
+    // Estado: ao vivo no Play; na edição, o que será animado.
+    const auto *live=state.tweenRuntime?state.tweenRuntime->state(entity.id,component->instanceId()):nullptr;
+    std::string status;bool warning=false;
+    if(live) {
+      status=live->paused||state.playPaused?std::string{"Pausado"}:std::string{runtime::SceneTweens::statusText(live->status)};
+      warning=live->status>=runtime::SceneTweens::Status::Authority;
+    } else if(tween.property.empty()) {status="Escolha a propriedade a animar";warning=true;}
+    else {
+      bool found=false;
+      if(targetEntity) for(const auto &option:tweenablePropertyOptions(targetEntity->components))
+        if(option.type==tween.componentType&&option.property==tween.property) {
+          char text[96];std::snprintf(text,sizeof text,"De %.6g até %s%.6g · começa no Play",static_cast<double>(option.value),tween.relative?"+":"",static_cast<double>(tween.destination));
+          status=text;found=true;break;
+        }
+      if(!found) {status="Propriedade ausente no alvo";warning=true;}
+    }
+    builder.label(takeTop(content,20),fitMiddle(builder.list,status,content.width,theme.type.caption),warning?theme.color.warning:theme.color.textDim,theme.type.caption);
   }
   const auto show=[&](const scene::PropertyPresentation &p) {
     if(!p.isVisible(*component)) return false;
@@ -3706,6 +3766,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       return id=="friction"?1:id=="friction_combine"?2:id=="restitution"?3:id=="restitution_combine"?4:5;
     };
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
+  if(entry.type==&scene::PropertyTween::descriptor&&!searching&&group=="Propriedade") {
+    const auto rank=[](const Field &field){return field.kind==4?0:field.kind==2?2:3;};
+    fields.push_back({23,0});
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){
+      const auto ra=a.kind==23?-1:rank(a),rb=b.kind==23?-1:rank(b);return ra<rb;});
   }
   // Sequência: uma linha por etapa, na ordem de execução (objeto, espera e
   // "junto da anterior"), em vez de três listas separadas por tipo de campo.
@@ -3989,6 +4055,19 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(editable) builder.list.addImage(centred(chevron,10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
       builder.label(deflate(box,UiInsets{8,0,0,0}),label,editable?theme.color.text:theme.color.textMuted,theme.type.caption);
       if(editable) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+    } else if(f.kind==23) {
+      const auto &tween=scene::propertyTween(*component);
+      const auto *targetEntity=tween.target?builder.state.document->find(static_cast<EditorEntityId>(tween.target)):&entity;
+      std::string label="Escolher propriedade";bool warning=tween.property.empty();
+      if(!tween.property.empty()) {
+        label="Ausente · "+tween.componentType+" · "+tween.property;warning=true;
+        if(targetEntity) for(const auto &option:tweenablePropertyOptions(targetEntity->components))
+          if(option.type==tween.componentType&&option.property==tween.property) {label=option.componentName+" · "+option.propertyName;warning=false;break;}
+      }
+      builder.label(takeTop(slot,17),"Propriedade",theme.color.textMuted,theme.type.caption);
+      builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
+      builder.label(slot,fitMiddle(builder.list,label,slot.width,theme.type.caption),warning?theme.color.warning:theme.color.text,theme.type.caption);
+      if(state.workspace!=EditorWorkspace::Play) builder.router.addRegion(hit,widgetId(EditorWidget::PropertyTweenPick)+index);
     } else if(f.kind==22) {
       const auto &reference=entry.type->references[f.index];const auto &interval=entry.type->numbers[f.slot];
       const auto target=reference.read(*component);const bool used=target!=0;
@@ -4017,7 +4096,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
       const auto readiness=runtime::referenceReadiness(*builder.state.document,entity.id,*component,reference);
       const bool warning=used&&readiness!=runtime::ReferenceReadiness::Ready&&readiness!=runtime::ReferenceReadiness::OptionalEmpty;
-      std::string label=!used?std::string{"Escolher objeto com Transform Tween"}:object?object->name:std::string{"Objeto ausente"};
+      std::string label=!used?std::string{"Escolher objeto com tween"}:object?object->name:std::string{"Objeto ausente"};
       if(used&&readiness==runtime::ReferenceReadiness::Incompatible&&object) label+=" · sem tween";
       builder.list.addImage(centred(takeRight(slot,22),16,16),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
       builder.label(slot,fitMiddle(builder.list,label,slot.width,theme.type.caption),warning?theme.color.warning:used?theme.color.text:theme.color.textDim,theme.type.caption);

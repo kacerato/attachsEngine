@@ -1,7 +1,7 @@
 using Astra.Components;
 namespace Astra;
 
-public enum TweenRuntimeStatus : uint { Idle,Delayed,Running,Completed,Cancelled,Authority,CompetingWriter,InvalidPose,NoChannels }
+public enum TweenRuntimeStatus : uint { Idle,Delayed,Running,Completed,Cancelled,Authority,CompetingWriter,InvalidPose,NoChannels,PropertyUnavailable }
 public readonly record struct TweenRuntimeState(TweenRuntimeStatus Status,double ElapsedSeconds,bool Paused,bool Enabled,bool ActiveInHierarchy);
 
 /// <summary>Controls the session-owned transform evaluator. Runtime state is not serialized.</summary>

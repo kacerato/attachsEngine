@@ -15,6 +15,8 @@
 #include "renderer/primitive_geometry.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
+#include "editor/editor_property_tween.h"
+#include "scene/property_tween.h"
 #include "editor/editor_number_text.h"
 #include "editor/editor_scene_template.h"
 #include "scene/environment.h"
@@ -4705,6 +4707,32 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::MeshPickerClose)) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();return true;}
     if(key==widgetId(EditorWidget::MeshPrevious)) {if(state_.meshPage) --state_.meshPage;return true;}
     if(key==widgetId(EditorWidget::MeshNext)) {++state_.meshPage;return true;}
+    // Tween de propriedade: abrir o seletor, fechar e aplicar a escolha. A
+    // escolha grava tipo e PropertyId e usa o valor atual como destino inicial.
+    if(key>=widgetId(EditorWidget::PropertyTweenPick)&&key<widgetId(EditorWidget::PropertyTweenPick)+0x01000000u) {
+      const auto *entity=document_.find(state_.selection);const u32 index=key-widgetId(EditorWidget::PropertyTweenPick);
+      if(!entity||index>=entity->components.size()||isPlaying()||history_.isOpen()) return true;
+      const auto *component=entity->components.at(index);
+      if(&component->type()!=&scene::PropertyTween::descriptor) return true;
+      state_.propertyTweenPicker=component->instanceId();state_.meshPage=0;return true;
+    }
+    if(key==widgetId(EditorWidget::PropertyTweenPickerClose)) {state_.propertyTweenPicker=0;return true;}
+    if(key>=widgetId(EditorWidget::PropertyTweenChoiceBase)&&key<widgetId(EditorWidget::PropertyTweenChoiceBase)+0x01000000u) {
+      const u32 choice=key-widgetId(EditorWidget::PropertyTweenChoiceBase);
+      const auto *entity=document_.find(state_.selection);
+      const auto *component=entity?entity->components.findInstance(state_.propertyTweenPicker):nullptr;
+      if(!component||&component->type()!=&scene::PropertyTween::descriptor||isPlaying()||history_.isOpen()) {state_.propertyTweenPicker=0;return true;}
+      const auto &tween=scene::propertyTween(*component);
+      const auto *target=tween.target?document_.find(static_cast<EditorEntityId>(tween.target)):entity;
+      const auto options=target?tweenablePropertyOptions(target->components):std::vector<TweenablePropertyOption>{};
+      if(choice>=options.size()) return true;
+      auto values=*entity;auto &edited=scene::propertyTween(*values.components.editInstance(state_.propertyTweenPicker));
+      edited.componentType=options[choice].type;edited.property=options[choice].property;
+      edited.destination=std::clamp(options[choice].value,-100000.f,100000.f);edited.relative=false;
+      if(!edited.valid()||!history_.applyValues(document_,state_.selection,values)) {state_.status="Propriedade recusada";return true;}
+      state_.propertyTweenPicker=0;state_.status="Propriedade do tween: "+options[choice].componentName+" · "+options[choice].propertyName;
+      return true;
+    }
     if(key==widgetId(EditorWidget::PhysicsMaterialCreate)||key==widgetId(EditorWidget::PhysicsMaterialUpdate)) {
       std::string diagnostic;
       const bool created=key==widgetId(EditorWidget::PhysicsMaterialCreate);

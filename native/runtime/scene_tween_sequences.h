@@ -26,7 +26,7 @@ public:
     case Status::Completed:return "Concluída";
     case Status::Cancelled:return "Cancelada";
     case Status::Failed:return "Etapa falhou";
-    case Status::NoSteps:return "Nenhuma etapa com Transform Tween";
+    case Status::NoSteps:return "Nenhuma etapa com tween";
     }
     return "Sequência indisponível";
   }
@@ -80,7 +80,7 @@ public:
           s.pendingStart=false;
           if(c.stepCount()==0) {s.status=Status::NoSteps;continue;}
           // A sequência é dona dos tweens das etapas: nenhum começa por conta própria.
-          for(const auto &step:c.steps) if(const auto member=tweenOf(w,step.target)) {SceneTweens::State ignored;tweens.command(w,{w.handle(member->first),member->second},2,ignored);}
+          for(const auto &step:c.steps) for(const auto &member:tweensOf(w,step.target)) {SceneTweens::State ignored;tweens.command(w,{w.handle(member.first),member.second},2,ignored);}
           s.loopsDone=0;beginGroup(c,s,firstStep(c,0));
         }
         const double dt=c.ignoreTimeScale?unscaledDelta:delta;
@@ -130,26 +130,36 @@ private:
     s.members.clear();
     for(u32 i=s.step;i<s.groupEnd;++i) {
       if(!c.steps[i].target) continue;
-      const auto member=tweenOf(w,c.steps[i].target);
-      if(!member) {fail(s,"Etapa "+std::to_string(i+1)+": objeto sem Transform Tween");return;}
-      const auto *tween=static_cast<const scene::TransformTween*>(w.readComponent({w.handle(member->first),member->second}));
-      if(tween && tween->loops==0) {fail(s,"Etapa "+std::to_string(i+1)+": tween com repetição infinita nunca termina");return;}
-      SceneTweens::State out;
-      if(tweens.command(w,{w.handle(member->first),member->second},1,out)!=WorldStatus::Ok) {fail(s,"Etapa "+std::to_string(i+1)+": tween recusou reinício");return;}
-      s.members.emplace_back(*member);
+      const auto members=tweensOf(w,c.steps[i].target);
+      if(members.empty()) {fail(s,"Etapa "+std::to_string(i+1)+": objeto sem Transform Tween nem Tween de propriedade");return;}
+      for(const auto &member:members) if(loopsOf(w,member)==0) {fail(s,"Etapa "+std::to_string(i+1)+": tween com repetição infinita nunca termina");return;}
+      for(const auto &member:members) {
+        SceneTweens::State out;
+        if(tweens.command(w,{w.handle(member.first),member.second},1,out)!=WorldStatus::Ok) {fail(s,"Etapa "+std::to_string(i+1)+": tween recusou reinício");return;}
+        s.members.emplace_back(member);
+      }
       if(events_) {const auto number=scene::ComponentOperationValue::makeInteger(i+1);events_->emit(w,owner,c.instanceId(),scene::TweenSequence::descriptor,"step_started",std::span(&number,1));}
     }
     s.status=Status::Running;
   }
-  // Primeiro Transform Tween do objeto apontado: só um escreve a pose por vez.
-  static std::optional<std::pair<ObjectId,u64>> tweenOf(const GameWorld &w,u64 target) {
-    if(!target) return std::nullopt;
-    const auto *o=w.graph().find(static_cast<ObjectId>(target));if(!o) return std::nullopt;
+  // Tweens persistentes do objeto apontado: o Transform Tween (um escreve a
+  // pose) e todos os Tweens de propriedade, que começam juntos na etapa.
+  static std::vector<std::pair<ObjectId,u64>> tweensOf(const GameWorld &w,u64 target) {
+    std::vector<std::pair<ObjectId,u64>> found;if(!target) return found;
+    const auto *o=w.graph().find(static_cast<ObjectId>(target));if(!o) return found;
+    bool pose=false;
     for(usize k=0;k<o->components.size();++k) {
       const auto *v=o->components.at(k);
-      if(&v->type()==&scene::TransformTween::descriptor) return std::pair{static_cast<ObjectId>(target),v->instanceId()};
+      const bool transform=&v->type()==&scene::TransformTween::descriptor;
+      if((transform&&!pose)||&v->type()==&scene::PropertyTween::descriptor) found.emplace_back(static_cast<ObjectId>(target),v->instanceId());
+      pose|=transform;
     }
-    return std::nullopt;
+    return found;
+  }
+  static u32 loopsOf(const GameWorld &w,std::pair<ObjectId,u64> member) {
+    const auto *v=w.readComponent({w.handle(member.first),member.second});
+    if(!v) return 1;
+    return &v->type()==&scene::PropertyTween::descriptor?scene::propertyTween(*v).loops:static_cast<const scene::TransformTween&>(*v).loops;
   }
   void stopMembers(GameWorld &w,SceneTweens &tweens,State &s) {memberCommand(w,tweens,s,2);s.members.clear();}
   static void memberCommand(GameWorld &w,SceneTweens &tweens,const State &s,u32 operation) {

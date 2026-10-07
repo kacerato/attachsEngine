@@ -64,6 +64,9 @@
           },
           "default": {
             "cpp": "1"
+          },
+          "tweenable": {
+            "cpp": "true"
           }
         },
         {
@@ -129,7 +132,10 @@
         {
           "id": "volume",
           "label": "Ganho",
-          "member": "volume"
+          "member": "volume",
+          "tweenable": {
+            "cpp": "true"
+          }
         }
       ],
       "defaults": {
@@ -224,6 +230,9 @@
           },
           "default": {
             "cpp": "1"
+          },
+          "tweenable": {
+            "cpp": "true"
           }
         },
         {
@@ -248,6 +257,9 @@
           },
           "default": {
             "cpp": "1"
+          },
+          "tweenable": {
+            "cpp": "true"
           }
         },
         {
@@ -272,6 +284,9 @@
           },
           "default": {
             "cpp": "0"
+          },
+          "tweenable": {
+            "cpp": "true"
           }
         },
         {

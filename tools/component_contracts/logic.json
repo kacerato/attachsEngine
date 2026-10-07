@@ -183,6 +183,20 @@
       "apiName": "TransformTween"
     },
     {
+      "type": "PropertyTween",
+      "name": "Tween de propriedade",
+      "description": "Interpola uma propriedade numérica interpolável de um componente",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_tweens.h → GameWorld::setTweenNumber",
+      "subfamily": "Tempo",
+      "icon": "component/tween-property",
+      "searchTerms": "Tween Property Propriedade Interpolar Intensidade FOV Valor",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_tween.html#class-tween-method-tween-property",
+      "apiName": "PropertyTween"
+    },
+    {
       "type": "TweenSequence",
       "name": "Sequência de tweens",
       "description": "Encadeia Transform Tweens em etapas sequenciais ou paralelas",

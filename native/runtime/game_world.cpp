@@ -783,9 +783,7 @@ WorldStatus GameWorld::validateTweenNumber(const ComponentHandle &component,std:
   const scene::ComponentNumber *number=nullptr;
   for(const auto &p:value->type().numbers)if(p.id==propertyId){if(number)return WorldStatus::InvalidArgument;number=&p;}
   if(!number)return WorldStatus::InvalidArgument;
-  constexpr u32 heavy=scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape|scene::Invalidate::MeshDerived|scene::Invalidate::TextureResidency|scene::Invalidate::Policy|scene::Invalidate::Script;
-  const auto capability=number->presentation.capability.empty()?schema->capability:number->presentation.capability;
-  if(!number->tweenable||!number->read||!number->write||!number->presentation.isEditable(*value)||!number->presentation.isVisible(*value)||!core::engineCapabilityAuthorable(capability)||((schema->invalidates|number->presentation.invalidates)&heavy))return WorldStatus::PropertyNotTweenable;
+  if(!numberTweenable(*schema,*number,*value))return WorldStatus::PropertyNotTweenable;
   if(!std::isfinite(destination)||destination<number->minimum||destination>number->maximum)return WorldStatus::Rejected;
   initial=number->read(*value);return std::isfinite(initial)?WorldStatus::Ok:WorldStatus::Rejected;
 }

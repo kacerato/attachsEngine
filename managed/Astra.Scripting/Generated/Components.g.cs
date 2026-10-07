@@ -818,6 +818,126 @@ public readonly struct TransformTween : IComponentFacade<TransformTween>
     public ComponentSubscription OnCompleted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "completed", handler);
 }
 
+/// <summary>Tween de propriedade: Interpola uma propriedade numérica interpolável de um componente. Família Lógica · Tempo.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html#class-tween-method-tween-property</remarks>
+public readonly struct PropertyTween : IComponentFacade<PropertyTween>
+{
+    public static string TypeId => "astra.tween.property";
+    public static PropertyTween Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PropertyTween(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Destino. Valor final; com "Destino relativo", soma ao valor do início</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Destination
+    {
+        get => Component.GetFloat("destination");
+        set => Component.SetFloat("destination", value);
+    }
+    /// <summary>Duração (s)</summary>
+    /// <remarks>Faixa válida: 0.001 a 36000.</remarks>
+    public float Duration
+    {
+        get => Component.GetFloat("duration");
+        set => Component.SetFloat("duration", value);
+    }
+    /// <summary>Espera (s)</summary>
+    /// <remarks>Faixa válida: 0 a 36000.</remarks>
+    public float Delay
+    {
+        get => Component.GetFloat("delay");
+        set => Component.SetFloat("delay", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Iniciar no Play</summary>
+    public bool Autoplay
+    {
+        get => Component.GetBool("autoplay");
+        set => Component.SetBool("autoplay", value);
+    }
+    /// <summary>Ida e volta</summary>
+    public bool Pingpong
+    {
+        get => Component.GetBool("pingpong");
+        set => Component.SetBool("pingpong", value);
+    }
+    /// <summary>Destino relativo</summary>
+    public bool Relative
+    {
+        get => Component.GetBool("relative");
+        set => Component.SetBool("relative", value);
+    }
+    /// <summary>Ignorar escala de tempo</summary>
+    public bool IgnoreTimeScale
+    {
+        get => Component.GetBool("ignore_time_scale");
+        set => Component.SetBool("ignore_time_scale", value);
+    }
+    public enum EasingOption : uint
+    {
+        Linear = 0,
+        Smoothstep = 1,
+        QuadraticoEntrada = 2,
+        QuadraticoSaida = 3,
+    }
+    /// <summary>Curva</summary>
+    public EasingOption Easing
+    {
+        get => (EasingOption)Component.GetEnum("easing");
+        set => Component.SetEnum("easing", (uint)value);
+    }
+    public enum LoopsOption : uint
+    {
+        Infinito = 0,
+        UmaVez = 1,
+        DuasVezes = 2,
+        TresVezes = 3,
+        DezVezes = 10,
+    }
+    /// <summary>Repetição</summary>
+    public LoopsOption Loops
+    {
+        get => (LoopsOption)Component.GetEnum("loops");
+        set => Component.SetEnum("loops", (uint)value);
+    }
+    /// <summary>Alvo. Objeto dono do componente animado; vazio usa este objeto</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+    /// <summary>Reiniciar. Recomeça do valor atual da propriedade, conservando a pausa</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Restart() => Component.Invoke("restart");
+    /// <summary>Cancelar. Interrompe sem voltar ao valor inicial</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Cancel() => Component.Invoke("cancel");
+    /// <summary>Pausar. Congela o progresso</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Pause() => Component.Invoke("pause");
+    /// <summary>Retomar. Continua o progresso pausado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Resume() => Component.Invoke("resume");
+    /// <summary>Decorrido. Segundos desde o início, incluindo a espera</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Elapsed() => Component.Invoke("elapsed").AsNumber();
+    /// <summary>Concluiu. Emitido uma vez quando as repetições finitas terminam, depois do valor final</summary>
+    public ComponentSubscription OnCompleted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "completed", handler);
+}
+
 /// <summary>Sequência de tweens: Encadeia Transform Tweens em etapas sequenciais ou paralelas. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html</remarks>
 public readonly struct TweenSequence : IComponentFacade<TweenSequence>
@@ -965,49 +1085,49 @@ public readonly struct TweenSequence : IComponentFacade<TweenSequence>
         get => (LoopsOption)Component.GetEnum("loops");
         set => Component.SetEnum("loops", (uint)value);
     }
-    /// <summary>Etapa 1. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 1. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step0
     {
         get => Component.GetReference("step_0");
         set => Component.SetReference("step_0", value);
     }
-    /// <summary>Etapa 2. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 2. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step1
     {
         get => Component.GetReference("step_1");
         set => Component.SetReference("step_1", value);
     }
-    /// <summary>Etapa 3. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 3. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step2
     {
         get => Component.GetReference("step_2");
         set => Component.SetReference("step_2", value);
     }
-    /// <summary>Etapa 4. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 4. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step3
     {
         get => Component.GetReference("step_3");
         set => Component.SetReference("step_3", value);
     }
-    /// <summary>Etapa 5. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 5. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step4
     {
         get => Component.GetReference("step_4");
         set => Component.SetReference("step_4", value);
     }
-    /// <summary>Etapa 6. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 6. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step5
     {
         get => Component.GetReference("step_5");
         set => Component.SetReference("step_5", value);
     }
-    /// <summary>Etapa 7. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 7. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step6
     {
         get => Component.GetReference("step_6");
         set => Component.SetReference("step_6", value);
     }
-    /// <summary>Etapa 8. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    /// <summary>Etapa 8. Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa</summary>
     public ObjectReference Step7
     {
         get => Component.GetReference("step_7");
@@ -1174,6 +1294,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         Colisao2DTerminou = 10,
         SequenciaEtapaComecou = 11,
         SequenciaConcluiu = 12,
+        TweenDePropriedadeConcluiu = 13,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1217,6 +1338,10 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         SequenciaCancelar = 17,
         SequenciaPausar = 18,
         SequenciaRetomar = 19,
+        TweenDePropriedadeReiniciar = 20,
+        TweenDePropriedadeCancelar = 21,
+        TweenDePropriedadePausar = 22,
+        TweenDePropriedadeRetomar = 23,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method

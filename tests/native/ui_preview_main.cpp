@@ -153,6 +153,49 @@ int writePhysicsMaterialProject(const char *directory) {
   std::printf("Physics material project written: %s\n",root.generic_string().c_str());
   return 0;
 }
+// Aceite no aparelho do Tween de propriedade (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md).
+int writePropertyTweenProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Property tween export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/property-tween/PropertyProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/PropertyProbe.cs",probe)) return fail("cannot publish source");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  auto &document=session.document();
+  const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");auto camera=*document.find(cameraId);
+  camera.transform.position[1]=1;camera.transform.position[2]=-6;
+  if(!camera.components.add(scene::Camera::descriptor)||!document.applyEntityValues(cameraId,camera)) return fail("camera");
+  const auto stageId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Luz do palco");auto stage=*document.find(stageId);
+  static_cast<scene::Light*>(stage.components.add(scene::Light::descriptor))->intensity=0;
+  if(!document.applyEntityValues(stageId,stage)) return fail("stage light");
+  const auto lightUpId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Acender palco");auto lightUp=*document.find(lightUpId);
+  auto *fade=static_cast<scene::PropertyTween*>(lightUp.components.add(scene::PropertyTween::descriptor));
+  fade->target=stageId;fade->componentType="astra.render.light";fade->property="intensity";fade->destination=50;fade->duration=1;
+  if(!document.applyEntityValues(lightUpId,lightUp)) return fail("fade");
+  const auto spotId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Holofote");auto spot=*document.find(spotId);
+  static_cast<scene::Light*>(spot.components.add(scene::Light::descriptor))->intensity=0;
+  auto *move=static_cast<scene::TransformTween*>(spot.components.add(scene::TransformTween::descriptor));move->autoplay=false;move->duration=.5f;move->destination[0]=1;
+  auto *glow=static_cast<scene::PropertyTween*>(spot.components.add(scene::PropertyTween::descriptor));
+  glow->autoplay=false;glow->componentType="astra.render.light";glow->property="intensity";glow->destination=30;glow->duration=.8f;
+  if(!document.applyEntityValues(spotId,spot)) return fail("spot");
+  const auto showId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Show");auto show=*document.find(showId);
+  static_cast<scene::TweenSequence*>(show.components.add(scene::TweenSequence::descriptor))->steps[0]={spotId,false,.2f};
+  auto *script=static_cast<scene::ScriptBehavior*>(show.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="acceptance.property_tween";script->source="Scripts/PropertyProbe.cs";
+  if(!document.applyEntityValues(showId,show)) return fail("show");
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"TweenPropriedade-20261006\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Property tween project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
 // Aceite no aparelho do bloco D (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md):
 // Porta sobe (relativo), depois Luz e Placa juntas após 0,3 s; duas passagens.
 int writeSequenceProject(const char *directory) {
@@ -572,6 +615,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-groups-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Groups);
   if(argc>1&&std::string_view(argv[1])=="write-services-project")return writeServicesProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);
   const char *output = argc > 1 ? argv[1] : "build/editor-preview.ppm";
@@ -1566,6 +1610,21 @@ int main(int argc, char **argv) {
     if(mode=="event-connection-when")state.componentGroup="Quando";
     if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
     if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
+  }
+  // Tween de propriedade: acender a luz do palco; "-picker" abre o seletor.
+  if(argc>4 && std::string(argv[4]).starts_with("property-tween")) {
+    const std::string mode=argv[4];
+    const auto lamp=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Luz do palco");auto lampValue=*document.find(lamp);
+    lampValue.transform.position[1]=2;static_cast<scene::Light*>(lampValue.components.add(scene::Light::descriptor))->intensity=200;
+    document.applyEntityValues(lamp,lampValue);
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Acender palco");auto value=*document.find(id);
+    auto *tween=static_cast<scene::PropertyTween*>(value.components.add(scene::PropertyTween::descriptor));
+    tween->target=lamp;tween->componentType="astra.render.light";tween->property="intensity";tween->destination=1500;tween->duration=2;tween->easing=1;
+    const auto instance=tween->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Propriedade";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(mode=="property-tween-picker") state.propertyTweenPicker=instance;
   }
   // Material físico: aba Material do Corpo físico e seletor com "Criar".
   if(argc>4 && std::string(argv[4]).starts_with("physics-material")) {

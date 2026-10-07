@@ -13,6 +13,7 @@
 #pragma once
 #include "scene/components.h"
 #include "scene/transform_tween.h"
+#include "scene/property_tween.h"
 
 #include <array>
 #include <cmath>
@@ -59,10 +60,11 @@ template<u32 I> bool stepUsed(const ComponentValue &v) {return tweenSequence(v).
 template<u32 I> bool joinVisible(const ComponentValue &v) {return I>0 && tweenSequence(v).steps[I].target!=0;}
 template<u32 I> ComponentObjectReference reference(const char *name) {
   return {I==0?"step_0":I==1?"step_1":I==2?"step_2":I==3?"step_3":I==4?"step_4":I==5?"step_5":I==6?"step_6":"step_7",name,
-          "astra.tween.transform",ObjectReferenceScope::Any,"Nenhum",
+          "",ObjectReferenceScope::Any,"Nenhum",
           [](const ComponentValue &v){return tweenSequence(v).steps[I].target;},
           [](ComponentValue &v,u64 x){tweenSequence(v).steps[I].target=x;},
-          {"Etapas","","Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa",stepVisible<I>}};
+          {"Etapas","","Objeto com Transform Tween ou Tween de propriedade; a sequência reinicia esses tweens quando a etapa começa",stepVisible<I>},
+          nullptr,hasPersistentTween};
 }
 template<u32 I> ComponentBoolean join() {
   return {I==1?"join_1":I==2?"join_2":I==3?"join_3":I==4?"join_4":I==5?"join_5":I==6?"join_6":I==7?"join_7":"join_0",

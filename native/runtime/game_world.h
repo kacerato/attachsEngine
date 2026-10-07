@@ -40,6 +40,19 @@
 #include <vector>
 
 namespace ae::runtime {
+// Regra única de "interpolável": NumberTween por script, Tween de propriedade
+// e o seletor do editor perguntam aqui. Exige consumidor por quadro, campo
+// editável e visível agora, e nenhuma invalidação que reconstrua física,
+// malha, textura, política ou script.
+inline bool numberTweenable(const scene::ComponentSchema &schema,const scene::ComponentNumber &number,const scene::ComponentValue &value) {
+  constexpr u32 heavy=scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape|scene::Invalidate::MeshDerived|
+                      scene::Invalidate::TextureResidency|scene::Invalidate::Policy|scene::Invalidate::Script;
+  const auto capability=number.presentation.capability.empty()?schema.capability:number.presentation.capability;
+  return schema.propertiesInPlay!=scene::PlayMutability::Never&&number.tweenable&&number.read&&number.write&&
+         number.presentation.isEditable(value)&&number.presentation.isVisible(value)&&core::engineCapabilityAuthorable(capability)&&
+         !((schema.invalidates|number.presentation.invalidates)&heavy);
+}
+
 class Prefab;
 
 using ComponentResourceResolver = std::function<bool(resources::AssetGuid,resources::AssetType,std::string_view,u32,

@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 50 schemas; 48 tipos no Add; 48 fachadas geradas.
+**Registro atual:** 51 schemas; 49 tipos no Add; 49 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -20,6 +20,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.constraint.parent` | Lógica | `Astra.Components.ParentConstraint` | Add Component |
 | `astra.constraint.look_at` | Lógica | `Astra.Components.LookAtConstraint` | Add Component |
 | `astra.tween.transform` | Lógica | `Astra.Components.TransformTween` | Add Component |
+| `astra.tween.property` | Lógica | `Astra.Components.PropertyTween` | Add Component |
 | `astra.tween.sequence` | Lógica | `Astra.Components.TweenSequence` | Add Component |
 | `astra.time.timer` | Lógica | `Astra.Components.GameTimer` | Add Component |
 | `astra.logic.event_connection` | Lógica | `Astra.Components.EventConnection` | Add Component |
@@ -314,6 +315,44 @@ Interpola canais locais com espera, curva e repetição. **Consumidor:** runtime
 |---|---|---|---|
 | `completed` | Concluiu | — | Emitido uma vez quando as repetições finitas terminam, depois da pose final |
 
+## Tween de propriedade · `astra.tween.property` v1
+
+Interpola uma propriedade numérica interpolável de um componente. **Consumidor:** runtime/scene_tweens.h → GameWorld::setTweenNumber. **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_tween.html#class-tween-method-tween-property).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `destination` | Destino | número | Propriedade | 0 | -100000 … 100000 |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `duration` | Duração | número | Tempo | 1 | 0.001 … 36000 | s | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `delay` | Espera | número | Tempo | 0 | 0 … 36000 | s | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `enabled` | Ativo | booleano | Tempo | verdadeiro | verdadeiro \| falso |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `autoplay` | Iniciar no Play | booleano | Tempo | verdadeiro | verdadeiro \| falso |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `pingpong` | Ida e volta | booleano | Repetição | falso | verdadeiro \| falso |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `relative` | Destino relativo | booleano | Propriedade | falso | verdadeiro \| falso |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `ignore_time_scale` | Ignorar escala de tempo | booleano | Tempo | falso | verdadeiro \| falso |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `easing` | Curva | enumeração | Tempo | Linear | Linear \| Smoothstep \| Quadrático entrada \| Quadrático saída |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `loops` | Repetição | enumeração | Repetição | Uma vez | Infinito \| Uma vez \| Duas vezes \| Três vezes \| Dez vezes |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+| `target` | Alvo | referência | Propriedade | Este objeto | qualquer objeto |  | runtime/scene_tweens.h → GameWorld::setTweenNumber | nada | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `restart` | Reiniciar | — | nada | Recomeça do valor atual da propriedade, conservando a pausa |
+| `cancel` | Cancelar | — | nada | Interrompe sem voltar ao valor inicial |
+| `pause` | Pausar | — | nada | Congela o progresso |
+| `resume` | Retomar | — | nada | Continua o progresso pausado |
+| `elapsed` | Decorrido | — | número | Segundos desde o início, incluindo a espera |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `completed` | Concluiu | — | Emitido uma vez quando as repetições finitas terminam, depois do valor final |
+
 ## Sequência de tweens · `astra.tween.sequence` v1
 
 Encadeia Transform Tweens em etapas sequenciais ou paralelas. **Consumidor:** runtime/scene_tween_sequences.h. **Invalida:** pose e bounds.
@@ -343,14 +382,14 @@ Encadeia Transform Tweens em etapas sequenciais ou paralelas. **Consumidor:** ru
 | `join_6` | Etapa 7 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
 | `join_7` | Etapa 8 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
 | `loops` | Repetição | enumeração | Execução | Uma vez | Infinito \| Uma vez \| Duas vezes \| Três vezes \| Dez vezes |  | runtime/scene_tween_sequences.h | pose e bounds | não | não | não |
-| `step_0` | Etapa 1 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_1` | Etapa 2 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_2` | Etapa 3 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_3` | Etapa 4 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_4` | Etapa 5 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_5` | Etapa 6 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_6` | Etapa 7 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
-| `step_7` | Etapa 8 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_0` | Etapa 1 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_1` | Etapa 2 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_2` | Etapa 3 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_3` | Etapa 4 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_4` | Etapa 5 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_5` | Etapa 6 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_6` | Etapa 7 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_7` | Etapa 8 | referência | Etapas | Nenhum | objeto compatível com o receptor |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
 
 **Métodos em Play**
 
@@ -417,9 +456,9 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
-| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 
@@ -1676,9 +1715,9 @@ Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/s
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `volume` | Volume | número | Som | 1 | 0 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `pitch` | Velocidade / pitch | número | Reprodução | 1 | 0.1 … 4 | × | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `pan` | Pan estéreo | número | Espaço | 0 | -1 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
+| `volume` | Volume | número | Som | 1 | 0 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | sim |
+| `pitch` | Velocidade / pitch | número | Reprodução | 1 | 0.1 … 4 | × | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | sim |
+| `pan` | Pan estéreo | número | Espaço | 0 | -1 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | sim |
 | `min_distance` | Distância mínima | número | Espaço | 1 | 0.01 … 100000 | m | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
 | `max_distance` | Distância máxima | número | Espaço | 100 | 0.02 … 100001 | m | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
 | `rolloff_factor` | Decaimento | número | Espaço | 1 | 0 … 10 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
@@ -1714,7 +1753,7 @@ Pose e volume de escuta escolhidos por prioridade. **Consumidor:** runtime/scene
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `volume` | Volume global | número | Escuta | 1 | 0 … 1 |  | runtime/scene_audio.cpp → miniaudio listener | nada | não | não | não |
+| `volume` | Volume global | número | Escuta | 1 | 0 … 1 |  | runtime/scene_audio.cpp → miniaudio listener | nada | não | não | sim |
 | `priority` | Prioridade | número | Escuta | 0 | 0 … 255 |  | runtime/scene_audio.cpp → miniaudio listener | nada | não | não | não |
 | `enabled` | Ativo | booleano | Escuta | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → miniaudio listener | nada | não | não | não |
 
@@ -1728,7 +1767,7 @@ Roteamento de ganho, mute e solo até Master. **Consumidor:** runtime/scene_audi
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `volume` | Ganho | número | Mixer | 1 | 0 … 1 |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
+| `volume` | Ganho | número | Mixer | 1 | 0 … 1 |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | sim |
 | `enabled` | Ativo | booleano | Mixer | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
 | `mute` | Silenciar | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
 | `solo` | Solo | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |

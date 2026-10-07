@@ -10,6 +10,7 @@
 #include "scene/path_follow.h"
 #include "scene/timer.h"
 #include "scene/transform_tween.h"
+#include "scene/property_tween.h"
 #include "scene/tween_sequence.h"
 
 #include <algorithm>
@@ -63,7 +64,7 @@ WorldStatus pathOperation(const ComponentOperationServices &s,ComponentHandle h,
   return ok?WorldStatus::Ok:WorldStatus::Rejected;
 }
 
-const std::array<ComponentMethodBinding,25> bindings{{
+const std::array<ComponentMethodBinding,30> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -78,6 +79,11 @@ const std::array<ComponentMethodBinding,25> bindings{{
   {&scene::TransformTween::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,3,nullptr);}},
   {&scene::TransformTween::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,4,nullptr);}},
   {&scene::TransformTween::descriptor,"elapsed",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return tweenOperation(s,h,0,&r);}},
+  {&scene::PropertyTween::descriptor,"restart",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,1,nullptr);}},
+  {&scene::PropertyTween::descriptor,"cancel",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,2,nullptr);}},
+  {&scene::PropertyTween::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,3,nullptr);}},
+  {&scene::PropertyTween::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,4,nullptr);}},
+  {&scene::PropertyTween::descriptor,"elapsed",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return tweenOperation(s,h,0,&r);}},
   {&scene::TweenSequence::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,1,nullptr);}},
   {&scene::TweenSequence::descriptor,"cancel",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,2,nullptr);}},
   {&scene::TweenSequence::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,3,nullptr);}},

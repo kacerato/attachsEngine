@@ -1625,6 +1625,12 @@
       "name": "material",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/tween-property": {
+      "category": "component",
+      "name": "tween-property",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

@@ -2,6 +2,8 @@
 #include "scene/path_follow.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_reference_picker.h"
+#include "editor/editor_property_tween.h"
+#include "scene/property_tween.h"
 #include "scene/component_properties.h"
 #include "renderer/authoring_geometry.h"
 #include "renderer/rendering_settings_file.h"
@@ -5955,4 +5957,31 @@ AE_TEST(physics_material_is_created_shared_updated_synchronized_and_undone) {
   AE_EXPECT_TRUE(resources::PhysicsMaterialAsset::deserialize(text,disk)&&disk.friction==.9f,"o arquivo também voltou");
   request.version=f.session.sceneVersion();request.componentResource=resources::assetGuidFromSeed("ausente");request.action=EditorAction::ComponentResource;
   AE_EXPECT_TRUE(f.session.dispatch(request).status!=EditorActionStatus::Applied,"GUID fora do projeto é recusado");
+}
+
+// Tween de propriedade: o seletor do Inspector lista só o que o alvo deixa
+// interpolar, grava tipo e PropertyId e entra no Desfazer.
+AE_TEST(property_tween_picker_lists_tweenable_properties_and_records_the_choice) {
+  Fixture f;auto &doc=f.session.document();
+  const auto lamp=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Luz do palco");auto lampValue=*doc.find(lamp);
+  lampValue.components.add(scene::Light::descriptor);doc.applyEntityValues(lamp,lampValue);
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Acender");auto value=*doc.find(id);
+  auto *tween=static_cast<scene::PropertyTween*>(value.components.add(scene::PropertyTween::descriptor));tween->target=lamp;const auto instance=tween->instanceId();
+  doc.applyEntityValues(id,value);f.session.setSelection(id);f.session.history().clear();f.session.update();
+  const auto options=tweenablePropertyOptions(doc.find(lamp)->components);
+  u32 choice=~0u;for(u32 i=0;i<options.size();++i) if(options[i].property=="intensity") choice=i;
+  AE_EXPECT_TRUE(choice!=~0u,"intensidade da luz é interpolável");
+  for(const auto &option:options) AE_EXPECT_TRUE(option.property!="shadow_bias","propriedade sem consumidor por quadro fica fora da lista");
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::PropertyTweenPick));
+  AE_EXPECT_TRUE(f.session.screen().propertyTweenPicker==instance,"seletor aberto");
+  const u32 widget=widgetId(EditorWidget::PropertyTweenChoiceBase)+choice;
+  for(u32 i=0;i<16&&locateWidget(f.session,widget).x<0;++i) tapWidget(f,widgetId(EditorWidget::MeshNext));
+  tapWidget(f,widget);
+  const auto *chosen=static_cast<const scene::PropertyTween*>(doc.find(id)->components.findInstance(instance));
+  AE_EXPECT_TRUE(chosen->componentType=="astra.render.light"&&chosen->property=="intensity"&&chosen->destination==options[choice].value,
+                 "escolha grava tipo, PropertyId e destino inicial");
+  AE_EXPECT_TRUE(f.session.screen().propertyTweenPicker==0,"seletor fechado depois da escolha");
+  AE_EXPECT_TRUE(f.session.history().undo(doc),"desfazer a escolha");
+  AE_EXPECT_TRUE(static_cast<const scene::PropertyTween*>(doc.find(id)->components.findInstance(instance))->property.empty(),"desfazer limpa a propriedade");
 }
