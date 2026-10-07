@@ -83,6 +83,8 @@ Sequência e paralelo persistentes sobre TransformTween e NumberTween existentes
 
 ### Bloco E — Reconciliação do saldo
 
+**Estado (06/10):** reconciliação feita em [FAMILIAS-ESTADO](ampliacao-2026-09-23/FAMILIAS-ESTADO.md): das 87 obrigatórias, 10 concluídas, 47 parciais e 30 ausentes (novo estado: conferido sem tipo ou consumidor). Leitura estática de código e testes existentes; nenhum aceite novo foi executado. A associação propriedade → cenário de efeito continua pendente.
+
 Das 72 linhas “auditar”, várias têm implementação no checkout (Mesh, MeshRenderer, SkinnedMesh, LOD, Camera, Light, corpo/colisores/juntas/personagem/queries Jolt, Physics2D, ActionMap). Conferir cada requisito do catálogo contra o código, fechar com cenário host quando o efeito estiver comprovado e registrar a lacuna real quando não estiver. Ferramenta: `tools/report-family-progress.py`. Resultado esperado: contagem real de concluídas/parciais publicada, e a lista de lacunas que alimenta os blocos F–L.
 
 Junto: associar propriedades a cenários de efeito (problema 4 da seção 3), começando pelas famílias reconciliadas.

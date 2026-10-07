@@ -44,7 +44,7 @@ data = json.loads(ledger.read_text(encoding='utf-8'))
 entries = data['capacidades']
 if [(r['id'], r['capacidade']) for r in rows] != [(r['id'], r['capacidade']) for r in entries]:
     raise SystemExit('Scope changed: review ledger identities before reporting progress.')
-valid = {'auditar', 'parcial', 'em_execucao', 'implementada_aguarda_aceite', 'concluida', 'condicional'}
+valid = {'auditar', 'ausente', 'parcial', 'em_execucao', 'implementada_aguarda_aceite', 'concluida', 'condicional'}
 for entry in entries:
     if entry['estado'] not in valid:
         raise SystemExit('Invalid state: ' + entry['id'])
@@ -62,7 +62,7 @@ lines = ['# Saldo de capacidades Astra', '',
     f'**Encerradas neste registro: {closed}; ainda sem encerramento comprovado: {len(mandatory)-closed}.**', '',
     'A contagem de 44 famílias de componentes + 18 recursos do resumo original não cobre as 91 linhas atuais do catálogo. '
     'Este saldo usa as linhas efetivas, sem converter tipos, receitas ou lotes de 50 em famílias encerradas.', '',
-    '`auditar` significa cobertura ainda não reconciliada, não ausência de implementação. '
+    '`auditar` significa cobertura ainda não reconciliada, não ausência de implementação; `ausente` significa conferido sem tipo ou consumidor no checkout. '
     'Uma família parcial pode ter muitos consumidores funcionando. Fechar exige conferir cada requisito do catálogo, '
     'registrar o aceite e retirar todas as lacunas de implementação. A pedido do usuário, esta rodada usa evidências host/APK; '
     'a qualificação física integrada P20 permanece separada. Build e captura host não equivalem a prova física Android.', '',
