@@ -335,7 +335,7 @@ private:
     gui_.advance(frameElapsed);
     sceneGui_.advance(world_,frameElapsed);
     return stage(runScripts(scriptElapsed),"Update") && stage(advanceTimers(frameElapsed,std::min(elapsed,.25)),"timers") && stage(animate(scriptElapsed),"animação") &&
-           stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent),"física / FixedUpdate") && drainCommands() &&
+           stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") &&
            stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
@@ -387,6 +387,20 @@ private:
     self.emitContact(scene::Collider::descriptor,event.first,0,event.second,event.phase,false);
     self.emitContact(scene::Collider::descriptor,event.second,0,event.first,event.phase,false);
     return self.scripts_.contact(event) && self.drainCommands();
+  }
+  static bool characterHitEvent(void *context,const runtime::CharacterHit &hit) {
+    auto &self=*static_cast<EditorPlayScene *>(context);
+    const scene::ComponentOperationValue values[3]{scene::ComponentOperationValue::makeObject(hit.other),
+      scene::ComponentOperationValue::makeVector(hit.point[0],hit.point[1],hit.point[2]),
+      scene::ComponentOperationValue::makeVector(hit.normal[0],hit.normal[1],hit.normal[2])};
+    self.events_.emit(self.world_,hit.character,hit.instance,scene::Character::descriptor,"collider_hit",values);
+    return true;
+  }
+  static bool jointBrokenEvent(void *context,runtime::ObjectId owner,u64 instance,float force) {
+    auto &self=*static_cast<EditorPlayScene *>(context);
+    const auto value=scene::ComponentOperationValue::makeNumber(force);
+    self.events_.emit(self.world_,owner,instance,scene::Joint::descriptor,"broken",std::span(&value,1));
+    return true;
   }
   // Enter/Exit viram eventos de componente; Stay fica só no callback do script.
   void emitContact(const scene::ComponentType &type,runtime::ObjectId source,u64 instance,runtime::ObjectId other,u32 phase,bool sensor) {

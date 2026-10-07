@@ -1063,6 +1063,42 @@
               "cpp": "jointAxisPosition<5>"
             }
           }
+        },
+        {
+          "id": "break_force",
+          "label": "Força de quebra",
+          "member": "breakForce",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000000.0f"
+          },
+          "presentation": {
+            "group": "Quebra",
+            "unit": "N",
+            "help": {
+              "cpp": "\"Zero: nunca quebra. Acima, a junta sai do solver no passo em que a força de restrição passa do limite\""
+            }
+          }
+        },
+        {
+          "id": "break_torque",
+          "label": "Torque de quebra",
+          "member": "breakTorque",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000000000.0f"
+          },
+          "presentation": {
+            "group": "Quebra",
+            "unit": "N·m",
+            "help": {
+              "cpp": "\"Zero: nunca quebra por torque\""
+            }
+          }
         }
       ],
       "defaults": {

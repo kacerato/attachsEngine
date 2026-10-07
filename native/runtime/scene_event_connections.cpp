@@ -12,7 +12,8 @@ std::vector<std::string> auditEventConnectionCatalog() {
     const auto *event=schema?scene::findComponentEvent(*schema->type,key.event):nullptr;
     if(!event) issues.push_back("evento "+std::to_string(key.value)+" sem descritor");
     else {
-      const bool object=event->payload.size()==1&&event->payload[0].kind==scene::ComponentValueKind::Object;
+      // O outro objeto, quando existe, é o primeiro valor do payload.
+      const bool object=!event->payload.empty()&&event->payload[0].kind==scene::ComponentValueKind::Object;
       if(object!=scene::eventConnectionCarriesObject(key.value)) issues.push_back("evento "+std::to_string(key.value)+": filtro por objeto incoerente");
     }
     for(usize j=0;j<i;++j) if(scene::eventConnectionEventKeys[j].value==key.value) issues.push_back("evento "+std::to_string(key.value)+" repetido");

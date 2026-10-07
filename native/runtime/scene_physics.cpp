@@ -1,5 +1,6 @@
 #include "runtime/scene_physics.h"
 #include "runtime/transform_math.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
@@ -25,7 +26,7 @@ void ScenePhysics::stop() {
   characters_.clear();
   dynamicMotors_.clear();
   if(world_) AetherPhysics_DestroyWorld(world_);
-  world_=nullptr;ownerWorldId_=0;bindings_.clear();objects_.clear();events_.clear();accumulated_=0;jointCount_=0;
+  world_=nullptr;ownerWorldId_=0;bindings_.clear();objects_.clear();events_.clear();accumulated_=0;jointCount_=0;joints_.clear();
   fieldCandidates_.clear();fieldFrames_.clear();fieldRevision_=std::numeric_limits<u64>::max();
 }
 ObjectId ScenePhysics::objectForBody(AetherBodyHandle body) const {
@@ -81,6 +82,8 @@ bool collisionMesh(const CollisionGeometrySource &geometry,const scene::Collider
 }
 bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geometry) {
   stop();gameWorld.clearAuthorities();error_="Falha ao iniciar a física da cena";
+  // Juntas quebradas valem para a execução de Play inteira, não para uma reconstrução.
+  if(brokenWorldId_!=gameWorld.worldId()){brokenJoints_.clear();brokenWorldId_=gameWorld.worldId();}
   const auto &document=gameWorld.graph();
   std::vector<ObjectId> ids;document.collectSubtree(document.root(),ids);
   AetherPhysicsWorldDescV2 config{};
@@ -237,7 +240,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     const auto &entity=*document.find(id);if(!document.activeInHierarchy(id)) continue;
     for(usize i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);if(&v->type()!=&scene::Joint::descriptor) continue;
-      const auto &joint=static_cast<const scene::Joint &>(*v);if(!joint.enabled) continue;
+      const auto &joint=static_cast<const scene::Joint &>(*v);if(!joint.enabled||jointBroken(id,joint.instanceId())) continue;
       const auto issues=jointRequirementIssues(document,id,joint);
       if(!issues.empty()) return fail(entity,issues.front().message);
       const Binding *a=nullptr,*b=nullptr;for(const auto &binding:bindings_) {if(binding.id==id) a=&binding;if(binding.id==joint.connectedBody) b=&binding;}
@@ -265,7 +268,9 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
         std::swap(first,second);std::swap(desc.point1,desc.point2);
         std::swap(desc.axis1,desc.axis2);std::swap(extended.normal1,extended.normal2);
       }
-      if(AetherPhysics_CreateJointV3(world_,first,second,&extended)==AetherJointHandle_Invalid) return fail(entity,"Jolt recusou a junta #"+std::to_string(joint.instanceId()));
+      const auto jointHandle=AetherPhysics_CreateJointV3(world_,first,second,&extended);
+      if(jointHandle==AetherJointHandle_Invalid) return fail(entity,"Jolt recusou a junta #"+std::to_string(joint.instanceId()));
+      joints_.push_back({id,joint.instanceId(),jointHandle,joint.breakForce,joint.breakTorque});
       ++jointCount_;
     }
   }
@@ -564,7 +569,11 @@ bool ScenePhysics::moveKinematic(ObjectId id,const float *v) {
   return false;
 }
 #include "runtime/scene_physics_fields.inl"
-bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32),bool (*contact)(void *,const ContactEvent &)) {
+bool ScenePhysics::jointBroken(ObjectId owner,u64 instance) const {
+  for(const auto &broken:brokenJoints_) if(broken.first==owner&&broken.second==instance) return true;
+  return false;
+}
+bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32),bool (*contact)(void *,const ContactEvent &),bool (*jointBroken)(void *,ObjectId,u64,float),bool (*characterHit)(void *,const CharacterHit &)) {
   if(!world_ || !std::isfinite(elapsed) || elapsed<0) {error_="Mundo físico ausente ou delta de tempo inválido";return false;}
   constexpr double fixed=1.0/60.0;
   // Bound catch-up after surface/lifecycle stalls; never feed a large dt to Jolt.
@@ -581,10 +590,37 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       const float forward=scripted?c.scriptForward:c.forward;
       const float yaw=scripted?c.scriptYaw:c.yaw;
       if(!c.motor->update(right,forward,yaw,static_cast<float>(fixed))) return false;
+      if(!characterHit) continue;
+      const auto total=AetherPhysics_GetCharacterContactsV1(c.motor->physicsWorld(),c.motor->handle(),nullptr,0);
+      if(total<=0) continue;
+      characterContacts_.resize(static_cast<usize>(total));
+      const auto written=AetherPhysics_GetCharacterContactsV1(c.motor->physicsWorld(),c.motor->handle(),characterContacts_.data(),total);
+      std::vector<ObjectId> reported;
+      for(ae::i32 k=0;k<std::min(written,total);++k) {
+        const auto &hit=characterContacts_[static_cast<usize>(k)];
+        if(!(hit.flags&1u)||(hit.flags&2u)) continue;
+        const auto other=objects_.find(hit.body);if(other==objects_.end()) continue;
+        if(std::find(reported.begin(),reported.end(),other->second)!=reported.end()) continue;
+        reported.push_back(other->second);
+        CharacterHit event{c.id,c.instance,other->second,{hit.point.x,hit.point.y,hit.point.z},{hit.normal.x,hit.normal.y,hit.normal.z}};
+        if(!characterHit(context,event)) return false;
+      }
     }
     if(const auto result=AetherPhysics_StepV2(world_,static_cast<float>(fixed),1);result!=0) {error_="Solver físico recusou o passo: "+std::to_string(result);return false;}
     accumulated_-=fixed;
     if(!synchronizePoses(world)) return false;
+    // Quebra: a força média do passo é o impulso dividido pelo passo.
+    for(auto &joint:joints_) {
+      if(joint.handle==AetherJointHandle_Invalid||(joint.breakForce<=0&&joint.breakTorque<=0)) continue;
+      float linear=0,angular=0;
+      if(!AetherPhysics_GetJointImpulseV1(world_,joint.handle,&linear,&angular)) continue;
+      const float force=linear/static_cast<float>(fixed),torque=angular/static_cast<float>(fixed);
+      const bool byForce=joint.breakForce>0&&force>joint.breakForce,byTorque=joint.breakTorque>0&&torque>joint.breakTorque;
+      if(!byForce&&!byTorque) continue;
+      AetherPhysics_DestroyJoint(world_,joint.handle);joint.handle=AetherJointHandle_Invalid;
+      brokenJoints_.emplace_back(joint.owner,joint.instance);
+      if(jointBroken&&!jointBroken(context,joint.owner,joint.instance,byForce?force:torque)) return false;
+    }
     if(trigger) {
       const auto count=AetherPhysics_GetTriggerEvents(world_,nullptr,0);
       if(count<0||count>1024*1024) {error_="Quantidade de eventos físicos inválida";return false;}

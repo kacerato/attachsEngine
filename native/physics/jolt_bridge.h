@@ -802,6 +802,9 @@ void AetherPhysics_SetJointMotor(AetherPhysicsWorld *world, AetherJointHandle ha
 /// — Point não tem graus de liberdade livres, Distance é medido por AetherPhysics_GetTransform
 /// dos dois corpos, não por um único escalar).
 float AetherPhysics_GetJointPosition(AetherPhysicsWorld *world, AetherJointHandle handle);
+// Impulso total da restrição no último passo (N·s e N·m·s), separado em
+// linear e angular, somando limites e motor. Força = impulso / passo.
+ae::i32 AetherPhysics_GetJointImpulseV1(AetherPhysicsWorld *world, AetherJointHandle handle, float *linear, float *angular);
 
 // ---------------------------------------------------------------- character controller (4.1.5)
 //
@@ -916,5 +919,17 @@ ae::i32 AetherPhysics_TryGetCharacterCapsuleV1(AetherPhysicsWorld *,AetherCharac
 /// sucesso, 0 se não havia espaço (ex.: tentando ficar de pé debaixo de algo baixo) — nesse caso
 /// a forma permanece a anterior, sem efeito colateral.
 ae::i32 AetherPhysics_SetCharacterCrouching(AetherPhysicsWorld *world, AetherCharacterHandle handle, ae::i32 crouching);
+
+// Contatos ativos do personagem depois do último Update (CharacterVirtual::
+// GetActiveContacts). flags: 1 colidiu de fato no movimento, 2 sensor.
+// Devolve a contagem real, que pode passar de `max`; -1 para handle inválido.
+struct AetherCharacterContactV1 {
+  AetherBodyHandle body;
+  AetherVec3 point;
+  AetherVec3 normal;
+  ae::u32 flags;
+};
+ae::i32 AetherPhysics_GetCharacterContactsV1(AetherPhysicsWorld *world, AetherCharacterHandle handle,
+                                            AetherCharacterContactV1 *out, ae::i32 max);
 
 } // extern "C"

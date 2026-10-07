@@ -1295,6 +1295,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         SequenciaEtapaComecou = 11,
         SequenciaConcluiu = 12,
         TweenDePropriedadeConcluiu = 13,
+        JuntaQuebrou = 14,
+        PersonagemBateuNumColisor = 15,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -3746,6 +3748,8 @@ public readonly struct Character : IComponentFacade<Character>
         get => Component.GetBool("inherit_platform_horizontal");
         set => Component.SetBool("inherit_platform_horizontal", value);
     }
+    /// <summary>Bateu num colisor. O movimento do personagem colidiu com um corpo; carrega o objeto, o ponto e a normal. Payload: Objeto tocado: objeto, Ponto: vetor, Normal: vetor</summary>
+    public ComponentSubscription OnColliderHit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collider_hit", handler);
 }
 
 /// <summary>Colisor 3D: Volume de contato. Família Física 3D · Formas.</summary>
@@ -4413,6 +4417,20 @@ public readonly struct Joint : IComponentFacade<Joint>
         get => Component.GetFloat("angular_z_damping");
         set => Component.SetFloat("angular_z_damping", value);
     }
+    /// <summary>Força de quebra (N). Zero: nunca quebra. Acima, a junta sai do solver no passo em que a força de restrição passa do limite</summary>
+    /// <remarks>Faixa válida: 0 a 1000000000.</remarks>
+    public float BreakForce
+    {
+        get => Component.GetFloat("break_force");
+        set => Component.SetFloat("break_force", value);
+    }
+    /// <summary>Torque de quebra (N·m). Zero: nunca quebra por torque</summary>
+    /// <remarks>Faixa válida: 0 a 1000000000.</remarks>
+    public float BreakTorque
+    {
+        get => Component.GetFloat("break_torque");
+        set => Component.SetFloat("break_torque", value);
+    }
     /// <summary>Ativa</summary>
     public bool Enabled
     {
@@ -4606,6 +4624,8 @@ public readonly struct Joint : IComponentFacade<Joint>
         get => Component.GetReference("connected_body");
         set => Component.SetReference("connected_body", value);
     }
+    /// <summary>Quebrou. Força ou torque passou do limite; a junta saiu do solver até o fim do Play (Unity OnJointBreak). Payload: Força ou torque: número</summary>
+    public ComponentSubscription OnBroken(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "broken", handler);
 }
 
 /// <summary>Motor dinâmico: Locomoção por força e salto com apoio sobre Corpo físico dinâmico. Família Física 3D · Corpos.</summary>

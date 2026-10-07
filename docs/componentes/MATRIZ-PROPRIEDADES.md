@@ -456,7 +456,7 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
@@ -1232,6 +1232,12 @@ Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → Characte
 | `gravity` | Gravidade | número | Locomoção | 9.81 | 0 … 1000 | m/s² | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 | `inherit_platform_horizontal` | Impulso ao sair | booleano | Chão | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `collider_hit` | Bateu num colisor | other: objeto, point: vetor (m), normal: vetor | O movimento do personagem colidiu com um corpo; carrega o objeto, o ponto e a normal |
+
 ## Colisor 3D · `astra.physics.collider` v9
 
 Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. **Invalida:** forma física.
@@ -1291,7 +1297,7 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | `collision_enter` | Colisão: começou | other: objeto | Contato sólido começou; entregue aos dois objetos |
 | `collision_exit` | Colisão: terminou | other: objeto | Contato sólido terminou; entregue aos dois objetos |
 
-## Junta · `astra.physics.joint` v2
+## Junta · `astra.physics.joint` v3
 
 Nove mecanismos Jolt com limites, referenciais e motores. **Consumidor:** runtime/scene_physics.cpp → constraint do Jolt. **Invalida:** corpo físico.
 
@@ -1382,6 +1388,8 @@ Nove mecanismos Jolt com limites, referenciais e motores. **Consumidor:** runtim
 | `angular_z_force` | Força máxima | número | Rotação Z | 100 | 0 … 1000000 | Nm | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
 | `angular_z_frequency` | Frequência | número | Rotação Z | 2 | 0.001 … 1000 | Hz | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
 | `angular_z_damping` | Amortecimento | número | Rotação Z | 1 | 0 … 10 |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
+| `break_force` | Força de quebra | número | Quebra | 0 | 0 … 1000000000 | N | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não | não |
+| `break_torque` | Torque de quebra | número | Quebra | 0 | 0 … 1000000000 | N·m | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não | não |
 | `enabled` | Ativa | booleano |  | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não | não |
 | `kind` | Tipo | enumeração |  | Distância | Ponto \| Dobradiça \| Deslizante \| Distância \| Fixa \| Cone \| Swing / Twist \| Configurável 6DOF \| Mola |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não | não |
 | `motor` | Motor | enumeração | Motor | Desligado | Desligado \| Velocidade \| Posição \| Posição e velocidade |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
@@ -1398,6 +1406,12 @@ Nove mecanismos Jolt com limites, referenciais e motores. **Consumidor:** runtim
 | `angular_z_motion` | Movimento | enumeração | Rotação Z | Travado | Travado \| Limitado \| Livre |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
 | `angular_z_motor` | Motor | enumeração | Rotação Z | Desligado | Desligado \| Velocidade \| Posição \| Posição e velocidade |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não | não |
 | `connected_body` | Conectar corpo | referência | Âncoras | Escolher corpo | astra.physics.body · outro objeto |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não | não |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `broken` | Quebrou | force: número | Força ou torque passou do limite; a junta saiu do solver até o fim do Play (Unity OnJointBreak) |
 
 ## Motor dinâmico · `astra.physics.dynamic_motor` v2
 

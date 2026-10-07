@@ -1935,6 +1935,53 @@ JointSlot *ResolveJointSlot(AetherPhysicsWorld *world, AetherJointHandle handle)
 }
 } // namespace
 
+ae::i32 AetherPhysics_GetJointImpulseV1(AetherPhysicsWorld *world, AetherJointHandle handle, float *linear, float *angular) {
+  JointSlot *slot = ResolveJointSlot(world, handle);
+  if (slot == nullptr || linear == nullptr || angular == nullptr) return 0;
+  const JPH::Constraint *constraint = slot->constraint.GetPtr();
+  const auto length2 = [](const JPH::Vector<2> &v) { return std::sqrt(v[0] * v[0] + v[1] * v[1]); };
+  float l = 0, a = 0;
+  switch (constraint->GetSubType()) {
+  case JPH::EConstraintSubType::Fixed: {
+    const auto *c = static_cast<const JPH::FixedConstraint *>(constraint);
+    l = c->GetTotalLambdaPosition().Length(); a = c->GetTotalLambdaRotation().Length(); break;
+  }
+  case JPH::EConstraintSubType::Point:
+    l = static_cast<const JPH::PointConstraint *>(constraint)->GetTotalLambdaPosition().Length(); break;
+  case JPH::EConstraintSubType::Hinge: {
+    const auto *c = static_cast<const JPH::HingeConstraint *>(constraint);
+    l = c->GetTotalLambdaPosition().Length();
+    a = length2(c->GetTotalLambdaRotation()) + std::abs(c->GetTotalLambdaRotationLimits()) + std::abs(c->GetTotalLambdaMotor()); break;
+  }
+  case JPH::EConstraintSubType::Slider: {
+    const auto *c = static_cast<const JPH::SliderConstraint *>(constraint);
+    l = length2(c->GetTotalLambdaPosition()) + std::abs(c->GetTotalLambdaPositionLimits()) + std::abs(c->GetTotalLambdaMotor());
+    a = c->GetTotalLambdaRotation().Length(); break;
+  }
+  case JPH::EConstraintSubType::Distance:
+    l = std::abs(static_cast<const JPH::DistanceConstraint *>(constraint)->GetTotalLambdaPosition()); break;
+  case JPH::EConstraintSubType::Cone: {
+    const auto *c = static_cast<const JPH::ConeConstraint *>(constraint);
+    l = c->GetTotalLambdaPosition().Length(); a = std::abs(c->GetTotalLambdaRotation()); break;
+  }
+  case JPH::EConstraintSubType::SwingTwist: {
+    const auto *c = static_cast<const JPH::SwingTwistConstraint *>(constraint);
+    l = c->GetTotalLambdaPosition().Length();
+    a = std::sqrt(c->GetTotalLambdaSwingY() * c->GetTotalLambdaSwingY() + c->GetTotalLambdaSwingZ() * c->GetTotalLambdaSwingZ() +
+                  c->GetTotalLambdaTwist() * c->GetTotalLambdaTwist()) + c->GetTotalLambdaMotor().Length(); break;
+  }
+  case JPH::EConstraintSubType::SixDOF: {
+    const auto *c = static_cast<const JPH::SixDOFConstraint *>(constraint);
+    l = c->GetTotalLambdaPosition().Length() + c->GetTotalLambdaMotorTranslation().Length();
+    a = c->GetTotalLambdaRotation().Length() + c->GetTotalLambdaMotorRotation().Length(); break;
+  }
+  default: return 0;
+  }
+  if (!std::isfinite(l) || !std::isfinite(a)) return 0;
+  *linear = l; *angular = a;
+  return 1;
+}
+
 void AetherPhysics_DestroyJoint(AetherPhysicsWorld *world, AetherJointHandle handle) {
   JointSlot *slot = ResolveJointSlot(world, handle);
   if (slot == nullptr) return;
@@ -2127,6 +2174,23 @@ ae::i32 AetherPhysics_TryGetCharacterGroundPointV1(AetherPhysicsWorld *world,Aet
   if(state!=JPH::CharacterBase::EGroundState::OnGround&&state!=JPH::CharacterBase::EGroundState::OnSteepGround)return 0;
   const auto p=slot->character->GetGroundPosition();*out={float(p.GetX()),float(p.GetY()),float(p.GetZ())};return 1;
 }
+ae::i32 AetherPhysics_GetCharacterContactsV1(AetherPhysicsWorld *world,AetherCharacterHandle handle,
+                                            AetherCharacterContactV1 *out,ae::i32 max) {
+  auto *slot=ResolveCharacterSlot(world,handle);
+  if(!slot) return -1;
+  ae::i32 count=0;
+  for(const auto &contact:slot->character->GetActiveContacts()) {
+    if(contact.mBodyB.IsInvalid()||contact.mWasDiscarded) continue;
+    if(out&&count<max) {
+      const auto p=contact.mPosition;const auto n=contact.mSurfaceNormal;
+      out[count]={contact.mBodyB.GetIndexAndSequenceNumber(),{static_cast<float>(p.GetX()),static_cast<float>(p.GetY()),static_cast<float>(p.GetZ())},
+                  {n.GetX(),n.GetY(),n.GetZ()},(contact.mHadCollision?1u:0u)|(contact.mIsSensorB?2u:0u)};
+    }
+    ++count;
+  }
+  return count;
+}
+
 AetherBodyHandle AetherPhysics_GetCharacterGroundBodyV1(AetherPhysicsWorld *world,AetherCharacterHandle handle) {
   auto *slot=ResolveCharacterSlot(world,handle);
   if(!slot || slot->character->GetGroundState()!=JPH::CharacterBase::EGroundState::OnGround)

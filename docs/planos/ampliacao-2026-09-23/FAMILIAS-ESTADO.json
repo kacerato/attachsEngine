@@ -949,17 +949,17 @@
       "dependencias": "Pelo menos corpo proprietário; segundo corpo ou world anchor; validação de frames",
       "trabalho_original": "Ampliar Junta, sem flags fictícias",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "implementada_aguarda_aceite",
       "evidencias": [
         "native/scene/joint.h",
-        "tests/native/test_joint_bridge.cpp"
+        "tests/native/test_joint_bridge.cpp",
+        "tests/native/test_joint_break.cpp",
+        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md"
       ],
-      "lacunas": [
-        "Limite de quebra (break force/torque) e evento JointBreak ausentes."
-      ],
+      "lacunas": [],
       "aceite": {},
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Quebra validada no host com Jolt real em 07/10; aparelho pendente."
       ]
     },
     {
@@ -971,18 +971,17 @@
       "dependencias": "Backend CharacterVirtual; conflicts atuais com Body/Collider devem evoluir com migração",
       "trabalho_original": "Ampliar Character",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "implementada_aguarda_aceite",
       "evidencias": [
         "native/scene/character.h",
         "tests/native/test_character_motor.cpp",
-        "tests/native/test_character_bridge.cpp"
+        "tests/native/test_joint_break.cpp",
+        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md"
       ],
-      "lacunas": [
-        "Direção up configurável e evento ControllerColliderHit ausentes."
-      ],
+      "lacunas": [],
       "aceite": {},
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Up direction: não aplicável com motivo (Unity CharacterController é sempre Y). Colisão do personagem validada no host; aparelho pendente."
       ]
     },
     {

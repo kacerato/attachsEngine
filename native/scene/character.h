@@ -35,7 +35,15 @@ public:
 // These fields update the existing motor, without replacing its capsule/velocity.
 #include "scene/generated/character_characterBooleans.inc"
 inline bool characterMotionProperty(std::string_view id) {return id=="speed"||id=="jump_speed"||id=="step_height"||id=="floor_snap_length"||id=="gravity"||id=="inherit_platform_horizontal";}
+// Unity 6000.0 CharacterController.OnControllerColliderHit: o movimento bateu
+// num corpo. Uma vez por objeto tocado em cada passo físico com colisão real.
+inline constexpr std::array<ComponentParameter,3> characterHitPayload{{
+  {"other","Objeto tocado",ComponentValueKind::Object},{"point","Ponto",ComponentValueKind::Vector3,"m"},{"normal","Normal",ComponentValueKind::Vector3}}};
+inline constexpr std::array<ComponentEvent,1> characterEvents{{
+  {"collider_hit","Bateu num colisor","O movimento do personagem colidiu com um corpo; carrega o objeto, o ponto e a normal",characterHitPayload}
+}};
 inline const ComponentType Character::descriptor{
-  "astra.physics.character",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Character>();},characterNumbers,characterBooleans
+  "astra.physics.character",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Character>();},characterNumbers,characterBooleans,
+  {},nullptr,false,{},{},{},{},{},{},{},characterEvents
 };
 }

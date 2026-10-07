@@ -66,6 +66,12 @@ bool validPhysicsQueryShape(const QueryShapeDesc &shape);
 
 // Fase de um contato sólido entregue ao consumidor, no mesmo vocabulário dos
 // sensores: 0 Enter, 1 Stay, 2 Exit.
+// O movimento de um Personagem bateu num corpo (Unity OnControllerColliderHit):
+// uma vez por objeto tocado em cada passo físico com colisão real.
+struct CharacterHit {
+  ObjectId character=0;u64 instance=0;ObjectId other=0;
+  float point[3]{},normal[3]{};
+};
 struct ContactEvent {
   ObjectId first = kInvalidObject;
   ObjectId second = kInvalidObject;
@@ -103,7 +109,12 @@ public:
   bool start(GameWorld &gameWorld, const CollisionGeometrySource *geometry = nullptr);
   bool advance(double elapsed, GameWorld &world, bool (*beforeStep)(void *, float) = nullptr,
                void *context = nullptr, bool (*trigger)(void *, ObjectId, ObjectId, u32) = nullptr,
-               bool (*contact)(void *, const ContactEvent &) = nullptr);
+               bool (*contact)(void *, const ContactEvent &) = nullptr,
+               bool (*jointBroken)(void *, ObjectId, u64, float) = nullptr,
+               bool (*characterHit)(void *, const CharacterHit &) = nullptr);
+  // Junta quebrada nesta execução de Play: fora do solver e não recriada pelas
+  // reconstruções seguintes; o componente autoral não muda.
+  bool jointBroken(ObjectId owner,u64 instance) const;
 
   // --- consultas ----------------------------------------------------------
   // Todas devolvem identidade de OBJETO, não de corpo nativo: um script nunca
@@ -210,7 +221,12 @@ private:
     bool scriptMoveActive=false;
   };
   std::vector<CharacterBinding> characters_;
+  std::vector<AetherCharacterContactV1> characterContacts_;
   u32 jointCount_ = 0;
+  struct JointBinding {ObjectId owner=0;u64 instance=0;AetherJointHandle handle=AetherJointHandle_Invalid;float breakForce=0,breakTorque=0;};
+  std::vector<JointBinding> joints_;
+  std::vector<std::pair<ObjectId,u64>> brokenJoints_;
+  u32 brokenWorldId_=0;
   double accumulated_ = 0;
   std::string error_;
 };

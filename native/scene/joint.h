@@ -24,6 +24,9 @@ public:
 #include "scene/generated/joint_Joint_fields4.inc"
 
   JointAxis axes[6]{};
+  // Limites de quebra (v3), como Joint.breakForce/breakTorque da Unity 6000.0;
+  // zero nunca quebra. Força e torque vêm do impulso da restrição no passo.
+  float breakForce=0,breakTorque=0;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<Joint>(*this);}
@@ -54,9 +57,10 @@ public:
     for(const auto &a:axes) out<<' '<<a.motion<<' '<<a.motor;
   }
   bool read(std::istream &in,u32 version) override {
-    u32 k=0;if((version!=1&&version!=2)||!(in>>k>>motor>>connectedBody>>enabled)||k>(version==1?3u:8u)) return false;kind=static_cast<JointKind>(k);
+    u32 k=0;if((version<1||version>3)||!(in>>k>>motor>>connectedBody>>enabled)||k>(version==1?3u:8u)) return false;kind=static_cast<JointKind>(k);
+    breakForce=breakTorque=0;
     if(version==1) {for(auto &a:axes)a=JointAxis{};normalA[0]=normalB[0]=1;normalA[1]=normalA[2]=normalB[1]=normalB[2]=0;swingY=swingZ=45;twistMin=-45;twistMax=45;}
-    const usize count=version==1?19:descriptor.numbers.size();
+    const usize count=version==1?19:version==2?descriptor.numbers.size()-2:descriptor.numbers.size();
     for(usize i=0;i<count;++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
     if(version>=2) for(auto &a:axes) if(!(in>>a.motion>>a.motor)) return false;
     return valid();
@@ -151,7 +155,12 @@ inline constexpr std::array<ComponentTriple,6> jointTriples{{
   {"normal_a","Plano A",{"normal_a_x","normal_a_y","normal_a_z"}},
   {"normal_b","Plano B",{"normal_b_x","normal_b_y","normal_b_z"}}
 }};
+inline constexpr std::array<ComponentParameter,1> jointBreakPayload{{{"force","Força ou torque",ComponentValueKind::Number}}};
+inline constexpr std::array<ComponentEvent,1> jointEvents{{
+  {"broken","Quebrou","Força ou torque passou do limite; a junta saiu do solver até o fim do Play (Unity OnJointBreak)",jointBreakPayload}
+}};
 inline const ComponentType Joint::descriptor{
-  "astra.physics.joint",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Joint>();},jointNumbers,jointBooleans,jointEnums,nullptr,true,jointReferences,jointTriples
+  "astra.physics.joint",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Joint>();},jointNumbers,jointBooleans,jointEnums,nullptr,true,jointReferences,jointTriples,
+  {},{},{},{},{},jointEvents
 };
 }

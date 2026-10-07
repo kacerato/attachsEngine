@@ -1611,6 +1611,20 @@ int main(int argc, char **argv) {
     if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
     if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
   }
+  // Junta com limites de quebra (aba Quebra).
+  if(argc>4 && std::string(argv[4])=="joint-break") {
+    const auto anchor=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Viga");auto a=*document.find(anchor);
+    a.transform.position[1]=3;static_cast<scene::PhysicsBody*>(a.components.add(scene::PhysicsBody::descriptor))->motion=scene::BodyMotion::Static;
+    a.components.add(scene::Collider::descriptor);document.applyEntityValues(anchor,a);
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Lustre");auto value=*document.find(id);
+    value.transform.position[1]=2;static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor))->motion=scene::BodyMotion::Dynamic;
+    value.components.add(scene::Collider::descriptor);
+    auto *joint=static_cast<scene::Joint*>(value.components.add(scene::Joint::descriptor));joint->kind=scene::JointKind::Fixed;joint->connectedBody=anchor;
+    joint->breakForce=400;joint->breakTorque=120;const auto instance=joint->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Quebra";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+  }
   // Tween de propriedade: acender a luz do palco; "-picker" abre o seletor.
   if(argc>4 && std::string(argv[4]).starts_with("property-tween")) {
     const std::string mode=argv[4];

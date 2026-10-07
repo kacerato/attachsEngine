@@ -47,6 +47,8 @@ public:
   bool restoreMotionState(const MotionState &state);
 
   bool isReady() const { return world_!=nullptr&&character_!=AetherCharacterHandle_Invalid; }
+  AetherCharacterHandle handle() const { return character_; }
+  AetherPhysicsWorld *physicsWorld() const { return world_; }
   AetherVec3 eyePosition() const;
   AetherCharacterGroundState groundState() const;
 
