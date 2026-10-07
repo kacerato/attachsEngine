@@ -167,6 +167,31 @@ ICONS: dict[str, str] = {
 <circle cx="31" cy="28" r="6" fill="{ACCENT}"/>
 <circle cx="40" cy="64" r="6" fill="{ACCENT}"/>
 <circle cx="25" cy="100" r="6" fill="{ACCENT}"/>''',
+    # Mixer (bloco H): resposta de frequência, repetições, sala, curva de
+    # transferência, derivação e faders salvos.
+    "audio/filter": f'''<path d="M14 108h100M14 108V20" {stroke(4)}/>
+<path d="M20 42h40c20 0 24 8 32 30s10 32 22 36" {stroke(5, ACCENT)}/>
+<circle cx="62" cy="42" r="8" fill="{ACCENT}"/>''',
+    "audio/echo": f'''<path d="M12 108h104" {stroke(4)}/>
+<path d="M24 102V22" {stroke(7)}/>
+<path d="M54 102V46M82 102V64M106 102V80" {stroke(6, ACCENT)}/>
+<path d="M30 30c12 0 16 10 22 14M60 52c10 0 14 8 20 12" {stroke(3, ACCENT)}/>''',
+    "audio/reverb": f'''<path d="M14 34v76h100V34M14 34l24-18h52l24 18" {stroke(5)}/>
+<path d="M30 96 50 50l20 46 20-34 12 34" {stroke(5, ACCENT)}/>
+<circle cx="30" cy="96" r="7" fill="{ACCENT}"/>''',
+    "audio/compressor": f'''<path d="M14 114h100M14 114V14" {stroke(4)}/>
+<path d="M64 64l44-44" {stroke(4, extra='stroke-dasharray="6 7"')}/>
+<path d="M20 108l44-44c14 0 30-8 46-14" {stroke(6, ACCENT)}/>
+<circle cx="64" cy="64" r="8" fill="{ACCENT}"/>''',
+    "audio/send": f'''<rect x="10" y="44" width="34" height="40" rx="6" {stroke(5)}/>
+<path d="M44 64h68M100 52l12 12-12 12" {stroke(5)}/>
+<path d="M62 64c0-24 18-36 46-36M96 18l12 10-12 10" {stroke(5, ACCENT)}/>
+<circle cx="62" cy="64" r="7" fill="{ACCENT}"/>''',
+    "audio/snapshot": f'''<path d="M12 34V14h20M96 14h20v20M116 94v20H96M32 114H12V94" {stroke(5, ACCENT)}/>
+<path d="M40 32v64M64 32v64M88 32v64" {stroke(4)}/>
+<rect x="31" y="70" width="18" height="10" rx="3" fill="{ACCENT}"/>
+<rect x="55" y="44" width="18" height="10" rx="3" fill="{ACCENT}"/>
+<rect x="79" y="58" width="18" height="10" rx="3" fill="{ACCENT}"/>''',
     # O mesmo vínculo fonte/objeto distingue os quatro canais de restrição.
     "component/position-constraint": f'''<rect x="18" y="58" width="30" height="30" {stroke(5)}/>
 <circle cx="94" cy="34" r="12" {stroke(5, ACCENT)}/>

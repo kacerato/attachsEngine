@@ -279,8 +279,9 @@
             "group": "Espaço",
             "unit": "",
             "visible": {
-              "cpp": "audioFlat"
-            }
+              "cpp": "audioPans"
+            },
+            "help": "Em 3D, vale para a parte 2D da mistura espacial"
           },
           "default": {
             "cpp": "0"
@@ -456,6 +457,109 @@
           "default": {
             "cpp": "1"
           }
+        },
+        {
+          "id": "spatial_blend",
+          "label": "Mistura espacial",
+          "member": "spatialBlend",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Espaço",
+            "unit": "",
+            "visible": {
+              "cpp": "audioSpatial"
+            },
+            "help": "1 = totalmente 3D; 0 = 2D sem distância nem direção"
+          },
+          "default": {
+            "cpp": "1"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "priority",
+          "label": "Prioridade",
+          "member": "priority",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "256"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Som",
+            "unit": "",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "help": "0 é a mais importante; acima do limite de vozes, as de menor prioridade ficam virtuais"
+          },
+          "default": {
+            "cpp": "128"
+          }
+        },
+        {
+          "id": "loop_start",
+          "label": "Início do loop",
+          "member": "loopStart",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "36000"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Reprodução",
+            "unit": "s",
+            "visible": {
+              "cpp": "audioLoops"
+            },
+            "help": "Ao repetir, volta a este ponto"
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "loop_end",
+          "label": "Fim do loop",
+          "member": "loopEnd",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "36000"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Reprodução",
+            "unit": "s",
+            "visible": {
+              "cpp": "audioLoops"
+            },
+            "help": "Zero usa o fim do clipe"
+          },
+          "default": {
+            "cpp": "0"
+          }
         }
       ],
       "defaults": {
@@ -511,6 +615,18 @@
               "cpp": "audioSpatial"
             }
           }
+        },
+        {
+          "id": "loading",
+          "label": "Carregamento",
+          "type": "AudioSource",
+          "member": "loading",
+          "options": "audioLoadingOptions",
+          "presentation": {
+            "group": "Som",
+            "unit": "",
+            "help": "Streaming lê o arquivo aos poucos: para músicas e falas longas"
+          }
         }
       ]
     }
@@ -538,7 +654,11 @@
         "audioSourceNumbers/cone_inner",
         "audioSourceNumbers/cone_outer",
         "audioSourceNumbers/cone_gain",
-        "audioSourceNumbers/doppler"
+        "audioSourceNumbers/doppler",
+        "audioSourceNumbers/spatial_blend",
+        "audioSourceNumbers/priority",
+        "audioSourceNumbers/loop_start",
+        "audioSourceNumbers/loop_end"
       ]
     },
     {

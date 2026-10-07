@@ -5,9 +5,9 @@
   "entries": [
     {
       "type": "AudioSource",
-      "name": "Audio Source",
+      "name": "Fonte de áudio",
       "description": "Clipe de projeto com reprodução e espaço acústico",
-      "consumer": "runtime/scene_audio.cpp → miniaudio engine/device",
+      "consumer": "runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais",
       "subfamily": "Reprodução",
       "icon": "audio/source",
       "searchTerms": "AudioSource AudioStreamPlayer AudioStreamPlayer3D som WAV",
@@ -16,7 +16,7 @@
     },
     {
       "type": "AudioListener",
-      "name": "Audio Listener",
+      "name": "Ouvinte de áudio",
       "description": "Pose e volume de escuta escolhidos por prioridade",
       "consumer": "runtime/scene_audio.cpp → miniaudio listener",
       "subfamily": "Escuta",
@@ -27,14 +27,95 @@
     },
     {
       "type": "AudioBus",
-      "name": "Audio Bus",
-      "description": "Roteamento de ganho, mute e solo até Master",
-      "consumer": "runtime/scene_audio.cpp → voice gain routing",
+      "name": "Bus de áudio",
+      "description": "Nó do mixer: ganho, mute, solo, cadeia de efeitos e envios até Master",
+      "consumer": "runtime/scene_audio.cpp → nó DSP do bus",
       "subfamily": "Mixer",
       "icon": "audio/bus",
       "searchTerms": "AudioMixerGroup AudioServer bus mixer",
       "reference": "https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html",
       "apiName": "AudioBus"
+    },
+    {
+      "type": "AudioFilter",
+      "name": "Filtro de áudio",
+      "description": "Passa-baixa, passa-alta, banda, rejeita-banda, pico e prateleiras",
+      "consumer": "runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h)",
+      "subfamily": "Mixer",
+      "icon": "audio/filter",
+      "searchTerms": "AudioEffectFilter LowPass HighPass Lowpass Highpass EQ Equalizador Filtro abafar",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_audioeffectfilter.html",
+      "apiName": "AudioFilter",
+      "requirements": {
+        "cpp": "audioEffectRequirements"
+      }
+    },
+    {
+      "type": "AudioEcho",
+      "name": "Eco",
+      "description": "Repetições atrasadas com realimentação",
+      "consumer": "runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h)",
+      "subfamily": "Mixer",
+      "icon": "audio/echo",
+      "searchTerms": "AudioEffectDelay Echo Delay Eco Atraso",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioEchoEffect.html",
+      "apiName": "AudioEcho",
+      "requirements": {
+        "cpp": "audioEffectRequirements"
+      }
+    },
+    {
+      "type": "AudioReverb",
+      "name": "Reverberação",
+      "description": "Sala simulada com tamanho, amortecimento e pré-atraso",
+      "consumer": "runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h)",
+      "subfamily": "Mixer",
+      "icon": "audio/reverb",
+      "searchTerms": "AudioEffectReverb SFX Reverb Reverberação Sala Caverna",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_audioeffectreverb.html",
+      "apiName": "AudioReverb",
+      "requirements": {
+        "cpp": "audioEffectRequirements"
+      }
+    },
+    {
+      "type": "AudioCompressor",
+      "name": "Compressor",
+      "description": "Controla picos; com sidechain abaixa este bus quando outro soa",
+      "consumer": "runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h)",
+      "subfamily": "Mixer",
+      "icon": "audio/compressor",
+      "searchTerms": "AudioEffectCompressor Compressor Ducking Duck Volume Sidechain Limiter",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_audioeffectcompressor.html",
+      "apiName": "AudioCompressor",
+      "requirements": {
+        "cpp": "audioEffectRequirements"
+      }
+    },
+    {
+      "type": "AudioSend",
+      "name": "Envio de áudio",
+      "description": "Copia o sinal deste ponto da cadeia para outro bus",
+      "consumer": "runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h)",
+      "subfamily": "Mixer",
+      "icon": "audio/send",
+      "searchTerms": "Send Receive Envio Aux Reverb send",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixer.html",
+      "apiName": "AudioSend",
+      "requirements": {
+        "cpp": "audioEffectRequirements"
+      }
+    },
+    {
+      "type": "AudioSnapshot",
+      "name": "Snapshot de mixer",
+      "description": "Leva ganhos e efeitos a valores salvos com transição",
+      "consumer": "runtime/scene_audio.cpp → transição das propriedades do mixer",
+      "subfamily": "Mixer",
+      "icon": "audio/snapshot",
+      "searchTerms": "AudioMixerSnapshot TransitionTo Snapshot Estado do mixer",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixerSnapshots.html",
+      "apiName": "AudioSnapshot"
     }
   ],
   "defaults": {

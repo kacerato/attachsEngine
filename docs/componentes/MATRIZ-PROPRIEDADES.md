@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 56 schemas; 54 tipos no Add; 54 fachadas geradas.
+**Registro atual:** 62 schemas; 60 tipos no Add; 60 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -64,6 +64,12 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.audio.source` | Áudio | `Astra.Components.AudioSource` | Add Component |
 | `astra.audio.listener` | Áudio | `Astra.Components.AudioListener` | Add Component |
 | `astra.audio.bus` | Áudio | `Astra.Components.AudioBus` | Add Component |
+| `astra.audio.filter` | Áudio | `Astra.Components.AudioFilter` | Add Component |
+| `astra.audio.echo` | Áudio | `Astra.Components.AudioEcho` | Add Component |
+| `astra.audio.reverb` | Áudio | `Astra.Components.AudioReverb` | Add Component |
+| `astra.audio.compressor` | Áudio | `Astra.Components.AudioCompressor` | Add Component |
+| `astra.audio.send` | Áudio | `Astra.Components.AudioSend` | Add Component |
+| `astra.audio.snapshot` | Áudio | `Astra.Components.AudioSnapshot` | Add Component |
 | `astra.path` | Lógica | `Astra.Components.PathComponent` | Add Component |
 | `astra.path.follow` | Lógica | `Astra.Components.PathFollow` | Add Component |
 
@@ -463,7 +469,7 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro \| Cérebro: câmera ativada \| Cérebro: corte de câmera \| Cérebro: transição concluída \| Câmera virtual entrou ao vivo \| Câmera virtual saiu do ar |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
-| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora \| Câmera virtual: priorizar \| Câmera virtual: encaixar |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora \| Câmera virtual: priorizar \| Câmera virtual: encaixar \| Snapshot: transicionar \| Snapshot: aplicar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 
@@ -831,7 +837,7 @@ Rotação local da câmera por entrada ou script. **Consumidor:** runtime/game_w
 | `pitch_limit` | Limite vertical graus | número | Limites | 83 | 1 … 89 | ° | runtime/game_world.cpp → pose da câmera | entrada | não | não | não |
 | `enabled` | Ativo | booleano | Controle | verdadeiro | verdadeiro \| falso |  | runtime/game_world.cpp → pose da câmera | entrada | não | não | não |
 
-## Acompanhar alvo · `astra.camera.follow` v1
+## Acompanhar alvo · `astra.camera.follow` v2
 
 Posiciona a câmera após física e animação. **Consumidor:** runtime/scene_camera_follow.h → pose de Play da câmera. **Invalida:** pose e bounds.
 
@@ -851,7 +857,9 @@ Posiciona a câmera após física e animação. **Consumidor:** runtime/scene_ca
 | `offset_y` | Deslocamento Y | número | Posição | 2 | -10000 … 10000 | m | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 | `offset_z` | Deslocamento Z | número | Posição | -5 | -10000 … 10000 | m | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 | `damping_seconds` | Amortecimento | número | Resposta | 0.2 | 0 … 30 | s | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
+| `pivot_height` | Altura do pivô | número | Órbita | 0 | -10000 … 10000 | m | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 | `enabled` | Ativo | booleano | Resposta | verdadeiro | verdadeiro \| falso |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
+| `orbit` | Orbitar alvo | booleano | Órbita | falso | verdadeiro \| falso |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 | `target` | Alvo | referência | Posição | Escolher objeto | qualquer objeto · fora da subárvore |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 
 ## Câmera virtual · `astra.camera.virtual` v1
@@ -1329,7 +1337,7 @@ Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **
 | `surface` | Superfície | enumeração | Material | Padrão | Padrão \| Concreto \| Madeira \| Metal \| Grama \| Terra \| Areia \| Água \| Gelo \| Borracha \| Vidro \| Tecido \| Pedra |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `interpolation` | Interpolação | enumeração | Simulação | Nenhuma | Nenhuma \| Interpolar \| Extrapolar |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 
-## Personagem · `astra.physics.character` v4
+## Personagem · `astra.physics.character` v5
 
 Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → CharacterVirtual. **Invalida:** forma física, corpo físico.
 
@@ -1354,7 +1362,13 @@ Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → Characte
 | `step_height` | Altura do degrau | número | Chão | 0.4 | 0 … 10 | m | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 | `floor_snap_length` | Aderência ao chão | número | Chão | 0.5 | 0 … 10 | m | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 | `gravity` | Gravidade | número | Locomoção | 9.81 | 0 … 1000 | m/s² | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
+| `control_priority_ui` | Prioridade UI | número | Posse de controle | 10 | 0 … 1000 |  | runtime/motor_control.h → motor físico | forma física, corpo físico, entrada | sim | não | não |
+| `control_priority_keyboard` | Prioridade Teclado / mouse | número | Posse de controle | 10 | 0 … 1000 |  | runtime/motor_control.h → motor físico | forma física, corpo físico, entrada | sim | não | não |
+| `control_priority_gamepad` | Prioridade Gamepad | número | Posse de controle | 10 | 0 … 1000 |  | runtime/motor_control.h → motor físico | forma física, corpo físico, entrada | sim | não | não |
+| `control_priority_script` | Prioridade Script | número | Posse de controle | 20 | 0 … 1000 |  | runtime/motor_control.h → motor físico | forma física, corpo físico, entrada | sim | não | não |
+| `control_priority_ai` | Prioridade IA | número | Posse de controle | 5 | 0 … 1000 |  | runtime/motor_control.h → motor físico | forma física, corpo físico, entrada | sim | não | não |
 | `inherit_platform_horizontal` | Impulso ao sair | booleano | Chão | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
+| `control_source` | Fonte de controle | enumeração | Posse de controle | Automático | Automático \| UI \| Teclado / mouse \| Gamepad \| Script \| IA |  | runtime/motor_control.h | forma física, corpo físico, entrada | não | não | não |
 
 **Eventos em Play**
 
@@ -1538,7 +1552,7 @@ Nove mecanismos Jolt com limites, referenciais e motores. **Consumidor:** runtim
 |---|---|---|---|
 | `broken` | Quebrou | force: número | Força ou torque passou do limite; a junta saiu do solver até o fim do Play (Unity OnJointBreak) |
 
-## Motor dinâmico · `astra.physics.dynamic_motor` v2
+## Motor dinâmico · `astra.physics.dynamic_motor` v3
 
 Locomoção por força e salto com apoio sobre Corpo físico dinâmico. **Consumidor:** runtime/scene_dynamic_motor.cpp → forças/impulsos antes de cada passo Jolt. **Invalida:** corpo físico.
 
@@ -1562,9 +1576,15 @@ Locomoção por força e salto com apoio sobre Corpo físico dinâmico. **Consum
 | `probe_distance` | Alcance abaixo dos pés | número | Chão | 0.15 | 0.001 … 2 | m | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
 | `support_radius` | Raio de sondagem | número | Chão | 0.3 | 0 … 10 | m | runtime/scene_dynamic_motor.cpp | corpo físico | sim | não | não |
 | `max_slope` | Rampa máxima | número | Chão | 50 | 0 … 89 | ° | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `control_priority_ui` | Prioridade UI | número | Posse de controle | 10 | 0 … 1000 |  | runtime/motor_control.h → motor físico | corpo físico, entrada | sim | não | não |
+| `control_priority_keyboard` | Prioridade Teclado / mouse | número | Posse de controle | 10 | 0 … 1000 |  | runtime/motor_control.h → motor físico | corpo físico, entrada | sim | não | não |
+| `control_priority_gamepad` | Prioridade Gamepad | número | Posse de controle | 10 | 0 … 1000 |  | runtime/motor_control.h → motor físico | corpo físico, entrada | sim | não | não |
+| `control_priority_script` | Prioridade Script | número | Posse de controle | 20 | 0 … 1000 |  | runtime/motor_control.h → motor físico | corpo físico, entrada | sim | não | não |
+| `control_priority_ai` | Prioridade IA | número | Posse de controle | 5 | 0 … 1000 |  | runtime/motor_control.h → motor físico | corpo físico, entrada | sim | não | não |
 | `enabled` | Habilitado | booleano | Locomoção | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
 | `inherit_platform_velocity` | Acompanhar plataforma | booleano | Chão | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
 | `automatic_support` | Apoio pela colisão | booleano | Chão | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+| `control_source` | Fonte de controle | enumeração | Posse de controle | Automático | Automático \| UI \| Teclado / mouse \| Gamepad \| Script \| IA |  | runtime/motor_control.h | corpo físico, entrada | não | não | não |
 
 ## Raio · `astra.physics.raycast` v1
 
@@ -1938,9 +1958,9 @@ Caixa, círculo ou cápsula; sensor real. **Consumidor:** runtime/scene_physics2
 | `collision_enter` | Colisão: começou | other: objeto | Contato sólido começou; entregue aos dois colisores |
 | `collision_exit` | Colisão: terminou | other: objeto | Contato sólido terminou; entregue aos dois colisores |
 
-## Audio Source · `astra.audio.source` v1
+## Fonte de áudio · `astra.audio.source` v2
 
-Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/scene_audio.cpp → miniaudio engine/device. **Invalida:** nada.
+Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais. **Invalida:** nada.
 
 **Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioSource.html).
 
@@ -1956,23 +1976,28 @@ Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/s
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `volume` | Volume | número | Som | 1 | 0 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | sim |
-| `pitch` | Velocidade / pitch | número | Reprodução | 1 | 0.1 … 4 | × | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | sim |
-| `pan` | Pan estéreo | número | Espaço | 0 | -1 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | sim |
-| `min_distance` | Distância mínima | número | Espaço | 1 | 0.01 … 100000 | m | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `max_distance` | Distância máxima | número | Espaço | 100 | 0.02 … 100001 | m | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `rolloff_factor` | Decaimento | número | Espaço | 1 | 0 … 10 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `cone_inner` | Cone interno | número | Emissão | 360 | 0 … 360 | ° | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `cone_outer` | Cone externo | número | Emissão | 360 | 0 … 360 | ° | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `cone_gain` | Ganho fora do cone | número | Emissão | 0 | 0 … 1 |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `doppler` | Doppler | número | Emissão | 1 | 0 … 4 | × | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `enabled` | Ativo | booleano | Som | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `mute` | Silenciar | booleano | Som | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `loop` | Repetir | booleano | Reprodução | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `playback` | Pedido | enumeração | Reprodução | Tocar | Parar \| Tocar \| Pausar |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `dimension` | Dimensão | enumeração | Espaço | 2D / estéreo | 2D / estéreo \| 3D / espacial |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
-| `rolloff` | Atenuação | enumeração | Espaço | Inverso | Linear \| Inverso \| Exponencial |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | sim | não | não |
-| `bus` | Bus | referência | Som | Master | astra.audio.bus |  | runtime/scene_audio.cpp → miniaudio engine/device | nada | não | não | não |
+| `volume` | Volume | número | Som | 1 | 0 … 1 |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | sim |
+| `pitch` | Velocidade / pitch | número | Reprodução | 1 | 0.1 … 4 | × | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | sim |
+| `pan` | Pan estéreo | número | Espaço | 0 | -1 … 1 |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | sim |
+| `min_distance` | Distância mínima | número | Espaço | 1 | 0.01 … 100000 | m | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `max_distance` | Distância máxima | número | Espaço | 100 | 0.02 … 100001 | m | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `rolloff_factor` | Decaimento | número | Espaço | 1 | 0 … 10 |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `cone_inner` | Cone interno | número | Emissão | 360 | 0 … 360 | ° | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `cone_outer` | Cone externo | número | Emissão | 360 | 0 … 360 | ° | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `cone_gain` | Ganho fora do cone | número | Emissão | 0 | 0 … 1 |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `doppler` | Doppler | número | Emissão | 1 | 0 … 4 | × | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `spatial_blend` | Mistura espacial | número | Espaço | 1 | 0 … 1 |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | sim |
+| `priority` | Prioridade | número | Som | 128 | 0 … 256 |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `loop_start` | Início do loop | número | Reprodução | 0 | 0 … 36000 | s | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `loop_end` | Fim do loop | número | Reprodução | 0 | 0 … 36000 | s | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `enabled` | Ativo | booleano | Som | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `mute` | Silenciar | booleano | Som | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `loop` | Repetir | booleano | Reprodução | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `playback` | Pedido | enumeração | Reprodução | Tocar | Parar \| Tocar \| Pausar |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `dimension` | Dimensão | enumeração | Espaço | 2D / estéreo | 2D / estéreo \| 3D / espacial |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `rolloff` | Atenuação | enumeração | Espaço | Inverso | Linear \| Inverso \| Exponencial |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | sim | não | não |
+| `loading` | Carregamento | enumeração | Som | Memória | Memória \| Streaming |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
+| `bus` | Bus | referência | Som | Master | astra.audio.bus |  | runtime/scene_audio.cpp → voz miniaudio, espacialização própria, vozes virtuais | nada | não | não | não |
 
 **Métodos em Play**
 
@@ -1983,8 +2008,9 @@ Clipe de projeto com reprodução e espaço acústico. **Consumidor:** runtime/s
 | `resume` | Retomar | — | nada | Continua do cursor pausado |
 | `stop` | Parar | — | nada | Interrompe e libera a voz |
 | `seek` | Posicionar | seconds: número (s) | nada | Move o cursor; aplicado pelo mixer |
+| `is_virtual` | Virtual | — | booleano | Verdadeiro quando a voz passou do limite de vozes e é acompanhada sem tocar |
 
-## Audio Listener · `astra.audio.listener` v1
+## Ouvinte de áudio · `astra.audio.listener` v1
 
 Pose e volume de escuta escolhidos por prioridade. **Consumidor:** runtime/scene_audio.cpp → miniaudio listener. **Invalida:** nada.
 
@@ -1998,9 +2024,9 @@ Pose e volume de escuta escolhidos por prioridade. **Consumidor:** runtime/scene
 | `priority` | Prioridade | número | Escuta | 0 | 0 … 255 |  | runtime/scene_audio.cpp → miniaudio listener | nada | não | não | não |
 | `enabled` | Ativo | booleano | Escuta | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → miniaudio listener | nada | não | não | não |
 
-## Audio Bus · `astra.audio.bus` v1
+## Bus de áudio · `astra.audio.bus` v1
 
-Roteamento de ganho, mute e solo até Master. **Consumidor:** runtime/scene_audio.cpp → voice gain routing. **Invalida:** nada.
+Nó do mixer: ganho, mute, solo, cadeia de efeitos e envios até Master. **Consumidor:** runtime/scene_audio.cpp → nó DSP do bus. **Invalida:** nada.
 
 **Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html).
 
@@ -2008,11 +2034,171 @@ Roteamento de ganho, mute e solo até Master. **Consumidor:** runtime/scene_audi
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `volume` | Ganho | número | Mixer | 1 | 0 … 1 |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | sim |
-| `enabled` | Ativo | booleano | Mixer | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
-| `mute` | Silenciar | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
-| `solo` | Solo | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
-| `output` | Saída | referência | Mixer | Master | astra.audio.bus · outro objeto |  | runtime/scene_audio.cpp → voice gain routing | nada | não | não | não |
+| `volume` | Ganho | número | Mixer | 1 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus | nada | não | não | sim |
+| `enabled` | Ativo | booleano | Mixer | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus | nada | não | não | não |
+| `mute` | Silenciar | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus | nada | não | não | não |
+| `solo` | Solo | booleano | Mixer | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus | nada | não | não | não |
+| `output` | Saída | referência | Mixer | Master | astra.audio.bus · outro objeto |  | runtime/scene_audio.cpp → nó DSP do bus | nada | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `peak_db` | Pico (dB) | — | número | Pico de saída do bus, com queda de 20 dB/s; -120 em silêncio |
+
+## Filtro de áudio · `astra.audio.filter` v1
+
+Passa-baixa, passa-alta, banda, rejeita-banda, pico e prateleiras. **Consumidor:** runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h). **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_audioeffectfilter.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.audio.bus` | Adicione Bus de áudio a este objeto: efeitos e envios processam o sinal do bus |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `cutoff` | Frequência de corte | número | Filtro | 5000 | 20 … 20000 | Hz | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `resonance` | Ressonância | número | Filtro | 0.707 | 0.1 … 10 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `gain` | Ganho | número | Filtro | 0 | -24 … 24 | dB | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | sim | não | sim |
+| `enabled` | Ativo | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `mode` | Tipo | enumeração | Filtro | Passa-baixa | Passa-baixa \| Passa-alta \| Passa-banda \| Rejeita-banda \| Pico \| Prateleira grave \| Prateleira aguda |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+
+## Eco · `astra.audio.echo` v1
+
+Repetições atrasadas com realimentação. **Consumidor:** runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h). **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioEchoEffect.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.audio.bus` | Adicione Bus de áudio a este objeto: efeitos e envios processam o sinal do bus |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `delay` | Atraso | número | Eco | 300 | 1 … 5000 | ms | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `feedback` | Realimentação | número | Eco | 0.4 | 0 … 0.95 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `wet` | Mistura do eco | número | Eco | 0.5 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `dry` | Sinal original | número | Eco | 1 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `enabled` | Ativo | booleano | Eco | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+
+## Reverberação · `astra.audio.reverb` v1
+
+Sala simulada com tamanho, amortecimento e pré-atraso. **Consumidor:** runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h). **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_audioeffectreverb.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.audio.bus` | Adicione Bus de áudio a este objeto: efeitos e envios processam o sinal do bus |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `room_size` | Tamanho da sala | número | Sala | 0.8 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `damping` | Amortecimento | número | Sala | 0.5 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `width` | Largura | número | Sala | 1 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `predelay` | Pré-atraso | número | Sala | 20 | 0 … 500 | ms | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `wet` | Mistura da reverberação | número | Mistura | 0.3 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `dry` | Sinal original | número | Mistura | 1 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `enabled` | Ativo | booleano | Sala | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+
+## Compressor · `astra.audio.compressor` v1
+
+Controla picos; com sidechain abaixa este bus quando outro soa. **Consumidor:** runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h). **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_audioeffectcompressor.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.audio.bus` | Adicione Bus de áudio a este objeto: efeitos e envios processam o sinal do bus |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `threshold` | Limiar | número | Compressão | -20 | -60 … 0 | dB | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `ratio` | Razão | número | Compressão | 4 | 1 … 48 | : 1 | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `attack` | Ataque | número | Compressão | 20 | 0.02 … 250 | ms | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `release` | Liberação | número | Compressão | 250 | 1 … 2000 | ms | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `makeup` | Ganho de compensação | número | Saída | 0 | 0 … 24 | dB | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `mix` | Mistura | número | Saída | 1 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `enabled` | Ativo | booleano | Compressão | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `sidechain` | Sidechain | referência | Compressão | Próprio sinal | astra.audio.bus · outro objeto |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `reduction_db` | Redução (dB) | — | número | Quanto o compressor está abaixando agora |
+
+## Envio de áudio · `astra.audio.send` v1
+
+Copia o sinal deste ponto da cadeia para outro bus. **Consumidor:** runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h). **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixer.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.audio.bus` | Adicione Bus de áudio a este objeto: efeitos e envios processam o sinal do bus |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `level` | Nível do envio | número | Envio | 0.5 | 0 … 1 |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | sim |
+| `enabled` | Ativo | booleano | Envio | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+| `target` | Destino | referência | Envio | Nenhum | astra.audio.bus · outro objeto |  | runtime/scene_audio.cpp → nó DSP do bus (runtime/audio_dsp.h) | nada | não | não | não |
+
+## Snapshot de mixer · `astra.audio.snapshot` v1
+
+Leva ganhos e efeitos a valores salvos com transição. **Consumidor:** runtime/scene_audio.cpp → transição das propriedades do mixer. **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixerSnapshots.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `transition` | Transição | número | Snapshot | 1 | 0 … 60 | s | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | não | não | não |
+| `slot_0_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_1_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_2_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_3_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_4_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_5_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_6_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_7_value` | Valor | número | Valores | 1 | -100000 … 100000 |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `enabled` | Ativo | booleano | Snapshot | verdadeiro | verdadeiro \| falso |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | não | não | não |
+| `apply_at_start` | Aplicar ao iniciar | booleano | Snapshot | falso | verdadeiro \| falso |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | não | não | não |
+| `slot_0_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_1_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_2_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_3_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_4_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_5_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_6_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_7_parameter` | Parâmetro | enumeração | Valores | Ganho do bus | Ganho do bus \| Corte do filtro \| Ressonância do filtro \| Ganho do filtro \| Mistura do eco \| Mistura da reverberação \| Tamanho da sala \| Nível do envio \| Limiar do compressor |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_0_target` | Objeto 1 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_1_target` | Objeto 2 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_2_target` | Objeto 3 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_3_target` | Objeto 4 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_4_target` | Objeto 5 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_5_target` | Objeto 6 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_6_target` | Objeto 7 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+| `slot_7_target` | Objeto 8 | referência | Valores | Nenhum | qualquer objeto |  | runtime/scene_audio.cpp → transição das propriedades do mixer | nada | sim | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `transition_to` | Transicionar | seconds: número (s) | nada | Leva os valores atuais aos do snapshot no tempo dado; negativo usa a Transição do componente |
+| `apply` | Aplicar | — | nada | Aplica os valores na hora, sem transição |
 
 ## Path · `astra.path` v2
 

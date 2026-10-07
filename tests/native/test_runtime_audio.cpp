@@ -28,7 +28,7 @@ AE_TEST(audio_source_archive_clears_previous_clip_in_reused_component){
   scene::AudioSource empty,reused;
   reused.clip=resources::assetGuidFromSeed("previous-clip");
   std::ostringstream saved;empty.write(saved);std::istringstream input(saved.str());
-  AE_EXPECT_TRUE(reused.read(input,1)&&!reused.clip.valid(),"empty persisted binding must replace previous GUID");
+  AE_EXPECT_TRUE(reused.read(input,scene::AudioSource::descriptor.version)&&!reused.clip.valid(),"empty persisted binding must replace previous GUID");
   std::ostringstream restored;reused.write(restored);
   AE_EXPECT_TRUE(restored.str()==saved.str(),"clear roundtrip must not resurrect previous resource");
 }

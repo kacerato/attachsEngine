@@ -779,6 +779,7 @@ if(NOT ANDROID)
     ../tests/native/test_joint_break.cpp
     ../tests/native/test_physics_queries.cpp
     ../tests/native/test_virtual_cameras.cpp
+    ../tests/native/test_audio_mixer.cpp
     ../tests/native/test_body_mass.cpp
     ../tests/native/test_runtime_number_tweens.cpp
     ../tests/native/test_runtime_physics2d.cpp

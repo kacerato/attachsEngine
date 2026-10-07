@@ -1353,16 +1353,27 @@
       "dependencias": "Decode, cache e threads de áudio; GUID durável",
       "trabalho_original": "P10",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
-        "docs/planos/AUDIO-2026-09-30.md",
+        "docs/planos/MIXER-DE-AUDIO-2026-10-07.md",
+        "native/runtime/scene_audio.cpp",
+        "native/runtime/audio_dsp.h",
+        "tests/native/test_audio_mixer.cpp",
         "tests/native/test_runtime_audio.cpp",
-        "docs/planos/AUDIO-TRANSPORTE-ABI37-2026-10-02.md"
+        "tests/fixtures/audio-mixer/AudioMixerProbe.cs",
+        "docs/validacao/evidencias/audio-mixer-20261007/aparelho-logcat.txt",
+        "native/resources/audio_clip.h",
+        "native/editor/editor_audio_assets.cpp"
       ],
-      "lacunas": [
-        "Streaming de clipe e pontos de loop autorados nao implementados; WAV decodificado/cached e loop inteiro funcionam."
-      ],
-      "aceite": {}
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
+      "limites_validacao": [
+        "WAV em memória ou streaming (até 1 GiB) com pontos de loop; aceite no aparelho em 07/10/2026.",
+        "Pendências declaradas: Importação só de WAV (MP3/OGG/FLAC fora do build)."
+      ]
     },
     {
       "id": "F059",
@@ -1373,16 +1384,26 @@
       "dependencias": "Audio world; Transform para 3D; não exigir renderer",
       "trabalho_original": "P10",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
-        "docs/planos/AUDIO-2026-09-30.md",
-        "docs/planos/AUDIO-API-ABI-2026-09-30.md",
-        "docs/planos/AUDIO-TRANSPORTE-ABI37-2026-10-02.md"
+        "docs/planos/MIXER-DE-AUDIO-2026-10-07.md",
+        "native/runtime/scene_audio.cpp",
+        "native/runtime/audio_dsp.h",
+        "tests/native/test_audio_mixer.cpp",
+        "tests/native/test_runtime_audio.cpp",
+        "tests/fixtures/audio-mixer/AudioMixerProbe.cs",
+        "docs/validacao/evidencias/audio-mixer-20261007/aparelho-logcat.txt",
+        "native/scene/audio.h"
       ],
-      "lacunas": [
-        "Prioridade/preempcao de fontes e mistura espacial continua ainda nao implementadas; dimensao plana/espacial e demais propriedades possuem consumidor."
-      ],
-      "aceite": {}
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
+      "limites_validacao": [
+        "Mistura espacial contínua, prioridade e vozes virtuais; virtualização validada no host, demais no aparelho em 07/10/2026.",
+        "Pendências declaradas: Curvas de atenuação personalizadas, Spread e limite de vozes autorável no projeto ainda não existem."
+      ]
     },
     {
       "id": "F060",
@@ -1420,14 +1441,26 @@
       "dependencias": "Grafo sem ciclos não suportados; DSP real; lifecycle da plataforma",
       "trabalho_original": "P10",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
-        "docs/planos/AUDIO-2026-09-30.md"
+        "docs/planos/MIXER-DE-AUDIO-2026-10-07.md",
+        "native/runtime/scene_audio.cpp",
+        "native/runtime/audio_dsp.h",
+        "tests/native/test_audio_mixer.cpp",
+        "tests/native/test_runtime_audio.cpp",
+        "tests/fixtures/audio-mixer/AudioMixerProbe.cs",
+        "docs/validacao/evidencias/audio-mixer-20261007/aparelho-logcat.txt",
+        "native/scene/audio_mixer.h"
       ],
-      "lacunas": [
-        "Sends, efeitos DSP/parametros e snapshots ainda nao implementados; buses atuais executam apenas encadeamento de ganho, mute/solo."
-      ],
-      "aceite": {}
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
+      "limites_validacao": [
+        "Buses como nós DSP com filtro, eco, reverb, compressor/sidechain, envios e snapshots; aceite no aparelho em 07/10/2026.",
+        "Pendências declaradas: Efeitos Chorus/Phaser/Distortion/EQ de bandas e snapshot do mixer inteiro não implementados."
+      ]
     },
     {
       "id": "F062",

@@ -82,6 +82,7 @@ public:
   }
   void setScriptRuntime(scene::ScriptRuntimeApi api,const std::string &root) {scripts_.configure(api,root);}
   void configureAudio(runtime::SceneAudio::ClipLoader loader,runtime::SceneAudio::Output output=runtime::SceneAudio::Output::Device){audio_.configure(std::move(loader),output);}
+  void configureAudioStreams(runtime::SceneAudio::StreamResolver resolver){audio_.configureStreams(std::move(resolver));}
   void setPrefabLoader(runtime::ScriptBridge::PrefabLoader loader) {scripts_.setPrefabLoader(std::move(loader));}
   void setScriptResourceAvailability(runtime::ScriptBridge::ResourceAvailability available) {
     scripts_.setResourceAvailability(std::move(available));

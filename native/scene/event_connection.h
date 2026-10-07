@@ -63,7 +63,7 @@ inline constexpr std::array<ComponentEnumOption,22> eventConnectionEvents{{
   {17,"Cérebro: câmera ativada"},{18,"Cérebro: corte de câmera"},{19,"Cérebro: transição concluída"},
   {20,"Câmera virtual entrou ao vivo"},{21,"Câmera virtual saiu do ar"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,27> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,29> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -91,8 +91,10 @@ inline constexpr std::array<EventConnectionMethodKey,27> eventConnectionMethodKe
   {25,"astra.physics.shapecast","update"},
   {26,"astra.camera.virtual","prioritize"},
   {27,"astra.camera.virtual","snap"},
+  {28,"astra.audio.snapshot","transition_to"},
+  {29,"astra.audio.snapshot","apply"},
 }};
-inline constexpr std::array<ComponentEnumOption,28> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,30> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -102,6 +104,7 @@ inline constexpr std::array<ComponentEnumOption,28> eventConnectionMethods{{
   {20,"Tween de propriedade: reiniciar"},{21,"Tween de propriedade: cancelar"},{22,"Tween de propriedade: pausar"},{23,"Tween de propriedade: retomar"},
   {24,"Raio: atualizar agora"},{25,"Varredura: atualizar agora"},
   {26,"Câmera virtual: priorizar"},{27,"Câmera virtual: encaixar"},
+  {28,"Snapshot: transicionar"},{29,"Snapshot: aplicar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
@@ -123,8 +126,8 @@ inline const EventConnectionMethodKey *findEventConnectionMethod(u32 value) {
 // Eventos que carregam o outro objeto (contatos) aceitam filtro por ele.
 inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || (event>=15 && event<=21);}
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
-// e audio.seek (segundos).
-inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6;}
+// audio.seek (segundos) e snapshot.transition_to (duração; negativo usa a autorada).
+inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28;}
 
 class EventConnection final : public ComponentValue {
 public:

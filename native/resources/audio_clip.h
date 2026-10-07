@@ -15,4 +15,9 @@ struct AudioClip {
   bool valid() const {return !samples.empty() && samples.size()%Channels==0 && samples.size()<=MaximumSamples;}
 };
 bool decodeWaveClip(std::span<const u8> bytes,AudioClip &out,std::string &error);
+// WAV longo, lido em blocos durante o Play (streaming). Confere o formato e
+// devolve a duração em quadros de 48 kHz sem decodificar o arquivo inteiro.
+inline constexpr u64 MaximumStreamFileBytes=1024ull*1024ull*1024ull;
+inline constexpr const char *WaveStreamImporter="WAV_STREAM_F32_48000_V1";
+bool inspectWaveStream(const std::string &path,u64 &frames,std::string &error);
 }

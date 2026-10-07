@@ -670,8 +670,9 @@ bool EditorSession::setProjectDirectory(const char *path) {
   gui_.setHistoryActions([this](bool redo){return redo?history_.redo(document_):history_.undo(document_);},
                         [this](bool redo){return redo?history_.canRedo():history_.canUndo();});
   playScene_.configureSceneGui([this](resources::AssetGuid asset,ui::GuiDocument &doc,std::string &error){return loadGuiDocument(asset,doc,error);});
-  audioClips_.clear();
+  audioClips_.clear();audioStreams_.clear();
   playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},audioOutput_);
+  playScene_.configureAudioStreams([this](resources::AssetGuid asset,std::string &path,std::string &error){return resolveAudioStream(asset,path,error);});
   projectTags_=std::move(tags);document_.setTags(projectTags_);
   state_.tagPicker=false;state_.editingTagName=false;state_.editingTagSearch=false;state_.tagPage=0;state_.tagQuery.clear();
   environmentBatchRequest_.clear();multiEnvironments_.clear();multiProfiles_.clear();
@@ -897,7 +898,7 @@ runtime::ComponentResourceResolver EditorSession::runtimeResourceResolver() {
       runtime::AnimationClipView view;
       return !guid.valid() || mapScene_.findClip(guid,view);
     }
-    if(type==resources::AssetType::AudioClip) {std::string error;return !guid.valid() || bool(loadAudioClip(guid,error));}
+    if(type==resources::AssetType::AudioClip) {std::string error;return !guid.valid() || audioClipAvailable(guid,error);}
     if(type==resources::AssetType::UiDocument) {ui::GuiDocument doc;std::string error;return !guid.valid()||loadGuiDocument(guid,doc,error);}
     auto *render=&candidate.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer *>(&candidate):nullptr;
     if(!render||slot>=render->slotCount()) return false;
@@ -9716,6 +9717,7 @@ void EditorSession::update() {
   state_.tweenSequenceRuntime=playInspecting()&&playScene_.active()?&playScene_.tweenSequences():nullptr;
   state_.physicsQueryRuntime=playInspecting()&&playScene_.active()?&playScene_.physicsQueries():nullptr;
   state_.virtualCameraRuntime=playInspecting()&&playScene_.active()?&playScene_.virtualCameras():nullptr;
+  state_.audioRuntime=playInspecting()&&playScene_.active()?&playScene_.audio():nullptr;
   state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   refreshColliderAuthoring();
@@ -11803,7 +11805,7 @@ bool EditorSession::resolveComponentResources(scene::ComponentValue &value,const
         if(!mapScene_.findClip(asset,view)) {error="Clipe do recurso não está carregado";return false;}
         continue;
       }
-      if(binding.kind==resources::AssetType::AudioClip && !loadAudioClip(asset,error)) return false;
+      if(binding.kind==resources::AssetType::AudioClip && !audioClipAvailable(asset,error)) return false;
       if(binding.kind==resources::AssetType::EnvironmentProfile && !findEnvironmentProfile(asset)) {
         error="Perfil de ambiente do recurso não está carregado";return false;
       }

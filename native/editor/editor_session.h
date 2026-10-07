@@ -103,9 +103,14 @@ class EditorSession final {
 public:
   bool importWaveClip(const std::string &relative,resources::AssetGuid &asset,std::string &error);
   std::shared_ptr<const resources::AudioClip> loadAudioClip(resources::AssetGuid asset,std::string &error);
+  // WAV registrado para streaming: caminho absoluto, conferido pelo hash do registro.
+  bool resolveAudioStream(resources::AssetGuid asset,std::string &path,std::string &error);
+  // Vale para Fonte de áudio: carregável na memória ou registrado para streaming.
+  bool audioClipAvailable(resources::AssetGuid asset,std::string &error);
   void setAudioOutput(runtime::SceneAudio::Output output) {
     audioOutput_=output;
     playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},output);
+    playScene_.configureAudioStreams([this](resources::AssetGuid asset,std::string &path,std::string &error){return resolveAudioStream(asset,path,error);});
   }
   void setAudioFocus(bool focused){playScene_.setAudioFocus(focused);}
   bool audioWantsFocus()const{return playScene_.audioWantsFocus();}
@@ -1757,6 +1762,8 @@ private:
   EditorFileSystem files_;
   struct CachedAudioClip {resources::AssetGuid guid;std::string hash;std::shared_ptr<const resources::AudioClip> clip;};
   std::vector<CachedAudioClip> audioClips_;
+  struct VerifiedAudioStream {resources::AssetGuid guid;std::string hash;u64 size=0;i64 modified=0;};
+  std::vector<VerifiedAudioStream> audioStreams_;
   runtime::SceneAudio::Output audioOutput_=runtime::SceneAudio::Output::Device;
   EditorCodeWorkspace code_;
   std::string codeBuildRequest_;

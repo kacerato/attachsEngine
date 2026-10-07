@@ -4,12 +4,15 @@
 #include "scene/event_connection.h"
 #include "scene/camera.h"
 #include "scene/virtual_camera.h"
+#include "scene/audio.h"
+#include "scene/audio_mixer.h"
 #include "scene/collider.h"
 #include "scene/physics_body.h"
 #include "scene/timer.h"
 #include <tuple>
 #include <sstream>
 #include <iomanip>
+#include <functional>
 #include "editor/editor_route_component.h"
 #include "editor/editor_reference_picker.h"
 // Renderiza a tela do editor em um arquivo, sem GPU e sem aparelho.
@@ -330,6 +333,88 @@ int writeVirtualCameraProject(const char *directory) {
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Virtual camera project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
+// Aceite no aparelho do bloco H (docs/planos/MIXER-DE-AUDIO-2026-10-07.md):
+// buses com efeitos, envio para reverberação, ducking por sidechain, WAV longo
+// em streaming e Snapshot, com sons sintetizados aqui mesmo.
+namespace {
+std::vector<u8> synthesizedWave(u32 frames,const std::function<float(u32,u32)> &sample) {
+  std::vector<u8> bytes(44+usize(frames)*4,0);
+  const auto put16=[&](usize p,u32 v){bytes[p]=u8(v);bytes[p+1]=u8(v>>8);};
+  const auto put32=[&](usize p,u32 v){for(u32 k=0;k<4;++k)bytes[p+k]=u8(v>>(k*8));};
+  std::memcpy(bytes.data(),"RIFF",4);put32(4,u32(bytes.size()-8));std::memcpy(bytes.data()+8,"WAVEfmt ",8);
+  put32(16,16);put16(20,1);put16(22,2);put32(24,48000);put32(28,192000);put16(32,4);put16(34,16);std::memcpy(bytes.data()+36,"data",4);put32(40,frames*4);
+  for(u32 i=0;i<frames;++i) for(u32 ch=0;ch<2;++ch) {
+    const float v=std::clamp(sample(i,ch),-1.f,1.f);put16(44+(usize(i)*2+ch)*2,u32(u16(i16(std::lround(v*32767)))));
+  }
+  return bytes;
+}
+}
+int writeAudioMixerProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Audio mixer export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/audio-mixer/AudioMixerProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes",".astra","Audio"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/AudioMixerProbe.cs",probe)) return fail("cannot publish source");
+  constexpr float tau=6.2831853f;
+  // Música: acorde lá maior com tremolo, 4 s, laço entre 1 s e 3 s.
+  const auto musicWave=synthesizedWave(4*48000,[&](u32 i,u32){const float t=float(i)/48000;
+    return (.16f*std::sin(tau*220*t)+.12f*std::sin(tau*277.18f*t)+.12f*std::sin(tau*329.63f*t))*(.85f+.15f*std::sin(tau*3*t));});
+  // Fala: sílabas de 180 ms com vibrato, 2 s.
+  const auto speechWave=synthesizedWave(2*48000,[&](u32 i,u32){const float t=float(i)/48000;const float syllable=std::fmod(t,.24f);
+    return syllable<.18f?.45f*std::sin(tau*(320+30*std::sin(tau*6*t))*t)*std::sin(3.14159f*syllable/.18f):0.f;});
+  // Ambiente: 50 s (acima do orçamento de memória): pede streaming.
+  const auto ambientWave=synthesizedWave(50*48000,[&](u32 i,u32 ch){const float t=float(i)/48000;
+    return .12f*std::sin(tau*82.4f*t+ch)+.08f*std::sin(tau*123.5f*t)*(.6f+.4f*std::sin(tau*.2f*t))+.05f*std::sin(tau*164.8f*t+2*ch);});
+  for(const auto &[name,bytes]:{std::pair{"Audio/musica.wav",&musicWave},std::pair{"Audio/fala.wav",&speechWave},std::pair{"Audio/ambiente-longo.wav",&ambientWave}})
+    if(!editor::EditorImportTransaction::write(root/name,*bytes)) return fail("cannot write wave");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  resources::AssetGuid musicClip,speechClip,ambientClip;std::string error;
+  if(!session.importWaveClip("Audio/musica.wav",musicClip,error)||!session.importWaveClip("Audio/fala.wav",speechClip,error)||
+     !session.importWaveClip("Audio/ambiente-longo.wav",ambientClip,error)) return fail(error);
+  auto &document=session.document();
+  const auto object=[&](const char *name,float x,float y,float z){
+    const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto v=*document.find(id);
+    v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;document.applyEntityValues(id,v);return id;};
+  const auto cameraId=object("Câmera",0,1.6f,-4);
+  {auto v=*document.find(cameraId);v.components.add(scene::Camera::descriptor);v.components.add(scene::AudioListener::descriptor);document.applyEntityValues(cameraId,v);}
+  const auto voices=object("Falas",0,0,0),reverb=object("Reverb",0,0,0),musicBus=object("Música",0,0,0),ambientBus=object("Ambiente",0,0,0);
+  {auto v=*document.find(voices);v.components.add(scene::AudioBus::descriptor);document.applyEntityValues(voices,v);}
+  {auto v=*document.find(reverb);v.components.add(scene::AudioBus::descriptor);auto *r=static_cast<scene::AudioReverb*>(v.components.add(scene::AudioReverb::descriptor));
+   r->dry=0;r->wet=.6f;document.applyEntityValues(reverb,v);}
+  {auto v=*document.find(musicBus);static_cast<scene::AudioBus*>(v.components.add(scene::AudioBus::descriptor))->volume=.9f;
+   static_cast<scene::AudioFilter*>(v.components.add(scene::AudioFilter::descriptor))->cutoff=20000;
+   auto *c=static_cast<scene::AudioCompressor*>(v.components.add(scene::AudioCompressor::descriptor));c->sidechain=voices;c->threshold=-35;c->ratio=8;c->attack=10;c->release=400;
+   auto *s=static_cast<scene::AudioSend*>(v.components.add(scene::AudioSend::descriptor));s->target=reverb;s->level=.3f;
+   document.applyEntityValues(musicBus,v);}
+  {auto v=*document.find(ambientBus);v.components.add(scene::AudioBus::descriptor);document.applyEntityValues(ambientBus,v);}
+  const auto source=[&](const char *name,float x,resources::AssetGuid clip,u64 bus,const std::function<void(scene::AudioSource&)> &setup){
+    const auto id=object(name,x,0,0);auto v=*document.find(id);auto *s=static_cast<scene::AudioSource*>(v.components.add(scene::AudioSource::descriptor));
+    s->clip=clip;s->bus=bus;setup(*s);document.applyEntityValues(id,v);return id;};
+  source("Fonte da música",0,musicClip,musicBus,[](scene::AudioSource &s){s.loop=true;s.loopStart=1;s.loopEnd=3;s.priority=10;});
+  source("Fala",0,speechClip,voices,[](scene::AudioSource &s){s.playback=scene::AudioPlayback::Stopped;s.volume=.9f;s.priority=0;});
+  source("Fonte do ambiente",5,ambientClip,ambientBus,[](scene::AudioSource &s){s.loop=true;s.loading=scene::AudioLoading::Stream;
+    s.dimension=scene::AudioDimension::Spatial;s.spatialBlend=.5f;s.minDistance=2;s.priority=200;});
+  const auto pause=object("Pausa",0,0,0);
+  {auto v=*document.find(pause);auto *n=static_cast<scene::AudioSnapshot*>(v.components.add(scene::AudioSnapshot::descriptor));
+   n->slots[0]={musicBus,scene::AudioSnapshotParameter::BusGain,.3f};n->slots[1]={musicBus,scene::AudioSnapshotParameter::FilterCutoff,800};
+   document.applyEntityValues(pause,v);}
+  const auto probeId=object("Sonda",0,0,0);
+  {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
+   script->scriptType="acceptance.audio_mixer";script->source="Scripts/AudioMixerProbe.cs";document.applyEntityValues(probeId,v);}
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"MixerAudio-20261007\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":3},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Audio mixer project written: %s\n",root.generic_string().c_str());
   return 0;
 }
 // Aceite no aparelho do bloco D (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md):
@@ -753,6 +838,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-f-project")return writePhysicsFProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-virtual-camera-project")return writeVirtualCameraProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);

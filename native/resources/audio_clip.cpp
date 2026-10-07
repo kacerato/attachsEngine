@@ -46,4 +46,16 @@ bool decodeWaveClip(std::span<const u8> bytes,AudioClip &out,std::string &error)
   for(float value:prepared.samples) if(!std::isfinite(value) || std::abs(value)>1) {error="PCM não finito ou fora de [-1,1]";return false;}
   out=std::move(prepared);return true;
 }
+bool inspectWaveStream(const std::string &path,u64 &frames,std::string &error) {
+  error.clear();frames=0;
+  auto config=ma_decoder_config_init(ma_format_f32,AudioClip::Channels,AudioClip::SampleRate);
+  config.encodingFormat=ma_encoding_format_wav;
+  ma_decoder decoder{};
+  if(ma_decoder_init_file(path.c_str(),&config,&decoder)!=MA_SUCCESS) {error="WAV não reconhecido para streaming";return false;}
+  ma_uint64 length=0;const bool known=ma_decoder_get_length_in_pcm_frames(&decoder,&length)==MA_SUCCESS&&length>0;
+  float probe[2*256]{};ma_uint64 read=0;const auto result=ma_decoder_read_pcm_frames(&decoder,probe,256,&read);
+  ma_decoder_uninit(&decoder);
+  if(!known||(result!=MA_SUCCESS&&result!=MA_AT_END)||!read) {error="WAV vazio ou ilegível";return false;}
+  frames=length;return true;
+}
 }

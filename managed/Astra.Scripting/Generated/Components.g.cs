@@ -1354,6 +1354,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         VarreduraAtualizarAgora = 25,
         CameraVirtualPriorizar = 26,
         CameraVirtualEncaixar = 27,
+        SnapshotTransicionar = 28,
+        SnapshotAplicar = 29,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -6832,7 +6834,7 @@ public readonly struct Collider2D : IComponentFacade<Collider2D>
     public ComponentSubscription OnCollisionExit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_exit", handler);
 }
 
-/// <summary>Audio Source: Clipe de projeto com reprodução e espaço acústico. Família Áudio · Reprodução.</summary>
+/// <summary>Fonte de áudio: Clipe de projeto com reprodução e espaço acústico. Família Áudio · Reprodução.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioSource.html</remarks>
 public readonly struct AudioSource : IComponentFacade<AudioSource>
 {
@@ -6863,7 +6865,7 @@ public readonly struct AudioSource : IComponentFacade<AudioSource>
         get => Component.GetFloat("pitch");
         set => Component.SetFloat("pitch", value);
     }
-    /// <summary>Pan estéreo</summary>
+    /// <summary>Pan estéreo. Em 3D, vale para a parte 2D da mistura espacial</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float Pan
     {
@@ -6919,6 +6921,34 @@ public readonly struct AudioSource : IComponentFacade<AudioSource>
         get => Component.GetFloat("doppler");
         set => Component.SetFloat("doppler", value);
     }
+    /// <summary>Mistura espacial. 1 = totalmente 3D; 0 = 2D sem distância nem direção</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SpatialBlend
+    {
+        get => Component.GetFloat("spatial_blend");
+        set => Component.SetFloat("spatial_blend", value);
+    }
+    /// <summary>Prioridade. 0 é a mais importante; acima do limite de vozes, as de menor prioridade ficam virtuais</summary>
+    /// <remarks>Faixa válida: 0 a 256.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
+    }
+    /// <summary>Início do loop (s). Ao repetir, volta a este ponto</summary>
+    /// <remarks>Faixa válida: 0 a 36000.</remarks>
+    public float LoopStart
+    {
+        get => Component.GetFloat("loop_start");
+        set => Component.SetFloat("loop_start", value);
+    }
+    /// <summary>Fim do loop (s). Zero usa o fim do clipe</summary>
+    /// <remarks>Faixa válida: 0 a 36000.</remarks>
+    public float LoopEnd
+    {
+        get => Component.GetFloat("loop_end");
+        set => Component.SetFloat("loop_end", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -6972,6 +7002,17 @@ public readonly struct AudioSource : IComponentFacade<AudioSource>
         get => (RolloffOption)Component.GetEnum("rolloff");
         set => Component.SetEnum("rolloff", (uint)value);
     }
+    public enum LoadingOption : uint
+    {
+        Memoria = 0,
+        Streaming = 1,
+    }
+    /// <summary>Carregamento. Streaming lê o arquivo aos poucos: para músicas e falas longas</summary>
+    public LoadingOption Loading
+    {
+        get => (LoadingOption)Component.GetEnum("loading");
+        set => Component.SetEnum("loading", (uint)value);
+    }
     /// <summary>Bus</summary>
     public ObjectReference Bus
     {
@@ -6996,9 +7037,12 @@ public readonly struct AudioSource : IComponentFacade<AudioSource>
     /// <summary>Posicionar. Move o cursor; aplicado pelo mixer</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public void Seek(double seconds) => Component.Invoke("seek", ComponentValue.Number(seconds));
+    /// <summary>Virtual. Verdadeiro quando a voz passou do limite de vozes e é acompanhada sem tocar</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool IsVirtual() => Component.Invoke("is_virtual").AsBoolean();
 }
 
-/// <summary>Audio Listener: Pose e volume de escuta escolhidos por prioridade. Família Áudio · Escuta.</summary>
+/// <summary>Ouvinte de áudio: Pose e volume de escuta escolhidos por prioridade. Família Áudio · Escuta.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioListener.html</remarks>
 public readonly struct AudioListener : IComponentFacade<AudioListener>
 {
@@ -7037,7 +7081,7 @@ public readonly struct AudioListener : IComponentFacade<AudioListener>
     }
 }
 
-/// <summary>Audio Bus: Roteamento de ganho, mute e solo até Master. Família Áudio · Mixer.</summary>
+/// <summary>Bus de áudio: Nó do mixer: ganho, mute, solo, cadeia de efeitos e envios até Master. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html</remarks>
 public readonly struct AudioBus : IComponentFacade<AudioBus>
 {
@@ -7085,6 +7129,597 @@ public readonly struct AudioBus : IComponentFacade<AudioBus>
         get => Component.GetReference("output");
         set => Component.SetReference("output", value);
     }
+    /// <summary>Pico (dB). Pico de saída do bus, com queda de 20 dB/s; -120 em silêncio</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double PeakDb() => Component.Invoke("peak_db").AsNumber();
+}
+
+/// <summary>Filtro de áudio: Passa-baixa, passa-alta, banda, rejeita-banda, pico e prateleiras. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_audioeffectfilter.html</remarks>
+public readonly struct AudioFilter : IComponentFacade<AudioFilter>
+{
+    public static string TypeId => "astra.audio.filter";
+    public static AudioFilter Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioFilter(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Frequência de corte (Hz)</summary>
+    /// <remarks>Faixa válida: 20 a 20000.</remarks>
+    public float Cutoff
+    {
+        get => Component.GetFloat("cutoff");
+        set => Component.SetFloat("cutoff", value);
+    }
+    /// <summary>Ressonância. Q do filtro; 0,707 é plano</summary>
+    /// <remarks>Faixa válida: 0.1 a 10.</remarks>
+    public float Resonance
+    {
+        get => Component.GetFloat("resonance");
+        set => Component.SetFloat("resonance", value);
+    }
+    /// <summary>Ganho (dB). Reforço ou corte na faixa</summary>
+    /// <remarks>Faixa válida: -24 a 24.</remarks>
+    public float Gain
+    {
+        get => Component.GetFloat("gain");
+        set => Component.SetFloat("gain", value);
+    }
+    /// <summary>Ativo. Desligado deixa o sinal passar sem alteração</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum ModeOption : uint
+    {
+        PassaBaixa = 0,
+        PassaAlta = 1,
+        PassaBanda = 2,
+        RejeitaBanda = 3,
+        Pico = 4,
+        PrateleiraGrave = 5,
+        PrateleiraAguda = 6,
+    }
+    /// <summary>Tipo. Passa-baixa abafa (porta fechada, embaixo d'água); passa-alta afina (rádio, telefone)</summary>
+    public ModeOption Mode
+    {
+        get => (ModeOption)Component.GetEnum("mode");
+        set => Component.SetEnum("mode", (uint)value);
+    }
+}
+
+/// <summary>Eco: Repetições atrasadas com realimentação. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioEchoEffect.html</remarks>
+public readonly struct AudioEcho : IComponentFacade<AudioEcho>
+{
+    public static string TypeId => "astra.audio.echo";
+    public static AudioEcho Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioEcho(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Atraso (ms). Intervalo entre as repetições</summary>
+    /// <remarks>Faixa válida: 1 a 5000.</remarks>
+    public float Delay
+    {
+        get => Component.GetFloat("delay");
+        set => Component.SetFloat("delay", value);
+    }
+    /// <summary>Realimentação. Quanto de cada repetição volta ao atraso</summary>
+    /// <remarks>Faixa válida: 0 a 0.95.</remarks>
+    public float Feedback
+    {
+        get => Component.GetFloat("feedback");
+        set => Component.SetFloat("feedback", value);
+    }
+    /// <summary>Mistura do eco</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Wet
+    {
+        get => Component.GetFloat("wet");
+        set => Component.SetFloat("wet", value);
+    }
+    /// <summary>Sinal original</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Dry
+    {
+        get => Component.GetFloat("dry");
+        set => Component.SetFloat("dry", value);
+    }
+    /// <summary>Ativo. Desligado esvazia as repetições</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Reverberação: Sala simulada com tamanho, amortecimento e pré-atraso. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_audioeffectreverb.html</remarks>
+public readonly struct AudioReverb : IComponentFacade<AudioReverb>
+{
+    public static string TypeId => "astra.audio.reverb";
+    public static AudioReverb Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioReverb(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Tamanho da sala. Maior deixa a cauda mais longa</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float RoomSize
+    {
+        get => Component.GetFloat("room_size");
+        set => Component.SetFloat("room_size", value);
+    }
+    /// <summary>Amortecimento. Absorção dos agudos pelas paredes</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Damping
+    {
+        get => Component.GetFloat("damping");
+        set => Component.SetFloat("damping", value);
+    }
+    /// <summary>Largura. Abertura estéreo da reverberação</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Width
+    {
+        get => Component.GetFloat("width");
+        set => Component.SetFloat("width", value);
+    }
+    /// <summary>Pré-atraso (ms). Tempo até as primeiras reflexões</summary>
+    /// <remarks>Faixa válida: 0 a 500.</remarks>
+    public float Predelay
+    {
+        get => Component.GetFloat("predelay");
+        set => Component.SetFloat("predelay", value);
+    }
+    /// <summary>Mistura da reverberação</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Wet
+    {
+        get => Component.GetFloat("wet");
+        set => Component.SetFloat("wet", value);
+    }
+    /// <summary>Sinal original. Zero em um bus de envio deixa só a reverberação</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Dry
+    {
+        get => Component.GetFloat("dry");
+        set => Component.SetFloat("dry", value);
+    }
+    /// <summary>Ativo. Desligado corta a reverberação</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Compressor: Controla picos; com sidechain abaixa este bus quando outro soa. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_audioeffectcompressor.html</remarks>
+public readonly struct AudioCompressor : IComponentFacade<AudioCompressor>
+{
+    public static string TypeId => "astra.audio.compressor";
+    public static AudioCompressor Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioCompressor(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Limiar (dB). Acima deste nível o volume é reduzido</summary>
+    /// <remarks>Faixa válida: -60 a 0.</remarks>
+    public float Threshold
+    {
+        get => Component.GetFloat("threshold");
+        set => Component.SetFloat("threshold", value);
+    }
+    /// <summary>Razão (: 1). 4 reduz 4 dB acima do limiar para cada 1 dB que passa</summary>
+    /// <remarks>Faixa válida: 1 a 48.</remarks>
+    public float Ratio
+    {
+        get => Component.GetFloat("ratio");
+        set => Component.SetFloat("ratio", value);
+    }
+    /// <summary>Ataque (ms)</summary>
+    /// <remarks>Faixa válida: 0.02 a 250.</remarks>
+    public float Attack
+    {
+        get => Component.GetFloat("attack");
+        set => Component.SetFloat("attack", value);
+    }
+    /// <summary>Liberação (ms)</summary>
+    /// <remarks>Faixa válida: 1 a 2000.</remarks>
+    public float Release
+    {
+        get => Component.GetFloat("release");
+        set => Component.SetFloat("release", value);
+    }
+    /// <summary>Ganho de compensação (dB)</summary>
+    /// <remarks>Faixa válida: 0 a 24.</remarks>
+    public float Makeup
+    {
+        get => Component.GetFloat("makeup");
+        set => Component.SetFloat("makeup", value);
+    }
+    /// <summary>Mistura. Menor que 1 soma o sinal sem compressão (paralela)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Mix
+    {
+        get => Component.GetFloat("mix");
+        set => Component.SetFloat("mix", value);
+    }
+    /// <summary>Ativo. Desligado deixa o sinal passar sem alteração</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Sidechain. Comprime quando OUTRO bus soa: música abaixa quando há fala (ducking)</summary>
+    public ObjectReference Sidechain
+    {
+        get => Component.GetReference("sidechain");
+        set => Component.SetReference("sidechain", value);
+    }
+    /// <summary>Redução (dB). Quanto o compressor está abaixando agora</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double ReductionDb() => Component.Invoke("reduction_db").AsNumber();
+}
+
+/// <summary>Envio de áudio: Copia o sinal deste ponto da cadeia para outro bus. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixer.html</remarks>
+public readonly struct AudioSend : IComponentFacade<AudioSend>
+{
+    public static string TypeId => "astra.audio.send";
+    public static AudioSend Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioSend(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Nível do envio. Fração do sinal deste ponto da cadeia que vai ao destino</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Level
+    {
+        get => Component.GetFloat("level");
+        set => Component.SetFloat("level", value);
+    }
+    /// <summary>Ativo. Desligado não envia nada</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Destino. Bus que recebe a cópia, por exemplo um bus só com Reverb</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Snapshot de mixer: Leva ganhos e efeitos a valores salvos com transição. Família Áudio · Mixer.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixerSnapshots.html</remarks>
+public readonly struct AudioSnapshot : IComponentFacade<AudioSnapshot>
+{
+    public static string TypeId => "astra.audio.snapshot";
+    public static AudioSnapshot Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public AudioSnapshot(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Transição (s). Tempo real até os valores do snapshot</summary>
+    /// <remarks>Faixa válida: 0 a 60.</remarks>
+    public float Transition
+    {
+        get => Component.GetFloat("transition");
+        set => Component.SetFloat("transition", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot0Value
+    {
+        get => Component.GetFloat("slot_0_value");
+        set => Component.SetFloat("slot_0_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot1Value
+    {
+        get => Component.GetFloat("slot_1_value");
+        set => Component.SetFloat("slot_1_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot2Value
+    {
+        get => Component.GetFloat("slot_2_value");
+        set => Component.SetFloat("slot_2_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot3Value
+    {
+        get => Component.GetFloat("slot_3_value");
+        set => Component.SetFloat("slot_3_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot4Value
+    {
+        get => Component.GetFloat("slot_4_value");
+        set => Component.SetFloat("slot_4_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot5Value
+    {
+        get => Component.GetFloat("slot_5_value");
+        set => Component.SetFloat("slot_5_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot6Value
+    {
+        get => Component.GetFloat("slot_6_value");
+        set => Component.SetFloat("slot_6_value", value);
+    }
+    /// <summary>Valor. Limitado à faixa da propriedade de destino</summary>
+    /// <remarks>Faixa válida: -100000 a 100000.</remarks>
+    public float Slot7Value
+    {
+        get => Component.GetFloat("slot_7_value");
+        set => Component.SetFloat("slot_7_value", value);
+    }
+    /// <summary>Ativo. Desligado recusa transições</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Aplicar ao iniciar. Os valores entram no primeiro quadro do Play, sem transição</summary>
+    public bool ApplyAtStart
+    {
+        get => Component.GetBool("apply_at_start");
+        set => Component.SetBool("apply_at_start", value);
+    }
+    public enum Slot0ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot0ParameterOption Slot0Parameter
+    {
+        get => (Slot0ParameterOption)Component.GetEnum("slot_0_parameter");
+        set => Component.SetEnum("slot_0_parameter", (uint)value);
+    }
+    public enum Slot1ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot1ParameterOption Slot1Parameter
+    {
+        get => (Slot1ParameterOption)Component.GetEnum("slot_1_parameter");
+        set => Component.SetEnum("slot_1_parameter", (uint)value);
+    }
+    public enum Slot2ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot2ParameterOption Slot2Parameter
+    {
+        get => (Slot2ParameterOption)Component.GetEnum("slot_2_parameter");
+        set => Component.SetEnum("slot_2_parameter", (uint)value);
+    }
+    public enum Slot3ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot3ParameterOption Slot3Parameter
+    {
+        get => (Slot3ParameterOption)Component.GetEnum("slot_3_parameter");
+        set => Component.SetEnum("slot_3_parameter", (uint)value);
+    }
+    public enum Slot4ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot4ParameterOption Slot4Parameter
+    {
+        get => (Slot4ParameterOption)Component.GetEnum("slot_4_parameter");
+        set => Component.SetEnum("slot_4_parameter", (uint)value);
+    }
+    public enum Slot5ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot5ParameterOption Slot5Parameter
+    {
+        get => (Slot5ParameterOption)Component.GetEnum("slot_5_parameter");
+        set => Component.SetEnum("slot_5_parameter", (uint)value);
+    }
+    public enum Slot6ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot6ParameterOption Slot6Parameter
+    {
+        get => (Slot6ParameterOption)Component.GetEnum("slot_6_parameter");
+        set => Component.SetEnum("slot_6_parameter", (uint)value);
+    }
+    public enum Slot7ParameterOption : uint
+    {
+        GanhoDoBus = 0,
+        CorteDoFiltro = 1,
+        RessonanciaDoFiltro = 2,
+        GanhoDoFiltro = 3,
+        MisturaDoEco = 4,
+        MisturaDaReverberacao = 5,
+        TamanhoDaSala = 6,
+        NivelDoEnvio = 7,
+        LimiarDoCompressor = 8,
+    }
+    /// <summary>Parâmetro. Usa o primeiro componente daquele tipo no objeto</summary>
+    public Slot7ParameterOption Slot7Parameter
+    {
+        get => (Slot7ParameterOption)Component.GetEnum("slot_7_parameter");
+        set => Component.SetEnum("slot_7_parameter", (uint)value);
+    }
+    /// <summary>Objeto 1. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot0Target
+    {
+        get => Component.GetReference("slot_0_target");
+        set => Component.SetReference("slot_0_target", value);
+    }
+    /// <summary>Objeto 2. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot1Target
+    {
+        get => Component.GetReference("slot_1_target");
+        set => Component.SetReference("slot_1_target", value);
+    }
+    /// <summary>Objeto 3. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot2Target
+    {
+        get => Component.GetReference("slot_2_target");
+        set => Component.SetReference("slot_2_target", value);
+    }
+    /// <summary>Objeto 4. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot3Target
+    {
+        get => Component.GetReference("slot_3_target");
+        set => Component.SetReference("slot_3_target", value);
+    }
+    /// <summary>Objeto 5. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot4Target
+    {
+        get => Component.GetReference("slot_4_target");
+        set => Component.SetReference("slot_4_target", value);
+    }
+    /// <summary>Objeto 6. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot5Target
+    {
+        get => Component.GetReference("slot_5_target");
+        set => Component.SetReference("slot_5_target", value);
+    }
+    /// <summary>Objeto 7. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot6Target
+    {
+        get => Component.GetReference("slot_6_target");
+        set => Component.SetReference("slot_6_target", value);
+    }
+    /// <summary>Objeto 8. Bus de áudio, ou o objeto do bus com o efeito</summary>
+    public ObjectReference Slot7Target
+    {
+        get => Component.GetReference("slot_7_target");
+        set => Component.SetReference("slot_7_target", value);
+    }
+    /// <summary>Transicionar. Leva os valores atuais aos do snapshot no tempo dado; negativo usa a Transição do componente</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void TransitionTo(double seconds) => Component.Invoke("transition_to", ComponentValue.Number(seconds));
+    /// <summary>Aplicar. Aplica os valores na hora, sem transição</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Apply() => Component.Invoke("apply");
 }
 
 /// <summary>Path: Curva Bézier local com pontos persistentes. Família Lógica · Caminhos.</summary>

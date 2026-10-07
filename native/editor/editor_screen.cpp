@@ -14,6 +14,8 @@
 #include "editor/editor_property_tween.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_virtual_cameras.h"
+#include "runtime/scene_audio.h"
+#include "scene/audio_mixer.h"
 #include "scene/virtual_camera.h"
 #include "runtime/scene_tween_sequences.h"
 #include "scene/script_behavior.h"
@@ -140,6 +142,10 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(const auto *timer=static_cast<const scene::Timer*>(entity.components.find(scene::Timer::descriptor)))
     return timer->elapsedAction!=0 ? UiIcon::EventTimeoutConnection : UiIcon::ComponentTimer;
   if(entity.components.find(scene::VirtualCamera::descriptor)) return UiIcon::ComponentVirtualCamera;
+  if(entity.components.find(scene::AudioSnapshot::descriptor)) return UiIcon::AudioSnapshot;
+  if(entity.components.find(scene::AudioBus::descriptor)) return UiIcon::AudioBus;
+  if(entity.components.find(scene::AudioSource::descriptor)) return UiIcon::AudioSource;
+  if(entity.components.find(scene::AudioListener::descriptor)) return UiIcon::AudioListener;
   if(entity.components.find(scene::TweenSequence::descriptor)) return UiIcon::ComponentTweenSequence;
   if(entity.components.find(scene::PropertyTween::descriptor)) return UiIcon::ComponentTweenProperty;
   if(const auto *tween=static_cast<const scene::TransformTween*>(entity.components.find(scene::TransformTween::descriptor)))
@@ -2833,6 +2839,30 @@ std::string fitMiddle(const UiDrawList &list,const std::string &text,float width
   return "...";
 }
 
+// Cartão de estado no topo de um componente: ícone, título no tom do estado,
+// detalhe e, opcionalmente, uma barra (progresso, nível ou redução).
+void inspectorStatusCard(ScreenBuilder &builder,UiRect &content,UiIcon icon,std::string_view title,std::string_view detail,
+                         UiColor tone,float bar=-1,UiColor barColor=0,float secondary=-1) {
+  const UiTheme &theme=builder.theme;
+  auto card=takeTop(content,52);card=deflate(card,{0,2,0,6});
+  builder.list.addRect(card,theme.color.surface,6);
+  builder.list.addBorder(card,tone==theme.color.accent?theme.color.accent:tone==theme.color.warning?theme.color.warning:theme.color.lineSoft,1,6);
+  auto inner=deflate(card,{10,6,10,6});
+  const auto glyph=takeLeft(inner,30);takeLeft(inner,8);
+  builder.list.addImage(centred(glyph,26,26),static_cast<UiImageId>(icon),tone==theme.color.warning?theme.color.warning:theme.color.text);
+  const auto top=takeTop(inner,18);
+  builder.label(top,fitMiddle(builder.list,std::string(title),top.width,theme.type.cardName),tone==theme.color.textDim?theme.color.text:tone,theme.type.cardName);
+  const auto bottom=takeTop(inner,14);
+  builder.label(bottom,fitMiddle(builder.list,std::string(detail),bottom.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+  if(bar>=0) {
+    const UiRect track{card.x+10,card.y+card.height-5,card.width-20,3};
+    builder.list.addRect(track,theme.color.track,1.5f);
+    if(secondary>=0) builder.list.addRect({track.x,track.y,track.width*std::min(1.f,secondary),track.height},withAlpha(barColor?barColor:theme.color.accent,.45f),1.5f);
+    builder.list.addRect({track.x,track.y,track.width*std::min(1.f,bar),track.height},barColor?barColor:theme.color.accent,1.5f);
+  }
+}
+
+
 // Cartões desenhados numa coluna que rola dentro de `window`: o desenho é
 // recortado pela janela e o toque só existe na parte visível.
 struct TextureCards {
@@ -3429,21 +3459,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         std::snprintf(detail,sizeof detail,"Transição padrão: %s · %.1f s",styles[static_cast<u32>(b.defaultBlend)],static_cast<double>(b.defaultBlendTime));
       }
     }
-    auto card=takeTop(content,52);card=deflate(card,{0,2,0,6});
-    builder.list.addRect(card,theme.color.surface,6);
-    builder.list.addBorder(card,tone==theme.color.accent?theme.color.accent:theme.color.lineSoft,1,6);
-    auto inner=deflate(card,{10,6,10,6});
-    const auto glyph=takeLeft(inner,30);takeLeft(inner,8);
-    builder.list.addImage(centred(glyph,26,26),static_cast<UiImageId>(icon),tone==theme.color.warning?theme.color.warning:theme.color.text);
-    const auto top=takeTop(inner,18);
-    builder.label(top,fitMiddle(builder.list,title,top.width,theme.type.cardName),tone==theme.color.textDim?theme.color.text:tone,theme.type.cardName);
-    const auto bottom=takeTop(inner,14);
-    builder.label(bottom,fitMiddle(builder.list,detail,bottom.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
-    if(progress>=0) {
-      const UiRect track{card.x+10,card.y+card.height-5,card.width-20,3};
-      builder.list.addRect(track,theme.color.track,1.5f);
-      builder.list.addRect({track.x,track.y,track.width*progress,track.height},theme.color.accent,1.5f);
-    }
+    inspectorStatusCard(builder,content,icon,title,detail,tone,progress);
   }
   // Sequência: diz em que etapa está e, se parou, por quê; o motivo vem do avaliador.
   if(entry.type==&scene::TweenSequence::descriptor&&!searching) {
@@ -3487,14 +3503,100 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       }
     } else builder.label(takeTop(content,20),runtime::worldStatusMessage(status),theme.color.warning,theme.type.caption);
   }
-  if(audio&&!searching) {
+  // Mixer e fontes: cartão com o estado real no Play e o resumo na edição.
+  if(audio&&!searching&&entry.type!=&scene::AudioListener::descriptor) {
+    const auto *live=state.audioRuntime;
+    const auto name=[&](u64 id,const char *empty)->std::string{if(!id)return empty;const auto *e=state.document->find(static_cast<EditorEntityId>(id));return e?e->name:"objeto removido";};
+    const auto db=[](float gain){char t[24];if(gain<=1e-5f)std::snprintf(t,sizeof t,"-inf dB");else std::snprintf(t,sizeof t,"%+.1f dB",static_cast<double>(20*std::log10(gain)));return std::string(t);};
+    const auto clock=[](double s){char t[24];std::snprintf(t,sizeof t,"%d:%04.1f",static_cast<int>(s/60),std::fmod(s,60.0));return std::string(t);};
+    // Medidor: -60 dB à esquerda, 0 dB à direita.
+    const auto level=[](float gain){return gain<=1e-6f?0.f:std::clamp((20*std::log10(gain)+60)/60,0.f,1.f);};
+    std::string title,detail;UiColor tone=theme.color.textDim;float bar=-1,secondary=-1;UiColor barColor=0;UiIcon icon=UiIcon::AudioSource;
+    char text[200];
+    const auto percent=[](float x){return std::to_string(static_cast<int>(x*100+.5f))+"%";};
+    const auto *t=entry.type;
+    if(t==&scene::AudioSource::descriptor) {
+      const auto &s=static_cast<const scene::AudioSource&>(*component);
+      detail=std::string(s.loading==scene::AudioLoading::Stream?"Streaming":"Memória")+" · "+
+             (s.dimension==scene::AudioDimension::Flat?"2D":s.spatialBlend>=1?"3D":s.spatialBlend<=0?"3D com mistura 0 (2D)":"3D "+percent(s.spatialBlend))+
+             " · prioridade "+std::to_string(static_cast<int>(s.priority))+(s.loop?(s.loopEnd>0||s.loopStart>0?" · loop entre pontos":" · loop"):"");
+      const auto *d=live?live->diagnostic(entity.id,component->instanceId()):nullptr;
+      using S=runtime::SceneAudio::State;
+      if(d) {
+        switch(d->state) {
+          case S::Playing: title="Tocando "+clock(d->cursor);tone=theme.color.accent;break;
+          case S::Virtual: title="Virtual em "+clock(d->cursor);tone=theme.color.warning;
+            detail="Acima do limite de "+std::to_string(live->voiceLimit())+" vozes; volta a tocar quando houver vaga";break;
+          case S::Paused: title="Pausada em "+clock(d->cursor);break;
+          case S::Stopped: title=d->message;break;
+          default: title=d->message;tone=theme.color.warning;break;
+        }
+      } else if(!s.clip.valid()) {title="Atribua um clipe WAV";tone=theme.color.warning;}
+      else title=s.playback==scene::AudioPlayback::Playing?"Toca ao iniciar o Play":"Aguardando comando de tocar";
+    } else if(t==&scene::AudioBus::descriptor) {
+      icon=UiIcon::AudioBus;const auto &b=static_cast<const scene::AudioBus&>(*component);
+      u32 effects=0,sends=0;
+      for(usize i=0;i<entity.components.size();++i){const auto id=std::string_view(entity.components.at(i)->type().id);
+        sends+=id=="astra.audio.send";effects+=id=="astra.audio.filter"||id=="astra.audio.echo"||id=="astra.audio.reverb"||id=="astra.audio.compressor";}
+      detail=std::to_string(effects)+(effects==1?" efeito · ":" efeitos · ")+std::to_string(sends)+(sends==1?" envio · saída ":" envios · saída ")+name(b.output,"Master");
+      if(const auto *m=live?live->busMeter(entity.id):nullptr) {
+        title="Nível "+db(m->peak);bar=level(m->peak);secondary=level(m->rms);
+        tone=!m->message.empty()&&m->audible?theme.color.warning:m->audible?theme.color.accent:theme.color.textDim;
+        barColor=m->peak>=1?theme.color.danger:theme.color.accent;
+        if(!m->message.empty()) detail=m->message;
+      } else title=b.mute?"Silenciado":b.solo?"Solo · ganho "+db(b.volume):"Ganho "+db(b.volume);
+    } else if(t==&scene::AudioFilter::descriptor) {
+      icon=UiIcon::AudioFilter;const auto &f=static_cast<const scene::AudioFilter&>(*component);
+      static constexpr const char *modes[]{"Passa-baixa","Passa-alta","Passa-banda","Rejeita-banda","Pico","Prateleira grave","Prateleira aguda"};
+      const bool gain=f.mode==scene::AudioFilterMode::Peak||f.mode==scene::AudioFilterMode::LowShelf||f.mode==scene::AudioFilterMode::HighShelf;
+      std::snprintf(text,sizeof text,"%s em %.0f Hz",modes[static_cast<u32>(f.mode)],static_cast<double>(f.cutoff));title=text;
+      if(gain){std::snprintf(text,sizeof text," · %+.1f dB",static_cast<double>(f.gain));title+=text;}
+      std::snprintf(text,sizeof text,"Q %.2f · processa o sinal do bus nesta posição da cadeia",static_cast<double>(f.resonance));detail=text;
+      if(!f.enabled) detail="Desligado: o sinal passa sem alteração";
+    } else if(t==&scene::AudioEcho::descriptor) {
+      icon=UiIcon::AudioEcho;const auto &e=static_cast<const scene::AudioEcho&>(*component);
+      std::snprintf(text,sizeof text,"Repete a cada %.0f ms",static_cast<double>(e.delay));title=text;
+      detail="Realimentação "+percent(e.feedback)+" · mistura "+percent(e.wet)+" · original "+percent(e.dry);
+    } else if(t==&scene::AudioReverb::descriptor) {
+      icon=UiIcon::AudioReverb;const auto &r=static_cast<const scene::AudioReverb&>(*component);
+      title="Sala "+percent(r.roomSize)+" · mistura "+percent(r.wet);
+      std::snprintf(text,sizeof text," · pré-atraso %.0f ms",static_cast<double>(r.predelay));
+      detail=std::string(r.dry<=0?"Só reverberação (bus de envio)":"Soma ao original")+" · amortecimento "+percent(r.damping)+text;
+    } else if(t==&scene::AudioCompressor::descriptor) {
+      icon=UiIcon::AudioCompressor;const auto &k=static_cast<const scene::AudioCompressor&>(*component);
+      std::snprintf(text,sizeof text,"%.1f:1 acima de %.1f dB",static_cast<double>(k.ratio),static_cast<double>(k.threshold));title=text;
+      detail=k.sidechain?"Ducking: abaixa quando "+name(k.sidechain,"")+" soa":"Detecta o próprio sinal do bus";
+      if(live&&live->busMeter(entity.id)) {
+        const float reduction=live->compressorReduction(entity.id,component->instanceId());
+        std::snprintf(text,sizeof text,"Reduzindo %.1f dB",static_cast<double>(reduction));
+        title=reduction>.05f?std::string(text):"Sem redução agora";
+        bar=std::clamp(reduction/24,0.f,1.f);barColor=theme.color.warning;tone=reduction>.05f?theme.color.accent:theme.color.textDim;
+      }
+    } else if(t==&scene::AudioSend::descriptor) {
+      icon=UiIcon::AudioSend;const auto &s=static_cast<const scene::AudioSend&>(*component);
+      if(!s.target){title="Escolha o bus de destino";tone=theme.color.warning;}
+      else title="Envia "+percent(s.level)+" para "+name(s.target,"");
+      detail="Copia o sinal deste ponto da cadeia; os efeitos abaixo não afetam a cópia";
+      if(const auto *m=live?live->busMeter(entity.id):nullptr;m&&m->message.starts_with("Envio")){detail=m->message;tone=theme.color.warning;}
+    } else if(t==&scene::AudioSnapshot::descriptor) {
+      icon=UiIcon::AudioSnapshot;const auto &n=static_cast<const scene::AudioSnapshot&>(*component);
+      const u32 count=n.slotCount();
+      std::snprintf(text,sizeof text," · transição %.1f s",static_cast<double>(n.transition));
+      if(!count){title="Escolha o primeiro objeto do mixer";tone=theme.color.warning;}
+      else title=std::to_string(count)+(count==1?" valor":" valores")+text;
+      detail=n.applyAtStart?"Aplicado no primeiro quadro do Play":"Transicionar por script ou Conexão de evento";
+      if(live&&live->activeTransitions()){detail="Mixer em transição ("+std::to_string(live->activeTransitions())+" valores)";tone=theme.color.accent;}
+    }
+    inspectorStatusCard(builder,content,icon,title,detail,tone,bar,barColor,secondary);
+  }
+  if(audio&&!searching&&entry.type==&scene::AudioListener::descriptor) {
     auto note=takeTop(content,20);const auto searchHit=takeRight(note,24);
     const auto status=state.audioStatus.empty()?std::string_view{audioSource?"Pedido salvo · estado no Play":"Estado real no Play"}:std::string_view{state.audioStatus};
     builder.label(note,fitMiddle(builder.list,std::string(status),note.width,theme.type.caption),state.audioStatusWarning?theme.color.warning:theme.color.textMuted,theme.type.caption);
     builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
     builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
   }
-  if((!character&&!constantForce&&!audio&&!tween&&entry.type!=&scene::PathFollow::descriptor&&(!mesh||state.meshTab!=2))||searching||state.editingPropertySearch) {
+  if((!character&&!constantForce&&(!audio||entry.type!=&scene::AudioListener::descriptor)&&!tween&&entry.type!=&scene::PathFollow::descriptor&&(!mesh||state.meshTab!=2))||searching||state.editingPropertySearch) {
     auto searchRow=takeTop(content,34),clear=takeRight(searchRow,32);
     builder.list.addRect(searchRow,theme.color.raised,theme.radius.control);
     builder.label(searchRow,searchText.empty()?"Buscar propriedade":searchText,searchText.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
@@ -6106,7 +6208,14 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     const bool open=builder.onlyComponent?true:same&&(item.object?state.expandedComponent=="astra.object":item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
     const bool menu=same&&!item.object&&(item.transform?state.transformMenu:item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
     std::string title=item.object?"Objeto":item.transform?"Transformação":item.native?item.native->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
-    if(item.value && item.native && item.native->type->allowMultiple) title+=" · "+std::to_string(item.value->instanceId());
+    // Vários do mesmo tipo: numera pela ordem no objeto (1, 2…); sozinho, sem número.
+    if(item.value && item.native && item.native->type->allowMultiple) {
+      u32 ordinal=0,count=0;
+      for(usize i=0;i<entity.components.size();++i) if(&entity.components.at(i)->type()==item.native->type) {
+        ++count;if(entity.components.at(i)==item.value) ordinal=count;
+      }
+      if(count>1&&ordinal) title+=" · "+std::to_string(ordinal);
+    }
     const auto icon=item.object?UiIcon::EditorAuthorObject:item.transform?UiIcon::EditorAuthorMove:item.native?item.native->icon:UiIcon::ScriptingCode;
     auto row=takeTop(content,44.0f);const auto hit=row;
     builder.list.addRect(row,theme.color.raised,theme.radius.control);

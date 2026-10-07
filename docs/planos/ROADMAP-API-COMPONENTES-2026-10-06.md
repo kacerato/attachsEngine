@@ -108,6 +108,8 @@ Câmera virtual com prioridade, cérebro com blend, órbita, colisão/desoclusã
 
 ### Bloco H — Áudio completo (F058, F059, F061)
 
+**Estado (07/10):** concluído — ver [Mixer de áudio](MIXER-DE-AUDIO-2026-10-07.md); aceite no host e no aparelho. Pendências (efeitos extras, formatos comprimidos, curvas personalizadas, limite de vozes no projeto) classificadas no documento.
+
 Streaming com pontos de loop, prioridade/preempção de vozes, mistura espacial contínua, sends e efeitos selecionados no mixer, snapshots. miniaudio 0.11.23 já integrado. Referências: [AudioSource](https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioSource.html), Godot 4.5 [Audio buses](https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html).
 
 ### Bloco I — Animação (F062–F066)

@@ -1661,6 +1661,42 @@
       "name": "camera-brain",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "audio/filter": {
+      "category": "audio",
+      "name": "filter",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/echo": {
+      "category": "audio",
+      "name": "echo",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/reverb": {
+      "category": "audio",
+      "name": "reverb",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/compressor": {
+      "category": "audio",
+      "name": "compressor",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/send": {
+      "category": "audio",
+      "name": "send",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/snapshot": {
+      "category": "audio",
+      "name": "snapshot",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

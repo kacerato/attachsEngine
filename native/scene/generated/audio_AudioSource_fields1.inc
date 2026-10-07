@@ -10,3 +10,7 @@
   float coneOuter = 360;
   float coneGain = 0;
   float doppler = 1;
+  float spatialBlend = 1;
+  float priority = 128;
+  float loopStart = 0;
+  float loopEnd = 0;

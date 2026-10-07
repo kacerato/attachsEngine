@@ -7,6 +7,7 @@
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_virtual_cameras.h"
+#include "scene/audio_mixer.h"
 #include "scene/audio.h"
 #include "scene/component_schema.h"
 #include "scene/path_follow.h"
@@ -76,7 +77,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,48> bindings{{
+const std::array<ComponentMethodBinding,53> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -121,6 +122,25 @@ const std::array<ComponentMethodBinding,48> bindings{{
   {&scene::AudioSource::descriptor,"seek",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!std::isfinite(a[0].number) || a[0].number<0) return WorldStatus::InvalidArgument;
     return audioOperation(s,h,SceneAudio::Command::Seek,a[0].number);}},
+  {&scene::AudioSource::descriptor,"is_virtual",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.audio) return WorldStatus::NotRunning;
+    const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+    r=Value::makeBoolean(s.audio->isVirtual(h.object.id,h.instance));return WorldStatus::Ok;}},
+  {&scene::AudioBus::descriptor,"peak_db",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.audio) return WorldStatus::NotRunning;
+    const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+    const auto *meter=s.audio->busMeter(h.object.id);
+    r=Value::makeNumber(meter&&meter->peak>1e-6f?20*std::log10(meter->peak):-120);return WorldStatus::Ok;}},
+  {&scene::AudioCompressor::descriptor,"reduction_db",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.audio) return WorldStatus::NotRunning;
+    const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+    r=Value::makeNumber(s.audio->compressorReduction(h.object.id,h.instance));return WorldStatus::Ok;}},
+  {&scene::AudioSnapshot::descriptor,"transition_to",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!s.audio) return WorldStatus::NotRunning;
+    return s.audio->transitionSnapshot(*s.world,h,a[0].number);}},
+  {&scene::AudioSnapshot::descriptor,"apply",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){
+    if(!s.audio) return WorldStatus::NotRunning;
+    return s.audio->transitionSnapshot(*s.world,h,0);}},
   {&scene::PathFollow::descriptor,"restart",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,0,r);}},
   {&scene::PathFollow::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,1,r);}},
   {&scene::PathFollow::descriptor,"progress",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,2,r);}},

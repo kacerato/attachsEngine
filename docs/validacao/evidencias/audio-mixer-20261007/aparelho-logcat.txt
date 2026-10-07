@@ -1,0 +1,7 @@
+# Aparelho, 07/10/2026 19:47, canal Astra Dev (dev.aether.editor.u07, versionCode 9, 0.2.3-dev.20261007),
+# projeto MixerAudio-20261007, sonda tests/fixtures/audio-mixer/AudioMixerProbe.cs
+MIX start
+MIX musica nivel=-10.6dB reducao=0.0dB PASS
+MIX streaming ambiente nivel=-16.7dB PASS
+MIX ducking fala=-8.9dB reducao-maxima=23.7dB PASS
+MIX snapshot ganho=0.30 corte=800Hz PASS
