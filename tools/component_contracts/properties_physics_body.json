@@ -180,7 +180,7 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "group": "Corpo",
+            "group": "Material",
             "unit": "",
             "help": {
               "cpp": "nullptr"
@@ -207,7 +207,7 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "group": "Corpo",
+            "group": "Material",
             "unit": "",
             "help": {
               "cpp": "nullptr"
@@ -561,6 +561,28 @@
           "options": "bodyMotionOptions",
           "presentation": {
             "group": "Corpo"
+          }
+        },
+        {
+          "id": "friction_combine",
+          "label": "Combinar atrito",
+          "type": "PhysicsBody",
+          "member": "frictionCombine",
+          "options": "physicsCombineOptions",
+          "presentation": {
+            "group": "Material",
+            "help": "Num par, vale o modo de maior precedência: máximo > multiplicar > mínimo > média. Padrão: média geométrica"
+          }
+        },
+        {
+          "id": "restitution_combine",
+          "label": "Combinar restituição",
+          "type": "PhysicsBody",
+          "member": "restitutionCombine",
+          "options": "physicsCombineOptions",
+          "presentation": {
+            "group": "Material",
+            "help": "Num par, vale o modo de maior precedência. Padrão: o maior valor"
           }
         }
       ]

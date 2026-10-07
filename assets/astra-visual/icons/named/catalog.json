@@ -1619,6 +1619,12 @@
       "name": "tween-sequence",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "physics/material": {
+      "category": "physics",
+      "name": "material",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

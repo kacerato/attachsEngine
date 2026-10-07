@@ -146,6 +146,8 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         if(record&&record->type!=binding->kind) break;
         if(binding->kind==resources::AssetType::EnvironmentProfile&&
            (!record||record->type!=resources::AssetType::EnvironmentProfile)) break;
+        if(binding->kind==resources::AssetType::PhysicsMaterial&&
+           (!record||record->type!=resources::AssetType::PhysicsMaterial||!findPhysicsMaterial(request.componentResource))) break;
         if(binding->kind==resources::AssetType::Mesh&&!mapScene_.assetSlot(request.componentResource)) break;
         if(binding->kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(request.componentResource)) break;
         if(binding->kind==resources::AssetType::Texture&&(!record||record->type!=resources::AssetType::Texture)) break;
@@ -161,6 +163,14 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
           binding->inheritable?resources::AssetGuid{}:binding->none;
       auto values=*entity;auto *candidate=values.components.editInstance(request.componentInstance);
       if(!candidate||!binding->write(*candidate,request.componentResourceSlot,authored)) break;
+      // Escolher um material copia os valores dele para o corpo, na mesma transação.
+      if(binding->kind==resources::AssetType::PhysicsMaterial&&authored.valid()) {
+        auto *body=&candidate->type()==&scene::PhysicsBody::descriptor?static_cast<scene::PhysicsBody*>(candidate):nullptr;
+        const auto *material=findPhysicsMaterial(authored);
+        if(!body||!material) break;
+        body->friction=material->friction;body->restitution=material->restitution;
+        body->frictionCombine=material->frictionCombine;body->restitutionCombine=material->restitutionCombine;
+      }
       if(binding->kind==resources::AssetType::EnvironmentProfile&&authored.valid()) {
         auto *environment=&candidate->type()==&scene::Environment::descriptor?
             static_cast<scene::Environment*>(candidate):nullptr;
@@ -4291,7 +4301,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(bindingIndex>=component->type().resourceBindings.size()) return true;
       const auto &binding=component->type().resourceBindings[bindingIndex];
       if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile&&
-          binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::Texture&&binding.kind!=resources::AssetType::UiDocument)||
+          binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::Texture&&binding.kind!=resources::AssetType::UiDocument&&
+          binding.kind!=resources::AssetType::PhysicsMaterial)||
          slot>=binding.slotCount(*component)||
          !binding.presentation.isEditable(*component)) return true;
       state_.resourceInstance=component->instanceId();state_.resourceProperty=std::string(binding.id);state_.resourceSlot=slot;
@@ -4694,6 +4705,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::MeshPickerClose)) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();return true;}
     if(key==widgetId(EditorWidget::MeshPrevious)) {if(state_.meshPage) --state_.meshPage;return true;}
     if(key==widgetId(EditorWidget::MeshNext)) {++state_.meshPage;return true;}
+    if(key==widgetId(EditorWidget::PhysicsMaterialCreate)||key==widgetId(EditorWidget::PhysicsMaterialUpdate)) {
+      std::string diagnostic;
+      const bool created=key==widgetId(EditorWidget::PhysicsMaterialCreate);
+      const bool ok=created?createPhysicsMaterial(state_.selection,state_.resourceInstance,diagnostic).valid():
+                            updatePhysicsMaterial(state_.selection,state_.resourceInstance,diagnostic);
+      state_.status=diagnostic;if(ok) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();}
+      return true;
+    }
     if(key==widgetId(EditorWidget::EnvironmentProfileCreate)||key==widgetId(EditorWidget::EnvironmentProfileUpdate)) {
       std::string diagnostic;
       const bool created=key==widgetId(EditorWidget::EnvironmentProfileCreate);
@@ -4742,7 +4761,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           if(component) for(const auto &candidate:component->type().resourceBindings)
             if(candidate.id==state_.resourceProperty) {binding=&candidate;break;}
           if(binding&&(binding->kind==resources::AssetType::EnvironmentProfile||
-                      binding->kind==resources::AssetType::EnvironmentMap||binding->kind==resources::AssetType::Texture||binding->kind==resources::AssetType::AudioClip||binding->kind==resources::AssetType::UiDocument)) {
+                      binding->kind==resources::AssetType::EnvironmentMap||binding->kind==resources::AssetType::Texture||binding->kind==resources::AssetType::AudioClip||binding->kind==resources::AssetType::UiDocument||
+                      binding->kind==resources::AssetType::PhysicsMaterial)) {
             const auto index=request.property-1;
             if(index>=assets_.records().size()) return true;
             request.componentResource=assets_.records()[index].guid;

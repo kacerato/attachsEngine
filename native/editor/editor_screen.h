@@ -244,6 +244,7 @@ enum class EditorWidget : u32 {
   MeshGenerateCollision, MeshCollisionQualityDown, MeshCollisionQualityUp,
   MeshCollisionErrorDown, MeshCollisionErrorUp, MaterialRestore,
   EnvironmentProfileCreate, EnvironmentProfileUpdate,
+  PhysicsMaterialCreate, PhysicsMaterialUpdate,
   ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
   CodeTemplateClose, CodeConsole,
   ImportMatchInOrder, ImportTreatAsNew, ImportLinkMenu, ImportLinkUnlink, ImportLinkKeep, ImportLinkDelete,

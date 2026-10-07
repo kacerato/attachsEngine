@@ -105,6 +105,54 @@ bool writePreviewWave(const std::filesystem::path &path) {
   const bool ok=std::fwrite(bytes.data(),1,bytes.size(),file)==bytes.size();std::fclose(file);return ok;
 }
 
+// Aceite no aparelho do Material físico (docs/planos/MATERIAL-FISICO-2026-10-06.md):
+// materiais criados pelo fluxo do editor a partir de dois corpos, chão sem quique.
+int writePhysicsMaterialProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Physics material export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/physics-material/MaterialProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes",".astra"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/MaterialProbe.cs",probe)) return fail("cannot publish source");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  auto &document=session.document();
+  const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");auto camera=*document.find(cameraId);
+  camera.transform.position[1]=1;camera.transform.position[2]=-8;
+  if(!camera.components.add(scene::Camera::descriptor)||!document.applyEntityValues(cameraId,camera)) return fail("camera");
+  const auto floorId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Chão");auto floor=*document.find(floorId);
+  floor.transform.position[1]=-.5f;
+  auto *floorBody=static_cast<scene::PhysicsBody*>(floor.components.add(scene::PhysicsBody::descriptor));floorBody->restitution=0;
+  auto *floorShape=static_cast<scene::Collider*>(floor.components.add(scene::Collider::descriptor));floorShape->halfX=floorShape->halfZ=5;floorShape->halfY=.5f;
+  if(!document.applyEntityValues(floorId,floor)) return fail("floor");
+  const auto ball=[&](const char *name,float x,u32 combine,u64 &instance){
+    const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto v=*document.find(id);
+    v.transform.position[0]=x;v.transform.position[1]=2;
+    auto *b=static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor));
+    b->motion=scene::BodyMotion::Dynamic;b->restitution=.9f;b->restitutionCombine=combine;instance=b->instanceId();
+    auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));c->shape=scene::ColliderShape::Sphere;c->radius=.5f;
+    document.applyEntityValues(id,v);return id;};
+  u64 bouncyInstance=0,dullInstance=0;
+  const auto bouncy=ball("Bola de borracha",-1.5f,4,bouncyInstance),dull=ball("Bola de massa",1.5f,2,dullInstance);
+  std::string diagnostic;
+  if(!session.createPhysicsMaterial(bouncy,bouncyInstance,diagnostic).valid()) return fail(diagnostic);
+  if(!session.createPhysicsMaterial(dull,dullInstance,diagnostic).valid()) return fail(diagnostic);
+  const auto probeId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Sonda");auto probeValue=*document.find(probeId);
+  auto *script=static_cast<scene::ScriptBehavior*>(probeValue.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="acceptance.physics_material";script->source="Scripts/MaterialProbe.cs";
+  if(!document.applyEntityValues(probeId,probeValue)) return fail("probe");
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"MaterialFisico-20261006\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":2},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Physics material project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
 // Aceite no aparelho do bloco D (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md):
 // Porta sobe (relativo), depois Luz e Placa juntas após 0,3 s; duas passagens.
 int writeSequenceProject(const char *directory) {
@@ -524,6 +572,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-groups-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Groups);
   if(argc>1&&std::string_view(argv[1])=="write-services-project")return writeServicesProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);
   const char *output = argc > 1 ? argv[1] : "build/editor-preview.ppm";
   const u32 width = argc > 3 ? static_cast<u32>(std::atoi(argv[2])) : 1600;
@@ -1517,6 +1566,19 @@ int main(int argc, char **argv) {
     if(mode=="event-connection-when")state.componentGroup="Quando";
     if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
     if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
+  }
+  // Material físico: aba Material do Corpo físico e seletor com "Criar".
+  if(argc>4 && std::string(argv[4]).starts_with("physics-material")) {
+    const std::string mode=argv[4];
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Bola de borracha");auto value=*document.find(id);
+    auto *body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));
+    body->motion=scene::BodyMotion::Dynamic;body->friction=.9f;body->restitution=.85f;body->restitutionCombine=4;
+    auto *shape=static_cast<scene::Collider*>(value.components.add(scene::Collider::descriptor));shape->shape=scene::ColliderShape::Sphere;shape->radius=.4f;
+    const auto instance=body->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Material";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    if(mode=="physics-material-picker"){state.meshPicker=true;state.resourceInstance=instance;state.resourceProperty="material";state.resourceSlot=0;}
   }
   // Sequência de tweens: porta abre, depois luz e placa juntas após um intervalo.
   if(argc>4 && std::string(argv[4]).starts_with("tween-sequence")) {

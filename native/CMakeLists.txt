@@ -434,6 +434,7 @@ add_library(aether_assets STATIC
   resources/import_node_map.cpp
   resources/material_asset.cpp
   resources/environment_profile.cpp
+  resources/physics_material.cpp
   resources/environment_map_asset.cpp
   resources/image_decode.cpp
   resources/gltf_codecs.cpp
@@ -527,6 +528,7 @@ add_library(aether_editor STATIC
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
+  editor/editor_physics_materials.cpp
   editor/editor_texture_assets.cpp
   editor/editor_audio_assets.cpp
   editor/editor_path.cpp
@@ -765,6 +767,7 @@ if(NOT ANDROID)
     ../tests/native/test_bulk50.cpp
     ../tests/native/test_runtime_tweens.cpp
     ../tests/native/test_tween_sequences.cpp
+    ../tests/native/test_physics_material.cpp
     ../tests/native/test_runtime_number_tweens.cpp
     ../tests/native/test_runtime_physics2d.cpp
     ../tests/native/test_runtime_audio.cpp

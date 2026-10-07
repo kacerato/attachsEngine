@@ -3535,7 +3535,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     if((mesh&&!searching&&!lightmap)||(binding.kind!=resources::AssetType::Mesh&&!lightmap&&
              binding.kind!=resources::AssetType::EnvironmentProfile&&
              binding.kind!=resources::AssetType::EnvironmentMap&&
-             binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip&&binding.kind!=resources::AssetType::UiDocument)||!show(binding.presentation)) continue;
+             binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip&&binding.kind!=resources::AssetType::UiDocument&&
+             binding.kind!=resources::AssetType::PhysicsMaterial)||!show(binding.presentation)) continue;
     for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
   }
   if(entry.type==&scene::UiCanvas::descriptor && !searching && group=="Canvas")fields.push_back({3,widgetId(EditorWidget::GuiCanvasEdit)});
@@ -3696,6 +3697,16 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   }
   // Ação e receptor primeiro: uma ativação cabe numa página do telefone; método
   // e valor só existem quando a ação chama método e ficam na sequência.
+  // Material do corpo: primeiro o recurso, depois cada valor seguido da sua
+  // combinação, como na ficha do PhysicsMaterial.
+  if(entry.type==&scene::PhysicsBody::descriptor&&!searching&&group=="Material") {
+    const auto rank=[&](const Field &field) {
+      if(field.kind==6) return 0;
+      const std::string_view id=field.kind==2?entry.type->numbers[field.index].id:field.kind==1?entry.type->enums[field.index].id:std::string_view{};
+      return id=="friction"?1:id=="friction_combine"?2:id=="restitution"?3:id=="restitution_combine"?4:5;
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
   // Sequência: uma linha por etapa, na ordem de execução (objeto, espera e
   // "junto da anterior"), em vez de três listas separadas por tipo de campo.
   if(entry.type==&scene::TweenSequence::descriptor&&!searching&&group=="Etapas") {
@@ -4176,6 +4187,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       std::string value;
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
+              binding.kind==resources::AssetType::PhysicsMaterial?"Sem material · valores deste corpo":
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
               binding.kind==resources::AssetType::AnimationClip||binding.kind==resources::AssetType::AudioClip?"Nenhum clipe":
               binding.inheritable?"Herdar malha visual":"Sem recurso";
@@ -4190,6 +4202,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         value=name.empty()?"Malha "+std::to_string(resolved):std::string(name);
       }
       if(const auto *record=builder.state.assetRegistry?builder.state.assetRegistry->find(asset):nullptr) value=record->path;
+      else if(asset.valid()&&binding.kind==resources::AssetType::PhysicsMaterial) value="Material ausente · "+asset.text().substr(0,8)+" · cópia local";
       if(builder.mixed(multiKey(component->instanceId(),std::string(binding.id)+"@"+std::to_string(f.slot)))) value="—";
       builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
       builder.label(slot,fitMiddle(builder.list,value,slot.width,theme.type.caption),theme.color.text,theme.type.caption);
@@ -4319,13 +4332,26 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
        resourceBinding&&resourceBinding->kind==resources::AssetType::Texture?"Buscar textura":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip?"Buscar WAV":
        resourceBinding&&resourceBinding->kind==resources::AssetType::UiDocument?"Buscar documento UI":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Buscar material físico":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AnimationClip?"Buscar clipe":"Buscar malha"):
       state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
   if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
                        resourceBinding->kind==resources::AssetType::EnvironmentMap||
-                       resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip||resourceBinding->kind==resources::AssetType::UiDocument)) {
+                       resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip||resourceBinding->kind==resources::AssetType::UiDocument||
+                       resourceBinding->kind==resources::AssetType::PhysicsMaterial)) {
+    if(resourceBinding->kind==resources::AssetType::PhysicsMaterial&&state.workspace!=EditorWorkspace::Play) {
+      // Criar copia os valores deste corpo para um recurso; atualizar leva os
+      // valores editados aqui a todos os corpos que usam o mesmo material.
+      const auto action=deflate(takeTop(content,40),UiInsets::all(2));
+      builder.list.addRect(action,theme.color.accent,theme.radius.control);
+      auto label=action;
+      builder.list.addImage(centred(takeLeft(label,34),20,20),static_cast<UiImageId>(UiIcon::PhysicsMaterial),theme.color.accentInk);
+      builder.label(label,selectedResource.valid()?"Atualizar material com os valores deste corpo":"Criar material com os valores deste corpo",
+                    theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::PhysicsMaterialUpdate:EditorWidget::PhysicsMaterialCreate));
+    }
     if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
       const auto action=deflate(takeTop(content,40),UiInsets::all(2));
       builder.list.addRect(action,theme.color.accent,theme.radius.control);
@@ -4346,6 +4372,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     const u32 page=std::min(state.meshPage,pages-1);
     auto clear=takeTop(content,34);builder.label(clear,
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":
+        resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Sem material · conservar os valores do corpo":
         resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":resourceBinding->kind==resources::AssetType::UiDocument?"Sem documento UI · canvas inativo":"Sem mapa HDRI",
         theme.color.textDim,theme.type.caption);
     builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
@@ -4363,7 +4390,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     if(matches.empty()) builder.label(content,resourceCount&& !query.empty()?
         (resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV corresponde à busca":"Nenhum recurso corresponde à busca"):
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?
-        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::Texture?
+        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::Texture?
         "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":resourceBinding->kind==resources::AssetType::UiDocument?"Salve uma interface .aeui para registrar o documento":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);

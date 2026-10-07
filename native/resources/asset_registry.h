@@ -55,7 +55,8 @@ enum class AssetType : u32 {
   AnimationClip = 9,
   Prefab = 10, // subárvore autoral portátil, com identidade de fonte
   AudioClip = 11, // WAV validado; dados PCM consumidos pelo mundo de áudio
-  UiDocument = 12 // AEUI document; instantiated by SceneGui, not an editor tab
+  UiDocument = 12, // AEUI document; instantiated by SceneGui, not an editor tab
+  PhysicsMaterial = 13 // atrito, restituição e combinação compartilhados por corpos
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

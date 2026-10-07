@@ -190,6 +190,7 @@ constexpr const char *kNames[] = {
     "physics/kinematic-box",
     "physics/kinematic-cylinder",
     "physics/kinematic-sphere",
+    "physics/material",
     "physics/sensor-box",
     "physics/sensor-capsule",
     "physics/sensor-cylinder",

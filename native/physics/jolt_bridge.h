@@ -31,6 +31,8 @@
 
 #include "core/base.h"
 
+#include <cmath>
+
 extern "C" {
 
 struct AetherVec3 {
@@ -573,6 +575,25 @@ ae::i32 AetherPhysics_SetLayerInteractionV1(AetherPhysicsWorld *world, const ae:
 /// Move um corpo já criado para outra camada de gameplay. Devolve 1 em sucesso;
 /// 0 para mundo/handle inválido ou camada fora de [0, 32).
 ae::i32 AetherPhysics_SetBodyGameplayLayerV1(AetherPhysicsWorld *world, AetherBodyHandle body, ae::u32 layer);
+
+// Combinação do material físico (0 padrão do motor, 1 média, 2 mínimo,
+// 3 multiplicar, 4 máximo). Num par, vale o modo de maior precedência, como na
+// Unity 6000.0 (PhysicsMaterial.frictionCombine): máximo > multiplicar >
+// mínimo > média. Os dois em 0 mantêm o padrão do Jolt: atrito pela média
+// geométrica e restituição pelo maior valor.
+// https://docs.unity3d.com/6000.0/Documentation/ScriptReference/PhysicsMaterial.html
+inline float AetherCombinePhysicsMaterial(ae::u32 a, ae::u32 b, float va, float vb, bool friction) {
+  switch (a > b ? a : b) {
+  case 1: return (va + vb) * .5f;
+  case 2: return va < vb ? va : vb;
+  case 3: return va * vb;
+  case 4: return va > vb ? va : vb;
+  default: return friction ? std::sqrt(va * vb) : (va > vb ? va : vb);
+  }
+}
+// Falso para corpo inexistente ou modo fora de 0..4. Ambos 0 removem o registro.
+ae::i32 AetherPhysics_SetBodyMaterialCombineV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                              ae::u32 friction, ae::u32 restitution);
 
 /// A camada de gameplay atual do corpo, ou 0xffffffff quando o handle não vale.
 ae::u32 AetherPhysics_GetBodyGameplayLayerV1(const AetherPhysicsWorld *world, AetherBodyHandle body);

@@ -216,6 +216,9 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     // corpo, e prometer o contrário seria uma propriedade sem efeito.
     if(!AetherPhysics_SetBodyGameplayLayerV1(world_,handle,entity.layer%GameplayLayers::kCount))
       return fail(entity,"camada de gameplay inválida");
+    if((body->frictionCombine||body->restitutionCombine)&&
+       !AetherPhysics_SetBodyMaterialCombineV1(world_,handle,body->frictionCombine,body->restitutionCombine))
+      return fail(entity,"combinação do material físico recusada");
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
                          body->motion!=scene::BodyMotion::Static,std::move(instances),
                          {body->velocityX,body->velocityY,body->velocityZ}});

@@ -358,6 +358,14 @@ public:
     mSensorMasks.erase(body);
   }
 
+  // Combinação do material físico por corpo. Sem registro nos dois corpos do
+  // par, o contato conserva a combinação padrão do Jolt.
+  void SetMaterialCombine(AetherBodyHandle body, ae::u32 friction, ae::u32 restitution) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    if (friction == 0 && restitution == 0) mCombine.erase(body);
+    else mCombine[body] = {friction, restitution};
+  }
+
   void BeginStep() {
     std::lock_guard<std::mutex> lock(mMutex);
     mFrameEvents = std::move(mPendingEvents);
@@ -409,8 +417,9 @@ public:
 
   void OnContactAdded(const JPH::Body &body1, const JPH::Body &body2,
                       const JPH::ContactManifold &manifold,
-                      JPH::ContactSettings &) override {
+                      JPH::ContactSettings &settings) override {
     std::lock_guard<std::mutex> lock(mMutex);
+    ApplyMaterialCombine(body1, body2, settings);
     const JPH::SubShapeIDPair subPair(body1.GetID(), manifold.mSubShapeID1,
                                       body2.GetID(), manifold.mSubShapeID2);
     if (mActiveSubShapes.find(subPair) != mActiveSubShapes.end()) return;
@@ -424,8 +433,9 @@ public:
 
   void OnContactPersisted(const JPH::Body &body1, const JPH::Body &body2,
                           const JPH::ContactManifold &manifold,
-                          JPH::ContactSettings &) override {
+                          JPH::ContactSettings &settings) override {
     std::lock_guard<std::mutex> lock(mMutex);
+    ApplyMaterialCombine(body1, body2, settings);
     const JPH::SubShapeIDPair subPair(body1.GetID(), manifold.mSubShapeID1,
                                       body2.GetID(), manifold.mSubShapeID2);
     auto it = mActiveSubShapes.find(subPair);
@@ -497,6 +507,18 @@ private:
     DirectedPair solid{};
     bool hasSolid = false;
   };
+
+  struct MaterialCombine { ae::u32 friction = 0, restitution = 0; };
+  void ApplyMaterialCombine(const JPH::Body &a, const JPH::Body &b, JPH::ContactSettings &settings) const {
+    if (mCombine.empty()) return;
+    const auto ia = mCombine.find(a.GetID().GetIndexAndSequenceNumber());
+    const auto ib = mCombine.find(b.GetID().GetIndexAndSequenceNumber());
+    if (ia == mCombine.end() && ib == mCombine.end()) return;
+    const MaterialCombine ca = ia == mCombine.end() ? MaterialCombine{} : ia->second;
+    const MaterialCombine cb = ib == mCombine.end() ? MaterialCombine{} : ib->second;
+    settings.mCombinedFriction = AetherCombinePhysicsMaterial(ca.friction, cb.friction, a.GetFriction(), b.GetFriction(), true);
+    settings.mCombinedRestitution = AetherCombinePhysicsMaterial(ca.restitution, cb.restitution, a.GetRestitution(), b.GetRestitution(), false);
+  }
 
   static ae::u32 LayerBit(JPH::ObjectLayer layer) {
     return Layers::IsMoving(layer) ? static_cast<ae::u32>(AetherQueryLayerMask::Dynamic)
@@ -576,6 +598,7 @@ private:
 
   std::mutex mMutex;
   std::map<AetherBodyHandle, ae::u32> mSensorMasks;
+  std::map<AetherBodyHandle, MaterialCombine> mCombine;
   std::map<JPH::SubShapeIDPair, ActiveSubShape> mActiveSubShapes;
   std::map<DirectedPair, ae::u32> mActivePairCounts;
   std::vector<AetherTriggerEvent> mPendingEvents;
@@ -1113,6 +1136,7 @@ void AetherPhysics_DestroyBodies(AetherPhysicsWorld *world,
     if (handles[i] == AetherBodyHandle_Invalid) continue;
     const JPH::BodyID id(handles[i]);
     if (bodyInterface.IsSensor(id)) world->triggerListener.UnregisterSensor(handles[i]);
+    world->triggerListener.SetMaterialCombine(handles[i], 0, 0);
     ids.push_back(id);
   }
   if (ids.empty()) return;
@@ -1159,6 +1183,14 @@ ae::i32 AetherPhysics_SetLayerInteractionV1(AetherPhysicsWorld *world, const ae:
     for (ae::u32 b = 0; b < count; ++b)
       if (((matrix[a] >> b) & 1u) != ((matrix[b] >> a) & 1u)) return 0;
   for (ae::u32 a = 0; a < count; ++a) world->layerInteraction[a] = matrix[a];
+  return 1;
+}
+
+ae::i32 AetherPhysics_SetBodyMaterialCombineV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                              ae::u32 friction, ae::u32 restitution) {
+  if (world == nullptr || body == AetherBodyHandle_Invalid || friction > 4 || restitution > 4) return 0;
+  if (!world->physicsSystem.GetBodyInterface().IsAdded(JPH::BodyID(body))) return 0;
+  world->triggerListener.SetMaterialCombine(body, friction, restitution);
   return 1;
 }
 

@@ -5915,3 +5915,44 @@ AE_TEST(input_interactions_session_touch_hold_unscaled_cancel_and_fresh_press) {
  session.applicationEvent(scene::ScriptLifecycleEvent::ApplicationFocus,true);session.advanceClock(2);session.extractPlayMap(draws);
  AE_EXPECT_TRUE(query().phase!=2&&query().progress==0,"resume does not resurrect canceled pointer");
 }
+
+// Material físico (bloco F): criar a partir de um corpo, escolher em outro,
+// atualizar e sincronizar os dois, desfazer pelo histórico do recurso.
+AE_TEST(physics_material_is_created_shared_updated_synchronized_and_undone) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto root=fs::temp_directory_path()/("aether-physmat-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  const auto body=[&](const char *name,float friction,u64 &instance){
+    const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,name);auto value=*doc.find(id);
+    auto *b=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));
+    b->motion=scene::BodyMotion::Dynamic;b->friction=friction;b->restitution=.8f;b->restitutionCombine=4;instance=b->instanceId();
+    value.components.add(scene::Collider::descriptor);doc.applyEntityValues(id,value);return id;};
+  u64 first=0,second=0;const auto a=body("Borracha",.9f,first),b=body("Caixa",.1f,second);
+  const auto read=[&](EditorEntityId id,u64 instance){return static_cast<const scene::PhysicsBody*>(doc.find(id)->components.findInstance(instance));};
+  std::string diagnostic;
+  const auto guid=f.session.createPhysicsMaterial(a,first,diagnostic);
+  AE_EXPECT_TRUE(guid.valid(),diagnostic.c_str());
+  const auto *record=f.session.assets().find(guid);
+  const std::string path=record?record->path:std::string{};
+  AE_EXPECT_TRUE(record&&record->type==resources::AssetType::PhysicsMaterial&&path=="Física/Borracha.physmat"&&
+                 fs::exists(root/EditorImportTransaction::fromUtf8(path)),"arquivo e registro publicados juntos");
+  AE_EXPECT_TRUE(read(a,first)->material==guid,"o corpo de origem passa a usar o material");
+  EditorActionRequest request;request.version=f.session.sceneVersion();request.entity=b;
+  request.action=EditorAction::ComponentResource;request.componentInstance=second;request.componentProperty="material";request.componentResource=guid;
+  AE_EXPECT_TRUE(f.session.dispatch(request).status==EditorActionStatus::Applied,"segundo corpo escolhe o material");
+  AE_EXPECT_TRUE(read(b,second)->friction==.9f&&read(b,second)->restitutionCombine==4,"escolher copia os valores do material");
+  history.clear();
+  auto edited=*doc.find(a);static_cast<scene::PhysicsBody*>(edited.components.editInstance(first))->friction=.4f;doc.applyEntityValues(a,edited);
+  AE_EXPECT_TRUE(f.session.updatePhysicsMaterial(a,first,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(f.session.findPhysicsMaterial(guid)->friction==.4f&&read(b,second)->friction==.4f,"atualizar sincroniza todos os corpos");
+  request.version=f.session.sceneVersion();request.action=EditorAction::Undo;
+  AE_EXPECT_TRUE(f.session.dispatch(request).status==EditorActionStatus::Applied,"desfazer o recurso");
+  AE_EXPECT_TRUE(f.session.findPhysicsMaterial(guid)->friction==.9f&&read(b,second)->friction==.9f,"desfazer volta recurso e cópias");
+  resources::PhysicsMaterialAsset disk;std::ifstream in(root/EditorImportTransaction::fromUtf8(path));std::string text((std::istreambuf_iterator<char>(in)),{});
+  AE_EXPECT_TRUE(resources::PhysicsMaterialAsset::deserialize(text,disk)&&disk.friction==.9f,"o arquivo também voltou");
+  request.version=f.session.sceneVersion();request.componentResource=resources::assetGuidFromSeed("ausente");request.action=EditorAction::ComponentResource;
+  AE_EXPECT_TRUE(f.session.dispatch(request).status!=EditorActionStatus::Applied,"GUID fora do projeto é recusado");
+}

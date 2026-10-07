@@ -93,6 +93,8 @@ Junto: associar propriedades a cenários de efeito (problema 4 da seção 3), co
 
 ### Bloco F — Física 3D sobre Jolt (P07)
 
+**Estado (06/10):** PhysicsMaterial implementado — ver [Material físico](MATERIAL-FISICO-2026-10-06.md) (no corpo, como no Godot; por colisor depende de F038). Restante do bloco pendente.
+
 - **PhysicsMaterial (F039):** recurso com atrito, restituição e modo de combinação, atribuído por colisor; migração do atrito/restituição atuais do corpo. Referência: [PhysicsMaterial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-PhysicMaterial.html).
 - **Composição de colisores (F038):** vários colisores em filhos formando um corpo composto.
 - **Componentes de consulta:** Raio e Varredura de forma persistentes (Godot [RayCast3D](https://docs.godotengine.org/en/4.5/classes/class_raycast3d.html)/[ShapeCast3D](https://docs.godotengine.org/en/4.5/classes/class_shapecast3d.html)), Braço de mola ([SpringArm3D](https://docs.godotengine.org/en/4.5/classes/class_springarm3d.html)) para câmera.

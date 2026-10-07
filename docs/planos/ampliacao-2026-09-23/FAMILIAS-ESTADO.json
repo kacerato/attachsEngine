@@ -841,7 +841,7 @@
         "tests/native/test_collider_handles.cpp"
       ],
       "lacunas": [
-        "Material e layers/masks por colisor ausentes: atrito/restituição ficam no corpo (bloco F, PhysicsMaterial)."
+        "Material fica no corpo (um colisor por corpo); layers/masks por colisor ausentes."
       ],
       "aceite": {},
       "limites_validacao": [
@@ -899,14 +899,20 @@
       "dependencias": "Propriedade suportada no backend; compartilhado/override explícito",
       "trabalho_original": "P07a",
       "escopo": "obrigatorio",
-      "estado": "ausente",
-      "evidencias": [],
+      "estado": "parcial",
+      "evidencias": [
+        "docs/planos/MATERIAL-FISICO-2026-10-06.md",
+        "native/resources/physics_material.cpp",
+        "tests/native/test_physics_material.cpp",
+        "docs/validacao/evidencias/physics-material-20261006/aparelho-logcat.txt"
+      ],
       "lacunas": [
-        "Sem recurso PhysicsMaterial nem política de combinação (bloco F)."
+        "Material por colisor de corpo composto depende de F038.",
+        "Dados de superfície (tags) e edição direta do recurso em Propriedades pendentes."
       ],
       "aceite": {},
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Aceite no aparelho em 06/10/2026 com dois corpos; sem malha visível."
       ]
     },
     {

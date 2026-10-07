@@ -1115,7 +1115,7 @@ Força e torque contínuos sobre corpo dinâmico. **Consumidor:** runtime/scene_
 | `relative_torque_z` | Torque local Z | número | Torque local | 0 | -10000000 … 10000000 | N·m | runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt | nada | não | não | não |
 | `enabled` | Ativo | booleano | Força mundo | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt | nada | não | não | não |
 
-## Corpo físico · `astra.physics.body` v4
+## Corpo físico · `astra.physics.body` v5
 
 Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **Invalida:** corpo físico.
 
@@ -1127,11 +1127,19 @@ Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **
 |---|---|---|
 | Incompatível | `astra.physics.character` | Incompatível com personagem cápsula |
 
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `material` | Material físico | physics_material | não | não | não |
+
+**Propriedades**
+
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `mass` | Massa kg | número | Corpo | 1 | 0.01 … 1000000 | kg | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
-| `friction` | Atrito | número | Corpo | 0.5 | 0 … 1 |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
-| `restitution` | Restituição | número | Corpo | 0 | 0 … 1 |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `friction` | Atrito | número | Material | 0.5 | 0 … 1 |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `restitution` | Restituição | número | Material | 0 | 0 … 1 |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `velocity_x` | Velocidade inicial X | número | Início | 0 | -1000 … 1000 | m/s | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `velocity_y` | Velocidade inicial Y | número | Início | 0 | -1000 … 1000 | m/s | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `velocity_z` | Velocidade inicial Z | número | Início | 0 | -1000 … 1000 | m/s | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
@@ -1154,6 +1162,8 @@ Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **
 | `freeze_rotation_z` | Travar rotação Z | booleano | Restrições | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `continuous_collision` | Colisão contínua | booleano | Simulação | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `motion` | Movimento | enumeração | Corpo | Estático | Estático \| Cinemático \| Dinâmico |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `friction_combine` | Combinar atrito | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `restitution_combine` | Combinar restituição | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 
 ## Personagem · `astra.physics.character` v4
 

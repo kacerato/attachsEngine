@@ -48,6 +48,7 @@
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
 #include "resources/environment_profile.h"
+#include "resources/physics_material.h"
 #include "resources/environment_map_asset.h"
 #include "resources/texture_budget.h"
 #include "resources/import_profile.h"
@@ -841,6 +842,15 @@ public:
   }
   resources::AssetGuid createEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   bool updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
+  // Material físico (editor_physics_materials.cpp): mesmo modelo do perfil de
+  // ambiente; o corpo guarda a cópia e o GUID.
+  const std::vector<resources::PhysicsMaterialAsset> &physicsMaterials() const {return physicsMaterials_;}
+  const resources::PhysicsMaterialAsset *findPhysicsMaterial(const resources::AssetGuid &guid) const {
+    for(const auto &material:physicsMaterials_) if(material.guid==guid) return &material;
+    return nullptr;
+  }
+  resources::AssetGuid createPhysicsMaterial(EditorEntityId id,u64 instance,std::string &diagnostic);
+  bool updatePhysicsMaterial(EditorEntityId id,u64 instance,std::string &diagnostic);
   // Liga o slot a um material do projeto; identidade inválida volta à fonte.
   bool assignSlotMaterial(EditorEntityId id,u32 slot,const resources::AssetGuid &material);
   bool repairComponentResource(EditorEntityId id,u64 instance,resources::AssetGuid from,resources::AssetGuid to,
@@ -1030,6 +1040,7 @@ public:
     environmentMaps_.clear();
     loadMaterialAssets();
     loadEnvironmentProfiles();
+    loadPhysicsMaterials();
     return true;
   }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
@@ -1566,6 +1577,7 @@ private:
   u64 importInstanceCounter_=0;
   std::vector<resources::MaterialAsset> materials_;
   std::vector<resources::EnvironmentProfile> environmentProfiles_;
+  std::vector<resources::PhysicsMaterialAsset> physicsMaterials_;
   std::vector<EnvironmentMapEntry> environmentMaps_;
   std::vector<ProjectTexture> textures_;
   struct DecodedProjectTexture {
@@ -1646,6 +1658,9 @@ private:
   void publishMaterialLibrary();
   void loadMaterialAssets();
   void loadEnvironmentProfiles();
+  void loadPhysicsMaterials();
+  void synchronizePhysicsMaterial(const resources::PhysicsMaterialAsset &material);
+  bool commitPhysicsMaterial(const resources::PhysicsMaterialAsset &candidate,std::string &diagnostic,bool recordHistory);
   void loadTextureAssets();
   // Textura do projeto decodificada com mips para um espaço de cor, em cache
   // enquanto o conteúdo registrado não muda. Nula quando o arquivo não abre.

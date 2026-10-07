@@ -1,0 +1,3 @@
+MATERIAL start bouncy=True dull=True
+MATERIAL borracha=1.67 massa=0.57 PASS
+vulkan-errors(E Aether.Vulkan): 0

@@ -3480,6 +3480,37 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
         get => (MotionOption)Component.GetEnum("motion");
         set => Component.SetEnum("motion", (uint)value);
     }
+    public enum FrictionCombineOption : uint
+    {
+        PadraoDoMotor = 0,
+        Media = 1,
+        Minimo = 2,
+        Multiplicar = 3,
+        Maximo = 4,
+    }
+    /// <summary>Combinar atrito. Num par, vale o modo de maior precedência: máximo &gt; multiplicar &gt; mínimo &gt; média. Padrão: média geométrica</summary>
+    public FrictionCombineOption FrictionCombine
+    {
+        get => (FrictionCombineOption)Component.GetEnum("friction_combine");
+        set => Component.SetEnum("friction_combine", (uint)value);
+    }
+    public enum RestitutionCombineOption : uint
+    {
+        PadraoDoMotor = 0,
+        Media = 1,
+        Minimo = 2,
+        Multiplicar = 3,
+        Maximo = 4,
+    }
+    /// <summary>Combinar restituição. Num par, vale o modo de maior precedência. Padrão: o maior valor</summary>
+    public RestitutionCombineOption RestitutionCombine
+    {
+        get => (RestitutionCombineOption)Component.GetEnum("restitution_combine");
+        set => Component.SetEnum("restitution_combine", (uint)value);
+    }
+    /// <summary>Material físico. Recurso do projeto por slot</summary>
+    public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
+    public void SetMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("material", value, slot);
 }
 
 /// <summary>Personagem: Locomoção com cápsula. Família Física 3D · Corpos.</summary>
