@@ -4,18 +4,38 @@
 #include <cmath>
 namespace ae::runtime {
 bool ScenePhysics::setDynamicMotorMove(ObjectId id,float right,float forward,float yaw) {
-  if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)||std::abs(right)>1||std::abs(forward)>1)return false;
-  for(auto &m:dynamicMotors_)if(m.id==id){m.right=right;m.forward=forward;m.yaw=yaw;return true;}
-  return false;
+  return submitMotorControl(id,MotorControlSource::Keyboard,right,forward,yaw);
 }
-bool ScenePhysics::jumpDynamicMotor(ObjectId id) {
-  for(auto &m:dynamicMotors_)if(m.id==id){if(m.pendingJump)return false;m.pendingJump=true;return true;}
+bool ScenePhysics::jumpDynamicMotor(ObjectId id,MotorControlSource source) {
+  if(!controlFocused_)return false;
+  for(auto &m:dynamicMotors_)if(m.id==id)return m.control.queueJump(source);
   return false;
 }
 bool ScenePhysics::setDynamicMotorScriptMove(ObjectId id,float right,float forward,float yaw) {
-  if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)||std::abs(right)>1||std::abs(forward)>1)return false;
-  for(auto &m:dynamicMotors_)if(m.id==id){m.scriptRight=right;m.scriptForward=forward;m.scriptYaw=yaw;m.scriptMoveActive=true;return true;}
+  return submitMotorControl(id,MotorControlSource::Script,right,forward,yaw);
+}
+bool ScenePhysics::submitMotorControl(ObjectId id,MotorControlSource source,float right,float forward,float yaw,bool jump) {
+  if(!validMotorControlInput(source,right,forward,yaw))return false;
+  // Suspended input is consumed without retaining intent. AI/scripts can keep
+  // updating while an editor surface has focus without aborting Play.
+  for(auto &m:dynamicMotors_)if(m.id==id)return !controlFocused_||m.control.submit(source,right,forward,yaw,jump);
+  for(auto &c:characters_)if(c.id==id)return !controlFocused_||c.control.submit(source,right,forward,yaw,jump);
   return false;
+}
+bool ScenePhysics::releaseMotorControl(ObjectId id,MotorControlSource source) {
+  for(auto &m:dynamicMotors_)if(m.id==id)return m.control.cancel(source);
+  for(auto &c:characters_)if(c.id==id)return c.control.cancel(source);
+  return false;
+}
+bool ScenePhysics::motorControlState(ObjectId id,MotorControlSnapshot &out) const {
+  for(const auto &m:dynamicMotors_)if(m.id==id){out=m.control.snapshot(controlFocused_);return true;}
+  for(const auto &c:characters_)if(c.id==id){out=c.control.snapshot(controlFocused_);return true;}
+  return false;
+}
+void ScenePhysics::setControlFocus(bool focus) {
+  controlFocused_=focus;if(focus)return;
+  for(auto &m:dynamicMotors_)m.control.clear();
+  for(auto &c:characters_)c.control.clear();
 }
 bool ScenePhysics::dynamicMotorState(ObjectId id,DynamicMotorState &out) const {
   for(const auto &m:dynamicMotors_)if(m.id==id){out=m.state;return true;}
@@ -23,13 +43,15 @@ bool ScenePhysics::dynamicMotorState(ObjectId id,DynamicMotorState &out) const {
 }
 bool ScenePhysics::applyDynamicMotors(GameWorld &world,float dt) {
   for(auto &m:dynamicMotors_) {
-    const float inputRight=m.scriptMoveActive?m.scriptRight:m.right,inputForward=m.scriptMoveActive?m.scriptForward:m.forward,yaw=m.scriptMoveActive?m.scriptYaw:m.yaw;
-    m.state={};m.state.move[0]=inputRight;m.state.move[1]=inputForward;
+    m.state={};
     const auto *entity=world.graph().find(m.id);
     const auto *component=entity?entity->components.findInstance(m.instance):nullptr;
-    if(!component||!world.activeInHierarchy(world.handle(m.id))){m.pendingJump=false;continue;}
+    if(!component||!world.activeInHierarchy(world.handle(m.id))){m.control.clear();continue;}
     const auto &c=static_cast<const scene::DynamicBodyMotor&>(*component);
-    if(!c.enabled){m.pendingJump=false;continue;}
+    if(!c.enabled){m.control.clear();continue;}
+    const auto intent=m.control.resolve(c.control,controlFocused_);
+    const float inputRight=intent.right,inputForward=intent.forward,yaw=intent.yaw;
+    m.state.move[0]=inputRight;m.state.move[1]=inputForward;
     const auto *body=physicsBody(*entity);
     if(!body||body->motion!=scene::BodyMotion::Dynamic||body->sensor||!c.valid()||body->freezePosition[0]||body->freezePosition[2]||(c.jumpSpeed>0&&body->freezePosition[1])) {
       error_=std::string(entity->name)+": motor requer corpo dinâmico sólido e eixos livres";return false;
@@ -83,12 +105,11 @@ bool ScenePhysics::applyDynamicMotors(GameWorld &world,float dt) {
       // the floor. A steep wall never grants a new jump either.
       if(velocity.y-ground[1]<=.5f){m.state.grounded=true;m.state.support=support.object;std::copy(support.point,support.point+3,m.state.point);std::copy(support.normal,support.normal+3,m.state.normal);std::copy(ground,ground+3,m.state.supportVelocity);}
     }
-    if(m.pendingJump&&m.state.grounded&&c.jumpSpeed>0) {
+    if(intent.jump&&m.state.grounded&&c.jumpSpeed>0) {
       const float impulse=body->mass*std::max(0.f,c.jumpSpeed-(velocity.y-m.state.supportVelocity[1]));
       if(impulse>0&&!AetherPhysics_ApplyBodyForceV1(world_,binding->body,{0,impulse,0},AetherBodyForceKind::Impulse))return false;
       m.state.grounded=false;m.state.support=0;
     }
-    m.pendingJump=false;
     float right=inputRight,forward=inputForward;const float length=std::hypot(right,forward);
     if(length>1){right/=length;forward/=length;}
     float target[3]{(right*std::cos(yaw)+forward*std::sin(yaw))*c.speed,0,(forward*std::cos(yaw)-right*std::sin(yaw))*c.speed};

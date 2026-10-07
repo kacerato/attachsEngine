@@ -1,0 +1,6 @@
+--------- beginning of main
+10-07 16:12:18.139 24384 25645 I Astra.Script: 187: U07 READY: typed ownership and real Body motor
+10-07 16:12:18.180 24384 25645 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 16:12:18.183 24384 25645 I Astra.Script: 187: U07 OWNER Ui candidates=32
+10-07 16:12:18.562 24384 25645 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 16:12:18.982 24384 25645 I Astra.Script: 187: U07 ANIMATION Idle grounded=True

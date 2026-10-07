@@ -548,6 +548,9 @@ target_link_libraries(aether_editor PUBLIC aether_core aether_assets aether_runt
 # MinGW ("file too big"); o formato estendido so muda o objeto, nao o codigo.
 if(MINGW)
   target_compile_options(aether_editor PRIVATE -Wa,-mbig-obj)
+  # The bridge instantiates the same component schemas as the editor. Their
+  # typed accessors can exceed COFF's 32767-section limit in host Debug builds.
+  set_source_files_properties(runtime/script_bridge.cpp PROPERTIES COMPILE_OPTIONS "-Wa,-mbig-obj")
   # The session integration fixture instantiates the full typed component schema.
   # COFF's default section limit is too small for its debug translation unit.
   set_source_files_properties(${CMAKE_SOURCE_DIR}/../tests/native/test_editor_session.cpp
@@ -937,6 +940,7 @@ if(NOT ANDROID)
     ../tests/native/test_scene_gui.cpp
     ../tests/native/test_character_authoring.cpp
     ../tests/native/test_dynamic_body_motor.cpp
+    ../tests/native/test_motor_control.cpp
     ../tests/native/test_convex_bake.cpp
     ../tests/native/test_collision_regeneration.cpp
     ../tests/native/test_collider_occlusion.cpp

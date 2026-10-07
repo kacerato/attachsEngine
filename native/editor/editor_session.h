@@ -1159,9 +1159,8 @@ public:
     playScene_.submitInput(device,elapsed);
     const auto &input=playScene_.input();
     const auto &map=input.map();
-    float look[2]{0,0},move[2]{0,0};
+    float look[2]{0,0};
     input.axis2(map.lookAction(),look);
-    input.axis2(map.moveAction(),move);
     auto view=resolveSceneCamera(playScene_.document());
     const auto *viewEntity=playScene_.document().find(view.entity);
     if(viewEntity&&cameraLook(*viewEntity)) {
@@ -1169,18 +1168,8 @@ public:
       view=resolveSceneCamera(playScene_.document());
       viewEntity=playScene_.document().find(view.entity);
     }
-    const auto *controlled=playScene_.document().find(state_.selection);
-    for(auto *ancestor=viewEntity;ancestor;ancestor=playScene_.document().find(ancestor->parent))
-      if(characterComponent(*ancestor)||ancestor->components.find(scene::DynamicBodyMotor::descriptor)) {controlled=ancestor;break;}
-    if(!controlled) controlled=playScene_.document().find(state_.selection);
-    if(controlled && characterComponent(*controlled)) {
-      if(!playScene_.setCharacterMove(controlled->id,move[0],move[1],view.entity?view.yaw:0)) return false;
-      if(input.justPressed(map.jumpAction())) playScene_.jumpCharacter(controlled->id);
-    }
-    else if(controlled&&controlled->components.find(scene::DynamicBodyMotor::descriptor)) {
-      if(!playScene_.setDynamicMotorMove(controlled->id,move[0],move[1],view.entity?view.yaw:0))return false;
-      if(input.justPressed(map.jumpAction()))playScene_.jumpDynamicMotor(controlled->id);
-    }
+    const auto motorTarget=playScene_.motorReceiver(view.entity,state_.selection);
+    if(!playScene_.routeDefaultMotorControl(motorTarget,view.entity?view.yaw:0))return false;
     if(state_.playStepRequested) {
       state_.playStepRequested=false;
       if(!playScene_.step()) return false;

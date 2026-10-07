@@ -10,6 +10,15 @@ namespace Aether.Tests;
 public static class AstraBehaviorTests
 {
     [Test]
+    public static void U07Example_CompilesWithRealProjectCompiler()
+    {
+        var root=new DirectoryInfo(AppContext.BaseDirectory);
+        while(root is not null&&!File.Exists(Path.Combine(root.FullName,"examples","ui","U07Controller.cs")))root=root.Parent;
+        Assert.True(root is not null);
+        using var project=new Project(File.ReadAllText(Path.Combine(root!.FullName,"examples","ui","U07Controller.cs")));
+        Assert.Equal("example.gui.u07-control",project.Compile().Types.Single().Id);
+    }
+    [Test]
     public static void PrefabAcceptanceFixture_CompilesWithTheProjectCompiler()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);

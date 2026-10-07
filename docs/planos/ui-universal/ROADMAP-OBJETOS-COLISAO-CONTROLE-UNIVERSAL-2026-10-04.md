@@ -50,7 +50,7 @@ Pesquisa de workflow: documentação e source oficiais acima, criação no menu 
 | U04 — formas côncavas dinâmicas | Decomposição convexa, recursos persistentes por parte, limite de custo | Worker V-HACD, GLB/GUID por parte, Undo e validação; limites de geometria/custo continuam abertos | Gerar várias partes de uma malha côncava; manter cavidades dentro da tolerância; cooking cancelável e resultado salvo |
 | U05 — autoria de hierarquia | Seleção de partes, transformações relativas, autoridade, prefab | Fontes tipadas por objeto/slot, matrizes afins e fronteiras de Body; overrides ainda abertos | Escolher quais descendentes contribuem, prévia de cada parte, preservar shear válido, uma transação e overrides coerentes |
 | U06 — capacidades de movimento | DynamicBodyMotor / Character / mecanismos, apoio, constraints | Motor físico e Character existentes; expansão parcial | Caminhar, saltar, subir degraus, agachar, nadar, voar e modos de veículos com consumidores próprios; sem usar um motor terrestre para tudo |
-| U07 — fontes e posse de controle | InputActions, receiver, UI, scripts, arbitragem | UI e script no motor existentes; arbitragem ampliada planejada | Trocar player/IA/UI/gamepad em runtime, prioridades explícitas, cancelar ao perder foco/desativar/destruir; nenhum vetor preso |
+| U07 — fontes e posse de controle | InputActions, receiver, UI, scripts, arbitragem | Fechado em 07/10: cinco fontes, posse exclusiva/prioridades, lifecycle, SDK tipado, arquivo/prefab/histórico e diagnóstico medido; [aceite](../../validacao/u07-2026-10-07/REPORT.md) | 8/8 direcionados, 117/117 regressões, ProjectCompiler real, Android autoria/Play/Save/Undo/Redo/reabertura e 200/200 quadros de órbita/caminhada; gamepad físico Android não conectado, contrato/desconexão no host |
 | U08 — animação e aparência | Skeleton/Animation, motor, pose visual relativa | Integração ampliada planejada | Trocar malha sem mudar física, orientar visual, estados por velocidade/apoio; root motion com autoridade explícita |
 | U09 — recursos e reimportação | Asset GUID, dependências, cooking cache, invalidação | Resolução/cooking existentes; cache e reimportação ampliados planejados | Reimportar malha e regenerar colisão opt-in, manter overrides, detectar geometria perdida e não publicar artefato incompleto |
 | U10 — UI componível | Documento UI, eventos, animação, binding, estilos | Roadmap UI original continua obrigatório | Toda imagem/control tem comportamento opcional, fundo removível, entradas independentes da aparência, layout e lifecycle verificáveis |
@@ -127,3 +127,14 @@ Os parágrafos de entregas anteriores registram o estado histórico naquelas rev
 O [bloco integrado de autoria física](BLOCO-AUTORIA-FISICA-2026-10-06.md) está aceito nos orçamentos publicados. Esta revisão substitui os estados históricos de skin, overrides/cache e primeira autoria em prefab acima: pose Base/Atual/Clipe padrão efetiva, CollisionRecipe v2/migração, parâmetros numéricos, fontes por toque/slot, cache com invalidadores, reimportação opt-in com merge de overrides, dependências atômicas de prefab e momentum do mesmo Body. Mantém a independência da malha e da colisão, sem converter o objeto em cilindro/cápsula.
 
 109/109 cenários de regressão e 9/9 finais; Android Release instalado e autoria/IME/prévia/cancelamento/Apply/Save/Undo/Redo/reabertura fria verificados no POCO F7. Queries dos arquivos retirados do aparelho são do Jolt no host. Entrada grande 99.372 triângulos aceita; limites 100 mil/128 fontes/32 partes/64 vértices/400 mil voxels, snapshot físico estático e prazo cooperativo explícitos. Não implica fechamento thermal de U14 nem a modelagem visual completa. [Evidência e limites](../../validacao/ui-universal-2026-10-06/physical-authoring/REPORT.md). U03/U06–U08, U10, editor visual de malha e U12–U14 continuam nos blocos seguintes; o roadmap UI original não mudou.
+
+## Correção integrada: movimento, animação e câmera — 07/10/2026
+
+A revisão posterior substitui a amostra de um clipe/CesiumMan por oito clipes
+Godot TPS e movimento medido, controle aéreo real, câmera virtual/Cérebro com
+varredura contra piso e catálogo Current antes de Play. APK embute só o laboratório.
+12/12 direcionados, 121/121 regressões no reteste, ProjectCompiler 1/1, ProjectStore
+7/7; 527 quadros examinados, principal atualizado e projetos do usuário preservados.
+Os parágrafos acima ficam históricos. [Contrato e limites](U07-MOVIMENTO-ANIMACAO-CAMERA-2026-10-07.md)
+e [evidência atual](../../validacao/u07-2026-10-07/REPORT.md). U08 amplo e os outros
+blocos não são declarados completos por esta correção.

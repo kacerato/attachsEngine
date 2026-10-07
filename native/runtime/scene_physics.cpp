@@ -242,7 +242,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
                          {body->velocityX,body->velocityY,body->velocityZ},
                          {body->angularX,body->angularY,body->angularZ},body->instanceId(),body->motion==scene::BodyMotion::Dynamic});
     bindings_.back().interpolation=body->motion==scene::BodyMotion::Static?0u:body->interpolation;
-    if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor))dynamicMotors_.push_back({id,motor->instanceId()});
+    if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor))dynamicMotors_.push_back({id,motor->instanceId(),{}, {}});
   }
   // All bodies exist now, including static anchors and forward references.
   for(auto id:ids) {
@@ -325,16 +325,16 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
     AetherPhysics_TryGetBodyMomentumV1(world_,binding.body,&motion.momentum);
     motions.push_back(motion);
   }
-  struct CharacterMotion {ObjectId id;u64 instance;physics::CharacterMotor::MotionState motor;float pose[16],shape[4],input[6];bool scripted;};
+  struct CharacterMotion {ObjectId id;u64 instance;physics::CharacterMotor::MotionState motor;float pose[16],shape[4];MotorControlState control;};
   std::vector<CharacterMotion> characterMotions;characterMotions.reserve(characters_.size());
   for(const auto&c:characters_) {
-    CharacterMotion motion{c.id,c.instance,c.motor->motionState(),{},{},{c.right,c.forward,c.yaw,c.scriptRight,c.scriptForward,c.scriptYaw},c.scriptMoveActive};
+    CharacterMotion motion{c.id,c.instance,c.motor->motionState(),{},{},c.control};
     std::copy(c.world,c.world+16,motion.pose);std::copy(c.shapeFingerprint,c.shapeFingerprint+4,motion.shape);characterMotions.push_back(motion);
   }
   const double accumulated=accumulated_;
   const auto dynamicInput=dynamicMotors_;
   if(!start(world,geometry)) return false;
-  for(auto &m:dynamicMotors_)for(const auto &old:dynamicInput)if(m.id==old.id&&m.instance==old.instance){m.right=old.right;m.forward=old.forward;m.yaw=old.yaw;m.scriptRight=old.scriptRight;m.scriptForward=old.scriptForward;m.scriptYaw=old.scriptYaw;m.scriptMoveActive=old.scriptMoveActive;break;}
+  for(auto &m:dynamicMotors_)for(const auto &old:dynamicInput)if(m.id==old.id&&m.instance==old.instance){m.control=old.control;break;}
   accumulated_=accumulated;
   for(const auto &motion:motions) for(const auto &binding:bindings_) {
     if(binding.id!=motion.id||binding.instance!=motion.instance||!binding.moving) continue;
@@ -358,7 +358,7 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
     for(u32 n=0;n<4;++n)if(c.shapeFingerprint[n]!=motion.shape[n])unchanged=false;
     if(!unchanged)break;
     if(!c.motor->restoreMotionState(motion.motor)){error_="Não foi possível restaurar o movimento do personagem";return false;}
-    c.right=motion.input[0];c.forward=motion.input[1];c.yaw=motion.input[2];c.scriptRight=motion.input[3];c.scriptForward=motion.input[4];c.scriptYaw=motion.input[5];c.scriptMoveActive=motion.scripted;break;
+    c.control=motion.control;break;
   }
   return true;
 }
@@ -516,27 +516,20 @@ u32 ScenePhysics::overlap(const QueryShapeDesc &shape,const float origin[3],cons
   return static_cast<u32>(total);
 }
 bool ScenePhysics::setCharacterMove(ObjectId id,float right,float forward,float yaw) {
-  if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)) return false;
-  for(auto &c:characters_) if(c.id==id) {c.right=right;c.forward=forward;c.yaw=yaw;return true;}
-  return false;
+  return submitMotorControl(id,MotorControlSource::Keyboard,right,forward,yaw);
 }
 void ScenePhysics::beginScriptInputFrame() {
-  for(auto &c:characters_) c.scriptMoveActive=false;
-  for(auto &m:dynamicMotors_)m.scriptMoveActive=false;
+  for(auto &c:characters_) c.control.beginScriptFrame();
+  for(auto &m:dynamicMotors_)m.control.beginScriptFrame();
 }
 bool ScenePhysics::setCharacterScriptMove(ObjectId id,float right,float forward,float yaw) {
-  if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)||
-     right<-1||right>1||forward<-1||forward>1) return false;
-  for(auto &c:characters_) if(c.id==id) {
-    c.scriptRight=right;c.scriptForward=forward;c.scriptYaw=yaw;c.scriptMoveActive=true;
-    return true;
-  }
-  return false;
+  return submitMotorControl(id,MotorControlSource::Script,right,forward,yaw);
 }
-bool ScenePhysics::jumpCharacter(ObjectId id,const GameWorld *world) {
+bool ScenePhysics::jumpCharacter(ObjectId id,const GameWorld *world,MotorControlSource source) {
+  if(!controlFocused_)return false;
   for(auto &c:characters_) if(c.id==id) {
     const auto*entity=world?world->graph().find(id):nullptr;const auto*settings=entity?characterComponent(*entity):nullptr;
-    return c.motor->jump(settings?settings->jumpSpeed:c.jumpSpeed);
+    return (settings?settings->jumpSpeed:c.jumpSpeed)>0&&c.motor->groundState()==AetherCharacterGroundState::OnGround&&c.control.queueJump(source);
   }
   return false;
 }
@@ -559,7 +552,7 @@ WorldStatus ScenePhysics::bodyCommand(const GameWorld &world,ObjectHandle handle
     if(found==dynamicMotors_.end())return WorldStatus::ComponentUnavailable;
     if(op==100&&!setDynamicMotorScriptMove(handle.id,value.x,value.y,value.z))return WorldStatus::InvalidArgument;
     if(op==101&&!jumpDynamicMotor(handle.id))return WorldStatus::Rejected;
-    if(op==102)found->scriptMoveActive=false;
+    if(op==102)found->control.cancel(MotorControlSource::Script);
     op=0; // Same real body snapshot as PhysicsBodyRuntime; no repacked fake state.
   } else if(component->type().id!=scene::PhysicsBody::descriptor.id)return WorldStatus::ComponentMissing;
   for(const auto &binding:bindings_)if(binding.id==handle.id)return AetherPhysics_BodyCommandV1(world_,binding.body,op,value,point,&out)?WorldStatus::Ok:WorldStatus::Rejected;
@@ -601,11 +594,11 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       const auto*entity=world.graph().find(c.id);const auto*settings=entity?characterComponent(*entity):nullptr;
       if(!settings||!c.motor->configureMotion(settings->speed,settings->gravity,settings->stepHeight,settings->floorSnapLength,settings->inheritPlatformHorizontal))return false;
       c.jumpSpeed=settings->jumpSpeed;
-      const bool scripted=c.scriptMoveActive;
-      const float right=scripted?c.scriptRight:c.right;
-      const float forward=scripted?c.scriptForward:c.forward;
-      const float yaw=scripted?c.scriptYaw:c.yaw;
-      if(!c.motor->update(right,forward,yaw,static_cast<float>(fixed))) return false;
+      const bool active=world.activeInHierarchy(world.handle(c.id));
+      if(!active)c.control.clear();
+      const auto intent=c.control.resolve(settings->control,controlFocused_&&active);
+      if(intent.jump)c.motor->jump(c.jumpSpeed);
+      if(!c.motor->update(intent.right,intent.forward,intent.yaw,static_cast<float>(fixed))) return false;
       if(!characterHit) continue;
       const auto total=AetherPhysics_GetCharacterContactsV1(c.motor->physicsWorld(),c.motor->handle(),nullptr,0);
       if(total<=0) continue;

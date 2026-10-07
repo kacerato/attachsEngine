@@ -2818,11 +2818,24 @@ public readonly struct CameraFollow : IComponentFacade<CameraFollow>
         get => Component.GetFloat("damping_seconds");
         set => Component.SetFloat("damping_seconds", value);
     }
+    /// <summary>Altura do pivô (m). Altura em mundo do ponto observado no alvo; usada somente em órbita</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float PivotHeight
+    {
+        get => Component.GetFloat("pivot_height");
+        set => Component.SetFloat("pivot_height", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Orbitar alvo. Gira o deslocamento pela orientação da câmera; CameraLook controla a órbita</summary>
+    public bool Orbit
+    {
+        get => Component.GetBool("orbit");
+        set => Component.SetBool("orbit", value);
     }
     /// <summary>Alvo</summary>
     public ObjectReference Target
@@ -4188,11 +4201,61 @@ public readonly struct Character : IComponentFacade<Character>
         get => Component.GetFloat("gravity");
         set => Component.SetFloat("gravity", value);
     }
+    /// <summary>Prioridade UI. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityUi
+    {
+        get => Component.GetFloat("control_priority_ui");
+        set => Component.SetFloat("control_priority_ui", value);
+    }
+    /// <summary>Prioridade Teclado / mouse. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityKeyboard
+    {
+        get => Component.GetFloat("control_priority_keyboard");
+        set => Component.SetFloat("control_priority_keyboard", value);
+    }
+    /// <summary>Prioridade Gamepad. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityGamepad
+    {
+        get => Component.GetFloat("control_priority_gamepad");
+        set => Component.SetFloat("control_priority_gamepad", value);
+    }
+    /// <summary>Prioridade Script. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityScript
+    {
+        get => Component.GetFloat("control_priority_script");
+        set => Component.SetFloat("control_priority_script", value);
+    }
+    /// <summary>Prioridade IA. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityAi
+    {
+        get => Component.GetFloat("control_priority_ai");
+        set => Component.SetFloat("control_priority_ai", value);
+    }
     /// <summary>Impulso ao sair. Conserva X/Z da superfície no ar; desligar remove apenas esse impulso, sem recriar a cápsula.</summary>
     public bool InheritPlatformHorizontal
     {
         get => Component.GetBool("inherit_platform_horizontal");
         set => Component.SetBool("inherit_platform_horizontal", value);
+    }
+    public enum ControlSourceOption : uint
+    {
+        Automatico = 0,
+        UI = 1,
+        TecladoMouse = 2,
+        Gamepad = 3,
+        Script = 4,
+        IA = 5,
+    }
+    /// <summary>Fonte de controle. Automático arbitra prioridades; fonte fixa dá posse exclusiva, sem converter a malha ou a colisão.</summary>
+    public ControlSourceOption ControlSource
+    {
+        get => (ControlSourceOption)Component.GetEnum("control_source");
+        set => Component.SetEnum("control_source", (uint)value);
     }
     /// <summary>Bateu num colisor. O movimento do personagem colidiu com um corpo; carrega o objeto, o ponto e a normal. Payload: Objeto tocado: objeto, Ponto: vetor, Normal: vetor</summary>
     public ComponentSubscription OnColliderHit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collider_hit", handler);
@@ -5156,6 +5219,41 @@ public readonly struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
         get => Component.GetFloat("max_slope");
         set => Component.SetFloat("max_slope", value);
     }
+    /// <summary>Prioridade UI. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityUi
+    {
+        get => Component.GetFloat("control_priority_ui");
+        set => Component.SetFloat("control_priority_ui", value);
+    }
+    /// <summary>Prioridade Teclado / mouse. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityKeyboard
+    {
+        get => Component.GetFloat("control_priority_keyboard");
+        set => Component.SetFloat("control_priority_keyboard", value);
+    }
+    /// <summary>Prioridade Gamepad. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityGamepad
+    {
+        get => Component.GetFloat("control_priority_gamepad");
+        set => Component.SetFloat("control_priority_gamepad", value);
+    }
+    /// <summary>Prioridade Script. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityScript
+    {
+        get => Component.GetFloat("control_priority_script");
+        set => Component.SetFloat("control_priority_script", value);
+    }
+    /// <summary>Prioridade IA. Maior prioridade vence; empate: IA &gt; Script &gt; Gamepad &gt; Teclado &gt; UI. Script/IA zero mantém posse neste quadro.</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ControlPriorityAi
+    {
+        get => Component.GetFloat("control_priority_ai");
+        set => Component.SetFloat("control_priority_ai", value);
+    }
     /// <summary>Habilitado</summary>
     public bool Enabled
     {
@@ -5173,6 +5271,21 @@ public readonly struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
     {
         get => Component.GetBool("automatic_support");
         set => Component.SetBool("automatic_support", value);
+    }
+    public enum ControlSourceOption : uint
+    {
+        Automatico = 0,
+        UI = 1,
+        TecladoMouse = 2,
+        Gamepad = 3,
+        Script = 4,
+        IA = 5,
+    }
+    /// <summary>Fonte de controle. Automático arbitra prioridades; fonte fixa dá posse exclusiva, sem converter a malha ou a colisão.</summary>
+    public ControlSourceOption ControlSource
+    {
+        get => (ControlSourceOption)Component.GetEnum("control_source");
+        set => Component.SetEnum("control_source", (uint)value);
     }
 }
 

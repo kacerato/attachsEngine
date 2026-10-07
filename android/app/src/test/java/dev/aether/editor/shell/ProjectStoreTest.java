@@ -13,6 +13,25 @@ public class ProjectStoreTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder();
     private ProjectStore store(File files, File projects) { return new ProjectStore(files, projects); }
 
+    @Test public void retiresOnlyRecognizedBundledPackagesAndPreservesUserProjects() throws Exception {
+        File files=temporary.newFolder("files"), projects=temporary.newFolder("Projects");
+        ProjectStore initial=store(files,projects);
+        Project example=initial.create("Cristais do Templo",SceneTemplate.byId("empty"));
+        Project user=initial.create("Circuito Neon",SceneTemplate.byId("empty"));
+        assertNotNull(example);assertNotNull(user);
+        File packageRoot=new File(example.path);assertTrue(new File(packageRoot,".astra").mkdir());
+        Files.write(new File(packageRoot,".astra/assets.astra").toPath(),new byte[]{42});
+        Files.write(new File(packageRoot,"LEIA-ME.md").toPath(),new byte[]{42});
+        File descriptor=new File(packageRoot,"project.json");
+        org.json.JSONObject json=new org.json.JSONObject(new String(Files.readAllBytes(descriptor.toPath()),StandardCharsets.UTF_8));
+        json.getJSONObject("project").put("thumbnail","example-cristais.png");
+        Files.write(descriptor.toPath(),json.toString().getBytes(StandardCharsets.UTF_8));
+        initial.retireBundledExamples();
+        assertFalse(packageRoot.exists());assertTrue(new File(user.path,"project.json").isFile());
+        ProjectStore reopened=store(files,projects);assertEquals(1,reopened.projects().size());
+        assertEquals("Circuito Neon",reopened.projects().get(0).name);
+    }
+
     @Test public void firstLaunchIsEmptyAndDoesNotSeedProjects() throws Exception {
         File files=temporary.newFolder("files"), projects=new File(temporary.getRoot(),"Projects");
         assertTrue(store(files,projects).projects().isEmpty());

@@ -120,4 +120,25 @@ struct ScriptSceneOperations {
   int (*requestSingle)(void *,const u8 *name,int length)=nullptr;
 };
 
+inline constexpr std::string_view kScriptMotorControl="astra.motor-control";
+inline constexpr std::string_view kScriptMotorMotion="astra.motor-motion";
+struct ScriptMotorMotionState {
+  u32 size=sizeof(ScriptMotorMotionState),flags=0;
+  u64 support=0;
+  float velocity[3]{},groundVelocity[3]{},normal[3]{},point[3]{};
+};
+static_assert(sizeof(ScriptMotorMotionState)==64);
+struct ScriptMotorMotionOperations {
+  u32 version=1,size=sizeof(ScriptMotorMotionOperations);
+  int (*state)(void *,u64 object,u32 world,u32 generation,u64 instance,ScriptMotorMotionState *)=nullptr;
+};
+struct ScriptMotorControlState {
+  u32 size=sizeof(ScriptMotorControlState),source=0,candidates=0,flags=0;
+  float right=0,forward=0,yaw=0,priority=0;
+};
+static_assert(sizeof(ScriptMotorControlState)==32);
+struct ScriptMotorControlOperations {
+  u32 version=1,size=sizeof(ScriptMotorControlOperations);
+  int (*command)(void *,u64 object,u32 world,u32 generation,u64 instance,u32 operation,u32 source,const float *move,u32 jump,ScriptMotorControlState *)=nullptr;
+};
 } // namespace ae::scene

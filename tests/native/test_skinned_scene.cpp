@@ -305,6 +305,8 @@ AE_TEST(fox_cross_fades_and_layers_blend_three_clips_on_one_skeleton) {
   animator.state(owner, instance, survey, a);
   animator.state(owner, instance, walk, b);
   AE_EXPECT_TRUE(near(a.weight, .5f, .01f) && near(b.weight, .5f, .01f) && a.enabled && b.enabled, "pesos 0,5 / 0,5");
+  b.speed=.7f;b.time=.1f;
+  AE_EXPECT_TRUE(animator.setState(owner,instance,b)==runtime::AnimationCommandStatus::Ok,"cadence and phase can be adjusted during a cross-fade");
   AE_EXPECT_TRUE(play.advance(.25) && play.advance(.05), "fim do fade");
   animator.state(owner, instance, survey, a);
   animator.state(owner, instance, walk, b);

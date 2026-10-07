@@ -299,6 +299,18 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, uint, float, int> Vibrate;
     }
     [StructLayout(LayoutKind.Sequential)]
+    public struct NativeMotorControlState {public uint Size,Source,Candidates,Flags;public float Right,Forward,Yaw,Priority;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeMotorMotionState {public uint Size,Flags;public ulong Support;public Vector3 Velocity,GroundVelocity,Normal,Point;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeMotorMotionOperations {public uint Version,Size;public delegate* unmanaged<void*,ulong,uint,uint,ulong,NativeMotorMotionState*,int> State;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeMotorControlOperations
+    {
+        public uint Version,Size;
+        public delegate* unmanaged<void*,ulong,uint,uint,ulong,uint,uint,float*,uint,NativeMotorControlState*,int> Command;
+    }
+    [StructLayout(LayoutKind.Sequential)]
     public struct NativeSceneOperations
     {
         public uint Version, Size;
@@ -410,6 +422,21 @@ public static unsafe class NativeBehaviorRuntime
             state = new(raw.Width, raw.Height, raw.Dpi, (raw.Flags & 2) != 0, new(raw.SafeX, raw.SafeY, raw.SafeWidth, raw.SafeHeight),
                 (GameViewPlatform)raw.Platform, raw.Camera);
             return true;
+        }
+        public bool MotorControlCommand(ulong id,uint world,uint generation,ulong instance,uint operation,MotorControlSource source,Vector3 input,bool jump,out MotorControlState state)
+        {
+            state=default;var family=Require<NativeMotorControlOperations>("astra.motor-control");
+            NativeMotorControlState raw=new(){Size=(uint)sizeof(NativeMotorControlState)};
+            if(family->Command(access.Context,id,world,generation,instance,operation,(uint)source,(float*)&input,jump?1u:0u,&raw)==0)return false;
+            state=new((MotorControlSource)raw.Source,raw.Candidates,(raw.Flags&1)!=0,(raw.Flags&2)!=0,(raw.Flags&4)!=0,new(raw.Right,raw.Forward),raw.Yaw,raw.Priority);
+            return true;
+        }
+        public bool ReadMotorMotion(ulong id,uint world,uint generation,ulong instance,out MotorMotionState state)
+        {
+            state=default;var family=Require<NativeMotorMotionOperations>("astra.motor-motion");
+            NativeMotorMotionState raw=new(){Size=(uint)sizeof(NativeMotorMotionState)};
+            if(family->State(access.Context,id,world,generation,instance,&raw)==0)return false;
+            state=new((raw.Flags&1)!=0,(raw.Flags&2)!=0,raw.Velocity,raw.GroundVelocity,raw.Normal,raw.Point,raw.Support);return true;
         }
         public bool ScreenRay(float x, float y, out Ray ray)
         {

@@ -376,6 +376,56 @@ void ScriptBridge::installExtensions() {
     if(!self.haptics_(milliseconds,amplitude)){self.lastStatus_=WorldStatus::Rejected;return 0;}
     return 1;
   };
+  motorControlOperations_={};
+  motorControlOperations_.command=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 operation,u32 source,const float *move,u32 jump,scene::ScriptMotorControlState *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);
+    if(!s.world_||!s.world_->running()||!s.physics_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||operation>2||!out||out->size!=sizeof(*out)||jump>1||
+       (operation<2&&(source<4||source>5))||(operation==0&&!move)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(operation==0&&(!std::isfinite(move[0])||!std::isfinite(move[1])||!std::isfinite(move[2])||std::abs(move[0])>1||std::abs(move[1])>1)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const ComponentHandle handle{{worldId,ObjectId(id),generation},instance};
+    s.lastStatus_=s.world_->validate(handle.object);if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    const auto type=s.world_->componentTypeId(handle);
+    if(type!=scene::Character::descriptor.id&&type!=scene::DynamicBodyMotor::descriptor.id){s.lastStatus_=WorldStatus::ComponentMissing;return 0;}
+    if(operation<2&&!s.world_->activeInHierarchy(handle.object)){s.lastStatus_=WorldStatus::Rejected;return 0;}
+    const auto *entity=s.world_->find(handle.object);
+    if(const auto *motor=entity->components.find(scene::DynamicBodyMotor::descriptor);motor&&!static_cast<const scene::DynamicBodyMotor&>(*motor).enabled&&operation<2){s.lastStatus_=WorldStatus::ComponentUnavailable;return 0;}
+    if(operation==0&&!s.physics_->submitMotorControl(ObjectId(id),MotorControlSource(source),move[0],move[1],move[2],jump!=0)){s.lastStatus_=WorldStatus::Rejected;return 0;}
+    if(operation==1&&!s.physics_->releaseMotorControl(ObjectId(id),MotorControlSource(source))){s.lastStatus_=WorldStatus::Rejected;return 0;}
+    MotorControlSnapshot state;if(!s.physics_->motorControlState(ObjectId(id),state)){s.lastStatus_=WorldStatus::ComponentUnavailable;return 0;}
+    const auto *dynamic=entity->components.find(scene::DynamicBodyMotor::descriptor);
+    if(!s.world_->activeInHierarchy(handle.object)||(dynamic&&!static_cast<const scene::DynamicBodyMotor&>(*dynamic).enabled)){state={};state.focused=false;}
+    out->source=u32(state.source);out->candidates=state.candidates;out->flags=(state.focused?1u:0u)|(state.measured?2u:0u)|(state.jump?4u:0u);
+    out->right=state.right;out->forward=state.forward;out->yaw=state.yaw;out->priority=state.priority;
+    s.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  motorMotionOperations_={};
+  motorMotionOperations_.state=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,scene::ScriptMotorMotionState *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);
+    if(!s.world_||!s.world_->running()||!s.physics_){s.lastStatus_=WorldStatus::NotRunning;return 0;}
+    if(id>std::numeric_limits<ObjectId>::max()||!out||out->size!=sizeof(*out)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const ComponentHandle h{{worldId,ObjectId(id),generation},instance};
+    s.lastStatus_=s.world_->validate(h.object);if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    const auto *v=s.world_->readComponent(h);
+    if(!v){s.lastStatus_=WorldStatus::ComponentMissing;return 0;}
+    if(!s.world_->activeInHierarchy(h.object)){s.lastStatus_=WorldStatus::ComponentUnavailable;return 0;}
+    *out={};
+    if(&v->type()==&scene::DynamicBodyMotor::descriptor) {
+      if(!static_cast<const scene::DynamicBodyMotor&>(*v).enabled){s.lastStatus_=WorldStatus::ComponentUnavailable;return 0;}
+      ScenePhysics::DynamicMotorState motion;
+      if(!s.physics_->dynamicMotorState(ObjectId(id),motion)||!s.physics_->getBodyVelocity(ObjectId(id),out->velocity)){s.lastStatus_=WorldStatus::ComponentUnavailable;return 0;}
+      out->flags=(motion.hasMeasuredStep?1u:0u)|(motion.grounded?2u:0u);out->support=motion.support;
+      std::copy(motion.supportVelocity,motion.supportVelocity+3,out->groundVelocity);
+      std::copy(motion.normal,motion.normal+3,out->normal);std::copy(motion.point,motion.point+3,out->point);
+    } else if(&v->type()==&scene::Character::descriptor) {
+      physics::CharacterMotor::RuntimeState motion;s.lastStatus_=s.physics_->characterState(*s.world_,ObjectId(id),motion);
+      if(s.lastStatus_!=WorldStatus::Ok)return 0;
+      out->flags=(motion.hasMeasuredStep?1u:0u)|(motion.groundState==AetherCharacterGroundState::OnGround?2u:0u);
+      const auto copy=[](AetherVec3 a,float *b){b[0]=a.x;b[1]=a.y;b[2]=a.z;};
+      copy(motion.velocity,out->velocity);copy(motion.groundVelocity,out->groundVelocity);copy(motion.groundNormal,out->normal);copy(motion.groundPoint,out->point);
+    } else {s.lastStatus_=WorldStatus::ComponentMissing;return 0;}
+    s.lastStatus_=WorldStatus::Ok;return 1;
+  };
   access_.extension=[](void *context,const u8 *name,int length,u32 *version,u32 *size)->const void * {
     auto &self=*static_cast<ScriptBridge *>(context);
     if(!name||length<=0||length>256) return nullptr;
@@ -390,6 +440,8 @@ void ScriptBridge::installExtensions() {
     if(requested==scene::kScriptDebug) return publish(self.debugOperations_);
     if(requested==scene::kScriptHierarchy) return publish(self.hierarchyOperations_);
     if(requested==scene::kScriptScenes) return publish(self.sceneOperations_);
+    if(requested==scene::kScriptMotorControl&&self.physics_)return publish(self.motorControlOperations_);
+    if(requested==scene::kScriptMotorMotion&&self.physics_)return publish(self.motorMotionOperations_);
     // Família ausente de verdade: sem vibrador, não há tabela a oferecer.
     if(requested==scene::kScriptHaptics && self.haptics_) return publish(self.hapticsOperations_);
     return nullptr;

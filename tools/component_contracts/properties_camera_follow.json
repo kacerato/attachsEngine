@@ -82,6 +82,28 @@
           "default": {
             "cpp": ".2f"
           }
+        },
+        {
+          "id": "pivot_height",
+          "label": "Altura do pivô",
+          "member": "pivotHeight",
+          "min": {
+            "cpp": "-10000"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "default": {
+            "cpp": "0"
+          },
+          "presentation": {
+            "group": "Órbita",
+            "unit": "m",
+            "help": "Altura em mundo do ponto observado no alvo; usada somente em órbita"
+          }
         }
       ],
       "defaults": {
@@ -98,6 +120,18 @@
           "id": "enabled",
           "label": "Ativo",
           "member": "enabled"
+        },
+        {
+          "id": "orbit",
+          "label": "Orbitar alvo",
+          "member": "orbit",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Órbita",
+            "help": "Gira o deslocamento pela orientação da câmera; CameraLook controla a órbita"
+          }
         }
       ],
       "defaults": {
@@ -116,14 +150,16 @@
       "name": "camera_follow_CameraFollow_fields0",
       "type": "CameraFollow",
       "properties": [
-        "cameraFollowBooleans/enabled"
+        "cameraFollowBooleans/enabled",
+        "cameraFollowBooleans/orbit"
       ]
     },
     {
       "name": "camera_follow_CameraFollow_fields2",
       "type": "CameraFollow",
       "properties": [
-        "cameraFollowNumbers/damping_seconds"
+        "cameraFollowNumbers/damping_seconds",
+        "cameraFollowNumbers/pivot_height"
       ]
     }
   ]

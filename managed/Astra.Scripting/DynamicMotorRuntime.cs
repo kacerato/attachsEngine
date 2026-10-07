@@ -13,7 +13,8 @@ public sealed partial class GameObject
 
 /// <summary>Instance-bound commands on the real Body motor. Move applies for the
 /// current script frame; call in Update or FixedUpdate. FixedUpdate can override
-/// Update; ReleaseMove returns control to Canvas input. Commands never write pose.</summary>
+/// Update; ReleaseMove relinquishes the Script channel to the motor's authored
+/// ownership policy. Commands never write pose.</summary>
 public readonly struct DynamicMotorRuntime
 {
     private readonly Component component;

@@ -357,7 +357,9 @@ AE_TEST(convex_bake_open_mesh_and_legacy_pose_are_explicit) {
   AE_EXPECT_TRUE(job.start({0,0,0,1,0,0,0,1,0},settings,std::string(64,'a'),{},error),"worker accepts bounded input");
   const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(5);while(job.progress().status==resources::ConvexBakeStatus::Running&&std::chrono::steady_clock::now()<end)std::this_thread::sleep_for(std::chrono::milliseconds(5));
   AE_EXPECT_TRUE(job.progress().status==resources::ConvexBakeStatus::Failed&&!job.result()&&!job.progress().error.empty(),"open geometry never silently becomes a box");
-  scene::Collider legacy;legacy.shape=scene::ColliderShape::Mesh;legacy.centerX=8;std::ostringstream stream;legacy.write(stream);auto text=stream.str();text=text.substr(0,text.rfind(' '));std::istringstream input(text);scene::Collider read;
+  // Fixture v7 imutável: o writer atual inclui material local (v9), portanto
+  // truncar sua saída não produz um arquivo antigo.
+  std::istringstream input("3 .5 .5 .5 .5 .5 8 0 0 0 0 0 .001 5 0 1 0 - 1 1");scene::Collider read;
   AE_EXPECT_TRUE(read.read(input,7)&&read.centerX==8&&!read.meshLocalPose,"v7 hidden pose preserved but remains inactive");
   settings.maximumParts=33;AE_EXPECT_TRUE(!resources::validConvexBakeSettings(settings),"component and mobile budget enforced");
 }

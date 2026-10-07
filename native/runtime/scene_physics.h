@@ -13,6 +13,7 @@
 #include "physics/jolt_bridge.h"
 #include "physics/character_motor.h"
 #include "runtime/physics_field_sample.h"
+#include "runtime/motor_control.h"
 
 #include <memory>
 #include <string>
@@ -146,12 +147,17 @@ public:
   bool setCharacterMove(ObjectId id, float right, float forward, float yaw);
   bool setDynamicMotorMove(ObjectId id,float right,float forward,float yaw);
   bool setDynamicMotorScriptMove(ObjectId id,float right,float forward,float yaw);
-  bool jumpDynamicMotor(ObjectId id);
+  bool jumpDynamicMotor(ObjectId id,MotorControlSource source=MotorControlSource::Script);
+  bool submitMotorControl(ObjectId,MotorControlSource,float right,float forward,float yaw,bool jump=false);
+  bool releaseMotorControl(ObjectId,MotorControlSource);
+  bool motorControlState(ObjectId,MotorControlSnapshot &) const;
+  void setControlFocus(bool);
   struct DynamicMotorState {bool grounded=false,hasMeasuredStep=false;ObjectId support=0;float normal[3]{0,1,0},supportVelocity[3]{},move[2]{},point[3]{};};
   bool dynamicMotorState(ObjectId id,DynamicMotorState &out) const;
   struct Diagnostic {
     ObjectId object=0,support=0;TransformAuthority authority=TransformAuthority::Free;
-    bool hasBody=false,hasCharacter=false,hasSupport=false,motorSupport=false;
+    bool hasBody=false,hasCharacter=false,hasSupport=false,motorSupport=false,hasControl=false;
+    MotorControlSnapshot control{};
     AetherBodyStateV1 body{};physics::CharacterMotor::RuntimeState character{};
     u32 colliderCount=0,probeCount=0;
     u32 shapeCounts[5]{};
@@ -165,7 +171,7 @@ public:
   // substituí-lo antes do subpasso corrente.
   void beginScriptInputFrame();
   bool setCharacterScriptMove(ObjectId id,float right,float forward,float yaw);
-  bool jumpCharacter(ObjectId id,const GameWorld *world=nullptr);
+  bool jumpCharacter(ObjectId id,const GameWorld *world=nullptr,MotorControlSource source=MotorControlSource::Script);
   WorldStatus characterState(const GameWorld &world,ObjectId id,physics::CharacterMotor::RuntimeState &out) const;
   // Solta corpo, personagem e mapeamento de um objeto removido no ponto seguro.
   // Juntas ligadas a ele deixam de existir junto com o corpo no Jolt.
@@ -180,7 +186,8 @@ public:
 
 private:
   bool applyDynamicMotors(GameWorld &,float);
-  struct DynamicMotorBinding {ObjectId id=0;u64 instance=0;float right=0,forward=0,yaw=0;bool pendingJump=false;DynamicMotorState state{};float scriptRight=0,scriptForward=0,scriptYaw=0;bool scriptMoveActive=false;};
+  bool controlFocused_=true;
+  struct DynamicMotorBinding {ObjectId id=0;u64 instance=0;DynamicMotorState state{};MotorControlState control;};
   std::vector<DynamicMotorBinding> dynamicMotors_;
   bool applyPhysicsFields(GameWorld &,float);
   std::vector<std::pair<ObjectId,u64>> fieldCandidates_;
@@ -226,9 +233,7 @@ private:
     float world[16];
     float eyeHeight;
     float jumpSpeed = 0;
-    float right = 0, forward = 0, yaw = 0;
-    float scriptRight=0,scriptForward=0,scriptYaw=0;
-    bool scriptMoveActive=false;
+    MotorControlState control;
   };
   std::vector<CharacterBinding> characters_;
   std::vector<AetherCharacterContactV1> characterContacts_;

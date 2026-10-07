@@ -1,0 +1,32 @@
+{
+  "apkSha256": "1ab86324c41ed7cb1a632f4bfa52ebba5d2d961b91eab317754cd4ba063236a0",
+  "bytes": 102874942,
+  "bundledProjects": [
+    "u07"
+  ],
+  "files": {
+    ".astra/assets.astra": "assets/astra/example-projects/u07/metadata/assets.astra",
+    ".astra/cache/textures/69a035b7e49b008dd69a73a42798b4a4.aetc": "assets/astra/example-projects/u07/metadata/cache/textures/69a035b7e49b008dd69a73a42798b4a4.aetc",
+    ".astra/cache/textures/83b0229df4146933a2a9395327b45916.aetc": "assets/astra/example-projects/u07/metadata/cache/textures/83b0229df4146933a2a9395327b45916.aetc",
+    ".astra/cache/textures/f59857109db3213810066920b8a03155.aetc": "assets/astra/example-projects/u07/metadata/cache/textures/f59857109db3213810066920b8a03155.aetc",
+    ".astra/gui-resource": "assets/astra/example-projects/u07/metadata/gui-resource",
+    ".astra/imports/981062db018e4877701ddfe6509aae45.nodes": "assets/astra/example-projects/u07/metadata/imports/981062db018e4877701ddfe6509aae45.nodes",
+    ".astra/imports/d7b0607c1f00bfa351f0cafda69582c5.nodes": "assets/astra/example-projects/u07/metadata/imports/d7b0607c1f00bfa351f0cafda69582c5.nodes",
+    "FONTES.md": "assets/astra/example-projects/u07/FONTES.md",
+    "README.md": "assets/astra/example-projects/u07/README.md",
+    "Scripts/U07Controller.cs": "assets/astra/example-projects/u07/Scripts/U07Controller.cs",
+    "Sources/Fox.LICENSE.txt": "assets/astra/example-projects/u07/Sources/Fox.LICENSE.txt",
+    "Sources/Fox.glb": "assets/astra/example-projects/u07/Sources/Fox.glb",
+    "Sources/GodotTPSPlayer.LICENSE.txt": "assets/astra/example-projects/u07/Sources/GodotTPSPlayer.LICENSE.txt",
+    "Sources/GodotTPSPlayer.glb": "assets/astra/example-projects/u07/Sources/GodotTPSPlayer.glb",
+    "Sources/GodotTPSPlayer.provenance.json": "assets/astra/example-projects/u07/Sources/GodotTPSPlayer.provenance.json",
+    "Textures/concrete-arm.png": "assets/astra/example-projects/u07/Textures/concrete-arm.png",
+    "Textures/concrete-base.jpg": "assets/astra/example-projects/u07/Textures/concrete-base.jpg",
+    "Textures/concrete-normal.png": "assets/astra/example-projects/u07/Textures/concrete-normal.png",
+    "UI/main.aeui": "assets/astra/example-projects/u07/UI/main.aeui",
+    "project.json": "assets/astra/example-projects/u07/project.json",
+    "scenes/editor.aescene": "assets/astra/example-projects/u07/scenes/editor.aescene"
+  },
+  "exactSourceBytes": true,
+  "nativeLibrarySha256": "ca59be419bd18110bd478e3f00c5eefbbb1233168dccf2bd728d51f32b8a7175"
+}

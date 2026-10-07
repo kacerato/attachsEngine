@@ -31,3 +31,30 @@ Base preservada `6349ee60d799ea191d42b3d5c97934e454001d38`. O parágrafo anterio
 **Bloco 1 aceito:** 109/109 na regressão, 9/9 aceites finais, Android Release compilado/instalado com hash conferido. Autoria/Save/Undo/Redo/reabertura fria em duas cenas no POCO F7; cancelamento real sem mudança de cena/registro; entrada de 99.372 triângulos medida no host e aparelho. Arquivos retirados do Android reabertos/consultados no Jolt do host, sem atribuir essa query ao aparelho. UI compacta executável e capturas físicas examinadas individualmente; nenhum vídeo gravado nesta revisão. [Plano e contratos](BLOCO-AUTORIA-FISICA-2026-10-06.md), [relatório integral](../../validacao/ui-universal-2026-10-06/physical-authoring/REPORT.md), [registro verificável](../../validacao/ui-universal-2026-10-06/physical-authoring/acceptance.json).
 
 Deadline de 1s excedeu uma fase interna e foi recusado após 6,4s: é cooperativo, não tempo real. Erro de volume não é garantia universal de cavidades. Os limites e a natureza estática da captura são contrato, não stubs silenciosos. U14 ainda exige campanha de custo/thermal mais ampla. Os próximos blocos permanecem 2, 3, 4 e 5 acima. O roadmap UI original permanece intacto. Mudanças locais e APK instalado nesta revisão; sem novo commit/push.
+
+## U07 fechado dentro do bloco de locomoção — 07/10/2026
+
+As cinco fontes possuem arbitragem por motor, exclusividade, prioridades, cancelamento
+e consumidor físico real. Política passa por Inspector, arquivo, prefab/overrides e
+histórico; C# envia/libera Script/IA e observa o passo consumido. A revisão preserva
+a câmera virtual/Cérebro do merge 4081cad9. [Plano U07](U07-POSSE-CONTROLE-2026-10-07.md)
+e [aceite](../../validacao/u07-2026-10-07/REPORT.md): 8/8 direcionados, 117/117
+regressões, ProjectCompiler, Android instalado/hash igual, UI/Script/IA/prioridades,
+pausa/retomada, salvar/desfazer/refazer e reabertura fria no POCO F7. Gamepad e
+desconexão no host, sem gamepad físico no Android. Os 200 quadros da nova gravação
+foram examinados; órbita cruza 90° sem inversão e Body/colisão/rig giram juntos na
+direção da câmera. O laboratório editável possui dois rigs, clipes, piso PBR e
+atmosfera, sem substituir o objeto por um cilindro. Isso fecha U07, não todo o bloco
+2: U03/U06/U08 continuam separados, assim como UI componível, modelagem visual
+completa e SDK/rede/custo amplo. O roadmap UI original permanece intacto.
+
+## Correção integrada: movimento, animação e câmera — 07/10/2026
+
+A revisão posterior substitui a amostra de um clipe/CesiumMan por oito clipes
+Godot TPS e movimento medido, controle aéreo real, câmera virtual/Cérebro com
+varredura contra piso e catálogo Current antes de Play. APK embute só o laboratório.
+12/12 direcionados, 121/121 regressões no reteste, ProjectCompiler 1/1, ProjectStore
+7/7; 527 quadros examinados, principal atualizado e projetos do usuário preservados.
+Os parágrafos acima ficam históricos. [Contrato e limites](U07-MOVIMENTO-ANIMACAO-CAMERA-2026-10-07.md)
+e [evidência atual](../../validacao/u07-2026-10-07/REPORT.md). U08 amplo e os outros
+blocos não são declarados completos por esta correção.

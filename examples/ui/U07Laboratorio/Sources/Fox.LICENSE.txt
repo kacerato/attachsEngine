@@ -1,0 +1,8 @@
+Fox
+Source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox
+Downloaded GLB: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb
+SHA-256: d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7
+License: model (c) 2014 PixelMannen, CC0-1.0; rigging and animation (c) 2014 tomkranis, CC-BY-4.0;
+glTF conversion (c) 2017 @AsoboStudio and @scurest, CC-BY-4.0.
+Por que este: um skin com tres clipes (Survey, Walk, Run) no mesmo esqueleto; e o que
+exercita lista de clipes, cross-fade e mistura por camada.

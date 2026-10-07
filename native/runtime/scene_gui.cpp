@@ -20,9 +20,10 @@ bool samePresentation(const scene::UiCanvas &a,const scene::UiCanvas &b) {
     std::equal(a.offset,a.offset+3,b.offset)&&std::equal(a.rotation,a.rotation+3,b.rotation)&&std::equal(a.resolution,a.resolution+2,b.resolution);
 }
 }
-void SceneGui::reset(){cancelPointers();routes_.clear();receivers_.clear();instances_.clear();documents_.clear();failures_.clear();world_=0;graphRevision_=~u64{0};diagnostic_.clear();inputDiagnostic_.clear();++revision_;}
+void SceneGui::reset(){cancelPointers();for(auto &input:sourceInputs_)input.reset();routes_.clear();receivers_.clear();instances_.clear();documents_.clear();failures_.clear();world_=0;graphRevision_=~u64{0};diagnostic_.clear();inputDiagnostic_.clear();++revision_;}
 void SceneGui::invalidateResources(){cancelPointers();instances_.clear();documents_.clear();failures_.clear();graphRevision_=~u64{0};++revision_;}
-void SceneGui::cancelPointers(){for(auto &i:instances_)i->runtime.cancelPointers();for(auto &r:receivers_){r.input.reset();r.pendingJump.clear();}}
+void SceneGui::cancelDefaultControls(){for(auto &i:instances_)if(!i->config.inputReceiver)i->runtime.cancelPointers();rootControlInput_.reset();rootSample_={};rootPendingJump_.clear();rootHardwareJump_=false;}
+void SceneGui::cancelPointers(){for(auto &i:instances_)i->runtime.cancelPointers();sourceInputs_[0].reset();rootControlInput_.reset();rootSample_={};rootPendingJump_.clear();rootHardwareJump_=false;for(auto &r:receivers_){r.input.reset();r.controlInput.reset();r.pendingJump.clear();}}
 bool SceneGui::captures(u32 pointer,ui::UiPointerDevice device) const {return std::any_of(routes_.begin(),routes_.end(),[&](const auto &r){return r.pointer==pointer&&r.device==device;});}
 void SceneGui::setImages(const ui::GuiImageAtlas *images){images_=images;for(auto &i:instances_)i->runtime.setImages(images);}
 SceneGui::Instance *SceneGui::find(GameWorld &world,u64 id) {

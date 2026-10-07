@@ -4,8 +4,9 @@
 #include <cmath>
 
 namespace ae::scene {
-// Acompanha a posição de outro objeto. A rotação permanece com CameraLook,
-// animação ou autoria; este componente possui somente a posição no Play.
+// Owns position only. Orbit rotates its authored offset by the camera's world
+// orientation; CameraLook/animation still own orientation, without feedback
+// from the target's facing. Existing v1 archives retain their world offset.
 class CameraFollow final : public ComponentValue {
 public:
   u64 target=0;
@@ -30,10 +31,13 @@ public:
   void write(std::ostream &out) const override {
     out<<target<<' '<<enabled;
     for(const auto &p:descriptor.numbers) out<<' '<<p.read(*this);
+    out<<' '<<orbit;
   }
   bool read(std::istream &in,u32 version) override {
-    if(version!=1 || !(in>>target>>enabled)) return false;
-    for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
+    if(version<1||version>2 || !(in>>target>>enabled)) return false;
+    orbit=false;pivotHeight=0;
+    for(u32 i=0;i<(version==1?4:descriptor.numbers.size());++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
+    if(version==2&&!(in>>orbit))return false;
     return valid();
   }
 };
@@ -49,7 +53,7 @@ inline constexpr std::array<ComponentTriple,1> cameraFollowTriples{{
   {"offset","Deslocamento",{"offset_x","offset_y","offset_z"}}
 }};
 inline const ComponentType CameraFollow::descriptor{
-  "astra.camera.follow",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<CameraFollow>();},
+  "astra.camera.follow",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<CameraFollow>();},
   cameraFollowNumbers,cameraFollowBooleans,{},nullptr,false,cameraFollowReferences,cameraFollowTriples
 };
 }

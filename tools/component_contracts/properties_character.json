@@ -169,6 +169,106 @@
           "default": {
             "cpp": "9.81f"
           }
+        },
+        {
+          "id": "control_priority_ui",
+          "label": "Prioridade UI",
+          "type": "Character",
+          "member": "control.uiPriority",
+          "min": 0,
+          "max": 1000,
+          "step": 1,
+          "presentation": {
+            "group": "Posse de controle",
+            "visible": {
+              "cpp": "motorControlAutomatic<Character>"
+            },
+            "help": "Maior prioridade vence; empate: IA > Script > Gamepad > Teclado > UI. Script/IA zero mantém posse neste quadro.",
+            "consumer": "runtime/motor_control.h → motor físico",
+            "invalidates": {
+              "cpp": "Invalidate::Input"
+            }
+          }
+        },
+        {
+          "id": "control_priority_keyboard",
+          "label": "Prioridade Teclado / mouse",
+          "type": "Character",
+          "member": "control.keyboardPriority",
+          "min": 0,
+          "max": 1000,
+          "step": 1,
+          "presentation": {
+            "group": "Posse de controle",
+            "visible": {
+              "cpp": "motorControlAutomatic<Character>"
+            },
+            "help": "Maior prioridade vence; empate: IA > Script > Gamepad > Teclado > UI. Script/IA zero mantém posse neste quadro.",
+            "consumer": "runtime/motor_control.h → motor físico",
+            "invalidates": {
+              "cpp": "Invalidate::Input"
+            }
+          }
+        },
+        {
+          "id": "control_priority_gamepad",
+          "label": "Prioridade Gamepad",
+          "type": "Character",
+          "member": "control.gamepadPriority",
+          "min": 0,
+          "max": 1000,
+          "step": 1,
+          "presentation": {
+            "group": "Posse de controle",
+            "visible": {
+              "cpp": "motorControlAutomatic<Character>"
+            },
+            "help": "Maior prioridade vence; empate: IA > Script > Gamepad > Teclado > UI. Script/IA zero mantém posse neste quadro.",
+            "consumer": "runtime/motor_control.h → motor físico",
+            "invalidates": {
+              "cpp": "Invalidate::Input"
+            }
+          }
+        },
+        {
+          "id": "control_priority_script",
+          "label": "Prioridade Script",
+          "type": "Character",
+          "member": "control.scriptPriority",
+          "min": 0,
+          "max": 1000,
+          "step": 1,
+          "presentation": {
+            "group": "Posse de controle",
+            "visible": {
+              "cpp": "motorControlAutomatic<Character>"
+            },
+            "help": "Maior prioridade vence; empate: IA > Script > Gamepad > Teclado > UI. Script/IA zero mantém posse neste quadro.",
+            "consumer": "runtime/motor_control.h → motor físico",
+            "invalidates": {
+              "cpp": "Invalidate::Input"
+            }
+          }
+        },
+        {
+          "id": "control_priority_ai",
+          "label": "Prioridade IA",
+          "type": "Character",
+          "member": "control.aiPriority",
+          "min": 0,
+          "max": 1000,
+          "step": 1,
+          "presentation": {
+            "group": "Posse de controle",
+            "visible": {
+              "cpp": "motorControlAutomatic<Character>"
+            },
+            "help": "Maior prioridade vence; empate: IA > Script > Gamepad > Teclado > UI. Script/IA zero mantém posse neste quadro.",
+            "consumer": "runtime/motor_control.h → motor físico",
+            "invalidates": {
+              "cpp": "Invalidate::Input"
+            }
+          }
         }
       ],
       "defaults": {
@@ -201,6 +301,29 @@
           "help": "Conserva X/Z da superfície no ar; desligar remove apenas esse impulso, sem recriar a cápsula."
         }
       }
+    },
+    {
+      "name": "characterEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "control_source",
+          "label": "Fonte de controle",
+          "type": "Character",
+          "member": "control.source",
+          "options": "motorControlOptions",
+          "presentation": {
+            "group": "Posse de controle",
+            "help": "Automático arbitra prioridades; fonte fixa dá posse exclusiva, sem converter a malha ou a colisão.",
+            "consumer": "runtime/motor_control.h",
+            "invalidates": {
+              "cpp": "Invalidate::Input"
+            }
+          }
+        }
+      ]
     }
   ],
   "field_groups": [

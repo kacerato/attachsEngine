@@ -1,0 +1,17 @@
+{
+  "upstream": "https://github.com/godotengine/tps-demo",
+  "revision": "a82f15448e9b015440d3bbdf5e10801b260c4e9f",
+  "source": "player/model/player.glb",
+  "original_sha256": "16b783ec2e19245d034326d401796b9bd2635de75f4e38917854316abeee4f9c",
+  "derived_sha256": "e7353e28ad7382c3a3c5ade5aa3e0d713705d70e0cf0067a943176a8dc1e878e",
+  "license": "CC-BY-3.0",
+  "changes": [
+    "Eight locomotion clips renamed",
+    "Dedicated root-motion track removed: force-driven in-place motion",
+    "Unused buffer data compacted; all meshes and 145 joints retained"
+  ],
+  "stride_meters": {
+    "Walk": 1.75,
+    "Run": 2.6666666666666665
+  }
+}

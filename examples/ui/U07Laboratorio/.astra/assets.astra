@@ -1,0 +1,10 @@
+AETHER_ASSETS 1 6
+585e5eb45e09c115aa063b357d546d5e ui_document "UI/main.aeui" "" "eefc9e3e263e1344cf05bda250c32f5f575e6671f09e7d402b35e57306f3081d" 1 "" 0 0
+d7b0607c1f00bfa351f0cafda69582c5 mesh "Sources/GodotTPSPlayer.glb" "Sources/GodotTPSPlayer.glb" "e7353e28ad7382c3a3c5ade5aa3e0d713705d70e0cf0067a943176a8dc1e878e" 1 "glb" 0 0
+981062db018e4877701ddfe6509aae45 mesh "Sources/Fox.glb" "Sources/Fox.glb" "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7" 1 "glb" 0 0
+69a035b7e49b008dd69a73a42798b4a4 texture "Textures/concrete-base.jpg" "Textures/concrete-base.jpg" "b08a20dcb306d08ee7f4a05ec216b19b7fd37e95745998ec5f81ecedaac1f0e9" 1 "{\"schema\":4,\"interpretation\":1,\"maximumDimension\":1024,\"mipmaps\":1,\"dilateEdges\":0,\"anisotropy\":1,\"invertNormalGreen\":0,\"preserveAlphaCoverage\":0,\"alphaCoverageCutoff\":500,\"streamingMipmaps\":1,\"streamingPriority\":0}
+" 0 0
+f59857109db3213810066920b8a03155 texture "Textures/concrete-normal.png" "Textures/concrete-normal.png" "0b13102bbf79daef40b7230c20aaca402620b618e043413f1ff677c47acc2861" 1 "{\"schema\":4,\"interpretation\":3,\"maximumDimension\":1024,\"mipmaps\":1,\"dilateEdges\":0,\"anisotropy\":1,\"invertNormalGreen\":0,\"preserveAlphaCoverage\":0,\"alphaCoverageCutoff\":500,\"streamingMipmaps\":1,\"streamingPriority\":0}
+" 0 0
+83b0229df4146933a2a9395327b45916 texture "Textures/concrete-arm.png" "Textures/concrete-arm.png" "e191d359dc99575393d314a8195f67007661b49e313131693accecf022584256" 1 "{\"schema\":4,\"interpretation\":2,\"maximumDimension\":1024,\"mipmaps\":1,\"dilateEdges\":0,\"anisotropy\":1,\"invertNormalGreen\":0,\"preserveAlphaCoverage\":0,\"alphaCoverageCutoff\":500,\"streamingMipmaps\":1,\"streamingPriority\":0}
+" 0 0

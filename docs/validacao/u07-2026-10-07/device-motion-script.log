@@ -1,0 +1,35 @@
+--------- beginning of main
+10-07 15:53:41.963 13063 17808 I Astra.Script: 187: U07 READY: typed ownership and real Body motor
+10-07 15:53:41.993 13063 17808 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 15:53:41.996 13063 17808 I Astra.Script: 187: U07 OWNER Ui candidates=32
+10-07 15:53:42.417 13063 17808 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 15:53:42.844 13063 17808 I Astra.Script: 187: U07 ANIMATION Idle grounded=True
+10-07 15:54:03.054 18293 18401 I Astra.Script: 187: U07 READY: typed ownership and real Body motor
+10-07 15:54:03.091 18293 18401 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 15:54:03.093 18293 18401 I Astra.Script: 187: U07 OWNER Ui candidates=32
+10-07 15:54:03.536 18293 18401 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 15:54:03.949 18293 18401 I Astra.Script: 187: U07 ANIMATION Idle grounded=True
+10-07 15:54:05.520 18293 18401 I Astra.Script: 187: U07 ANIMATION Jump grounded=False
+10-07 15:54:05.756 18293 18401 I Astra.Script: 187: U07 ANIMATION Rise grounded=False
+10-07 15:54:06.034 18293 18401 I Astra.Script: 187: U07 ANIMATION Apex grounded=False
+10-07 15:54:06.210 18293 18401 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 15:54:06.699 18293 18401 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 15:54:07.124 18293 18401 I Astra.Script: 187: U07 ANIMATION Idle grounded=True
+10-07 15:55:43.460 19059 19161 I Astra.Script: 187: U07 READY: typed ownership and real Body motor
+10-07 15:55:43.496 19059 19161 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 15:55:43.499 19059 19161 I Astra.Script: 187: U07 OWNER Ui candidates=32
+10-07 15:55:43.900 19059 19161 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 15:55:44.336 19059 19161 I Astra.Script: 187: U07 ANIMATION Idle grounded=True
+10-07 15:55:46.129 19059 19161 I Astra.Script: 187: U07 ANIMATION Locomotion grounded=True
+10-07 15:55:46.968 19059 19161 I Astra.Script: 187: U07 ANIMATION Jump grounded=False
+10-07 15:55:47.201 19059 19161 I Astra.Script: 187: U07 ANIMATION Rise grounded=False
+10-07 15:55:47.474 19059 19161 I Astra.Script: 187: U07 ANIMATION Apex grounded=False
+10-07 15:55:47.640 19059 19161 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 15:55:48.152 19059 19161 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 15:55:48.576 19059 19161 I Astra.Script: 187: U07 ANIMATION Idle grounded=True
+10-07 15:55:49.431 19059 19161 I Astra.Script: 187: U07 ANIMATION Jump grounded=False
+10-07 15:55:49.675 19059 19161 I Astra.Script: 187: U07 ANIMATION Rise grounded=False
+10-07 15:55:49.949 19059 19161 I Astra.Script: 187: U07 ANIMATION Apex grounded=False
+10-07 15:55:50.123 19059 19161 I Astra.Script: 187: U07 ANIMATION Fall grounded=False
+10-07 15:55:50.589 19059 19161 I Astra.Script: 187: U07 ANIMATION Land grounded=True
+10-07 15:55:51.020 19059 19161 I Astra.Script: 187: U07 ANIMATION Idle grounded=True

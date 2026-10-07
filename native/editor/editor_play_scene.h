@@ -1,5 +1,6 @@
 #pragma once
 #include "editor/editor_map_scene.h"
+#include "editor/editor_scene_camera.h"
 #include "renderer/primitive_geometry.h"
 #include "renderer/water_authoring_geometry.h"
 #include "runtime/game_world.h"
@@ -25,6 +26,7 @@
 #include "runtime/scene_physics2d.h"
 #include "runtime/scene_audio.h"
 #include "scene/script_behavior.h"
+#include "scene/camera_follow.h"
 
 #include <span>
 
@@ -122,7 +124,43 @@ public:
   void submitInput(const runtime::InputDeviceState &state,double unscaledElapsed=0) { if(active_)sceneGui_.submitInput(world_,input_,state,unscaledElapsed); }
   // Foco: quando a interface consome o toque, o gameplay lê zero e nenhum botão
   // fica preso — a pausa e o cancelamento usam o mesmo caminho.
-  void setInputFocus(bool focused) { input_.setGameplayFocus(focused&&!applicationPaused_&&applicationFocused_); }
+  void setInputFocus(bool focused) { input_.setGameplayFocus(focused&&!applicationPaused_&&applicationFocused_&&!paused_);physics_.setControlFocus(input_.gameplayFocus()); }
+  static EditorEntityId defaultMotorReceiver(const runtime::SceneGraph &graph,EditorEntityId camera,EditorEntityId selected) {
+    const auto ancestorMotor=[&](EditorEntityId id){for(auto *e=graph.find(id);e;e=graph.find(e->parent))if(runtime::characterComponent(*e)||e->components.find(scene::DynamicBodyMotor::descriptor))return e->id;return EditorEntityId{0};};
+    if(auto id=ancestorMotor(camera))return id;
+    if(const auto *e=graph.find(camera))if(const auto *component=e->components.find(scene::CameraFollow::descriptor)) {
+      const auto &follow=static_cast<const scene::CameraFollow&>(*component);
+      if(follow.enabled)if(auto id=ancestorMotor(static_cast<EditorEntityId>(follow.target)))return id;
+    }
+    return ancestorMotor(selected);
+  }
+  EditorEntityId motorReceiver(EditorEntityId camera,EditorEntityId selected) const {
+    if(const auto *brain=virtualCameras_.brain(camera);brain&&brain->live) {
+      const auto *rig=world_.graph().find(brain->live);
+      const auto *value=rig?rig->components.find(scene::VirtualCamera::descriptor):nullptr;
+      if(value) {
+        const auto &v=scene::virtualCamera(*value);
+        if(auto id=defaultMotorReceiver(world_.graph(),static_cast<EditorEntityId>(v.trackingTarget),0))return id;
+      }
+    }
+    return defaultMotorReceiver(world_.graph(),camera,selected);
+  }
+  bool routeDefaultMotorControl(EditorEntityId target,float yaw) {
+    const auto handle=world_.handle(target);
+    if(handle!=hardwareControlTarget_){
+      if(hardwareControlTarget_.id)sceneGui_.cancelDefaultControls();
+      if(world_.validate(hardwareControlTarget_)==runtime::WorldStatus::Ok)for(u32 n=1;n<=3;++n)physics_.releaseMotorControl(hardwareControlTarget_.id,runtime::MotorControlSource(n));
+      hardwareControlTarget_=handle;
+    }
+    hardwareControlYaw_=yaw;
+    if(!target||!input_.gameplayFocus())return true;
+    for(u32 n=2;n<=3;++n)if(const auto *input=sceneGui_.sourceInput(runtime::MotorControlSource(n))) {
+      float move[2]{};input->axis2(input->map().moveAction(),move);
+      for(auto &axis:move)axis=std::clamp(axis,-1.f,1.f);
+      if(!physics_.submitMotorControl(target,runtime::MotorControlSource(n),move[0],move[1],yaw,input->justPressed(input->map().jumpAction())))return false;
+    }
+    return true;
+  }
   static EditorEntityId unresolvedEntity(const runtime::SceneGraph &source) {
     std::vector<EditorEntityId> ids;source.collectSubtree(source.root(),ids);
     for(auto id:ids) if(source.find(id)->components.hasUnresolved()) return id;
@@ -139,6 +177,7 @@ public:
     input_.setMap(world_.graph().inputActions());
     input_.reset();
     input_.setGameplayFocus(true);
+    physics_.setControlFocus(true);hardwareControlTarget_={};
     // O avaliador existe antes dos scripts: o Start de um comportamento já
     // pode tocar ou misturar clipes.
     animator_.begin(world_.poseGraph(),resources);
@@ -253,7 +292,7 @@ public:
     auto *components=world_.poseGraph().editComponents(id);
     return components && components->replaceInstance(after.instanceId(),after);
   }
-  void pause(bool value) {if(active_){paused_=value;if(value){input_.setGameplayFocus(false);gui_.cancelPointers();sceneGui_.cancelPointers();}updateAudioPause();}}
+  void pause(bool value) {if(active_){paused_=value;if(value){setInputFocus(false);gui_.cancelPointers();sceneGui_.cancelPointers();}updateAudioPause();}}
   void setAudioFocus(bool focused){audioFocused_=focused;updateAudioPause();}
   bool audioWantsFocus()const{return active_&&!paused_&&!applicationPaused_&&applicationFocused_&&audio_.wantsDevice();}
   bool step() {return active_ && paused_ && advanceFrame(1.0/60.0,true);}
@@ -274,6 +313,7 @@ public:
     if(event==scene::ScriptLifecycleEvent::ApplicationPause)applicationPaused_=value;
     else applicationFocused_=value;
     input_.setGameplayFocus(!applicationPaused_&&applicationFocused_&&!paused_);
+    physics_.setControlFocus(input_.gameplayFocus());
     updateAudioPause();
     return !active_ || (scripts_.lifecycle(event,value) && drainCommands());
   }
@@ -364,6 +404,10 @@ private:
   // A órbita lê a mesma ação Olhar do mapa de entrada que Olhar e scripts leem.
   bool advanceVirtualCameras() {
     float look[2]{0,0};input_.axis2(input_.map().lookAction(),look);
+    // Scoped Canvas look belongs to its real Camera/Cérebro, not the global
+    // player input. Reuse the recipient context and avoid two pose writers.
+    const auto camera=resolveSceneCamera(world_.graph()).entity;
+    sceneGui_.cameraLookInput(camera,look);
     return virtualCameras_.advance(world_,&physics_,look) && drainCommands();
   }
   bool runScripts(float elapsed) {return scripts_.update(elapsed) && drainCommands();}
@@ -435,8 +479,11 @@ private:
   }
   static bool fixedStep(void *context,float dt) {
     auto &self=*static_cast<EditorPlayScene *>(context);
+    if(!self.scripts_.fixedUpdate(dt)||!self.drainCommands()||!self.reconcilePhysics())return false;
+    self.sceneGui_.reconcile(self.world_);
+    if(self.world_.validate(self.hardwareControlTarget_)==runtime::WorldStatus::Ok)self.sceneGui_.driveDefaultControl(self.world_,self.physics_,self.hardwareControlTarget_.id,self.hardwareControlYaw_);
     self.sceneGui_.driveCharacters(self.world_,self.physics_);
-    return self.scripts_.fixedUpdate(dt) && self.drainCommands() && self.reconcilePhysics() && self.physics2D_.advance(dt,self.world_,nullptr,&self,event2D);
+    return self.physics2D_.advance(dt,self.world_,nullptr,&self,event2D);
   }
   static bool event2D(void *context,const runtime::Physics2DEvent &event){
     auto &self=*static_cast<EditorPlayScene*>(context);
@@ -452,6 +499,8 @@ private:
     return self.scripts_.contact(contact)&&self.drainCommands();
   }
   runtime::GameWorld world_;
+  runtime::ObjectHandle hardwareControlTarget_{};
+  float hardwareControlYaw_=0;
   std::string frameError_;
   runtime::ScenePhysics physics_;
   runtime::ScenePhysics2D physics2D_;

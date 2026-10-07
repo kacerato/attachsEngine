@@ -11,6 +11,7 @@ bool ScenePhysics::diagnostic(const GameWorld &world, ObjectId id,
   Diagnostic value;
   value.object = id;
   value.authority = world.authorityOf(world.handle(id));
+  value.hasControl=motorControlState(id,value.control);
   for (const auto &c : characters_)
     if (c.id == id) {
       if (!c.motor->runtimeState(value.character))

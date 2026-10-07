@@ -39,8 +39,10 @@ public final class ProjectStore {
     public ProjectStore(Context context) {
         this(context.getFilesDir(), new File(context.getExternalFilesDir(null) != null
                 ? context.getExternalFilesDir(null) : context.getFilesDir(), "Projetos"));
+        retireBundledExamples();
         installExamples(context.getAssets());
         load();
+        save();
     }
 
     ProjectStore(File privateRoot, File projectRoot) {
@@ -59,19 +61,45 @@ public final class ProjectStore {
 
     private File indexFile() { return new File(privateRoot, INDEX); }
 
-    /** Install each bundled game once. Existing authored projects are never replaced. */
+    // Only historical bundled names with their historical package layout are
+    // removed. Projects created by the user and renamed copies are preserved.
+    private static final String[] RETIRED_EXAMPLES = {
+            "Cristais do Templo", "Circuito Neon", "Arena de Drones", "Quarentena 04 · GLB",
+            "Resgate na Mina · GLB", "Perímetro Delta · GLB", "Linha Fantasma · GLB",
+            "MERCADO NEXUS", "FAROL ABISSAL", "EXPRESSO TITÃ"
+    };
+    void retireBundledExamples() {
+        for (String name : RETIRED_EXAMPLES) {
+            File directory = new File(root(), name);
+            try {
+                if (!directory.isDirectory() || !directory.getCanonicalFile().getParentFile().equals(root().getCanonicalFile())) continue;
+                File descriptor = new File(directory, "project.json");
+                if (!descriptor.isFile() || !new File(directory, "LEIA-ME.md").isFile()
+                        || !new File(directory, ".astra/assets.astra").isFile()) continue;
+                JSONObject data = new JSONObject(new String(Files.readAllBytes(descriptor.toPath()), StandardCharsets.UTF_8));
+                if (!"ASTRA-PROJECT-1".equals(data.optString("format"))
+                        || !name.equals(data.getJSONObject("project").optString("name"))
+                        || !data.getJSONObject("project").optString("thumbnail").startsWith("example-")
+                        || !"scenes/main.ascene".equals(data.optString("mainScene"))) continue;
+                deleteBundledTree(directory, directory.getCanonicalFile());
+            } catch (Exception error) { LOG.log(Level.WARNING, "exemplo antigo não removido: " + name, error); }
+        }
+    }
+    private static void deleteBundledTree(File file, File boundary) throws IOException {
+        File canonical = file.getCanonicalFile();
+        if (!canonical.toPath().startsWith(boundary.toPath())) throw new IOException("referência fora do exemplo: " + file);
+        if (Files.isSymbolicLink(file.toPath())) throw new IOException("link no exemplo: " + file);
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children == null) throw new IOException("pasta ilegível: " + file);
+            for (File child : children) deleteBundledTree(child, boundary);
+        }
+        if (!file.delete()) throw new IOException("não removido: " + file);
+    }
+    /** Install the sole bundled laboratory once, without overwriting authored edits. */
     private void installExamples(AssetManager assets) {
         final String[][] examples = {
-                {"cristais", "Cristais do Templo", "example-cristais.png"},
-                {"circuito", "Circuito Neon", "example-circuito.png"},
-                {"arena", "Arena de Drones", "example-arena.png"},
-                {"quarentena", "Quarentena 04 · GLB", "example-quarentena.png"},
-                {"resgate", "Resgate na Mina · GLB", "example-resgate.png"},
-                {"perimetro", "Perímetro Delta · GLB", "example-perimetro.png"},
-                {"linha-fantasma", "Linha Fantasma · GLB", "example-linha-fantasma.png"},
-                {"mercado-nexus", "MERCADO NEXUS", "example-mercado-nexus.png"},
-                {"farol-abissal", "FAROL ABISSAL", "example-farol-abissal.png"},
-                {"expresso-tita", "EXPRESSO TITÃ", "example-expresso-tita.png"}
+                {"u07", "U07Laboratorio"}
         };
         for (String[] example : examples) {
             File destination = new File(root(), example[1]);
@@ -80,20 +108,10 @@ public final class ProjectStore {
             if (staging.exists() && !staging.isDirectory()) continue;
             try {
                 String packagePath = "astra/example-projects/" + example[0];
-                copyExampleTree(assets, packagePath + "/Assets", new File(staging, "Assets"));
-                copyExampleTree(assets, packagePath + "/Scripts", new File(staging, "Scripts"));
-                copyExampleTree(assets, packagePath + "/scenes", new File(staging, "scenes"));
-                copyExampleTree(assets, packagePath + "/assets.astra", new File(staging, ".astra/assets.astra"));
-                copyExampleTree(assets, packagePath + "/LEIA-ME.md", new File(staging, "LEIA-ME.md"));
-                Project project = new Project(example[1], destination.getAbsolutePath(),
-                        SceneTemplate.EMPTY, example[2], 1, 1);
-                JSONObject data = new JSONObject();
-                data.put("format", "ASTRA-PROJECT-1");
-                data.put("resourceSource", "independent");
-                data.put("project", project.toJson());
-                data.put("mainScene", "scenes/main.ascene");
-                data.put("editorScene", "scenes/editor.aescene");
-                writeAtomic(new File(staging, "project.json"), data.toString(2));
+                copyExampleTree(assets, packagePath, staging);
+                JSONObject data = new JSONObject(new String(Files.readAllBytes(new File(staging, "project.json").toPath()), StandardCharsets.UTF_8));
+                if (!"ASTRA-PROJECT-1".equals(data.optString("format"))
+                        || !new File(staging, data.getString("editorScene")).isFile()) throw new IOException("laboratório incompleto");
                 if (!staging.renameTo(destination)) throw new IOException("publicação: " + destination);
             } catch (Exception error) {
                 LOG.log(Level.WARNING, "exemplo não instalado: " + example[1], error);
@@ -106,7 +124,10 @@ public final class ProjectStore {
         if (children == null) throw new IOException("pacote ausente: " + source);
         if (children.length != 0) {
             if (!destination.isDirectory() && !destination.mkdirs()) throw new IOException("pasta: " + destination);
-            for (String child : children) copyExampleTree(assets, source + "/" + child, new File(destination, child));
+            for (String child : children) {
+                String target = source.equals("astra/example-projects/u07") && child.equals("metadata") ? ".astra" : child;
+                copyExampleTree(assets, source + "/" + child, new File(destination, target));
+            }
             return;
         }
         File parent = destination.getParentFile();
@@ -221,9 +242,8 @@ public final class ProjectStore {
             stream.write(content.getBytes(StandardCharsets.UTF_8));
             stream.getFD().sync();
         }
-        if (!temporary.renameTo(target)) {
-            throw new IOException("rename falhou: " + temporary + " -> " + target);
-        }
+        Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING);
         // Um rename só é durável depois que o diretório também é sincronizado.
         try (RandomAccessFile directory = new RandomAccessFile(target.getParentFile(), "r")) {
             directory.getFD().sync();

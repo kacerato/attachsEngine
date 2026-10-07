@@ -148,7 +148,18 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     inputs.file("../../samples/ocean/manifest.json")
     }
     from("src/main/assets") {
-        exclude("dotnet/Aether.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
+        exclude("dotnet/Aether.*", "dotnet_manifest.txt", "dotnet_build_id.txt", "astra/example-projects/**")
+    }
+    // Single editable, independent project. Legacy examples remain source
+    // references in the repository; they are not shipped or auto-installed.
+    from("../../examples/ui/U07Laboratorio") {
+        val manifest = file("../../examples/ui/U07Laboratorio/package-files.txt")
+        check(manifest.isFile) { "Missing laboratory package manifest" }
+        include(manifest.readLines().filter { it.isNotBlank() })
+        into("astra/example-projects/u07")
+        // AAPT drops hidden directories. Ship metadata under a visible name;
+        // ProjectStore restores the native .astra layout transactionally.
+        eachFile { path = path.replace("/.astra/", "/metadata/") }
     }
     from(managedOutput) { include("*.dll", "*.deps.json", "*.runtimeconfig.json"); into("dotnet") }
     if (includeLegacyDemos) {
@@ -233,6 +244,8 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
                 check(!root.resolve(name).exists()) { "Legacy demo leaked into standard assets: $name" }
             }
         }
+        val examples = root.resolve("astra/example-projects").listFiles()?.filter { it.isDirectory }?.map { it.name }
+        check(examples == listOf("u07")) { "Standard APK must contain only the U07 laboratory: $examples" }
         val dotnet = root.resolve("dotnet")
         val paths = dotnet.walkTopDown().filter { it.isFile }.map { it.relativeTo(dotnet).invariantSeparatorsPath }.sorted().toList()
         root.resolve("dotnet_manifest.txt").writeText(paths.joinToString("\n", postfix = "\n"))
@@ -275,13 +288,14 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.aether.editor"
+        applicationId = providers.gradleProperty("astraApplicationId").getOrElse("dev.aether.editor")
         buildConfigField("boolean", "INCLUDE_LEGACY_DEMOS", includeLegacyDemos.toString())
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "dev.aether.editor.validation.U07GestureInstrumentation"
         // Versão 2 foi o experimento Godot. Atualização preserva dados sem downgrade.
-        versionCode = 4
-        versionName = "0.2.0-editor-ui"
+        versionCode = providers.gradleProperty("astraVersionCode").getOrElse("7").toInt()
+        versionName = providers.gradleProperty("astraVersionName").getOrElse("0.2.2-preview.20261007")
 
         ndk {
             abiFilters.addAll(androidAbis)
@@ -295,6 +309,7 @@ android {
             }
         }
     }
+    testBuildType = "release"
 
     externalNativeBuild {
         cmake {

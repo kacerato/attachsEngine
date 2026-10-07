@@ -50,7 +50,14 @@ public:
     // v8 acrescentou centro de massa e inércia no fim da tabela de números.
     for(auto &v:centerOfMass) v=0;
     for(auto &v:inertia) v=1;
-    for(usize i=0;i<(version==2?6:version==3?12:version<8?15:descriptor.numbers.size());++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
+    solverVelocitySteps=0;
+    for(usize i=0;i<(version==2?6:version==3?12:version<8?14:descriptor.numbers.size());++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
+    const auto tail=in.tellg();
+    const auto readTail=[&] {
+    sensor=false;allowSleep=true;
+    for(auto &n:freezePosition)n=false;
+    for(auto &n:freezeRotation)n=false;
+    continuousCollision=false;
     if(version>=3 && !(in>>sensor>>allowSleep)) return false;
     if(version>=4){for(auto &n:freezePosition)if(!(in>>n))return false;for(auto &n:freezeRotation)if(!(in>>n))return false;if(!(in>>continuousCollision))return false;}
     frictionCombine=restitutionCombine=surface=0;material={};
@@ -64,6 +71,16 @@ public:
     automaticCenterOfMass=automaticInertia=true;interpolation=0;
     if(version>=8 && !(in>>automaticCenterOfMass>>automaticInertia>>interpolation)) return false;
     return true;
+    };
+    if(version<4||version>=8)return readTail();
+    // v4-v7 circularam com 14 números e, posteriormente, com o override de
+    // solver acrescentado sem bump do formato. O payload do componente é
+    // limitado: aceite somente uma das duas leituras completas e válidas.
+    const auto complete=[&] {if(!valid())return false;in>>std::ws;return in.eof();};
+    if(readTail()&&complete())return true;
+    if(tail==std::istream::pos_type(-1))return false;
+    in.clear();in.seekg(tail);
+    return bool(in>>solverVelocitySteps)&&readTail()&&complete();
   }
 };
 // Os grupos seguem a leitura do Rigidbody da Unity: o que descreve o corpo, o
@@ -87,7 +104,7 @@ inline constexpr std::array<ComponentEnumOption,3> bodyInterpolationOptions{{{0,
 #include "scene/generated/physics_body_physicsBodyEnums.inc"
 inline bool migratePhysicsBody(std::istream &in,u32 version,Components &components) {
   // V1 stored an implicit box in the body; never replace an explicit collider.
-  if(version==2||version==3) {PhysicsBody body;if(!body.read(in,version)||!body.valid()) return false;return components.edit(PhysicsBody::descriptor)&&components.replace(body);}
+  if(version>=2&&version<=7) {PhysicsBody body;if(!body.read(in,version)||!body.valid()) return false;return components.edit(PhysicsBody::descriptor)&&components.replace(body);}
   if(version!=1 || components.find(Collider::descriptor)) return false;
   u32 dynamic=0;PhysicsBody body;Collider collider;
   if(!(in>>dynamic>>body.mass>>collider.halfX>>collider.halfY>>collider.halfZ>>body.friction>>body.restitution) || dynamic>1) return false;

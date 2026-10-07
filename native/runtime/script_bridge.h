@@ -161,6 +161,8 @@ private:
   scene::ScriptDebugOperations debugOperations_{};
   scene::ScriptHierarchyOperations hierarchyOperations_{};
   scene::ScriptHapticsOperations hapticsOperations_{};
+  scene::ScriptMotorControlOperations motorControlOperations_{};
+  scene::ScriptMotorMotionOperations motorMotionOperations_{};
   ComponentEventQueue *events_=nullptr;
   const GameView *gameView_=nullptr;
   DebugLines *debugLines_=nullptr;

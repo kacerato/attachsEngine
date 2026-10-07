@@ -83,14 +83,25 @@ bool localTransformForWorld(const float world[16], const float parent[16], Trans
   // perfectly valid rotating solver pose then fails reconstruction and stops
   // Play. Preserve that cosine from the first column instead; shear/reflection
   // are still rejected by the full reconstruction below.
-  const float cosine = std::hypot(local[0], local[1]) / value.scale[0];
-  const float pitch = std::atan2(-local[2] / value.scale[0], cosine);
+  // Float quaternion->matrix rounding can leave columns very slightly
+  // nonorthogonal. Near an Euler pole that error is amplified by division by
+  // cos(yaw). Recover a consistent optical basis in double precision first;
+  // the ORIGINAL matrix must still pass the unchanged reconstruction check.
+  double axes[3][3];
+  for(u32 r=0;r<3;++r){axes[0][r]=double(local[r])/value.scale[0];axes[1][r]=double(local[4+r])/value.scale[1];}
+  double dot=0;for(u32 r=0;r<3;++r)dot+=axes[0][r]*axes[1][r];
+  double length=0;for(u32 r=0;r<3;++r){axes[1][r]-=dot*axes[0][r];length+=axes[1][r]*axes[1][r];}
+  length=std::sqrt(length);if(!(length>0))return false;
+  for(double &v:axes[1])v/=length;
+  for(u32 r=0;r<3;++r)axes[2][r]=axes[0][(r+1)%3]*axes[1][(r+2)%3]-axes[0][(r+2)%3]*axes[1][(r+1)%3];
+  const double cosine = std::hypot(axes[0][0],axes[0][1]);
+  const double pitch = std::atan2(-axes[0][2], cosine);
   const bool pole = cosine < .00001f;
   constexpr float degrees = 57.29577951308232f;
   value.rotationDegrees[1] = pitch * degrees;
-  value.rotationDegrees[0] = (pole ? std::atan2(-local[9] / value.scale[2], local[5] / value.scale[1])
-                                   : std::atan2(local[6] / value.scale[1], local[10] / value.scale[2])) * degrees;
-  value.rotationDegrees[2] = pole ? 0 : std::atan2(local[1] / value.scale[0], local[0] / value.scale[0]) * degrees;
+  value.rotationDegrees[0] = (pole ? std::atan2(-axes[2][1], axes[1][1])
+                                   : std::atan2(axes[1][2],axes[2][2])) * degrees;
+  value.rotationDegrees[2] = pole ? 0 : std::atan2(axes[0][1],axes[0][0]) * degrees;
   float reconstructed[16];
   transformMatrix(value, reconstructed);
   // Reject shear/reflection instead of silently losing the old world transform.

@@ -1,0 +1,19 @@
+android-ui-saved.aescene
+U07_MOTOR 2 source=1 ui=10 keyboard=10 gamepad=10 script=20 ai=5
+U07_ARCHIVE motors=1 skins=2 animations=2 environments=1
+exit=0
+
+android-undo-saved.aescene
+U07_MOTOR 2 source=0 ui=10 keyboard=10 gamepad=10 script=20 ai=5
+U07_ARCHIVE motors=1 skins=2 animations=2 environments=1
+exit=0
+
+android-redo-saved.aescene
+U07_MOTOR 2 source=1 ui=10 keyboard=10 gamepad=10 script=20 ai=5
+U07_ARCHIVE motors=1 skins=2 animations=2 environments=1
+exit=0
+
+android-auto-restored.aescene
+U07_MOTOR 2 source=0 ui=10 keyboard=10 gamepad=10 script=20 ai=5
+U07_ARCHIVE motors=1 skins=2 animations=2 environments=1
+exit=0

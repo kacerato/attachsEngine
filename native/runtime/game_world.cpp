@@ -764,6 +764,7 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
     case scene::ComponentPropertyStatus::Applied: {
       u32 invalidates=schema->invalidates;
       if(typeId==scene::Character::descriptor.id&&scene::characterMotionProperty(propertyId))invalidates&=~(scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape);
+      if((typeId==scene::Character::descriptor.id||typeId==scene::DynamicBodyMotor::descriptor.id)&&scene::motorControlProperty(propertyId))invalidates&=~(scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape);
       invalidated_|=invalidates;return WorldStatus::Ok;
     }
     case scene::ComponentPropertyStatus::MissingComponent: return WorldStatus::ComponentMissing;

@@ -48,11 +48,28 @@ public:
          world.worldTransform(target,targetPose)!=WorldStatus::Ok) continue;
       const float alpha=follow.dampingSeconds==0?1.0f:
         static_cast<float>(1.0-std::exp(-delta/static_cast<double>(follow.dampingSeconds)));
+      float offset[3]{follow.offset[0],follow.offset[1],follow.offset[2]};
+      if(follow.orbit) {
+        // Transform a direction, never a point: the camera's current translation
+        // must not feed back into its next orbit position. Remove world scale.
+        Transform orientation=cameraPose;
+        for(u32 axis=0;axis<3;++axis){orientation.position[axis]=0;orientation.scale[axis]=1;}
+        float matrix[16];transformMatrix(orientation,matrix);
+        for(u32 axis=0;axis<3;++axis)offset[axis]=matrix[axis]*follow.offset[0]+matrix[4+axis]*follow.offset[1]+matrix[8+axis]*follow.offset[2];
+      }
       for(u32 axis=0;axis<3;++axis) {
-        const float desired=targetPose.position[axis]+follow.offset[axis];
+        const float desired=targetPose.position[axis]+offset[axis]+(follow.orbit&&axis==1?follow.pivotHeight:0);
         cameraPose.position[axis]+=(desired-cameraPose.position[axis])*alpha;
       }
-      if(world.setWorldTransform(camera,cameraPose)!=WorldStatus::Ok) return false;
+      // Own translation only. Publishing a full world TRS decomposes yaw into
+      // the canonical [-90,90] Euler branch (pitch/roll flip at the poles).
+      // CameraLook must retain its authored local angles through a full orbit.
+      float desired[16],parent[16];Transform translated;
+      transformMatrix(cameraPose,desired);
+      if(!parentWorldMatrix(world.poseGraph(),id,parent)||!localTransformForWorld(desired,parent,translated))return false;
+      auto local=world.find(camera)->transform;
+      std::copy(translated.position,translated.position+3,local.position);
+      if(world.setLocalTransform(camera,local)!=WorldStatus::Ok) return false;
     }
     return true;
   }

@@ -6505,6 +6505,12 @@ void EditorSession::preparePlay() {
     state_.workspace=EditorWorkspace::Scene;playRequested_=false;return;
   }
   state_.playHasScripts=runtime::ScriptBridge::hasScripts(document_);
+  // O primeiro frame do projeto antecede a compilação automática. Um catálogo
+  // vazio não é um assembly pronto: a mesma barreira vale para botão e autostart.
+  if(state_.playHasScripts && code_.catalogState()!=EditorCodeCatalogState::Current) {
+    state_.status="Aguarde a publicação dos scripts antes de Play";
+    state_.workspace=EditorWorkspace::Scene;playRequested_=false;return;
+  }
   state_.playSecondaryActionLabel.clear();state_.playHudMessage.clear();
   for(const auto &action:document_.inputActions().actions()) {
     if(action.kind!=runtime::ActionKind::Button) continue;

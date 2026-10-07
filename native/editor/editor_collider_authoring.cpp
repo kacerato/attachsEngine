@@ -662,6 +662,17 @@ void EditorSession::refreshColliderAuthoring() {
        << '\n';
   text << "Autoridade: " << authorities[static_cast<u32>(value.authority)]
        << '\n';
+  if(value.hasControl) {
+    const auto &control=value.control;
+    text << "Posse: " << (state_.physicsDiagnosticLive&&control.measured
+        ? (control.source==scene::MotorControlSource::None?"Sem intenção":scene::motorControlName(control.source)) : "Aguardando passo em Play") << '\n';
+    if(state_.physicsDiagnosticLive&&control.measured) {
+      text << (control.focused?"Com foco":"Entrada suspensa") << " · prioridade " << control.priority << " · candidatos: ";
+      bool any=false;for(u32 n=1;n<=5;++n)if(control.candidates&(1u<<n)){if(any)text << ", ";text << scene::motorControlName(scene::MotorControlSource(n));any=true;}
+      if(!any)text << "nenhum";
+      text << "\nIntenção " << control.right << " / " << control.forward << (control.jump?" · salto solicitado":"") << '\n';
+    }
+  }
   text << "Dono: " << target << " · " << value.colliderCount << " Colisores · "
        << physics->bodyCount() << " corpos na cena\n";
   if(!value.hasCharacter) {

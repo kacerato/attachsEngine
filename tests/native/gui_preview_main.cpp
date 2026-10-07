@@ -9,6 +9,7 @@
 #include "scene/camera.h"
 #include "scene/camera_look.h"
 #include "scene/camera_follow.h"
+#include "scene/virtual_camera.h"
 #include "scene/character.h"
 #include "resources/gltf_import.h"
 #include "runtime/primitive_object.h"
@@ -26,6 +27,7 @@ static std::vector<u8> read(const std::filesystem::path &path) {
   const auto size=s.tellg();if(size<0)return{};std::vector<u8> out(static_cast<usize>(size));s.seekg(0);
   s.read(reinterpret_cast<char*>(out.data()),size);return out;
 }
+#include "u07_authoring_fixture.h"
 static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool rendered) {
   auto &g=s.document();const auto root=g.createEntity(g.root(),runtime::ObjectKind::Folder,"SharedBody");auto object=*g.find(root);
   auto *body=static_cast<scene::PhysicsBody*>(object.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;
@@ -59,6 +61,22 @@ static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool ren
 int main(int argc,char **argv) {
   if(argc<2)return 1;
   const std::filesystem::path root=AETHER_REPOSITORY_ROOT;
+  if(std::string_view(argv[1])=="inspect-u07") {
+    if(argc!=3)return 171;
+    auto bytes=read(argv[2]);editor::EditorDocument document;
+    if(!editor::deserializeEditorDocument(std::string(bytes.begin(),bytes.end()),0,document))return 172;
+    std::vector<editor::EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+    u32 motors=0,skins=0,animations=0,environments=0;
+    for(auto id:ids) {
+      const auto &e=*document.find(id);skins+=e.components.find(scene::SkinnedMesh::descriptor)!=nullptr;
+      animations+=e.components.find(scene::Animation::descriptor)!=nullptr;environments+=e.components.find(scene::Environment::descriptor)!=nullptr;
+      if(const auto *m=static_cast<const scene::DynamicBodyMotor*>(e.components.find(scene::DynamicBodyMotor::descriptor))) {
+        ++motors;std::printf("U07_MOTOR %llu source=%u ui=%.0f keyboard=%.0f gamepad=%.0f script=%.0f ai=%.0f\n",static_cast<unsigned long long>(id),u32(m->control.source),m->control.uiPriority,m->control.keyboardPriority,m->control.gamepadPriority,m->control.scriptPriority,m->control.aiPriority);
+      }
+    }
+    std::printf("U07_ARCHIVE motors=%u skins=%u animations=%u environments=%u\n",motors,skins,animations,environments);
+    return motors==1&&skins>=2&&animations==2&&environments==1?0:173;
+  }
   if(std::string_view(argv[1])=="verify-physical-authoring-project") {
     if(argc!=4&&argc!=5)return 161;
     const auto project=std::filesystem::absolute(argv[2]);
@@ -302,11 +320,12 @@ int main(int argc,char **argv) {
         !editor::EditorImportTransaction::writeText(out/".astra/assets.astra",s.serializeAssets()))return 107;
     std::printf("Body owners project: %s; root body, two child colliders with local UID 1\n",out.generic_string().c_str());return 0;
   }
-  if(std::string_view(argv[1])=="write-controls"||std::string_view(argv[1])=="write-conversion"||std::string_view(argv[1])=="write-dynamic"||std::string_view(argv[1])=="write-object-motor"||std::string_view(argv[1])=="write-convex"||std::string_view(argv[1])=="write-convex-hierarchy") {
+  if(std::string_view(argv[1])=="write-u07"||std::string_view(argv[1])=="write-controls"||std::string_view(argv[1])=="write-conversion"||std::string_view(argv[1])=="write-dynamic"||std::string_view(argv[1])=="write-object-motor"||std::string_view(argv[1])=="write-convex"||std::string_view(argv[1])=="write-convex-hierarchy") {
+    const bool u07=std::string_view(argv[1])=="write-u07";
     const bool hierarchyMotor=std::string_view(argv[1])=="write-convex-hierarchy";
     const bool convexMotor=std::string_view(argv[1])=="write-convex"||hierarchyMotor;
     const bool conversion=std::string_view(argv[1])=="write-conversion";
-    const bool objectMotor=std::string_view(argv[1])=="write-object-motor";
+    const bool objectMotor=u07||std::string_view(argv[1])=="write-object-motor";
     const bool dynamic=std::string_view(argv[1])=="write-dynamic"||objectMotor||convexMotor;
     if(argc!=3)return 50;
     const auto out=std::filesystem::absolute(argv[2]);std::error_code ec;if(std::filesystem::exists(out,ec))return 51;
@@ -315,18 +334,24 @@ int main(int argc,char **argv) {
     editor::EditorSession session;if(!session.setProjectDirectory(out.generic_string().c_str()))return 53;
     std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
     if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials)||!session.importMap(draws,materials,false,vertices,indices,0))return 54;
-    if(convexMotor&&!convexLibrary.connect(session))return 54;
+    if((convexMotor||u07)&&!convexLibrary.connect(session))return 54;
     auto &d=session.gui().document();std::string error;
     const auto look=d.create(ui::GuiKind::LookArea);auto n=*d.find(look);n.name="Olhar";n.anchorMin={.5f,0};n.anchorMax={1,1};n.offsets={0,0,-24,-24};n.control.sensitivity=1;if(!d.update(n,error))return 55;
     const auto move=d.create(ui::GuiKind::Joystick);n=*d.find(move);n.name="Mover";n.anchorMin=n.anchorMax={0,1};n.offsets={32,-240,232,-40};n.control.inputRadius=80;n.foreground=0x604A555B;n.accent=0xFFB8E86B;if(!d.update(n,error))return 55;
     const auto jump=d.create(ui::GuiKind::ActionButton);n=*d.find(jump);n.name="Saltar";n.text="SALTAR";n.anchorMin=n.anchorMax={1,1};n.offsets={-190,-160,-50,-60};n.background=0x904A555B;n.radius=50;if(!d.update(n,error))return 55;
-    const auto label=d.create(ui::GuiKind::Text);n=*d.find(label);n.name="Instrucoes";n.text="Mover / olhar / saltar | controles autorados";n.offsets={32,32,1900,76};n.fontSize=23;if(!d.update(n,error))return 55;
-    if(dynamic){auto id=d.create(ui::GuiKind::ActionButton);n=*d.find(id);n.name="Impulso";n.text="IMPULSO";n.control.action="Impulso";n.anchorMin=n.anchorMax={1,1};n.offsets={-390,-160,-240,-60};n.background=0x904A555B;n.radius=12;if(!d.update(n,error))return 55;}
+    if(u07){auto id=d.create(ui::GuiKind::Panel);n=*d.find(id);n.name="Leitura do motor";n.offsets={20,20,700,114};n.background=0xCE182027;if(!d.update(n,error))return 55;}
+    const auto label=d.create(ui::GuiKind::Text);n=*d.find(label);n.name="Instrucoes";n.text="Mover / olhar / saltar | controles autorados";n.offsets=u07?ui::UiRect{32,30,680,65}:ui::UiRect{32,32,1900,76};n.fontSize=u07?18:23;if(!d.update(n,error))return 55;
+    if(u07){auto id=d.create(ui::GuiKind::Text);n=*d.find(id);n.name="Movimento";n.text="Estado do passo físico";n.offsets={32,68,680,105};n.fontSize=18;if(!d.update(n,error))return 55;}
+    if(dynamic&&!u07){auto id=d.create(ui::GuiKind::ActionButton);n=*d.find(id);n.name="Impulso";n.text="IMPULSO";n.control.action="Impulso";n.anchorMin=n.anchorMax={1,1};n.offsets={-390,-160,-240,-60};n.background=0x904A555B;n.radius=12;if(!d.update(n,error))return 55;}
+    if(u07){u32 at=0;for(const auto *action:{"Fonte","Script","PrioridadeIA"}){auto id=d.create(ui::GuiKind::ActionButton);n=*d.find(id);n.name=n.control.action=action;n.text=action;n.anchorMin=n.anchorMax={1,0};n.offsets={-560.f+at*180.f,32,-400.f+at*180.f,100};++at;if(!d.update(n,error))return 55;}}
     if(!session.gui().save())return 55;
     resources::AssetRegistry registry;if(!resources::AssetRegistry::deserialize(session.serializeAssets(),registry))return 56;const auto *source=registry.findByPath("UI/main.aeui");if(!source)return 56;
     auto &g=session.document();editor::EditorEntityId actor=0,visual=0;editor::EditorEntity object;
-    if(dynamic){auto actions=g.inputActions();runtime::InputAction impulse;impulse.id="Impulso";impulse.kind=runtime::ActionKind::Button;impulse.deadzone=0;if(!actions.add(impulse)||!g.setInputActions(actions))return 57;}
-    if(convexMotor) {
+    if(dynamic&&!u07){auto actions=g.inputActions();runtime::InputAction impulse;impulse.id="Impulso";impulse.kind=runtime::ActionKind::Button;impulse.deadzone=0;if(!actions.add(impulse)||!g.setInputActions(actions))return 57;}
+    if(u07){auto actions=g.inputActions();auto moveAction=*actions.find("Mover");moveAction.bindings.push_back({runtime::InputSource::Key,32,29,0,1,false});moveAction.bindings.push_back({runtime::InputSource::Key,51,47,1,1,false});moveAction.bindings.push_back({runtime::InputSource::GamepadAxis,0,0,0,1,false});moveAction.bindings.push_back({runtime::InputSource::GamepadAxis,1,0,1,1,true});if(!actions.replace("Mover",moveAction))return 57;for(const auto *name:{"Fonte","Script","PrioridadeIA"}){runtime::InputAction a;a.id=name;a.deadzone=0;if(!actions.add(a))return 57;}if(!g.setInputActions(actions))return 57;}
+    if(u07) {
+      actor=test::u07Human(session,root,out,error);if(!actor){std::fprintf(stderr,"%s\n",error.c_str());return 57;}
+    } else if(convexMotor) {
       actor=visual=hierarchyMotor?test::convexFixtureHierarchy(session,error):test::convexFixtureObject(session,error);if(!actor){std::fprintf(stderr,"%s\n",error.c_str());return 57;}
       object=*g.find(actor);editor::assignEntityName(object,hierarchyMotor?"CompoundPlayer":"ConcavePlayer");object.transform.position[1]=2;
       if(!g.applyEntityValues(actor,object))return 57;
@@ -348,14 +373,53 @@ int main(int argc,char **argv) {
     const auto floor=g.createEntity(g.root(),runtime::ObjectKind::Mesh,"Ground");object=*g.find(floor);
     if(!runtime::configurePrimitive(object,scene::PrimitiveType::Cube,{1,session.mapScene().assetGuid(0),session.mapScene().materialForAsset(0)}))return 57;
     object.transform.position[1]=-.5f;object.transform.scale[0]=object.transform.scale[2]=30;object.transform.scale[1]=1;if(!g.applyEntityValues(floor,object))return 57;
-    const auto camera=g.createEntity(g.root(),runtime::ObjectKind::Camera,"Camera");object=*g.find(camera);object.components.add(scene::Camera::descriptor);object.components.add(scene::CameraLook::descriptor);
-    auto *follow=static_cast<scene::CameraFollow*>(object.components.add(scene::CameraFollow::descriptor));follow->target=actor?actor:visual;follow->offset[1]=3;follow->offset[2]=-8;object.transform.position[1]=3;object.transform.position[2]=-8;object.transform.rotationDegrees[0]=12;if(!g.applyEntityValues(camera,object))return 57;
+    if(u07&&!test::u07Environment(session,floor,root,out,error)){std::fprintf(stderr,"%s\n",error.c_str());return 57;}
+    const auto camera=g.createEntity(g.root(),runtime::ObjectKind::Camera,"Camera");object=*g.find(camera);object.components.add(scene::Camera::descriptor);
+    object.transform.position[1]=3;object.transform.position[2]=-8;object.transform.rotationDegrees[0]=12;
+    if(u07) {
+      auto *brain=static_cast<scene::CameraBrain*>(object.components.add(scene::CameraBrain::descriptor));brain->defaultBlend=scene::CameraBlendStyle::Cut;
+    } else {
+      object.components.add(scene::CameraLook::descriptor);
+      auto *follow=static_cast<scene::CameraFollow*>(object.components.add(scene::CameraFollow::descriptor));follow->target=actor?actor:visual;follow->offset[1]=3;follow->offset[2]=-8;follow->dampingSeconds=.2f;
+    }
+    if(!g.applyEntityValues(camera,object))return 57;
+    if(u07) {
+      const auto pivot=g.createEntity(actor,runtime::ObjectKind::Folder,"CameraTarget");object=*g.find(pivot);object.transform.position[1]=1.3f;if(!g.applyEntityValues(pivot,object))return 57;
+      const auto rig=g.createEntity(g.root(),runtime::ObjectKind::Folder,"Camera terceira pessoa");object=*g.find(rig);
+      auto *v=static_cast<scene::VirtualCamera*>(object.components.add(scene::VirtualCamera::descriptor));
+      v->trackingTarget=v->lookAtTarget=pivot;v->position=scene::VirtualCameraPosition::Orbit;v->rotation=scene::VirtualCameraRotation::LookAt;
+      v->orbitRadius=5;v->orbitPitch=15;v->orbitPitchMin=-65;v->orbitPitchMax=70;v->positionDamping=0;
+      v->avoidObstacles=true;v->cameraRadius=.25f;v->minimumDistance=.1f;v->collisionDamping=.2f;v->nearPlane=.05f;
+      if(!g.applyEntityValues(rig,object))return 57;
+    }
     const auto hud=g.createEntity(g.root(),runtime::ObjectKind::Folder,"HUD");object=*g.find(hud);auto *canvas=static_cast<scene::UiCanvas*>(object.components.add(scene::UiCanvas::descriptor));canvas->document=source->guid;canvas->inputReceiver=actor;canvas->inputCamera=camera;canvas->movementSpace=2;
-    auto *script=static_cast<scene::ScriptBehavior*>(object.components.add(scene::ScriptBehavior::descriptor));script->scriptType="example.gui.authored-controls";script->source="Scripts/GuiAuthoredControls.cs";if(!g.applyEntityValues(hud,object))return 57;
+    auto *script=static_cast<scene::ScriptBehavior*>(object.components.add(scene::ScriptBehavior::descriptor));script->scriptType=u07?"example.gui.u07-control":"example.gui.authored-controls";script->source=u07?"Scripts/U07Controller.cs":"Scripts/GuiAuthoredControls.cs";if(!g.applyEntityValues(hud,object))return 57;
+    if(u07) {
+      auto probe=g;auto plain=*probe.find(hud);plain.components.remove(scene::ScriptBehavior::descriptor);if(!probe.applyEntityValues(hud,plain))return 174;
+      auto motorProbe=*probe.find(actor);static_cast<scene::DynamicBodyMotor*>(motorProbe.components.edit(scene::DynamicBodyMotor::descriptor))->control.source=scene::MotorControlSource::Keyboard;if(!probe.applyEntityValues(actor,motorProbe))return 174;
+      editor::EditorPlayScene play;std::vector<renderer::MapDrawState> first,second;
+      if(!play.start(probe,session.mapScene())||!play.advance(.1)||!play.extract(session.mapScene(),first)||!play.setDynamicMotorMove(actor,1,0,0)||!play.advance(.2)||!play.extract(session.mapScene(),second))return 175;
+      u32 movingSkins=0;for(const auto &a:first)for(const auto &b:second)if(a.objectId==b.objectId&&a.skinPalette&&b.skinPalette&&*a.skinPalette!=*b.skinPalette)++movingSkins;
+      runtime::MotorControlSnapshot control;if(!play.physics().motorControlState(actor,control)||control.source!=scene::MotorControlSource::Keyboard||movingSkins<2)return 176;
+      std::printf("U07_RUNTIME real motor source=%u animated palettes=%u\n",u32(control.source),movingSkins);
+      std::vector<editor::EditorEntityId> rigNodes;probe.collectSubtree(actor,rigNodes);
+      bool checkedFade=false;
+      for(auto id:rigNodes)if(const auto *component=probe.find(id)->components.find(scene::Animation::descriptor)) {
+        const auto &a=static_cast<const scene::Animation&>(*component);if(a.clips.size()!=8)return 177;
+        auto &animator=const_cast<runtime::SceneAnimator&>(play.animator());
+        const auto walking=a.clips[1].asset;runtime::AnimationStateView cadence;
+        if(animator.crossFade(id,a.instanceId(),walking,.2f)!=runtime::AnimationCommandStatus::Ok||!play.advance(.1)||animator.state(id,a.instanceId(),walking,cadence)!=runtime::AnimationCommandStatus::Ok)return 178;
+        cadence.speed=.7f;cadence.time=.1f;
+        if(animator.setState(id,a.instanceId(),cadence)!=runtime::AnimationCommandStatus::Ok||!play.advance(.1)||animator.state(id,a.instanceId(),walking,cadence)!=runtime::AnimationCommandStatus::Ok||cadence.weight<.99f)return 179;
+        checkedFade=true;std::printf("U07_FADE cadence/phase preserve cross-fade; eight real clips\n");break;
+      }
+      if(!checkedFade)return 180;
+      play.stop();
+    }
     const auto archive=editor::serializeEditorDocument(g,0);editor::EditorDocument reopened;if(!editor::deserializeEditorDocument(archive,0,reopened))return 58;
-    const std::string projectName=hierarchyMotor?"UI Hierarchy Sources v1":convexMotor?"UI Convex Parts v1":objectMotor?"UI Object Motor v2":dynamic?"UI Dynamic Motor v1":conversion?"UI Character Conversion v3":"UI Authored Controls v3";
-    const std::string descriptor="{\"format\":\"ASTRA-PROJECT-1\",\"resourceSource\":\"independent\",\"project\":{\"name\":\""+projectName+"\",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\"mainScene\":\"scenes/editor.aescene\",\"editorScene\":\"scenes/editor.aescene\"}";
-    if(!editor::EditorImportTransaction::writeText(out/"project.json",descriptor)||!editor::EditorImportTransaction::writeText(out/"scenes/editor.aescene",archive)||!editor::EditorImportTransaction::write(out/"Scripts/GuiAuthoredControls.cs",read(root/"examples/ui/GuiAuthoredControls.cs")))return 59;
+    const std::string projectName=u07?"U07 Laboratório de Controle":hierarchyMotor?"UI Hierarchy Sources v1":convexMotor?"UI Convex Parts v1":objectMotor?"UI Object Motor v2":dynamic?"UI Dynamic Motor v1":conversion?"UI Character Conversion v3":"UI Authored Controls v3";
+    const std::string descriptor="{\"format\":\"ASTRA-PROJECT-1\",\"resourceSource\":\"independent\",\"project\":{\"name\":\""+projectName+"\",\"template\":\"empty\",\"scenes\":1,\"assets\":"+(u07?std::string("6"):std::string("1"))+"},\"mainScene\":\"scenes/editor.aescene\",\"editorScene\":\"scenes/editor.aescene\"}";
+    if(!editor::EditorImportTransaction::writeText(out/"project.json",descriptor)||!editor::EditorImportTransaction::writeText(out/"scenes/editor.aescene",archive)||!editor::EditorImportTransaction::write(out/(u07?"Scripts/U07Controller.cs":"Scripts/GuiAuthoredControls.cs"),read(root/(u07?"examples/ui/U07Controller.cs":"examples/ui/GuiAuthoredControls.cs"))))return 59;
     std::printf("Authored controls project: %s\n",out.generic_string().c_str());return 0;
   }
   if(std::string_view(argv[1])=="write-instances") {

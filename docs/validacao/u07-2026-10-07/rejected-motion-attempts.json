@@ -1,0 +1,18 @@
+{
+  "attempts": [
+    {
+      "video": "locomotion-rejected-startup.mp4",
+      "sha256": "c583e493307425851a34cbcf257324d5b4bb138f8ecb79e3daab626799a623e2",
+      "accepted": false,
+      "review": "partial diagnostic review, not complete frame acceptance",
+      "reason": "Play started before first script publication; Empty catalog is now barred in preparePlay"
+    },
+    {
+      "video": "locomotion-rejected-early-gestures.mp4",
+      "sha256": "1a97b5c56e75dd285ed19fa0ad026db698eee7925d022840553403f928254230",
+      "accepted": false,
+      "review": "partial diagnostic review, not complete frame acceptance",
+      "reason": "Test gestures ran before U07 READY; helper now waits for READY after this launch"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 #include "scene/ui_canvas.h"
 #include "ui/gui_world.h"
 #include "runtime/input_actions.h"
+#include "runtime/motor_control.h"
 #include <functional>
 #include <memory>
 
@@ -13,6 +14,7 @@ ui::GuiCanvas uiCanvasPresentation(const scene::UiCanvas &canvas);
 // Immutable authored documents are shared; every lease owns its execution copy.
 class SceneGui final {
 public:
+  const InputService *sourceInput(MotorControlSource source) const {const auto n=u32(source);return n>=1&&n<=3?&sourceInputs_[n-1]:nullptr;}
   using Loader=std::function<bool(resources::AssetGuid,ui::GuiDocument&,std::string&)>;
   using Occlusion=std::function<bool(ui::UiPoint,float)>;
   static constexpr u32 kMaximumInstances=64;
@@ -32,7 +34,17 @@ public:
   void cancelPointers();
   void submitInput(GameWorld &,InputService &,const InputDeviceState &,double elapsed);
   void driveCharacters(GameWorld &,ScenePhysics &);
+  void driveDefaultControl(GameWorld &,ScenePhysics &,ObjectId,float yaw);
+  void cancelDefaultControls();
   const InputService *inputFor(ObjectId receiver) const;
+  bool cameraLookInput(ObjectId camera,float out[2]) const {
+    bool found=false;
+    for(const auto &r:receivers_)if(r.used&&r.camera.id==camera&&r.input.gameplayFocus()) {
+      float scoped[2]{};r.input.axis2(r.input.map().lookAction(),scoped);
+      out[0]+=scoped[0];out[1]+=scoped[1];found=true;
+    }
+    return found;
+  }
   bool captures(u32 pointer,ui::UiPointerDevice device=ui::UiPointerDevice::Touch) const;
   void setImages(const ui::GuiImageAtlas *images);
   Instance *find(GameWorld &world,u64 instance);
@@ -54,7 +66,14 @@ private:
   u32 world_=0;u64 nextId_=1,graphRevision_=~u64{0},revision_=0;
   std::string diagnostic_,inputDiagnostic_;
   struct PendingJump {u64 instance=0;ui::GuiId node=0;u64 cancellation=0;};
-  struct ReceiverInput {ObjectHandle receiver{},camera{};u32 space=0;std::vector<PendingJump> pendingJump;bool used=false;InputService input;InputDeviceState sample;};
+  std::array<InputService,3> sourceInputs_;
+  std::array<InputDeviceState,3> sourceSamples_;
+  InputService rootControlInput_;
+  InputDeviceState rootSample_;
+  InputDeviceState rootStepSample_;
+  std::vector<PendingJump> rootPendingJump_;
+  bool rootHardwareJump_=false;
+  struct ReceiverInput {ObjectHandle receiver{},camera{};u32 space=0;std::vector<PendingJump> pendingJump;bool used=false;InputService input,controlInput;InputDeviceState sample;};
   std::vector<ReceiverInput> receivers_;
 };
 }

@@ -1,0 +1,23 @@
+{
+  "package": "dev.aether.editor",
+  "versionCode": 7,
+  "versionName": "0.2.2-preview.20261007",
+  "installedApkSha256": "61f7d8d85581dc090ad906e865b2e96c4ff974bf14cab4b5202806c0a2075936",
+  "nativeLibraryMatchesValidation": true,
+  "projectsAfter": [
+    "CameraVirtual-20261007",
+    "U07Laboratorio",
+    "teste"
+  ],
+  "retiredHistoricalBundledProjects": 10,
+  "userProjectFilesPreserved": 11,
+  "userProjectHashComparison": "identical before/after",
+  "savedSceneSha256": "4d5aeb51ad522f74188ee3320b52b600964637f82ddc9f59c6134446dc4dbc2b",
+  "savedSceneInspection": "archive-motion-saved-inspection.log",
+  "physicalAcceptance": [
+    "public-project-list.png",
+    "public-motion-play.png",
+    "public-saved-edit.png",
+    "public-reopened-play.png"
+  ]
+}

@@ -298,12 +298,16 @@ AnimationCommandStatus SceneAnimator::setState(ObjectId owner, u64 instance, con
   if (!p) return status;
   auto *target = stateOf(*p, value.clip, status);
   if (!target) return status;
+  const bool replacesBlend=value.enabled!=target->enabled||value.weight!=target->weight||value.layer!=target->layer;
   target->enabled = value.enabled;
   target->time = value.time;
   target->speed = value.speed;
-  target->weight = target->targetWeight = value.weight;
-  target->fadeRate = 0;
-  target->stopAtZero = false;
+  target->weight = value.weight;
+  // AnimationState setters transmit a complete snapshot. Changing cadence,
+  // phase or wrap mode must not silently cancel an ongoing CrossFade.
+  if(replacesBlend) {
+    target->targetWeight=value.weight;target->fadeRate=0;target->stopAtZero=false;
+  }
   target->layer = value.layer;
   target->wrapMode = value.wrapMode;
   return AnimationCommandStatus::Ok;
