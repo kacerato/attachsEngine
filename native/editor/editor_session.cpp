@@ -167,11 +167,8 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
       if(!candidate||!binding->write(*candidate,request.componentResourceSlot,authored)) break;
       // Escolher um material copia os valores dele para o corpo, na mesma transação.
       if(binding->kind==resources::AssetType::PhysicsMaterial&&authored.valid()) {
-        auto *body=&candidate->type()==&scene::PhysicsBody::descriptor?static_cast<scene::PhysicsBody*>(candidate):nullptr;
         const auto *material=findPhysicsMaterial(authored);
-        if(!body||!material) break;
-        body->friction=material->friction;body->restitution=material->restitution;
-        body->frictionCombine=material->frictionCombine;body->restitutionCombine=material->restitutionCombine;
+        if(!material||!applyPhysicsMaterialCopy(*candidate,*material)) break;
       }
       if(binding->kind==resources::AssetType::EnvironmentProfile&&authored.valid()) {
         auto *environment=&candidate->type()==&scene::Environment::descriptor?
@@ -531,7 +528,7 @@ void EditorSession::setSelection(EditorEntityId entity) {
   state_.guiSelection={};state_.guiInspector=false;
   // Escolher um objeto tira o material do projeto de Propriedades.
   if(materialAssetMode()) {state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;}
-  state_.environmentInspector={};state_.profileInspector={};
+  state_.environmentInspector={};state_.profileInspector={};state_.physicsMaterialInspector={};
   if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.propertyQuery.clear();state_.componentPage=0;state_.componentPreview=0;state_.scriptPreviewType.clear();state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
     state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
     state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
@@ -2582,7 +2579,7 @@ void EditorSession::selectFiles(std::vector<std::string> paths) {
   // Nenhum ou vários: os Inspectors de um recurso fecham e Propriedades mostra
   // o conjunto (ou nada).
   state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;
-  state_.environmentInspector={};state_.profileInspector={};
+  state_.environmentInspector={};state_.profileInspector={};state_.physicsMaterialInspector={};
   if(state_.textureInspector) {closeTextureViewer();state_.textureInspector=false;}
   state_.textureManager=false;
   state_.selectedFile=unique.empty()?std::string():unique.back();
@@ -3014,6 +3011,9 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentProfile) {
     if(!openProfileInspector(record->guid)) state_.status="Perfil registrado, mas o arquivo não pôde ser lido";
+  }
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::PhysicsMaterial) {
+    if(!openPhysicsMaterialInspector(record->guid)) state_.status="Material físico registrado, mas o arquivo não pôde ser lido";
   }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentMap) {
     if(!openEnvironmentInspector(record->guid)) state_.status="Receita HDRI salva é inválida; Reimportar recria a partir da fonte";
@@ -4398,6 +4398,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           state_.profileInspector.valid()?openFocusedAsset(Kind::EnvironmentProfile,state_.profileInspector):false;
       if(!ok) state_.status="Nada para abrir numa janela";
       return true;
+    }
+    // Material físico do projeto em Propriedades.
+    if(state_.physicsMaterialInspector.valid()) {
+      if(key==widgetId(EditorWidget::PhysicsMaterialInspectorClose)) {state_.physicsMaterialInspector={};state_.selectedFile.clear();state_.selectedFiles.clear();return true;}
+      if(key>=widgetId(EditorWidget::PhysicsMaterialStepBase)&&key<widgetId(EditorWidget::PhysicsMaterialStepBase)+10) {
+        const u32 code=key-widgetId(EditorWidget::PhysicsMaterialStepBase),field=code/2;const bool up=code%2;
+        stepPhysicsMaterial(field,up);return true;
+      }
     }
     // Perfil de ambiente do projeto em Propriedades.
     if(state_.profileInspector.valid()) {

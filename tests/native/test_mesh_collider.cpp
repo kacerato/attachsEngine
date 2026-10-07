@@ -226,7 +226,7 @@ AE_TEST(collider_file_reads_older_versions_and_keeps_convex) {
   std::stringstream out;
   collider.write(out);
   scene::Collider read;
-  AE_EXPECT_TRUE(read.read(out, 6), "a versão atual relê");
+  AE_EXPECT_TRUE(read.read(out, scene::Collider::descriptor.version), "a versão atual relê");
   AE_EXPECT_TRUE(read.shape == scene::ColliderShape::Mesh && read.convex && read.collisionMesh==collider.collisionMesh &&
                  std::abs(read.hullTolerance-.025f)<1e-6f && read.activeEdgeAngle==17 &&
                  !read.weldVertices&&!read.optimizeCooking,"forma, recurso e cooking voltam");

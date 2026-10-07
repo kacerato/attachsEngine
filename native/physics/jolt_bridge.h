@@ -594,6 +594,18 @@ inline float AetherCombinePhysicsMaterial(ae::u32 a, ae::u32 b, float va, float 
 // Falso para corpo inexistente ou modo fora de 0..4. Ambos 0 removem o registro.
 ae::i32 AetherPhysics_SetBodyMaterialCombineV1(AetherPhysicsWorld *world, AetherBodyHandle body,
                                               ae::u32 friction, ae::u32 restitution);
+// Material próprio por parte de um corpo composto, na ordem das partes da
+// criação (o índice é o userData da forma-folha). `overrides` 0 deixa a parte
+// com os valores do corpo. Contagem zero remove a tabela.
+struct AetherPartMaterialV1 {
+  float friction;
+  float restitution;
+  ae::u32 frictionCombine;
+  ae::u32 restitutionCombine;
+  ae::u32 overrides;
+};
+ae::i32 AetherPhysics_SetBodyPartMaterialsV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                            const AetherPartMaterialV1 *parts, ae::u32 count);
 
 /// A camada de gameplay atual do corpo, ou 0xffffffff quando o handle não vale.
 ae::u32 AetherPhysics_GetBodyGameplayLayerV1(const AetherPhysicsWorld *world, AetherBodyHandle body);

@@ -921,6 +921,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
 void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel);
 void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel);
 void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel);
+void buildPhysicsMaterialInspector(ScreenBuilder &builder,UiRect panel);
 void buildFocusedInspectors(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
   if(state.focusedInspectors.empty() || layout.viewport.isEmpty()) return;
@@ -2489,6 +2490,53 @@ void buildEnvironmentAssetInspector(ScreenBuilder &builder,const UiRect &panel) 
 // o perfil guarda — interruptores, opções que ciclam, cores e números pelo
 // teclado numérico, o mapa HDRI. Sem consumidor neste aparelho, a linha fica
 // apagada e não recebe toque; toda edição muda os ambientes que usam o perfil.
+// Material físico do projeto em Propriedades (Unity 6000.0 PhysicsMaterial no
+// Inspector): cada controle grava o recurso e sincroniza quem o usa.
+void buildPhysicsMaterialInspector(ScreenBuilder &builder,UiRect panel) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  list.addRect(panel,theme.color.surface);router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets::all(theme.spacing.small));
+  auto header=takeTop(content,kPanelHeaderHeight);
+  const auto back=takeLeft(header,32);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  router.addRegion(back,widgetId(EditorWidget::PhysicsMaterialInspectorClose));
+  list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::PhysicsMaterial),theme.color.accent);
+  const auto &material=state.physicsMaterialView;const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},material.name.c_str(),theme.color.text,theme.type.cardName);
+  const std::string sub="Material físico · rev. "+std::to_string(material.revision)+" · "+std::to_string(state.physicsMaterialUsers)+
+      (state.physicsMaterialUsers==1?" usuário":" usuários");
+  builder.label({header.x,header.y+half,header.width,half},sub.c_str(),theme.color.textDim,theme.type.caption);
+  takeTop(content,6);
+  const auto optionName=[](std::span<const scene::ComponentEnumOption> options,u32 value){
+    for(const auto &option:options) if(option.value==value) return option.name;
+    return "?";};
+  struct Row {const char *label;std::string value;};
+  char friction[16],restitution[16];
+  std::snprintf(friction,sizeof friction,"%.2f",static_cast<double>(material.friction));
+  std::snprintf(restitution,sizeof restitution,"%.2f",static_cast<double>(material.restitution));
+  const Row rows[]{{"Atrito",friction},{"Combinar atrito",optionName(scene::physicsCombineOptions,material.frictionCombine)},
+                   {"Restituição",restitution},{"Combinar restituição",optionName(scene::physicsCombineOptions,material.restitutionCombine)},
+                   {"Superfície",optionName(scene::physicsSurfaceOptions,material.surface)}};
+  const bool editable=state.workspace!=EditorWorkspace::Play;
+  // Painel estreito (telefone): rótulo numa linha, controles na de baixo.
+  const bool narrow=content.width<300;
+  for(u32 i=0;i<std::size(rows)&&content.height>=36;++i) {
+    auto row=takeTop(content,narrow?50.f:40.f);
+    if(narrow) builder.label(takeTop(row,18),rows[i].label,theme.color.textMuted,theme.type.caption);
+    else builder.label(takeLeft(row,row.width*.42f),rows[i].label,theme.color.textMuted,theme.type.caption);
+    const auto less=takeLeft(row,34),more=takeRight(row,34);
+    list.addRect(deflate(row,UiInsets::all(3)),theme.color.silhouette,theme.radius.control);
+    builder.label(row,rows[i].value.c_str(),theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.label(less,"−",editable?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(more,"+",editable?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    if(editable) {
+      router.addRegion(less,widgetId(EditorWidget::PhysicsMaterialStepBase)+i*2);
+      router.addRegion(more,widgetId(EditorWidget::PhysicsMaterialStepBase)+i*2+1);
+    }
+  }
+  if(content.height>=20) builder.label(takeTop(content,20),fitMiddle(list,state.physicsMaterialPath,content.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+}
+
 void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
   list.addRect(panel,theme.color.surface);
@@ -3759,11 +3807,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   // e valor só existem quando a ação chama método e ficam na sequência.
   // Material do corpo: primeiro o recurso, depois cada valor seguido da sua
   // combinação, como na ficha do PhysicsMaterial.
-  if(entry.type==&scene::PhysicsBody::descriptor&&!searching&&group=="Material") {
+  if((entry.type==&scene::PhysicsBody::descriptor||entry.type==&scene::Collider::descriptor)&&!searching&&group=="Material") {
     const auto rank=[&](const Field &field) {
+      if(field.kind==0) return -1; // "Material próprio" do colisor abre a aba
       if(field.kind==6) return 0;
       const std::string_view id=field.kind==2?entry.type->numbers[field.index].id:field.kind==1?entry.type->enums[field.index].id:std::string_view{};
-      return id=="friction"?1:id=="friction_combine"?2:id=="restitution"?3:id=="restitution_combine"?4:5;
+      return id=="friction"?1:id=="friction_combine"?2:id=="restitution"?3:id=="restitution_combine"?4:id=="surface"?5:6;
     };
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
   }
@@ -4266,7 +4315,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       std::string value;
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
-              binding.kind==resources::AssetType::PhysicsMaterial?"Sem material · valores deste corpo":
+              binding.kind==resources::AssetType::PhysicsMaterial?(entry.type==&scene::Collider::descriptor?"Sem material · valores desta forma":"Sem material · valores deste corpo"):
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
               binding.kind==resources::AssetType::AnimationClip||binding.kind==resources::AssetType::AudioClip?"Nenhum clipe":
               binding.inheritable?"Herdar malha visual":"Sem recurso";
@@ -7564,6 +7613,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   if (builder.state.materialInspector.valid()) {buildMaterialAssetInspector(builder, panel);return;}
   if (builder.state.environmentInspector.valid()) {buildEnvironmentAssetInspector(builder, panel);return;}
   if (builder.state.profileInspector.valid()) {buildProfileAssetInspector(builder, panel);return;}
+  if (builder.state.physicsMaterialInspector.valid()) {buildPhysicsMaterialInspector(builder, panel);return;}
   // R4: textura escolhida em Arquivos e gerenciador da pasta Texturas.
   if (builder.state.textureManager || builder.state.textureInspector) {
     // O Inspector de textura é fundo escuro com cartões por cima.

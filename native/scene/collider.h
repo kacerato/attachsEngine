@@ -9,6 +9,13 @@ namespace ae::scene {
 // Com `convex` a física usa o casco convexo e aceita qualquer corpo; sem ele
 // usa os triângulos exatos e só aceita corpo estático ou cinemático.
 enum class ColliderShape : u32 { Box=0, Sphere=1, Capsule=2, Mesh=3, Cylinder=4 };
+// Material físico (recurso physics_material): combinação por par e tipo de
+// superfície. Valores gravados na cena: acrescentar no fim, nunca renumerar.
+inline constexpr std::array<ComponentEnumOption,5> physicsCombineOptions{{{0,"Padrão do motor"},{1,"Média"},{2,"Mínimo"},{3,"Multiplicar"},{4,"Máximo"}}};
+inline constexpr std::array<ComponentEnumOption,13> physicsSurfaceOptions{{
+  {0,"Padrão"},{1,"Concreto"},{2,"Madeira"},{3,"Metal"},{4,"Grama"},{5,"Terra"},{6,"Areia"},
+  {7,"Água"},{8,"Gelo"},{9,"Borracha"},{10,"Vidro"},{11,"Tecido"},{12,"Pedra"}}};
+inline constexpr u32 kPhysicsSurfaceCount=13;
 // Primitive shapes are independent of visual geometry and body motion. Capsule
 // local Y halfHeight excludes the hemispherical ends; dimensions are in local
 // scene units.
@@ -45,27 +52,35 @@ public:
   resources::AssetGuid collisionMesh{};
   // Opt-in preserves old scenes whose hidden center/rotation were ignored.
 #include "scene/generated/collider_Collider_fields9.inc"
+  // Material próprio desta forma (v9). Desligado, a forma usa o do corpo.
+#include "scene/generated/collider_Collider_fields10.inc"
+  u32 frictionCombine=0,restitutionCombine=0,surface=0;
+  resources::AssetGuid material{};
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<Collider>(*this);}
   bool valid() const override {
-    if(static_cast<u32>(shape)>4 || owner>std::numeric_limits<u32>::max()) return false;
+    if(static_cast<u32>(shape)>4 || owner>std::numeric_limits<u32>::max() || frictionCombine>4 || restitutionCombine>4 ||
+       surface>=kPhysicsSurfaceCount) return false;
     for(const auto &p:descriptor.numbers) {const float v=p.read(*this);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
     return true;
   }
   void write(std::ostream &out) const override {
     out<<static_cast<u32>(shape);for(const auto &p:descriptor.numbers) out<<' '<<p.read(*this);
     out<<' '<<owner<<' '<<enabled<<' '<<convex<<' '<<(collisionMesh.valid()?collisionMesh.text():std::string("-"))
-       <<' '<<weldVertices<<' '<<optimizeCooking<<' '<<meshLocalPose;
+       <<' '<<weldVertices<<' '<<optimizeCooking<<' '<<meshLocalPose
+       <<' '<<ownMaterial<<' '<<frictionCombine<<' '<<restitutionCombine<<' '<<surface<<' '<<(material.valid()?material.text():std::string("-"));
   }
   bool read(std::istream &in,u32 version) override {
     // v4 acrescentou Malha/Convexo; v5 separa a malha física da visual; v6
     // acrescenta cooking autoral sem reinterpretar os dados antigos.
-    u32 kind=0;if((version<1||version>8) || !(in>>kind) || kind>(version>=7?4u:version>=4?3u:2u)) return false;
+    u32 kind=0;if((version<1||version>9) || !(in>>kind) || kind>(version>=7?4u:version>=4?3u:2u)) return false;
     shape=static_cast<ColliderShape>(kind);
     centerX=centerY=centerZ=rotationX=rotationY=rotationZ=0;owner=0;enabled=true;convex=false;collisionMesh={};
     weldVertices=true;optimizeCooking=true;hullTolerance=.001f;activeEdgeAngle=5.f;
-    const usize numberCount=version==1?5:version==2?8:version<6?11:descriptor.numbers.size();
+    ownMaterial=false;friction=.5f;restitution=0;frictionCombine=restitutionCombine=surface=0;material={};
+    // v9 acrescentou atrito e restituição no fim da tabela de números.
+    const usize numberCount=version==1?5:version==2?8:version<6?11:version<9?13:descriptor.numbers.size();
     for(usize i=0;i<numberCount;++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
     if(version>=3 && !(in>>owner>>enabled)) return false;
     if(version>=4 && !(in>>convex)) return false;
@@ -74,6 +89,10 @@ public:
     }
     if(version>=6 && !(in>>weldVertices>>optimizeCooking)) return false;
     meshLocalPose=false;if(version>=8 && !(in>>meshLocalPose))return false;
+    if(version>=9) {
+      std::string guid;
+      if(!(in>>ownMaterial>>frictionCombine>>restitutionCombine>>surface>>guid) || (guid!="-"&&!resources::AssetGuid::parse(guid,material))) return false;
+    }
     return true;
   }
 };
@@ -87,6 +106,7 @@ inline bool colliderIsTriangleMesh(const ComponentValue &v) {const auto &c=stati
 // há centro nem rotação próprios — a pose é a do objeto.
 inline bool colliderIsPrimitive(const ComponentValue &v) {return !colliderIsMesh(v);}
 inline bool colliderHasLocalPose(const ComponentValue &v) {const auto &c=static_cast<const Collider&>(v);return c.shape!=ColliderShape::Mesh||c.meshLocalPose;}
+inline bool colliderOwnMaterial(const ComponentValue &v) {return static_cast<const Collider&>(v).ownMaterial;}
 #include "scene/generated/collider_colliderNumbers.inc"
 inline constexpr std::array<ComponentEnumOption,5> colliderShapeOptions{{{0,"Caixa"},{1,"Esfera"},{2,"Cápsula"},{3,"Malha"},{4,"Cilindro"}}};
 #include "scene/generated/collider_colliderEnums.inc"
@@ -103,7 +123,7 @@ inline constexpr std::array<ComponentTriple,3> colliderTriples{{
 // O endereço continua existindo quando a forma não é Malha: o valor fica
 // inativo e escondido, mas ainda participa de dependências, presets e reparo.
 inline u32 colliderMeshResourceSlots(const ComponentValue &) {return 1;}
-inline constexpr std::array<ComponentResourceBinding,1> colliderResources{{
+inline constexpr std::array<ComponentResourceBinding,2> colliderResources{{
   {"collision_mesh","Malha de colisão",resources::AssetType::Mesh,colliderMeshResourceSlots,
    [](const ComponentValue &v,u32){return static_cast<const Collider&>(v).collisionMesh;},
    [](ComponentValue &v,u32 slot,resources::AssetGuid value){
@@ -111,7 +131,11 @@ inline constexpr std::array<ComponentResourceBinding,1> colliderResources{{
      static_cast<Collider&>(v).collisionMesh=value;
      return true;
    },
-   {"Forma","","Vazio usa a malha visual; escolha uma malha simplificada para a física",colliderIsMesh},true}
+   {"Forma","","Vazio usa a malha visual; escolha uma malha simplificada para a física",colliderIsMesh},true},
+  {"material","Material físico",resources::AssetType::PhysicsMaterial,[](const ComponentValue &){return 1u;},
+   [](const ComponentValue &v,u32){return static_cast<const Collider&>(v).material;},
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){if(slot) return false;static_cast<Collider&>(v).material=value;return true;},
+   {"Material","","Recurso compartilhado; escolher copia atrito, restituição, combinação e superfície para esta forma",colliderOwnMaterial}}
 }};
 // Acontecimentos do solver Jolt. Instância zero: o backend informa o objeto,
 // não qual das formas repetíveis do objeto tocou. Stay fica fora: um evento
@@ -124,6 +148,6 @@ inline constexpr std::array<ComponentEvent,4> physicsContactEvents{{
   {"collision_exit","Colisão: terminou","Contato sólido terminou; entregue aos dois objetos",physicsOtherPayload},
 }};
 inline const ComponentType Collider::descriptor{
-  "astra.physics.collider",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources,{},{},{},{},physicsContactEvents
+  "astra.physics.collider",9,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources,{},{},{},{},physicsContactEvents
 };
 }

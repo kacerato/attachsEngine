@@ -584,6 +584,17 @@
             "group": "Material",
             "help": "Num par, vale o modo de maior precedência. Padrão: o maior valor"
           }
+        },
+        {
+          "id": "surface",
+          "label": "Superfície",
+          "type": "PhysicsBody",
+          "member": "surface",
+          "options": "physicsSurfaceOptions",
+          "presentation": {
+            "group": "Material",
+            "help": "Tipo de superfície lido por scripts no acerto e no contato (passos, faíscas, sons)"
+          }
         }
       ]
     }

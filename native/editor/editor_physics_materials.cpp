@@ -5,24 +5,52 @@
 
 #include "core/sha256.h"
 #include "editor/editor_import_transaction.h"
+#include "scene/collider.h"
 #include "scene/physics_body.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <limits>
 
 namespace ae::editor {
 namespace {
-const scene::PhysicsBody *physicsBodyOf(const EditorEntity *entity,u64 instance) {
-  const auto *component=entity?entity->components.findInstance(instance):nullptr;
-  return component&&&component->type()==&scene::PhysicsBody::descriptor?static_cast<const scene::PhysicsBody*>(component):nullptr;
+// Corpo ou colisor com material próprio: os dois guardam a mesma cópia.
+struct MaterialHolder {
+  float *friction=nullptr,*restitution=nullptr;u32 *frictionCombine=nullptr,*restitutionCombine=nullptr,*surface=nullptr;
+  resources::AssetGuid *material=nullptr;bool *own=nullptr;
+  explicit operator bool() const {return friction!=nullptr;}
+};
+MaterialHolder holderOf(scene::ComponentValue *component) {
+  if(!component) return {};
+  if(&component->type()==&scene::PhysicsBody::descriptor) {
+    auto &b=static_cast<scene::PhysicsBody&>(*component);
+    return {&b.friction,&b.restitution,&b.frictionCombine,&b.restitutionCombine,&b.surface,&b.material,nullptr};
+  }
+  if(&component->type()==&scene::Collider::descriptor) {
+    auto &c=static_cast<scene::Collider&>(*component);
+    return {&c.friction,&c.restitution,&c.frictionCombine,&c.restitutionCombine,&c.surface,&c.material,&c.ownMaterial};
+  }
+  return {};
 }
-// Os valores do recurso são os mesmos campos do corpo; o resto do corpo é dele.
-void applyMaterial(scene::PhysicsBody &body,const resources::PhysicsMaterialAsset &material) {
-  body.friction=material.friction;body.restitution=material.restitution;
-  body.frictionCombine=material.frictionCombine;body.restitutionCombine=material.restitutionCombine;
+MaterialHolder holderOf(const scene::ComponentValue *component) {return holderOf(const_cast<scene::ComponentValue*>(component));}
+// Os valores do recurso são os mesmos campos do dono; o resto do componente é dele.
+void applyMaterial(const MaterialHolder &h,const resources::PhysicsMaterialAsset &material) {
+  *h.friction=material.friction;*h.restitution=material.restitution;
+  *h.frictionCombine=material.frictionCombine;*h.restitutionCombine=material.restitutionCombine;*h.surface=material.surface;
+  if(h.own) *h.own=true;
+}
+void readMaterial(const MaterialHolder &h,resources::PhysicsMaterialAsset &material) {
+  material.friction=*h.friction;material.restitution=*h.restitution;
+  material.frictionCombine=*h.frictionCombine;material.restitutionCombine=*h.restitutionCombine;material.surface=*h.surface;
 }
 } // namespace
+
+bool applyPhysicsMaterialCopy(scene::ComponentValue &component,const resources::PhysicsMaterialAsset &material) {
+  const auto holder=holderOf(&component);if(!holder) return false;
+  applyMaterial(holder,material);return true;
+}
 
 void EditorSession::loadPhysicsMaterials() {
   physicsMaterials_.clear();
@@ -48,11 +76,9 @@ void EditorSession::synchronizePhysicsMaterial(const resources::PhysicsMaterialA
     const auto *entity=document_.find(id);if(!entity) continue;
     auto values=*entity;bool changed=false;
     for(u32 index=0;index<values.components.size();++index) {
-      auto *component=values.components.editInstance(values.components.at(index)->instanceId());
-      if(!component||&component->type()!=&scene::PhysicsBody::descriptor) continue;
-      auto &body=static_cast<scene::PhysicsBody&>(*component);
-      if(body.material!=material.guid) continue;
-      applyMaterial(body,material);changed=true;
+      const auto holder=holderOf(values.components.editInstance(values.components.at(index)->instanceId()));
+      if(!holder||*holder.material!=material.guid) continue;
+      applyMaterial(holder,material);changed=true;
     }
     // A cópia faz parte da transação do recurso; desfazer o recurso repete-a.
     if(changed) document_.applyEntityValues(id,values);
@@ -60,12 +86,12 @@ void EditorSession::synchronizePhysicsMaterial(const resources::PhysicsMaterialA
 }
 
 resources::AssetGuid EditorSession::createPhysicsMaterial(EditorEntityId id,u64 instance,std::string &diagnostic) {
-  diagnostic.clear();const auto *entity=document_.find(id);const auto *body=physicsBodyOf(entity,instance);
-  if(isPlaying()||history_.isOpen()||!body) {diagnostic="Corpo físico indisponível.";return {};}
+  diagnostic.clear();const auto *entity=document_.find(id);
+  const auto source=holderOf(entity?entity->components.findInstance(instance):nullptr);
+  if(isPlaying()||history_.isOpen()||!source) {diagnostic="Corpo ou colisor indisponível.";return {};}
   if(files_.rootPath().empty()) {diagnostic="Materiais físicos precisam de um projeto aberto.";return {};}
   resources::PhysicsMaterialAsset material;material.name=entity->name[0]?entity->name:"Material físico";
-  material.friction=body->friction;material.restitution=body->restitution;
-  material.frictionCombine=body->frictionCombine;material.restitutionCombine=body->restitutionCombine;
+  readMaterial(source,material);
   std::string stem;for(unsigned char c:material.name)
     stem.push_back(c<32||c==127||c=='/'||c=='\\'||c==':'||c=='"'?'_':static_cast<char>(c));
   if(stem.empty()||stem=="."||stem=="..") stem="Material físico";
@@ -78,9 +104,9 @@ resources::AssetGuid EditorSession::createPhysicsMaterial(EditorEntityId id,u64 
   record.guid=material.guid;record.type=resources::AssetType::PhysicsMaterial;record.path=path;
   record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(text.data()),text.size()));
   auto nextAssets=assets_;if(!nextAssets.add(record)) {diagnostic="O registro recusou o material.";return {};}
-  auto values=*entity;auto *editable=static_cast<scene::PhysicsBody*>(values.components.editInstance(instance));
-  if(!editable) {diagnostic="O corpo mudou durante a criação.";return {};}
-  editable->material=material.guid;
+  auto values=*entity;const auto editable=holderOf(values.components.editInstance(instance));
+  if(!editable) {diagnostic="O componente mudou durante a criação.";return {};}
+  *editable.material=material.guid;if(editable.own) *editable.own=true;
   auto stagedDocument=document_;auto stagedHistory=history_;
   if(!stagedHistory.applyValues(stagedDocument,id,values)) {diagnostic="O histórico recusou o vínculo do material.";return {};}
   // Toda a mutação autoral é validada antes de o arquivo existir.
@@ -94,13 +120,44 @@ resources::AssetGuid EditorSession::createPhysicsMaterial(EditorEntityId id,u64 
 }
 
 bool EditorSession::updatePhysicsMaterial(EditorEntityId id,u64 instance,std::string &diagnostic) {
-  const auto *body=physicsBodyOf(document_.find(id),instance);
-  const auto *current=body?findPhysicsMaterial(body->material):nullptr;
-  if(!body||!current) {diagnostic="Escolha ou crie um material antes de atualizá-lo.";return false;}
-  auto candidate=*current;candidate.friction=body->friction;candidate.restitution=body->restitution;
-  candidate.frictionCombine=body->frictionCombine;candidate.restitutionCombine=body->restitutionCombine;++candidate.revision;
+  const auto *entity=document_.find(id);
+  const auto source=holderOf(entity?entity->components.findInstance(instance):nullptr);
+  const auto *current=source?findPhysicsMaterial(*source.material):nullptr;
+  if(!source||!current) {diagnostic="Escolha ou crie um material antes de atualizá-lo.";return false;}
+  auto candidate=*current;readMaterial(source,candidate);++candidate.revision;
   if(!commitPhysicsMaterial(candidate,diagnostic,true)) return false;
   diagnostic="Material físico compartilhado atualizado: "+candidate.name;return true;
+}
+
+bool EditorSession::openPhysicsMaterialInspector(const resources::AssetGuid &guid) {
+  const auto *material=findPhysicsMaterial(guid);const auto *record=assets_.find(guid);
+  if(!material||!record) return false;
+  state_.materialInspector={};state_.environmentInspector={};state_.profileInspector={};
+  state_.physicsMaterialInspector=guid;state_.physicsMaterialView=*material;state_.physicsMaterialPath=record->path;
+  u32 users=0;std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) if(const auto *entity=document_.find(id))
+    for(usize i=0;i<entity->components.size();++i) {
+      const auto holder=holderOf(entity->components.at(i));
+      users+=holder&&*holder.material==guid&&(!holder.own||*holder.own);
+    }
+  state_.physicsMaterialUsers=users;state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
+  return true;
+}
+
+bool EditorSession::stepPhysicsMaterial(u32 field,bool up) {
+  const auto *current=findPhysicsMaterial(state_.physicsMaterialInspector);
+  if(!current||field>4) return false;
+  auto candidate=*current;++candidate.revision;
+  const auto cycle=[&](u32 &value,u32 count){value=up?(value+1)%count:(value+count-1)%count;};
+  const auto nudge=[&](float &value){value=std::clamp(std::round((value+(up?.05f:-.05f))*100.f)/100.f,0.f,1.f);};
+  if(field==0) nudge(candidate.friction);
+  else if(field==1) cycle(candidate.frictionCombine,5);
+  else if(field==2) nudge(candidate.restitution);
+  else if(field==3) cycle(candidate.restitutionCombine,5);
+  else cycle(candidate.surface,scene::kPhysicsSurfaceCount);
+  std::string diagnostic;
+  if(!commitPhysicsMaterial(candidate,diagnostic,true)) {state_.status=diagnostic.empty()?"Material físico recusado":diagnostic;return false;}
+  return openPhysicsMaterialInspector(candidate.guid);
 }
 
 bool EditorSession::commitPhysicsMaterial(const resources::PhysicsMaterialAsset &candidate,std::string &diagnostic,bool recordHistory) {

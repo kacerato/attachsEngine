@@ -837,17 +837,16 @@
       "dependencias": "Forma independente da mesh; corpo estático implícito ou relação explícita definida",
       "trabalho_original": "Ampliar Collider",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "implementada_aguarda_aceite",
       "evidencias": [
         "native/scene/collider.h",
-        "tests/native/test_collider_handles.cpp"
+        "tests/native/test_collider_handles.cpp",
+        "tests/native/test_physics_material.cpp"
       ],
-      "lacunas": [
-        "Material fica no corpo (um colisor por corpo); layers/masks por colisor ausentes."
-      ],
+      "lacunas": [],
       "aceite": {},
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Camada de colisão vale por corpo (adaptação explícita: o Jolt filtra por corpo)."
       ]
     },
     {
@@ -882,14 +881,17 @@
       "dependencias": "Agregação em corpo proprietário; remover filho invalida composição",
       "trabalho_original": "P07a",
       "escopo": "obrigatorio",
-      "estado": "ausente",
-      "evidencias": [],
-      "lacunas": [
-        "Colisores em filhos não formam corpo composto do pai; cada colisor exige corpo próprio (bloco F)."
+      "estado": "implementada_aguarda_aceite",
+      "evidencias": [
+        "native/runtime/scene_physics.cpp",
+        "native/scene/collider.h",
+        "tests/native/test_physics_material.cpp",
+        "docs/planos/MATERIAL-FISICO-2026-10-06.md"
       ],
+      "lacunas": [],
       "aceite": {},
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "A reconciliação de 06/10 marcou ausente por engano: colisores em filhos com owner já formavam corpo composto. Material por parte validado no host em 07/10; aparelho pendente."
       ]
     },
     {
@@ -901,20 +903,18 @@
       "dependencias": "Propriedade suportada no backend; compartilhado/override explícito",
       "trabalho_original": "P07a",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "implementada_aguarda_aceite",
       "evidencias": [
         "docs/planos/MATERIAL-FISICO-2026-10-06.md",
         "native/resources/physics_material.cpp",
         "tests/native/test_physics_material.cpp",
-        "docs/validacao/evidencias/physics-material-20261006/aparelho-logcat.txt"
+        "docs/validacao/evidencias/physics-material-20261006/aparelho-logcat.txt",
+        "docs/validacao/evidencias/physics-material-20261006/physics-material-asset-853.png"
       ],
-      "lacunas": [
-        "Material por colisor de corpo composto depende de F038.",
-        "Dados de superfície (tags) e edição direta do recurso em Propriedades pendentes."
-      ],
+      "lacunas": [],
       "aceite": {},
       "limites_validacao": [
-        "Aceite no aparelho em 06/10/2026 com dois corpos; sem malha visível."
+        "Material no corpo aceito no aparelho em 06/10; material por forma, superfície e edição em Propriedades validados no host em 07/10, aparelho pendente."
       ]
     },
     {

@@ -79,6 +79,18 @@
           "default": {
             "cpp": "false"
           }
+        },
+        {
+          "id": "own_material",
+          "label": "Material próprio",
+          "member": "ownMaterial",
+          "presentation": {
+            "group": "Material",
+            "help": "Esta forma usa atrito, restituição e superfície próprios em vez dos do corpo"
+          },
+          "default": {
+            "cpp": "false"
+          }
         }
       ],
       "defaults": {
@@ -437,6 +449,60 @@
           "default": {
             "cpp": "5.f"
           }
+        },
+        {
+          "id": "friction",
+          "label": "Atrito",
+          "member": "friction",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "help": {
+              "cpp": "\"Usado por esta forma quando Material próprio está ligado\""
+            },
+            "visible": {
+              "cpp": "colliderOwnMaterial"
+            }
+          },
+          "default": {
+            "cpp": ".5f"
+          }
+        },
+        {
+          "id": "restitution",
+          "label": "Restituição",
+          "member": "restitution",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "help": {
+              "cpp": "nullptr"
+            },
+            "visible": {
+              "cpp": "colliderOwnMaterial"
+            }
+          },
+          "default": {
+            "cpp": "0"
+          }
         }
       ],
       "defaults": {
@@ -457,6 +523,36 @@
           "options": "colliderShapeOptions",
           "presentation": {
             "group": "Forma"
+          }
+        },
+        {
+          "id": "friction_combine",
+          "label": "Combinar atrito",
+          "type": "Collider",
+          "member": "frictionCombine",
+          "options": "physicsCombineOptions",
+          "presentation": {
+            "group": "Material"
+          }
+        },
+        {
+          "id": "restitution_combine",
+          "label": "Combinar restituição",
+          "type": "Collider",
+          "member": "restitutionCombine",
+          "options": "physicsCombineOptions",
+          "presentation": {
+            "group": "Material"
+          }
+        },
+        {
+          "id": "surface",
+          "label": "Superfície",
+          "type": "Collider",
+          "member": "surface",
+          "options": "physicsSurfaceOptions",
+          "presentation": {
+            "group": "Material"
           }
         }
       ]
@@ -539,6 +635,15 @@
       "type": "Collider",
       "properties": [
         "colliderBooleans/mesh_local_pose"
+      ]
+    },
+    {
+      "name": "collider_Collider_fields10",
+      "type": "Collider",
+      "properties": [
+        "colliderNumbers/friction",
+        "colliderNumbers/restitution",
+        "colliderBooleans/own_material"
       ]
     }
   ]

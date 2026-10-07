@@ -78,6 +78,9 @@
 #include <vector>
 
 namespace ae::editor {
+// Copia atrito, restituição, combinação e superfície do recurso para o corpo
+// ou colisor; falso para outro tipo de componente.
+bool applyPhysicsMaterialCopy(scene::ComponentValue &component,const resources::PhysicsMaterialAsset &material);
 
 enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName, Gui };
 struct EditorTextEdit {
@@ -843,7 +846,7 @@ public:
   resources::AssetGuid createEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   bool updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   // Material físico (editor_physics_materials.cpp): mesmo modelo do perfil de
-  // ambiente; o corpo guarda a cópia e o GUID.
+  // ambiente; o corpo ou o colisor com material próprio guarda a cópia e o GUID.
   const std::vector<resources::PhysicsMaterialAsset> &physicsMaterials() const {return physicsMaterials_;}
   const resources::PhysicsMaterialAsset *findPhysicsMaterial(const resources::AssetGuid &guid) const {
     for(const auto &material:physicsMaterials_) if(material.guid==guid) return &material;
@@ -851,6 +854,9 @@ public:
   }
   resources::AssetGuid createPhysicsMaterial(EditorEntityId id,u64 instance,std::string &diagnostic);
   bool updatePhysicsMaterial(EditorEntityId id,u64 instance,std::string &diagnostic);
+  // Abre o recurso em Propriedades; cada passo grava pelo histórico do recurso.
+  bool openPhysicsMaterialInspector(const resources::AssetGuid &guid);
+  bool stepPhysicsMaterial(u32 field,bool up);
   // Liga o slot a um material do projeto; identidade inválida volta à fonte.
   bool assignSlotMaterial(EditorEntityId id,u32 slot,const resources::AssetGuid &material);
   bool repairComponentResource(EditorEntityId id,u64 instance,resources::AssetGuid from,resources::AssetGuid to,

@@ -1154,7 +1154,7 @@ Força e torque contínuos sobre corpo dinâmico. **Consumidor:** runtime/scene_
 | `relative_torque_z` | Torque local Z | número | Torque local | 0 | -10000000 … 10000000 | N·m | runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt | nada | não | não | não |
 | `enabled` | Ativo | booleano | Força mundo | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt | nada | não | não | não |
 
-## Corpo físico · `astra.physics.body` v5
+## Corpo físico · `astra.physics.body` v6
 
 Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **Invalida:** corpo físico.
 
@@ -1203,6 +1203,7 @@ Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **
 | `motion` | Movimento | enumeração | Corpo | Estático | Estático \| Cinemático \| Dinâmico |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `friction_combine` | Combinar atrito | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `restitution_combine` | Combinar restituição | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `surface` | Superfície | enumeração | Material | Padrão | Padrão \| Concreto \| Madeira \| Metal \| Grama \| Terra \| Areia \| Água \| Gelo \| Borracha \| Vidro \| Tecido \| Pedra |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 
 ## Personagem · `astra.physics.character` v4
 
@@ -1231,7 +1232,7 @@ Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → Characte
 | `gravity` | Gravidade | número | Locomoção | 9.81 | 0 … 1000 | m/s² | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 | `inherit_platform_horizontal` | Impulso ao sair | booleano | Chão | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → CharacterVirtual | forma física, corpo físico | não | não | não |
 
-## Colisor 3D · `astra.physics.collider` v8
+## Colisor 3D · `astra.physics.collider` v9
 
 Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. **Invalida:** forma física.
 
@@ -1248,6 +1249,7 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
 |---|---|---|---|---|---|
 | `collision_mesh` | Malha de colisão | mesh | sim | não | não |
+| `material` | Material físico | physics_material | não | não | não |
 
 **Propriedades**
 
@@ -1266,12 +1268,18 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | `rotation_z` | Rotação local Z | número | Pose | 0 | -10000000 … 10000000 | ° | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `hull_tolerance` | Tolerância do casco | número | Cozimento | 0.001 | 0.00001 … 1 | u | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `active_edge_angle` | Ângulo de aresta ativa | número | Cozimento | 5 | 0 … 90 | ° | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
+| `friction` | Atrito | número | Material | 0.5 | 0 … 1 |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
+| `restitution` | Restituição | número | Material | 0 | 0 … 1 |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `enabled` | Ativo | booleano |  | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 | `convex` | Convexo | booleano | Forma | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `weld_vertices` | Soldar vértices iguais | booleano | Cozimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `optimize_cooking` | Otimizar para o jogo | booleano | Cozimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
 | `mesh_local_pose` | Pose local da malha | booleano | Forma | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não | não |
+| `own_material` | Material próprio | booleano | Material | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 | `shape` | Forma | enumeração | Forma | Caixa | Caixa \| Esfera \| Cápsula \| Malha \| Cilindro |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
+| `friction_combine` | Combinar atrito | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
+| `restitution_combine` | Combinar restituição | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
+| `surface` | Superfície | enumeração | Material | Padrão | Padrão \| Concreto \| Madeira \| Metal \| Grama \| Terra \| Areia \| Água \| Gelo \| Borracha \| Vidro \| Tecido \| Pedra |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 | `owner` | Corpo proprietário | referência | Vínculo | Neste objeto | astra.physics.body · neste objeto ou ancestral |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não | não |
 
 **Eventos em Play**

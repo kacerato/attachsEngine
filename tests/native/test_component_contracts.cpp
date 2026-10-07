@@ -79,10 +79,12 @@ AE_TEST(component_matrix_reports_default_domain_and_invalidation) {
   const auto *shape = findContract(rows, "astra.physics.collider", "shape");
   AE_EXPECT_TRUE(shape && shape->kind == scene::PropertyKind::Enum, "forma é enumeração");
   AE_EXPECT_EQ(shape->defaultValue, std::string("Caixa"), "o padrão enumerado vem pelo nome da opção");
-  AE_EXPECT_TRUE(scene::Collider::descriptor.resourceBindings.size()==1 &&
+  AE_EXPECT_TRUE(scene::Collider::descriptor.resourceBindings.size()==2 &&
                      scene::Collider::descriptor.resourceBindings[0].id=="collision_mesh" &&
-                     scene::Collider::descriptor.resourceBindings[0].kind==resources::AssetType::Mesh,
-                 "o colisor publica a malha física como binding de recurso tipado");
+                     scene::Collider::descriptor.resourceBindings[0].kind==resources::AssetType::Mesh &&
+                     scene::Collider::descriptor.resourceBindings[1].id=="material" &&
+                     scene::Collider::descriptor.resourceBindings[1].kind==resources::AssetType::PhysicsMaterial,
+                 "o colisor publica a malha física e o material físico como bindings de recurso tipados");
   const auto *hullTolerance=findContract(rows,"astra.physics.collider","hull_tolerance");
   const auto *activeEdge=findContract(rows,"astra.physics.collider","active_edge_angle");
   const auto *weld=findContract(rows,"astra.physics.collider","weld_vertices");

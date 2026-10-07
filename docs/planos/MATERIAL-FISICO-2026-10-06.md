@@ -1,6 +1,6 @@
 # Material físico (bloco F, F039)
 
-Recurso do projeto `physics_material` (arquivo `.physmat`), vinculado ao Corpo físico (`astra.physics.body` v5, binding `material`).
+Recurso do projeto `physics_material` (arquivo `.physmat`, formato 2), vinculado ao Corpo físico (`astra.physics.body` v6) e, como material próprio da forma, ao Colisor 3D (`astra.physics.collider` v9).
 
 Referências: Godot 4.5 [PhysicsMaterial](https://docs.godotengine.org/en/4.5/classes/class_physicsmaterial.html), atribuído ao corpo (`physics_material_override`); Unity 6000.0 [PhysicsMaterial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-PhysicsMaterial.html) para os modos de combinação e a precedência.
 
@@ -10,9 +10,19 @@ Referências: Godot 4.5 [PhysicsMaterial](https://docs.godotengine.org/en/4.5/cl
 |---|---|---|
 | `friction`, `restitution` | Recurso e cópia no corpo | Valores do contato no Jolt (`mFriction`, `mRestitution`) |
 | `friction_combine`, `restitution_combine` | Recurso e cópia no corpo | 0 padrão do motor, 1 média, 2 mínimo, 3 multiplicar, 4 máximo |
-| `material` | Corpo | GUID do recurso; vazio = valores só deste corpo |
+| `surface` | Recurso e cópia | Tipo de superfície (Padrão, Concreto, Madeira, Metal, Grama, Terra, Areia, Água, Gelo, Borracha, Vidro, Tecido, Pedra), lido por scripts |
+| `material` | Corpo ou colisor | GUID do recurso; vazio = valores só deste componente |
+| `own_material` | Colisor | Liga o material próprio da forma; desligado, a forma usa o do corpo |
 
 Num par de corpos vale o modo de maior precedência (máximo > multiplicar > mínimo > média), como na Unity. Com os dois em "Padrão do motor" o contato mantém a combinação do Jolt (atrito pela média geométrica, restituição pelo maior valor), o que preserva cenas antigas. A regra é `AetherCombinePhysicsMaterial` (`native/physics/jolt_bridge.h`), aplicada por par no `ContactListener` do bridge (`OnContactAdded/Persisted` → `ContactSettings::mCombinedFriction/Restitution`).
+
+## Material por forma
+
+Um corpo composto (colisores em filhos que apontam o corpo por `owner`, até 256 partes) pode ter partes com material próprio. O Play envia uma tabela por parte (`AetherPhysics_SetBodyPartMaterialsV1`, na ordem das partes); no contato, o bridge identifica a parte tocada por `Shape::GetSubShapeUserData(SubShapeID)` e usa os valores dela, senão os do corpo. Equivale ao `collider.sharedMaterial` da Unity por forma.
+
+## Superfície para scripts
+
+`PhysicsSurfaces` (C#): `hit.Surface()` num `RayHit` devolve a superfície da forma com material próprio, senão a do corpo; `PhysicsSurfaces.Of(objeto)` lê a do corpo. Uso típico: escolher som de passo ou partícula pelo que foi atingido.
 
 ## Modelo de dados
 
@@ -23,17 +33,23 @@ Mesmo modelo do Perfil de ambiente: o corpo guarda a cópia dos valores e o GUID
 - Aba Material do Corpo físico: material, atrito, combinar atrito, restituição, combinar restituição (nesta ordem).
 - Seletor do material: "Criar material com os valores deste corpo" (grava `Física/<nome>.physmat` e o registro juntos, liga o corpo) ou, com material escolhido, "Atualizar material com os valores deste corpo", que sincroniza todos os corpos que o usam. Escolher um material copia os valores para o corpo na mesma transação.
 - Atualizar o recurso entra no histórico: Desfazer volta o arquivo, o registro e as cópias.
+- Aba Material também no Colisor: Material próprio, material, atrito, combinação, restituição, combinação e superfície.
+- O `.physmat` aberto em Arquivos edita o recurso em Propriedades (atrito, restituição, combinações e superfície com −/+); cada passo grava arquivo e registro, sincroniza todos os usuários e entra no Desfazer. No telefone, rótulo e controles ficam em linhas separadas.
 - Ícone novo `physics/material` no atlas.
 
 ## Diferenças
 
 | Aspecto | Astra | Classificação |
 |---|---|---|
-| Onde o material mora | No corpo | Equivalente ao Godot; adaptação em relação à Unity (no colisor), porque hoje cada colisor exige corpo próprio |
+| Onde o material mora | No corpo (Godot) e, opcionalmente, em cada forma (Unity) | Equivalente |
 | Atrito estático e dinâmico | Um atrito só | Adaptação explícita: o Jolt tem um coeficiente |
-| Material por colisor de um corpo composto | Não | Pendente com a composição de colisores (F038) |
-| Dados de superfície (tag para som de passos, etc.) | Não | Pendente |
-| Edição direta do `.physmat` em Propriedades | Não: edita-se pelo corpo e "Atualizar" | Pendente |
+| Dados de superfície | Lista fixa de 13 tipos | Adaptação explícita: nem Unity nem Godot têm o campo; a lista é contrato de cena e só cresce no fim |
+| Camada de colisão por forma | A camada do corpo vale para todas as formas | Adaptação explícita: o Jolt filtra por corpo |
+
+## Validação executada (07/10/2026, material por forma)
+
+- Host: `physics_material_per_collider_part_*` (chão composto: a parte com material próprio Máximo faz quicar acima de 1 m, a outra parte do mesmo corpo fica abaixo de 0,5 m), `collider_v8_body_v5_and_material_v1_*` (leituras antigas sem material/superfície), `physics_material_on_a_collider_*` (criar a partir da forma liga o material próprio; escolher copia a superfície; atualizar sincroniza), `physics_material_file_opens_in_properties_*` (toque real no −/+ grava recurso e corpo; Desfazer). Suíte 1425/1429 (4 falhas anteriores à branch); C# 521/521.
+- Aparelho: pendente nesta rodada (ADB desconectou).
 
 ## Validação executada (06/10/2026)
 

@@ -3633,6 +3633,28 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
         get => (RestitutionCombineOption)Component.GetEnum("restitution_combine");
         set => Component.SetEnum("restitution_combine", (uint)value);
     }
+    public enum SurfaceOption : uint
+    {
+        Padrao = 0,
+        Concreto = 1,
+        Madeira = 2,
+        Metal = 3,
+        Grama = 4,
+        Terra = 5,
+        Areia = 6,
+        Agua = 7,
+        Gelo = 8,
+        Borracha = 9,
+        Vidro = 10,
+        Tecido = 11,
+        Pedra = 12,
+    }
+    /// <summary>Superfície. Tipo de superfície lido por scripts no acerto e no contato (passos, faíscas, sons)</summary>
+    public SurfaceOption Surface
+    {
+        get => (SurfaceOption)Component.GetEnum("surface");
+        set => Component.SetEnum("surface", (uint)value);
+    }
     /// <summary>Material físico. Recurso do projeto por slot</summary>
     public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
     public void SetMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("material", value, slot);
@@ -3789,6 +3811,20 @@ public readonly struct Collider : IComponentFacade<Collider>
         get => Component.GetFloat("active_edge_angle");
         set => Component.SetFloat("active_edge_angle", value);
     }
+    /// <summary>Atrito. Usado por esta forma quando Material próprio está ligado</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Friction
+    {
+        get => Component.GetFloat("friction");
+        set => Component.SetFloat("friction", value);
+    }
+    /// <summary>Restituição</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Restitution
+    {
+        get => Component.GetFloat("restitution");
+        set => Component.SetFloat("restitution", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -3819,6 +3855,12 @@ public readonly struct Collider : IComponentFacade<Collider>
         get => Component.GetBool("mesh_local_pose");
         set => Component.SetBool("mesh_local_pose", value);
     }
+    /// <summary>Material próprio. Esta forma usa atrito, restituição e superfície próprios em vez dos do corpo</summary>
+    public bool OwnMaterial
+    {
+        get => Component.GetBool("own_material");
+        set => Component.SetBool("own_material", value);
+    }
     public enum ShapeOption : uint
     {
         Caixa = 0,
@@ -3833,6 +3875,56 @@ public readonly struct Collider : IComponentFacade<Collider>
         get => (ShapeOption)Component.GetEnum("shape");
         set => Component.SetEnum("shape", (uint)value);
     }
+    public enum FrictionCombineOption : uint
+    {
+        PadraoDoMotor = 0,
+        Media = 1,
+        Minimo = 2,
+        Multiplicar = 3,
+        Maximo = 4,
+    }
+    /// <summary>Combinar atrito</summary>
+    public FrictionCombineOption FrictionCombine
+    {
+        get => (FrictionCombineOption)Component.GetEnum("friction_combine");
+        set => Component.SetEnum("friction_combine", (uint)value);
+    }
+    public enum RestitutionCombineOption : uint
+    {
+        PadraoDoMotor = 0,
+        Media = 1,
+        Minimo = 2,
+        Multiplicar = 3,
+        Maximo = 4,
+    }
+    /// <summary>Combinar restituição</summary>
+    public RestitutionCombineOption RestitutionCombine
+    {
+        get => (RestitutionCombineOption)Component.GetEnum("restitution_combine");
+        set => Component.SetEnum("restitution_combine", (uint)value);
+    }
+    public enum SurfaceOption : uint
+    {
+        Padrao = 0,
+        Concreto = 1,
+        Madeira = 2,
+        Metal = 3,
+        Grama = 4,
+        Terra = 5,
+        Areia = 6,
+        Agua = 7,
+        Gelo = 8,
+        Borracha = 9,
+        Vidro = 10,
+        Tecido = 11,
+        Pedra = 12,
+    }
+    /// <summary>Superfície</summary>
+    public SurfaceOption Surface
+    {
+        get => (SurfaceOption)Component.GetEnum("surface");
+        set => Component.SetEnum("surface", (uint)value);
+    }
     /// <summary>Corpo proprietário</summary>
     public ObjectReference Owner
     {
@@ -3842,6 +3934,9 @@ public readonly struct Collider : IComponentFacade<Collider>
     /// <summary>Malha de colisão. Recurso do projeto por slot</summary>
     public AssetGuid GetCollisionMesh(uint slot = 0) => Component.GetResource("collision_mesh", slot);
     public void SetCollisionMesh(AssetGuid value, uint slot = 0) => Component.SetResource("collision_mesh", value, slot);
+    /// <summary>Material físico. Recurso do projeto por slot</summary>
+    public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
+    public void SetMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("material", value, slot);
     /// <summary>Sensor: entrou. Outro corpo começou a sobrepor este sensor. Payload: Outro objeto: objeto</summary>
     public ComponentSubscription OnTriggerEnter(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "trigger_enter", handler);
     /// <summary>Sensor: saiu. Outro corpo deixou de sobrepor este sensor. Payload: Outro objeto: objeto</summary>

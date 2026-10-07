@@ -20,6 +20,7 @@
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
 
+#include "resources/physics_material.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
 #include "renderer/scene_statistics.h"
@@ -393,6 +394,7 @@ enum class EditorWidget : u32 {
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
   PropertyTweenPick=0xE0000000u,PropertyTweenChoiceBase=0xE1000000u,PropertyTweenPickerClose=0xE2000000u,
+  PhysicsMaterialInspectorClose=0xE3000000u,PhysicsMaterialStepBase=0xE4000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -617,7 +619,8 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptArrayAddBase,kRange},{EditorWidget::ScriptArrayRemoveBase,kRange},{EditorWidget::GradientBase,kRange},
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
   {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange},{EditorWidget::FilesMultiToggle,kRange},
-  {EditorWidget::PropertyTweenPick,kRange},{EditorWidget::PropertyTweenChoiceBase,kRange},{EditorWidget::PropertyTweenPickerClose,kRange}};
+  {EditorWidget::PropertyTweenPick,kRange},{EditorWidget::PropertyTweenChoiceBase,kRange},{EditorWidget::PropertyTweenPickerClose,kRange},
+  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -1398,6 +1401,10 @@ struct EditorScreenState final {
   };
   resources::AssetGuid profileInspector{};
   std::string profileInspectorName,profileInspectorPath;
+  // Material físico aberto em Propriedades: cópia do recurso, caminho e usuários.
+  resources::AssetGuid physicsMaterialInspector{};
+  resources::PhysicsMaterialAsset physicsMaterialView{};
+  std::string physicsMaterialPath;u32 physicsMaterialUsers=0;
   u32 profileInspectorRevision=0,profileGroup=0,profileUse=0;
   std::vector<std::string> profileGroups;
   std::vector<ProfileRow> profileRows;

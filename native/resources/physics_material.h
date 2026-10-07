@@ -16,13 +16,15 @@ namespace ae::resources {
 // Unity 6000.0 PhysicsMaterial (combinação de atrito e quique)
 // https://docs.unity3d.com/6000.0/Documentation/Manual/class-PhysicsMaterial.html
 struct PhysicsMaterialAsset final {
-  static constexpr u32 FormatVersion = 1;
+  static constexpr u32 FormatVersion = 2;
   AssetGuid guid{};
   u32 revision = 1;
   std::string name;
   float friction = .5f, restitution = 0;
   // 0 padrão do motor, 1 média, 2 mínimo, 3 multiplicar, 4 máximo.
   u32 frictionCombine = 0, restitutionCombine = 0;
+  // Tipo de superfície (scene::physicsSurfaceOptions), lido por scripts.
+  u32 surface = 0;
 
   bool valid() const;
   std::string serialize() const;

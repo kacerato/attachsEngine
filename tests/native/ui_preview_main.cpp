@@ -1638,6 +1638,17 @@ int main(int argc, char **argv) {
     selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Material";
     state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
     if(mode=="physics-material-picker"){state.meshPicker=true;state.resourceInstance=instance;state.resourceProperty="material";state.resourceSlot=0;}
+    if(mode=="physics-material-collider") {
+      auto values=*document.find(id);auto *own=static_cast<scene::Collider*>(values.components.edit(scene::Collider::descriptor));
+      own->ownMaterial=true;own->friction=.05f;own->restitution=.1f;own->surface=8;own->frictionCombine=2;
+      document.applyEntityValues(id,values);state.expandedNative=own->instanceId();
+    }
+    if(mode=="physics-material-asset") {
+      state.physicsMaterialInspector=resources::assetGuidFromSeed("borracha");state.physicsMaterialView.guid=state.physicsMaterialInspector;
+      state.physicsMaterialView.name="Borracha";state.physicsMaterialView.revision=3;state.physicsMaterialView.friction=.9f;
+      state.physicsMaterialView.restitution=.85f;state.physicsMaterialView.restitutionCombine=4;state.physicsMaterialView.surface=9;
+      state.physicsMaterialPath="Física/Borracha.physmat";state.physicsMaterialUsers=2;
+    }
   }
   // Sequência de tweens: porta abre, depois luz e placa juntas após um intervalo.
   if(argc>4 && std::string(argv[4]).starts_with("tween-sequence")) {

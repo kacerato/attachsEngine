@@ -5985,3 +5985,54 @@ AE_TEST(property_tween_picker_lists_tweenable_properties_and_records_the_choice)
   AE_EXPECT_TRUE(f.session.history().undo(doc),"desfazer a escolha");
   AE_EXPECT_TRUE(static_cast<const scene::PropertyTween*>(doc.find(id)->components.findInstance(instance))->property.empty(),"desfazer limpa a propriedade");
 }
+
+// Material físico num colisor: material próprio da forma, criado, escolhido e
+// sincronizado pelo mesmo fluxo do corpo, com a superfície na cópia.
+AE_TEST(physics_material_on_a_collider_turns_on_its_own_material_and_synchronizes) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();
+  const auto root=fs::temp_directory_path()/("aether-physmat-col-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Gelo");auto value=*doc.find(id);
+  value.components.add(scene::PhysicsBody::descriptor);
+  auto *shape=static_cast<scene::Collider*>(value.components.add(scene::Collider::descriptor));
+  shape->friction=.02f;shape->surface=8;const auto first=shape->instanceId();
+  auto *second=static_cast<scene::Collider*>(value.components.add(scene::Collider::descriptor));const auto other=second->instanceId();
+  doc.applyEntityValues(id,value);
+  const auto read=[&](u64 instance){return static_cast<const scene::Collider*>(doc.find(id)->components.findInstance(instance));};
+  std::string diagnostic;const auto guid=f.session.createPhysicsMaterial(id,first,diagnostic);
+  AE_EXPECT_TRUE(guid.valid()&&read(first)->material==guid&&read(first)->ownMaterial,diagnostic.c_str());
+  AE_EXPECT_TRUE(f.session.findPhysicsMaterial(guid)->surface==8&&f.session.findPhysicsMaterial(guid)->friction==.02f,"recurso nasce dos valores da forma");
+  EditorActionRequest request;request.version=f.session.sceneVersion();request.entity=id;
+  request.action=EditorAction::ComponentResource;request.componentInstance=other;request.componentProperty="material";request.componentResource=guid;
+  AE_EXPECT_TRUE(f.session.dispatch(request).status==EditorActionStatus::Applied,"segunda forma escolhe o material");
+  AE_EXPECT_TRUE(read(other)->ownMaterial&&read(other)->surface==8&&read(other)->friction==.02f,"escolher liga o material próprio e copia a superfície");
+  auto edited=*doc.find(id);static_cast<scene::Collider*>(edited.components.editInstance(first))->surface=12;doc.applyEntityValues(id,edited);
+  AE_EXPECT_TRUE(f.session.updatePhysicsMaterial(id,first,diagnostic)&&read(other)->surface==12,"atualizar sincroniza a outra forma");
+}
+
+// O .physmat aberto em Arquivos edita o recurso em Propriedades: cada passo
+// grava o arquivo, sincroniza os usuários e entra no Desfazer.
+AE_TEST(physics_material_file_opens_in_properties_and_edits_the_shared_resource) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();
+  const auto root=fs::temp_directory_path()/("aether-physmat-props-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Rampa");auto value=*doc.find(id);
+  auto *body=static_cast<scene::PhysicsBody*>(value.components.add(scene::PhysicsBody::descriptor));body->friction=.4f;const auto instance=body->instanceId();
+  value.components.add(scene::Collider::descriptor);doc.applyEntityValues(id,value);
+  std::string diagnostic;const auto guid=f.session.createPhysicsMaterial(id,instance,diagnostic);
+  AE_EXPECT_TRUE(guid.valid(),diagnostic.c_str());
+  const std::string path=f.session.assets().find(guid)->path;
+  EditorFileEntry file;file.relativePath=path;file.name=path.substr(path.rfind('/')+1);
+  f.session.openProjectFile(file);f.session.history().clear();f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().physicsMaterialInspector==guid&&f.session.screen().physicsMaterialUsers==1,"recurso em Propriedades com um usuário");
+  tapWidget(f,widgetId(EditorWidget::PhysicsMaterialStepBase)+1);
+  const auto bodyFriction=[&]{return static_cast<const scene::PhysicsBody*>(doc.find(id)->components.findInstance(instance))->friction;};
+  AE_EXPECT_TRUE(std::abs(f.session.findPhysicsMaterial(guid)->friction-.45f)<1e-5f&&std::abs(bodyFriction()-.45f)<1e-5f,"+ no atrito grava o recurso e o corpo");
+  tapWidget(f,widgetId(EditorWidget::PhysicsMaterialStepBase)+9);
+  AE_EXPECT_EQ(f.session.findPhysicsMaterial(guid)->surface,1u,"superfície avança pelas opções");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&f.session.findPhysicsMaterial(guid)->surface==0,"desfazer volta a superfície");
+}

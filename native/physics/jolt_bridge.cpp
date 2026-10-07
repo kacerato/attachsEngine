@@ -365,6 +365,11 @@ public:
     if (friction == 0 && restitution == 0) mCombine.erase(body);
     else mCombine[body] = {friction, restitution};
   }
+  void SetPartMaterials(AetherBodyHandle body, std::vector<AetherPartMaterialV1> parts) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    if (parts.empty()) mParts.erase(body);
+    else mParts[body] = std::move(parts);
+  }
 
   void BeginStep() {
     std::lock_guard<std::mutex> lock(mMutex);
@@ -419,7 +424,7 @@ public:
                       const JPH::ContactManifold &manifold,
                       JPH::ContactSettings &settings) override {
     std::lock_guard<std::mutex> lock(mMutex);
-    ApplyMaterialCombine(body1, body2, settings);
+    ApplyMaterialCombine(body1, body2, manifold, settings);
     const JPH::SubShapeIDPair subPair(body1.GetID(), manifold.mSubShapeID1,
                                       body2.GetID(), manifold.mSubShapeID2);
     if (mActiveSubShapes.find(subPair) != mActiveSubShapes.end()) return;
@@ -435,7 +440,7 @@ public:
                           const JPH::ContactManifold &manifold,
                           JPH::ContactSettings &settings) override {
     std::lock_guard<std::mutex> lock(mMutex);
-    ApplyMaterialCombine(body1, body2, settings);
+    ApplyMaterialCombine(body1, body2, manifold, settings);
     const JPH::SubShapeIDPair subPair(body1.GetID(), manifold.mSubShapeID1,
                                       body2.GetID(), manifold.mSubShapeID2);
     auto it = mActiveSubShapes.find(subPair);
@@ -509,15 +514,30 @@ private:
   };
 
   struct MaterialCombine { ae::u32 friction = 0, restitution = 0; };
-  void ApplyMaterialCombine(const JPH::Body &a, const JPH::Body &b, JPH::ContactSettings &settings) const {
-    if (mCombine.empty()) return;
-    const auto ia = mCombine.find(a.GetID().GetIndexAndSequenceNumber());
-    const auto ib = mCombine.find(b.GetID().GetIndexAndSequenceNumber());
-    if (ia == mCombine.end() && ib == mCombine.end()) return;
-    const MaterialCombine ca = ia == mCombine.end() ? MaterialCombine{} : ia->second;
-    const MaterialCombine cb = ib == mCombine.end() ? MaterialCombine{} : ib->second;
-    settings.mCombinedFriction = AetherCombinePhysicsMaterial(ca.friction, cb.friction, a.GetFriction(), b.GetFriction(), true);
-    settings.mCombinedRestitution = AetherCombinePhysicsMaterial(ca.restitution, cb.restitution, a.GetRestitution(), b.GetRestitution(), false);
+  struct Surface { float friction, restitution; ae::u32 frictionCombine, restitutionCombine; bool registered; };
+  // Valores do lado do contato: o material próprio da parte tocada, senão o do corpo.
+  Surface SideOf(const JPH::Body &body, const JPH::SubShapeID &part) const {
+    const AetherBodyHandle handle = body.GetID().GetIndexAndSequenceNumber();
+    Surface side{body.GetFriction(), body.GetRestitution(), 0, 0, false};
+    if (const auto it = mCombine.find(handle); it != mCombine.end()) {
+      side.frictionCombine = it->second.friction; side.restitutionCombine = it->second.restitution; side.registered = true;
+    }
+    if (const auto it = mParts.find(handle); it != mParts.end()) {
+      const ae::u64 index = body.GetShape()->GetSubShapeUserData(part);
+      if (index < it->second.size() && it->second[index].overrides) {
+        const auto &own = it->second[index];
+        side = {own.friction, own.restitution, own.frictionCombine, own.restitutionCombine, true};
+      }
+    }
+    return side;
+  }
+  void ApplyMaterialCombine(const JPH::Body &a, const JPH::Body &b, const JPH::ContactManifold &manifold,
+                            JPH::ContactSettings &settings) const {
+    if (mCombine.empty() && mParts.empty()) return;
+    const Surface sa = SideOf(a, manifold.mSubShapeID1), sb = SideOf(b, manifold.mSubShapeID2);
+    if (!sa.registered && !sb.registered) return;
+    settings.mCombinedFriction = AetherCombinePhysicsMaterial(sa.frictionCombine, sb.frictionCombine, sa.friction, sb.friction, true);
+    settings.mCombinedRestitution = AetherCombinePhysicsMaterial(sa.restitutionCombine, sb.restitutionCombine, sa.restitution, sb.restitution, false);
   }
 
   static ae::u32 LayerBit(JPH::ObjectLayer layer) {
@@ -599,6 +619,7 @@ private:
   std::mutex mMutex;
   std::map<AetherBodyHandle, ae::u32> mSensorMasks;
   std::map<AetherBodyHandle, MaterialCombine> mCombine;
+  std::map<AetherBodyHandle, std::vector<AetherPartMaterialV1>> mParts;
   std::map<JPH::SubShapeIDPair, ActiveSubShape> mActiveSubShapes;
   std::map<DirectedPair, ae::u32> mActivePairCounts;
   std::vector<AetherTriggerEvent> mPendingEvents;
@@ -1137,6 +1158,7 @@ void AetherPhysics_DestroyBodies(AetherPhysicsWorld *world,
     const JPH::BodyID id(handles[i]);
     if (bodyInterface.IsSensor(id)) world->triggerListener.UnregisterSensor(handles[i]);
     world->triggerListener.SetMaterialCombine(handles[i], 0, 0);
+    world->triggerListener.SetPartMaterials(handles[i], {});
     ids.push_back(id);
   }
   if (ids.empty()) return;
@@ -1191,6 +1213,19 @@ ae::i32 AetherPhysics_SetBodyMaterialCombineV1(AetherPhysicsWorld *world, Aether
   if (world == nullptr || body == AetherBodyHandle_Invalid || friction > 4 || restitution > 4) return 0;
   if (!world->physicsSystem.GetBodyInterface().IsAdded(JPH::BodyID(body))) return 0;
   world->triggerListener.SetMaterialCombine(body, friction, restitution);
+  return 1;
+}
+
+ae::i32 AetherPhysics_SetBodyPartMaterialsV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                            const AetherPartMaterialV1 *parts, ae::u32 count) {
+  if (world == nullptr || body == AetherBodyHandle_Invalid || (count && parts == nullptr) || count > 256) return 0;
+  if (!world->physicsSystem.GetBodyInterface().IsAdded(JPH::BodyID(body))) return 0;
+  for (ae::u32 i = 0; i < count; ++i) {
+    const auto &p = parts[i];
+    if (!std::isfinite(p.friction) || p.friction < 0 || p.friction > 1 || !std::isfinite(p.restitution) || p.restitution < 0 ||
+        p.restitution > 1 || p.frictionCombine > 4 || p.restitutionCombine > 4 || p.overrides > 1) return 0;
+  }
+  world->triggerListener.SetPartMaterials(body, std::vector<AetherPartMaterialV1>(parts, parts + count));
   return 1;
 }
 

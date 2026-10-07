@@ -219,6 +219,14 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     if((body->frictionCombine||body->restitutionCombine)&&
        !AetherPhysics_SetBodyMaterialCombineV1(world_,handle,body->frictionCombine,body->restitutionCombine))
       return fail(entity,"combinação do material físico recusada");
+    // Material próprio por forma: a tabela segue a ordem das partes criadas.
+    std::vector<AetherPartMaterialV1> partMaterials;bool ownMaterial=false;
+    for(const auto &source:found->second) {
+      const auto &c=*source.value;ownMaterial|=c.ownMaterial;
+      partMaterials.push_back({c.friction,c.restitution,c.frictionCombine,c.restitutionCombine,c.ownMaterial?1u:0u});
+    }
+    if(ownMaterial&&!AetherPhysics_SetBodyPartMaterialsV1(world_,handle,partMaterials.data(),static_cast<u32>(partMaterials.size())))
+      return fail(entity,"material próprio de forma recusado");
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
                          body->motion!=scene::BodyMotion::Static,std::move(instances),
                          {body->velocityX,body->velocityY,body->velocityZ}});
