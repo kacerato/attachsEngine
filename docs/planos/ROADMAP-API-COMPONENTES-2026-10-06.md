@@ -79,6 +79,8 @@ Componente repetível “Conexões de evento”: emissor (qualquer evento descri
 
 ### Bloco D — Composição de tempo (F010)
 
+**Estado (06/10):** implementado — ver [Sequência de tweens](SEQUENCIA-DE-TWEENS-2026-10-06.md). Etapas sobre Transform Tween; NumberTween em etapa autoral fica pendente (trilha só de script).
+
 Sequência e paralelo persistentes sobre TransformTween e NumberTween existentes: inserção, intervalos, callbacks, loop do grupo, cancelamento único. Scheduler atual, sem segundo serviço. Referência: Godot 4.5 [Tween](https://docs.godotengine.org/en/4.5/classes/class_tween.html) (`chain`/`parallel`).
 
 ### Bloco E — Reconciliação do saldo

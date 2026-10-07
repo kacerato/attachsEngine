@@ -9,6 +9,8 @@
 #include <sstream>
 #include <iomanip>
 #include "scene/event_connection.h"
+#include "scene/tween_sequence.h"
+#include "runtime/scene_tween_sequences.h"
 #include "scene/script_behavior.h"
 #include "scene/prefab_link.h"
 #include "editor/editor_water_body_component.h"
@@ -132,6 +134,7 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(entity.components.find(scene::EventConnection::descriptor))return UiIcon::ComponentEventConnection;
   if(const auto *timer=static_cast<const scene::Timer*>(entity.components.find(scene::Timer::descriptor)))
     return timer->elapsedAction!=0 ? UiIcon::EventTimeoutConnection : UiIcon::ComponentTimer;
+  if(entity.components.find(scene::TweenSequence::descriptor)) return UiIcon::ComponentTweenSequence;
   if(const auto *tween=static_cast<const scene::TransformTween*>(entity.components.find(scene::TransformTween::descriptor)))
     return tween->finishedAction!=0?UiIcon::EventTweenCompletion:UiIcon::ComponentTweenTransform;
   return iconForKind(entity.kind);
@@ -3319,6 +3322,26 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
     builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
   }
+  // Sequência: diz em que etapa está e, se parou, por quê; o motivo vem do avaliador.
+  if(entry.type==&scene::TweenSequence::descriptor&&!searching) {
+    const auto &sequence=static_cast<const scene::TweenSequence&>(*component);
+    const auto *live=state.tweenSequenceRuntime?state.tweenSequenceRuntime->state(entity.id,component->instanceId()):nullptr;
+    using S=runtime::SceneTweenSequences::Status;
+    const u32 total=sequence.stepCount();
+    std::string status;
+    if(!live) status=total==0?std::string{"Aponte a etapa 1 para um objeto com Transform Tween"}:
+      std::to_string(total)+(total==1?" etapa · ":" etapas · ")+(sequence.autoplay?"começa no Play":"aguarda Tocar");
+    else if(live->status==S::Failed) status=live->failure;
+    else {
+      status=live->paused||state.playPaused?std::string{"Pausada"}:std::string{runtime::SceneTweenSequences::statusText(live->status)};
+      if(live->status==S::Interval||live->status==S::Running) {
+        u32 position=0;for(u32 i=0;i<=live->step&&i<scene::kTweenSequenceSteps;++i) position+=sequence.steps[i].target!=0;
+        status+=" · etapa "+std::to_string(position)+" de "+std::to_string(total);
+      }
+    }
+    const bool warning=total==0||(live&&(live->status==S::Failed||live->status==S::NoSteps));
+    builder.label(takeTop(content,20),fitMiddle(builder.list,status,content.width,theme.type.caption),warning?theme.color.warning:theme.color.textDim,theme.type.caption);
+  }
   if(tween&&searching) {
     const auto *live=state.tweenRuntime?state.tweenRuntime->state(entity.id,component->instanceId()):nullptr;
     const std::string status=live?(live->paused?"Pausado":runtime::SceneTweens::statusText(live->status)):"Destino local · início em Play";
@@ -3673,6 +3696,15 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   }
   // Ação e receptor primeiro: uma ativação cabe numa página do telefone; método
   // e valor só existem quando a ação chama método e ficam na sequência.
+  // Sequência: uma linha por etapa, na ordem de execução (objeto, espera e
+  // "junto da anterior"), em vez de três listas separadas por tipo de campo.
+  if(entry.type==&scene::TweenSequence::descriptor&&!searching&&group=="Etapas") {
+    fields.clear();
+    for(u32 i=0;i<scene::kTweenSequenceSteps&&i<entry.type->references.size();++i) {
+      if(!entry.type->references[i].presentation.isVisible(*component)) continue;
+      fields.push_back({22,i,i,i>0?2+i:~u32{0}});
+    }
+  }
   if(entry.type==&scene::EventConnection::descriptor&&!searching&&group=="Então") {
     const auto rank=[&](const Field &field){
       if(field.kind==1) return entry.type->enums[field.index].id=="action"?0:2;
@@ -3946,6 +3978,39 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(editable) builder.list.addImage(centred(chevron,10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
       builder.label(deflate(box,UiInsets{8,0,0,0}),label,editable?theme.color.text:theme.color.textMuted,theme.type.caption);
       if(editable) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+    } else if(f.kind==22) {
+      const auto &reference=entry.type->references[f.index];const auto &interval=entry.type->numbers[f.slot];
+      const auto target=reference.read(*component);const bool used=target!=0;
+      const bool joined=f.second!=~u32{0}&&entry.type->booleans[f.second].read(*component);
+      if(used&&f.second!=~u32{0}) {
+        auto cell=takeRight(slot,44);const auto &join=entry.type->booleans[f.second];
+        builder.label(takeTop(cell,14),"Junto",theme.color.textDim,theme.type.caption,UiAlign::Center);
+        builder.checkbox(centred(cell,26,24),joined,widgetId(EditorWidget::ComponentBooleanBase)+index+(f.second<<8),
+                         join.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),join.id)));
+      }
+      if(used) {
+        auto cell=takeRight(slot,60);
+        builder.label(takeTop(cell,14),"Espera",theme.color.textDim,theme.type.caption,UiAlign::Center);
+        const auto box=deflate(cell,UiInsets::all(2));
+        builder.list.addRect(box,theme.color.silhouette,theme.radius.control);
+        char text[32];std::snprintf(text,sizeof(text),"%.3g s",static_cast<double>(interval.read(*component)));
+        builder.label(box,builder.mixed(multiKey(component->instanceId(),interval.id))?"â":text,theme.color.text,theme.type.caption,UiAlign::Center);
+        if(interval.presentation.isEditable(*component)) builder.router.addRegion(box,widgetId(EditorWidget::ComponentNumberBase)+index+(f.slot<<8));
+      }
+      const auto referenceHit=slot;
+      auto title=takeTop(slot,17);
+      const auto badge=takeLeft(title,18);
+      builder.list.addRect(centred(badge,16,14),joined?withAlpha(theme.color.accent,.25f):theme.color.raised,4);
+      builder.label(badge,std::to_string(f.slot+1),joined?theme.color.accent:theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.label(title,f.slot==0?"Primeira etapa":joined?"Junto da anterior":"Depois da anterior",theme.color.textMuted,theme.type.caption);
+      const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
+      const auto readiness=runtime::referenceReadiness(*builder.state.document,entity.id,*component,reference);
+      const bool warning=used&&readiness!=runtime::ReferenceReadiness::Ready&&readiness!=runtime::ReferenceReadiness::OptionalEmpty;
+      std::string label=!used?std::string{"Escolher objeto com Transform Tween"}:object?object->name:std::string{"Objeto ausente"};
+      if(used&&readiness==runtime::ReferenceReadiness::Incompatible&&object) label+=" · sem tween";
+      builder.list.addImage(centred(takeRight(slot,22),16,16),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
+      builder.label(slot,fitMiddle(builder.list,label,slot.width,theme.type.caption),warning?theme.color.warning:used?theme.color.text:theme.color.textDim,theme.type.caption);
+      if(reference.presentation.isEditable(*component)) builder.router.addRegion(referenceHit,widgetId(EditorWidget::ComponentReferenceBase)+index+(f.index<<8));
     } else if(f.kind==4||f.kind==14) {
       const auto &property=entry.type->references[f.index];const auto target=property.read(*component);
       if(f.kind==14) {

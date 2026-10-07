@@ -1613,6 +1613,12 @@
       "dark_ui_ready": true,
       "generation": "collision-recipe-v1",
       "source": "tools/generate-collision-recipe-icon.py; existing solid mark primitives"
+    },
+    "component/tween-sequence": {
+      "category": "component",
+      "name": "tween-sequence",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

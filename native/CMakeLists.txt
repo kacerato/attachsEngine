@@ -764,6 +764,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_constraints.cpp
     ../tests/native/test_bulk50.cpp
     ../tests/native/test_runtime_tweens.cpp
+    ../tests/native/test_tween_sequences.cpp
     ../tests/native/test_runtime_number_tweens.cpp
     ../tests/native/test_runtime_physics2d.cpp
     ../tests/native/test_runtime_audio.cpp

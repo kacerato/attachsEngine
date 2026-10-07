@@ -818,6 +818,222 @@ public readonly struct TransformTween : IComponentFacade<TransformTween>
     public ComponentSubscription OnCompleted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "completed", handler);
 }
 
+/// <summary>Sequência de tweens: Encadeia Transform Tweens em etapas sequenciais ou paralelas. Família Lógica · Tempo.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html</remarks>
+public readonly struct TweenSequence : IComponentFacade<TweenSequence>
+{
+    public static string TypeId => "astra.tween.sequence";
+    public static TweenSequence Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public TweenSequence(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Intervalo da etapa 1 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval0
+    {
+        get => Component.GetFloat("interval_0");
+        set => Component.SetFloat("interval_0", value);
+    }
+    /// <summary>Intervalo da etapa 2 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval1
+    {
+        get => Component.GetFloat("interval_1");
+        set => Component.SetFloat("interval_1", value);
+    }
+    /// <summary>Intervalo da etapa 3 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval2
+    {
+        get => Component.GetFloat("interval_2");
+        set => Component.SetFloat("interval_2", value);
+    }
+    /// <summary>Intervalo da etapa 4 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval3
+    {
+        get => Component.GetFloat("interval_3");
+        set => Component.SetFloat("interval_3", value);
+    }
+    /// <summary>Intervalo da etapa 5 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval4
+    {
+        get => Component.GetFloat("interval_4");
+        set => Component.SetFloat("interval_4", value);
+    }
+    /// <summary>Intervalo da etapa 6 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval5
+    {
+        get => Component.GetFloat("interval_5");
+        set => Component.SetFloat("interval_5", value);
+    }
+    /// <summary>Intervalo da etapa 7 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval6
+    {
+        get => Component.GetFloat("interval_6");
+        set => Component.SetFloat("interval_6", value);
+    }
+    /// <summary>Intervalo da etapa 8 (s). Espera antes de a etapa começar, somada à espera do próprio tween</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Interval7
+    {
+        get => Component.GetFloat("interval_7");
+        set => Component.SetFloat("interval_7", value);
+    }
+    /// <summary>Ativa. Desligada não reinicia etapas; a configuração é preservada</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Iniciar no Play. Sem isto a sequência espera o método Tocar (script ou Conexão de evento)</summary>
+    public bool Autoplay
+    {
+        get => Component.GetBool("autoplay");
+        set => Component.SetBool("autoplay", value);
+    }
+    /// <summary>Ignorar escala de tempo. Vale para os intervalos da sequência; cada tween segue a própria opção</summary>
+    public bool IgnoreTimeScale
+    {
+        get => Component.GetBool("ignore_time_scale");
+        set => Component.SetBool("ignore_time_scale", value);
+    }
+    /// <summary>Etapa 2 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join1
+    {
+        get => Component.GetBool("join_1");
+        set => Component.SetBool("join_1", value);
+    }
+    /// <summary>Etapa 3 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join2
+    {
+        get => Component.GetBool("join_2");
+        set => Component.SetBool("join_2", value);
+    }
+    /// <summary>Etapa 4 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join3
+    {
+        get => Component.GetBool("join_3");
+        set => Component.SetBool("join_3", value);
+    }
+    /// <summary>Etapa 5 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join4
+    {
+        get => Component.GetBool("join_4");
+        set => Component.SetBool("join_4", value);
+    }
+    /// <summary>Etapa 6 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join5
+    {
+        get => Component.GetBool("join_5");
+        set => Component.SetBool("join_5", value);
+    }
+    /// <summary>Etapa 7 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join6
+    {
+        get => Component.GetBool("join_6");
+        set => Component.SetBool("join_6", value);
+    }
+    /// <summary>Etapa 8 junto da anterior. Começa com a etapa anterior em vez de esperar ela terminar</summary>
+    public bool Join7
+    {
+        get => Component.GetBool("join_7");
+        set => Component.SetBool("join_7", value);
+    }
+    public enum LoopsOption : uint
+    {
+        Infinito = 0,
+        UmaVez = 1,
+        DuasVezes = 2,
+        TresVezes = 3,
+        DezVezes = 10,
+    }
+    /// <summary>Repetição. Quantas vezes a lista inteira de etapas é percorrida</summary>
+    public LoopsOption Loops
+    {
+        get => (LoopsOption)Component.GetEnum("loops");
+        set => Component.SetEnum("loops", (uint)value);
+    }
+    /// <summary>Etapa 1. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step0
+    {
+        get => Component.GetReference("step_0");
+        set => Component.SetReference("step_0", value);
+    }
+    /// <summary>Etapa 2. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step1
+    {
+        get => Component.GetReference("step_1");
+        set => Component.SetReference("step_1", value);
+    }
+    /// <summary>Etapa 3. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step2
+    {
+        get => Component.GetReference("step_2");
+        set => Component.SetReference("step_2", value);
+    }
+    /// <summary>Etapa 4. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step3
+    {
+        get => Component.GetReference("step_3");
+        set => Component.SetReference("step_3", value);
+    }
+    /// <summary>Etapa 5. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step4
+    {
+        get => Component.GetReference("step_4");
+        set => Component.SetReference("step_4", value);
+    }
+    /// <summary>Etapa 6. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step5
+    {
+        get => Component.GetReference("step_5");
+        set => Component.SetReference("step_5", value);
+    }
+    /// <summary>Etapa 7. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step6
+    {
+        get => Component.GetReference("step_6");
+        set => Component.SetReference("step_6", value);
+    }
+    /// <summary>Etapa 8. Objeto com Transform Tween; a sequência reinicia esse tween quando a etapa começa</summary>
+    public ObjectReference Step7
+    {
+        get => Component.GetReference("step_7");
+        set => Component.SetReference("step_7", value);
+    }
+    /// <summary>Tocar. Recomeça da etapa 1, cancelando os tweens das etapas em andamento</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Play() => Component.Invoke("play");
+    /// <summary>Cancelar. Interrompe a sequência e os tweens da etapa em andamento, sem voltar poses</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Cancel() => Component.Invoke("cancel");
+    /// <summary>Pausar. Congela intervalo e tweens da etapa em andamento</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Pause() => Component.Invoke("pause");
+    /// <summary>Retomar. Continua de onde pausou</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Resume() => Component.Invoke("resume");
+    /// <summary>Etapa atual. Número da etapa em andamento (1 a 8); zero parada</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long Step() => Component.Invoke("step").AsInteger();
+    /// <summary>Etapa começou. Emitido quando cada etapa reinicia o seu tween; carrega o número da etapa. Payload: Etapa: inteiro</summary>
+    public ComponentSubscription OnStepStarted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "step_started", handler);
+    /// <summary>Concluiu. Emitido uma vez quando as repetições finitas terminam</summary>
+    public ComponentSubscription OnCompleted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "completed", handler);
+}
+
 /// <summary>Timer: Dispara eventos temporizados e ações persistentes de ativação de objetos. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_timer.html</remarks>
 public readonly struct GameTimer : IComponentFacade<GameTimer>
@@ -956,6 +1172,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         Sensor2DSaiu = 8,
         Colisao2DComecou = 9,
         Colisao2DTerminou = 10,
+        SequenciaEtapaComecou = 11,
+        SequenciaConcluiu = 12,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -995,6 +1213,10 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         TweenRetomar = 13,
         PercursoReiniciar = 14,
         PercursoParar = 15,
+        SequenciaTocar = 16,
+        SequenciaCancelar = 17,
+        SequenciaPausar = 18,
+        SequenciaRetomar = 19,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method

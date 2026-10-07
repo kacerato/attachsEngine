@@ -1,0 +1,9 @@
+SEQUENCE start porta=0.00 luz=0.00 placa=0.00
+SEQUENCE step=1 t=0.09 porta=0.00 luz=0.00 placa=0.00
+SEQUENCE step=2 t=0.84 porta=1.00 luz=0.04 placa=0.04
+SEQUENCE step=3 t=0.84 porta=1.00 luz=0.04 placa=0.04
+SEQUENCE step=1 t=1.38 porta=1.04 luz=1.00 placa=1.00
+SEQUENCE step=2 t=2.20 porta=2.00 luz=1.00 placa=1.00
+SEQUENCE step=3 t=2.20 porta=2.00 luz=1.00 placa=1.00
+SEQUENCE completed steps=6 porta=2.00 luz=1.00 placa=1.00 PASS
+vulkan-errors(E Aether.Vulkan): 0

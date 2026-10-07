@@ -94,6 +94,7 @@ public:
   void setSceneGui(SceneGui *gui) noexcept {sceneGui_=gui;}
   void setNumberTweens(SceneNumberTweens *numberTweens) noexcept {numberTweens_=numberTweens;}
   void setTweens(SceneTweens *tweens) noexcept {tweens_=tweens;}
+  void setTweenSequences(SceneTweenSequences *sequences) noexcept {sequences_=sequences;}
   void setTimers(SceneTimers *timers) noexcept { timers_=timers; }
   void setPaths(ScenePaths *paths) noexcept { paths_ = paths; }
   // Fila de eventos de componente do Play; os scripts a leem pela família
@@ -147,7 +148,7 @@ private:
   void collectDiagnostics();
   void installAccess();
   void installExtensions();
-  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_};}
+  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_};}
   QueryFilter queryFilter(const scene::ScriptQueryFilter &filter) const;
   static QueryShapeDesc queryShape(const scene::ScriptShapeQuery &shape);
   static void copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity);
@@ -180,6 +181,7 @@ private:
   bool guiRequestActive_=false;
   SceneTimers *timers_=nullptr;
   SceneTweens *tweens_=nullptr;
+  SceneTweenSequences *sequences_=nullptr;
   SceneNumberTweens *numberTweens_=nullptr;
   InputService *input_ = nullptr;
   SceneAnimator *animator_ = nullptr;

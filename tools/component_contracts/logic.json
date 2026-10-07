@@ -183,6 +183,23 @@
       "apiName": "TransformTween"
     },
     {
+      "type": "TweenSequence",
+      "name": "Sequência de tweens",
+      "description": "Encadeia Transform Tweens em etapas sequenciais ou paralelas",
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "consumer": "runtime/scene_tween_sequences.h",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Tempo",
+      "icon": "component/tween-sequence",
+      "searchTerms": "Tween Sequence Sequencia Encadear Paralelo Chain Parallel",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_tween.html",
+      "apiName": "TweenSequence"
+    },
+    {
       "type": "Timer",
       "name": "Timer",
       "description": "Dispara eventos temporizados e ações persistentes de ativação de objetos",

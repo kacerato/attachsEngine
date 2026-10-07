@@ -4,11 +4,13 @@
 #include "runtime/scene_paths.h"
 #include "runtime/scene_timers.h"
 #include "runtime/scene_tweens.h"
+#include "runtime/scene_tween_sequences.h"
 #include "scene/audio.h"
 #include "scene/component_schema.h"
 #include "scene/path_follow.h"
 #include "scene/timer.h"
 #include "scene/transform_tween.h"
+#include "scene/tween_sequence.h"
 
 #include <algorithm>
 #include <cmath>
@@ -36,6 +38,17 @@ WorldStatus tweenOperation(const ComponentOperationServices &s,ComponentHandle h
   if(status==WorldStatus::Ok && result) *result=Value::makeNumber(state.elapsed);
   return status;
 }
+WorldStatus sequenceOperation(const ComponentOperationServices &s,ComponentHandle h,u32 operation,Value *result) {
+  if(!s.sequences || !s.tweens) return WorldStatus::NotRunning;
+  SceneTweenSequences::State state;
+  const auto status=s.sequences->command(*s.world,*s.tweens,h,operation,state);
+  if(status==WorldStatus::Ok && result) {
+    using S=SceneTweenSequences::Status;
+    const bool active=state.status==S::Interval||state.status==S::Running;
+    *result=Value::makeInteger(active?state.step+1:0);
+  }
+  return status;
+}
 WorldStatus audioOperation(const ComponentOperationServices &s,ComponentHandle h,SceneAudio::Command command,double seconds=0) {
   if(!s.audio) return WorldStatus::NotRunning;
   return s.audio->command(*s.world,h,command,seconds);
@@ -50,7 +63,7 @@ WorldStatus pathOperation(const ComponentOperationServices &s,ComponentHandle h,
   return ok?WorldStatus::Ok:WorldStatus::Rejected;
 }
 
-const std::array<ComponentMethodBinding,20> bindings{{
+const std::array<ComponentMethodBinding,25> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -65,6 +78,11 @@ const std::array<ComponentMethodBinding,20> bindings{{
   {&scene::TransformTween::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,3,nullptr);}},
   {&scene::TransformTween::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,4,nullptr);}},
   {&scene::TransformTween::descriptor,"elapsed",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return tweenOperation(s,h,0,&r);}},
+  {&scene::TweenSequence::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,1,nullptr);}},
+  {&scene::TweenSequence::descriptor,"cancel",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,2,nullptr);}},
+  {&scene::TweenSequence::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,3,nullptr);}},
+  {&scene::TweenSequence::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,4,nullptr);}},
+  {&scene::TweenSequence::descriptor,"step",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return sequenceOperation(s,h,0,&r);}},
   {&scene::AudioSource::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Play);}},
   {&scene::AudioSource::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Pause);}},
   {&scene::AudioSource::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return audioOperation(s,h,SceneAudio::Command::Resume);}},

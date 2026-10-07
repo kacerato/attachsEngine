@@ -6,6 +6,7 @@
 #include "scene/event_connection.h"
 #include "scene/transform_constraints.h"
 #include "scene/transform_tween.h"
+#include "scene/tween_sequence.h"
 #include "scene/spring_constraint.h"
 
 namespace ae::scene {

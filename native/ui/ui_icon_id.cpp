@@ -60,6 +60,7 @@ constexpr const char *kNames[] = {
     "component/spring-rotation",
     "component/spring-scale",
     "component/timer",
+    "component/tween-sequence",
     "component/tween-transform",
     "debug/bug",
     "debug/stats",

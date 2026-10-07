@@ -105,6 +105,44 @@ bool writePreviewWave(const std::filesystem::path &path) {
   const bool ok=std::fwrite(bytes.data(),1,bytes.size(),file)==bytes.size();std::fclose(file);return ok;
 }
 
+// Aceite no aparelho do bloco D (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md):
+// Porta sobe (relativo), depois Luz e Placa juntas após 0,3 s; duas passagens.
+int writeSequenceProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Sequence export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/tween-sequence/SequenceProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/SequenceProbe.cs",probe)) return fail("cannot publish source");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  auto &document=session.document();
+  const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");auto camera=*document.find(cameraId);
+  camera.transform.position[1]=1;camera.transform.position[2]=-6;
+  if(!camera.components.add(scene::Camera::descriptor)||!document.applyEntityValues(cameraId,camera)) return fail("camera");
+  const auto tweened=[&](const char *name,float x,bool relative){
+    const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto v=*document.find(id);v.transform.position[0]=x;
+    auto *t=static_cast<scene::TransformTween*>(v.components.add(scene::TransformTween::descriptor));
+    t->autoplay=false;t->duration=.5f;t->relative=relative;t->destination[0]=relative?0:x;t->destination[1]=1;
+    document.applyEntityValues(id,v);return id;};
+  const auto door=tweened("Porta",-2,true),lamp=tweened("Luz do corredor",0,false),sign=tweened("Placa",2,false);
+  const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Abertura da sala");auto value=*document.find(id);
+  auto *sequence=static_cast<scene::TweenSequence*>(value.components.add(scene::TweenSequence::descriptor));
+  sequence->steps[0]={door,false,0};sequence->steps[1]={lamp,false,.3f};sequence->steps[2]={sign,true,0};sequence->loops=2;
+  auto *script=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="acceptance.tween_sequence";script->source="Scripts/SequenceProbe.cs";
+  if(!session.history().applyValues(document,id,value)) return fail("sequence");
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"Sequencia-20261006\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Sequence project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
 // Aceite no aparelho dos blocos B, C e C2 (docs/planos/CONEXOES-DE-EVENTO,
 // SERVICOS-RUNTIME e CENAS-EM-PLAY): cena com câmera autorada, alvo, sensor
 // com Gatilho sonoro (Conexão de evento -> AudioSource.play) e corpo caindo;
@@ -485,6 +523,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-timer-connection-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::TimerConnection);
   if(argc>1&&std::string_view(argv[1])=="write-groups-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Groups);
   if(argc>1&&std::string_view(argv[1])=="write-services-project")return writeServicesProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);
   const char *output = argc > 1 ? argv[1] : "build/editor-preview.ppm";
   const u32 width = argc > 3 ? static_cast<u32>(std::atoi(argv[2])) : 1600;
@@ -1478,6 +1517,24 @@ int main(int argc, char **argv) {
     if(mode=="event-connection-when")state.componentGroup="Quando";
     if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
     if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
+  }
+  // Sequência de tweens: porta abre, depois luz e placa juntas após um intervalo.
+  if(argc>4 && std::string(argv[4]).starts_with("tween-sequence")) {
+    const std::string mode=argv[4];
+    const auto tweened=[&](const char *name,float x){
+      const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,name);auto v=*document.find(id);v.transform.position[0]=x;
+      auto *t=static_cast<scene::TransformTween*>(v.components.add(scene::TransformTween::descriptor));t->autoplay=false;t->destination[1]=1;
+      document.applyEntityValues(id,v);return id;};
+    const auto doorId=tweened("Porta",-2),lampId=tweened("Luz do corredor",0),signId=tweened("Placa",2);
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Abertura da sala");auto value=*document.find(id);
+    auto *sequence=static_cast<scene::TweenSequence*>(value.components.add(scene::TweenSequence::descriptor));
+    sequence->steps[0]={doorId,false,0};sequence->steps[1]={lampId,false,.3f};sequence->steps[2]={signId,true,0};sequence->loops=1;
+    const auto instance=sequence->instanceId();
+    if(!document.applyEntityValues(id,value))return 1;
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
+    state.componentGroup=mode=="tween-sequence-run"?"Execução":"Etapas";
+    if(mode=="tween-sequence-catalog"){state.addingComponent=true;state.componentQuery="Sequ";}
   }
   if(argc>4 && std::string(argv[4])=="debug-lines") state.workspace=editor::EditorWorkspace::Play;
   state.canUndo = history.canUndo();

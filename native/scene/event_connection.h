@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,10> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,12> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -38,14 +38,17 @@ inline constexpr std::array<EventConnectionEventKey,10> eventConnectionEventKeys
   {8,"astra.physics2d.collider","trigger_exit"},
   {9,"astra.physics2d.collider","collision_enter"},
   {10,"astra.physics2d.collider","collision_exit"},
+  {11,"astra.tween.sequence","step_started"},
+  {12,"astra.tween.sequence","completed"},
 }};
-inline constexpr std::array<ComponentEnumOption,11> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,13> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
   {7,"Sensor 2D: entrou"},{8,"Sensor 2D: saiu"},{9,"Colisão 2D: começou"},{10,"Colisão 2D: terminou"},
+  {11,"Sequência: etapa começou"},{12,"Sequência concluiu"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,15> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,19> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -61,13 +64,18 @@ inline constexpr std::array<EventConnectionMethodKey,15> eventConnectionMethodKe
   {13,"astra.tween.transform","resume"},
   {14,"astra.path.follow","restart"},
   {15,"astra.path.follow","stop"},
+  {16,"astra.tween.sequence","play"},
+  {17,"astra.tween.sequence","cancel"},
+  {18,"astra.tween.sequence","pause"},
+  {19,"astra.tween.sequence","resume"},
 }};
-inline constexpr std::array<ComponentEnumOption,16> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,20> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
   {10,"Tween: reiniciar"},{11,"Tween: cancelar"},{12,"Tween: pausar"},{13,"Tween: retomar"},
   {14,"Percurso: reiniciar"},{15,"Percurso: parar"},
+  {16,"Sequência: tocar"},{17,"Sequência: cancelar"},{18,"Sequência: pausar"},{19,"Sequência: retomar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},

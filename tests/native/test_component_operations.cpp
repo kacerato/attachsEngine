@@ -77,7 +77,7 @@ AE_TEST(component_operations_every_declared_method_has_one_runtime_function) {
   const auto issues=runtime::auditComponentOperations();
   std::string joined;for(const auto &issue:issues) joined+=issue+"; ";
   AE_EXPECT_TRUE(issues.empty(),(std::string("method and event contracts audited: ")+joined).c_str());
-  AE_EXPECT_EQ(runtime::componentMethodBindings().size(),usize{20},"timer 6 + tween 5 + audio 5 + path follow 4");
+  AE_EXPECT_EQ(runtime::componentMethodBindings().size(),usize{25},"timer 6 + tween 5 + sequence 5 + audio 5 + path follow 4");
   AE_EXPECT_TRUE(scene::findComponentEvent(scene::Timer::descriptor,"elapsed")&&
                  scene::findComponentEvent(scene::Collider::descriptor,"trigger_enter")&&
                  scene::findComponentEvent(scene::Collider2D::descriptor,"collision_exit")&&

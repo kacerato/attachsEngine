@@ -46,7 +46,7 @@
 #include "ui/ui_theme.h"
 #include <string>
 
-namespace ae::runtime {class SceneTimers;class SceneTweens;class ScenePhysics;class GameWorld;}
+namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysics;class GameWorld;}
 namespace ae::editor {
 class EditorMapScene;
 struct ColliderTopology;
@@ -824,6 +824,7 @@ struct EditorScreenState final {
   const runtime::ScenePhysics *characterRuntime=nullptr;
   const runtime::GameWorld *characterWorld=nullptr;
   const runtime::SceneTweens *tweenRuntime=nullptr;
+  const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::SceneTimers *timerRuntime=nullptr; // session-owned runtime inspection only
   // Hierarquia e Inspector abertos com o Play rodando (Unity: o Inspector
   // continua editável em Play e tudo volta ao sair). Mostram o mundo de

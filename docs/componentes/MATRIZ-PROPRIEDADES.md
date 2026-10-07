@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 49 schemas; 47 tipos no Add; 47 fachadas geradas.
+**Registro atual:** 50 schemas; 48 tipos no Add; 48 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -20,6 +20,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.constraint.parent` | Lógica | `Astra.Components.ParentConstraint` | Add Component |
 | `astra.constraint.look_at` | Lógica | `Astra.Components.LookAtConstraint` | Add Component |
 | `astra.tween.transform` | Lógica | `Astra.Components.TransformTween` | Add Component |
+| `astra.tween.sequence` | Lógica | `Astra.Components.TweenSequence` | Add Component |
 | `astra.time.timer` | Lógica | `Astra.Components.GameTimer` | Add Component |
 | `astra.logic.event_connection` | Lógica | `Astra.Components.EventConnection` | Add Component |
 | `astra.script.behavior` | Lógica | API própria | Fluxo próprio |
@@ -313,6 +314,61 @@ Interpola canais locais com espera, curva e repetição. **Consumidor:** runtime
 |---|---|---|---|
 | `completed` | Concluiu | — | Emitido uma vez quando as repetições finitas terminam, depois da pose final |
 
+## Sequência de tweens · `astra.tween.sequence` v1
+
+Encadeia Transform Tweens em etapas sequenciais ou paralelas. **Consumidor:** runtime/scene_tween_sequences.h. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_tween.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `interval_0` | Intervalo da etapa 1 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_1` | Intervalo da etapa 2 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_2` | Intervalo da etapa 3 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_3` | Intervalo da etapa 4 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_4` | Intervalo da etapa 5 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_5` | Intervalo da etapa 6 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_6` | Intervalo da etapa 7 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `interval_7` | Intervalo da etapa 8 | número | Etapas | 0 | 0 … 3600 | s | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `enabled` | Ativa | booleano | Execução | verdadeiro | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | não | não | não |
+| `autoplay` | Iniciar no Play | booleano | Execução | verdadeiro | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | não | não | não |
+| `ignore_time_scale` | Ignorar escala de tempo | booleano | Execução | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | não | não | não |
+| `join_1` | Etapa 2 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `join_2` | Etapa 3 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `join_3` | Etapa 4 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `join_4` | Etapa 5 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `join_5` | Etapa 6 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `join_6` | Etapa 7 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `join_7` | Etapa 8 junto da anterior | booleano | Etapas | falso | verdadeiro \| falso |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `loops` | Repetição | enumeração | Execução | Uma vez | Infinito \| Uma vez \| Duas vezes \| Três vezes \| Dez vezes |  | runtime/scene_tween_sequences.h | pose e bounds | não | não | não |
+| `step_0` | Etapa 1 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_1` | Etapa 2 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_2` | Etapa 3 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_3` | Etapa 4 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_4` | Etapa 5 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_5` | Etapa 6 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_6` | Etapa 7 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+| `step_7` | Etapa 8 | referência | Etapas | Nenhum | astra.tween.transform |  | runtime/scene_tween_sequences.h | pose e bounds | sim | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `play` | Tocar | — | nada | Recomeça da etapa 1, cancelando os tweens das etapas em andamento |
+| `cancel` | Cancelar | — | nada | Interrompe a sequência e os tweens da etapa em andamento, sem voltar poses |
+| `pause` | Pausar | — | nada | Congela intervalo e tweens da etapa em andamento |
+| `resume` | Retomar | — | nada | Continua de onde pausou |
+| `step` | Etapa atual | — | inteiro | Número da etapa em andamento (1 a 8); zero parada |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `step_started` | Etapa começou | step: inteiro | Emitido quando cada etapa reinicia o seu tween; carrega o número da etapa |
+| `completed` | Concluiu | — | Emitido uma vez quando as repetições finitas terminam |
+
 ## Timer · `astra.time.timer` v4
 
 Dispara eventos temporizados e ações persistentes de ativação de objetos. **Consumidor:** runtime/scene_timers.h → ScriptBridge → Behavior.TimerElapsed. **Invalida:** nada.
@@ -361,9 +417,9 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
-| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 

@@ -24,6 +24,7 @@ class SceneTimers;
 class SceneTweens;
 class SceneAudio;
 class ScenePaths;
+class SceneTweenSequences;
 
 struct ComponentOperationServices {
   GameWorld *world=nullptr;
@@ -31,6 +32,7 @@ struct ComponentOperationServices {
   SceneTweens *tweens=nullptr;
   SceneAudio *audio=nullptr;
   ScenePaths *paths=nullptr;
+  SceneTweenSequences *sequences=nullptr;
 };
 
 using ComponentMethodInvoke=WorldStatus (*)(const ComponentOperationServices &,ComponentHandle,
