@@ -9,6 +9,7 @@
 #include "scene/constant_force.h"
 #include "scene/physics_event_connection.h"
 #include "scene/physics_field.h"
+#include "scene/physics_queries.h"
 
 namespace ae::scene {
 inline constexpr std::array<ComponentRule, 1> bodyConflicts{{

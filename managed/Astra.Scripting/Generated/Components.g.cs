@@ -1344,6 +1344,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         TweenDePropriedadeCancelar = 21,
         TweenDePropriedadePausar = 22,
         TweenDePropriedadeRetomar = 23,
+        RaioAtualizarAgora = 24,
+        VarreduraAtualizarAgora = 25,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -4726,6 +4728,384 @@ public readonly struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
         get => Component.GetBool("automatic_support");
         set => Component.SetBool("automatic_support", value);
     }
+}
+
+/// <summary>Raio: Consulta um raio a cada quadro e guarda o primeiro acerto. Família Física 3D · Consultas.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_raycast3d.html</remarks>
+public readonly struct RayCast : IComponentFacade<RayCast>
+{
+    public static string TypeId => "astra.physics.raycast";
+    public static RayCast Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public RayCast(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Alvo local</summary>
+    public Vector3 Target
+    {
+        get => new(Component.GetFloat("target_x"), Component.GetFloat("target_y"), Component.GetFloat("target_z"));
+        set => Component.SetVector3("target", value);
+    }
+    /// <summary>Ativo. Desligado não consulta e mantém o último resultado como vazio</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ignorar o próprio corpo. Ignora o corpo deste objeto ou do ancestral mais próximo com Corpo físico</summary>
+    public bool ExcludeSelf
+    {
+        get => Component.GetBool("exclude_self");
+        set => Component.SetBool("exclude_self", value);
+    }
+    /// <summary>Incluir sensores. Sensores ficam de fora por padrão (collide_with_areas do Godot)</summary>
+    public bool IncludeSensors
+    {
+        get => Component.GetBool("include_sensors");
+        set => Component.SetBool("include_sensors", value);
+    }
+    /// <summary>Incluir estáticos</summary>
+    public bool IncludeStatic
+    {
+        get => Component.GetBool("include_static");
+        set => Component.SetBool("include_static", value);
+    }
+    /// <summary>Incluir dinâmicos</summary>
+    public bool IncludeDynamic
+    {
+        get => Component.GetBool("include_dynamic");
+        set => Component.SetBool("include_dynamic", value);
+    }
+    public enum LayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada. Todas ou só uma camada física do projeto</summary>
+    public LayerOption Layer
+    {
+        get => (LayerOption)Component.GetEnum("layer");
+        set => Component.SetEnum("layer", (uint)value);
+    }
+    /// <summary>Acertando. Verdadeiro quando a última consulta encontrou algo</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Colliding() => Component.Invoke("colliding").AsBoolean();
+    /// <summary>Objeto atingido. Dono do corpo atingido; vazio sem acerto</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public ObjectReference Collider() => Component.Reference(Component.Invoke("collider"));
+    /// <summary>Ponto. Ponto do acerto no mundo</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public Vector3 Point() => Component.Invoke("point").AsVector3();
+    /// <summary>Normal. Normal da superfície atingida</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public Vector3 Normal() => Component.Invoke("normal").AsVector3();
+    /// <summary>Distância. Distância do acerto ao início, em metros</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Distance() => Component.Invoke("distance").AsNumber();
+    /// <summary>Atualizar agora. Refaz a consulta neste instante (force_raycast_update do Godot)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Update() => Component.Invoke("update");
+}
+
+/// <summary>Varredura de forma: Varre uma forma até o alvo e guarda o primeiro acerto. Família Física 3D · Consultas.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_shapecast3d.html</remarks>
+public readonly struct ShapeCast : IComponentFacade<ShapeCast>
+{
+    public static string TypeId => "astra.physics.shapecast";
+    public static ShapeCast Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ShapeCast(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Meia extensão</summary>
+    public Vector3 HalfExtents
+    {
+        get => new(Component.GetFloat("half_x"), Component.GetFloat("half_y"), Component.GetFloat("half_z"));
+        set => Component.SetVector3("half_extents", value);
+    }
+    /// <summary>Alvo local</summary>
+    public Vector3 Target
+    {
+        get => new(Component.GetFloat("target_x"), Component.GetFloat("target_y"), Component.GetFloat("target_z"));
+        set => Component.SetVector3("target", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Meia altura (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float HalfHeight
+    {
+        get => Component.GetFloat("half_height");
+        set => Component.SetFloat("half_height", value);
+    }
+    /// <summary>Ativo. Desligado não consulta e mantém o último resultado como vazio</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ignorar o próprio corpo. Ignora o corpo deste objeto ou do ancestral mais próximo com Corpo físico</summary>
+    public bool ExcludeSelf
+    {
+        get => Component.GetBool("exclude_self");
+        set => Component.SetBool("exclude_self", value);
+    }
+    /// <summary>Incluir sensores. Sensores ficam de fora por padrão (collide_with_areas do Godot)</summary>
+    public bool IncludeSensors
+    {
+        get => Component.GetBool("include_sensors");
+        set => Component.SetBool("include_sensors", value);
+    }
+    /// <summary>Incluir estáticos</summary>
+    public bool IncludeStatic
+    {
+        get => Component.GetBool("include_static");
+        set => Component.SetBool("include_static", value);
+    }
+    /// <summary>Incluir dinâmicos</summary>
+    public bool IncludeDynamic
+    {
+        get => Component.GetBool("include_dynamic");
+        set => Component.SetBool("include_dynamic", value);
+    }
+    public enum LayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada. Todas ou só uma camada física do projeto</summary>
+    public LayerOption Layer
+    {
+        get => (LayerOption)Component.GetEnum("layer");
+        set => Component.SetEnum("layer", (uint)value);
+    }
+    public enum ShapeOption : uint
+    {
+        Esfera = 0,
+        Caixa = 1,
+        Capsula = 2,
+        Cilindro = 3,
+    }
+    /// <summary>Forma</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    /// <summary>Acertando. Verdadeiro quando a última consulta encontrou algo</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Colliding() => Component.Invoke("colliding").AsBoolean();
+    /// <summary>Objeto atingido. Dono do corpo atingido; vazio sem acerto</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public ObjectReference Collider() => Component.Reference(Component.Invoke("collider"));
+    /// <summary>Ponto. Ponto do acerto no mundo</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public Vector3 Point() => Component.Invoke("point").AsVector3();
+    /// <summary>Normal. Normal da superfície atingida</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public Vector3 Normal() => Component.Invoke("normal").AsVector3();
+    /// <summary>Distância. Distância do acerto ao início, em metros</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Distance() => Component.Invoke("distance").AsNumber();
+    /// <summary>Atualizar agora. Refaz a consulta neste instante (force_raycast_update do Godot)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Update() => Component.Invoke("update");
+}
+
+/// <summary>Braço de mola: Afasta os filhos até a primeira colisão, como câmera em terceira pessoa. Família Física 3D · Consultas.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_springarm3d.html</remarks>
+public readonly struct SpringArm : IComponentFacade<SpringArm>
+{
+    public static string TypeId => "astra.physics.spring_arm";
+    public static SpringArm Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public SpringArm(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Comprimento (m). Distância livre máxima ao longo de +Z local</summary>
+    /// <remarks>Faixa válida: 0.001 a 1000.</remarks>
+    public float Length
+    {
+        get => Component.GetFloat("length");
+        set => Component.SetFloat("length", value);
+    }
+    /// <summary>Margem (m). Folga entre o filho e a superfície atingida</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float Margin
+    {
+        get => Component.GetFloat("margin");
+        set => Component.SetFloat("margin", value);
+    }
+    /// <summary>Raio da esfera (m). Zero usa raio de luz; maior varre uma esfera (evita a câmera atravessar quinas)</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Ativo. Desligado não consulta e mantém o último resultado como vazio</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ignorar o próprio corpo. Ignora o corpo deste objeto ou do ancestral mais próximo com Corpo físico</summary>
+    public bool ExcludeSelf
+    {
+        get => Component.GetBool("exclude_self");
+        set => Component.SetBool("exclude_self", value);
+    }
+    /// <summary>Incluir sensores. Sensores ficam de fora por padrão (collide_with_areas do Godot)</summary>
+    public bool IncludeSensors
+    {
+        get => Component.GetBool("include_sensors");
+        set => Component.SetBool("include_sensors", value);
+    }
+    /// <summary>Incluir estáticos</summary>
+    public bool IncludeStatic
+    {
+        get => Component.GetBool("include_static");
+        set => Component.SetBool("include_static", value);
+    }
+    /// <summary>Incluir dinâmicos</summary>
+    public bool IncludeDynamic
+    {
+        get => Component.GetBool("include_dynamic");
+        set => Component.SetBool("include_dynamic", value);
+    }
+    public enum LayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada. Todas ou só uma camada física do projeto</summary>
+    public LayerOption Layer
+    {
+        get => (LayerOption)Component.GetEnum("layer");
+        set => Component.SetEnum("layer", (uint)value);
+    }
+    /// <summary>Comprimento atual. Distância livre do último quadro, já descontada a margem</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double HitLength() => Component.Invoke("hit_length").AsNumber();
 }
 
 /// <summary>Animação: Clipes tocados e misturados no Play. Família Animação · Clipes.</summary>

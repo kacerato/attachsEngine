@@ -30,4 +30,4 @@ Referência: Unity 6000.0 [OnControllerColliderHit](https://docs.unity3d.com/600
 
 - Host: `joint_breaks_when_constraint_force_passes_*` (v3/v2; peso de 10 kg em junta fixa com limite 50 N quebra uma vez, evento leva dono/instância/força > 50, o peso cai, reconstrução não recria; com 1000 N a junta segura) e `character_movement_reports_controller_collider_hit_*` (personagem andando contra parede: evento com a parede, normal −X e ponto na face). Suíte 1427/1431 (4 falhas anteriores à branch); C# 521/521.
 - UI executável: aba Quebra em `docs/validacao/evidencias/joint-break-20261007/`.
-- Aparelho: pendente (ADB desconectado nesta rodada).
+- Aparelho (07/10, projeto `FisicaF-20261007`): `junta quebrou=True forca=98` e `personagem bateu na parede=True` — PASS, 0 erros Vulkan (`docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt`).

@@ -5,6 +5,7 @@
 #include "runtime/scene_timers.h"
 #include "runtime/scene_tweens.h"
 #include "runtime/scene_tween_sequences.h"
+#include "runtime/scene_physics_queries.h"
 #include "scene/audio.h"
 #include "scene/component_schema.h"
 #include "scene/path_follow.h"
@@ -50,6 +51,10 @@ WorldStatus sequenceOperation(const ComponentOperationServices &s,ComponentHandl
   }
   return status;
 }
+WorldStatus queryOperation(const ComponentOperationServices &s,ComponentHandle h,std::string_view method,Value &result) {
+  if(!s.queries || !s.physics) return WorldStatus::NotRunning;
+  return s.queries->command(*s.world,*s.physics,h,method,result);
+}
 WorldStatus audioOperation(const ComponentOperationServices &s,ComponentHandle h,SceneAudio::Command command,double seconds=0) {
   if(!s.audio) return WorldStatus::NotRunning;
   return s.audio->command(*s.world,h,command,seconds);
@@ -64,7 +69,7 @@ WorldStatus pathOperation(const ComponentOperationServices &s,ComponentHandle h,
   return ok?WorldStatus::Ok:WorldStatus::Rejected;
 }
 
-const std::array<ComponentMethodBinding,30> bindings{{
+const std::array<ComponentMethodBinding,43> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -84,6 +89,19 @@ const std::array<ComponentMethodBinding,30> bindings{{
   {&scene::PropertyTween::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,3,nullptr);}},
   {&scene::PropertyTween::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return tweenOperation(s,h,4,nullptr);}},
   {&scene::PropertyTween::descriptor,"elapsed",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return tweenOperation(s,h,0,&r);}},
+  {&scene::RayCast::descriptor,"colliding",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"colliding",r);}},
+  {&scene::RayCast::descriptor,"collider",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"collider",r);}},
+  {&scene::RayCast::descriptor,"point",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"point",r);}},
+  {&scene::RayCast::descriptor,"normal",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"normal",r);}},
+  {&scene::RayCast::descriptor,"distance",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"distance",r);}},
+  {&scene::RayCast::descriptor,"update",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"update",r);}},
+  {&scene::ShapeCast::descriptor,"colliding",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"colliding",r);}},
+  {&scene::ShapeCast::descriptor,"collider",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"collider",r);}},
+  {&scene::ShapeCast::descriptor,"point",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"point",r);}},
+  {&scene::ShapeCast::descriptor,"normal",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"normal",r);}},
+  {&scene::ShapeCast::descriptor,"distance",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"distance",r);}},
+  {&scene::ShapeCast::descriptor,"update",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"update",r);}},
+  {&scene::SpringArm::descriptor,"hit_length",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"hit_length",r);}},
   {&scene::TweenSequence::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,1,nullptr);}},
   {&scene::TweenSequence::descriptor,"cancel",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,2,nullptr);}},
   {&scene::TweenSequence::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,3,nullptr);}},

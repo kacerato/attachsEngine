@@ -7,8 +7,12 @@
       "type": "CollisionRecipe",
       "name": "Receita de colisão",
       "description": "Fontes e base das partes para regeneração explícita preservando edições",
-      "requirements": {"cpp": "jointRequirements"},
-      "propertiesInPlay": {"cpp": "PlayMutability::Never"},
+      "requirements": {
+        "cpp": "jointRequirements"
+      },
+      "propertiesInPlay": {
+        "cpp": "PlayMutability::Never"
+      },
       "consumer": "editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp",
       "subfamily": "Autoria",
       "icon": "physics/collision-recipe",
@@ -202,6 +206,51 @@
       "searchTerms": "DynamicBodyMotor Rigidbody RigidBody3D Jogador Motor",
       "reference": "https://docs.godotengine.org/en/4.5/classes/class_rigidbody3d.html",
       "apiName": "DynamicBodyMotor"
+    },
+    {
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "subfamily": "Consultas",
+      "type": "RayCast",
+      "name": "Raio",
+      "description": "Consulta um raio a cada quadro e guarda o primeiro acerto",
+      "consumer": "runtime/scene_physics_queries.h → ScenePhysics::rayCast",
+      "icon": "component/raycast",
+      "searchTerms": "RayCast3D Raycast Raio Linha de visada Sensor de chão",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_raycast3d.html",
+      "apiName": "RayCast"
+    },
+    {
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "subfamily": "Consultas",
+      "type": "ShapeCast",
+      "name": "Varredura de forma",
+      "description": "Varre uma forma até o alvo e guarda o primeiro acerto",
+      "consumer": "runtime/scene_physics_queries.h → ScenePhysics::shapeCast",
+      "icon": "component/shapecast",
+      "searchTerms": "ShapeCast3D SphereCast BoxCast Varredura",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_shapecast3d.html",
+      "apiName": "ShapeCast"
+    },
+    {
+      "structuralInPlay": {
+        "cpp": "PlayMutability::SafePoint"
+      },
+      "subfamily": "Consultas",
+      "type": "SpringArm",
+      "name": "Braço de mola",
+      "description": "Afasta os filhos até a primeira colisão, como câmera em terceira pessoa",
+      "consumer": "runtime/scene_physics_queries.h → pose local dos filhos",
+      "icon": "component/spring-arm",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "searchTerms": "SpringArm3D Camera boom Braço de câmera Terceira pessoa",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_springarm3d.html",
+      "apiName": "SpringArm"
     }
   ],
   "defaults": {

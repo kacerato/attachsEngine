@@ -1,0 +1,5 @@
+PROPERTY start palco=0.0
+PROPERTY t=0.51 palco=24.5
+PROPERTY show completed x=1.00 holofote=30.0 STEP PASS
+PROPERTY t=1.62 palco=50.0 TWEEN PASS
+vulkan-errors(E Aether.Vulkan): 0

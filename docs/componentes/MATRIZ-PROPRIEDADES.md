@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 51 schemas; 49 tipos no Add; 49 fachadas geradas.
+**Registro atual:** 54 schemas; 52 tipos no Add; 52 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -46,6 +46,9 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.physics.collider` | Física 3D | `Astra.Components.Collider` | Add Component |
 | `astra.physics.joint` | Física 3D | `Astra.Components.Joint` | Add Component |
 | `astra.physics.dynamic_motor` | Física 3D | `Astra.Components.DynamicBodyMotor` | Add Component |
+| `astra.physics.raycast` | Física 3D | `Astra.Components.RayCast` | Add Component |
+| `astra.physics.shapecast` | Física 3D | `Astra.Components.ShapeCast` | Add Component |
+| `astra.physics.spring_arm` | Física 3D | `Astra.Components.SpringArm` | Add Component |
 | `astra.animation` | Animação | `Astra.Components.Animation` | Add Component |
 | `astra.physics2d.field.gravity` | Física 2D | `Astra.Components.GravityField2D` | Add Component |
 | `astra.physics2d.field.wind` | Física 2D | `Astra.Components.WindField2D` | Add Component |
@@ -458,7 +461,7 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
-| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 
@@ -1440,6 +1443,100 @@ Locomoção por força e salto com apoio sobre Corpo físico dinâmico. **Consum
 | `enabled` | Habilitado | booleano | Locomoção | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
 | `inherit_platform_velocity` | Acompanhar plataforma | booleano | Chão | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
 | `automatic_support` | Apoio pela colisão | booleano | Chão | verdadeiro | verdadeiro \| falso |  | runtime/scene_dynamic_motor.cpp | corpo físico | não | não | não |
+
+## Raio · `astra.physics.raycast` v1
+
+Consulta um raio a cada quadro e guarda o primeiro acerto. **Consumidor:** runtime/scene_physics_queries.h → ScenePhysics::rayCast. **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_raycast3d.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `target_x` | Alvo X | número | Consulta | 0 | -10000 … 10000 | m | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `target_y` | Alvo Y | número | Consulta | -1 | -10000 … 10000 | m | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `target_z` | Alvo Z | número | Consulta | 0 | -10000 … 10000 | m | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `enabled` | Ativo | booleano | Consulta | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `exclude_self` | Ignorar o próprio corpo | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `include_sensors` | Incluir sensores | booleano | Filtro | falso | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `include_static` | Incluir estáticos | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `include_dynamic` | Incluir dinâmicos | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+| `layer` | Camada | enumeração | Filtro | Todas | Todas \| Camada 0 \| Camada 1 \| Camada 2 \| Camada 3 \| Camada 4 \| Camada 5 \| Camada 6 \| Camada 7 \| Camada 8 \| Camada 9 \| Camada 10 \| Camada 11 \| Camada 12 \| Camada 13 \| Camada 14 \| Camada 15 \| Camada 16 \| Camada 17 \| Camada 18 \| Camada 19 \| Camada 20 \| Camada 21 \| Camada 22 \| Camada 23 \| Camada 24 \| Camada 25 \| Camada 26 \| Camada 27 \| Camada 28 \| Camada 29 \| Camada 30 \| Camada 31 |  | runtime/scene_physics_queries.h → ScenePhysics::rayCast | nada | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `colliding` | Acertando | — | booleano | Verdadeiro quando a última consulta encontrou algo |
+| `collider` | Objeto atingido | — | objeto | Dono do corpo atingido; vazio sem acerto |
+| `point` | Ponto | — | vetor | Ponto do acerto no mundo |
+| `normal` | Normal | — | vetor | Normal da superfície atingida |
+| `distance` | Distância | — | número | Distância do acerto ao início, em metros |
+| `update` | Atualizar agora | — | nada | Refaz a consulta neste instante (force_raycast_update do Godot) |
+
+## Varredura de forma · `astra.physics.shapecast` v1
+
+Varre uma forma até o alvo e guarda o primeiro acerto. **Consumidor:** runtime/scene_physics_queries.h → ScenePhysics::shapeCast. **Invalida:** nada.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_shapecast3d.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `radius` | Raio | número | Forma | 0.5 | 0.001 … 1000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | sim | não | não |
+| `half_height` | Meia altura | número | Forma | 0.5 | 0.001 … 1000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | sim | não | não |
+| `half_x` | Meia extensão X | número | Forma | 0.5 | 0.001 … 1000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | sim | não | não |
+| `half_y` | Meia extensão Y | número | Forma | 0.5 | 0.001 … 1000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | sim | não | não |
+| `half_z` | Meia extensão Z | número | Forma | 0.5 | 0.001 … 1000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | sim | não | não |
+| `target_x` | Alvo X | número | Consulta | 0 | -10000 … 10000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `target_y` | Alvo Y | número | Consulta | -1 | -10000 … 10000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `target_z` | Alvo Z | número | Consulta | 0 | -10000 … 10000 | m | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `enabled` | Ativo | booleano | Consulta | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `exclude_self` | Ignorar o próprio corpo | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `include_sensors` | Incluir sensores | booleano | Filtro | falso | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `include_static` | Incluir estáticos | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `include_dynamic` | Incluir dinâmicos | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `layer` | Camada | enumeração | Filtro | Todas | Todas \| Camada 0 \| Camada 1 \| Camada 2 \| Camada 3 \| Camada 4 \| Camada 5 \| Camada 6 \| Camada 7 \| Camada 8 \| Camada 9 \| Camada 10 \| Camada 11 \| Camada 12 \| Camada 13 \| Camada 14 \| Camada 15 \| Camada 16 \| Camada 17 \| Camada 18 \| Camada 19 \| Camada 20 \| Camada 21 \| Camada 22 \| Camada 23 \| Camada 24 \| Camada 25 \| Camada 26 \| Camada 27 \| Camada 28 \| Camada 29 \| Camada 30 \| Camada 31 |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+| `shape` | Forma | enumeração | Forma | Esfera | Esfera \| Caixa \| Cápsula \| Cilindro |  | runtime/scene_physics_queries.h → ScenePhysics::shapeCast | nada | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `colliding` | Acertando | — | booleano | Verdadeiro quando a última consulta encontrou algo |
+| `collider` | Objeto atingido | — | objeto | Dono do corpo atingido; vazio sem acerto |
+| `point` | Ponto | — | vetor | Ponto do acerto no mundo |
+| `normal` | Normal | — | vetor | Normal da superfície atingida |
+| `distance` | Distância | — | número | Distância do acerto ao início, em metros |
+| `update` | Atualizar agora | — | nada | Refaz a consulta neste instante (force_raycast_update do Godot) |
+
+## Braço de mola · `astra.physics.spring_arm` v1
+
+Afasta os filhos até a primeira colisão, como câmera em terceira pessoa. **Consumidor:** runtime/scene_physics_queries.h → pose local dos filhos. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.godotengine.org/en/4.5/classes/class_springarm3d.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `length` | Comprimento | número | Braço | 3 | 0.001 … 1000 | m | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `margin` | Margem | número | Braço | 0.1 | 0 … 10 | m | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `radius` | Raio da esfera | número | Braço | 0 | 0 … 100 | m | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `enabled` | Ativo | booleano | Consulta | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `exclude_self` | Ignorar o próprio corpo | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `include_sensors` | Incluir sensores | booleano | Filtro | falso | verdadeiro \| falso |  | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `include_static` | Incluir estáticos | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `include_dynamic` | Incluir dinâmicos | booleano | Filtro | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+| `layer` | Camada | enumeração | Filtro | Todas | Todas \| Camada 0 \| Camada 1 \| Camada 2 \| Camada 3 \| Camada 4 \| Camada 5 \| Camada 6 \| Camada 7 \| Camada 8 \| Camada 9 \| Camada 10 \| Camada 11 \| Camada 12 \| Camada 13 \| Camada 14 \| Camada 15 \| Camada 16 \| Camada 17 \| Camada 18 \| Camada 19 \| Camada 20 \| Camada 21 \| Camada 22 \| Camada 23 \| Camada 24 \| Camada 25 \| Camada 26 \| Camada 27 \| Camada 28 \| Camada 29 \| Camada 30 \| Camada 31 |  | runtime/scene_physics_queries.h → pose local dos filhos | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `hit_length` | Comprimento atual | — | número | Distância livre do último quadro, já descontada a margem |
 
 ## Animação · `astra.animation` v4
 

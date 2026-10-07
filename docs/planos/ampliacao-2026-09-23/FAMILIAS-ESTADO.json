@@ -257,7 +257,7 @@
       "dependencias": "Propriedade elegível; cancelamento e concorrência com física/animação definidos",
       "trabalho_original": "P06",
       "escopo": "obrigatorio",
-      "estado": "implementada_aguarda_aceite",
+      "estado": "concluida",
       "evidencias": [
         "docs/planos/CONSTRAINTS-TWEEN-2026-09-30.md",
         "docs/validacao/evidencias/number-tweens-abi30-20261001/README.md",
@@ -266,12 +266,16 @@
         "tests/native/test_tween_sequences.cpp",
         "docs/validacao/evidencias/tween-sequence-20261006/aparelho-logcat.txt",
         "native/scene/property_tween.h",
-        "docs/validacao/evidencias/property-tween-20261006/property-tween-1200.png"
+        "docs/validacao/evidencias/property-tween-20261006/property-tween-1200.png",
+        "docs/validacao/evidencias/property-tween-20261006/aparelho-logcat.txt"
       ],
       "lacunas": [],
-      "aceite": {},
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Sequência aceita no aparelho em 06/10/2026; Tween de propriedade validado no host, aceite no aparelho pendente (ADB desconectado)."
+        "Sequência e Tween de propriedade aceitos no aparelho em 06–07/10/2026."
       ]
     },
     {
@@ -837,16 +841,20 @@
       "dependencias": "Forma independente da mesh; corpo estático implícito ou relação explícita definida",
       "trabalho_original": "Ampliar Collider",
       "escopo": "obrigatorio",
-      "estado": "implementada_aguarda_aceite",
+      "estado": "concluida",
       "evidencias": [
         "native/scene/collider.h",
         "tests/native/test_collider_handles.cpp",
-        "tests/native/test_physics_material.cpp"
+        "tests/native/test_physics_material.cpp",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
       "lacunas": [],
-      "aceite": {},
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Camada de colisão vale por corpo (adaptação explícita: o Jolt filtra por corpo)."
+        "Camada de colisão vale por corpo (o Jolt filtra por corpo); aceite no aparelho em 07/10/2026."
       ]
     },
     {
@@ -881,17 +889,21 @@
       "dependencias": "Agregação em corpo proprietário; remover filho invalida composição",
       "trabalho_original": "P07a",
       "escopo": "obrigatorio",
-      "estado": "implementada_aguarda_aceite",
+      "estado": "concluida",
       "evidencias": [
         "native/runtime/scene_physics.cpp",
         "native/scene/collider.h",
         "tests/native/test_physics_material.cpp",
-        "docs/planos/MATERIAL-FISICO-2026-10-06.md"
+        "docs/planos/MATERIAL-FISICO-2026-10-06.md",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
       "lacunas": [],
-      "aceite": {},
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "A reconciliação de 06/10 marcou ausente por engano: colisores em filhos com owner já formavam corpo composto. Material por parte validado no host em 07/10; aparelho pendente."
+        "Composição por owner já existia; material por parte aceito no aparelho em 07/10/2026."
       ]
     },
     {
@@ -903,18 +915,22 @@
       "dependencias": "Propriedade suportada no backend; compartilhado/override explícito",
       "trabalho_original": "P07a",
       "escopo": "obrigatorio",
-      "estado": "implementada_aguarda_aceite",
+      "estado": "concluida",
       "evidencias": [
         "docs/planos/MATERIAL-FISICO-2026-10-06.md",
         "native/resources/physics_material.cpp",
         "tests/native/test_physics_material.cpp",
         "docs/validacao/evidencias/physics-material-20261006/aparelho-logcat.txt",
-        "docs/validacao/evidencias/physics-material-20261006/physics-material-asset-853.png"
+        "docs/validacao/evidencias/physics-material-20261006/physics-material-asset-853.png",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
       "lacunas": [],
-      "aceite": {},
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Material no corpo aceito no aparelho em 06/10; material por forma, superfície e edição em Propriedades validados no host em 07/10, aparelho pendente."
+        "Material no corpo (06/10) e por forma/superfície (07/10) aceitos no aparelho."
       ]
     },
     {
@@ -949,17 +965,21 @@
       "dependencias": "Pelo menos corpo proprietário; segundo corpo ou world anchor; validação de frames",
       "trabalho_original": "Ampliar Junta, sem flags fictícias",
       "escopo": "obrigatorio",
-      "estado": "implementada_aguarda_aceite",
+      "estado": "concluida",
       "evidencias": [
         "native/scene/joint.h",
         "tests/native/test_joint_bridge.cpp",
         "tests/native/test_joint_break.cpp",
-        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md"
+        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
       "lacunas": [],
-      "aceite": {},
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Quebra validada no host com Jolt real em 07/10; aparelho pendente."
+        "Quebra aceita no aparelho em 07/10/2026 (98 N contra limite de 50 N)."
       ]
     },
     {
@@ -971,17 +991,21 @@
       "dependencias": "Backend CharacterVirtual; conflicts atuais com Body/Collider devem evoluir com migração",
       "trabalho_original": "Ampliar Character",
       "escopo": "obrigatorio",
-      "estado": "implementada_aguarda_aceite",
+      "estado": "concluida",
       "evidencias": [
         "native/scene/character.h",
         "tests/native/test_character_motor.cpp",
         "tests/native/test_joint_break.cpp",
-        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md"
+        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
       "lacunas": [],
-      "aceite": {},
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Up direction: não aplicável com motivo (Unity CharacterController é sempre Y). Colisão do personagem validada no host; aparelho pendente."
+        "Up direction: não aplicável com motivo (Unity CharacterController é sempre Y). Colisão do personagem aceita no aparelho em 07/10/2026."
       ]
     },
     {
@@ -993,19 +1017,21 @@
       "dependencias": "Mundo, alocação/buffer e truncamento explícitos; hits com IDs válidos",
       "trabalho_original": "Ampliar APIs atuais",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
+        "docs/planos/CONSULTAS-FISICAS-2026-10-07.md",
+        "native/runtime/scene_physics_queries.h",
+        "tests/native/test_physics_queries.cpp",
         "managed/Astra.Scripting/Physics.cs",
-        "tests/native/test_query_bridge.cpp",
-        "tests/native/test_query_contracts.cpp"
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
-      "lacunas": [
-        "Ray/shape cast e overlap 3D com filtro e truncamento existem; componentes persistentes de raio/varredura ausentes (bloco F).",
-        "2D só tem RayCast e OverlapCircle."
-      ],
-      "aceite": {},
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Componentes de consulta e APIs por script; aceite no aparelho em 07/10/2026."
       ]
     },
     {

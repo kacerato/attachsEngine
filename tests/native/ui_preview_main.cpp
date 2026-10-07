@@ -196,6 +196,74 @@ int writePropertyTweenProject(const char *directory) {
   std::printf("Property tween project written: %s\n",root.generic_string().c_str());
   return 0;
 }
+// Aceite no aparelho do bloco F (docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md,
+// MATERIAL-FISICO-2026-10-06.md): material por forma, superfície, quebra de
+// junta, colisão do personagem, Raio e Braço de mola numa só cena.
+int writePhysicsFProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Physics F export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/physics-f/PhysicsFProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes",".astra"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/PhysicsFProbe.cs",probe)) return fail("cannot publish source");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  auto &document=session.document();
+  const auto object=[&](const char *name,runtime::ObjectId parent,float x,float y,float z){
+    const auto id=document.createEntity(parent,runtime::ObjectKind::Folder,name);auto v=*document.find(id);
+    v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;document.applyEntityValues(id,v);return id;};
+  const auto body=[&](runtime::ObjectId id,scene::BodyMotion motion,float mass,u32 surface){
+    auto v=*document.find(id);auto *b=static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor));
+    b->motion=motion;b->mass=mass;b->surface=surface;document.applyEntityValues(id,v);};
+  const auto box=[&](runtime::ObjectId id,float hx,float hy,float hz,runtime::ObjectId owner){
+    auto v=*document.find(id);auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));
+    c->halfX=hx;c->halfY=hy;c->halfZ=hz;c->owner=owner;document.applyEntityValues(id,v);return c->instanceId();};
+  const auto cameraId=object("Câmera",document.root(),0,4,-14);
+  {auto v=*document.find(cameraId);v.components.add(scene::Camera::descriptor);document.applyEntityValues(cameraId,v);}
+  // Chão composto: corpo de concreto, metade esquerda com material próprio de borracha.
+  const auto floor=object("Chão",document.root(),0,-.5f,0);body(floor,scene::BodyMotion::Static,1,1);
+  const auto leftPart=object("Chão esquerdo",floor,-6,0,0);const auto leftShape=box(leftPart,6,.5f,10,floor);
+  const auto rightPart=object("Chão direito",floor,6,0,0);box(rightPart,6,.5f,10,floor);
+  {auto v=*document.find(leftPart);auto *own=static_cast<scene::Collider*>(v.components.editInstance(leftShape));
+   own->ownMaterial=true;own->restitution=.95f;own->restitutionCombine=4;own->surface=9;document.applyEntityValues(leftPart,v);}
+  std::string diagnostic;
+  if(!session.createPhysicsMaterial(leftPart,leftShape,diagnostic).valid()) return fail(diagnostic);
+  for(const auto &[name,x]:{std::pair{"Bola esquerda",-3.f},std::pair{"Bola direita",3.f}}) {
+    const auto id=object(name,document.root(),x,2.5f,-2);body(id,scene::BodyMotion::Dynamic,1,0);
+    auto v=*document.find(id);auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));
+    c->shape=scene::ColliderShape::Sphere;c->radius=.4f;document.applyEntityValues(id,v);
+  }
+  // Junta que quebra: 10 kg pendurados num limite de 50 N.
+  const auto anchor=object("Âncora",document.root(),0,6,-6);body(anchor,scene::BodyMotion::Static,1,0);box(anchor,.25f,.25f,.25f,0);
+  const auto weight=object("Peso",document.root(),0,5,-6);body(weight,scene::BodyMotion::Dynamic,10,0);box(weight,.25f,.25f,.25f,0);
+  {auto v=*document.find(weight);auto *j=static_cast<scene::Joint*>(v.components.add(scene::Joint::descriptor));
+   j->kind=scene::JointKind::Fixed;j->connectedBody=anchor;j->breakForce=50;document.applyEntityValues(weight,v);}
+  // Personagem andando contra a parede.
+  const auto wall=object("Parede",document.root(),8,1,0);body(wall,scene::BodyMotion::Static,1,0);box(wall,.25f,2,3,0);
+  const auto actor=object("Personagem",document.root(),5,1,0);
+  {auto v=*document.find(actor);static_cast<scene::Character*>(v.components.add(scene::Character::descriptor))->speed=3;document.applyEntityValues(actor,v);}
+  // Raio de chão sobre a metade de borracha e braço de mola contra outra parede.
+  const auto sensor=object("Sensor de chão",document.root(),-3,2,3);
+  {auto v=*document.find(sensor);static_cast<scene::RayCast*>(v.components.add(scene::RayCast::descriptor))->target[1]=-5;document.applyEntityValues(sensor,v);}
+  const auto back=object("Parede do braço",document.root(),0,1,9);body(back,scene::BodyMotion::Static,1,0);box(back,3,2,.25f,0);
+  const auto armId=object("Braço",document.root(),0,1,6);
+  {auto v=*document.find(armId);static_cast<scene::SpringArm*>(v.components.add(scene::SpringArm::descriptor))->length=6;document.applyEntityValues(armId,v);}
+  object("Câmera do braço",armId,0,0,6);
+  const auto probeId=object("Sonda",document.root(),0,0,0);
+  {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
+   script->scriptType="acceptance.physics_f";script->source="Scripts/PhysicsFProbe.cs";document.applyEntityValues(probeId,v);}
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"FisicaF-20261007\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Physics F project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
 // Aceite no aparelho do bloco D (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md):
 // Porta sobe (relativo), depois Luz e Placa juntas após 0,3 s; duas passagens.
 int writeSequenceProject(const char *directory) {
@@ -615,6 +683,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-groups-project")return writeTimeProject(argc>2?argv[2]:nullptr,AcceptanceCase::Groups);
   if(argc>1&&std::string_view(argv[1])=="write-services-project")return writeServicesProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-physics-f-project")return writePhysicsFProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);
@@ -1610,6 +1679,18 @@ int main(int argc, char **argv) {
     if(mode=="event-connection-when")state.componentGroup="Quando";
     if(mode=="event-connection-then"||mode=="event-connection-activation")state.componentGroup="Então";
     if(mode=="event-connection-catalog"){state.addingComponent=true;state.componentQuery="Conex";}
+  }
+  // Consultas físicas: raio de chão e braço de mola de câmera.
+  if(argc>4 && (std::string(argv[4])=="raycast"||std::string(argv[4])=="spring-arm")) {
+    const bool rayMode=std::string(argv[4])=="raycast";
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,rayMode?"Sensor de chão":"Braço da câmera");auto value=*document.find(id);
+    value.transform.position[1]=1.5f;u64 instance=0;
+    if(rayMode){auto *r=static_cast<scene::RayCast*>(value.components.add(scene::RayCast::descriptor));r->target[1]=-2;r->filter.layer=1;instance=r->instanceId();}
+    else {auto *a=static_cast<scene::SpringArm*>(value.components.add(scene::SpringArm::descriptor));a->length=4;a->radius=.2f;instance=a->instanceId();}
+    if(!document.applyEntityValues(id,value))return 1;
+    if(!rayMode) document.createEntity(id,editor::EditorEntityKind::Folder,"Câmera");
+    selection=id;state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup=rayMode?"Consulta":"Braço";
+    state.inspectorSurface=editor::EditorInspectorSurface::Inspection;state.compactPanel=editor::EditorScreenState::CompactPanel::Inspector;
   }
   // Junta com limites de quebra (aba Quebra).
   if(argc>4 && std::string(argv[4])=="joint-break") {

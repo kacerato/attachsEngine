@@ -12,6 +12,7 @@
 #include "scene/tween_sequence.h"
 #include "scene/property_tween.h"
 #include "editor/editor_property_tween.h"
+#include "runtime/scene_physics_queries.h"
 #include "runtime/scene_tween_sequences.h"
 #include "scene/script_behavior.h"
 #include "scene/prefab_link.h"
@@ -3372,6 +3373,24 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     builder.label(note,"Requer Corpo físico dinâmico",theme.color.textMuted,theme.type.caption);
     builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
     builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+  }
+  // Consultas físicas: o último resultado no Play; na edição, o alcance.
+  if((entry.type==&scene::RayCast::descriptor||entry.type==&scene::ShapeCast::descriptor||entry.type==&scene::SpringArm::descriptor)&&!searching) {
+    const auto *live=state.physicsQueryRuntime?state.physicsQueryRuntime->result(entity.id,component->instanceId()):nullptr;
+    char text[128];
+    if(entry.type==&scene::SpringArm::descriptor) {
+      const auto &arm=static_cast<const scene::SpringArm&>(*component);
+      if(live) std::snprintf(text,sizeof text,"Comprimento atual %.2f m de %.2f%s",static_cast<double>(live->armLength),static_cast<double>(arm.length),live->hit?" · colidindo":"");
+      else std::snprintf(text,sizeof text,"Filhos a até %.2f m em +Z · ajusta no Play",static_cast<double>(arm.length));
+    } else if(live&&live->hit) {
+      const auto *hit=state.document->find(static_cast<EditorEntityId>(live->collider));
+      std::snprintf(text,sizeof text,"Acertando %s a %.2f m",hit?hit->name:"objeto",static_cast<double>(live->distance));
+    } else if(live) std::snprintf(text,sizeof text,"Sem acerto");
+    else {
+      const float *t=entry.type==&scene::RayCast::descriptor?static_cast<const scene::RayCast&>(*component).target:static_cast<const scene::ShapeCast&>(*component).target;
+      std::snprintf(text,sizeof text,"Alcance %.2f m · consulta a cada quadro no Play",static_cast<double>(std::sqrt(t[0]*t[0]+t[1]*t[1]+t[2]*t[2])));
+    }
+    builder.label(takeTop(content,20),fitMiddle(builder.list,text,content.width,theme.type.caption),live&&live->hit?theme.color.accent:theme.color.textDim,theme.type.caption);
   }
   // Sequência: diz em que etapa está e, se parou, por quê; o motivo vem do avaliador.
   if(entry.type==&scene::TweenSequence::descriptor&&!searching) {

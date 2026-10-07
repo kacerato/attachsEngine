@@ -49,7 +49,7 @@ Mesmo modelo do Perfil de ambiente: o corpo guarda a cópia dos valores e o GUID
 ## Validação executada (07/10/2026, material por forma)
 
 - Host: `physics_material_per_collider_part_*` (chão composto: a parte com material próprio Máximo faz quicar acima de 1 m, a outra parte do mesmo corpo fica abaixo de 0,5 m), `collider_v8_body_v5_and_material_v1_*` (leituras antigas sem material/superfície), `physics_material_on_a_collider_*` (criar a partir da forma liga o material próprio; escolher copia a superfície; atualizar sincroniza), `physics_material_file_opens_in_properties_*` (toque real no −/+ grava recurso e corpo; Desfazer). Suíte 1425/1429 (4 falhas anteriores à branch); C# 521/521.
-- Aparelho: pendente nesta rodada (ADB desconectou).
+- Aparelho (projeto `FisicaF-20261007`, material criado pelo fluxo do editor a partir da forma): `material esquerda=2.22 direita=0.50` (a metade com material próprio Máximo quica, a outra não) e `superficie esquerda=Rubber direita=Concrete` lidas por `hit.Surface()` — PASS.
 
 ## Validação executada (06/10/2026)
 

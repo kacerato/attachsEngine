@@ -19,6 +19,7 @@
 #include "runtime/scene_constraints.h"
 #include "runtime/scene_tweens.h"
 #include "runtime/scene_tween_sequences.h"
+#include "runtime/scene_physics_queries.h"
 #include "runtime/scene_paths.h"
 #include "runtime/scene_physics2d.h"
 #include "runtime/scene_audio.h"
@@ -143,7 +144,7 @@ public:
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
     constraints_.reset();
-    tweens_.reset();numberTweens_.reset();sequences_.reset();
+    tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();
     paths_.reset();
     events_.reset();
     eventConnections_.reset();
@@ -160,6 +161,7 @@ public:
     scripts_.setTimers(&timers_);
     scripts_.setTweens(&tweens_);
     scripts_.setTweenSequences(&sequences_);
+    scripts_.setPhysicsQueries(&queries_);
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);
@@ -206,6 +208,7 @@ public:
     scripts_.setTimers(nullptr);
     scripts_.setTweens(nullptr);
     scripts_.setTweenSequences(nullptr);
+    scripts_.setPhysicsQueries(nullptr);
     scripts_.setNumberTweens(nullptr);
     scripts_.setAudio(nullptr);
     scripts_.setGui(nullptr);
@@ -225,7 +228,7 @@ public:
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
     constraints_.reset();
-    tweens_.reset();numberTweens_.reset();sequences_.reset();
+    tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();
     resources_=nullptr;
     active_=false;
     paused_=false;
@@ -280,7 +283,7 @@ public:
     if(!active_) return runtime::WorldStatus::NotRunning;
     return runtime::invokeComponentMethod(operationServices(),{world_.handle(object),instance},method,arguments,result);
   }
-  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_};}
+  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_};}
   runtime::ComponentEventQueue &events() noexcept {return events_;}
   const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
   // Quem desenha o quadro publica a vista de jogo antes de avançar o mundo.
@@ -300,6 +303,7 @@ public:
   const runtime::SceneTweens &tweens() const noexcept {return tweens_;}
   runtime::SceneTweens &tweens() noexcept {return tweens_;}
   const runtime::SceneTweenSequences &tweenSequences() const noexcept {return sequences_;}
+  const runtime::ScenePhysicsQueries &physicsQueries() const noexcept {return queries_;}
   const runtime::ScenePaths &paths() const noexcept {return paths_;}
   runtime::ScenePaths &paths() noexcept {return paths_;}
   runtime::SceneAudio &audio() noexcept {return audio_;}
@@ -336,7 +340,7 @@ private:
     sceneGui_.advance(world_,frameElapsed);
     return stage(runScripts(scriptElapsed),"Update") && stage(advanceTimers(frameElapsed,std::min(elapsed,.25)),"timers") && stage(animate(scriptElapsed),"animação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
-           stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") &&
+           stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
            stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
@@ -444,6 +448,7 @@ private:
   runtime::SceneConstraints constraints_;
   runtime::SceneTweens tweens_;
   runtime::SceneTweenSequences sequences_;
+  runtime::ScenePhysicsQueries queries_;
   runtime::SceneNumberTweens numberTweens_;
   runtime::ScenePaths paths_;
   runtime::ComponentEventQueue events_;

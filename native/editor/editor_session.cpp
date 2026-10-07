@@ -9639,6 +9639,7 @@ void EditorSession::update() {
   state_.characterWorld=playInspecting()&&playScene_.active()?&playScene_.world():nullptr;
   state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;
   state_.tweenSequenceRuntime=playInspecting()&&playScene_.active()?&playScene_.tweenSequences():nullptr;
+  state_.physicsQueryRuntime=playInspecting()&&playScene_.active()?&playScene_.physicsQueries():nullptr;
   state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   refreshColliderAuthoring();

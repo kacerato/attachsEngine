@@ -1,0 +1,8 @@
+PHYSF start
+PHYSF material esquerda=2.22 direita=0.50 PASS
+PHYSF superficie esquerda=Rubber direita=Concrete PASS
+PHYSF junta quebrou=True forca=98 PASS
+PHYSF personagem bateu na parede=True PASS
+PHYSF raio acerta=True distancia=2.00 chao=True PASS
+PHYSF braco comprimento=2.65 camera=2.65 PASS
+vulkan-errors(E Aether.Vulkan): 0

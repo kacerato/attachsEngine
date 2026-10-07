@@ -11,6 +11,7 @@
 #include "scene/transform_tween.h"
 #include "scene/tween_sequence.h"
 #include "scene/property_tween.h"
+#include "scene/physics_queries.h"
 #include "scene/event_connection.h"
 #include "scene/physics2d_components.h"
 #include "scene/audio.h"
@@ -317,7 +318,25 @@ inline void physicsField2DVisual(const scene::ComponentValue &value,const Editor
  if(kind==0||kind==1){const float length=std::hypot(field.vector[0],field.vector[1]);if(length>1e-6f){float pose[16]{};const float norm=std::hypot(frame[0],frame[1]);if(norm<1e-6f)return;pose[0]=frame[0]/norm;pose[1]=frame[1]/norm;pose[4]=-pose[1];pose[5]=pose[0];pose[10]=pose[15]=1;std::copy_n(frame+12,3,pose+12);const float origin[3]{},tip[3]{field.vector[0]/length*1.5f,field.vector[1]/length*1.5f,0};visual_detail::segment(out,pose,origin,tip);out.segments.back().emphasis=1;}}
  else if(kind==3){for(u32 axis=0;axis<2;++axis)for(float sign:{-1.f,1.f}){float a[3]{},b[3]{};a[axis]=sign*(field.acceleration<0?1.2f:.2f);b[axis]=sign*(field.acceleration<0?.2f:1.2f);visual_detail::segment(out,frame,a,b);out.segments.back().emphasis=1;}}
 }
-inline const std::array<ComponentVisualProvider,36> componentVisualProviders{{
+// Consultas físicas: a linha do raio/varredura até o alvo local e o braço
+// até o comprimento máximo (+Z local); o fim fica destacado.
+inline void physicsQueryVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                               float,bool detail,ComponentVisual &out) {
+  const float origin[3]{};
+  if(&value.type()==&scene::RayCast::descriptor) {
+    const auto &c=static_cast<const scene::RayCast&>(value);out.enabled=c.filter.enabled;if(!detail) return;
+    visual_detail::segment(out,world,origin,c.target);out.segments.back().emphasis=1;
+  } else if(&value.type()==&scene::ShapeCast::descriptor) {
+    const auto &c=static_cast<const scene::ShapeCast&>(value);out.enabled=c.filter.enabled;if(!detail) return;
+    visual_detail::segment(out,world,origin,c.target);out.segments.back().emphasis=1;
+    const float r=c.shape==scene::ShapeCastShape::Box?c.halfExtent[0]:c.radius;
+    for(u32 axis=0;axis<3;++axis) {float a[3]{c.target[0],c.target[1],c.target[2]},b[3]{c.target[0],c.target[1],c.target[2]};a[axis]-=r;b[axis]+=r;visual_detail::segment(out,world,a,b);}
+  } else {
+    const auto &c=static_cast<const scene::SpringArm&>(value);out.enabled=c.filter.enabled;if(!detail) return;
+    const float end[3]{0,0,c.length};visual_detail::segment(out,world,origin,end);out.segments.back().emphasis=1;
+  }
+}
+inline const std::array<ComponentVisualProvider,39> componentVisualProviders{{
   {&scene::GravityField2D::descriptor,ui::UiIcon::PhysicsFieldGravity2d,true,physicsField2DVisual},
   {&scene::WindField2D::descriptor,ui::UiIcon::PhysicsFieldWind2d,true,physicsField2DVisual},
   {&scene::DragField2D::descriptor,ui::UiIcon::PhysicsFieldDrag2d,true,physicsField2DVisual},
@@ -337,6 +356,9 @@ inline const std::array<ComponentVisualProvider,36> componentVisualProviders{{
   {&scene::TransformTween::descriptor,ui::UiIcon::ComponentTweenTransform,true,visual_detail::constraint},
   {&scene::TweenSequence::descriptor,ui::UiIcon::ComponentTweenSequence,true,visual_detail::constraint},
   {&scene::PropertyTween::descriptor,ui::UiIcon::ComponentTweenProperty,true,visual_detail::constraint},
+  {&scene::RayCast::descriptor,ui::UiIcon::ComponentRaycast,true,physicsQueryVisual},
+  {&scene::ShapeCast::descriptor,ui::UiIcon::ComponentShapecast,true,physicsQueryVisual},
+  {&scene::SpringArm::descriptor,ui::UiIcon::ComponentSpringArm,true,physicsQueryVisual},
   {&scene::Collider2D::descriptor,ui::UiIcon::PhysicsCollider2d,false,visual_detail::collider2D},
   {&scene::Joint2D::descriptor,ui::UiIcon::PhysicsJoint2d,true,visual_detail::constraint},
   {&scene::ConstantForce2D::descriptor,ui::UiIcon::PhysicsConstantForce2d,true,visual_detail::force2D},

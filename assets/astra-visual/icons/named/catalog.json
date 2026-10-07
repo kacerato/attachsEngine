@@ -1631,6 +1631,24 @@
       "name": "tween-property",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/raycast": {
+      "category": "component",
+      "name": "raycast",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/shapecast": {
+      "category": "component",
+      "name": "shapecast",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/spring-arm": {
+      "category": "component",
+      "name": "spring-arm",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

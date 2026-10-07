@@ -54,7 +54,7 @@ inline constexpr std::array<ComponentEnumOption,16> eventConnectionEvents{{
   {14,"Junta quebrou"},
   {15,"Personagem bateu num colisor"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,23> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,25> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -78,8 +78,10 @@ inline constexpr std::array<EventConnectionMethodKey,23> eventConnectionMethodKe
   {21,"astra.tween.property","cancel"},
   {22,"astra.tween.property","pause"},
   {23,"astra.tween.property","resume"},
+  {24,"astra.physics.raycast","update"},
+  {25,"astra.physics.shapecast","update"},
 }};
-inline constexpr std::array<ComponentEnumOption,24> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,26> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -87,6 +89,7 @@ inline constexpr std::array<ComponentEnumOption,24> eventConnectionMethods{{
   {14,"Percurso: reiniciar"},{15,"Percurso: parar"},
   {16,"Sequência: tocar"},{17,"Sequência: cancelar"},{18,"Sequência: pausar"},{19,"Sequência: retomar"},
   {20,"Tween de propriedade: reiniciar"},{21,"Tween de propriedade: cancelar"},{22,"Tween de propriedade: pausar"},{23,"Tween de propriedade: retomar"},
+  {24,"Raio: atualizar agora"},{25,"Varredura: atualizar agora"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
