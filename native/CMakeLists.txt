@@ -770,6 +770,7 @@ if(NOT ANDROID)
     ../tests/native/test_physics_material.cpp
     ../tests/native/test_joint_break.cpp
     ../tests/native/test_physics_queries.cpp
+    ../tests/native/test_body_mass.cpp
     ../tests/native/test_runtime_number_tweens.cpp
     ../tests/native/test_runtime_physics2d.cpp
     ../tests/native/test_runtime_audio.cpp

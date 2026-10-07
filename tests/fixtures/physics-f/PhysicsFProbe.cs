@@ -12,6 +12,8 @@ public sealed class PhysicsFProbe : Behavior
     private float bestLeft, bestRight;
     private bool landedLeft, landedRight, broken, wallHit, done;
     private double brokenForce;
+    private int stayFrames, ghostEnters, zoneEnters;
+    private int lastStayFrame = -1, frame;
 
     private void Log(string message) => Scene.Log(ObjectId, "PHYSF " + message);
     private GameObject? Find(string name) => Object.FindInWorld(name);
@@ -25,7 +27,18 @@ public sealed class PhysicsFProbe : Behavior
         {
             if (e.GetObject(0).ObjectId == wall!.ObjectId && e[2].AsVector3().X < -.5f) wallHit = true;
         });
+        var zone = Find("Zona")!.GetComponent<Collider>()!.Value;
+        var ghost = Find("Fantasma")!;
+        zone.OnTriggerEnter(this, e => { if (e.GetObject(0).ObjectId == ghost.ObjectId) ++ghostEnters; else ++zoneEnters; });
+        zone.OnTriggerStay(this, _ => { if (lastStayFrame != frame) { lastStayFrame = frame; ++stayFrames; } });
         Log("start");
+    }
+
+    // Ângulo, em graus, entre o +Y da caixa e o +Y do mundo.
+    private static float Tilt(GameObject o)
+    {
+        var up = Vector3.Transform(Vector3.UnitY, o.LocalTransform.Rotation);
+        return MathF.Acos(Math.Clamp(up.Y, -1f, 1f)) * 180f / MathF.PI;
     }
 
     private static void Track(GameObject? o, ref bool landed, ref float best)
@@ -38,6 +51,7 @@ public sealed class PhysicsFProbe : Behavior
     public override void Update(float deltaTime)
     {
         if (done) return;
+        ++frame;
         actor!.MoveCharacter(new Vector2(1, 0), 0);
         Track(ballLeft, ref landedLeft, ref bestLeft);
         Track(ballRight, ref landedRight, ref bestRight);
@@ -59,5 +73,11 @@ public sealed class PhysicsFProbe : Behavior
         Log($"personagem bateu na parede={wallHit} {(wallHit ? "PASS" : "FAIL")}");
         Log($"raio acerta={ray.Colliding()} distancia={ray.Distance():F2} chao={(ray.Collider().ObjectId == floorLeft.ObjectId || ray.Collider().ObjectId == Find("Chão")!.ObjectId)} {(rayPass ? "PASS" : "FAIL")}");
         Log($"braco comprimento={armLength:F2} camera={camera:F2} {(armPass ? "PASS" : "FAIL")}");
+        var area = zoneEnters == 1 && ghostEnters == 0 && stayFrames > 30;
+        Log($"sensor entradas={zoneEnters} fantasma={ghostEnters} quadros-dentro={stayFrames} {(area ? "PASS" : "FAIL")}");
+        var tilted = Tilt(Find("Caixa desequilibrada")!); var upright = Tilt(Find("Caixa equilibrada")!);
+        Log($"centro-de-massa inclinacao={tilted:F0} equilibrada={upright:F0} {(tilted > 30 && upright < 5 ? "PASS" : "FAIL")}");
+        var smooth = Find("Caixa interpolada")!.LocalTransform.Position.Y;
+        Log($"interpolacao y={smooth:F2} {(smooth < 2.9f && smooth > 0 ? "PASS" : "FAIL")}");
     }
 }

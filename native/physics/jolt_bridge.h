@@ -393,6 +393,11 @@ ae::i32 AetherPhysics_ConfigureBodySimulationV1(AetherPhysicsWorld *,AetherBodyH
 // 9 point velocity (returned in state.linear). Positions in world space.
 ae::i32 AetherPhysics_BodyCommandV1(AetherPhysicsWorld *,AetherBodyHandle,ae::u32,AetherVec3,AetherVec3,AetherBodyStateV1 *);
 ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass);
+// Propriedades de massa autorais de um corpo dinâmico: massa, centro de massa
+// no referencial do corpo (nulo mantém o da forma) e inércia diagonal nos
+// eixos locais (nula mantém a da forma escalada pela massa).
+ae::i32 AetherPhysics_SetBodyMassPropertiesV1(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass,
+                                             const AetherVec3 *centerOfMass,const AetherVec3 *inertia);
 ae::i32 AetherPhysics_GetBodyFieldStateV1(AetherPhysicsWorld *,AetherBodyHandle,float *,float *,AetherVec3 *);
 // Body-origin pose (not centre of mass). A stale/destroyed handle returns zero
 // and leaves outputs untouched; read under one body lock.

@@ -459,7 +459,7 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
@@ -1157,7 +1157,7 @@ Força e torque contínuos sobre corpo dinâmico. **Consumidor:** runtime/scene_
 | `relative_torque_z` | Torque local Z | número | Torque local | 0 | -10000000 … 10000000 | N·m | runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt | nada | não | não | não |
 | `enabled` | Ativo | booleano | Força mundo | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → ApplyBodyForceV1 antes de cada passo Jolt | nada | não | não | não |
 
-## Corpo físico · `astra.physics.body` v6
+## Corpo físico · `astra.physics.body` v8
 
 Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **Invalida:** corpo físico.
 
@@ -1194,6 +1194,12 @@ Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **
 | `max_linear_velocity` | Limite linear | número | Simulação | 500 | 0.001 … 100000 | m/s | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `max_angular_velocity` | Limite angular | número | Simulação | 47.12389 | 0.001 … 100000 | rad/s | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `solver_velocity_steps` | Iterações de velocidade | número | Simulação | 0 | 0 … 255 |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `center_of_mass_x` | Centro de massa X | número | Massa | 0 | -1000 … 1000 | m | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `center_of_mass_y` | Centro de massa Y | número | Massa | 0 | -1000 … 1000 | m | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `center_of_mass_z` | Centro de massa Z | número | Massa | 0 | -1000 … 1000 | m | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `inertia_x` | Inércia X | número | Massa | 1 | 0.000001 … 1000000 | kg·m² | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `inertia_y` | Inércia Y | número | Massa | 1 | 0.000001 … 1000000 | kg·m² | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `inertia_z` | Inércia Z | número | Massa | 1 | 0.000001 … 1000000 | kg·m² | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `sensor` | Sensor sem resposta | booleano | Corpo | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `allow_sleep` | Permitir repouso | booleano | Corpo | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `freeze_position_x` | Travar posição X | booleano | Restrições | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
@@ -1203,10 +1209,15 @@ Massa e resposta física. **Consumidor:** runtime/scene_physics.cpp → Jolt. **
 | `freeze_rotation_y` | Travar rotação Y | booleano | Restrições | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `freeze_rotation_z` | Travar rotação Z | booleano | Restrições | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `continuous_collision` | Colisão contínua | booleano | Simulação | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `monitoring` | Monitorar | booleano | Corpo | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `monitorable` | Detectável por sensores | booleano | Corpo | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `automatic_center_of_mass` | Centro de massa automático | booleano | Massa | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
+| `automatic_inertia` | Inércia automática | booleano | Massa | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 | `motion` | Movimento | enumeração | Corpo | Estático | Estático \| Cinemático \| Dinâmico |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `friction_combine` | Combinar atrito | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `restitution_combine` | Combinar restituição | enumeração | Material | Padrão do motor | Padrão do motor \| Média \| Mínimo \| Multiplicar \| Máximo |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
 | `surface` | Superfície | enumeração | Material | Padrão | Padrão \| Concreto \| Madeira \| Metal \| Grama \| Terra \| Areia \| Água \| Gelo \| Borracha \| Vidro \| Tecido \| Pedra |  | runtime/scene_physics.cpp → Jolt | corpo físico | não | não | não |
+| `interpolation` | Interpolação | enumeração | Simulação | Nenhuma | Nenhuma \| Interpolar \| Extrapolar |  | runtime/scene_physics.cpp → Jolt | corpo físico | sim | não | não |
 
 ## Personagem · `astra.physics.character` v4
 
@@ -1299,6 +1310,7 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | `trigger_exit` | Sensor: saiu | other: objeto | Outro corpo deixou de sobrepor este sensor |
 | `collision_enter` | Colisão: começou | other: objeto | Contato sólido começou; entregue aos dois objetos |
 | `collision_exit` | Colisão: terminou | other: objeto | Contato sólido terminou; entregue aos dois objetos |
+| `trigger_stay` | Sensor: dentro | other: objeto | Outro corpo continua sobrepondo este sensor; no máximo uma vez por quadro e par |
 
 ## Junta · `astra.physics.joint` v3
 

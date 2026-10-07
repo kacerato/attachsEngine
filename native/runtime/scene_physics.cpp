@@ -205,6 +205,13 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     const auto handle=AetherPhysics_CreateCompoundBodyV3(world_,&desc,parts.data(),static_cast<u32>(parts.size()),&dynamics);
     if(handle==AetherBodyHandle_Invalid||(body->motion==scene::BodyMotion::Dynamic&&!AetherPhysics_SetMassV2(world_,handle,body->mass)))
       return fail(entity,"Jolt recusou a composição ou a massa (malha convexa plana não tem casco sólido)");
+    if(body->motion==scene::BodyMotion::Dynamic&&(!body->automaticCenterOfMass||!body->automaticInertia)) {
+      // Centro de massa autoral em unidades locais do objeto; a escala vai junto.
+      const AetherVec3 center{body->centerOfMass[0]*transform.scale[0],body->centerOfMass[1]*transform.scale[1],body->centerOfMass[2]*transform.scale[2]};
+      const AetherVec3 inertia{body->inertia[0],body->inertia[1],body->inertia[2]};
+      if(!AetherPhysics_SetBodyMassPropertiesV1(world_,handle,body->mass,body->automaticCenterOfMass?nullptr:&center,body->automaticInertia?nullptr:&inertia))
+        return fail(entity,"Jolt recusou o centro de massa ou a inércia");
+    }
     if(body->motion!=scene::BodyMotion::Static){
       AetherBodySimulationV1 settings;settings.maxLinearVelocity=body->maxLinearVelocity;settings.maxAngularVelocity=body->maxAngularVelocity;settings.continuousCollision=body->continuousCollision;settings.velocitySteps=static_cast<u32>(body->solverVelocitySteps);
       if(!AetherPhysics_ConfigureBodySimulationV1(world_,handle,&settings))return fail(entity,"Configuração avançada do corpo recusada");
@@ -233,6 +240,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
                          body->motion!=scene::BodyMotion::Static,std::move(instances),
                          {body->velocityX,body->velocityY,body->velocityZ}});
+    bindings_.back().interpolation=body->motion==scene::BodyMotion::Static?0u:body->interpolation;
     if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor))dynamicMotors_.push_back({id,motor->instanceId()});
   }
   // All bodies exist now, including static anchors and forward references.
@@ -629,7 +637,12 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       // Native events are directed sensor -> other and aggregate compound parts.
       for(const auto &event:events_) {
         const auto sensor=objects_.find(event.sensor),other=objects_.find(event.other);
-        if(sensor!=objects_.end()&&other!=objects_.end()&&!trigger(context,sensor->second,other->second,static_cast<u32>(event.type))) return false;
+        if(sensor==objects_.end()||other==objects_.end()) continue;
+        // Area3D do Godot: sensor sem monitoring não publica; corpo sem monitorable não é visto.
+        const auto *sensorObject=world.graph().find(sensor->second);const auto *otherObject=world.graph().find(other->second);
+        const auto *sensorBody=sensorObject?physicsBody(*sensorObject):nullptr;const auto *otherBody=otherObject?physicsBody(*otherObject):nullptr;
+        if((sensorBody&&!sensorBody->monitoring)||(otherBody&&!otherBody->monitorable)) continue;
+        if(!trigger(context,sensor->second,other->second,static_cast<u32>(event.type))) return false;
       }
     }
     if(contact) {
@@ -653,7 +666,7 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       }
     }
   }
-  return true;
+  return publishInterpolatedPoses(world);
 }
 bool ScenePhysics::applyContinuousForces(GameWorld &world) {
   // Iterate existing body bindings, not every schema/object and not a new
@@ -700,22 +713,15 @@ bool ScenePhysics::applyContinuousForces(GameWorld &world) {
 }
 bool ScenePhysics::synchronizePoses(GameWorld &world) {
   auto &document=world.poseGraph();
-  for(const auto &binding:bindings_) {
+  for(auto &binding:bindings_) {
     if(!binding.moving) continue;
     AetherVec3 p;AetherQuat q;
     if(!AetherPhysics_TryGetBodyPoseV2(world_,binding.body,&p,&q)) {error_="Não foi possível ler a pose do corpo "+std::to_string(binding.id);return false;}
-    float world[16]{
-      (1-2*(q.y*q.y+q.z*q.z))*binding.scale[0],2*(q.x*q.y+q.w*q.z)*binding.scale[0],2*(q.x*q.z-q.w*q.y)*binding.scale[0],0,
-      2*(q.x*q.y-q.w*q.z)*binding.scale[1],(1-2*(q.x*q.x+q.z*q.z))*binding.scale[1],2*(q.y*q.z+q.w*q.x)*binding.scale[1],0,
-      2*(q.x*q.z+q.w*q.y)*binding.scale[2],2*(q.y*q.z-q.w*q.x)*binding.scale[2],(1-2*(q.x*q.x+q.y*q.y))*binding.scale[2],0,p.x,p.y,p.z,1};
-    // Um objeto removido no ponto seguro já teve o corpo solto; se a ordem
-    // inverter, ignorar é correto — publicar pose de quem não existe não é.
-    const auto *entity=document.find(binding.id);if(!entity) continue;
-    float parent[16]{};parent[0]=parent[5]=parent[10]=parent[15]=1;
-    if(entity->parent && !worldMatrix(document,entity->parent,parent)) {error_=std::string(entity->name)+": transformação do pai físico inválida";return false;}
-    Transform local;
-    if(!localTransformForWorld(world,parent,local)) {error_=std::string(entity->name)+": pose física não pode ser representada no referencial do pai";return false;}
-    if(!document.setTransform(binding.id,local)) {error_=std::string(entity->name)+": publicação da pose física recusada";return false;}
+    binding.previousPosition=binding.hasPose?binding.currentPosition:p;binding.previousRotation=binding.hasPose?binding.currentRotation:q;
+    binding.currentPosition=p;binding.currentRotation=q;binding.hasPose=true;
+    // Interpolados publicam uma vez por quadro, em publishInterpolatedPoses.
+    if(binding.interpolation) continue;
+    if(!publishBodyPose(world,binding,p,q)) return false;
   }
   for(auto &c:characters_) {
     const auto eye=c.motor->eyePosition();c.world[12]=eye.x;c.world[13]=eye.y-c.eyeHeight;c.world[14]=eye.z;
@@ -724,6 +730,53 @@ bool ScenePhysics::synchronizePoses(GameWorld &world) {
     if(entity->parent&&!worldMatrix(document,entity->parent,parent)) return false;
     Transform local;
     if(!localTransformForWorld(c.world,parent,local)||!document.setTransform(c.id,local)) return false;
+  }
+  return true;
+}
+// Unity Rigidbody.interpolation: a pose desenhada fica entre o passo anterior
+// e o último (Interpolar) ou é projetada pela velocidade (Extrapolar), pela
+// fração do passo que sobrou no acumulador. A física continua no último passo.
+bool ScenePhysics::publishInterpolatedPoses(GameWorld &world) {
+  const float alpha=static_cast<float>(std::clamp(accumulated_*60.0,0.0,1.0));
+  for(const auto &binding:bindings_) {
+    if(!binding.moving||!binding.interpolation||!binding.hasPose) continue;
+    AetherVec3 p=binding.currentPosition;AetherQuat q=binding.currentRotation;
+    if(binding.interpolation==1) {
+      const auto &a=binding.previousPosition;const auto &qa=binding.previousRotation;const auto &qb=binding.currentRotation;
+      p={a.x+(p.x-a.x)*alpha,a.y+(p.y-a.y)*alpha,a.z+(p.z-a.z)*alpha};
+      // Nlerp pelo caminho curto: entre passos de 1/60 s a diferença é pequena.
+      const float sign=qa.x*qb.x+qa.y*qb.y+qa.z*qb.z+qa.w*qb.w<0?-1.f:1.f;
+      q={qa.x+(sign*qb.x-qa.x)*alpha,qa.y+(sign*qb.y-qa.y)*alpha,qa.z+(sign*qb.z-qa.z)*alpha,qa.w+(sign*qb.w-qa.w)*alpha};
+    } else {
+      AetherVec3 v{},w{};const float dt=alpha/60.f;
+      AetherPhysics_TryGetBodyVelocityV1(world_,binding.body,&v);AetherPhysics_TryGetBodyAngularVelocityV1(world_,binding.body,&w);
+      p={p.x+v.x*dt,p.y+v.y*dt,p.z+v.z*dt};
+      // q' = q + ½·(ω,0)·q·dt
+      const AetherQuat r=q;
+      q={r.x+.5f*dt*(w.x*r.w+w.y*r.z-w.z*r.y),r.y+.5f*dt*(w.y*r.w+w.z*r.x-w.x*r.z),r.z+.5f*dt*(w.z*r.w+w.x*r.y-w.y*r.x),r.w-.5f*dt*(w.x*r.x+w.y*r.y+w.z*r.z)};
+    }
+    const float length=std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);
+    if(!(length>1e-6f)) continue;
+    q={q.x/length,q.y/length,q.z/length,q.w/length};
+    if(!publishBodyPose(world,binding,p,q)) return false;
+  }
+  return true;
+}
+bool ScenePhysics::publishBodyPose(GameWorld &world,const Binding &binding,AetherVec3 p,AetherQuat q) {
+  auto &document=world.poseGraph();
+  {
+    float world[16]{
+      (1-2*(q.y*q.y+q.z*q.z))*binding.scale[0],2*(q.x*q.y+q.w*q.z)*binding.scale[0],2*(q.x*q.z-q.w*q.y)*binding.scale[0],0,
+      2*(q.x*q.y-q.w*q.z)*binding.scale[1],(1-2*(q.x*q.x+q.z*q.z))*binding.scale[1],2*(q.y*q.z+q.w*q.x)*binding.scale[1],0,
+      2*(q.x*q.z+q.w*q.y)*binding.scale[2],2*(q.y*q.z-q.w*q.x)*binding.scale[2],(1-2*(q.x*q.x+q.y*q.y))*binding.scale[2],0,p.x,p.y,p.z,1};
+    // Um objeto removido no ponto seguro já teve o corpo solto; se a ordem
+    // inverter, ignorar é correto — publicar pose de quem não existe não é.
+    const auto *entity=document.find(binding.id);if(!entity) return true;
+    float parent[16]{};parent[0]=parent[5]=parent[10]=parent[15]=1;
+    if(entity->parent && !worldMatrix(document,entity->parent,parent)) {error_=std::string(entity->name)+": transformação do pai físico inválida";return false;}
+    Transform local;
+    if(!localTransformForWorld(world,parent,local)) {error_=std::string(entity->name)+": pose física não pode ser representada no referencial do pai";return false;}
+    if(!document.setTransform(binding.id,local)) {error_=std::string(entity->name)+": publicação da pose física recusada";return false;}
   }
   return true;
 }

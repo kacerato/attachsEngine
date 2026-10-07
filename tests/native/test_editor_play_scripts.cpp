@@ -1202,3 +1202,35 @@ AE_TEST(character_platform_fixedupdate_kinematic_abi_and_native_state_follow_rea
   AE_EXPECT_TRUE(std::abs(play.document().find(actor)->transform.position[0]-state.position[0])<.001f,"published scene pose matches native foot position");
   play.stop();FakeRuntime::reset();
 }
+
+// Sensor/Área (Godot 4.5 Area3D): monitoring, monitorable e permanência como
+// evento de componente, no máximo uma vez por quadro e par.
+AE_TEST(sensor_area_monitoring_monitorable_and_stay_event_once_per_frame) {
+  EditorDocument doc;physical(doc,"Chão",-.5f,scene::BodyMotion::Static,.5f);
+  const auto zone=[&](const char *name,float x,bool monitoring){
+    const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,name);auto v=*doc.find(id);v.transform.position[0]=x;v.transform.position[1]=.5f;
+    auto *b=editPhysicsBody(v);b->motion=scene::BodyMotion::Static;b->sensor=true;b->monitoring=monitoring;
+    auto *c=editCollider(v);c->halfX=c->halfY=c->halfZ=1;doc.applyEntityValues(id,v);return id;};
+  const auto ball=[&](const char *name,float x,bool monitorable){
+    const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,name);auto v=*doc.find(id);v.transform.position[0]=x;v.transform.position[1]=.5f;
+    auto *b=editPhysicsBody(v);b->motion=scene::BodyMotion::Dynamic;b->monitorable=monitorable;
+    auto *c=editCollider(v);c->shape=scene::ColliderShape::Sphere;c->radius=.3f;doc.applyEntityValues(id,v);return id;};
+  const auto watching=zone("Zona",0,true),blind=zone("Zona surda",6,false),hidden=zone("Zona da fantasma",-6,true);
+  const auto visitor=ball("Visitante",0,true);ball("Visitante surdo",6,true);ball("Fantasma",-6,false);
+  EditorMapScene resources;EditorPlayScene play;
+  AE_EXPECT_TRUE(play.start(doc,resources),play.physicsError().c_str());
+  play.events().attach(runtime::ComponentEventQueue::Consumer::Scripts,true);
+  for(u32 frame=0;frame<10;++frame) AE_EXPECT_TRUE(play.advance(1./20),"quadro com vários passos físicos");
+  u32 enter[3]{},stay[3]{};
+  play.events().consume(runtime::ComponentEventQueue::Consumer::Scripts,[&](const runtime::ComponentEventRecord &r,u64){
+    if(r.type!=&scene::Collider::descriptor) return;
+    const auto id=r.type->events[r.event].id;const u32 index=r.object.id==watching?0:r.object.id==blind?1:r.object.id==hidden?2:3;
+    if(index>2) return;
+    if(id=="trigger_enter") ++enter[index];
+    if(id=="trigger_stay") {++stay[index];AE_EXPECT_TRUE(r.values[0].object==visitor,"permanência leva o outro objeto");}
+  });
+  AE_EXPECT_TRUE(enter[0]==1&&stay[0]>=8&&stay[0]<=10,"sensor que monitora: uma entrada e uma permanência por quadro (não por passo)");
+  AE_EXPECT_TRUE(enter[1]==0&&stay[1]==0,"sensor sem monitoring não publica");
+  AE_EXPECT_TRUE(enter[2]==0&&stay[2]==0,"corpo sem monitorable não é visto");
+  play.stop();
+}

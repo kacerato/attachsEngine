@@ -127,6 +127,63 @@
               "cpp": "bodyIsDynamic"
             }
           }
+        },
+        {
+          "id": "monitoring",
+          "label": "Monitorar",
+          "member": "monitoring",
+          "presentation": {
+            "group": "Corpo",
+            "help": "Desligado, o sensor não publica entrada, permanência nem saída (Area3D.monitoring)",
+            "visible": {
+              "cpp": "bodyIsSensor"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "monitorable",
+          "label": "Detectável por sensores",
+          "member": "monitorable",
+          "presentation": {
+            "group": "Corpo",
+            "help": "Desligado, sensores ignoram este corpo (Area3D.monitorable)"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "automatic_center_of_mass",
+          "label": "Centro de massa automático",
+          "member": "automaticCenterOfMass",
+          "presentation": {
+            "group": "Massa",
+            "help": "Ligado, o Jolt calcula o centro pela forma (Rigidbody.automaticCenterOfMass)",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "automatic_inertia",
+          "label": "Inércia automática",
+          "member": "automaticInertia",
+          "presentation": {
+            "group": "Massa",
+            "help": "Ligado, a inércia vem da forma e da massa (Rigidbody.automaticInertiaTensor)",
+            "visible": {
+              "cpp": "bodyIsDynamic"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
         }
       ],
       "defaults": {
@@ -541,6 +598,150 @@
           "default": {
             "cpp": "0"
           }
+        },
+        {
+          "id": "center_of_mass_x",
+          "label": "Centro de massa X",
+          "member": "centerOfMass[0]",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Massa",
+            "unit": "m",
+            "help": {
+              "cpp": "\"Ponto local onde a massa se concentra (Rigidbody.centerOfMass)\""
+            },
+            "visible": {
+              "cpp": "bodyManualCenterOfMass"
+            }
+          }
+        },
+        {
+          "id": "center_of_mass_y",
+          "label": "Centro de massa Y",
+          "member": "centerOfMass[1]",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Massa",
+            "unit": "m",
+            "help": {
+              "cpp": "\"Ponto local onde a massa se concentra (Rigidbody.centerOfMass)\""
+            },
+            "visible": {
+              "cpp": "bodyManualCenterOfMass"
+            }
+          }
+        },
+        {
+          "id": "center_of_mass_z",
+          "label": "Centro de massa Z",
+          "member": "centerOfMass[2]",
+          "min": {
+            "cpp": "-1000"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Massa",
+            "unit": "m",
+            "help": {
+              "cpp": "\"Ponto local onde a massa se concentra (Rigidbody.centerOfMass)\""
+            },
+            "visible": {
+              "cpp": "bodyManualCenterOfMass"
+            }
+          }
+        },
+        {
+          "id": "inertia_x",
+          "label": "Inércia X",
+          "member": "inertia[0]",
+          "min": {
+            "cpp": ".000001f"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Massa",
+            "unit": "kg·m²",
+            "help": {
+              "cpp": "\"Momento de inércia nos eixos locais (Rigidbody.inertiaTensor)\""
+            },
+            "visible": {
+              "cpp": "bodyManualInertia"
+            }
+          }
+        },
+        {
+          "id": "inertia_y",
+          "label": "Inércia Y",
+          "member": "inertia[1]",
+          "min": {
+            "cpp": ".000001f"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Massa",
+            "unit": "kg·m²",
+            "help": {
+              "cpp": "\"Momento de inércia nos eixos locais (Rigidbody.inertiaTensor)\""
+            },
+            "visible": {
+              "cpp": "bodyManualInertia"
+            }
+          }
+        },
+        {
+          "id": "inertia_z",
+          "label": "Inércia Z",
+          "member": "inertia[2]",
+          "min": {
+            "cpp": ".000001f"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Massa",
+            "unit": "kg·m²",
+            "help": {
+              "cpp": "\"Momento de inércia nos eixos locais (Rigidbody.inertiaTensor)\""
+            },
+            "visible": {
+              "cpp": "bodyManualInertia"
+            }
+          }
         }
       ],
       "defaults": {
@@ -595,6 +796,20 @@
             "group": "Material",
             "help": "Tipo de superfície lido por scripts no acerto e no contato (passos, faíscas, sons)"
           }
+        },
+        {
+          "id": "interpolation",
+          "label": "Interpolação",
+          "type": "PhysicsBody",
+          "member": "interpolation",
+          "options": "bodyInterpolationOptions",
+          "presentation": {
+            "group": "Simulação",
+            "help": "Suaviza a pose desenhada entre passos de 60 Hz (Rigidbody.interpolation); a física não muda",
+            "visible": {
+              "cpp": "bodySimulates"
+            }
+          }
         }
       ]
     }
@@ -645,6 +860,22 @@
         "physicsBodyNumbers/max_linear_velocity",
         "physicsBodyNumbers/max_angular_velocity",
         "physicsBodyNumbers/solver_velocity_steps"
+      ]
+    },
+    {
+      "name": "physics_body_PhysicsBody_fields6",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyBooleans/monitoring",
+        "physicsBodyBooleans/monitorable"
+      ]
+    },
+    {
+      "name": "physics_body_PhysicsBody_fields7",
+      "type": "PhysicsBody",
+      "properties": [
+        "physicsBodyBooleans/automatic_center_of_mass",
+        "physicsBodyBooleans/automatic_inertia"
       ]
     }
   ]

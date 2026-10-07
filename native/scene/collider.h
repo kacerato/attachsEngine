@@ -138,14 +138,15 @@ inline constexpr std::array<ComponentResourceBinding,2> colliderResources{{
    {"Material","","Recurso compartilhado; escolher copia atrito, restituição, combinação e superfície para esta forma",colliderOwnMaterial}}
 }};
 // Acontecimentos do solver Jolt. Instância zero: o backend informa o objeto,
-// não qual das formas repetíveis do objeto tocou. Stay fica fora: um evento
-// por par e passo físico encheria a fila sem informação nova para conexões.
+// não qual das formas repetíveis do objeto tocou. A permanência no sensor sai
+// no máximo uma vez por quadro e par; a de contato sólido fica no script.
 inline constexpr std::array<ComponentParameter,1> physicsOtherPayload{{{"other","Outro objeto",ComponentValueKind::Object}}};
-inline constexpr std::array<ComponentEvent,4> physicsContactEvents{{
+inline constexpr std::array<ComponentEvent,5> physicsContactEvents{{
   {"trigger_enter","Sensor: entrou","Outro corpo começou a sobrepor este sensor",physicsOtherPayload},
   {"trigger_exit","Sensor: saiu","Outro corpo deixou de sobrepor este sensor",physicsOtherPayload},
   {"collision_enter","Colisão: começou","Contato sólido começou; entregue aos dois objetos",physicsOtherPayload},
   {"collision_exit","Colisão: terminou","Contato sólido terminou; entregue aos dois objetos",physicsOtherPayload},
+  {"trigger_stay","Sensor: dentro","Outro corpo continua sobrepondo este sensor; no máximo uma vez por quadro e par",physicsOtherPayload},
 }};
 inline const ComponentType Collider::descriptor{
   "astra.physics.collider",9,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples,colliderResources,{},{},{},{},physicsContactEvents

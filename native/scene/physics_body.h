@@ -19,6 +19,15 @@ public:
   // e restituição acima são a cópia local, usada também quando o recurso falta.
   u32 frictionCombine=0,restitutionCombine=0,surface=0;
   resources::AssetGuid material{};
+  // Godot 4.5 Area3D: monitoring (o sensor publica eventos) e monitorable
+  // (sensores enxergam este corpo). v7.
+#include "scene/generated/physics_body_PhysicsBody_fields6.inc"
+  // Massa autoral (v8): centro de massa e inércia manuais, e interpolação da
+  // pose desenhada (0 nenhuma, 1 interpolar, 2 extrapolar).
+#include "scene/generated/physics_body_PhysicsBody_fields7.inc"
+  float centerOfMass[3]{},inertia[3]{1,1,1};
+  u32 interpolation=0;
+
 
 #include "scene/generated/physics_body_PhysicsBody_fields5.inc"
 
@@ -26,18 +35,22 @@ public:
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<PhysicsBody>(*this);}
   bool valid() const override {
-    if(static_cast<u32>(motion)>2||frictionCombine>4||restitutionCombine>4||surface>=kPhysicsSurfaceCount) return false;
+    if(static_cast<u32>(motion)>2||frictionCombine>4||restitutionCombine>4||surface>=kPhysicsSurfaceCount||interpolation>2) return false;
     if(motion==BodyMotion::Dynamic&&freezePosition[0]&&freezePosition[1]&&freezePosition[2]&&freezeRotation[0]&&freezeRotation[1]&&freezeRotation[2])return false;
     if(solverVelocitySteps!=std::floor(solverVelocitySteps))return false;
     for(const auto &p:descriptor.numbers) {const float v=p.read(*this);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
     return true;
   }
   void write(std::ostream &out) const override {out<<static_cast<u32>(motion);for(const auto &p:descriptor.numbers) out<<' '<<p.read(*this);out<<' '<<sensor<<' '<<allowSleep;for(bool n:freezePosition)out<<' '<<n;for(bool n:freezeRotation)out<<' '<<n;out<<' '<<continuousCollision;
-    out<<' '<<frictionCombine<<' '<<restitutionCombine<<' '<<(material.valid()?material.text():"-")<<' '<<surface;}
+    out<<' '<<frictionCombine<<' '<<restitutionCombine<<' '<<(material.valid()?material.text():"-")<<' '<<surface<<' '<<monitoring<<' '<<monitorable
+       <<' '<<automaticCenterOfMass<<' '<<automaticInertia<<' '<<interpolation;}
   bool read(std::istream &in,u32 version) override {
-    u32 mode=0;if((version<2||version>6) || !(in>>mode) || mode>2) return false;
+    u32 mode=0;if((version<2||version>8) || !(in>>mode) || mode>2) return false;
     motion=static_cast<BodyMotion>(mode);
-    for(usize i=0;i<(version==2?6:version==3?12:descriptor.numbers.size());++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
+    // v8 acrescentou centro de massa e inércia no fim da tabela de números.
+    for(auto &v:centerOfMass) v=0;
+    for(auto &v:inertia) v=1;
+    for(usize i=0;i<(version==2?6:version==3?12:version<8?15:descriptor.numbers.size());++i) if(!(in>>*descriptor.numbers[i].write(*this))) return false;
     if(version>=3 && !(in>>sensor>>allowSleep)) return false;
     if(version>=4){for(auto &n:freezePosition)if(!(in>>n))return false;for(auto &n:freezeRotation)if(!(in>>n))return false;if(!(in>>continuousCollision))return false;}
     frictionCombine=restitutionCombine=surface=0;material={};
@@ -46,6 +59,10 @@ public:
       if(guid!="-"&&!resources::AssetGuid::parse(guid,material)) return false;
     }
     if(version>=6 && !(in>>surface)) return false;
+    monitoring=monitorable=true;
+    if(version>=7 && !(in>>monitoring>>monitorable)) return false;
+    automaticCenterOfMass=automaticInertia=true;interpolation=0;
+    if(version>=8 && !(in>>automaticCenterOfMass>>automaticInertia>>interpolation)) return false;
     return true;
   }
 };
@@ -55,12 +72,18 @@ public:
 // seções na interface.
 inline bool bodySimulates(const ComponentValue &v) {return static_cast<const PhysicsBody&>(v).motion!=BodyMotion::Static;}
 inline bool bodyIsDynamic(const ComponentValue &v) {return static_cast<const PhysicsBody&>(v).motion==BodyMotion::Dynamic;}
+inline bool bodyIsSensor(const ComponentValue &v) {return static_cast<const PhysicsBody&>(v).sensor;}
+inline bool bodyManualCenterOfMass(const ComponentValue &v) {const auto &b=static_cast<const PhysicsBody&>(v);return b.motion==BodyMotion::Dynamic&&!b.automaticCenterOfMass;}
+inline bool bodyManualInertia(const ComponentValue &v) {const auto &b=static_cast<const PhysicsBody&>(v);return b.motion==BodyMotion::Dynamic&&!b.automaticInertia;}
 #include "scene/generated/physics_body_physicsBodyNumbers.inc"
-inline constexpr std::array<ComponentTriple,2> physicsBodyTriples{{
+inline constexpr std::array<ComponentTriple,4> physicsBodyTriples{{
   {"velocity","Velocidade inicial",{"velocity_x","velocity_y","velocity_z"}},
-  {"angular_velocity","Giro inicial",{"angular_x","angular_y","angular_z"}}
+  {"angular_velocity","Giro inicial",{"angular_x","angular_y","angular_z"}},
+  {"center_of_mass","Centro de massa",{"center_of_mass_x","center_of_mass_y","center_of_mass_z"}},
+  {"inertia_tensor","Inércia",{"inertia_x","inertia_y","inertia_z"}}
 }};
 inline constexpr std::array<ComponentEnumOption,3> bodyMotionOptions{{{0,"Estático"},{1,"Cinemático"},{2,"Dinâmico"}}};
+inline constexpr std::array<ComponentEnumOption,3> bodyInterpolationOptions{{{0,"Nenhuma"},{1,"Interpolar"},{2,"Extrapolar"}}};
 #include "scene/generated/physics_body_physicsBodyEnums.inc"
 inline bool migratePhysicsBody(std::istream &in,u32 version,Components &components) {
   // V1 stored an implicit box in the body; never replace an explicit collider.
@@ -82,7 +105,7 @@ inline const std::array<ComponentResourceBinding,1> physicsBodyResources{{
    {"Material","","Recurso compartilhado; escolher copia atrito, restituição, combinação e superfície para este corpo"}}
 }};
 inline const ComponentType PhysicsBody::descriptor{
-  "astra.physics.body",6,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<PhysicsBody>();},
+  "astra.physics.body",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<PhysicsBody>();},
   physicsBodyNumbers,physicsBodyBooleans,physicsBodyEnums,migratePhysicsBody,false,{},physicsBodyTriples,physicsBodyResources
 };
 }

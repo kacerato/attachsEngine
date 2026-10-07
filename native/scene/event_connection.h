@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,15> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,16> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -43,8 +43,9 @@ inline constexpr std::array<EventConnectionEventKey,15> eventConnectionEventKeys
   {13,"astra.tween.property","completed"},
   {14,"astra.physics.joint","broken"},
   {15,"astra.physics.character","collider_hit"},
+  {16,"astra.physics.collider","trigger_stay"},
 }};
-inline constexpr std::array<ComponentEnumOption,16> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,17> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -53,6 +54,7 @@ inline constexpr std::array<ComponentEnumOption,16> eventConnectionEvents{{
   {13,"Tween de propriedade concluiu"},
   {14,"Junta quebrou"},
   {15,"Personagem bateu num colisor"},
+  {16,"Sensor 3D: dentro"},
 }};
 inline constexpr std::array<EventConnectionMethodKey,25> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
@@ -109,7 +111,7 @@ inline const EventConnectionMethodKey *findEventConnectionMethod(u32 value) {
   return nullptr;
 }
 // Eventos que carregam o outro objeto (contatos) aceitam filtro por ele.
-inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || event==15;}
+inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || event==15 || event==16;}
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
 // e audio.seek (segundos).
 inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6;}

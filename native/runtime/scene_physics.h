@@ -200,7 +200,14 @@ private:
     // Velocidade inicial autorada quando o corpo foi criado; `rebuild` compara
     // com a atual para saber se o pedido foi mudar a velocidade.
     float authoredVelocity[3]{};
+    // Interpolação da pose desenhada: pose do passo anterior e do último passo.
+    u32 interpolation=0;
+    AetherVec3 previousPosition{},currentPosition{};
+    AetherQuat previousRotation{0,0,0,1},currentRotation{0,0,0,1};
+    bool hasPose=false;
   };
+  bool publishBodyPose(GameWorld &world,const Binding &binding,AetherVec3 p,AetherQuat q);
+  bool publishInterpolatedPoses(GameWorld &world);
   QueryHit describeHit(AetherBodyHandle body, u32 subShapeId) const;
   AetherPhysicsWorld *world_ = nullptr;
   u32 ownerWorldId_=0;

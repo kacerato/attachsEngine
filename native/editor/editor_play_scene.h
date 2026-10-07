@@ -324,6 +324,7 @@ private:
   // Referência de lifecycle: Unity 6.0 (6000.0), Event function execution order:
   // https://docs.unity3d.com/6000.0/Documentation/Manual/execution-order.html
   bool advanceFrame(double elapsed,bool editorStep=false) {
+    stayThisFrame_.clear();
     frameError_.clear();
     const auto stage=[&](bool ok,const char *name){
       if(ok)return true;
@@ -406,8 +407,16 @@ private:
     self.events_.emit(self.world_,owner,instance,scene::Joint::descriptor,"broken",std::span(&value,1));
     return true;
   }
-  // Enter/Exit viram eventos de componente; Stay fica só no callback do script.
+  // Enter/Exit viram eventos de componente; a permanência no sensor também, uma
+  // vez por quadro e par; a do contato sólido fica só no callback do script.
   void emitContact(const scene::ComponentType &type,runtime::ObjectId source,u64 instance,runtime::ObjectId other,u32 phase,bool sensor) {
+    if(phase==1&&sensor) {
+      for(const auto &pair:stayThisFrame_) if(pair.first==source&&pair.second==other) return;
+      stayThisFrame_.emplace_back(source,other);
+      const auto otherValue=scene::ComponentOperationValue::makeObject(other);
+      events_.emit(world_,source,instance,type,"trigger_stay",std::span(&otherValue,1));
+      return;
+    }
     if(phase!=0 && phase!=2) return;
     const auto otherValue=scene::ComponentOperationValue::makeObject(other);
     const char *id=sensor?(phase==0?"trigger_enter":"trigger_exit"):(phase==0?"collision_enter":"collision_exit");
@@ -449,6 +458,7 @@ private:
   runtime::SceneTweens tweens_;
   runtime::SceneTweenSequences sequences_;
   runtime::ScenePhysicsQueries queries_;
+  std::vector<std::pair<runtime::ObjectId,runtime::ObjectId>> stayThisFrame_;
   runtime::SceneNumberTweens numberTweens_;
   runtime::ScenePaths paths_;
   runtime::ComponentEventQueue events_;

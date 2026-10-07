@@ -6,6 +6,7 @@
 #include "scene/collider.h"
 #include "scene/physics_body.h"
 #include "scene/timer.h"
+#include <tuple>
 #include <sstream>
 #include <iomanip>
 #include "editor/editor_route_component.h"
@@ -252,6 +253,25 @@ int writePhysicsFProject(const char *directory) {
   const auto armId=object("Braço",document.root(),0,1,6);
   {auto v=*document.find(armId);static_cast<scene::SpringArm*>(v.components.add(scene::SpringArm::descriptor))->length=6;document.applyEntityValues(armId,v);}
   object("Câmera do braço",armId,0,0,6);
+  // Sensor/Área: zona com visitante e um corpo não detectável.
+  const auto zone=object("Zona",document.root(),-9,1,-8);
+  {auto v=*document.find(zone);auto *b=static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor));b->sensor=true;
+   auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));c->halfX=c->halfY=c->halfZ=1.5f;document.applyEntityValues(zone,v);}
+  for(const auto &[name,x,monitorable]:{std::tuple{"Visitante",-9.4f,true},std::tuple{"Fantasma",-8.6f,false}}) {
+    const auto id=object(name,document.root(),x,2,-8);auto v=*document.find(id);
+    auto *b=static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor));b->motion=scene::BodyMotion::Dynamic;b->monitorable=monitorable;
+    auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));c->shape=scene::ColliderShape::Sphere;c->radius=.3f;document.applyEntityValues(id,v);
+  }
+  // Centro de massa: a mesma caixa alta, com e sem o centro deslocado para o lado.
+  for(const auto &[name,x,shifted]:{std::tuple{"Caixa equilibrada",3.f,false},std::tuple{"Caixa desequilibrada",5.f,true}}) {
+    const auto id=object(name,document.root(),x,1.2f,6);auto v=*document.find(id);
+    auto *b=static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor));b->motion=scene::BodyMotion::Dynamic;
+    if(shifted){b->automaticCenterOfMass=false;b->centerOfMass[0]=1.5f;}
+    auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));c->halfX=.3f;c->halfY=1;c->halfZ=.3f;document.applyEntityValues(id,v);
+  }
+  {const auto id=object("Caixa interpolada",document.root(),-4,3,6);auto v=*document.find(id);
+   auto *b=static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor));b->motion=scene::BodyMotion::Dynamic;b->interpolation=1;
+   v.components.add(scene::Collider::descriptor);document.applyEntityValues(id,v);}
   const auto probeId=object("Sonda",document.root(),0,0,0);
   {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
    script->scriptType="acceptance.physics_f";script->source="Scripts/PhysicsFProbe.cs";document.applyEntityValues(probeId,v);}

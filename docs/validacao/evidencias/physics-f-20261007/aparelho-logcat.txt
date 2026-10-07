@@ -5,4 +5,7 @@ PHYSF junta quebrou=True forca=98 PASS
 PHYSF personagem bateu na parede=True PASS
 PHYSF raio acerta=True distancia=2.00 chao=True PASS
 PHYSF braco comprimento=2.65 camera=2.65 PASS
+PHYSF sensor entradas=1 fantasma=0 quadros-dentro=210 PASS
+PHYSF centro-de-massa inclinacao=90 equilibrada=0 PASS
+PHYSF interpolacao y=2.06 PASS
 vulkan-errors(E Aether.Vulkan): 0

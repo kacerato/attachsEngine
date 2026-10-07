@@ -31,13 +31,25 @@ AE_TEST(physics_material_combine_follows_unity_precedence) {
   AE_EXPECT_TRUE(std::abs((AetherCombinePhysicsMaterial(3,4,.5f,.6f,true))-(.6f))<1e-6f,"máximo vence todos");
 }
 
+namespace {
+// Gravação do Corpo nas versões anteriores, a partir da atual (v8): movimento,
+// 15 números (os 6 de massa da v8 ficam de fora), sensor, sono, 6 travas, CCD;
+// v5 acrescenta combinações e material; v6 a superfície; v7 monitoring.
+std::string bodyAs(const scene::PhysicsBody &body,u32 version) {
+  std::stringstream out;body.write(out);std::vector<std::string> t;{std::string w;while(out>>w) t.push_back(w);}
+  const usize tail=version<=4?9:version==5?12:version==6?13:15;
+  std::string text;for(usize i=0;i<16;++i) text+=t[i]+' ';
+  for(usize i=22;i<22+tail;++i) text+=t[i]+' ';
+  return text;
+}
+}
+
 AE_TEST(physics_body_v4_reads_without_material_and_v5_keeps_the_reference) {
   scene::PhysicsBody body;body.motion=scene::BodyMotion::Dynamic;body.friction=.3f;
-  std::stringstream v5;body.material=resources::assetGuidFromSeed("borracha");body.restitutionCombine=4;body.write(v5);
-  scene::PhysicsBody back;AE_EXPECT_TRUE(back.read(v5,6)&&back.material==body.material&&back.restitutionCombine==4,"v6 preserva material e combinação");
-  // Um arquivo v4 termina em continuousCollision.
-  std::string text=v5.str();for(int i=0;i<4;++i) text=text.substr(0,text.rfind(' '));  // v6 grava combinações, material e superfície
-  std::istringstream v4(text);scene::PhysicsBody old;old.material=body.material;old.frictionCombine=3;
+  body.material=resources::assetGuidFromSeed("borracha");body.restitutionCombine=4;
+  std::istringstream v5(bodyAs(body,5));scene::PhysicsBody back;
+  AE_EXPECT_TRUE(back.read(v5,5)&&back.material==body.material&&back.restitutionCombine==4,"v5 preserva material e combinação");
+  std::istringstream v4(bodyAs(body,4));scene::PhysicsBody old;old.material=body.material;old.frictionCombine=3;
   AE_EXPECT_TRUE(old.read(v4,4)&&!old.material.valid()&&old.frictionCombine==0&&old.friction==.3f,"v4 lê sem material e com padrão do motor");
 }
 
@@ -115,9 +127,9 @@ AE_TEST(collider_v8_body_v5_and_material_v1_read_without_surface_data) {
   std::string text;for(usize i=0;i+5<tokens.size();++i) if(i!=14&&i!=15) text+=tokens[i]+' ';
   std::istringstream v8(text);scene::Collider old;old.ownMaterial=true;
   AE_EXPECT_TRUE(old.read(v8,8)&&!old.ownMaterial&&old.surface==0&&old.friction==.5f,"colisor v8 lê sem material próprio");
-  scene::PhysicsBody body;body.surface=4;std::stringstream v6;body.write(v6);scene::PhysicsBody b6;
+  scene::PhysicsBody body;body.surface=4;std::istringstream v6(bodyAs(body,6));scene::PhysicsBody b6;
   AE_EXPECT_TRUE(b6.read(v6,6)&&b6.surface==4,"corpo v6 com superfície");
-  std::string t5=v6.str();t5=t5.substr(0,t5.rfind(' '));std::istringstream v5(t5);scene::PhysicsBody b5;b5.surface=3;
+  std::istringstream v5(bodyAs(body,5));scene::PhysicsBody b5;b5.surface=3;
   AE_EXPECT_TRUE(b5.read(v5,5)&&b5.surface==0,"corpo v5 lê com superfície padrão");
   resources::PhysicsMaterialAsset material;
   AE_EXPECT_TRUE(resources::PhysicsMaterialAsset::deserialize("ASTRA_PHYSICS_MATERIAL 1 8dd76ac7b22f2c66033af819d76c0586 1 \"Antigo\" 0.5 0.9 0 4",material)&&

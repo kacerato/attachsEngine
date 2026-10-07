@@ -22,6 +22,7 @@
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -1337,6 +1338,31 @@ ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handl
   if(!lock.Succeeded() || !lock.GetBody().IsDynamic()) return 0;
   auto &body=lock.GetBody();auto properties=body.GetShape()->GetMassProperties();
   properties.ScaleToMass(mass);
+  auto *motion=body.GetMotionProperties();motion->SetMassProperties(motion->GetAllowedDOFs(),properties);
+  return 1;
+}
+
+ae::i32 AetherPhysics_SetBodyMassPropertiesV1(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass,
+                                             const AetherVec3 *centerOfMass,const AetherVec3 *inertia) {
+  if(!world || handle==AetherBodyHandle_Invalid || !std::isfinite(mass) || mass<=0 || mass>1e6f) return 0;
+  const auto finite=[](const AetherVec3 *v){return !v||(std::isfinite(v->x)&&std::isfinite(v->y)&&std::isfinite(v->z));};
+  if(!finite(centerOfMass)||!finite(inertia)||(inertia&&(inertia->x<=0||inertia->y<=0||inertia->z<=0))) return 0;
+  JPH::BodyInterface &bodies=world->physicsSystem.GetBodyInterface();const JPH::BodyID id(handle);
+  if(!bodies.IsAdded(id)||bodies.GetMotionType(id)!=JPH::EMotionType::Dynamic) return 0;
+  if(centerOfMass) {
+    // O deslocamento é relativo ao centro que a forma já tem.
+    auto shape=bodies.GetShape(id);
+    if(shape->GetSubType()==JPH::EShapeSubType::OffsetCenterOfMass) shape=static_cast<const JPH::OffsetCenterOfMassShape*>(shape.GetPtr())->GetInnerShape();
+    const JPH::Vec3 offset=ToJolt(*centerOfMass)-shape->GetCenterOfMass();
+    JPH::OffsetCenterOfMassShapeSettings settings(offset,shape);const auto result=settings.Create();
+    if(result.HasError()) return 0;
+    bodies.SetShape(id,result.Get(),false,JPH::EActivation::Activate);
+  }
+  JPH::BodyLockWrite lock(world->physicsSystem.GetBodyLockInterface(),id);
+  if(!lock.Succeeded()) return 0;
+  auto &body=lock.GetBody();auto properties=body.GetShape()->GetMassProperties();
+  properties.ScaleToMass(mass);
+  if(inertia) properties.mInertia=JPH::Mat44::sScale(ToJolt(*inertia));
   auto *motion=body.GetMotionProperties();motion->SetMassProperties(motion->GetAllowedDOFs(),properties);
   return 1;
 }

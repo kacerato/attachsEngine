@@ -818,18 +818,20 @@
       "dependencias": "Mundo Jolt, shapes pertinentes; modo determina escritor da pose",
       "trabalho_original": "Ampliar corpo existente",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
         "native/scene/physics_body.h",
-        "tests/native/test_runtime_physics_access.cpp",
-        "tests/native/test_body_batch_bridge.cpp"
+        "tests/native/test_body_mass.cpp",
+        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
-      "lacunas": [
-        "Centro de massa e tensor de inércia não autoráveis; interpolação de pose não exposta."
-      ],
-      "aceite": {},
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Inércia só diagonal (adaptação explícita). Aceite no aparelho em 07/10/2026."
       ]
     },
     {
@@ -873,7 +875,8 @@
         "tests/native/test_mesh_collider.cpp"
       ],
       "lacunas": [
-        "Heightfield e decomposição convexa automática ausentes."
+        "Heightfield depende de terreno (F079), ainda ausente.",
+        "Decomposição convexa automática exige biblioteca nova (V-HACD) — aguarda aprovação do usuário."
       ],
       "aceite": {},
       "limites_validacao": [
@@ -942,18 +945,21 @@
       "dependencias": "Consulta de contatos; referência ao objeto/shape; sem obrigar renderer",
       "trabalho_original": "P07c",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
         "native/scene/physics_body.h",
-        "native/scene/physics_event_connection.h",
-        "docs/validacao/evidencias/unificacao-20261006/README.md"
+        "native/scene/collider.h",
+        "tests/native/test_editor_play_scripts.cpp",
+        "docs/planos/FISICA-QUEBRA-E-PERSONAGEM-2026-10-07.md",
+        "docs/validacao/evidencias/physics-f-20261007/aparelho-logcat.txt"
       ],
-      "lacunas": [
-        "Sensor é flag do corpo; sem monitoring/monitorable separados; Stay não chega à Conexão de evento."
-      ],
-      "aceite": {},
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Stay sólido continua só no script. Aceite no aparelho em 07/10/2026."
       ]
     },
     {
@@ -1046,7 +1052,7 @@
       "estado": "ausente",
       "evidencias": [],
       "lacunas": [
-        "Sem ragdoll (bloco F)."
+        "Exige corpos dinâmicos aninhados sob um componente Ragdoll (hoje recusados), autoridade por osso e troca cinemático/dinâmico; ossos já são objetos da cena."
       ],
       "aceite": {},
       "limites_validacao": [

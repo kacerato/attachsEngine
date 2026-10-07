@@ -1297,6 +1297,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         TweenDePropriedadeConcluiu = 13,
         JuntaQuebrou = 14,
         PersonagemBateuNumColisor = 15,
+        Sensor3DDentro = 16,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -3480,6 +3481,18 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
         get => new(Component.GetFloat("angular_x"), Component.GetFloat("angular_y"), Component.GetFloat("angular_z"));
         set => Component.SetVector3("angular_velocity", value);
     }
+    /// <summary>Centro de massa</summary>
+    public Vector3 CenterOfMass
+    {
+        get => new(Component.GetFloat("center_of_mass_x"), Component.GetFloat("center_of_mass_y"), Component.GetFloat("center_of_mass_z"));
+        set => Component.SetVector3("center_of_mass", value);
+    }
+    /// <summary>Inércia</summary>
+    public Vector3 InertiaTensor
+    {
+        get => new(Component.GetFloat("inertia_x"), Component.GetFloat("inertia_y"), Component.GetFloat("inertia_z"));
+        set => Component.SetVector3("inertia_tensor", value);
+    }
     /// <summary>Massa kg (kg)</summary>
     /// <remarks>Faixa válida: 0.01 a 1000000.</remarks>
     public float Mass
@@ -3597,6 +3610,30 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
         get => Component.GetBool("continuous_collision");
         set => Component.SetBool("continuous_collision", value);
     }
+    /// <summary>Monitorar. Desligado, o sensor não publica entrada, permanência nem saída (Area3D.monitoring)</summary>
+    public bool Monitoring
+    {
+        get => Component.GetBool("monitoring");
+        set => Component.SetBool("monitoring", value);
+    }
+    /// <summary>Detectável por sensores. Desligado, sensores ignoram este corpo (Area3D.monitorable)</summary>
+    public bool Monitorable
+    {
+        get => Component.GetBool("monitorable");
+        set => Component.SetBool("monitorable", value);
+    }
+    /// <summary>Centro de massa automático. Ligado, o Jolt calcula o centro pela forma (Rigidbody.automaticCenterOfMass)</summary>
+    public bool AutomaticCenterOfMass
+    {
+        get => Component.GetBool("automatic_center_of_mass");
+        set => Component.SetBool("automatic_center_of_mass", value);
+    }
+    /// <summary>Inércia automática. Ligado, a inércia vem da forma e da massa (Rigidbody.automaticInertiaTensor)</summary>
+    public bool AutomaticInertia
+    {
+        get => Component.GetBool("automatic_inertia");
+        set => Component.SetBool("automatic_inertia", value);
+    }
     public enum MotionOption : uint
     {
         Estatico = 0,
@@ -3658,6 +3695,18 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
     {
         get => (SurfaceOption)Component.GetEnum("surface");
         set => Component.SetEnum("surface", (uint)value);
+    }
+    public enum InterpolationOption : uint
+    {
+        Nenhuma = 0,
+        Interpolar = 1,
+        Extrapolar = 2,
+    }
+    /// <summary>Interpolação. Suaviza a pose desenhada entre passos de 60 Hz (Rigidbody.interpolation); a física não muda</summary>
+    public InterpolationOption Interpolation
+    {
+        get => (InterpolationOption)Component.GetEnum("interpolation");
+        set => Component.SetEnum("interpolation", (uint)value);
     }
     /// <summary>Material físico. Recurso do projeto por slot</summary>
     public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
@@ -3951,6 +4000,8 @@ public readonly struct Collider : IComponentFacade<Collider>
     public ComponentSubscription OnCollisionEnter(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_enter", handler);
     /// <summary>Colisão: terminou. Contato sólido terminou; entregue aos dois objetos. Payload: Outro objeto: objeto</summary>
     public ComponentSubscription OnCollisionExit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collision_exit", handler);
+    /// <summary>Sensor: dentro. Outro corpo continua sobrepondo este sensor; no máximo uma vez por quadro e par. Payload: Outro objeto: objeto</summary>
+    public ComponentSubscription OnTriggerStay(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "trigger_stay", handler);
 }
 
 /// <summary>Junta: Nove mecanismos Jolt com limites, referenciais e motores. Família Física 3D · Juntas.</summary>
