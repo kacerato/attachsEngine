@@ -200,6 +200,9 @@ private:
     // Velocidade inicial autorada quando o corpo foi criado; `rebuild` compara
     // com a atual para saber se o pedido foi mudar a velocidade.
     float authoredVelocity[3]{};
+    float authoredAngular[3]{};
+    u64 instance=0;
+    bool dynamic=false;
     // Interpolação da pose desenhada: pose do passo anterior e do último passo.
     u32 interpolation=0;
     AetherVec3 previousPosition{},currentPosition{};

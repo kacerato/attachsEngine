@@ -80,6 +80,8 @@ enum class EditorWidget : u32 {
   MotorBakePrevious,MotorBakeNext,MotorBakeSourcesOpen,MotorBakeSourcesDone,MotorBakeSourcesObject,MotorBakeSourcesHierarchy,
   MotorBakeSourcePrevious,MotorBakeSourceNext,MotorBakePartBase=0xDB000080u,MotorBakeSourceBase=0xDB000100u,
   MotorBakeRegenerate=0xDB000300u,MotorBakeConfirmMapping,MotorBakeMappingBase=0xDB000320u,
+  MotorBakeSettingsOpen=0xDB000360u,MotorBakeSettingsDone,MotorBakeSettingsPrevious,MotorBakeSettingsNext,
+  MotorBakePoseRest,MotorBakePoseAuthored,MotorBakePoseAnimation,MotorBakeSettingsNumberBase=0xDB000370u,
   GuiHierarchyRowBase = 0xDD000000u,
   GuiHierarchyCollapseBase = 0xDE000000u,
   CreationCategoryBase=0x63000000,
@@ -1254,7 +1256,9 @@ struct EditorScreenState final {
   struct MotorBakePreviewPart {std::vector<std::array<float,9>> triangles;};
   std::vector<MotorBakePreviewPart> motorBakePreview;
   struct MotorBakeSourceRow {std::string label,error;bool selected=false;};
-  bool motorBakeSourcesOpen=false;
+  bool motorBakeSourcesOpen=false,motorBakeSettingsOpen=false;
+  u32 motorBakeSettingsPage=0;
+  resources::ConvexBakeSettings motorBakeDraft{};
   u32 motorBakeSourcePage=0,motorBakeSelectedSources=0;
   std::vector<MotorBakeSourceRow> motorBakeSourceRows;
   bool motorBakeRecipeAvailable=false,motorBakeRegenerating=false,motorBakeMappingConfirmed=true;

@@ -1,0 +1,55 @@
+{
+  "scope": "whole editor; sampled PSS, not allocator peak",
+  "startInputCompletedSeconds": 0.7350000001024455,
+  "cancelInputCompletedSeconds": 2.3600000001024455,
+  "durationSeconds": 9.422000000020489,
+  "thermalValidated": false,
+  "samples": [
+    {
+      "seconds": 0.3600000001024455,
+      "totalPssKiB": 362638,
+      "totalRssKiB": 505208
+    },
+    {
+      "seconds": 2.2030000002123415,
+      "totalPssKiB": 375234,
+      "totalRssKiB": 517808
+    },
+    {
+      "seconds": 2.6410000000614673,
+      "totalPssKiB": 374934,
+      "totalRssKiB": 517508
+    },
+    {
+      "seconds": 3.4060000001918525,
+      "totalPssKiB": 375002,
+      "totalRssKiB": 517576
+    },
+    {
+      "seconds": 4.219000000040978,
+      "totalPssKiB": 369322,
+      "totalRssKiB": 511896
+    },
+    {
+      "seconds": 5.141000000061467,
+      "totalPssKiB": 369342,
+      "totalRssKiB": 511916
+    },
+    {
+      "seconds": 5.9850000001024455,
+      "totalPssKiB": 369318,
+      "totalRssKiB": 511892
+    },
+    {
+      "seconds": 6.766000000061467,
+      "totalPssKiB": 369314,
+      "totalRssKiB": 511884
+    },
+    {
+      "seconds": 7.563000000081956,
+      "totalPssKiB": 369322,
+      "totalRssKiB": 511892
+    }
+  ],
+  "maximumSampledPssKiB": 375234
+}

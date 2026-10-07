@@ -153,6 +153,12 @@ struct AetherBodyStateV1 {
   ae::u32 reserved=0;
 };
 static_assert(sizeof(AetherBodyStateV1)==48);
+// Internal solver rebuild state: world linear/angular momentum, not velocities.
+struct AetherBodyMomentumV1 {
+  ae::u32 size=32,flags=0; // 1 dynamic, 2 active
+  AetherVec3 linear{},angular{};
+};
+static_assert(sizeof(AetherBodyMomentumV1)==32);
 
 // Opaco de propósito — o layout real (PhysicsSystem, alocador temporário, job
 // system, filtros de camada) vive só em jolt_bridge.cpp.
@@ -387,6 +393,8 @@ ae::i32 AetherPhysics_TryGetBodyVelocityV1(AetherPhysicsWorld *world,AetherBodyH
 // corpo no solver sem parar o que ele estava fazendo.
 ae::i32 AetherPhysics_TryGetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *out);
 ae::i32 AetherPhysics_SetBodyAngularVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 value);
+ae::i32 AetherPhysics_TryGetBodyMomentumV1(AetherPhysicsWorld *,AetherBodyHandle,AetherBodyMomentumV1 *);
+ae::i32 AetherPhysics_RestoreBodyMomentumV1(AetherPhysicsWorld *,AetherBodyHandle,const AetherBodyMomentumV1 *,ae::u32 mask);
 ae::i32 AetherPhysics_ConfigureBodySimulationV1(AetherPhysicsWorld *,AetherBodyHandle,const AetherBodySimulationV1 *);
 // 0 snapshot, 1 angular velocity, 2 wake, 3 sleep, 4 force at position,
 // 5 impulse at position, 6 velocity pair, 7 linear change, 8 angular change,

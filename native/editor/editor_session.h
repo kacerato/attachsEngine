@@ -1534,8 +1534,9 @@ private:
   struct PhysicsPreview {runtime::GameWorld world;runtime::ScenePhysics physics;};
   std::unique_ptr<PhysicsPreview> diagnosticScene_;EditorSceneVersion diagnosticVersion_{};
   std::string diagnosticRoot_;double diagnosticLastTime_=-1;
-  bool collectMotorGeometry(EditorEntityId,std::vector<float> &,std::vector<std::string> &,std::vector<resources::ConvexBakeOrigin> &,std::string &) const;
+  bool collectMotorGeometry(EditorEntityId,std::vector<float> &,std::vector<std::string> &,std::vector<resources::ConvexBakeOrigin> &,std::string &,const resources::ConvexBakeSettings &) const;
   void refreshMotorBakeSources(EditorEntityId);
+  bool pickMotorBakeSource(ui::UiPoint);
   EditorEntityId motorBakeSourcesObject_=0;
   std::vector<MotorBakeSource> motorBakeSources_;
   bool motorBakeSourcesExplicit_=false;
@@ -1547,6 +1548,14 @@ private:
   std::string motorBakeRoot_,motorBakeSourceHash_;
   bool motorBakePreviewed_=false;
   resources::ConvexBakeSettings motorBakeSettings_{};
+  struct MotorBakeCached {
+    std::string project;
+    resources::ConvexBakeSettings settings;
+    resources::ConvexBakeResult result;
+  };
+  // Bounded authoring cache, owned by the session, never by a scene component.
+  // Geometry + source identities/affines + pose policy + every cooking setting.
+  std::vector<MotorBakeCached> motorBakeCache_;
   bool motorBakeRegenerating_=false;
   std::vector<u64> motorBakePartMapping_;
   bool buildMotorBakeCandidate(std::span<const resources::AssetGuid>,resources::AssetGuid,EditorEntity &,std::string &) const;

@@ -1419,6 +1419,30 @@ ae::i32 AetherPhysics_TryGetBodyGroundProbesV1(AetherPhysicsWorld *world,AetherB
   if(bottoms.overflow)return 0;
   std::copy(result,result+size,points);*count=size;return 1;
 }
+ae::i32 AetherPhysics_TryGetBodyMomentumV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherBodyMomentumV1 *out) {
+  if(!world||!out||out->size!=sizeof(*out)||handle==AetherBodyHandle_Invalid)return 0;
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(),JPH::BodyID(handle));
+  if(!lock.Succeeded()||!lock.GetBody().IsDynamic())return 0;
+  const auto &body=lock.GetBody();const auto *motion=body.GetMotionProperties();const float inverseMass=motion->GetInverseMass();
+  const auto axes=body.GetRotation()*motion->GetInertiaRotation();
+  const auto local=axes.Conjugated()*body.GetAngularVelocity(),diagonal=motion->GetInverseInertiaDiagonal();
+  const JPH::Vec3 localMomentum(diagonal.GetX()>0?local.GetX()/diagonal.GetX():0,
+                                diagonal.GetY()>0?local.GetY()/diagonal.GetY():0,
+                                diagonal.GetZ()>0?local.GetZ()/diagonal.GetZ():0);
+  out->linear=inverseMass>0?FromJolt(body.GetLinearVelocity()/inverseMass):AetherVec3{};out->angular=FromJolt(axes*localMomentum);
+  out->flags=1u|(body.IsActive()?2u:0u);return 1;
+}
+ae::i32 AetherPhysics_RestoreBodyMomentumV1(AetherPhysicsWorld *world,AetherBodyHandle handle,const AetherBodyMomentumV1 *state,ae::u32 mask) {
+  if(!world||!state||state->size!=sizeof(*state)||!(state->flags&1u)||(mask&~3u)||!mask||handle==AetherBodyHandle_Invalid)return 0;
+  for(const auto v:{state->linear.x,state->linear.y,state->linear.z,state->angular.x,state->angular.y,state->angular.z})if(!std::isfinite(v))return 0;
+  JPH::BodyLockWrite lock(world->physicsSystem.GetBodyLockInterface(),JPH::BodyID(handle));
+  if(!lock.Succeeded()||!lock.GetBody().IsDynamic())return 0;
+  auto &body=lock.GetBody();
+  // Clamped: o corpo recriado pode ter limites menores (edição ao vivo de max_*_velocity).
+  if(mask&1u)body.SetLinearVelocityClamped(ToJolt(state->linear)*body.GetMotionProperties()->GetInverseMass());
+  if(mask&2u)body.SetAngularVelocityClamped(body.GetInverseInertia().Multiply3x3(ToJolt(state->angular)));
+  return 1;
+}
 
 void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 velocity) {
   if (world == nullptr || handle == AetherBodyHandle_Invalid) return;

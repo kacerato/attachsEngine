@@ -6,6 +6,7 @@
 #include "editor/editor_import_transaction.h"
 #include "runtime/physics_requirements.h"
 #include "runtime/transform_math.h"
+#include "scene/animation.h"
 
 namespace ae::editor {
 bool EditorSession::prepareDynamicMotor(EditorEntityId id,MotorCollisionPolicy policy,EditorEntity &candidate,std::string &summary,std::string &error) const {
@@ -16,7 +17,6 @@ bool EditorSession::prepareDynamicMotor(EditorEntityId id,MotorCollisionPolicy p
   if(!source||id==document_.root())return fail("Selecione o objeto que deve possuir o corpo e a locomoção.");
   if(static_cast<u32>(policy)>3)return fail("Política de colisão inválida.");
   for(auto object=source;object;object=document_.find(object->parent)) {
-    if(scene::prefabLink(object->components))return fail("Desvincule o prefab antes de alterar sua estrutura física.");
     if(runtime::characterComponent(*object)||object->components.find("astra.physics2d.body"))return fail("Separe as autoridades Character/2D antes de configurar o motor 3D.");
   }
   candidate=*source;
@@ -55,6 +55,7 @@ bool EditorSession::prepareDynamicMotor(EditorEntityId id,MotorCollisionPolicy p
       collider->collisionMesh={};
     } else {
       if(policy==MotorCollisionPolicy::ConvexMesh&&!runtime::meshRenderer(*source))return fail("Convexo requer uma malha visual carregada neste objeto.");
+      if(policy==MotorCollisionPolicy::ConvexMesh&&source->components.find(scene::SkinnedMesh::descriptor))return fail("Para colisão da pose deformada, use Decompor e escolha Pose atual. O recurso visual base não será usado silenciosamente.");
       collider->shape=scene::ColliderShape::Mesh;collider->convex=true;collider->collisionMesh={};
     }
   }
@@ -91,7 +92,6 @@ std::string motorSourceError(const EditorDocument &document,EditorEntityId root,
   const auto *object=document.find(source.object);const auto *render=object?runtime::meshRenderer(*object):nullptr;
   if(!render||source.slot>=render->slotCount())return "Objeto ou slot de malha ausente";
   for(auto member=object;member;member=document.find(member->parent)) {
-    if(member->components.find(scene::SkinnedMesh::descriptor))return "Skin deformada exige bake de pose; não será usada a pose base silenciosamente";
     if(member->id==root)return {};
     if(runtime::physicsBody(*member)||runtime::characterComponent(*member)||member->components.find("astra.physics2d.body"))
       return "Autoridade física própria em "+std::string(member->name)+"; não será absorvida pelo Body principal";
@@ -143,6 +143,38 @@ void EditorSession::refreshMotorBakeSources(EditorEntityId id) {
   state_.motorBakeSelectedSources=static_cast<u32>(motorBakeSources_.size());motorBakeSourcesVersion_=sceneVersion();
   if(!options.empty())state_.motorBakeSourcePage=std::min<u32>(state_.motorBakeSourcePage,static_cast<u32>((options.size()-1)/state_.motorBakePartsPerPage()));
 }
+bool EditorSession::pickMotorBakeSource(ui::UiPoint point) {
+  // Keep the authored Body selected. Exact visible geometry decides which
+  // object/slot contributes, using the same deferred BVH as ordinary picking.
+  buildPickCandidates(nullptr,true);
+  const auto ray=screenPointToRay(view_,point);
+  const auto visible=pickNearest(candidates_,ray,0,true);
+  if(!visible.hit){state_.status="Toque numa superfície visível para incluir ou remover sua fonte";return true;}
+  if(!componentVisualSelectable(document_,visible.id,state_.hiddenLayers,state_.unpickableLayers,state_.sceneHidden,state_.scenePickOff)) {
+    state_.status="Fonte travada ou oculta; ajuste a Hierarquia";return true;
+  }
+  const auto options=motorDecompositionSources(state_.motorSetupTarget);
+  const MotorBakeSourceOption *chosen=nullptr;float nearest=INFINITY;
+  for(const auto &option:options)if(option.source.object==visible.id) {
+    EditorPickCandidate candidate;candidate.id=visible.id;
+    if(!mapScene_.pickSlotGeometry(document_,visible.id,option.source.slot,candidate))continue;
+    const auto *e=document_.find(visible.id);const auto *render=runtime::meshRenderer(*e);
+    const auto slot=render->slotMesh(option.source.slot);
+    if(!slot||!mapScene_.slotBounds(document_,visible.id,slot-1,candidate.center,candidate.radius))continue;
+    const auto hit=pickNearest({&candidate,1},ray,0,true);
+    if(hit.hit&&hit.distance<nearest){nearest=hit.distance;chosen=&option;}
+  }
+  if(!chosen){state_.status="A superfície não pertence às fontes desta hierarquia";return true;}
+  auto sources=motorBakeSources_;const auto found=std::find(sources.begin(),sources.end(),chosen->source);
+  const bool adding=found==sources.end();
+  if(adding) {
+    if(!chosen->error.empty()){state_.motorSetupError=chosen->error;return true;}
+    sources.push_back(chosen->source);
+  } else sources.erase(found);
+  if(selectMotorDecompositionSources(state_.motorSetupTarget,sources,state_.motorSetupError))
+    state_.status=chosen->label+" · "+(adding?"incluída":"removida");
+  return true;
+}
 bool EditorSession::selectMotorDecompositionSources(EditorEntityId id,std::span<const MotorBakeSource> sources,std::string &error) {
   if(isPlaying()||history_.isOpen()||!document_.find(id)||id==document_.root()){error="Selecione o Body em Edit Mode, fora de uma edição aberta";return false;}
   if(sources.size()>128){error="Limite de 128 fontes selecionadas; escolha um conjunto menor";return false;}
@@ -155,22 +187,66 @@ bool EditorSession::selectMotorDecompositionSources(EditorEntityId id,std::span<
   if(motorBakeSourcesObject_!=id||next!=motorBakeSources_)cancelMotorDecomposition();
   motorBakeSourcesObject_=id;motorBakeSources_=std::move(next);motorBakeSourcesExplicit_=true;motorBakeSourcesVersion_=sceneVersion();refreshMotorBakeSources(id);error.clear();return true;
 }
-bool EditorSession::collectMotorGeometry(EditorEntityId id,std::vector<float> &points,std::vector<std::string> &sources,std::vector<resources::ConvexBakeOrigin> &origins,std::string &error) const {
+bool EditorSession::collectMotorGeometry(EditorEntityId id,std::vector<float> &points,std::vector<std::string> &sources,std::vector<resources::ConvexBakeOrigin> &origins,std::string &error,const resources::ConvexBakeSettings &settings) const {
   if(motorBakeSourcesObject_!=id||motorBakeSources_.empty()) {
     const auto *object=document_.find(id);const auto *render=object?runtime::meshRenderer(*object):nullptr;
     error=render&&render->slotCount()>128?"Este objeto excede 128 slots; escolha explicitamente um conjunto menor":"Escolha pelo menos uma fonte de malha para este Body";return false;
   }
+  std::optional<EditorDocument> sampled;
+  if(settings.pose==resources::ConvexBakePose::Animation) {
+    sampled=document_;
+    std::vector<EditorEntityId> owners;document_.collectSubtree(id,owners);
+    for(auto parent=document_.find(document_.find(id)->parent);parent;parent=document_.find(parent->parent))owners.push_back(parent->id);
+    std::vector<EditorEntityId> sceneObjects;sampled->collectSubtree(sampled->root(),sceneObjects);
+    for(auto object:sceneObjects) {
+      auto copy=*sampled->find(object);bool changed=!copy.active;copy.active=true;
+      for(usize i=0;i<copy.components.size();++i)if(&copy.components.at(i)->type()==&scene::Animation::descriptor) {
+        auto *animation=static_cast<scene::Animation*>(copy.components.editInstance(copy.components.at(i)->instanceId()));
+        animation->playAutomatically=false;
+        if(std::find(owners.begin(),owners.end(),object)==owners.end())animation->enabled=false;
+        changed=true;
+      }
+      if(changed&&!sampled->applyEntityValues(object,copy)){error="Cópia de amostragem inválida";return false;}
+    }
+    runtime::SceneAnimator animator;animator.begin(*sampled,mapScene_);
+    u32 clips=0;
+    for(auto owner:owners)for(usize i=0;i<document_.find(owner)->components.size();++i) {
+      const auto *value=document_.find(owner)->components.at(i);
+      if(&value->type()!=&scene::Animation::descriptor)continue;
+      const auto &animation=static_cast<const scene::Animation&>(*value);
+      if(!animation.enabled||!animation.clip.valid())continue;
+      runtime::AnimationClipView clip;
+      if(!mapScene_.findClip(animation.clip,clip)){error="Clipe padrão de animação ausente; resolva a importação";return false;}
+      std::vector<runtime::ObjectId> targets;runtime::resolveAnimationTargets(*sampled,owner,*clip.source,targets);
+      for(const auto &channel:clip.clip->channels)if(channel.node>=targets.size()||!targets[channel.node]) {
+        error="Pose de animação possui canal sem objeto-alvo; resolva o vínculo antes do bake";return false;
+      }
+      runtime::AnimationStateView state;state.clip=animation.clip;state.enabled=true;state.time=settings.animationTime;state.speed=0;state.weight=1;state.wrapMode=animation.wrapMode;
+      if(animator.setState(owner,animation.instanceId(),state)!=runtime::AnimationCommandStatus::Ok){error="Não foi possível amostrar o clipe padrão";return false;}
+      ++clips;
+    }
+    if(!clips||!animator.advance(0,[](runtime::ObjectId){return true;})){error="Escolha um clipe padrão válido no componente Animation desta hierarquia";return false;}
+  }
+  const auto &geometryDocument=sampled?*sampled:document_;
   std::vector<std::pair<EditorEntityId,u32>> used;
   for(const auto &source:motorBakeSources_) {
     if(auto reason=motorSourceError(document_,id,source);!reason.empty()){error=std::move(reason);return false;}
-    const auto *object=document_.find(source.object);const auto *render=runtime::meshRenderer(*object);const auto slot=source.slot;
+    const auto *object=geometryDocument.find(source.object);const auto *render=runtime::meshRenderer(*object);const auto slot=source.slot;
     const auto asset=render->slotAsset(slot);const auto mesh=asset.valid()?mapScene_.assetSlot(asset):render->slotMesh(slot);
     std::span<const EditorPickMesh::Triangle> triangles;float m[16];
     if(!mesh||!mapScene_.localGeometry(mesh,triangles,m)||triangles.empty()){error=std::string(object->name)+": geometria ausente no slot "+std::to_string(slot+1);return false;}
+    // Refuse before allocating or skinning a snapshot larger than this tool's
+    // input budget. Repeated slots are accounted once below.
+    if(triangles.size()>100000){error="Decomposição limitada a 100 mil triângulos por revisão; escolha uma malha de colisão simplificada.";return false;}
+    std::vector<EditorPickMesh::Triangle> snapshot;
+    if(settings.pose!=resources::ConvexBakePose::Rest&&object->components.find(scene::SkinnedMesh::descriptor)) {
+      if(!mapScene_.authoredGeometry(geometryDocument,source.object,mesh,snapshot,error)){error=std::string(object->name)+": "+error;return false;}
+      triangles=snapshot;
+    }
     // Compose authored local matrices up to the body; no world inverse/TRS
     // decomposition can discard shear or collapse distinct mesh instances.
     float relative[16]{};relative[0]=relative[5]=relative[10]=relative[15]=1;
-    for(auto member=object;member&&member->id!=id;member=document_.find(member->parent)) {
+    for(auto member=object;member&&member->id!=id;member=geometryDocument.find(member->parent)) {
       float local[16],composed[16];runtime::transformMatrix(member->transform,local);runtime::multiplyMatrix(local,relative,composed);std::copy_n(composed,16,relative);
     }
     float composed[16];runtime::multiplyMatrix(relative,m,composed);std::copy_n(composed,16,m);
@@ -218,13 +294,20 @@ bool EditorSession::beginMotorDecomposition(EditorEntityId id,resources::ConvexB
   if(candidate.components.size()+settings.maximumParts-(regenerating?0u:1u)+extra>scene::Components::MaximumCount){error="O orçamento de partes/receita excede os slots livres";return false;}
   refreshMotorBakeSources(id);
   std::vector<float> points;std::vector<std::string> sources;std::vector<resources::ConvexBakeOrigin> origins;
-  if(!collectMotorGeometry(id,points,sources,origins,error))return false;
+  if(!collectMotorGeometry(id,points,sources,origins,error,settings))return false;
   const auto hash=Sha256::hex({reinterpret_cast<const u8*>(points.data()),points.size()*sizeof(float)});
   setSelection(id);
   motorBake_=std::make_unique<resources::ConvexBakeJob>();
-  if(!motorBake_->start(std::move(points),settings,hash,std::move(sources),error,std::move(origins)))return false;
+  const auto cached=std::find_if(motorBakeCache_.begin(),motorBakeCache_.end(),[&](const auto &entry) {
+    return entry.project==files_.rootPath()&&entry.settings==settings&&entry.result.sourceGeometryHash==hash&&entry.result.origins==origins;
+  });
+  if(cached!=motorBakeCache_.end()) {
+    if(!motorBake_->reuse(cached->result,error))return false;
+    auto recent=std::move(*cached);motorBakeCache_.erase(cached);motorBakeCache_.push_back(std::move(recent));
+  } else if(!motorBake_->start(std::move(points),settings,hash,std::move(sources),error,std::move(origins)))return false;
   motorBakeObject_=id;motorBakeVersion_=sceneVersion();motorBakeRoot_=files_.rootPath();motorBakeSourceHash_=hash;motorBakePreviewed_=false;
   motorBakeSettings_=settings;motorBakeRegenerating_=regenerating;state_.motorBakeRegenerating=regenerating;state_.motorBakePartMapping.clear();state_.motorBakeMappingConfirmed=true;
+  state_.motorBakeDraft=settings;state_.motorBakeSettingsOpen=false;
   state_.motorSetupTarget=id;state_.motorSetupPolicy=3;state_.motorBakeReady=false;state_.motorBakeRunning=true;state_.motorBakePage=0;
   state_.motorBakeSourcesOpen=false;
   state_.motorBakePreview.clear();state_.motorBakeEnabled.clear();state_.motorSetupError.clear();
@@ -247,6 +330,10 @@ void EditorSession::refreshMotorDecomposition() {
   if(progress.status==resources::ConvexBakeStatus::Failed){state_.motorSetupError=progress.error;motorBakeObject_=0;return;}
   const auto *result=motorBake_->result();if(!result)return;
   if(motorBakePreviewed_){if(!state_.motorBakeEnabled.empty())state_.motorBakePage=std::min<u32>(state_.motorBakePage,static_cast<u32>((state_.motorBakeEnabled.size()-1)/state_.motorBakePartsPerPage()));return;}
+  if(std::none_of(motorBakeCache_.begin(),motorBakeCache_.end(),[&](const auto &entry){return entry.project==motorBakeRoot_&&entry.settings==motorBakeSettings_&&entry.result.sourceGeometryHash==result->sourceGeometryHash&&entry.result.origins==result->origins;})) {
+    if(motorBakeCache_.size()==8)motorBakeCache_.erase(motorBakeCache_.begin());
+    motorBakeCache_.push_back({motorBakeRoot_,motorBakeSettings_,*result});
+  }
   motorBakePreviewed_=true;state_.motorBakeReady=true;state_.motorBakeEnabled.assign(result->parts.size(),true);
   for(const auto &part:result->parts){EditorScreenState::MotorBakePreviewPart preview;
     for(usize i=0;i<part.indices.size();i+=3){std::array<float,9> triangle;for(u32 v=0;v<3;++v)std::copy_n(part.vertices[part.indices[i+v]].data(),3,triangle.data()+v*3);preview.triangles.push_back(triangle);}
@@ -262,7 +349,7 @@ bool EditorSession::applyMotorDecomposition(std::string &error) {
   if(motorBakeRegenerating_&&!state_.motorBakeMappingConfirmed)return fail("Revise e confirme as correspondências antes de aplicar");
   if(state_.motorBakeEnabled.size()!=result->parts.size()||std::none_of(state_.motorBakeEnabled.begin(),state_.motorBakeEnabled.end(),[](bool v){return v;}))return fail("Ative pelo menos uma parte para o motor possuir suporte físico");
   std::vector<float> points;std::vector<std::string> sources;std::vector<resources::ConvexBakeOrigin> origins;
-  if(!collectMotorGeometry(motorBakeObject_,points,sources,origins,error))return false;
+  if(!collectMotorGeometry(motorBakeObject_,points,sources,origins,error,motorBakeSettings_))return false;
   if(Sha256::hex({reinterpret_cast<const u8*>(points.data()),points.size()*sizeof(float)})!=motorBakeSourceHash_)return fail("Geometria fonte mudou; gere novamente");
   if(origins!=result->origins)return fail("Identidade, seleção ou pose das fontes mudou; gere novamente");
   EditorEntity candidate;

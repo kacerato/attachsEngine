@@ -1,0 +1,6 @@
+AETHER_EDITOR 17 0 2
+1 0 0 "Cena" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1 "Untagged" GROUPS 1 0
+2 1 1 "Collision edit 1" 0 0 0 0 -0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.import.link" 2 "a7220d1063108cb5b6f29041b123516d 0127a9517453e93c2e10126de37f44fc b1129639f2822e2709ac5466e8ae75d8 -1 1 1 0 \"Collision edit 1\" 0 0 0 0 -0 0 1 1 1 - 6938a57d6fa67f6a0a5600a3ecdf999f 1 0 0" 2 "astra.render.mesh" 9 "7 1 0 1 1 1 1 1 1 1 0 0 0 0 6938a57d6fa67f6a0a5600a3ecdf999f - 0 - - - - 0 0 0.5 000 000 000 000 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 0 0 -1 0 0 - - 0 1 1 0 0 1 " "Untagged" GROUPS 1 0
+LAYERS 1 "Padrão" 4294967295
+INPUT ASTRA_ACTION_MAP 2 3 "Mover" "Olhar" "Saltar" "Mover" 2 0.119999997 1 "" 2 1 0 0.5 7 1 0 0 0 1 0 1 0 0 1 1 0 "Olhar" 2 0 1 "" 2 1 0 0.5 7 2 0 0 0 1 0 2 0 0 1 1 0 "Saltar" 0 0 1 "" 1 1 0 0.5 7 3 0 0 0 1 0
+VIEWS 0

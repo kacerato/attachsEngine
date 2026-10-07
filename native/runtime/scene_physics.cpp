@@ -239,7 +239,8 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
       return fail(entity,"material próprio de forma recusado");
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
                          body->motion!=scene::BodyMotion::Static,std::move(instances),
-                         {body->velocityX,body->velocityY,body->velocityZ}});
+                         {body->velocityX,body->velocityY,body->velocityZ},
+                         {body->angularX,body->angularY,body->angularZ},body->instanceId(),body->motion==scene::BodyMotion::Dynamic});
     bindings_.back().interpolation=body->motion==scene::BodyMotion::Static?0u:body->interpolation;
     if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor))dynamicMotors_.push_back({id,motor->instanceId()});
   }
@@ -313,13 +314,15 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
 }
 bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geometry) {
   if(ownerWorldId_!=world.worldId())return start(world,geometry);
-  struct Motion {ObjectId id;AetherVec3 linear,angular;float authored[3];};
+  struct Motion {ObjectId id;u64 instance;AetherVec3 linear{},angular{};AetherBodyMomentumV1 momentum;float authored[3],authoredAngular[3];};
   std::vector<Motion> motions;motions.reserve(bindings_.size());
   for(const auto &binding:bindings_) {
     if(!binding.moving) continue;
-    Motion motion{binding.id,{},{},{binding.authoredVelocity[0],binding.authoredVelocity[1],binding.authoredVelocity[2]}};
+    Motion motion{binding.id,binding.instance,{},{},{},{binding.authoredVelocity[0],binding.authoredVelocity[1],binding.authoredVelocity[2]},
+                  {binding.authoredAngular[0],binding.authoredAngular[1],binding.authoredAngular[2]}};
     if(!AetherPhysics_TryGetBodyVelocityV1(world_,binding.body,&motion.linear)) continue;
     AetherPhysics_TryGetBodyAngularVelocityV1(world_,binding.body,&motion.angular);
+    AetherPhysics_TryGetBodyMomentumV1(world_,binding.body,&motion.momentum);
     motions.push_back(motion);
   }
   struct CharacterMotion {ObjectId id;u64 instance;physics::CharacterMotor::MotionState motor;float pose[16],shape[4],input[6];bool scripted;};
@@ -334,11 +337,16 @@ bool ScenePhysics::rebuild(GameWorld &world,const CollisionGeometrySource *geome
   for(auto &m:dynamicMotors_)for(const auto &old:dynamicInput)if(m.id==old.id&&m.instance==old.instance){m.right=old.right;m.forward=old.forward;m.yaw=old.yaw;m.scriptRight=old.scriptRight;m.scriptForward=old.scriptForward;m.scriptYaw=old.scriptYaw;m.scriptMoveActive=old.scriptMoveActive;break;}
   accumulated_=accumulated;
   for(const auto &motion:motions) for(const auto &binding:bindings_) {
-    if(binding.id!=motion.id||!binding.moving) continue;
-    if(binding.authoredVelocity[0]!=motion.authored[0]||binding.authoredVelocity[1]!=motion.authored[1]||
-       binding.authoredVelocity[2]!=motion.authored[2]) break;
-    AetherPhysics_SetLinearVelocity(world_,binding.body,motion.linear);
-    AetherPhysics_SetBodyAngularVelocityV1(world_,binding.body,motion.angular);
+    if(binding.id!=motion.id||binding.instance!=motion.instance||!binding.moving) continue;
+    u32 mask=0;
+    if(std::equal(binding.authoredVelocity,binding.authoredVelocity+3,motion.authored))mask|=1;
+    if(std::equal(binding.authoredAngular,binding.authoredAngular+3,motion.authoredAngular))mask|=2;
+    if(mask&&binding.dynamic&&(motion.momentum.flags&1u)) {
+      if(!AetherPhysics_RestoreBodyMomentumV1(world_,binding.body,&motion.momentum,mask)){error_="Não foi possível conservar momentum do Body recriado";return false;}
+    } else {
+      if(mask&1u)AetherPhysics_SetLinearVelocity(world_,binding.body,motion.linear);
+      if(mask&2u)AetherPhysics_SetBodyAngularVelocityV1(world_,binding.body,motion.angular);
+    }
     break;
   }
   // Preserve motion only for the same component, shape and world pose. An

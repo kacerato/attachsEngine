@@ -1419,7 +1419,7 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   // renderer/grid_plan.h e editor/editor_grid.h. Aqui ficam só as ferramentas
   // e o HUD, que são coisas diferentes de "desenho no mundo".
 
-  if((state.workspace==EditorWorkspace::Scene||state.physicsDiagnosticOpen) && (state.showComponentVisuals||state.physicsDiagnosticOpen) && !state.cameraViewEntity) {
+  if(!state.motorBakeSourcesOpen&&!state.motorBakeSettingsOpen&&(state.workspace==EditorWorkspace::Scene||state.physicsDiagnosticOpen) && (state.showComponentVisuals||state.physicsDiagnosticOpen) && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
     const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative);
     const auto *inspectedObject=state.document->find(state.selection);
@@ -1470,7 +1470,7 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   // retain their specialized connection view until that provider is migrated.
   const auto *selectedVisual=state.document->find(state.selection);
   const auto *expandedVisual=selectedVisual?selectedVisual->components.findInstance(state.expandedNative):nullptr;
-  if(state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity &&
+  if(!state.motorBakeSourcesOpen&&!state.motorBakeSettingsOpen&&state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity &&
      !state.multiSelect && state.selectionSet.size()<=1 && !state.guiSelection.valid() && expandedVisual &&
      (&expandedVisual->type()==&scene::Collider::descriptor || &expandedVisual->type()==&scene::PhysicsBody::descriptor) &&
      componentVisualSelectable(*state.document,state.selection,state.hiddenLayers,state.unpickableLayers,state.sceneHidden,state.scenePickOff)) {
@@ -1512,6 +1512,7 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
     builder.iconButton(controls,UiIcon::EditorAuthorCamera,widgetId(state.cameraViewEntity?EditorWidget::CameraViewClose:EditorWidget::ComponentVisualsToggle),state.cameraViewEntity || state.showComponentVisuals);
   }
   const EditorEntity *entity = state.document->find(state.selection);
+  if(state.motorSetupTarget&&(state.motorBakeSourcesOpen||state.motorBakeSettingsOpen)){builder.list.popClip();return;}
   const bool colliderEditing=entity && (state.showComponentVisuals||state.colliderTopology) && !state.cameraViewEntity &&
       !state.multiSelect && state.selectionSet.size()<=1 && !state.guiSelection.valid() && expandedVisual &&
       &expandedVisual->type()==&scene::Collider::descriptor;
@@ -6558,17 +6559,50 @@ void buildPrefabOverrides(ScreenBuilder &builder,UiRect content) {
 void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   const bool compactReview=state.motorSetupTarget==entity.id&&state.motorSetupPolicy==3&&state.motorBakeReady&&!state.motorBakeSourcesOpen&&state.surface.height<600;
-  if(!compactReview) {
+  const bool compactSettings=state.motorSetupTarget==entity.id&&state.motorBakeSettingsOpen&&state.surface.height<600;
+  if(!compactReview&&!compactSettings) {
     auto title=takeTop(content,36),close=takeRight(title,36);
     builder.label(title,"Ações do objeto",theme.color.text,theme.type.body);
     builder.label(close,"x",theme.color.textDim,theme.type.body,UiAlign::Center);
     builder.router.addRegion(close,widgetId(EditorWidget::InspectorMenu));
   }
   if(state.motorSetupTarget==entity.id) {
+    if(state.motorSetupPolicy==3&&state.motorBakeSettingsOpen) {
+      auto footer=takeBottom(content,40);
+      builder.label(footer,"Concluir ajustes",theme.color.accent,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(footer,widgetId(EditorWidget::MotorBakeSettingsDone));
+      builder.label(takeTop(content,28),"Orçamento e pose da colisão",theme.color.text,theme.type.body);
+      auto pose=takeTop(content,36);const float poseWidth=pose.width/3;
+      const char *poseNames[]{"Base","Atual","Clipe padrão"};
+      for(u32 i=0;i<3;++i) {auto choice=takeLeft(pose,poseWidth);builder.label(choice,poseNames[i],static_cast<u32>(state.motorBakeDraft.pose)==i?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(choice,widgetId(EditorWidget::MotorBakePoseRest)+i);}
+      const auto &s=state.motorBakeDraft;
+      const char *names[]{"Máximo de partes","Resolução voxel","Vértices por casco","Erro de volume (%)","Prazo cooperativo (s)","Instante do clipe (s)"};
+      const char *limits[]{"2–32 · slots livres limitam Apply","10.000–400.000 · custo do worker","8–64 · geometria do casco","0,1–10 · não é tolerância de distância","1–120 · cancelamento nos callbacks","0–86.400 · ativo em Clipe padrão"};
+      const double numbers[]{double(s.maximumParts),double(s.voxelResolution),double(s.maximumVertices),s.volumeErrorPercent,double(s.timeBudgetSeconds),s.animationTime};
+      const u32 pageSize=state.surface.height<600?2:6,page=std::min(state.motorBakeSettingsPage,5/pageSize),begin=page*pageSize;
+      auto nav=pageSize<6?takeBottom(content,32):UiRect{};
+      for(u32 i=begin;i<std::min(begin+pageSize,6u)&&content.height>=44;++i) {
+        auto row=takeTop(content,44),label=takeTop(row,24),number=takeRight(label,80);
+        const bool editable=i!=5||s.pose==resources::ConvexBakePose::Animation;
+        builder.label(label,names[i],editable?theme.color.text:theme.color.textMuted,theme.type.caption);
+        char text[32];std::snprintf(text,sizeof(text),"%.7g",numbers[i]);builder.label(number,text,editable?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.label(row,fitMiddle(builder.list,limits[i],row.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+        if(editable)builder.router.addRegion({row.x,row.y-24,row.width,44},widgetId(EditorWidget::MotorBakeSettingsNumberBase)+i);
+      }
+      if(nav.height) {
+        auto previous=takeLeft(nav,nav.width/3),next=takeRight(nav,nav.width/2);
+        builder.label(previous,"Anterior",page?theme.color.textDim:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.label(next,"Próximos",begin+pageSize<6?theme.color.textDim:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.label(nav,std::to_string(page+1)+" / 3",theme.color.textDim,theme.type.caption,UiAlign::Center);
+        if(page)builder.router.addRegion(previous,widgetId(EditorWidget::MotorBakeSettingsPrevious));
+        if(begin+pageSize<6)builder.router.addRegion(next,widgetId(EditorWidget::MotorBakeSettingsNext));
+      }
+      return;
+    }
     if(state.motorSetupPolicy==3&&state.motorBakeSourcesOpen) {
       auto footer=takeBottom(content,40);builder.label(footer,"Concluir escolha das fontes",theme.color.accent,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(footer,widgetId(EditorWidget::MotorBakeSourcesDone));
-      builder.label(takeTop(content,32),"Fontes para a colisão",theme.color.text,theme.type.body);
+      builder.label(takeTop(content,32),"Fontes · toque na malha ou na lista",theme.color.text,theme.type.caption);
       auto actions=takeTop(content,32),own=takeLeft(actions,actions.width/2);
       builder.label(own,"Só este objeto",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(own,widgetId(EditorWidget::MotorBakeSourcesObject));
       builder.label(actions,"Disponíveis",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(actions,widgetId(EditorWidget::MotorBakeSourcesHierarchy));
@@ -6602,6 +6636,9 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
     const bool compactBake=state.motorSetupPolicy==3&&state.surface.height<600;
     if(compactReview&&!state.motorSetupError.empty())builder.label(takeBottom(content,20),fitMiddle(builder.list,state.motorSetupError,content.width,theme.type.caption),theme.color.warning,theme.type.caption);
     auto heading=takeTop(content,compactBake?26:40);
+    if(state.motorSetupPolicy==3&&!state.motorBakeRunning&&!state.motorBakeReady) {
+      auto settings=takeRight(heading,60);builder.label(settings,"Ajustes",theme.color.accent,theme.type.caption,UiAlign::Center);builder.router.addRegion(settings,widgetId(EditorWidget::MotorBakeSettingsOpen));
+    }
     if(state.motorSetupPolicy==3&&state.motorBakeReady) {
       auto sources=takeRight(heading,70);builder.label(sources,"Fontes",theme.color.accent,theme.type.caption,UiAlign::Center);builder.router.addRegion(sources,widgetId(EditorWidget::MotorBakeSourcesOpen));
     }
@@ -6639,12 +6676,11 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
         builder.router.addRegion(r,widgetId(EditorWidget::MotorBakeBudgetLow)+i);}
       if(!compactBake||(!state.motorBakeReady&&state.motorBakeBudget==3)) {
         std::string custom="Receita personalizada";
-        if(const auto *recipe=scene::collisionRecipe(entity.components);state.motorBakeBudget==3&&recipe) {
-          const auto &s=recipe->settings;char text[160];std::snprintf(text,sizeof(text),"Receita · %u partes · %u voxels · %u vértices · %.3g%% · %us",s.maximumParts,s.voxelResolution,s.maximumVertices,s.volumeErrorPercent,s.timeBudgetSeconds);custom=text;
+        if(state.motorBakeBudget==3) {
+          const auto &s=state.motorBakeDraft;char text[160];std::snprintf(text,sizeof(text),"Rascunho · %u partes · %u voxels · %u vértices · %.3g%% · %us",s.maximumParts,s.voxelResolution,s.maximumVertices,s.volumeErrorPercent,s.timeBudgetSeconds);custom=text;
         }
         if(compactBake) {
-          const auto *recipe=scene::collisionRecipe(entity.components);
-          const auto text=recipe?"Personalizado · "+std::to_string(recipe->settings.maximumParts)+" partes · "+std::to_string(recipe->settings.timeBudgetSeconds)+"s":custom;
+          const auto text="Personalizado · "+std::to_string(state.motorBakeDraft.maximumParts)+" partes · "+std::to_string(state.motorBakeDraft.timeBudgetSeconds)+"s";
           builder.label(takeTop(content,20),fitMiddle(builder.list,text,content.width,theme.type.caption),theme.color.textDim,theme.type.caption);
         } else paragraph(state.motorBakeBudget==3?custom:state.motorBakeBudget==0?"50 mil voxels · 32 vértices/casco · 1% volume":state.motorBakeBudget==1?"100 mil voxels · 32 vértices/casco · 1% volume":"400 mil voxels · 64 vértices/casco · 1% volume",theme.color.textDim);
       }

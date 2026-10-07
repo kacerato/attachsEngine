@@ -1,0 +1,85 @@
+{
+  "scope": "whole editor; sampled PSS, not allocator peak",
+  "startInputCompletedSeconds": 0.6870000001508743,
+  "cancelInputCompletedSeconds": null,
+  "durationSeconds": 13.827999999979511,
+  "thermalValidated": false,
+  "samples": [
+    {
+      "seconds": 0.2970000000204891,
+      "totalPssKiB": 290843,
+      "totalRssKiB": 433500
+    },
+    {
+      "seconds": 1.827999999979511,
+      "totalPssKiB": 388157,
+      "totalRssKiB": 530816
+    },
+    {
+      "seconds": 2.172000000020489,
+      "totalPssKiB": 401841,
+      "totalRssKiB": 544496
+    },
+    {
+      "seconds": 3.0620000001508743,
+      "totalPssKiB": 397061,
+      "totalRssKiB": 539720
+    },
+    {
+      "seconds": 3.8910000000614673,
+      "totalPssKiB": 385481,
+      "totalRssKiB": 528140
+    },
+    {
+      "seconds": 4.702999999979511,
+      "totalPssKiB": 385473,
+      "totalRssKiB": 528132
+    },
+    {
+      "seconds": 5.625,
+      "totalPssKiB": 385505,
+      "totalRssKiB": 528164
+    },
+    {
+      "seconds": 6.405999999959022,
+      "totalPssKiB": 385473,
+      "totalRssKiB": 528132
+    },
+    {
+      "seconds": 7.219000000040978,
+      "totalPssKiB": 385485,
+      "totalRssKiB": 528144
+    },
+    {
+      "seconds": 8.25,
+      "totalPssKiB": 385533,
+      "totalRssKiB": 528192
+    },
+    {
+      "seconds": 9.077999999979511,
+      "totalPssKiB": 385481,
+      "totalRssKiB": 528140
+    },
+    {
+      "seconds": 9.827999999979511,
+      "totalPssKiB": 385469,
+      "totalRssKiB": 528128
+    },
+    {
+      "seconds": 10.594000000040978,
+      "totalPssKiB": 385477,
+      "totalRssKiB": 528132
+    },
+    {
+      "seconds": 11.437000000150874,
+      "totalPssKiB": 385465,
+      "totalRssKiB": 528124
+    },
+    {
+      "seconds": 12.234000000171363,
+      "totalPssKiB": 385465,
+      "totalRssKiB": 528124
+    }
+  ],
+  "maximumSampledPssKiB": 401841
+}

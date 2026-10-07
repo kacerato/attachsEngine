@@ -1,0 +1,88 @@
+Starting a Gradle Daemon, 1 incompatible and 1 stopped Daemons could not be reused, use --status for details
+
+> Task :app:publishManagedCore
+  Determinando os projetos a serem restaurados...
+  Todos os projetos estão atualizados para restauração.
+  Aether.Analyzers -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Analyzers\release\Aether.Analyzers.dll
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Astra.Scripting\release\Astra.Scripting.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\math.cs(6,21): warning CS8981: O nome do tipo 'math' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Math\quaternion.cs(7,15): warning CS8981: O nome do tipo 'quaternion' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [C:\Users\donod\Downloads\atchengine\managed\Aether.Core\Aether.Core.csproj]
+  Aether.Core -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Core\release\Aether.Core.dll
+  Aether.Scene -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Scene\release\Aether.Scene.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed-artifacts\bin\Aether.Rendering\release_linux-bionic-arm64\Aether.Rendering.dll
+  Aether.Rendering -> C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering-net8.0-8.0.27\
+
+> Task :app:verifyPackagedOpenSsl
+> Task :app:prepareEngineAssets
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :app:mergeReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:createReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+
+> Task :app:processReleaseMainManifest
+C:\Users\donod\Downloads\atchengine\android\app\src\main\AndroidManifest.xml:24:9-41 Warning:
+	android:extractNativeLibs should not be specified in this source AndroidManifest.xml file. See https://d.android.com/guide/topics/manifest/application-element#extractNativeLibs for more information.
+The AGP Upgrade Assistant can remove the attribute from the AndroidManifest.xml file and update the build file accordingly. See https://d.android.com/studio/build/agp-upgrade-assistant for more information.
+
+> Task :app:processReleaseManifest
+> Task :app:extractProguardFiles UP-TO-DATE
+
+> Task :app:configureCMakeRelWithDebInfo[arm64-v8a]
+[CXX5304] This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+[CXX5304] This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+
+> Task :app:processReleaseManifestForPackage
+> Task :app:buildCMakeRelWithDebInfo[arm64-v8a][aether_android,aether_transform]
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:desugarReleaseFileDependencies UP-TO-DATE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:mergeExtDexRelease UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:mergeReleaseShaders UP-TO-DATE
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:extractReleaseVersionControlInfo UP-TO-DATE
+> Task :app:processReleaseJavaRes NO-SOURCE
+> Task :app:mergeReleaseJavaResource UP-TO-DATE
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningRelease UP-TO-DATE
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs
+> Task :app:stripReleaseDebugSymbols
+> Task :app:processReleaseResources
+> Task :app:extractReleaseNativeSymbolTables
+
+> Task :app:compileReleaseJavaWithJavac
+Note: C:\Users\donod\Downloads\atchengine\android\app\src\main\java\dev\aether\editor\shell\AstraShellActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:mergeReleaseNativeDebugMetadata
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics UP-TO-DATE
+> Task :app:optimizeReleaseResources
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:compressReleaseAssets
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect UP-TO-DATE
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease UP-TO-DATE
+> Task :app:lintVitalRelease
+> Task :app:assembleRelease
+
+BUILD SUCCESSFUL in 4m 1s
+53 actionable tasks: 24 executed, 29 up-to-date

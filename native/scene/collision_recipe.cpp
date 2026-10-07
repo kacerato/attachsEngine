@@ -80,7 +80,7 @@ inline const std::array<ComponentResourceBinding, 2> collisionRecipeResources{
 } // namespace detail
 const ComponentType CollisionRecipe::descriptor{
     "astra.physics.collision_recipe",
-    1,
+    2,
     []() -> std::unique_ptr<ComponentValue> {
       return std::make_unique<CollisionRecipe>();
     },

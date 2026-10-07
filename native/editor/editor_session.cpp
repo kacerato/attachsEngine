@@ -1322,6 +1322,8 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
       : 0.0f;
 
   if (wasTap && viewportPointers_.empty()) {
+    if(state_.motorSetupTarget==state_.selection&&state_.motorSetupPolicy==3&&state_.motorBakeSourcesOpen)
+      return pickMotorBakeSource(at);
     if(colliderTopology_.active())return pickColliderTopology(at);
     const auto *object=document_.find(state_.selection);
     const auto *focused=object?object->components.findInstance(state_.expandedNative):nullptr;
@@ -2046,6 +2048,29 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   }
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
+    const auto bakeBase=widgetId(EditorWidget::MotorBakeSettingsNumberBase);
+    if(edit.field>=bakeBase&&edit.field<bakeBase+6) {
+      NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
+      if(!state_.motorBakeSettingsOpen||state_.motorSetupTarget!=edit.entity||isPlaying()||
+         !evaluateNumericExpression(value,context,number,&reason)||number<0||number>400000||
+         (edit.field!=bakeBase+3&&edit.field!=bakeBase+5&&number!=std::floor(number))) {
+        state_.numericError=true;state_.status=reason.empty()?"Use um inteiro neste ajuste; erro de volume e instante aceitam decimais":reason;return false;
+      }
+      auto settings=state_.motorBakeDraft;
+      switch(edit.field-bakeBase) {
+        case 0:settings.maximumParts=static_cast<u32>(number);break;
+        case 1:settings.voxelResolution=static_cast<u32>(number);break;
+        case 2:settings.maximumVertices=static_cast<u32>(number);break;
+        case 3:settings.volumeErrorPercent=static_cast<float>(number);break;
+        case 4:settings.timeBudgetSeconds=static_cast<u32>(number);break;
+        case 5:settings.animationTime=static_cast<float>(number);break;
+      }
+      if(!resources::validConvexBakeSettings(settings)) {state_.numericError=true;state_.status="Valor fora do limite mostrado no ajuste";return false;}
+      cancelMotorDecomposition();state_.motorBakeDraft=settings;state_.motorBakeBudget=3;
+      state_.motorSetupError.clear();state_.motorSetupSummary="Rascunho alterado; gere e revise antes de aplicar.";
+      state_.status=state_.motorSetupSummary;
+      close();return true;
+    }
     const auto topologyBase=widgetId(EditorWidget::ColliderGeometryCoordinateX);
     if(edit.field>=topologyBase&&edit.field<topologyBase+3){
       NumericExpressionContext context;context.current=state_.numericCurrent;double evaluated=0;std::string reason;
@@ -5932,7 +5957,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(key==widgetId(EditorWidget::MotorSetupOpen)){
         state_.motorSetupTarget=state_.selection;state_.motorSetupPolicy=0;
         if(const auto *e=document_.find(state_.selection))if(const auto *recipe=scene::collisionRecipe(e->components);recipe&&!recipe->parts.empty()) {
-          state_.motorSetupPolicy=3;motorBakeSettings_=recipe->settings;
+          state_.motorSetupPolicy=3;motorBakeSettings_=recipe->settings;state_.motorBakeDraft=recipe->settings;
           state_.motorBakeBudget=3;
           for(u32 budget=0;budget<3;++budget)if(recipe->settings.maximumParts==(budget==0?8u:budget==1?16u:32u)&&recipe->settings.voxelResolution==(budget==0?50000u:budget==1?100000u:400000u)&&recipe->settings.maximumVertices==(budget==2?64u:32u)&&recipe->settings.volumeErrorPercent==1&&recipe->settings.timeBudgetSeconds==(budget==2?120.f:60.f))state_.motorBakeBudget=budget;
         }
@@ -5941,13 +5966,29 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       else state_.motorSetupPolicy=key==widgetId(EditorWidget::MotorSetupPreserve)?0:key==widgetId(EditorWidget::MotorSetupFit)?1:key==widgetId(EditorWidget::MotorSetupConvex)?2:3;
       cancelMotorDecomposition();
       EditorEntity candidate;
-      state_.motorBakeSourcesOpen=false;
+      state_.motorBakeSourcesOpen=false;state_.motorBakeSettingsOpen=false;
       if(state_.motorSetupPolicy==3){refreshMotorBakeSources(state_.selection);state_.motorSetupError.clear();state_.motorSetupSummary="Escolha as fontes e gere a prévia. Requer sólidos fechados; hierarquia e visual preservados.";}
       else previewDynamicMotor(state_.selection,static_cast<MotorCollisionPolicy>(state_.motorSetupPolicy),candidate,state_.motorSetupSummary,state_.motorSetupError);
       state_.characterConversionTarget=0;state_.entityMenu=false;state_.inspectorMenu=true;state_.propertyPage=0;
       state_.compactPanel=EditorScreenState::CompactPanel::Inspector;return true;
     }
-    if(key==widgetId(EditorWidget::MotorSetupBack)){if(state_.motorBakeSourcesOpen){state_.motorBakeSourcesOpen=false;return true;}cancelMotorDecomposition();state_.motorSetupTarget=0;state_.propertyPage=0;return true;}
+    if(key==widgetId(EditorWidget::MotorSetupBack)){if(state_.motorBakeSourcesOpen){state_.motorBakeSourcesOpen=false;return true;}if(state_.motorBakeSettingsOpen){state_.motorBakeSettingsOpen=false;return true;}cancelMotorDecomposition();state_.motorSetupTarget=0;state_.propertyPage=0;return true;}
+    if(key==widgetId(EditorWidget::MotorBakeSettingsOpen)){state_.motorBakeSettingsOpen=true;state_.motorBakeSettingsPage=0;return true;}
+    if(key==widgetId(EditorWidget::MotorBakeSettingsDone)){state_.motorBakeSettingsOpen=false;return true;}
+    if(key==widgetId(EditorWidget::MotorBakeSettingsPrevious)){if(state_.motorBakeSettingsPage)--state_.motorBakeSettingsPage;return true;}
+    if(key==widgetId(EditorWidget::MotorBakeSettingsNext)){if(state_.motorBakeSettingsPage<2)++state_.motorBakeSettingsPage;return true;}
+    if(key==widgetId(EditorWidget::MotorBakePoseRest)||key==widgetId(EditorWidget::MotorBakePoseAuthored)||key==widgetId(EditorWidget::MotorBakePoseAnimation)) {
+      cancelMotorDecomposition();state_.motorBakeDraft.pose=key==widgetId(EditorWidget::MotorBakePoseRest)?resources::ConvexBakePose::Rest:key==widgetId(EditorWidget::MotorBakePoseAuthored)?resources::ConvexBakePose::Authored:resources::ConvexBakePose::Animation;
+      state_.motorBakeBudget=3;state_.motorSetupError.clear();return true;
+    }
+    if(key>=widgetId(EditorWidget::MotorBakeSettingsNumberBase)&&key<widgetId(EditorWidget::MotorBakeSettingsNumberBase)+6) {
+      if(!state_.motorBakeSettingsOpen||isPlaying()||history_.isOpen())return true;
+      const auto &s=state_.motorBakeDraft;const double numbers[]{double(s.maximumParts),double(s.voxelResolution),double(s.maximumVertices),s.volumeErrorPercent,double(s.timeBudgetSeconds),s.animationTime};
+      state_.numericField=key;state_.numericEntity=state_.motorSetupTarget;state_.numericInstance=0;state_.numericProperty.clear();
+      state_.numericCurrent=numbers[key-widgetId(EditorWidget::MotorBakeSettingsNumberBase)];
+      std::snprintf(state_.numericText,sizeof(state_.numericText),"%.7g",state_.numericCurrent);
+      state_.numericReplace=true;state_.numericError=false;return true;
+    }
     if(key==widgetId(EditorWidget::MotorBakeSourcesOpen)){refreshMotorBakeSources(state_.selection);state_.motorBakeSourcesOpen=true;return true;}
     if(key==widgetId(EditorWidget::MotorBakeSourcesDone)){state_.motorBakeSourcesOpen=false;return true;}
     if(key==widgetId(EditorWidget::MotorBakeSourcesObject)||key==widgetId(EditorWidget::MotorBakeSourcesHierarchy)) {
@@ -5968,13 +6009,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::MotorBakeStart)||key==widgetId(EditorWidget::MotorBakeRegenerate)) {
-      resources::ConvexBakeSettings settings;
-      settings.maximumParts=state_.motorBakeBudget==0?8:state_.motorBakeBudget==1?16:32;
-      settings.voxelResolution=state_.motorBakeBudget==0?50000:state_.motorBakeBudget==1?100000:400000;
-      settings.maximumVertices=state_.motorBakeBudget==2?64:32;
-      settings.timeBudgetSeconds=state_.motorBakeBudget==2?120:60;
-      if(key==widgetId(EditorWidget::MotorBakeRegenerate))settings=motorBakeSettings_;
-      beginMotorDecomposition(state_.selection,settings,state_.motorSetupError);return true;
+      beginMotorDecomposition(state_.selection,state_.motorBakeDraft,state_.motorSetupError);return true;
     }
     if(key==widgetId(EditorWidget::MotorBakeConfirmMapping)){confirmMotorDecompositionMapping(state_.motorSetupError);return true;}
     if(key>=widgetId(EditorWidget::MotorBakeMappingBase)&&key<widgetId(EditorWidget::MotorBakeMappingBase)+32) {
@@ -5997,6 +6032,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       motorBakeSettings_.maximumParts=state_.motorBakeBudget==0?8:state_.motorBakeBudget==1?16:32;
       motorBakeSettings_.voxelResolution=state_.motorBakeBudget==0?50000:state_.motorBakeBudget==1?100000:400000;
       motorBakeSettings_.maximumVertices=state_.motorBakeBudget==2?64:32;motorBakeSettings_.volumeErrorPercent=1;motorBakeSettings_.timeBudgetSeconds=state_.motorBakeBudget==2?120:60;
+      motorBakeSettings_.pose=state_.motorBakeDraft.pose;motorBakeSettings_.animationTime=state_.motorBakeDraft.animationTime;state_.motorBakeDraft=motorBakeSettings_;
       state_.motorSetupError.clear();state_.motorSetupSummary="Orçamento alterado; gere uma nova prévia.";return true;
     }
     if(key==widgetId(EditorWidget::MotorBakePrevious)){if(state_.motorBakePage)--state_.motorBakePage;return true;}

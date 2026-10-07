@@ -1,0 +1,18 @@
+{
+  "triangles": 99372,
+  "voxelResolution": 400000,
+  "maximumParts": 8,
+  "maximumVertices": 64,
+  "readyMs": 19015.2,
+  "parts": 1,
+  "outputBytes": 1156,
+  "cancelMs": 16.5467,
+  "cancelledWithoutResult": true,
+  "deadlineMs": 6744.63,
+  "deadlineStatus": "budget-rejected",
+  "host": "Windows-11-10.0.26200-SP0",
+  "peakProcessWorkingSetBytes": 154779648,
+  "memoryScope": "entire native probe process",
+  "projectExportIncluded": true,
+  "thermalValidated": false
+}

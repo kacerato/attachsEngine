@@ -71,6 +71,8 @@ public:
     out << settings.maximumParts << ' ' << settings.voxelResolution << ' '
         << settings.maximumVertices << ' ' << settings.volumeErrorPercent << ' '
         << settings.timeBudgetSeconds << ' '
+        << static_cast<u32>(settings.pose) << ' '
+        << settings.animationTime << ' '
         << (bakeSource.valid() ? bakeSource.text() : "-") << ' '
         << std::quoted(geometryHash) << ' ' << sources.size();
     for (const auto &s : sources)
@@ -91,15 +93,19 @@ public:
     }
   }
   bool read(std::istream &in, u32 version) override {
-    if (version != 1)
+    if (version != 1 && version != 2)
       return false;
     CollisionRecipe next;
     std::string guid;
     usize count = 0;
     if (!(in >> next.settings.maximumParts >> next.settings.voxelResolution >>
           next.settings.maximumVertices >> next.settings.volumeErrorPercent >>
-          next.settings.timeBudgetSeconds >> guid >>
-          std::quoted(next.geometryHash) >> count) ||
+          next.settings.timeBudgetSeconds))
+      return false;
+    u32 pose=0; // Legacy recipes always used undeformed geometry.
+    if(version>=2 && !(in>>pose>>next.settings.animationTime))return false;
+    next.settings.pose=static_cast<resources::ConvexBakePose>(pose);
+    if (!(in >> guid >> std::quoted(next.geometryHash) >> count) ||
         count > 128)
       return false;
     if (guid != "-" && !resources::AssetGuid::parse(guid, next.bakeSource))

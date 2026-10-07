@@ -59,6 +59,110 @@ static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool ren
 int main(int argc,char **argv) {
   if(argc<2)return 1;
   const std::filesystem::path root=AETHER_REPOSITORY_ROOT;
+  if(std::string_view(argv[1])=="verify-physical-authoring-project") {
+    if(argc!=4&&argc!=5)return 161;
+    const auto project=std::filesystem::absolute(argv[2]);
+    const auto text=[](const std::filesystem::path &p){auto bytes=read(p);return std::string(bytes.begin(),bytes.end());};
+    editor::EditorDocument document;
+    if(!editor::deserializeEditorDocument(text(project/"scenes/editor.aescene"),0,document))return 162;
+    editor::EditorSession session;test::ConvexCpuLibrary library;std::string error;
+    if(!library.connect(session)||!session.setProjectDirectory(project.generic_string().c_str())||!session.loadAssets(text(project/".astra/assets.astra")))return 163;
+    std::vector<editor::EditorSession::ReopenedSource> sources;
+    for(const auto &record:session.assets().records())if(record.type==resources::AssetType::Mesh){auto bytes=read(project/editor::EditorImportTransaction::fromUtf8(record.path));resources::GltfImport model;if(Sha256::hex(bytes)!=record.contentHash||!resources::importGlb(bytes,{},{},model))return 164;sources.push_back({std::move(model),record.contentHash,record.path});}
+    std::vector<editor::EditorSession::ModelImportReport> reports;if(!session.reopenSources(sources,reports,error))return 165;
+    editor::EditorEntityId owner=0;std::vector<editor::EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+    for(auto id:ids)if(scene::collisionRecipe(document.find(id)->components)){if(owner)return 166;owner=id;}
+    const auto *recipe=owner?scene::collisionRecipe(document.find(owner)->components):nullptr;
+    const bool authored=std::string_view(argv[3])=="authored";
+    if(!recipe||recipe->settings.pose!=(authored?resources::ConvexBakePose::Authored:resources::ConvexBakePose::Animation)||
+       (!authored&&std::abs(recipe->settings.animationTime-std::strtof(argv[3],nullptr))>.00001f))return 167;
+    if(argc==5) {
+      editor::EditorDocument original;const auto before=text(argv[4]);
+      if(!editor::deserializeEditorDocument(before,0,original))return 172;
+      const auto *old=original.find(owner);const auto *oldRecipe=old?scene::collisionRecipe(old->components):nullptr;
+      if(!oldRecipe||oldRecipe->instanceId()!=recipe->instanceId()||oldRecipe->parts.size()!=recipe->parts.size())return 173;
+      auto restored=document;auto object=*restored.find(owner);
+      for(const auto &part:oldRecipe->parts){const auto *collider=old->components.findInstance(part.collider);if(!collider||!object.components.replaceInstance(part.collider,*collider))return 174;}
+      if(!object.components.replaceInstance(oldRecipe->instanceId(),*oldRecipe)||!restored.applyEntityValues(owner,object)||editor::serializeEditorDocument(restored,0)!=editor::serializeEditorDocument(original,0))return 175;
+    }
+    runtime::GameWorld world;runtime::ScenePhysics physics;test::ConvexMapGeometry geometry(session.mapScene());runtime::QueryHit hit;
+    const float origin[]{0,3,0},direction[]{0,-6,0};
+    if(!world.load(document)||!physics.start(world,&geometry)||!physics.rayCast(origin,direction,{},hit)||hit.object!=owner||
+       std::none_of(recipe->parts.begin(),recipe->parts.end(),[&](const auto &p){return p.collider==hit.colliderInstance;}))return 168;
+    std::printf("PHYSICAL_AUTHORING_DEVICE: source hashes/reopen + recipe %s time %.7g + Jolt shape hit object %u Collider UID %llu; parts %zu, budget %u/%u/%u, volume error %.7g.\n",authored?"authored":"animation",recipe->settings.animationTime,unsigned(owner),static_cast<unsigned long long>(hit.colliderInstance),recipe->parts.size(),recipe->settings.maximumParts,recipe->settings.voxelResolution,recipe->settings.maximumVertices,recipe->settings.volumeErrorPercent);return 0;
+  }
+  if(std::string_view(argv[1])=="measure-convex-budget") {
+    if(argc!=3&&argc!=4)return 150;
+    // Closed, consistently wound surface near the enforced input limit. Shared
+    // grid coordinates are identical across faces, so the real worker welds it.
+    constexpr u32 subdivisions=91;
+    std::vector<float> triangles;triangles.reserve(12*subdivisions*subdivisions*9);
+    const auto point=[](u32 axis,float side,u32 i,u32 j) {
+      std::array<float,3> p{};p[axis]=side;
+      p[(axis+1)%3]=static_cast<float>(2.0*i/subdivisions-1);
+      p[(axis+2)%3]=static_cast<float>(2.0*j/subdivisions-1);return p;
+    };
+    const auto triangle=[&](auto a,auto b,auto c){for(auto p:{a,b,c})triangles.insert(triangles.end(),p.begin(),p.end());};
+    for(u32 axis=0;axis<3;++axis)for(float side:{-1.f,1.f})for(u32 i=0;i<subdivisions;++i)for(u32 j=0;j<subdivisions;++j) {
+      const auto a=point(axis,side,i,j),b=point(axis,side,i+1,j),c=point(axis,side,i+1,j+1),d=point(axis,side,i,j+1);
+      if(side>0){triangle(a,b,c);triangle(a,c,d);}else{triangle(a,c,b);triangle(a,d,c);}
+    }
+    const auto hash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(triangles.data()),triangles.size()*sizeof(float)));
+    if(argc==4) {
+      resources::ConvexBakePart source;
+      for(usize i=0;i<triangles.size();i+=3){source.vertices.push_back({triangles[i],triangles[i+1],triangles[i+2]});source.indices.push_back(static_cast<u32>(source.indices.size()));}
+      std::vector<u8> bytes;std::string error;
+      resources::GltfImport model;editor::EditorSession session;test::ConvexCpuLibrary library;
+      editor::EditorSession::ModelImportReport imported;
+      std::filesystem::create_directories(std::filesystem::absolute(argv[3]));
+      if(!resources::writeCollisionTopologyGlb(source,hash,bytes,error)||!resources::importGlb(bytes,{},{},model)||
+         !session.setProjectDirectory(argv[3])||!library.connect(session)||
+         !session.commitModelImport(bytes,model,"Sources/budget-surface.glb","",imported)||!session.instantiateModel(imported.source,imported,false)){std::fprintf(stderr,"Budget project: %s %s %s\n",error.c_str(),model.diagnostic.c_str(),imported.diagnostic.c_str());return 158;}
+      auto &document=session.document();std::vector<editor::EditorEntityId> objects;document.collectSubtree(session.selection(),objects);
+      for(auto id:objects){auto object=*document.find(id);object.components.remove(scene::Collider::descriptor);object.components.remove(scene::PhysicsBody::descriptor);if(!document.applyEntityValues(id,object))return 159;}
+      const auto project=std::filesystem::absolute(argv[3]);std::filesystem::create_directories(project/"scenes");
+      if(!editor::EditorImportTransaction::writeText(project/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))||
+         !editor::EditorImportTransaction::writeText(project/"project.json",R"({"format":"ASTRA-PROJECT-1","resourceSource":"independent","project":{"name":"Physical Budget 20261006","template":"empty","scenes":1,"assets":1},"mainScene":"scenes/editor.aescene","editorScene":"scenes/editor.aescene"})"))return 160;
+    }
+    resources::ConvexBakeSettings settings;settings.maximumParts=8;settings.voxelResolution=400000;settings.maximumVertices=64;settings.timeBudgetSeconds=120;
+    std::string error;resources::ConvexBakeJob job;
+    const auto began=std::chrono::steady_clock::now();
+    if(!job.start(triangles,settings,hash,{},error)){std::fprintf(stderr,"%s\n",error.c_str());return 151;}
+    while(job.progress().status==resources::ConvexBakeStatus::Running)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    const double readyMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-began).count();
+    const auto *result=job.result();if(!result){std::fprintf(stderr,"%s\n",job.progress().error.c_str());return 152;}
+    resources::ConvexBakeJob cancelled;
+    if(!cancelled.start(triangles,settings,hash,{},error))return 153;
+    const auto cancelWait=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while(cancelled.progress().status==resources::ConvexBakeStatus::Running&&cancelled.progress().stage.empty()&&std::chrono::steady_clock::now()<cancelWait)
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const auto cancelStage=cancelled.progress().stage;
+    const auto cancelBegan=std::chrono::steady_clock::now();cancelled.cancel();
+    while(cancelled.progress().status==resources::ConvexBakeStatus::Running)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const double cancelMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-cancelBegan).count();
+    if(cancelled.progress().status!=resources::ConvexBakeStatus::Cancelled||cancelled.result())return 154;
+    resources::ConvexBakeJob lateCancelled;
+    if(!lateCancelled.start(triangles,settings,hash,{},error))return 169;
+    const auto lateWait=std::chrono::steady_clock::now()+std::chrono::seconds(120);
+    while(lateCancelled.progress().status==resources::ConvexBakeStatus::Running&&
+          lateCancelled.progress().stage.find("Amostrando")==std::string::npos&&std::chrono::steady_clock::now()<lateWait)
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const auto lateStage=lateCancelled.progress().stage;
+    if(lateCancelled.progress().status!=resources::ConvexBakeStatus::Running||lateStage.find("Amostrando")==std::string::npos)return 170;
+    const auto lateBegan=std::chrono::steady_clock::now();lateCancelled.cancel();
+    while(lateCancelled.progress().status==resources::ConvexBakeStatus::Running)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const double lateCancelMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-lateBegan).count();
+    if(lateCancelled.progress().status!=resources::ConvexBakeStatus::Cancelled||lateCancelled.result())return 171;
+    settings.timeBudgetSeconds=1;resources::ConvexBakeJob deadline;
+    const auto deadlineBegan=std::chrono::steady_clock::now();if(!deadline.start(triangles,settings,hash,{},error))return 155;
+    while(deadline.progress().status==resources::ConvexBakeStatus::Running)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    const double deadlineMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-deadlineBegan).count();
+    const auto deadlineProgress=deadline.progress();
+    const bool timedOut=deadlineProgress.status==resources::ConvexBakeStatus::Failed&&deadlineProgress.error.find("orçamento")!=std::string::npos;
+    if(!timedOut&&deadlineProgress.status!=resources::ConvexBakeStatus::Ready){std::fprintf(stderr,"%s\n",deadlineProgress.error.c_str());return 156;}
+    std::ofstream report(argv[2]);report<<"{\"triangles\":"<<triangles.size()/9<<",\"voxelResolution\":400000,\"maximumParts\":8,\"maximumVertices\":64,\"readyMs\":"<<readyMs<<",\"parts\":"<<result->parts.size()<<",\"outputBytes\":"<<result->glb.size()<<",\"cancelMs\":"<<cancelMs<<",\"cancelStage\":\""<<cancelStage<<"\",\"cancelledWithoutResult\":true,\"lateCancelMs\":"<<lateCancelMs<<",\"lateCancelStage\":\""<<lateStage<<"\",\"lateCancelledWithoutResult\":true,\"deadlineMs\":"<<deadlineMs<<",\"deadlineStatus\":\""<<(timedOut?"budget-rejected":"ready-within-budget")<<"\"}\n";
+    return report?0:157;
+  }
   if(std::string_view(argv[1])=="verify-collision-recipe-project") {
     if(argc!=4)return 130;
     const auto project=std::filesystem::absolute(argv[2]);

@@ -496,6 +496,48 @@ bool EditorMapScene::deformedPose(const runtime::SceneGraph &document,const scen
   return std::isfinite(out.radius) && std::isfinite(out.center[0]) && std::isfinite(out.center[1]) && std::isfinite(out.center[2]);
 }
 
+bool EditorMapScene::authoredGeometry(const runtime::SceneGraph &document,EditorEntityId id,u32 assetId,
+                                      std::vector<EditorPickMesh::Triangle> &out,std::string &error) const {
+  out.clear();
+  std::span<const EditorPickMesh::Triangle> base;float relative[16];
+  if(!assetId||!localGeometry(assetId,base,relative)||base.empty()) {error="Geometria fonte ausente";return false;}
+  const auto *entity=document.find(id);
+  const auto *mesh=entity?static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor)):nullptr;
+  if(!entity){error="Objeto fonte ausente";return false;}
+  if(!mesh){out.assign(base.begin(),base.end());error.clear();return true;}
+  const auto *deform=deformation(assetId-1);
+  if(!deform||(!deform->skin&&!deform->morph)) {
+    error="Skin ativa sem dados de deformação; resolva a importação ou escolha pose base";return false;
+  }
+  if(base.size()>100000||deform->localIndices.size()>300000||deform->restPositions.size()>900000) {
+    error="Captura de pose limitada a 100 mil triângulos e 300 mil vértices; escolha uma malha de colisão simplificada";return false;
+  }
+  float world[16],drawModel[16];
+  if(!editorWorldMatrix(document,id,world)){error="Transformação da fonte inválida";return false;}
+  multiply(world,relative,drawModel);
+  DeformedPose pose;
+  if(!deformedPose(document,*mesh,assetId-1,drawModel,pose)||pose.missingBones) {
+    error=pose.missingBones?"Pose atual exige todos os ossos vinculados":"Pose atual singular ou não finita";return false;
+  }
+  auto positions=deform->restPositions;
+  static const std::vector<float> none;
+  if(positions.empty()||deform->localIndices.empty()||deform->localIndices.size()%3||
+     !resources::deformPositions(positions,deform->influences,pose.palette?*pose.palette:none,mesh->influences(),
+                                deform->morph.get(),pose.weights?*pose.weights:none)) {
+    error="Não foi possível calcular skin/blend shapes da pose atual";return false;
+  }
+  std::vector<EditorPickMesh::Triangle> triangles(deform->localIndices.size()/3);
+  for(usize t=0;t<triangles.size();++t)for(u32 v=0;v<3;++v) {
+    const auto index=deform->localIndices[t*3+v];
+    if(usize(index)*3+2>=positions.size()){error="Índice de deformação inválido";return false;}
+    for(u32 k=0;k<3;++k) {
+      const auto p=positions[index*3+k];if(!std::isfinite(p)){error="Pose atual contém vértice não finito";return false;}
+      triangles[t][v*3+k]=p;
+    }
+  }
+  out=std::move(triangles);error.clear();return true;
+}
+
 bool EditorMapScene::deformedPickMesh(const runtime::SceneGraph &document,EditorEntityId id,u32 assetIndex,
                                       const float drawModel[16],std::shared_ptr<const EditorPickMesh> &out) const {
   const auto *entity=document.find(id);

@@ -14,6 +14,11 @@ inline bool fitEditorCollider(const EditorMapScene &resources,const EditorDocume
     const auto asset=mesh->slotAsset(slot).valid()?resources.assetSlot(mesh->slotAsset(slot)):mesh->slotMesh(slot);
     std::span<const EditorPickMesh::Triangle> triangles;float relative[16];
     if(!asset||!resources.localGeometry(asset,triangles,relative)||triangles.empty())return false;
+    std::vector<EditorPickMesh::Triangle> pose;std::string error;
+    if(entity->components.find(scene::SkinnedMesh::descriptor)) {
+      if(!resources.authoredGeometry(document,id,asset,pose,error))return false;
+      triangles=pose;
+    }
     for(const auto &triangle:triangles)for(u32 vertex=0;vertex<3;++vertex) {
       std::array<float,3> p;
       for(u32 k=0;k<3;++k) {p[k]=relative[12+k]+relative[k]*triangle[vertex*3]+relative[4+k]*triangle[vertex*3+1]+relative[8+k]*triangle[vertex*3+2];if(!std::isfinite(p[k]))return false;}

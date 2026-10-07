@@ -112,6 +112,10 @@ public:
   // Limites de um desenho do pacote levado à pose do objeto.
   bool slotBounds(const runtime::SceneGraph &document, EditorEntityId entity, u32 assetIndex, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
+  // CPU snapshot of the same skin + morph consumer used for drawing/picking.
+  // Unlike rendering's bind-pose fallback, authoring refuses missing bones.
+  bool authoredGeometry(const runtime::SceneGraph &,EditorEntityId,u32 assetId,
+                        std::vector<EditorPickMesh::Triangle> &,std::string &) const;
   struct CollisionHullPreview {
     std::span<const EditorPickMesh::Triangle> triangles;
     u32 inputPointCount=0,vertexCount=0,faceCount=0;

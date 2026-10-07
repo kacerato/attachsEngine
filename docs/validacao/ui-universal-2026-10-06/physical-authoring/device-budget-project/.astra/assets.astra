@@ -1,0 +1,3 @@
+AETHER_ASSETS 1 2
+a7220d1063108cb5b6f29041b123516d mesh "Sources/budget-surface.glb" "Sources/budget-surface.glb" "cbb46d1a648cf1cd052d91c9cc6acf8a230ee5dd5a962f89a01494b744c0c944" 1 "glb" 0 0
+7d2065bf574ebd35e3a7f20981ab018b mesh "Collision/bake-d2b453917f6cdcd1ca90c3a4768951a1b13ff6b5f681a7000dc18da8832e608e.glb" "Collision/bake-d2b453917f6cdcd1ca90c3a4768951a1b13ff6b5f681a7000dc18da8832e608e.glb" "d2b453917f6cdcd1ca90c3a4768951a1b13ff6b5f681a7000dc18da8832e608e" 1 "glb" 1 a7220d1063108cb5b6f29041b123516d 0

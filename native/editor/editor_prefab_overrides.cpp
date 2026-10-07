@@ -494,6 +494,14 @@ std::vector<u64> collisionRevisionMembers(const EditorEntity &donor,const Editor
   std::vector<u64> ids;
   const auto append=[&](const scene::CollisionRecipe &recipe){for(const auto &part:recipe.parts)if(std::find(ids.begin(),ids.end(),part.collider)==ids.end())ids.push_back(part.collider);};
   append(*static_cast<const scene::CollisionRecipe*>(value));
+  if(!source.components.find(scene::CollisionRecipe::descriptor)) {
+    // First-time authoring on a linked instance also creates required physical
+    // authority. Include only new dependencies; existing Body/motor edits stay
+    // separate addresses and are never silently published with regeneration.
+    for(const auto *type:{&scene::PhysicsBody::descriptor,&scene::DynamicBodyMotor::descriptor})
+      if(const auto *required=donor.components.find(*type);required&&!source.components.find(*type))
+        ids.push_back(required->instanceId());
+  }
   if(const auto *old=source.components.findInstance(component);old&&&old->type()==&scene::CollisionRecipe::descriptor)append(*static_cast<const scene::CollisionRecipe*>(old));
   return ids;
 }

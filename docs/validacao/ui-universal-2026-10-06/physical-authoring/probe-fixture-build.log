@@ -1,0 +1,6 @@
+[1/5] Checking generated component contracts
+49 types / 10 family tables; 387 property declarations / 76 tables; 774 generated accessors; all outputs current
+[2/5] Building CXX object CMakeFiles/aether_gui_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_collision_regeneration.cpp.obj
+[3/5] Building CXX object CMakeFiles/aether_gui_preview.dir/C_/Users/donod/Downloads/atchengine/tests/native/gui_preview_main.cpp.obj
+[4/5] Linking CXX executable aether_gui_preview.exe
+[5/5] Linking CXX executable aether_gui_tests.exe

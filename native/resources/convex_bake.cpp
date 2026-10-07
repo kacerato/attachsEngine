@@ -43,9 +43,9 @@ void makeGlb(ConvexBakeResult &result,const ConvexBakeSettings &settings,const s
     meshes<<"{\"name\":\""<<(topology?"Collision edit ":"Convex part ")<<i+1<<"\",\"extras\":{\"sourceObjectId\":\""<<p.sourceObject<<"\"},\"primitives\":[{\"attributes\":{\"POSITION\":"<<i*2<<"},\"indices\":"<<i*2+1<<"}]}";
     nodes<<"{\"name\":\""<<(topology?"Collision edit ":"Convex part ")<<i+1<<"\",\"mesh\":"<<i<<"}";roots<<i;
   }
-  std::ostringstream json;json.imbue(std::locale::classic());
-  if(topology)json<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"attachsEngine collision topology\",\"extras\":{\"collisionEdit\":{\"sourceGeometryHash\":\""<<result.sourceGeometryHash<<"\",\"sourceGuids\":[";
-  else json<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"attachsEngine V-HACD 4 f900e423\",\"extras\":{\"collisionBake\":{\"sourceGeometryHash\":\""<<result.sourceGeometryHash<<"\",\"maximumParts\":"<<settings.maximumParts<<",\"voxelResolution\":"<<settings.voxelResolution<<",\"maximumVertices\":"<<settings.maximumVertices<<",\"volumeErrorPercent\":"<<settings.volumeErrorPercent<<",\"timeBudgetSeconds\":"<<settings.timeBudgetSeconds<<",\"sourceGuids\":[";
+  std::ostringstream json;json.imbue(std::locale::classic());json<<std::setprecision(std::numeric_limits<float>::max_digits10);
+  if(topology)json<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"attachsEngine collision topology\",\"extras\":{\"collisionEdit\":{\"sourceGeometryHash\":\""<<result.sourceGeometryHash<<"\",\"animationTime\":"<<settings.animationTime<<",\"sourceGuids\":[";
+  else json<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"attachsEngine V-HACD 4 f900e423\",\"extras\":{\"collisionBake\":{\"sourceGeometryHash\":\""<<result.sourceGeometryHash<<"\",\"maximumParts\":"<<settings.maximumParts<<",\"voxelResolution\":"<<settings.voxelResolution<<",\"maximumVertices\":"<<settings.maximumVertices<<",\"volumeErrorPercent\":"<<settings.volumeErrorPercent<<",\"timeBudgetSeconds\":"<<settings.timeBudgetSeconds<<",\"pose\":\""<<(settings.pose==ConvexBakePose::Authored?"authored":settings.pose==ConvexBakePose::Animation?"animation":"rest")<<"\",\"animationTime\":"<<settings.animationTime<<",\"sourceGuids\":[";
   for(usize i=0;i<sources.size();++i){if(i)json<<',';json<<'"'<<sources[i]<<'"';}
   json<<"],\"authoringSources\":["<<std::setprecision(std::numeric_limits<float>::max_digits10);
   for(usize i=0;i<result.origins.size();++i) {
@@ -104,6 +104,8 @@ struct ConvexBakeJob::Work final : VHACD::IVHACD::IUserCallback {
       std::map<std::pair<u32,u32>,std::pair<u32,i32>> edges;
       for(usize i=0;i<solid.size();i+=9) {
         if(requested.load()){output={};status.store(ConvexBakeStatus::Cancelled);return;}
+        if(i%2304==0&&std::chrono::steady_clock::now()-began>std::chrono::seconds(budget))
+          throw std::runtime_error("Limite de tempo excedido na preparação; reduza a geometria ou aumente o orçamento.");
         u32 triangle[3];for(u32 v=0;v<3;++v){std::array<float,3> p{solid[i+v*3],solid[i+v*3+1],solid[i+v*3+2]};
           for(auto &k:p){if(!std::isfinite(k))throw std::runtime_error("Vértice não finito.");if(k==0)k=0;}
           const auto [found,inserted]=ids.emplace(p,static_cast<u32>(ids.size()));triangle[v]=found->second;
@@ -113,7 +115,15 @@ struct ConvexBakeJob::Work final : VHACD::IVHACD::IUserCallback {
         for(u32 v=0;v<3;++v){const auto a=triangle[v],b=triangle[(v+1)%3];auto &edge=edges[{std::min(a,b),std::max(a,b)}];++edge.first;edge.second+=a<b?1:-1;}
       }
       if(points.size()<12||triangles.size()<12)throw std::runtime_error("A malha não contém um sólido.");
-      for(const auto &[key,edge]:edges){(void)key;if(edge.first!=2||edge.second)throw std::runtime_error("Decomposição exige malha fechada e orientada. Corrija bordas abertas, faces duplicadas ou orientação.");}
+      usize checkedEdges=0;
+      for(const auto &[key,edge]:edges){
+        (void)key;if(edge.first!=2||edge.second)throw std::runtime_error("Decomposição exige malha fechada e orientada. Corrija bordas abertas, faces duplicadas ou orientação.");
+        if(++checkedEdges%1024==0) {
+          if(requested.load()){output={};status.store(ConvexBakeStatus::Cancelled);return;}
+          if(std::chrono::steady_clock::now()-began>std::chrono::seconds(budget))
+            throw std::runtime_error("Limite de tempo excedido na preparação; reduza a geometria ou aumente o orçamento.");
+        }
+      }
       {std::lock_guard lock(engineMutex);engine=VHACD::CreateVHACD();}if(!engine)throw std::runtime_error("V-HACD indisponível.");
       VHACD::IVHACD::Parameters p;p.m_callback=this;p.m_asyncACD=false;p.m_maxConvexHulls=settings.maximumParts;
       const auto partBudget=static_cast<u32>(settings.maximumParts/groupCount+(groupIndex<settings.maximumParts%groupCount));p.m_maxConvexHulls=partBudget;
@@ -143,6 +153,20 @@ struct ConvexBakeJob::Work final : VHACD::IVHACD::IUserCallback {
 ConvexBakeJob::ConvexBakeJob() noexcept :work_(new(std::nothrow) Work){}
 ConvexBakeJob::~ConvexBakeJob(){cancel();if(work_&&work_->worker.joinable())work_->worker.join();}
 void ConvexBakeJob::cancel() noexcept {if(work_)work_->requestCancel();}
+bool ConvexBakeJob::reuse(const ConvexBakeResult &result,std::string &error) noexcept {
+  try {
+    if(!work_||work_->status.load()!=ConvexBakeStatus::Idle||result.parts.empty()||result.parts.size()>32||result.glb.empty()||result.sourceGeometryHash.size()!=64) {
+      error="Resultado de cache inválido";return false;
+    }
+    for(const auto &part:result.parts) {
+      if(part.vertices.size()<4||part.vertices.size()>64||part.indices.empty()||part.indices.size()%3||part.indices.size()>768){error="Casco em cache inválido";return false;}
+      for(auto index:part.indices)if(index>=part.vertices.size()){error="Índice em cache inválido";return false;}
+      for(const auto &point:part.vertices)for(float value:point)if(!std::isfinite(value)){error="Vértice em cache inválido";return false;}
+    }
+    work_->output=result;work_->fraction=1;work_->stage="Prévia reutilizada · geometria e parâmetros idênticos";
+    work_->status.store(ConvexBakeStatus::Ready);error.clear();return true;
+  } catch(...) {error="Memória insuficiente para reutilizar a prévia";return false;}
+}
 bool ConvexBakeJob::start(std::vector<float> triangles,ConvexBakeSettings settings,std::string hash,std::vector<std::string> sources,std::string &error,std::vector<ConvexBakeOrigin> origins) noexcept {
   try {
     if(!work_||work_->status.load()!=ConvexBakeStatus::Idle||!validConvexBakeSettings(settings)||triangles.empty()||triangles.size()%9||triangles.size()>900000||hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos){error="Parâmetros ou geometria fora do orçamento (100 mil triângulos).";return false;}
