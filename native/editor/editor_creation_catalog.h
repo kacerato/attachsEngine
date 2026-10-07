@@ -76,6 +76,8 @@ struct EditorCreationEntry {
   std::string_view authoringComponent{};
   // A visual child shares resources, never the parent's physical authority.
   scene::PrimitiveType childVisual=scene::PrimitiveType::Count;
+  // Põe um Cérebro na câmera da cena (ou cria uma), no mesmo comando de histórico.
+  bool sceneBrain=false;
   bool composed() const {return action==EditorWidget::None;}
 };
 
@@ -192,6 +194,11 @@ inline const CreationComponent hinge2D[]{{"astra.physics2d.body"},{"astra.physic
 inline const CreationComponent path[]{{"astra.path"}};
 inline const CreationComponent pathFollow[]{{"astra.path.follow"}};
 inline const CreationComponent pathCamera[]{{camera},{"astra.path.follow"}};
+inline constexpr std::string_view virtualCamera="astra.camera.virtual";
+// Terceira pessoa pronta: órbita no alvo selecionado, mira nele e desvia de paredes.
+inline const CreationValue virtualCameraValues[]{{virtualCamera,"position_mode",u32{2}},{virtualCamera,"rotation_mode",u32{1}},
+  {virtualCamera,"avoid_obstacles",true},{virtualCamera,"priority",10.f},{virtualCamera,"aim_offset_y",1.f}};
+inline const CreationComponent virtualCameraRecipe[]{{virtualCamera,virtualCameraValues}};
 // Editable initial geometry, stored in the same Path value as subsequent edits.
 inline constexpr resources::CurvePoint3D pathPoints[]{
   {0,{-3,0,0},{},{0,0,2}},
@@ -205,7 +212,7 @@ inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água"
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,81> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,82> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -216,6 +223,10 @@ inline const std::array<EditorCreationEntry,81> editorCreationCatalog{{
   {"basic.follow_camera",EditorWidget::None,0,"Câmera seguidora","Cria câmera que acompanha o objeto selecionado no Play.",
     ui::UiIcon::ComponentCameraFollow,runtime::ObjectKind::Camera,recipe::followCamera,CreationPose::BehindSelection,0,
     recipe::follow,"target","Follow Cinemachine"},
+  {"basic.virtual_camera",EditorWidget::None,0,"Câmera virtual","Órbita no objeto selecionado; o Cérebro troca e mistura as câmeras no Play.",
+    ui::UiIcon::ComponentVirtualCamera,runtime::ObjectKind::Folder,recipe::virtualCameraRecipe,CreationPose::BehindSelection,0,
+    recipe::virtualCamera,"tracking_target","Cinemachine CinemachineCamera VirtualCamera Orbit Terceira pessoa",scene::PrimitiveType::Count,false,{},
+    recipe::virtualCamera,scene::PrimitiveType::Count,true},
   {"geometry.cube",EditorWidget::CreateCube,1,"Cubo","Malha com transformação e material editáveis.",ui::UiIcon::PrimitiveCube},
   {"geometry.ground",EditorWidget::CreateGround,1,"Chão","Superfície geométrica para compor o cenário.",ui::UiIcon::EditorAuthorGrid},
   {"water.surface",EditorWidget::CreateFiniteWater,2,"Superfície de água","Volume finito com profundidade e corrente.",ui::UiIcon::WaterAuthorSurface},

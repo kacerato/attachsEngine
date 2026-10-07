@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,16> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,21> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -44,8 +44,13 @@ inline constexpr std::array<EventConnectionEventKey,16> eventConnectionEventKeys
   {14,"astra.physics.joint","broken"},
   {15,"astra.physics.character","collider_hit"},
   {16,"astra.physics.collider","trigger_stay"},
+  {17,"astra.camera.brain","camera_activated"},
+  {18,"astra.camera.brain","camera_cut"},
+  {19,"astra.camera.brain","blend_finished"},
+  {20,"astra.camera.virtual","activated"},
+  {21,"astra.camera.virtual","deactivated"},
 }};
-inline constexpr std::array<ComponentEnumOption,17> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,22> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -55,8 +60,10 @@ inline constexpr std::array<ComponentEnumOption,17> eventConnectionEvents{{
   {14,"Junta quebrou"},
   {15,"Personagem bateu num colisor"},
   {16,"Sensor 3D: dentro"},
+  {17,"Cérebro: câmera ativada"},{18,"Cérebro: corte de câmera"},{19,"Cérebro: transição concluída"},
+  {20,"Câmera virtual entrou ao vivo"},{21,"Câmera virtual saiu do ar"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,25> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,27> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -82,8 +89,10 @@ inline constexpr std::array<EventConnectionMethodKey,25> eventConnectionMethodKe
   {23,"astra.tween.property","resume"},
   {24,"astra.physics.raycast","update"},
   {25,"astra.physics.shapecast","update"},
+  {26,"astra.camera.virtual","prioritize"},
+  {27,"astra.camera.virtual","snap"},
 }};
-inline constexpr std::array<ComponentEnumOption,26> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,28> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -92,6 +101,7 @@ inline constexpr std::array<ComponentEnumOption,26> eventConnectionMethods{{
   {16,"Sequência: tocar"},{17,"Sequência: cancelar"},{18,"Sequência: pausar"},{19,"Sequência: retomar"},
   {20,"Tween de propriedade: reiniciar"},{21,"Tween de propriedade: cancelar"},{22,"Tween de propriedade: pausar"},{23,"Tween de propriedade: retomar"},
   {24,"Raio: atualizar agora"},{25,"Varredura: atualizar agora"},
+  {26,"Câmera virtual: priorizar"},{27,"Câmera virtual: encaixar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
@@ -111,7 +121,7 @@ inline const EventConnectionMethodKey *findEventConnectionMethod(u32 value) {
   return nullptr;
 }
 // Eventos que carregam o outro objeto (contatos) aceitam filtro por ele.
-inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || event==15 || event==16;}
+inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || (event>=15 && event<=21);}
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
 // e audio.seek (segundos).
 inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6;}

@@ -102,6 +102,8 @@ Junto: associar propriedades a cenários de efeito (problema 4 da seção 3), co
 
 ### Bloco G — Câmera virtual (F023)
 
+**Estado (07/10):** concluído — ver [Câmera virtual e Cérebro](CAMERA-VIRTUAL-2026-10-07.md); aceite no host e no aparelho. Diferenças pendentes (Three Ring, Blend Hint, canais, Solo) classificadas no documento.
+
 Câmera virtual com prioridade, cérebro com blend, órbita, colisão/desoclusão e ruído, compondo `astra.camera`, `camera.follow` e `camera.look` existentes. Referência: [Cinemachine 3](https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/index.html).
 
 ### Bloco H — Áudio completo (F058, F059, F061)

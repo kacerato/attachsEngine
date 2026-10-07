@@ -6,6 +6,7 @@
 #include "runtime/scene_tweens.h"
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
+#include "runtime/scene_virtual_cameras.h"
 #include "scene/audio.h"
 #include "scene/component_schema.h"
 #include "scene/path_follow.h"
@@ -13,6 +14,7 @@
 #include "scene/transform_tween.h"
 #include "scene/property_tween.h"
 #include "scene/tween_sequence.h"
+#include "scene/virtual_camera.h"
 
 #include <algorithm>
 #include <cmath>
@@ -69,7 +71,12 @@ WorldStatus pathOperation(const ComponentOperationServices &s,ComponentHandle h,
   return ok?WorldStatus::Ok:WorldStatus::Rejected;
 }
 
-const std::array<ComponentMethodBinding,43> bindings{{
+WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle h,std::string_view method,Value &result) {
+  if(!s.cameras) return WorldStatus::NotRunning;
+  return s.cameras->command(*s.world,h,method,result);
+}
+
+const std::array<ComponentMethodBinding,48> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -118,6 +125,11 @@ const std::array<ComponentMethodBinding,43> bindings{{
   {&scene::PathFollow::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,1,r);}},
   {&scene::PathFollow::descriptor,"progress",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,2,r);}},
   {&scene::PathFollow::descriptor,"playing",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,3,r);}},
+  {&scene::VirtualCamera::descriptor,"prioritize",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return cameraOperation(s,h,"prioritize",r);}},
+  {&scene::VirtualCamera::descriptor,"snap",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return cameraOperation(s,h,"snap",r);}},
+  {&scene::VirtualCamera::descriptor,"is_live",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return cameraOperation(s,h,"is_live",r);}},
+  {&scene::CameraBrain::descriptor,"live_camera",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return cameraOperation(s,h,"live_camera",r);}},
+  {&scene::CameraBrain::descriptor,"blending",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return cameraOperation(s,h,"blending",r);}},
 }};
 
 const ComponentMethodBinding *findBinding(const scene::ComponentType &type,std::string_view method) {

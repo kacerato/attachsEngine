@@ -561,21 +561,26 @@
       "capacidade": "C CameraRig / Cinemachine, composição Camera3D+SpringArm3D",
       "origem": "COMPONENTES.md:46",
       "familia": "Recursos, geometria, materiais e câmeras — P05/P08",
-      "requisitos": "Follow de posição, offset e damping implementados; look-at, limites, colisão, blend pendentes",
-      "dependencias": "`astra.camera.follow` requer Camera e alvo por referência; executa após física",
+      "requisitos": "Câmera virtual com prioridade, Seguir com deslocamento e amortecimento, Órbita com entrada e limites, mira, desoclusão, tremor e Cérebro com transição",
+      "dependencias": "Câmera virtual compõe com astra.camera (Cérebro), entrada de olhar e ScenePhysics; avaliada depois de física, LateUpdate, tweens e Acompanhar alvo",
       "trabalho_original": "P08b parcial",
       "escopo": "obrigatorio",
-      "estado": "parcial",
+      "estado": "concluida",
       "evidencias": [
-        "native/scene/camera_follow.h",
-        "native/scene/camera_look.h"
+        "docs/planos/CAMERA-VIRTUAL-2026-10-07.md",
+        "native/scene/virtual_camera.h",
+        "native/runtime/scene_virtual_cameras.h",
+        "tests/native/test_virtual_cameras.cpp",
+        "tests/fixtures/virtual-camera/VirtualCameraProbe.cs",
+        "docs/validacao/evidencias/virtual-camera-20261007/aparelho-logcat.txt"
       ],
-      "lacunas": [
-        "Look-at com limites, colisão/desoclusão, prioridade entre câmeras virtuais e blend pendentes (bloco G)."
-      ],
-      "aceite": {},
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Câmera virtual e Cérebro; aceite no aparelho em 07/10/2026 (pacote de validação lado a lado). Diferenças da Cinemachine classificadas no documento do bloco."
       ]
     },
     {

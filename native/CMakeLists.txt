@@ -503,6 +503,11 @@ add_library(aether_runtime STATIC
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend aether_ui)
+# A ponte de scripts instancia o esquema tipado inteiro; no build de depuração do
+# MinGW ela passa do limite de seções do COFF. Só o formato do objeto muda.
+if(MINGW)
+  target_compile_options(aether_runtime PRIVATE -Wa,-mbig-obj)
+endif()
 
 # --- aether_editor: documento de cena, historico, projecao e gizmo ---------
 # O modelo do EDITOR, nao o do runtime: descreve o que o usuario autorou. Ele
@@ -770,6 +775,7 @@ if(NOT ANDROID)
     ../tests/native/test_physics_material.cpp
     ../tests/native/test_joint_break.cpp
     ../tests/native/test_physics_queries.cpp
+    ../tests/native/test_virtual_cameras.cpp
     ../tests/native/test_body_mass.cpp
     ../tests/native/test_runtime_number_tweens.cpp
     ../tests/native/test_runtime_physics2d.cpp

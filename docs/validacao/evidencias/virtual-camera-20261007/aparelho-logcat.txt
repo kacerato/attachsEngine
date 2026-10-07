@@ -1,0 +1,6 @@
+# Aparelho, 07/10/2026 13:17, pacote dev.aether.editor.validacao (APK release do worktree claude/api-componentes,
+# instalado lado a lado com o app publicado), projeto CameraVirtual-20261007, sonda tests/fixtures/virtual-camera/VirtualCameraProbe.cs
+VCAM start
+VCAM orbita ao vivo=True corte=True distancia=3.11 PASS
+VCAM aerea ao vivo=True transicao=True ativada=True concluida=True saiu-orbita=True pose=0.00 lente=45.0 PASS
+VCAM volta orbita ao vivo=True lente=60.0 PASS

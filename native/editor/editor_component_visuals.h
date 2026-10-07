@@ -12,6 +12,7 @@
 #include "scene/tween_sequence.h"
 #include "scene/property_tween.h"
 #include "scene/physics_queries.h"
+#include "scene/virtual_camera.h"
 #include "scene/event_connection.h"
 #include "scene/physics2d_components.h"
 #include "scene/audio.h"
@@ -336,7 +337,24 @@ inline void physicsQueryVisual(const scene::ComponentValue &value,const EditorEn
     const float end[3]{0,0,c.length};visual_detail::segment(out,world,origin,end);out.segments.back().emphasis=1;
   }
 }
-inline const std::array<ComponentVisualProvider,39> componentVisualProviders{{
+// Câmera virtual: o enquadramento com a lente dela, encurtado para caber na
+// cena (a câmera virtual não desenha; o frustum mostra para onde ela aponta).
+inline void virtualCameraVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                                float aspect,bool detail,ComponentVisual &out) {
+  const auto &c=static_cast<const scene::VirtualCamera&>(value);out.enabled=c.enabled;
+  if(!detail||!c.valid()) return;
+  float pose[16];if(!visual_detail::opticalFrame(world,pose)) return;
+  const float tanV=std::tan(c.verticalFov*0.00872664626f),tanH=tanV*aspect,depth=std::min(c.farPlane,4.f);
+  const float origin[3]{};float corners[4][3];
+  for(u32 i=0;i<4;++i) {corners[i][0]=(i==0||i==3?-1.f:1.f)*depth*tanH;corners[i][1]=(i<2?-1.f:1.f)*depth*tanV;corners[i][2]=depth;}
+  for(u32 i=0;i<4;++i) {visual_detail::segment(out,pose,corners[i],corners[(i+1)%4]);visual_detail::segment(out,pose,origin,corners[i]);}
+  const float a[3]{-.2f,.18f,0},b[3]{.2f,.18f,0},tip[3]{0,.38f,0};
+  visual_detail::segment(out,pose,a,b);visual_detail::segment(out,pose,b,tip);visual_detail::segment(out,pose,tip,a);
+  out.segments.back().emphasis=1;
+}
+inline void cameraBrainVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *,
+                              float,bool,ComponentVisual &out) {out.enabled=static_cast<const scene::CameraBrain&>(value).enabled;}
+inline const std::array<ComponentVisualProvider,41> componentVisualProviders{{
   {&scene::GravityField2D::descriptor,ui::UiIcon::PhysicsFieldGravity2d,true,physicsField2DVisual},
   {&scene::WindField2D::descriptor,ui::UiIcon::PhysicsFieldWind2d,true,physicsField2DVisual},
   {&scene::DragField2D::descriptor,ui::UiIcon::PhysicsFieldDrag2d,true,physicsField2DVisual},
@@ -372,6 +390,8 @@ inline const std::array<ComponentVisualProvider,39> componentVisualProviders{{
   {&scene::ScaleConstraint::descriptor,ui::UiIcon::ComponentScaleConstraint,true,visual_detail::constraint},
   {&scene::AimConstraint::descriptor,ui::UiIcon::ComponentAimConstraint,true,visual_detail::constraint},
   {&scene::ConstantForce::descriptor,ui::UiIcon::ComponentConstantForce,true,visual_detail::constantForce},
+  {&scene::VirtualCamera::descriptor,ui::UiIcon::ComponentVirtualCamera,true,virtualCameraVisual},
+  {&scene::CameraBrain::descriptor,ui::UiIcon::ComponentCameraBrain,false,cameraBrainVisual},
   {&scene::Camera::descriptor,ui::UiIcon::EditorAuthorCamera,true,visual_detail::camera},
   {&scene::Light::descriptor,ui::UiIcon::EditorAuthorSun,true,visual_detail::light},
   {&scene::Collider::descriptor,ui::UiIcon::ComponentCollider,false,visual_detail::collider},
@@ -575,6 +595,20 @@ inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::Scene
         if(id==selected&&value->type().id==scene::Collider::descriptor.id&&value->instanceId()==editedConnectionInstance)
           for(auto &line:v.segments)line.emphasis=1;
         if(id==selected&&value->type().id==scene::PathFollow::descriptor.id&&referencedPath){float source[16];if(editorWorldMatrix(document,referencedPath,source)){ComponentVisualSegment link;std::copy(world+12,world+15,link.a);std::copy(source+12,source+15,link.b);link.emphasis=1;v.segments.push_back(link);}}
+        // Câmera virtual selecionada: linhas até os alvos e, na órbita, o anel
+        // onde ela vai circular (raio e altura do ângulo vertical autorado).
+        if(id==selected&&&value->type()==&scene::VirtualCamera::descriptor) {
+          const auto &c=static_cast<const scene::VirtualCamera&>(*value);
+          const auto link=[&](u64 target){float m[16];if(!target||!editorWorldMatrix(document,static_cast<EditorEntityId>(target),m)) return;
+            ComponentVisualSegment line;std::copy(world+12,world+15,line.a);std::copy(m+12,m+15,line.b);line.emphasis=1;v.segments.push_back(line);};
+          link(c.trackingTarget);if(c.lookAtTarget!=c.trackingTarget) link(c.lookAtTarget);
+          float target[16];
+          if(c.position==scene::VirtualCameraPosition::Orbit&&c.trackingTarget&&editorWorldMatrix(document,static_cast<EditorEntityId>(c.trackingTarget),target)) {
+            const float pitch=c.orbitPitch*0.01745329252f;
+            float pose[16]{1,0,0,0,0,1,0,0,0,0,1,0,target[12],target[13]+c.orbitRadius*std::sin(pitch),target[14],1};
+            visual_detail::ring(v,pose,c.orbitRadius*std::cos(pitch),0,1);
+          }
+        }
         if(id==(selectedPathEntity?selectedPathEntity:selected)&&value->type().id==scene::Path::descriptor.id&&value->instanceId()==selectedPathInstance) {
           const auto *point=static_cast<const scene::Path&>(*value).point(selectedPathPoint);
           if(point){

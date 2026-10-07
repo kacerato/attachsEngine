@@ -1649,6 +1649,18 @@
       "name": "spring-arm",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/virtual-camera": {
+      "category": "component",
+      "name": "virtual-camera",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/camera-brain": {
+      "category": "component",
+      "name": "camera-brain",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

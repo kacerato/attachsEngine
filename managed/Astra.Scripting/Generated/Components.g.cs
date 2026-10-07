@@ -1298,6 +1298,11 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         JuntaQuebrou = 14,
         PersonagemBateuNumColisor = 15,
         Sensor3DDentro = 16,
+        CerebroCameraAtivada = 17,
+        CerebroCorteDeCamera = 18,
+        CerebroTransicaoConcluida = 19,
+        CameraVirtualEntrouAoVivo = 20,
+        CameraVirtualSaiuDoAr = 21,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1347,6 +1352,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         TweenDePropriedadeRetomar = 23,
         RaioAtualizarAgora = 24,
         VarreduraAtualizarAgora = 25,
+        CameraVirtualPriorizar = 26,
+        CameraVirtualEncaixar = 27,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -2823,6 +2830,394 @@ public readonly struct CameraFollow : IComponentFacade<CameraFollow>
         get => Component.GetReference("target");
         set => Component.SetReference("target", value);
     }
+}
+
+/// <summary>Câmera virtual: Pose e lente por prioridade: seguir, órbita, mira, desoclusão e tremor. Família Câmera · Câmera virtual.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineCamera.html</remarks>
+public readonly struct VirtualCamera : IComponentFacade<VirtualCamera>
+{
+    public static string TypeId => "astra.camera.virtual";
+    public static VirtualCamera Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public VirtualCamera(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Ajuste da mira</summary>
+    public Vector3 AimOffset
+    {
+        get => new(Component.GetFloat("aim_offset_x"), Component.GetFloat("aim_offset_y"), Component.GetFloat("aim_offset_z"));
+        set => Component.SetVector3("aim_offset", value);
+    }
+    /// <summary>Prioridade. A maior entre as câmeras virtuais ativas fica ao vivo; no empate vence a ativada por último</summary>
+    /// <remarks>Faixa válida: -10000 a 10000.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
+    }
+    /// <summary>Campo vertical (°). Usado quando a Câmera do Cérebro é perspectiva</summary>
+    /// <remarks>Faixa válida: 1 a 170.</remarks>
+    public float VerticalFov
+    {
+        get => Component.GetFloat("vertical_fov");
+        set => Component.SetFloat("vertical_fov", value);
+    }
+    /// <summary>Meia altura (m). Usado quando a Câmera do Cérebro é ortográfica</summary>
+    /// <remarks>Faixa válida: 0.001 a 100000.</remarks>
+    public float OrthographicHalfHeight
+    {
+        get => Component.GetFloat("orthographic_half_height");
+        set => Component.SetFloat("orthographic_half_height", value);
+    }
+    /// <summary>Próximo (m)</summary>
+    /// <remarks>Faixa válida: 0.001 a 10000.</remarks>
+    public float NearPlane
+    {
+        get => Component.GetFloat("near_plane");
+        set => Component.SetFloat("near_plane", value);
+    }
+    /// <summary>Distante (m)</summary>
+    /// <remarks>Faixa válida: 0.01 a 1000000.</remarks>
+    public float FarPlane
+    {
+        get => Component.GetFloat("far_plane");
+        set => Component.SetFloat("far_plane", value);
+    }
+    /// <summary>Inclinação holandesa (°). Giro em torno da direção de visão</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float Dutch
+    {
+        get => Component.GetFloat("dutch");
+        set => Component.SetFloat("dutch", value);
+    }
+    /// <summary>Raio da órbita (m). Distância ao alvo rastreado</summary>
+    /// <remarks>Faixa válida: 0.01 a 1000.</remarks>
+    public float OrbitRadius
+    {
+        get => Component.GetFloat("orbit_radius");
+        set => Component.SetFloat("orbit_radius", value);
+    }
+    /// <summary>Ângulo horizontal (°). Giro em torno do eixo Y do mundo; zero fica atrás do alvo (−Z)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float OrbitYaw
+    {
+        get => Component.GetFloat("orbit_yaw");
+        set => Component.SetFloat("orbit_yaw", value);
+    }
+    /// <summary>Ângulo vertical (°). Positivo põe a câmera acima do alvo</summary>
+    /// <remarks>Faixa válida: -89 a 89.</remarks>
+    public float OrbitPitch
+    {
+        get => Component.GetFloat("orbit_pitch");
+        set => Component.SetFloat("orbit_pitch", value);
+    }
+    /// <summary>Vertical mínimo (°)</summary>
+    /// <remarks>Faixa válida: -89 a 89.</remarks>
+    public float OrbitPitchMin
+    {
+        get => Component.GetFloat("orbit_pitch_min");
+        set => Component.SetFloat("orbit_pitch_min", value);
+    }
+    /// <summary>Vertical máximo (°)</summary>
+    /// <remarks>Faixa válida: -89 a 89.</remarks>
+    public float OrbitPitchMax
+    {
+        get => Component.GetFloat("orbit_pitch_max");
+        set => Component.SetFloat("orbit_pitch_max", value);
+    }
+    /// <summary>Sensibilidade horizontal (°). Graus por largura de tela arrastada</summary>
+    /// <remarks>Faixa válida: 0 a 2000.</remarks>
+    public float OrbitYawSensitivity
+    {
+        get => Component.GetFloat("orbit_yaw_sensitivity");
+        set => Component.SetFloat("orbit_yaw_sensitivity", value);
+    }
+    /// <summary>Sensibilidade vertical (°). Graus por altura de tela arrastada</summary>
+    /// <remarks>Faixa válida: 0 a 2000.</remarks>
+    public float OrbitPitchSensitivity
+    {
+        get => Component.GetFloat("orbit_pitch_sensitivity");
+        set => Component.SetFloat("orbit_pitch_sensitivity", value);
+    }
+    /// <summary>Amortecimento da posição (s). Tempo para alcançar o alvo; zero acompanha sem atraso</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float PositionDamping
+    {
+        get => Component.GetFloat("position_damping");
+        set => Component.SetFloat("position_damping", value);
+    }
+    /// <summary>Amortecimento da rotação (s)</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float RotationDamping
+    {
+        get => Component.GetFloat("rotation_damping");
+        set => Component.SetFloat("rotation_damping", value);
+    }
+    /// <summary>Raio da câmera (m). Distância mantida dos obstáculos; zero usa um raio de luz</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float CameraRadius
+    {
+        get => Component.GetFloat("camera_radius");
+        set => Component.SetFloat("camera_radius", value);
+    }
+    /// <summary>Distância mínima do alvo (m). Obstáculos mais perto do alvo que isto são ignorados</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float MinimumDistance
+    {
+        get => Component.GetFloat("minimum_distance");
+        set => Component.SetFloat("minimum_distance", value);
+    }
+    /// <summary>Amortecimento ao liberar (s). Tempo para voltar à distância livre; a aproximação é imediata</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float CollisionDamping
+    {
+        get => Component.GetFloat("collision_damping");
+        set => Component.SetFloat("collision_damping", value);
+    }
+    /// <summary>Tremor da rotação (°)</summary>
+    /// <remarks>Faixa válida: 0 a 90.</remarks>
+    public float NoiseAmplitude
+    {
+        get => Component.GetFloat("noise_amplitude");
+        set => Component.SetFloat("noise_amplitude", value);
+    }
+    /// <summary>Tremor da posição (m)</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float NoisePositionAmplitude
+    {
+        get => Component.GetFloat("noise_position_amplitude");
+        set => Component.SetFloat("noise_position_amplitude", value);
+    }
+    /// <summary>Frequência (Hz)</summary>
+    /// <remarks>Faixa válida: 0 a 50.</remarks>
+    public float NoiseFrequency
+    {
+        get => Component.GetFloat("noise_frequency");
+        set => Component.SetFloat("noise_frequency", value);
+    }
+    /// <summary>Duração da entrada (s)</summary>
+    /// <remarks>Faixa válida: 0 a 60.</remarks>
+    public float BlendTime
+    {
+        get => Component.GetFloat("blend_time");
+        set => Component.SetFloat("blend_time", value);
+    }
+    /// <summary>Ativa. Desligada deixa de concorrer; a configuração é preservada</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Controlar pela entrada de olhar. A ação Olhar do mapa de entrada gira a órbita enquanto esta câmera está ao vivo</summary>
+    public bool OrbitInput
+    {
+        get => Component.GetBool("orbit_input");
+        set => Component.SetBool("orbit_input", value);
+    }
+    /// <summary>Evitar obstáculos. Aproxima a câmera do alvo quando um colisor bloqueia a linha de visão</summary>
+    public bool AvoidObstacles
+    {
+        get => Component.GetBool("avoid_obstacles");
+        set => Component.SetBool("avoid_obstacles", value);
+    }
+    public enum PositionModeOption : uint
+    {
+        FixaPoseAutorada = 0,
+        Seguir = 1,
+        Orbita = 2,
+    }
+    /// <summary>Posição. Seguir e Órbita usam o alvo rastreado; sem alvo a câmera fica na pose autorada</summary>
+    public PositionModeOption PositionMode
+    {
+        get => (PositionModeOption)Component.GetEnum("position_mode");
+        set => Component.SetEnum("position_mode", (uint)value);
+    }
+    public enum BindingOption : uint
+    {
+        EixosDoMundo = 0,
+        GuinadaDoAlvo = 1,
+    }
+    /// <summary>Referencial do deslocamento. Guinada do alvo gira o deslocamento junto com o alvo (Lock To Target With World Up)</summary>
+    public BindingOption Binding
+    {
+        get => (BindingOption)Component.GetEnum("binding");
+        set => Component.SetEnum("binding", (uint)value);
+    }
+    public enum RotationModeOption : uint
+    {
+        FixaRotacaoAutorada = 0,
+        OlharParaOAlvo = 1,
+        RotacaoDoAlvo = 2,
+    }
+    /// <summary>Rotação. Olhar para o alvo usa o alvo de mira, ou o rastreado quando ele está vazio</summary>
+    public RotationModeOption RotationMode
+    {
+        get => (RotationModeOption)Component.GetEnum("rotation_mode");
+        set => Component.SetEnum("rotation_mode", (uint)value);
+    }
+    public enum CollisionLayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada dos obstáculos. Todas ou só uma camada física do projeto</summary>
+    public CollisionLayerOption CollisionLayer
+    {
+        get => (CollisionLayerOption)Component.GetEnum("collision_layer");
+        set => Component.SetEnum("collision_layer", (uint)value);
+    }
+    public enum BlendStyleOption : uint
+    {
+        PadraoDoCerebro = 0,
+        Corte = 1,
+        Suave = 2,
+        Linear = 3,
+        EntradaSuave = 4,
+        SaidaSuave = 5,
+        EntradaBrusca = 6,
+        SaidaBrusca = 7,
+    }
+    /// <summary>Entrada. Curva usada quando esta câmera entra ao vivo</summary>
+    public BlendStyleOption BlendStyle
+    {
+        get => (BlendStyleOption)Component.GetEnum("blend_style");
+        set => Component.SetEnum("blend_style", (uint)value);
+    }
+    /// <summary>Alvo rastreado. Objeto que Seguir e Órbita acompanham</summary>
+    public ObjectReference TrackingTarget
+    {
+        get => Component.GetReference("tracking_target");
+        set => Component.SetReference("tracking_target", value);
+    }
+    /// <summary>Alvo de mira. Ponto que Olhar para o alvo e a desoclusão usam</summary>
+    public ObjectReference LookAtTarget
+    {
+        get => Component.GetReference("look_at_target");
+        set => Component.SetReference("look_at_target", value);
+    }
+    /// <summary>Priorizar. Vence o empate com outras câmeras de mesma prioridade, como se tivesse sido ativada agora</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Prioritize() => Component.Invoke("prioritize");
+    /// <summary>Encaixar. Descarta o amortecimento no próximo quadro (depois de teletransportar o alvo)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Snap() => Component.Invoke("snap");
+    /// <summary>Ao vivo. Verdadeiro quando algum Cérebro está mostrando esta câmera</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool IsLive() => Component.Invoke("is_live").AsBoolean();
+    /// <summary>Entrou ao vivo. Emitido quando um Cérebro passa a mostrar esta câmera; carrega a câmera anterior. Payload: Outra câmera: objeto</summary>
+    public ComponentSubscription OnActivated(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "activated", handler);
+    /// <summary>Saiu do ar. Emitido quando outra câmera assume o Cérebro; carrega a nova câmera. Payload: Outra câmera: objeto</summary>
+    public ComponentSubscription OnDeactivated(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "deactivated", handler);
+}
+
+/// <summary>Cérebro de câmera: Mostra a câmera virtual de maior prioridade e faz a transição. Família Câmera · Câmera virtual.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineBrain.html</remarks>
+public readonly struct CameraBrain : IComponentFacade<CameraBrain>
+{
+    public static string TypeId => "astra.camera.brain";
+    public static CameraBrain Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public CameraBrain(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Duração padrão (s). Usada quando a câmera que entra não define a própria transição</summary>
+    /// <remarks>Faixa válida: 0 a 60.</remarks>
+    public float DefaultBlendTime
+    {
+        get => Component.GetFloat("default_blend_time");
+        set => Component.SetFloat("default_blend_time", value);
+    }
+    /// <summary>Ativo. Desligado devolve a câmera à autoria; a pose do último quadro permanece</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ignorar escala de tempo. Câmeras e transições seguem o tempo real mesmo em câmera lenta ou pausa por escala</summary>
+    public bool IgnoreTimeScale
+    {
+        get => Component.GetBool("ignore_time_scale");
+        set => Component.SetBool("ignore_time_scale", value);
+    }
+    public enum DefaultBlendOption : uint
+    {
+        Corte = 1,
+        Suave = 2,
+        Linear = 3,
+        EntradaSuave = 4,
+        SaidaSuave = 5,
+        EntradaBrusca = 6,
+        SaidaBrusca = 7,
+    }
+    /// <summary>Transição padrão</summary>
+    public DefaultBlendOption DefaultBlend
+    {
+        get => (DefaultBlendOption)Component.GetEnum("default_blend");
+        set => Component.SetEnum("default_blend", (uint)value);
+    }
+    /// <summary>Câmera ao vivo. Câmera virtual que o Cérebro está mostrando; vazio sem nenhuma</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public ObjectReference LiveCamera() => Component.Reference(Component.Invoke("live_camera"));
+    /// <summary>Em transição. Verdadeiro enquanto mistura duas câmeras</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Blending() => Component.Invoke("blending").AsBoolean();
+    /// <summary>Câmera ativada. Emitido quando uma câmera virtual assume, já no primeiro quadro da transição. Payload: Câmera que entrou: objeto, Câmera que saiu: objeto</summary>
+    public ComponentSubscription OnCameraActivated(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "camera_activated", handler);
+    /// <summary>Corte de câmera. Emitido quando a troca acontece sem transição. Payload: Câmera: objeto</summary>
+    public ComponentSubscription OnCameraCut(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "camera_cut", handler);
+    /// <summary>Transição concluída. Emitido quando a mistura termina e só a câmera nova aparece. Payload: Câmera: objeto</summary>
+    public ComponentSubscription OnBlendFinished(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "blend_finished", handler);
 }
 
 /// <summary>Campo de gravidade: Gravidade local em volume sobre corpos dinâmicos. Família Física 3D · Campos.</summary>

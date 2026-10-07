@@ -9501,6 +9501,39 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
       history_.cancel(document_);return refuse("Não foi possível criar o filho visual");
     }
   }
+  // Cinemachine: a primeira câmera virtual põe um Cérebro na câmera principal.
+  // Mesma transação: desfazer remove a câmera virtual e o Cérebro juntos.
+  std::string brainNote;
+  if(recipe.sceneBrain) {
+    bool hasBrain=false;std::vector<EditorEntityId> all;document_.collectSubtree(document_.root(),all);
+    for(const auto other:all) if(const auto *e=document_.find(other);e&&e->components.find(scene::CameraBrain::descriptor)) hasBrain=true;
+    if(!hasBrain) {
+      const auto camera=resolveSceneCamera(document_).entity;
+      if(camera) {
+        auto values=*document_.find(camera);
+        auto plan=scene::planComponentAddition(values.components,scene::CameraBrain::descriptor.id);
+        if(!plan.ready) brainNote=std::string(" · Cérebro não adicionado: ")+(plan.error?plan.error:"composição inválida");
+        else {
+          values.components=std::move(plan.candidate);
+          if(!history_.applyValues(document_,camera,values)) {history_.cancel(document_);return refuse("Não foi possível pôr o Cérebro na câmera");}
+          brainNote=std::string(" · Cérebro em ")+document_.find(camera)->name;
+        }
+      } else {
+        EditorEntity main;
+        for(const auto type:{scene::Camera::descriptor.id,scene::CameraBrain::descriptor.id}) {
+          auto plan=scene::planComponentAddition(main.components,type);
+          if(!plan.ready) {history_.cancel(document_);return refuse("Não foi possível compor a câmera principal");}
+          main.components=std::move(plan.candidate);
+        }
+        editorCameraPosition(camera_,main.transform.position);
+        main.transform.rotationDegrees[0]=camera_.pitch*degrees;main.transform.rotationDegrees[1]=camera_.yaw*degrees;
+        assignEntityName(main,"Câmera principal");
+        const auto created=history_.createEntity(document_,document_.root(),runtime::ObjectKind::Camera,"Câmera principal");
+        if(!created||!history_.applyValues(document_,created,main)) {history_.cancel(document_);return refuse("Não foi possível criar a câmera principal");}
+        brainNote=" · Câmera principal com Cérebro criada";
+      }
+    }
+  }
   history_.end();setSelection(id);
   if(!recipe.authoringComponent.empty()) {
     if(const auto *component=document_.find(id)->components.find(recipe.authoringComponent)) {
@@ -9513,7 +9546,7 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
   if(!recipe.pathPoints.empty()){
     refreshPathEditorState();state_.pathEditorOpen=true;state_.pathPointList=false;
   }
-  state_.status=std::string("Objeto criado: ")+recipe.name;
+  state_.status=std::string("Objeto criado: ")+recipe.name+brainNote;
   return id;
 }
 
@@ -9676,6 +9709,7 @@ void EditorSession::update() {
   state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;
   state_.tweenSequenceRuntime=playInspecting()&&playScene_.active()?&playScene_.tweenSequences():nullptr;
   state_.physicsQueryRuntime=playInspecting()&&playScene_.active()?&playScene_.physicsQueries():nullptr;
+  state_.virtualCameraRuntime=playInspecting()&&playScene_.active()?&playScene_.virtualCameras():nullptr;
   state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   refreshColliderAuthoring();

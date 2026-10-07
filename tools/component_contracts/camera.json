@@ -53,6 +53,43 @@
       "searchTerms": "Follow Camera Tracking Damping CinemachineFollow",
       "reference": "https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineFollow.html",
       "apiName": "CameraFollow"
+    },
+    {
+      "type": "VirtualCamera",
+      "name": "Câmera virtual",
+      "description": "Pose e lente por prioridade: seguir, órbita, mira, desoclusão e tremor",
+      "conflicts": {
+        "cpp": "virtualCameraConflicts"
+      },
+      "consumer": "runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Câmera virtual",
+      "icon": "component/virtual-camera",
+      "searchTerms": "Cinemachine CinemachineCamera VirtualCamera Camera3D Orbit Orbital Follow LookAt Deoccluder Noise Shake Tremor Prioridade",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineCamera.html",
+      "apiName": "VirtualCamera"
+    },
+    {
+      "type": "CameraBrain",
+      "name": "Cérebro de câmera",
+      "description": "Mostra a câmera virtual de maior prioridade e faz a transição",
+      "requirements": {
+        "cpp": "brainRequirements"
+      },
+      "conflicts": {
+        "cpp": "brainConflicts"
+      },
+      "consumer": "runtime/scene_virtual_cameras.h → pose e lente da Câmera",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Câmera virtual",
+      "icon": "component/camera-brain",
+      "searchTerms": "CinemachineBrain Brain Blend Transição Mistura Corte",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineBrain.html",
+      "apiName": "CameraBrain"
     }
   ],
   "defaults": {

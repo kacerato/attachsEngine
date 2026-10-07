@@ -1,13 +1,13 @@
 # Saldo de capacidades Astra
 
 **Universo atual: 91 linhas; 87 obrigatórias e 4 condicionais P19.**
-**Encerradas neste registro: 19; ainda sem encerramento comprovado: 68.**
+**Encerradas neste registro: 20; ainda sem encerramento comprovado: 67.**
 
 A contagem de 44 famílias de componentes + 18 recursos do resumo original não cobre as 91 linhas atuais do catálogo. Este saldo usa as linhas efetivas, sem converter tipos, receitas ou lotes de 50 em famílias encerradas.
 
 `auditar` significa cobertura ainda não reconciliada, não ausência de implementação; `ausente` significa conferido sem tipo ou consumidor no checkout. Uma família parcial pode ter muitos consumidores funcionando. Fechar exige conferir cada requisito do catálogo, registrar o aceite e retirar todas as lacunas de implementação. A pedido do usuário, esta rodada usa evidências host/APK; a qualificação física integrada P20 permanece separada. Build e captura host não equivalem a prova física Android.
 
-**Estados obrigatórios:** ausente: 28; concluida: 19; parcial: 40.
+**Estados obrigatórios:** ausente: 28; concluida: 20; parcial: 39.
 
 | ID | Capacidade | Estado | Evidências / lacunas |
 |---|---|---|---|
@@ -33,7 +33,7 @@ A contagem de 44 famílias de componentes + 18 recursos do resumo original não 
 | F020 | [R Sampler/binding](COMPONENTES.md:43) | parcial | `native/scene/mesh_renderer.h`, `docs/componentes/MATRIZ-PROPRIEDADES.md` — UV transform por binding existe (sampling.*); wrap/filtro/anisotropia por binding não são autoráveis (anisotropia depende do aparelho). Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |
 | F021 | [R RenderTarget / RenderTexture, ViewportTexture](COMPONENTES.md:44) | ausente | Sem RenderTexture autoral: alvos de render são internos ao renderer (pré-visualização de câmera); câmera não renderiza para textura do projeto. Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |
 | F022 | [C Camera / Camera, Camera3D](COMPONENTES.md:45) | parcial | `native/scene/camera.h`, `tests/native/test_camera_route.cpp`, `tests/native/test_camera_ray_contract.cpp`, `tests/native/test_game_services.cpp` — Sem viewport rect, alvo (render target), clear flags e máscara de culling por layer; environment_mask é a única máscara.; Exposição vem do Ambiente, não da câmera. Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |
-| F023 | [C CameraRig / Cinemachine, composição Camera3D+SpringArm3D](COMPONENTES.md:46) | parcial | `native/scene/camera_follow.h`, `native/scene/camera_look.h` — Look-at com limites, colisão/desoclusão, prioridade entre câmeras virtuais e blend pendentes (bloco G). Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |
+| F023 | [C CameraRig / Cinemachine, composição Camera3D+SpringArm3D](COMPONENTES.md:46) | concluida | `docs/planos/CAMERA-VIRTUAL-2026-10-07.md`, `native/scene/virtual_camera.h`, `native/runtime/scene_virtual_cameras.h`, `tests/native/test_virtual_cameras.cpp`, `tests/fixtures/virtual-camera/VirtualCameraProbe.cs`, `docs/validacao/evidencias/virtual-camera-20261007/aparelho-logcat.txt` Limite: Câmera virtual e Cérebro; aceite no aparelho em 07/10/2026 (pacote de validação lado a lado). Diferenças da Cinemachine classificadas no documento do bloco. |
 | F024 | [C Decal / URP DecalProjector, Decal](COMPONENTES.md:47) | ausente | Sem projetor de decal nem passe de decal no renderer. Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |
 | F025 | [C Line/Trail / LineRenderer/TrailRenderer, Line2D](COMPONENTES.md:48) | ausente | Sem Line/Trail renderer (bloco K; depende do renderer). Debug.DrawLine é só depuração. Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |
 | F026 | [C Light / Light; DirectionalLight3D, OmniLight3D, SpotLight3D](COMPONENTES.md:56) | parcial | `native/scene/light.h`, `native/scene/light_units.h`, `tests/native/test_runtime_lights.cpp` — Cookie e luz de área planejadas; sem layers/culling mask por luz; limite 8 luzes pontuais por quadro. Limite: Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado. |

@@ -13,6 +13,8 @@
 #include "scene/property_tween.h"
 #include "editor/editor_property_tween.h"
 #include "runtime/scene_physics_queries.h"
+#include "runtime/scene_virtual_cameras.h"
+#include "scene/virtual_camera.h"
 #include "runtime/scene_tween_sequences.h"
 #include "scene/script_behavior.h"
 #include "scene/prefab_link.h"
@@ -137,6 +139,7 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(entity.components.find(scene::EventConnection::descriptor))return UiIcon::ComponentEventConnection;
   if(const auto *timer=static_cast<const scene::Timer*>(entity.components.find(scene::Timer::descriptor)))
     return timer->elapsedAction!=0 ? UiIcon::EventTimeoutConnection : UiIcon::ComponentTimer;
+  if(entity.components.find(scene::VirtualCamera::descriptor)) return UiIcon::ComponentVirtualCamera;
   if(entity.components.find(scene::TweenSequence::descriptor)) return UiIcon::ComponentTweenSequence;
   if(entity.components.find(scene::PropertyTween::descriptor)) return UiIcon::ComponentTweenProperty;
   if(const auto *tween=static_cast<const scene::TransformTween*>(entity.components.find(scene::TransformTween::descriptor)))
@@ -3393,6 +3396,55 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     }
     builder.label(takeTop(content,20),fitMiddle(builder.list,text,content.width,theme.type.caption),live&&live->hit?theme.color.accent:theme.color.textDim,theme.type.caption);
   }
+  // Câmera virtual e Cérebro: cartão com o estado ao vivo (Play) ou o resumo
+  // do que a câmera vai fazer (edição). Nada aqui é editável: só lê.
+  if((entry.type==&scene::VirtualCamera::descriptor||entry.type==&scene::CameraBrain::descriptor)&&!searching) {
+    const auto name=[&](u64 id)->const char *{const auto *e=state.document->find(static_cast<EditorEntityId>(id));return e?e->name:"objeto removido";};
+    char title[128],detail[160];UiColor tone=theme.color.textDim;float progress=-1;UiIcon icon=UiIcon::ComponentVirtualCamera;
+    const auto *live=state.virtualCameraRuntime;
+    if(entry.type==&scene::VirtualCamera::descriptor) {
+      const auto &c=static_cast<const scene::VirtualCamera&>(*component);
+      static constexpr const char *positions[]{"Pose autorada","Seguir","Órbita"};
+      static constexpr const char *rotations[]{"rotação autorada","olha para o alvo","rotação do alvo"};
+      const bool needsTarget=c.position!=scene::VirtualCameraPosition::Authored&&!c.trackingTarget;
+      if(c.position==scene::VirtualCameraPosition::Orbit) std::snprintf(detail,sizeof detail,"Órbita de %.1f m · %s · prioridade %d",static_cast<double>(c.orbitRadius),rotations[static_cast<u32>(c.rotation)],static_cast<int>(c.priority));
+      else std::snprintf(detail,sizeof detail,"%s · %s · prioridade %d",positions[static_cast<u32>(c.position)],rotations[static_cast<u32>(c.rotation)],static_cast<int>(c.priority));
+      if(needsTarget) {std::snprintf(title,sizeof title,"Escolha o alvo rastreado");tone=theme.color.warning;}
+      else if(live&&live->live(entity.id)) {std::snprintf(title,sizeof title,"Ao vivo");tone=theme.color.accent;}
+      else if(live) std::snprintf(title,sizeof title,c.enabled?"Em espera":"Desligada");
+      else if(c.trackingTarget) std::snprintf(title,sizeof title,"Rastreia %s",name(c.trackingTarget));
+      else std::snprintf(title,sizeof title,"Concorre pela prioridade no Play");
+    } else {
+      const auto &b=static_cast<const scene::CameraBrain&>(*component);icon=UiIcon::ComponentCameraBrain;
+      static constexpr const char *styles[]{"","Corte","Suave","Linear","Entrada suave","Saída suave","Entrada brusca","Saída brusca"};
+      const auto *brain=live?live->brain(entity.id):nullptr;
+      if(brain&&brain->live) {
+        std::snprintf(title,sizeof title,"Ao vivo: %s",name(brain->live));tone=theme.color.accent;
+        if(brain->blending) {progress=brain->progress();
+          if(brain->blendFrom) std::snprintf(detail,sizeof detail,"Transição de %s · %d%%",name(brain->blendFrom),static_cast<int>(progress*100+.5f));
+          else std::snprintf(detail,sizeof detail,"Transição em andamento · %d%%",static_cast<int>(progress*100+.5f));
+        } else std::snprintf(detail,sizeof detail,"Transição padrão: %s · %.1f s",styles[static_cast<u32>(b.defaultBlend)],static_cast<double>(b.defaultBlendTime));
+      } else {
+        std::snprintf(title,sizeof title,live?"Nenhuma câmera virtual ativa":"Mostra a câmera virtual de maior prioridade");
+        std::snprintf(detail,sizeof detail,"Transição padrão: %s · %.1f s",styles[static_cast<u32>(b.defaultBlend)],static_cast<double>(b.defaultBlendTime));
+      }
+    }
+    auto card=takeTop(content,52);card=deflate(card,{0,2,0,6});
+    builder.list.addRect(card,theme.color.surface,6);
+    builder.list.addBorder(card,tone==theme.color.accent?theme.color.accent:theme.color.lineSoft,1,6);
+    auto inner=deflate(card,{10,6,10,6});
+    const auto glyph=takeLeft(inner,30);takeLeft(inner,8);
+    builder.list.addImage(centred(glyph,26,26),static_cast<UiImageId>(icon),tone==theme.color.warning?theme.color.warning:theme.color.text);
+    const auto top=takeTop(inner,18);
+    builder.label(top,fitMiddle(builder.list,title,top.width,theme.type.cardName),tone==theme.color.textDim?theme.color.text:tone,theme.type.cardName);
+    const auto bottom=takeTop(inner,14);
+    builder.label(bottom,fitMiddle(builder.list,detail,bottom.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+    if(progress>=0) {
+      const UiRect track{card.x+10,card.y+card.height-5,card.width-20,3};
+      builder.list.addRect(track,theme.color.track,1.5f);
+      builder.list.addRect({track.x,track.y,track.width*progress,track.height},theme.color.accent,1.5f);
+    }
+  }
   // Sequência: diz em que etapa está e, se parou, por quê; o motivo vem do avaliador.
   if(entry.type==&scene::TweenSequence::descriptor&&!searching) {
     const auto &sequence=static_cast<const scene::TweenSequence&>(*component);
@@ -3711,6 +3763,14 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(!show(property.presentation)) continue;
       for(u32 slot=0;slot<property.slotCount(*component) && slot<256;++slot) fields.push_back({9,i,slot});
     }
+  }
+  // Câmera virtual e Cérebro: o interruptor que liga o grupo e a escolha de modo
+  // vêm antes dos valores que eles mostram; os alvos fecham a aba Geral.
+  if((entry.type==&scene::VirtualCamera::descriptor||entry.type==&scene::CameraBrain::descriptor)&&!searching) {
+    const auto rank=[&](const Field &f){
+      if(f.kind==0) {const auto id=entry.type->booleans[f.index].id;return id=="enabled"||id=="avoid_obstacles"?0:3;}
+      return f.kind==1?1:f.kind==4?4:2;};
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
   }
   if((std::string_view(entry.type->id).starts_with("astra.constraint.")||std::string_view(entry.type->id).starts_with("astra.spring."))&&!searching) {
     u32 enabled=~u32{0},source=~u32{0};

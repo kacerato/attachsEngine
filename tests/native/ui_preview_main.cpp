@@ -3,6 +3,7 @@
 #include "scene/audio.h"
 #include "scene/event_connection.h"
 #include "scene/camera.h"
+#include "scene/virtual_camera.h"
 #include "scene/collider.h"
 #include "scene/physics_body.h"
 #include "scene/timer.h"
@@ -282,6 +283,53 @@ int writePhysicsFProject(const char *directory) {
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Physics F project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
+// Aceite no aparelho do bloco G (docs/planos/CAMERA-VIRTUAL-2026-10-07.md): Cérebro
+// na câmera principal, órbita no jogador atrás de uma parede e câmera aérea que
+// a sonda promove e rebaixa por prioridade.
+int writeVirtualCameraProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Virtual camera export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/virtual-camera/VirtualCameraProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/VirtualCameraProbe.cs",probe)) return fail("cannot publish source");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  auto &document=session.document();
+  const auto object=[&](const char *name,float x,float y,float z){
+    const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto v=*document.find(id);
+    v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;document.applyEntityValues(id,v);return id;};
+  const auto mainId=object("Câmera principal",0,3,-8);
+  {auto v=*document.find(mainId);v.components.add(scene::Camera::descriptor);
+   auto *brain=static_cast<scene::CameraBrain*>(v.components.add(scene::CameraBrain::descriptor));
+   brain->defaultBlend=scene::CameraBlendStyle::EaseInOut;brain->defaultBlendTime=1;
+   if(!document.applyEntityValues(mainId,v)) return fail("main camera");}
+  const auto playerId=object("Jogador",0,0,0);
+  const auto orbitId=object("Câmera de órbita",0,2,-6);
+  {auto v=*document.find(orbitId);auto *c=static_cast<scene::VirtualCamera*>(v.components.add(scene::VirtualCamera::descriptor));
+   c->priority=10;c->trackingTarget=playerId;c->position=scene::VirtualCameraPosition::Orbit;c->rotation=scene::VirtualCameraRotation::LookAt;
+   c->orbitRadius=6;c->orbitPitch=15;c->aimOffset[1]=1;c->avoidObstacles=true;c->cameraRadius=.2f;c->minimumDistance=1;
+   c->noiseAmplitude=.4f;c->noiseFrequency=.5f;
+   if(!document.applyEntityValues(orbitId,v)) return fail("orbit camera");}
+  const auto aerialId=object("Câmera aérea",8,10,8);
+  {auto v=*document.find(aerialId);auto *c=static_cast<scene::VirtualCamera*>(v.components.add(scene::VirtualCamera::descriptor));
+   c->priority=0;c->lookAtTarget=playerId;c->rotation=scene::VirtualCameraRotation::LookAt;c->verticalFov=45;
+   if(!document.applyEntityValues(aerialId,v)) return fail("aerial camera");}
+  const auto probeId=object("Sonda",0,0,0);
+  {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
+   script->scriptType="acceptance.virtual_camera";script->source="Scripts/VirtualCameraProbe.cs";
+   if(!document.applyEntityValues(probeId,v)) return fail("probe");}
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"CameraVirtual-20261007\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Virtual camera project written: %s\n",root.generic_string().c_str());
   return 0;
 }
 // Aceite no aparelho do bloco D (docs/planos/SEQUENCIA-DE-TWEENS-2026-10-06.md):
@@ -704,6 +752,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-services-project")return writeServicesProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-f-project")return writePhysicsFProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-virtual-camera-project")return writeVirtualCameraProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);

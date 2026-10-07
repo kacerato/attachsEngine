@@ -96,6 +96,7 @@ public:
   void setTweens(SceneTweens *tweens) noexcept {tweens_=tweens;}
   void setTweenSequences(SceneTweenSequences *sequences) noexcept {sequences_=sequences;}
   void setPhysicsQueries(ScenePhysicsQueries *queries) noexcept {queries_=queries;}
+  void setVirtualCameras(SceneVirtualCameras *cameras) noexcept {cameras_=cameras;}
   void setTimers(SceneTimers *timers) noexcept { timers_=timers; }
   void setPaths(ScenePaths *paths) noexcept { paths_ = paths; }
   // Fila de eventos de componente do Play; os scripts a leem pela família
@@ -149,7 +150,7 @@ private:
   void collectDiagnostics();
   void installAccess();
   void installExtensions();
-  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_,queries_,physics_};}
+  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_,queries_,physics_,cameras_};}
   QueryFilter queryFilter(const scene::ScriptQueryFilter &filter) const;
   static QueryShapeDesc queryShape(const scene::ScriptShapeQuery &shape);
   static void copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity);
@@ -184,6 +185,7 @@ private:
   SceneTweens *tweens_=nullptr;
   SceneTweenSequences *sequences_=nullptr;
   ScenePhysicsQueries *queries_=nullptr;
+  SceneVirtualCameras *cameras_=nullptr;
   SceneNumberTweens *numberTweens_=nullptr;
   InputService *input_ = nullptr;
   SceneAnimator *animator_ = nullptr;

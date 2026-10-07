@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 54 schemas; 52 tipos no Add; 52 fachadas geradas.
+**Registro atual:** 56 schemas; 54 tipos no Add; 54 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -34,6 +34,8 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.camera` | Câmera | `Astra.Components.Camera` | Add Component |
 | `astra.camera.look` | Câmera | `Astra.Components.CameraLook` | Add Component |
 | `astra.camera.follow` | Câmera | `Astra.Components.CameraFollow` | Add Component |
+| `astra.camera.virtual` | Câmera | `Astra.Components.VirtualCamera` | Add Component |
+| `astra.camera.brain` | Câmera | `Astra.Components.CameraBrain` | Add Component |
 | `astra.physics.collision_recipe` | Física 3D | API própria | Fluxo próprio |
 | `astra.physics.field.gravity` | Física 3D | `Astra.Components.GravityField` | Add Component |
 | `astra.physics.field.wind` | Física 3D | `Astra.Components.WindField` | Add Component |
@@ -459,9 +461,9 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro \| Cérebro: câmera ativada \| Cérebro: corte de câmera \| Cérebro: transição concluída \| Câmera virtual entrou ao vivo \| Câmera virtual saiu do ar |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
-| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora \| Câmera virtual: priorizar \| Câmera virtual: encaixar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 
@@ -852,7 +854,115 @@ Posiciona a câmera após física e animação. **Consumidor:** runtime/scene_ca
 | `enabled` | Ativo | booleano | Resposta | verdadeiro | verdadeiro \| falso |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 | `target` | Alvo | referência | Posição | Escolher objeto | qualquer objeto · fora da subárvore |  | runtime/scene_camera_follow.h → pose de Play da câmera | pose e bounds | não | não | não |
 
-## Receita de colisão · `astra.physics.collision_recipe` v1
+## Câmera virtual · `astra.camera.virtual` v1
+
+Pose e lente por prioridade: seguir, órbita, mira, desoclusão e tremor. **Consumidor:** runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineCamera.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Incompatível | `astra.physics.body` | A câmera virtual não pode receber pose do corpo físico |
+| Incompatível | `astra.physics.character` | A câmera virtual não pode receber pose do personagem |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `priority` | Prioridade | número | Geral | 0 | -10000 … 10000 |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `vertical_fov` | Campo vertical | número | Lente | 60 | 1 … 170 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | sim |
+| `orthographic_half_height` | Meia altura | número | Lente | 5 | 0.001 … 100000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | sim |
+| `near_plane` | Próximo | número | Lente | 0.1 | 0.001 … 10000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `far_plane` | Distante | número | Lente | 2000 | 0.01 … 1000000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `dutch` | Inclinação holandesa | número | Lente | 0 | -180 … 180 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | sim |
+| `offset_x` | Deslocamento X | número | Posição | 0 | -1000 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `offset_y` | Deslocamento Y | número | Posição | 2 | -1000 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `offset_z` | Deslocamento Z | número | Posição | -5 | -1000 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `orbit_radius` | Raio da órbita | número | Posição | 5 | 0.01 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | sim |
+| `orbit_yaw` | Ângulo horizontal | número | Posição | 0 | -180 … 180 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | sim |
+| `orbit_pitch` | Ângulo vertical | número | Posição | 20 | -89 … 89 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | sim |
+| `orbit_pitch_min` | Vertical mínimo | número | Posição | -10 | -89 … 89 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `orbit_pitch_max` | Vertical máximo | número | Posição | 70 | -89 … 89 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `orbit_yaw_sensitivity` | Sensibilidade horizontal | número | Posição | 300 | 0 … 2000 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `orbit_pitch_sensitivity` | Sensibilidade vertical | número | Posição | 195 | 0 … 2000 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `position_damping` | Amortecimento da posição | número | Posição | 0.2 | 0 … 10 | s | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `aim_offset_x` | Mira X | número | Rotação | 0 | -1000 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `aim_offset_y` | Mira Y | número | Rotação | 0 | -1000 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `aim_offset_z` | Mira Z | número | Rotação | 0 | -1000 … 1000 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `rotation_damping` | Amortecimento da rotação | número | Rotação | 0 | 0 … 10 | s | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `camera_radius` | Raio da câmera | número | Colisão | 0.2 | 0 … 10 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `minimum_distance` | Distância mínima do alvo | número | Colisão | 0.5 | 0 … 100 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `collision_damping` | Amortecimento ao liberar | número | Colisão | 0.3 | 0 … 10 | s | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `noise_amplitude` | Tremor da rotação | número | Tremor | 0 | 0 … 90 | ° | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | sim |
+| `noise_position_amplitude` | Tremor da posição | número | Tremor | 0 | 0 … 10 | m | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | sim |
+| `noise_frequency` | Frequência | número | Tremor | 1 | 0 … 50 | Hz | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | sim |
+| `blend_time` | Duração da entrada | número | Transição | 1 | 0 … 60 | s | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `enabled` | Ativa | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `orbit_input` | Controlar pela entrada de olhar | booleano | Posição | verdadeiro | verdadeiro \| falso |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `avoid_obstacles` | Evitar obstáculos | booleano | Colisão | falso | verdadeiro \| falso |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `position_mode` | Posição | enumeração | Posição | Fixa (pose autorada) | Fixa (pose autorada) \| Seguir \| Órbita |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `binding` | Referencial do deslocamento | enumeração | Posição | Eixos do mundo | Eixos do mundo \| Guinada do alvo |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `rotation_mode` | Rotação | enumeração | Rotação | Fixa (rotação autorada) | Fixa (rotação autorada) \| Olhar para o alvo \| Rotação do alvo |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `collision_layer` | Camada dos obstáculos | enumeração | Colisão | Todas | Todas \| Camada 0 \| Camada 1 \| Camada 2 \| Camada 3 \| Camada 4 \| Camada 5 \| Camada 6 \| Camada 7 \| Camada 8 \| Camada 9 \| Camada 10 \| Camada 11 \| Camada 12 \| Camada 13 \| Camada 14 \| Camada 15 \| Camada 16 \| Camada 17 \| Camada 18 \| Camada 19 \| Camada 20 \| Camada 21 \| Camada 22 \| Camada 23 \| Camada 24 \| Camada 25 \| Camada 26 \| Camada 27 \| Camada 28 \| Camada 29 \| Camada 30 \| Camada 31 |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | sim | não | não |
+| `blend_style` | Entrada | enumeração | Transição | Padrão do Cérebro | Padrão do Cérebro \| Corte \| Suave \| Linear \| Entrada suave \| Saída suave \| Entrada brusca \| Saída brusca |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `tracking_target` | Alvo rastreado | referência | Geral | Nenhum | qualquer objeto · fora da subárvore |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+| `look_at_target` | Alvo de mira | referência | Geral | O rastreado | qualquer objeto · fora da subárvore |  | runtime/scene_virtual_cameras.h → pose da câmera virtual e do Cérebro | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `prioritize` | Priorizar | — | nada | Vence o empate com outras câmeras de mesma prioridade, como se tivesse sido ativada agora |
+| `snap` | Encaixar | — | nada | Descarta o amortecimento no próximo quadro (depois de teletransportar o alvo) |
+| `is_live` | Ao vivo | — | booleano | Verdadeiro quando algum Cérebro está mostrando esta câmera |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `activated` | Entrou ao vivo | other: objeto | Emitido quando um Cérebro passa a mostrar esta câmera; carrega a câmera anterior |
+| `deactivated` | Saiu do ar | other: objeto | Emitido quando outra câmera assume o Cérebro; carrega a nova câmera |
+
+## Cérebro de câmera · `astra.camera.brain` v1
+
+Mostra a câmera virtual de maior prioridade e faz a transição. **Consumidor:** runtime/scene_virtual_cameras.h → pose e lente da Câmera. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineBrain.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Requer | `astra.camera` | Adicione Câmera a este objeto |
+| Incompatível | `astra.camera.follow` | O Cérebro e Acompanhar alvo escreveriam a mesma pose |
+| Incompatível | `astra.camera.look` | O Cérebro e Olhar escreveriam a mesma rotação |
+| Incompatível | `astra.camera.virtual` | Câmera virtual e Cérebro ficam em objetos separados |
+| Incompatível | `astra.physics.body` | A câmera do Cérebro não pode receber pose do corpo físico |
+| Incompatível | `astra.physics.character` | A câmera do Cérebro não pode receber pose do personagem |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `default_blend_time` | Duração padrão | número | Transição | 2 | 0 … 60 | s | runtime/scene_virtual_cameras.h → pose e lente da Câmera | pose e bounds | sim | não | não |
+| `enabled` | Ativo | booleano | Execução | verdadeiro | verdadeiro \| falso |  | runtime/scene_virtual_cameras.h → pose e lente da Câmera | pose e bounds | não | não | não |
+| `ignore_time_scale` | Ignorar escala de tempo | booleano | Execução | falso | verdadeiro \| falso |  | runtime/scene_virtual_cameras.h → pose e lente da Câmera | pose e bounds | não | não | não |
+| `default_blend` | Transição padrão | enumeração | Transição | Suave | Corte \| Suave \| Linear \| Entrada suave \| Saída suave \| Entrada brusca \| Saída brusca |  | runtime/scene_virtual_cameras.h → pose e lente da Câmera | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `live_camera` | Câmera ao vivo | — | objeto | Câmera virtual que o Cérebro está mostrando; vazio sem nenhuma |
+| `blending` | Em transição | — | booleano | Verdadeiro enquanto mistura duas câmeras |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `camera_activated` | Câmera ativada | incoming: objeto, outgoing: objeto | Emitido quando uma câmera virtual assume, já no primeiro quadro da transição |
+| `camera_cut` | Corte de câmera | camera: objeto | Emitido quando a troca acontece sem transição |
+| `blend_finished` | Transição concluída | camera: objeto | Emitido quando a mistura termina e só a câmera nova aparece |
+
+## Receita de colisão · `astra.physics.collision_recipe` v2
 
 Fontes e base das partes para regeneração explícita preservando edições. **Consumidor:** editor/editor_collision_regeneration.cpp → Colliders persistidos → runtime/scene_physics.cpp. **Invalida:** nada.
 
