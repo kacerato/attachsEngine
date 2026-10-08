@@ -57,6 +57,13 @@ AEANIMATOR 2 puxado: GUID `a4a2e40ddd621986696f36bc7b6dc391`, revisão **11**,
 camada ID **38**, blend **1**, peso **0.649999976**, referência
 `ab187bf1fcd384e83826b3bc57855a78`, tempo **0.25**.
 
+Conferência adicional de UI no Play: Inspecionar → Ver grafo ao vivo → camada
+aditiva → Ajustes. Peso 0,65 → 0,20 pelo campo numérico real modifica a pose de
+A; B permanece igual. Restaurar composição retorna a 0,65/0,25 s. Após Stop,
+o SHA-256 do recurso autorado continua idêntico ao arquivo salvo antes do Play.
+Capturas `device-live-applied.png`, `device-live-pose.png` e
+`device-live-restored2.png` registram valor, consumidor visível e restauração.
+
 ## Revisão de vídeo e interface
 
 Captura 1920×886: **417/417 frames** decodificados e extraídos, zero descartados,
@@ -92,7 +99,8 @@ importados na engine: **zero**. O catálogo é pesquisa privada, não biblioteca
 utilizável. Vídeo técnico de referência localizado, ainda não assistido.
 
 Evidências anexas: host-tests.log, device-runtime-final.txt, extraction.json,
-frames.csv, folha inicial/final, captura de reabertura/Play e recurso autorado.
-Frames completos e demais folhas permanecem em build/animator-additive-acceptance.
+frames.csv, vídeo e todas as 14 folhas, captura de reabertura/Play e recurso autorado.
+Frames completos permanecem em build/animator-additive-acceptance e podem ser
+regenerados do vídeo pelo script `tools/validation/review-animator-frames.py`.
 Regeneração: `aether_ui_preview write-animator-additive-project`; sonda em
 `tests/fixtures/animator/AdditiveAnimatorProbe.cs`.
