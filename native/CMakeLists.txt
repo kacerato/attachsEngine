@@ -498,6 +498,7 @@ add_library(aether_runtime STATIC
   runtime/scene_event_connections.cpp
   runtime/runtime_rendering_state.cpp
   runtime/scene_animation.cpp
+  runtime/scene_animator_graph.cpp
   runtime/scene_gui.cpp
   runtime/scene_gui_input.cpp
 )
@@ -536,6 +537,7 @@ add_library(aether_editor STATIC
   editor/editor_physics_materials.cpp
   editor/editor_texture_assets.cpp
   editor/editor_audio_assets.cpp
+  editor/editor_animator.cpp
   editor/editor_path.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
@@ -780,6 +782,7 @@ if(NOT ANDROID)
     ../tests/native/test_physics_queries.cpp
     ../tests/native/test_virtual_cameras.cpp
     ../tests/native/test_audio_mixer.cpp
+    ../tests/native/test_animator.cpp
     ../tests/native/test_body_mass.cpp
     ../tests/native/test_runtime_number_tweens.cpp
     ../tests/native/test_runtime_physics2d.cpp

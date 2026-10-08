@@ -169,6 +169,13 @@ ICONS: dict[str, str] = {
 <circle cx="25" cy="100" r="6" fill="{ACCENT}"/>''',
     # Mixer (bloco H): resposta de frequência, repetições, sala, curva de
     # transferência, derivação e faders salvos.
+    # Animator: dois estados ligados por transições e a entrada.
+    "component/animator": f'''<rect x="10" y="20" width="44" height="30" rx="8" {stroke(5)}/>
+<rect x="74" y="78" width="44" height="30" rx="8" {stroke(5)}/>
+<path d="M54 35c26 0 42 14 42 43M74 93c-26 0-42-14-42-43" {stroke(5, ACCENT)}/>
+<path d="M86 66l10 12 10-12M20 62l12-12 10 12" {stroke(5, ACCENT)}/>
+<circle cx="18" cy="104" r="8" fill="{ACCENT}"/>
+<path d="M26 104h40" {stroke(4, extra='stroke-dasharray="5 6"')}/>''',
     "audio/filter": f'''<path d="M14 108h100M14 108V20" {stroke(4)}/>
 <path d="M20 42h40c20 0 24 8 32 30s10 32 22 36" {stroke(5, ACCENT)}/>
 <circle cx="62" cy="42" r="8" fill="{ACCENT}"/>''',

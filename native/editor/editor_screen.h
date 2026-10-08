@@ -47,7 +47,7 @@
 #include "ui/ui_theme.h"
 #include <string>
 
-namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class ScenePhysics;class GameWorld;}
+namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;}
 namespace ae::editor {
 class EditorMapScene;
 struct ColliderTopology;
@@ -397,6 +397,8 @@ enum class EditorWidget : u32 {
   MeshChoiceBase=0x79000000u,
   PropertyTweenPick=0xE0000000u,PropertyTweenChoiceBase=0xE1000000u,PropertyTweenPickerClose=0xE2000000u,
   PhysicsMaterialInspectorClose=0xE3000000u,PhysicsMaterialStepBase=0xE4000000u,
+  // Editor de grafo do Animator: + código de animator_widget.
+  AnimatorBase=0xE5000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -622,7 +624,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
   {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange},{EditorWidget::FilesMultiToggle,kRange},
   {EditorWidget::PropertyTweenPick,kRange},{EditorWidget::PropertyTweenChoiceBase,kRange},{EditorWidget::PropertyTweenPickerClose,kRange},
-  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange}};
+  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange},{EditorWidget::AnimatorBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -633,6 +635,24 @@ inline constexpr bool widgetRangesDisjoint() {
 }
 }
 static_assert(detail::widgetRangesDisjoint(),"duas faixas de widget se cruzam");
+// Códigos dentro de EditorWidget::AnimatorBase; os "+ índice" somam a posição.
+namespace animator_widget {
+enum : u32 {
+  Open=0x0,Close=0x1,Canvas=0x2,AddState=0x3,Connect=0x4,SetDefault=0x5,Delete=0x6,Frame=0x7,
+  LayerAdd=0x8,LayerWeight=0x9,LayerMask=0xA,LayerName=0xB,LayerDelete=0xC,ZoomIn=0xD,ZoomOut=0xE,
+  LayerTab=0x100,ParameterAdd=0x200,ParameterName=0x300,ParameterValue=0x400,ParameterDelete=0x500,ParameterRow=0x600,
+  StateName=0x1000,StateKind=0x1001,StateBlendX=0x1004,StateBlendY=0x1005,StateSpeed=0x1006,StateSpeedParameter=0x1007,
+  StateLoop=0x1008,MotionAdd=0x1009,EventAdd=0x100A,
+  MotionClip=0x1100,MotionThreshold=0x1200,MotionX=0x1300,MotionY=0x1400,MotionRemove=0x1500,
+  EventTime=0x1700,EventTag=0x1800,EventRemove=0x1900,
+  TransitionExit=0x2000,TransitionExitTime=0x2001,TransitionDuration=0x2002,ConditionAdd=0x2003,
+  ConditionParameter=0x2100,ConditionMode=0x2200,ConditionThreshold=0x2300,ConditionRemove=0x2400,
+  ClipClose=0x3000,ClipChoice=0x3100,MaskClose=0x5000,MaskChoice=0x5100,PickerPrevious=0x6000,PickerNext=0x6001,
+};
+inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::AnimatorBase)+code;}
+inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::AnimatorBase);}
+inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
+} // namespace animator_widget
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
 }
@@ -836,6 +856,14 @@ struct EditorScreenState final {
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
   const runtime::SceneVirtualCameras *virtualCameraRuntime=nullptr;
   const runtime::SceneAudio *audioRuntime=nullptr;
+  const runtime::SceneAnimatorGraphs *animatorRuntime=nullptr;
+  // Editor de grafo do Animator (tela cheia sobre o editor).
+  bool animatorOpen=false,animatorConnecting=false,editingAnimatorName=false;
+  EditorEntityId animatorEntity=0;u64 animatorInstance=0;u32 animatorLayer=0;
+  u64 animatorState=0,animatorTransition=0,animatorParameter=0,animatorConnectFrom=0;
+  float animatorPan[2]{0,0},animatorZoom=1;
+  // Seletor aberto: 1 + índice do clipe da mistura; 0x10000 máscara da camada.
+  u32 animatorPicker=0,animatorPickerPage=0,animatorNameField=0;
   const runtime::SceneTimers *timerRuntime=nullptr; // session-owned runtime inspection only
   // Hierarquia e Inspector abertos com o Play rodando (Unity: o Inspector
   // continua editável em Play e tudo volta ao sair). Mostram o mundo de
@@ -1549,6 +1577,7 @@ struct EditorScreenLayout final {
   ui::UiRect colorSliders[5]{};
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
+  ui::UiRect animatorCanvas{};
   ui::UiRect lodBar{};
   // Janela dos Inspectors focados (vazia quando nenhum está aberto).
   ui::UiRect focusedWindow{};

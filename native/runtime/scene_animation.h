@@ -77,6 +77,18 @@ struct AnimationStateView {
 
 class SceneAnimator {
 public:
+  // Amostra pronta vinda de outro avaliador (Animator): o clipe no tempo local
+  // dado, com peso e camada; `mask` limita os alvos à subárvore daquele objeto.
+  struct ExternalSample {
+    ObjectId owner = kInvalidObject;
+    resources::AssetGuid clip;
+    float time = 0, weight = 0;
+    u32 layer = 0;
+    ObjectId mask = kInvalidObject;
+  };
+  // Valem para o próximo advance e são consumidas por ele.
+  void setExternalSamples(std::vector<ExternalSample> samples) { external_ = std::move(samples); }
+  const AnimationLibrary *library() const noexcept { return library_; }
   // Liga ao grafo do Play e à biblioteca. `reset` esquece tudo: o próximo Play
   // parte do zero.
   void begin(SceneGraph &graph, const AnimationLibrary &library);
@@ -144,6 +156,10 @@ private:
   const AnimationLibrary *library_ = nullptr;
   std::vector<Player> players_;
   std::unordered_map<ObjectId, Rest> rest_;
+  std::vector<ExternalSample> external_;
+  // Alvos resolvidos por (dono, clipe) das amostras externas.
+  struct ExternalTargets { ObjectId owner; resources::AssetGuid clip; std::vector<ObjectId> targets; };
+  std::vector<ExternalTargets> externalTargets_;
   u32 playing_ = 0, posed_ = 0;
 };
 

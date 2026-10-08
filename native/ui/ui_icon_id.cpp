@@ -44,6 +44,7 @@ constexpr const char *kNames[] = {
     "audio/source",
     "component/add",
     "component/aim-constraint",
+    "component/animator",
     "component/camera-brain",
     "component/camera-follow",
     "component/character",

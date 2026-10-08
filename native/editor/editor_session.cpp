@@ -1462,6 +1462,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     edit.field=state_.groupEditSlot;edit.text=state_.renameText;return edit;
   }
   if(state_.editingTagSearch) {edit.purpose=EditorTextPurpose::TagSearch;edit.text=state_.tagQuery;return edit;}
+  if(state_.editingAnimatorName) {edit.purpose=EditorTextPurpose::AnimatorName;edit.field=state_.animatorNameField;edit.entity=state_.animatorEntity;edit.text=state_.renameText;return edit;}
   if(state_.editingPhysicsLayerName) {
     edit.purpose=EditorTextPurpose::PhysicsLayerName;edit.field=state_.physicsLayer;
     edit.text=document_.layers().name(state_.physicsLayer);return edit;
@@ -1735,7 +1736,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.presetNaming=false;
     state_.viewNaming=false;state_.viewRenaming=false;
     state_.editingPhysicsLayerName=false;state_.editingTagName=false;state_.editingTagSearch=false;
-    state_.editingGroupName=false;
+    state_.editingGroupName=false;state_.editingAnimatorName=false;
     state_.editingInputActionName=false;state_.editingInputContext=false;state_.inputEditField=0;
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
@@ -1752,6 +1753,12 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     cancelPointers();
   };
   if(!accept) {close();return true;}
+  if(edit.purpose==EditorTextPurpose::AnimatorName) {const bool ok=applyAnimatorName(edit.field,std::string(text));close();return ok;}
+  if(edit.purpose==EditorTextPurpose::Number&&animator_widget::owns(edit.field)) {
+    NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
+    if(!evaluateNumericExpression(text,context,number,&reason)) {state_.numericError=true;state_.status=reason.empty()?"Valor inválido":reason;return false;}
+    const bool ok=applyAnimatorNumber(animator_widget::code(edit.field),number);close();return ok;
+  }
   if(edit.elementId && playMirrorOpen_){close();state_.status="Edição de pontos indisponível em Play";return false;}
   if(edit.purpose==EditorTextPurpose::InputActionName || edit.purpose==EditorTextPurpose::InputContext ||
      edit.purpose==EditorTextPurpose::InputNumber) {
@@ -3524,6 +3531,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(!state_.numericField && handlePathEditorInput(event,routing)) return true;
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
+  if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
+  if(state_.animatorOpen&&!state_.numericField&&!state_.editingAnimatorName) return handleAnimatorEditor(event,routing);
   if(state_.curveField && !state_.numericField) return handleCurveEditor(event,routing);
   if(state_.codeRecoveryPending) {
     if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CodeRecover)) {
@@ -5374,7 +5383,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingTagName || state_.editingTagSearch || state_.editingGroupName || state_.editingPhysicsLayerName) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingTagName || state_.editingTagSearch || state_.editingGroupName || state_.editingPhysicsLayerName || state_.editingAnimatorName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -9718,6 +9727,7 @@ void EditorSession::update() {
   state_.physicsQueryRuntime=playInspecting()&&playScene_.active()?&playScene_.physicsQueries():nullptr;
   state_.virtualCameraRuntime=playInspecting()&&playScene_.active()?&playScene_.virtualCameras():nullptr;
   state_.audioRuntime=playInspecting()&&playScene_.active()?&playScene_.audio():nullptr;
+  state_.animatorRuntime=playInspecting()&&playScene_.active()?&playScene_.animatorGraphs():nullptr;
   state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   refreshColliderAuthoring();

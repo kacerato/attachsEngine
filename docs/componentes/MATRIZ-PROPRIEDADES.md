@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 62 schemas; 60 tipos no Add; 60 fachadas geradas.
+**Registro atual:** 63 schemas; 61 tipos no Add; 61 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -52,6 +52,7 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.physics.shapecast` | Física 3D | `Astra.Components.ShapeCast` | Add Component |
 | `astra.physics.spring_arm` | Física 3D | `Astra.Components.SpringArm` | Add Component |
 | `astra.animation` | Animação | `Astra.Components.Animation` | Add Component |
+| `astra.animation.animator` | Animação | `Astra.Components.Animator` | Add Component |
 | `astra.physics2d.field.gravity` | Física 2D | `Astra.Components.GravityField2D` | Add Component |
 | `astra.physics2d.field.wind` | Física 2D | `Astra.Components.WindField2D` | Add Component |
 | `astra.physics2d.field.drag` | Física 2D | `Astra.Components.DragField2D` | Add Component |
@@ -467,7 +468,7 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro \| Cérebro: câmera ativada \| Cérebro: corte de câmera \| Cérebro: transição concluída \| Câmera virtual entrou ao vivo \| Câmera virtual saiu do ar |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro \| Cérebro: câmera ativada \| Cérebro: corte de câmera \| Cérebro: transição concluída \| Câmera virtual entrou ao vivo \| Câmera virtual saiu do ar \| Animator: entrou num estado \| Animator: evento do estado |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora \| Câmera virtual: priorizar \| Câmera virtual: encaixar \| Snapshot: transicionar \| Snapshot: aplicar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
@@ -1688,6 +1689,10 @@ Clipes tocados e misturados no Play. **Consumidor:** runtime/scene_animation.cpp
 
 **Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
 
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Incompatível | `astra.animation.animator` | Animator e Animação escreveriam a mesma pose; use um dos dois neste objeto |
+
 **Coleções com identidade persistente**
 
 | Coleção | Elementos iniciais | Próximo ID |
@@ -1712,6 +1717,38 @@ Apply seletivo exige identidade, ordem e fronteira de alocação compatíveis.
 | `play_automatically` | Tocar ao iniciar | booleano | Reprodução | verdadeiro | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
 | `wrap_mode` | Repetição | enumeração | Reprodução | Repetir | Uma vez \| Repetir \| Vai e volta \| Segurar no fim |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
 | `clip_count` | Quantidade de clipes | enumeração | Clipes | 0 | 0 \| 1 \| 2 \| 3 \| 4 \| 5 \| 6 \| 7 \| 8 \| 9 \| 10 \| 11 \| 12 \| 13 \| 14 \| 15 \| 16 \| 17 \| 18 \| 19 \| 20 \| 21 \| 22 \| 23 \| 24 \| 25 \| 26 \| 27 \| 28 \| 29 \| 30 \| 31 \| 32 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
+
+## Animator · `astra.animation.animator` v1
+
+Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor:** runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-AnimatorController.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Incompatível | `astra.animation` | Animator e Animação escreveriam a mesma pose; use um dos dois neste objeto |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `speed` | Velocidade | número | Animator | 1 | -10 … 10 | × | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | sim |
+| `enabled` | Ativo | booleano | Animator | verdadeiro | verdadeiro \| falso |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
+| `unscaled_time` | Ignorar escala de tempo | booleano | Animator | falso | verdadeiro \| falso |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
+| `target` | Raiz animada | referência | Animator | Este objeto | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `in_transition` | Em transição | — | booleano | Verdadeiro enquanto a camada base mistura dois estados |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `state_entered` | Entrou no estado | layer: inteiro, state: inteiro | Emitido quando um estado começa (no início da transição para ele) |
+| `state_event` | Evento do estado | layer: inteiro, state: inteiro, tag: inteiro | Emitido quando o tempo do estado passa por um evento marcado nele |
 
 ## Campo de gravidade 2D · `astra.physics2d.field.gravity` v1
 

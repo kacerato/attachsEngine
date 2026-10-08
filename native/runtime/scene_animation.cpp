@@ -72,6 +72,8 @@ void SceneAnimator::reset() {
   library_ = nullptr;
   players_.clear();
   rest_.clear();
+  external_.clear();
+  externalTargets_.clear();
   playing_ = posed_ = 0;
 }
 
@@ -429,6 +431,42 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       }
     }
   }
+
+  // Amostras do Animator: mesmo caminho de mistura, com máscara por subárvore.
+  for (const auto &sample : external_) {
+    if (sample.weight <= 0 || !graph.exists(sample.owner)) continue;
+    AnimationClipView view;
+    if (!library_->findClip(sample.clip, view)) continue;
+    auto found = std::find_if(externalTargets_.begin(), externalTargets_.end(), [&](const ExternalTargets &e) {
+      return e.owner == sample.owner && e.clip == sample.clip;
+    });
+    if (found == externalTargets_.end()) found = externalTargets_.insert(externalTargets_.end(), {sample.owner, sample.clip, {}});
+    auto &targets = found->targets;
+    bool stale = targets.size() != view.source->nodes.size();
+    for (const auto target : targets) stale = stale || (target != kInvalidObject && !graph.exists(target));
+    if (stale) resolveAnimationTargets(graph, sample.owner, *view.source, targets);
+    const auto masked = [&](ObjectId object) {
+      if (sample.mask == kInvalidObject) return true;
+      for (ObjectId o = object; o != kInvalidObject; ) {
+        if (o == sample.mask) return true;
+        const auto *e = graph.find(o);
+        if (!e || o == graph.root()) break;
+        o = e->parent;
+      }
+      return false;
+    };
+    ++playing_;
+    for (const auto &channel : view.clip->channels) {
+      if (channel.node >= targets.size() || targets[channel.node] == kInvalidObject) continue;
+      const ObjectId target = targets[channel.node];
+      if (!masked(target)) continue;
+      if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
+      std::vector<float> value(channel.components());
+      if (!resources::sampleAnimationChannel(channel, sample.time, value)) continue;
+      contribute(target, channel.path, sample.layer, sample.weight, std::move(value));
+    }
+  }
+  external_.clear();
 
   // Repouso: a pose (e os pesos) do nó quando a animação o tocou primeiro.
   const auto restOf = [&](ObjectId object) -> Rest & {

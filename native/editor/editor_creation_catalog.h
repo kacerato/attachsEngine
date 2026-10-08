@@ -185,6 +185,9 @@ inline const CreationComponent reverbBus[]{{"astra.audio.bus"},{audioReverb,reve
 inline const CreationValue duckingValues[]{{audioCompressor,"threshold",-35.f},{audioCompressor,"ratio",8.f},{audioCompressor,"attack",10.f},{audioCompressor,"release",400.f}};
 inline const CreationComponent duckingBus[]{{"astra.audio.bus"},{audioCompressor,duckingValues}};
 inline const CreationComponent snapshotRecipe[]{{audioSnapshot}};
+// Animator: controlador que anima a hierarquia escolhida em seguida (a raiz do modelo).
+inline constexpr std::string_view animatorType="astra.animation.animator";
+inline const CreationComponent animatorRecipe[]{{animatorType}};
 inline const CreationValue static2D[]{{"astra.physics2d.body","motion",u32{0}}};
 inline const CreationValue circle2D[]{{"astra.physics2d.collider","shape",u32{1}}};
 inline const CreationValue capsule2D[]{{"astra.physics2d.collider","shape",u32{2}}};
@@ -221,7 +224,7 @@ inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água"
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,85> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,86> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -343,6 +346,8 @@ inline const std::array<EditorCreationEntry,85> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::reverbBus,CreationPose::ViewTarget,0,{},{},"Reverb Send Return AudioEffectReverb SFX Reverb"},
   {"audio.ducking_bus",EditorWidget::None,6,"Bus com ducking","Abaixa sozinho quando o bus escolhido (falas, avisos) soa.",ui::UiIcon::AudioCompressor,
     runtime::ObjectKind::Folder,recipe::duckingBus,CreationPose::ViewTarget,0,recipe::audioCompressor,"sidechain","Ducking Duck Volume Sidechain Compressor Música"},
+  {"gameplay.animator",EditorWidget::None,5,"Animator","Máquina de estados que anima o modelo escolhido; abra o grafo na Inspeção.",ui::UiIcon::ComponentAnimator,
+    runtime::ObjectKind::Folder,recipe::animatorRecipe,CreationPose::ViewTarget,0,recipe::animatorType,"target","Animator AnimatorController AnimationTree Máquina de estados Blend Tree"},
   {"audio.snapshot",EditorWidget::None,6,"Snapshot de mixer","Valores de ganho e efeitos levados com transição por script ou evento.",ui::UiIcon::AudioSnapshot,
     runtime::ObjectKind::Folder,recipe::snapshotRecipe,CreationPose::ViewTarget,0,recipe::audioSnapshot,"slot_0_target","AudioMixerSnapshot TransitionTo Snapshot Pausa Embaixo d'água"},
   {"audio.import",EditorWidget::ImportWave,6,"Importar WAV","Valida PCM e registra um clipe reutilizável no projeto.",ui::UiIcon::AudioClip},

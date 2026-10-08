@@ -141,4 +141,22 @@ struct ScriptMotorControlOperations {
   u32 version=1,size=sizeof(ScriptMotorControlOperations);
   int (*command)(void *,u64 object,u32 world,u32 generation,u64 instance,u32 operation,u32 source,const float *move,u32 jump,ScriptMotorControlState *)=nullptr;
 };
+// Animator (bloco I): parâmetros por nome, troca de estado e consulta do estado
+// atual por camada. Operações de parâmetro: 0 ler, 1 Float, 2 Int, 3 Bool,
+// 4 disparar gatilho, 5 limpar gatilho.
+inline constexpr std::string_view kScriptAnimator="astra.animator";
+struct ScriptAnimatorStateInfo {
+  u32 size=sizeof(ScriptAnimatorStateInfo),flags=0;  // flags&1: em transição
+  u64 state=0,next=0;
+  float normalizedTime=0,progress=0;
+};
+static_assert(sizeof(ScriptAnimatorStateInfo)==32);
+struct ScriptAnimatorOperations {
+  u32 version=1,size=sizeof(ScriptAnimatorOperations);
+  int (*parameter)(void *,u64 object,u32 world,u32 generation,u64 instance,u32 operation,const u8 *name,int length,float value,float *result)=nullptr;
+  int (*play)(void *,u64 object,u32 world,u32 generation,u64 instance,u32 layer,const u8 *state,int length,float crossFade)=nullptr;
+  int (*state)(void *,u64 object,u32 world,u32 generation,u64 instance,u32 layer,ScriptAnimatorStateInfo *out)=nullptr;
+  // Nome de um estado da camada; devolve o comprimento ou -1.
+  int (*stateName)(void *,u64 object,u32 world,u32 generation,u64 instance,u32 layer,u64 state,u8 *buffer,int capacity)=nullptr;
+};
 } // namespace ae::scene

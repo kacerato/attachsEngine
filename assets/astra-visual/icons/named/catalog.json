@@ -1697,6 +1697,12 @@
       "name": "snapshot",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/animator": {
+      "category": "component",
+      "name": "animator",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

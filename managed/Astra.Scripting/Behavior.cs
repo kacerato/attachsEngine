@@ -317,6 +317,9 @@ public readonly record struct TransformValue(Vector3 Position, Quaternion Rotati
 /// </summary>
 public interface ISceneAccess
 {
+    bool AnimatorParameter(ulong id,uint world,uint generation,ulong instance,uint operation,string name,float value,out float result) => throw new NotSupportedException();
+    bool AnimatorPlay(ulong id,uint world,uint generation,ulong instance,uint layer,string state,float crossFade) => throw new NotSupportedException();
+    bool AnimatorState(ulong id,uint world,uint generation,ulong instance,uint layer,out AnimatorStateInfo state) => throw new NotSupportedException();
     bool MotorControlCommand(ulong id,uint world,uint generation,ulong instance,uint operation,MotorControlSource source,Vector3 input,bool jump,out MotorControlState state) => throw new NotSupportedException();
     bool ReadMotorMotion(ulong id,uint world,uint generation,ulong instance,out MotorMotionState state) => throw new NotSupportedException();
     bool FieldQuery(ulong id,uint world,uint generation,ulong instance,uint operation,Vector3 point,uint layer,out PhysicsFieldSample sample) => throw new NotSupportedException();

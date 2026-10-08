@@ -1,0 +1,8 @@
+# Aparelho, 07/10/2026 21:38, canal Astra Dev (dev.aether.editor.u07, versionCode 10, 0.2.4-dev.20261007),
+# projeto AnimatorFox-20261007 (Fox.glb, CC-BY 4.0), sonda tests/fixtures/animator/AnimatorProbe.cs
+ANIM start
+ANIM padrao estado=Locomoção PASS
+ANIM mistura velocidade=1.6 pose-mudou=True PASS
+ANIM tipo errado recusado PASS
+ANIM gatilho olhou=True voltou=Locomoção entradas=3 PASS
+ANIM eventos marca1=3 PASS

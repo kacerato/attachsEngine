@@ -1,0 +1,456 @@
+// Editor de grafo do Animator: toque, arrasto e edições (bloco I). O desenho
+// está em editor_screen.cpp (buildAnimatorEditor) e a geometria comum em
+// editor_animator_view.h. Toda edição passa pelo histórico; arrastar um estado
+// vira um único passo de desfazer.
+#include "editor/editor_session.h"
+#include "editor/editor_animator_view.h"
+#include "editor/editor_numeric_expression.h"
+#include "scene/animator.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace ae::editor {
+namespace {
+namespace w=animator_widget;namespace view=animator_view;
+using T=scene::AnimatorParameterType;using M=scene::AnimatorConditionMode;
+bool numericParameter(const scene::AnimatorParameter &p) {return p.type==T::Float||p.type==T::Int;}
+std::vector<M> modesFor(T type) {
+  switch(type) {
+    case T::Float: return {M::Greater,M::Less};
+    case T::Int: return {M::Greater,M::Less,M::Equals,M::NotEqual};
+    case T::Bool: return {M::If,M::IfNot};
+    default: return {M::If};
+  }
+}
+std::string uniqueName(const std::vector<std::string> &taken,std::string base) {
+  for(u32 n=1;;++n) {
+    const std::string name=n==1?base:base+" "+std::to_string(n);
+    if(std::find(taken.begin(),taken.end(),name)==taken.end()) return name;
+  }
+}
+// Próximo parâmetro numérico depois de `current`; com `allowNone`, o ciclo passa pelo zero.
+u64 cycleParameter(const scene::Animator &a,u64 current,bool allowNone) {
+  std::vector<u64> ids;if(allowNone) ids.push_back(0);
+  for(const auto &p:a.parameters) if(numericParameter(p)) ids.push_back(p.id);
+  if(ids.empty()) return 0;
+  const auto f=std::find(ids.begin(),ids.end(),current);
+  return f==ids.end()||f+1==ids.end()?ids.front():*(f+1);
+}
+}
+
+const scene::Animator *EditorSession::openAnimator() const {
+  const auto *entity=document_.find(state_.animatorEntity);
+  const auto *c=entity?entity->components.findInstance(state_.animatorInstance):nullptr;
+  return c&&&c->type()==&scene::Animator::descriptor?&scene::animator(*c):nullptr;
+}
+
+void EditorSession::openAnimatorEditor() {
+  const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
+  const auto *entity=document_.find(target);
+  const auto *c=entity?entity->components.find(scene::Animator::descriptor):nullptr;
+  if(!c) return;
+  state_.animatorOpen=true;state_.animatorEntity=entity->id;state_.animatorInstance=c->instanceId();
+  state_.animatorLayer=0;state_.animatorState=state_.animatorTransition=state_.animatorParameter=0;
+  state_.animatorConnecting=false;state_.animatorConnectFrom=0;state_.animatorPicker=0;
+  frameAnimator();
+}
+
+void EditorSession::frameAnimator() {
+  const auto *a=openAnimator();if(!a||a->layers.empty()) return;
+  const auto &layer=a->layers[std::min<usize>(state_.animatorLayer,a->layers.size()-1)];
+  float minX=view::EntryX,minY=view::EntryY,maxX=view::AnyX+view::NodeWidth,maxY=view::AnyY+view::NodeHeight;
+  for(const auto &s:layer.states) {minX=std::min(minX,s.x);minY=std::min(minY,s.y);maxX=std::max(maxX,s.x+view::NodeWidth);maxY=std::max(maxY,s.y+view::NodeHeight);}
+  state_.animatorPan[0]=-(minX+maxX)*.5f;state_.animatorPan[1]=-(minY+maxY)*.5f;
+  const auto &canvas=layout_.animatorCanvas;
+  if(canvas.width>0&&canvas.height>0)
+    state_.animatorZoom=std::clamp(std::min((canvas.width-80)/(maxX-minX),(canvas.height-80)/(maxY-minY)),.45f,1.4f);
+}
+
+bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &change) {
+  if(isPlaying()||history_.isOpen()) {state_.status="Pare o Play para editar o grafo";return false;}
+  const auto *entity=document_.find(state_.animatorEntity);if(!entity) return false;
+  auto values=*entity;
+  auto *c=values.components.editInstance(state_.animatorInstance);
+  if(!c||&c->type()!=&scene::Animator::descriptor) return false;
+  auto &a=scene::animator(*c);
+  if(!change(a)) return false;
+  if(!a.valid()) {state_.status="Mudança recusada: o grafo ficaria inválido";return false;}
+  return history_.applyValues(document_,entity->id,values);
+}
+
+void EditorSession::beginAnimatorNumber(u32 code,double current) {
+  state_.numericField=w::id(code);state_.numericEntity=state_.animatorEntity;state_.numericInstance=0;state_.numericProperty.clear();
+  state_.numericCurrent=current;std::snprintf(state_.numericText,sizeof state_.numericText,"%g",current);state_.numericError=false;
+}
+void EditorSession::beginAnimatorName(u32 code,const std::string &current) {
+  state_.editingAnimatorName=true;state_.animatorNameField=code;
+  std::snprintf(state_.renameText,sizeof state_.renameText,"%s",current.c_str());
+}
+
+bool EditorSession::applyAnimatorName(u32 code,const std::string &name) {
+  if(!scene::Animator::validName(name)) {state_.status="Nome vazio, longo demais ou com aspas";return false;}
+  const u32 layerIndex=state_.animatorLayer;
+  return editAnimator([&](scene::Animator &a){
+    if(layerIndex>=a.layers.size()) return false;
+    auto &layer=a.layers[layerIndex];
+    if(code==w::LayerName) {for(const auto &l:a.layers) if(l.id!=layer.id&&l.name==name) return false;layer.name=name;return true;}
+    if(code==w::StateName) {
+      auto *s=layer.state(state_.animatorState);if(!s) return false;
+      for(const auto &o:layer.states) if(o.id!=s->id&&o.name==name) {state_.status="Já existe um estado com esse nome nesta camada";return false;}
+      s->name=name;return true;
+    }
+    if(code>=w::ParameterName&&code<w::ParameterName+0x100) {
+      const u32 i=code-w::ParameterName;if(i>=a.parameters.size()) return false;
+      for(usize k=0;k<a.parameters.size();++k) if(k!=i&&a.parameters[k].name==name) {state_.status="Já existe um parâmetro com esse nome";return false;}
+      a.parameters[i].name=name;return true;
+    }
+    return false;
+  });
+}
+
+bool EditorSession::applyAnimatorNumber(u32 code,double number) {
+  if(!std::isfinite(number)) return false;
+  const float v=static_cast<float>(number);const u32 layerIndex=state_.animatorLayer;
+  return editAnimator([&](scene::Animator &a){
+    if(layerIndex>=a.layers.size()) return false;
+    auto &layer=a.layers[layerIndex];
+    auto *s=layer.state(state_.animatorState);
+    scene::AnimatorTransition *t=nullptr;for(auto &x:layer.transitions) if(x.id==state_.animatorTransition) t=&x;
+    if(code==w::LayerWeight) {layer.weight=std::clamp(v,0.f,1.f);return true;}
+    if(code>=w::ParameterValue&&code<w::ParameterValue+0x100) {
+      const u32 i=code-w::ParameterValue;if(i>=a.parameters.size()) return false;
+      a.parameters[i].value=a.parameters[i].type==T::Int?std::round(v):v;return true;
+    }
+    if(s) {
+      if(code==w::StateSpeed) {s->speed=std::clamp(v,-10.f,10.f);return true;}
+      const auto motion=[&](u32 base)->scene::AnimatorMotion*{const u32 m=code-base;return m<s->motions.size()?&s->motions[m]:nullptr;};
+      if(code>=w::MotionThreshold&&code<w::MotionThreshold+0x100) {if(auto *m=motion(w::MotionThreshold)) {m->threshold=v;return true;}}
+      if(code>=w::MotionX&&code<w::MotionX+0x100) {if(auto *m=motion(w::MotionX)) {m->x=v;return true;}}
+      if(code>=w::MotionY&&code<w::MotionY+0x100) {if(auto *m=motion(w::MotionY)) {m->y=v;return true;}}
+      if(code>=w::EventTime&&code<w::EventTime+0x100) {const u32 e=code-w::EventTime;if(e<s->events.size()) {s->events[e].time=std::clamp(v,0.f,1.f);return true;}}
+      if(code>=w::EventTag&&code<w::EventTag+0x100) {const u32 e=code-w::EventTag;if(e<s->events.size()&&v>=0) {s->events[e].tag=static_cast<u32>(std::lround(v));return true;}}
+    }
+    if(t) {
+      if(code==w::TransitionExitTime) {t->exitTime=std::clamp(v,0.f,100.f);return true;}
+      if(code==w::TransitionDuration) {t->duration=std::clamp(v,0.f,60.f);return true;}
+      if(code>=w::ConditionThreshold&&code<w::ConditionThreshold+0x100) {const u32 c=code-w::ConditionThreshold;if(c<t->conditions.size()) {t->conditions[c].threshold=v;return true;}}
+    }
+    return false;
+  });
+}
+
+bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
+  const auto *a=openAnimator();
+  if(!a||a->layers.empty()) {state_.animatorOpen=false;return false;}
+  state_.animatorLayer=std::min<u32>(state_.animatorLayer,static_cast<u32>(a->layers.size())-1);
+  const u32 layerIndex=state_.animatorLayer;const auto &layer=a->layers[layerIndex];
+  const bool readOnly=isPlaying();
+  const u32 key=routing.widgetId;
+  const view::View v{layout_.animatorCanvas,state_.animatorPan[0],state_.animatorPan[1],state_.animatorZoom};
+
+  // ---- Grafo: selecionar, mover estados, navegar, ligar transições -------
+  if(key==w::id(w::Canvas)) {
+    if(event.phase==ui::UiPointerPhase::Down) {
+      animatorPointer_=event.pointerId;animatorPress_=event.position;animatorDragged_=false;
+      animatorPressPan_[0]=state_.animatorPan[0];animatorPressPan_[1]=state_.animatorPan[1];
+      animatorPressNode_=view::hitNode(v,layer,event.position);
+      animatorPressTransition_=animatorPressNode_?0:view::hitTransition(v,layer,event.position);
+      animatorDragOriginal_.reset();
+      if(const auto *s=layer.state(animatorPressNode_)) {animatorNodeStart_[0]=s->x;animatorNodeStart_[1]=s->y;}
+      return true;
+    }
+    if(event.pointerId!=animatorPointer_) return true;
+    if(event.phase==ui::UiPointerPhase::Move&&routing.dragging) {
+      animatorDragged_=true;
+      const float dx=(event.position.x-animatorPress_.x)/state_.animatorZoom,dy=(event.position.y-animatorPress_.y)/state_.animatorZoom;
+      if(layer.state(animatorPressNode_)&&!readOnly&&!state_.animatorConnecting&&!history_.isOpen()) {
+        // Arrasto ao vivo direto no documento; o passo do histórico sai no fim.
+        auto *entity=document_.find(state_.animatorEntity);if(!entity) return true;
+        if(!animatorDragOriginal_) animatorDragOriginal_=*entity;
+        auto values=*entity;
+        auto &copy=scene::animator(*values.components.editInstance(state_.animatorInstance));
+        if(auto *s=copy.layers[layerIndex].state(animatorPressNode_)) {s->x=animatorNodeStart_[0]+dx;s->y=animatorNodeStart_[1]+dy;}
+        document_.applyEntityValues(entity->id,values);
+      } else {
+        state_.animatorPan[0]=animatorPressPan_[0]+dx;state_.animatorPan[1]=animatorPressPan_[1]+dy;
+      }
+      return true;
+    }
+    if(event.phase==ui::UiPointerPhase::Up) {
+      animatorPointer_=0;
+      if(animatorDragOriginal_) {
+        // Fim do arrasto: volta ao original e grava a posição final (na grade de 16) num passo só.
+        const auto *entity=document_.find(state_.animatorEntity);
+        auto finalValues=*entity;
+        auto &moved=scene::animator(*finalValues.components.editInstance(state_.animatorInstance));
+        if(auto *s=moved.layers[layerIndex].state(animatorPressNode_)) {s->x=std::round(s->x/16)*16;s->y=std::round(s->y/16)*16;}
+        document_.applyEntityValues(entity->id,*animatorDragOriginal_);animatorDragOriginal_.reset();
+        history_.applyValues(document_,entity->id,finalValues);
+        return true;
+      }
+      if(!routing.tapped||animatorDragged_) return true;
+      const u64 node=animatorPressNode_;
+      if(state_.animatorConnecting&&!readOnly) {
+        if(!state_.animatorConnectFrom) {
+          if(node&&node!=view::EntryNode) {state_.animatorConnectFrom=node;state_.status="Agora toque no estado de destino";}
+          return true;
+        }
+        if(layer.state(node)) {
+          const u64 from=state_.animatorConnectFrom==view::AnyNode?0:state_.animatorConnectFrom;
+          if(from==node&&from!=0) {state_.status="Transição para o próprio estado: use Qualquer estado";return true;}
+          u64 created=0;
+          // Padrões da Unity: com tempo de saída em 0,75 e mistura de 0,25 s; de Qualquer estado, sem tempo de saída.
+          if(editAnimator([&](scene::Animator &edit){
+               auto &l=edit.layers[layerIndex];if(l.transitions.size()>=scene::Animator::MaximumTransitions) return false;
+               scene::AnimatorTransition t;t.id=edit.allocateId();t.from=from;t.to=node;t.hasExitTime=from!=0;t.exitTime=.75f;t.duration=.25f;
+               created=t.id;l.transitions.push_back(t);return true;})) {
+            state_.animatorTransition=created;state_.animatorState=0;state_.status="Transição criada";
+          }
+          state_.animatorConnecting=false;state_.animatorConnectFrom=0;
+        }
+        return true;
+      }
+      state_.animatorParameter=0;
+      if(layer.state(node)) {state_.animatorState=node;state_.animatorTransition=0;}
+      else if(animatorPressTransition_) {state_.animatorTransition=animatorPressTransition_;state_.animatorState=0;}
+      else {state_.animatorState=0;state_.animatorTransition=0;}
+      return true;
+    }
+    return true;
+  }
+  if(!routing.tapped) return true;
+  if(!w::owns(key)) return true;   // o editor cobre a tela: o resto não recebe toque
+  const u32 code=w::code(key);
+
+  // ---- Seletores -----------------------------------------------------------
+  if(code==w::ClipClose||code==w::MaskClose) {state_.animatorPicker=0;return true;}
+  if(code==w::PickerPrevious) {if(state_.animatorPickerPage) --state_.animatorPickerPage;return true;}
+  if(code==w::PickerNext) {++state_.animatorPickerPage;return true;}
+  if(code>=w::ClipChoice&&code<w::ClipChoice+0xF00&&state_.animatorPicker&&state_.animatorPicker<0x10000u) {
+    const auto catalog=mapScene_.clipCatalog();const u32 i=code-w::ClipChoice;
+    const u32 motion=state_.animatorPicker-1;state_.animatorPicker=0;
+    if(i>=catalog.size()) return true;
+    const auto clip=catalog[i].clip;
+    editAnimator([&](scene::Animator &edit){
+      auto *s=edit.layers[layerIndex].state(state_.animatorState);if(!s) return false;
+      if(motion>=scene::Animator::MaximumMotions) return false;
+      if(s->motions.size()<=motion) s->motions.resize(motion+1);
+      s->motions[motion].clip=clip;return true;});
+    return true;
+  }
+  if(code>=w::MaskChoice&&code<w::MaskChoice+0xF00&&state_.animatorPicker==0x10000u) {
+    state_.animatorPicker=0;u64 mask=0;
+    if(code>w::MaskChoice) {
+      std::vector<EditorEntityId> subtree;
+      const auto *entity=document_.find(state_.animatorEntity);
+      document_.collectSubtree(a->target?static_cast<EditorEntityId>(a->target):entity->id,subtree);
+      const u32 i=code-w::MaskChoice-1;if(i<subtree.size()) mask=subtree[i];
+    }
+    editAnimator([&](scene::Animator &edit){edit.layers[layerIndex].mask=mask;return true;});
+    return true;
+  }
+
+  // ---- Barra superior ----------------------------------------------------
+  switch(code) {
+    case w::Close: state_.animatorOpen=false;state_.animatorConnecting=false;state_.animatorPicker=0;return true;
+    case w::Frame: frameAnimator();return true;
+    case w::ZoomIn: state_.animatorZoom=std::min(1.8f,state_.animatorZoom*1.25f);return true;
+    case w::ZoomOut: state_.animatorZoom=std::max(.35f,state_.animatorZoom/1.25f);return true;
+    case w::Connect: state_.animatorConnecting=!state_.animatorConnecting;state_.animatorConnectFrom=0;
+      if(state_.animatorConnecting) {state_.status="Toque no estado de origem (ou em Qualquer estado)";}
+      return true;
+    case w::LayerAdd: {
+      u32 created=0;
+      editAnimator([&](scene::Animator &edit){
+        std::vector<std::string> names;for(const auto &l:edit.layers) names.push_back(l.name);
+        scene::AnimatorLayer l;l.id=edit.allocateId();l.name=uniqueName(names,"Camada");l.weight=1;
+        scene::AnimatorState s;s.id=edit.allocateId();s.name="Vazio";s.x=-view::NodeWidth*.5f;s.y=-view::NodeHeight*.5f;
+        l.defaultState=s.id;l.states.push_back(s);edit.layers.push_back(l);created=static_cast<u32>(edit.layers.size())-1;return true;});
+      if(created) {state_.animatorLayer=created;state_.animatorState=state_.animatorTransition=0;}
+      return true;
+    }
+    case w::LayerDelete:
+      if(layerIndex>0&&editAnimator([&](scene::Animator &edit){edit.layers.erase(edit.layers.begin()+layerIndex);return true;})) {
+        state_.animatorLayer=0;state_.animatorState=state_.animatorTransition=0;
+      }
+      return true;
+    case w::LayerName: if(!readOnly) beginAnimatorName(code,layer.name);return true;
+    case w::LayerWeight: if(!readOnly&&layerIndex>0) beginAnimatorNumber(code,layer.weight);return true;
+    case w::LayerMask: if(!readOnly) {state_.animatorPicker=0x10000u;state_.animatorPickerPage=0;}return true;
+    case w::AddState: {
+      u64 created=0;
+      editAnimator([&](scene::Animator &edit){
+        auto &l=edit.layers[layerIndex];if(l.states.size()>=scene::Animator::MaximumStates) return false;
+        std::vector<std::string> names;for(const auto &s:l.states) names.push_back(s.name);
+        scene::AnimatorState s;s.id=edit.allocateId();s.name=uniqueName(names,"Estado");
+        // Nasce no centro da vista; se cair sobre outro estado, desce até achar lugar.
+        const auto &c=layout_.animatorCanvas;
+        if(c.width>0) {view::toGraph(v,{c.x+c.width*.5f,c.y+c.height*.5f},s.x,s.y);s.x-=view::NodeWidth*.5f;s.y-=view::NodeHeight*.5f;}
+        else view::freeSpot(l,s.x,s.y);
+        s.x=std::round(s.x/16)*16;s.y=std::round(s.y/16)*16;
+        for(u32 tries=0;tries<20;++tries) {
+          bool overlaps=false;
+          for(const auto &o:l.states) overlaps=overlaps||(std::abs(o.x-s.x)<view::NodeWidth+16&&std::abs(o.y-s.y)<view::NodeHeight+16);
+          if(!overlaps) break;
+          s.y+=view::NodeHeight+32;
+        }
+        if(!l.defaultState) l.defaultState=s.id;
+        created=s.id;l.states.push_back(s);return true;});
+      if(created) {state_.animatorState=created;state_.animatorTransition=0;}
+      return true;
+    }
+    case w::SetDefault: editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];if(!l.state(state_.animatorState)) return false;l.defaultState=state_.animatorState;return true;});return true;
+    case w::Delete:
+      if(state_.animatorState) {
+        const u64 doomed=state_.animatorState;
+        if(editAnimator([&](scene::Animator &edit){
+             auto &l=edit.layers[layerIndex];
+             std::erase_if(l.states,[&](const scene::AnimatorState &s){return s.id==doomed;});
+             std::erase_if(l.transitions,[&](const scene::AnimatorTransition &t){return t.from==doomed||t.to==doomed;});
+             if(l.defaultState==doomed) l.defaultState=l.states.empty()?0:l.states.front().id;
+             return true;})) state_.animatorState=0;
+      } else if(state_.animatorTransition) {
+        const u64 doomed=state_.animatorTransition;
+        if(editAnimator([&](scene::Animator &edit){std::erase_if(edit.layers[layerIndex].transitions,[&](const scene::AnimatorTransition &t){return t.id==doomed;});return true;}))
+          state_.animatorTransition=0;
+      }
+      return true;
+    default: break;
+  }
+  if(code>=w::LayerTab&&code<w::LayerTab+scene::Animator::MaximumLayers) {
+    state_.animatorLayer=code-w::LayerTab;state_.animatorState=state_.animatorTransition=0;state_.animatorConnecting=false;frameAnimator();return true;
+  }
+
+  // ---- Parâmetros ----------------------------------------------------------
+  if(code>=w::ParameterAdd&&code<w::ParameterAdd+4) {
+    const auto type=static_cast<T>(code-w::ParameterAdd);
+    static constexpr const char *bases[]{"Float","Int","Bool","Gatilho"};
+    u64 created=0;
+    editAnimator([&](scene::Animator &edit){
+      if(edit.parameters.size()>=scene::Animator::MaximumParameters) return false;
+      std::vector<std::string> names;for(const auto &p:edit.parameters) names.push_back(p.name);
+      edit.parameters.push_back({edit.allocateId(),uniqueName(names,bases[static_cast<u32>(type)]),type,0});created=edit.parameters.back().id;return true;});
+    // O campo de nome abre com o nome sugerido: confirmar mantém, digitar troca.
+    if(const auto *now=openAnimator();created&&now) {
+      state_.animatorParameter=created;
+      beginAnimatorName(w::ParameterName+static_cast<u32>(now->parameters.size()-1),now->parameters.back().name);
+    }
+    return true;
+  }
+  if(code>=w::ParameterRow&&code<w::ParameterRow+0x100) {const u32 i=code-w::ParameterRow;if(i<a->parameters.size()) state_.animatorParameter=a->parameters[i].id;return true;}
+  if(code>=w::ParameterName&&code<w::ParameterName+0x100) {const u32 i=code-w::ParameterName;if(i<a->parameters.size()&&!readOnly) beginAnimatorName(code,a->parameters[i].name);return true;}
+  if(code>=w::ParameterValue&&code<w::ParameterValue+0x100) {
+    const u32 i=code-w::ParameterValue;if(i>=a->parameters.size()||readOnly) return true;
+    const auto &p=a->parameters[i];
+    if(p.type==T::Bool) editAnimator([&](scene::Animator &edit){edit.parameters[i].value=edit.parameters[i].value!=0?0.f:1.f;return true;});
+    else if(p.type!=T::Trigger) beginAnimatorNumber(code,p.value);
+    return true;
+  }
+  if(code>=w::ParameterDelete&&code<w::ParameterDelete+0x100) {
+    const u32 i=code-w::ParameterDelete;if(i>=a->parameters.size()) return true;
+    const u64 doomed=a->parameters[i].id;
+    editAnimator([&](scene::Animator &edit){
+      std::erase_if(edit.parameters,[&](const scene::AnimatorParameter &p){return p.id==doomed;});
+      for(auto &l:edit.layers) {
+        for(auto &s:l.states) {if(s.blendX==doomed) s.blendX=0;if(s.blendY==doomed) s.blendY=0;if(s.speedParameter==doomed) s.speedParameter=0;}
+        for(auto &t:l.transitions) std::erase_if(t.conditions,[&](const scene::AnimatorCondition &c){return c.parameter==doomed;});
+      }
+      return true;});
+    state_.animatorParameter=0;return true;
+  }
+
+  // ---- Estado selecionado --------------------------------------------------
+  if(const auto *s=layer.state(state_.animatorState);s&&!readOnly) {
+    if(code==w::StateName) {beginAnimatorName(code,s->name);return true;}
+    if(code>=w::StateKind&&code<w::StateKind+3) {
+      const auto kind=static_cast<scene::AnimatorMotionKind>(code-w::StateKind);
+      editAnimator([&](scene::Animator &edit){
+        auto *x=edit.layers[layerIndex].state(s->id);x->kind=kind;
+        if(kind!=scene::AnimatorMotionKind::Clip) {
+          if(!x->blendX) x->blendX=cycleParameter(edit,0,false);
+          if(kind==scene::AnimatorMotionKind::Blend2D&&!x->blendY) x->blendY=cycleParameter(edit,x->blendX,false);
+          for(usize m=0;m<x->motions.size();++m) if(kind==scene::AnimatorMotionKind::Blend1D) x->motions[m].threshold=static_cast<float>(m);
+        }
+        return true;});
+      if(code!=w::StateKind&&cycleParameter(*a,0,false)==0) state_.status="Crie um parâmetro Float para guiar a mistura";
+      return true;
+    }
+    if(code==w::StateBlendX||code==w::StateBlendY) {
+      editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);auto &slot=code==w::StateBlendX?x->blendX:x->blendY;slot=cycleParameter(edit,slot,false);return true;});
+      if(!cycleParameter(*a,0,false)) state_.status="Crie um parâmetro Float para guiar a mistura";
+      return true;
+    }
+    if(code==w::StateSpeed) {beginAnimatorNumber(code,s->speed);return true;}
+    if(code==w::StateSpeedParameter) {editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);x->speedParameter=cycleParameter(edit,x->speedParameter,true);return true;});return true;}
+    if(code==w::StateLoop) {editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);x->loop=!x->loop;return true;});return true;}
+    if(code==w::MotionAdd) {
+      editAnimator([&](scene::Animator &edit){
+        auto *x=edit.layers[layerIndex].state(s->id);if(x->motions.size()>=scene::Animator::MaximumMotions) return false;
+        scene::AnimatorMotion m;const usize n=x->motions.size();
+        m.threshold=n?x->motions.back().threshold+1:0;
+        // Mistura 2D: o novo ponto entra num círculo ao redor do centro.
+        const float angle=static_cast<float>(n)*1.2566370614f;m.x=n?std::sin(angle):0;m.y=n?std::cos(angle):0;
+        x->motions.push_back(m);return true;});
+      state_.animatorPicker=static_cast<u32>(s->motions.size())+1;state_.animatorPickerPage=0;return true;
+    }
+    if(code>=w::MotionClip&&code<w::MotionClip+0x100) {state_.animatorPicker=code-w::MotionClip+1;state_.animatorPickerPage=0;return true;}
+    if(code>=w::MotionThreshold&&code<w::MotionThreshold+0x100) {const u32 m=code-w::MotionThreshold;if(m<s->motions.size()) beginAnimatorNumber(code,s->motions[m].threshold);return true;}
+    if(code>=w::MotionX&&code<w::MotionX+0x100) {const u32 m=code-w::MotionX;if(m<s->motions.size()) beginAnimatorNumber(code,s->motions[m].x);return true;}
+    if(code>=w::MotionY&&code<w::MotionY+0x100) {const u32 m=code-w::MotionY;if(m<s->motions.size()) beginAnimatorNumber(code,s->motions[m].y);return true;}
+    if(code>=w::MotionRemove&&code<w::MotionRemove+0x100) {const u32 m=code-w::MotionRemove;editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);if(m>=x->motions.size()) return false;x->motions.erase(x->motions.begin()+m);return true;});return true;}
+    if(code==w::EventAdd) {
+      editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);if(x->events.size()>=scene::Animator::MaximumEvents) return false;
+        u32 tag=1;for(const auto &e:x->events) tag=std::max(tag,e.tag+1);x->events.push_back({.5f,tag});return true;});
+      return true;
+    }
+    if(code>=w::EventTime&&code<w::EventTime+0x100) {const u32 e=code-w::EventTime;if(e<s->events.size()) beginAnimatorNumber(code,s->events[e].time);return true;}
+    if(code>=w::EventTag&&code<w::EventTag+0x100) {const u32 e=code-w::EventTag;if(e<s->events.size()) beginAnimatorNumber(code,s->events[e].tag);return true;}
+    if(code>=w::EventRemove&&code<w::EventRemove+0x100) {const u32 e=code-w::EventRemove;editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);if(e>=x->events.size()) return false;x->events.erase(x->events.begin()+e);return true;});return true;}
+  }
+
+  // ---- Transição selecionada -----------------------------------------------
+  const scene::AnimatorTransition *t=nullptr;for(const auto &x:layer.transitions) if(x.id==state_.animatorTransition) t=&x;
+  if(t&&!readOnly) {
+    const auto transition=[&](scene::Animator &edit)->scene::AnimatorTransition*{for(auto &x:edit.layers[layerIndex].transitions) if(x.id==t->id) return &x;return nullptr;};
+    if(code==w::TransitionExit) {editAnimator([&](scene::Animator &edit){auto *x=transition(edit);x->hasExitTime=!x->hasExitTime;return true;});return true;}
+    if(code==w::TransitionExitTime) {beginAnimatorNumber(code,t->exitTime);return true;}
+    if(code==w::TransitionDuration) {beginAnimatorNumber(code,t->duration);return true;}
+    if(code==w::ConditionAdd) {
+      editAnimator([&](scene::Animator &edit){
+        auto *x=transition(edit);if(x->conditions.size()>=scene::Animator::MaximumConditions||edit.parameters.empty()) return false;
+        const auto &p=edit.parameters.front();x->conditions.push_back({p.id,modesFor(p.type).front(),0});return true;});
+      return true;
+    }
+    if(code>=w::ConditionParameter&&code<w::ConditionParameter+0x100) {
+      const u32 c=code-w::ConditionParameter;
+      editAnimator([&](scene::Animator &edit){
+        auto *x=transition(edit);if(c>=x->conditions.size()||edit.parameters.empty()) return false;
+        auto &cond=x->conditions[c];usize i=0;while(i<edit.parameters.size()&&edit.parameters[i].id!=cond.parameter) ++i;
+        const auto &next=edit.parameters[(i+1)%edit.parameters.size()];
+        cond.parameter=next.id;const auto modes=modesFor(next.type);
+        if(std::find(modes.begin(),modes.end(),cond.mode)==modes.end()) cond.mode=modes.front();
+        return true;});
+      return true;
+    }
+    if(code>=w::ConditionMode&&code<w::ConditionMode+0x100) {
+      const u32 c=code-w::ConditionMode;
+      editAnimator([&](scene::Animator &edit){
+        auto *x=transition(edit);if(c>=x->conditions.size()) return false;auto &cond=x->conditions[c];
+        const auto *p=edit.parameter(cond.parameter);if(!p) return false;
+        const auto modes=modesFor(p->type);const auto f=std::find(modes.begin(),modes.end(),cond.mode);
+        cond.mode=f==modes.end()||f+1==modes.end()?modes.front():*(f+1);return true;});
+      return true;
+    }
+    if(code>=w::ConditionThreshold&&code<w::ConditionThreshold+0x100) {const u32 c=code-w::ConditionThreshold;if(c<t->conditions.size()) beginAnimatorNumber(code,t->conditions[c].threshold);return true;}
+    if(code>=w::ConditionRemove&&code<w::ConditionRemove+0x100) {
+      const u32 c=code-w::ConditionRemove;
+      editAnimator([&](scene::Animator &edit){auto *x=transition(edit);if(c>=x->conditions.size()) return false;x->conditions.erase(x->conditions.begin()+c);return true;});
+      return true;
+    }
+  }
+  return true;
+}
+
+} // namespace ae::editor

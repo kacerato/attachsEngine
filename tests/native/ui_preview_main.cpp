@@ -6,6 +6,8 @@
 #include "scene/virtual_camera.h"
 #include "scene/audio.h"
 #include "scene/audio_mixer.h"
+#include "scene/animator.h"
+#include "resources/gltf_import.h"
 #include "scene/collider.h"
 #include "scene/physics_body.h"
 #include "scene/timer.h"
@@ -333,6 +335,73 @@ int writeVirtualCameraProject(const char *directory) {
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Virtual camera project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
+// Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
+// importado com Animator no lugar da Animação legada, mistura 1D por
+// Velocidade, gatilho de Qualquer estado e retorno por tempo de saída.
+int writeAnimatorProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Animator export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe,fox,license;
+  if(!readAsset("tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset("tests/native/fixtures/gltf/Fox.glb",fox)||
+     !readAsset("tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
+  for(const auto *folder:{"Scripts","scenes",".astra","Fontes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/AnimatorProbe.cs",probe)||
+     !editor::EditorImportTransaction::write(root/"Fontes/Fox.LICENSE.txt",license)) return fail("cannot publish sources");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  // O gravador não desenha: o publicador só guarda os buffers que o import entrega.
+  static std::vector<u8> vertices;static std::vector<u32> indices;
+  static std::vector<renderer::MapDrawRecord> draws;static std::vector<renderer::MapMaterialRecord> materials;
+  session.setGeometryPublisher([](std::span<const u8> v,std::span<const u32> i,std::span<const renderer::MapDrawRecord> d,
+                                  std::span<const renderer::MapMaterialRecord> m,std::span<const renderer::SharedAuthoringTexture>,
+                                  editor::EditorSession::PublishedGeometry &out){
+    vertices.assign(v.begin(),v.end());indices.assign(i.begin(),i.end());draws.assign(d.begin(),d.end());materials.assign(m.begin(),m.end());
+    out={draws,materials,vertices,indices};return true;});
+  // Mesmo caminho do importador sem GPU: decodifica, publica a fonte e instancia.
+  resources::GltfImport model;editor::EditorSession::ModelImportReport report;
+  if(!resources::importGlb(fox,{},{},model)||!session.commitModelImport(fox,model,"Fontes/Fox.glb","",report)||
+     !session.instantiateModel(report.source,report,true)) return fail(model.diagnostic+" "+report.diagnostic);
+  auto &document=session.document();
+  std::vector<editor::EditorEntityId> all;document.collectSubtree(document.root(),all);
+  editor::EditorEntityId owner=0;
+  for(const auto id:all) if(document.find(id)->components.find(scene::Animation::descriptor)) owner=id;
+  if(!owner) return fail("imported Fox has no Animation");
+  auto values=*document.find(owner);
+  const auto clips=static_cast<const scene::Animation*>(values.components.find(scene::Animation::descriptor))->clips;
+  if(clips.size()!=3) return fail("Fox should have Survey, Walk and Run");
+  while(values.components.remove(scene::Animation::descriptor)) {}
+  auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));
+  editor::assignEntityName(values,"Fox");
+  const auto speed=a.allocateId(),scare=a.allocateId();
+  a.parameters={{speed,"Velocidade",scene::AnimatorParameterType::Float,0},{scare,"Assustar",scene::AnimatorParameterType::Trigger,0}};
+  auto &base=a.layers.front();
+  auto &loco=base.states.front();loco.name="Locomoção";loco.kind=scene::AnimatorMotionKind::Blend1D;loco.blendX=speed;
+  loco.motions={{clips[0].asset,0},{clips[1].asset,1},{clips[2].asset,2}};loco.events={{.5f,1}};loco.x=-88;loco.y=-30;const u64 locoId=loco.id;
+  scene::AnimatorState look;look.id=a.allocateId();look.name="Olhar";look.motions={{clips[0].asset}};look.loop=false;look.speed=1.5f;look.x=200;look.y=-30;
+  base.states.push_back(look);
+  scene::AnimatorTransition toLook;toLook.id=a.allocateId();toLook.from=0;toLook.to=look.id;toLook.duration=.2f;
+  toLook.conditions={{scare,scene::AnimatorConditionMode::If,0}};
+  scene::AnimatorTransition back;back.id=a.allocateId();back.from=look.id;back.to=locoId;back.hasExitTime=true;back.exitTime=.9f;back.duration=.3f;
+  base.transitions={toLook,back};
+  if(!a.valid()) return fail("animator graph invalid");
+  if(!document.applyEntityValues(owner,values)) return fail("animator graph rejected by document");
+  const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");
+  {auto v=*document.find(cameraId);v.transform.position[1]=60;v.transform.position[2]=-260;v.components.add(scene::Camera::descriptor);document.applyEntityValues(cameraId,v);}
+  const auto probeId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Sonda");
+  {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
+   script->scriptType="acceptance.animator";script->source="Scripts/AnimatorProbe.cs";document.applyEntityValues(probeId,v);}
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"AnimatorFox-20261007\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Animator project written: %s\n",root.generic_string().c_str());
   return 0;
 }
 // Aceite no aparelho do bloco H (docs/planos/MIXER-DE-AUDIO-2026-10-07.md):
@@ -839,6 +908,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-physics-f-project")return writePhysicsFProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-virtual-camera-project")return writeVirtualCameraProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-animator-project")return writeAnimatorProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-runtime-family-project")return writeRuntimeFamilyProject(argc>2?argv[2]:nullptr);

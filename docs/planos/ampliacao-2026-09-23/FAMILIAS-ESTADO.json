@@ -1474,10 +1474,11 @@
       "estado": "parcial",
       "evidencias": [
         "native/runtime/scene_animation.h",
-        "tests/native/test_skeletal_animation.cpp"
+        "tests/native/test_skeletal_animation.cpp",
+        "docs/planos/ANIMATOR-2026-10-07.md"
       ],
       "lacunas": [
-        "Clipe vem de importação; sem eventos de animação nem curvas de propriedade arbitrária."
+        "Eventos ficam no estado do Animator (tempo normalizado e marca), não no clipe; curvas de propriedade arbitrária ainda não existem."
       ],
       "aceite": {},
       "limites_validacao": [
@@ -1515,14 +1516,24 @@
       "dependencias": "Clip evaluator; árvore/grafo validado; máquina de estados salva em resource",
       "trabalho_original": "P11b",
       "escopo": "obrigatorio",
-      "estado": "ausente",
-      "evidencias": [],
-      "lacunas": [
-        "Sem Animator (estados, transições, parâmetros) — bloco I."
+      "estado": "concluida",
+      "evidencias": [
+        "docs/planos/ANIMATOR-2026-10-07.md",
+        "native/scene/animator.h",
+        "native/runtime/scene_animator_graph.cpp",
+        "native/editor/editor_animator.cpp",
+        "tests/native/test_animator.cpp",
+        "tests/fixtures/animator/AnimatorProbe.cs",
+        "docs/validacao/evidencias/animator-20261007/aparelho-logcat.txt"
       ],
-      "aceite": {},
+      "lacunas": [],
+      "aceite": {
+        "runtime_host": "passou",
+        "aparelho": "passou"
+      },
       "limites_validacao": [
-        "Reconciliação estática em 06/10/2026 (bloco E): leitura de código e testes existentes; nenhum aceite novo executado."
+        "Animator com parâmetros, camadas com máscara, estados Clipe/1D/2D, transições e eventos; editor de grafo; aceite com o Fox no aparelho em 07/10/2026.",
+        "Pendências declaradas: sub-máquinas, interrupção de transição, camadas aditivas e root motion."
       ]
     },
     {

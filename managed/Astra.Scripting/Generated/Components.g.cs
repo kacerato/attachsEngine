@@ -1303,6 +1303,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         CerebroTransicaoConcluida = 19,
         CameraVirtualEntrouAoVivo = 20,
         CameraVirtualSaiuDoAr = 21,
+        AnimatorEntrouNumEstado = 22,
+        AnimatorEventoDoEstado = 23,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -5766,6 +5768,57 @@ public readonly struct Animation : IComponentFacade<Animation>
     /// <summary>Clipe. Recurso do projeto por slot</summary>
     public AssetGuid GetClips(uint slot = 0) => Component.GetResource("clips", slot);
     public void SetClips(AssetGuid value, uint slot = 0) => Component.SetResource("clips", value, slot);
+}
+
+/// <summary>Animator: Máquina de estados: parâmetros, transições, misturas e camadas. Família Animação · Máquina de estados.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AnimatorController.html</remarks>
+public readonly struct Animator : IComponentFacade<Animator>
+{
+    public static string TypeId => "astra.animation.animator";
+    public static Animator Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Animator(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Velocidade (×). Multiplica o tempo de todos os estados</summary>
+    /// <remarks>Faixa válida: -10 a 10.</remarks>
+    public float Speed
+    {
+        get => Component.GetFloat("speed");
+        set => Component.SetFloat("speed", value);
+    }
+    /// <summary>Ativo. Desligado congela a pose atual; parâmetros e estados são preservados</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ignorar escala de tempo. Anima em tempo real mesmo com o jogo pausado por escala (menus, cutscenes)</summary>
+    public bool UnscaledTime
+    {
+        get => Component.GetBool("unscaled_time");
+        set => Component.SetBool("unscaled_time", value);
+    }
+    /// <summary>Raiz animada. Objeto cuja hierarquia os clipes animam (o modelo importado)</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+    /// <summary>Em transição. Verdadeiro enquanto a camada base mistura dois estados</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool InTransition() => Component.Invoke("in_transition").AsBoolean();
+    /// <summary>Entrou no estado. Emitido quando um estado começa (no início da transição para ele). Payload: Camada: inteiro, Estado: inteiro</summary>
+    public ComponentSubscription OnStateEntered(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "state_entered", handler);
+    /// <summary>Evento do estado. Emitido quando o tempo do estado passa por um evento marcado nele. Payload: Camada: inteiro, Estado: inteiro, Marca: inteiro</summary>
+    public ComponentSubscription OnStateEvent(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "state_event", handler);
 }
 
 /// <summary>Campo de gravidade 2D: Gravidade XY em área sobre corpos dinâmicos 2D. Família Física 2D · Campos.</summary>

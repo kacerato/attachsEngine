@@ -22,6 +22,7 @@
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_virtual_cameras.h"
+#include "runtime/scene_animator_graph.h"
 #include "runtime/scene_paths.h"
 #include "runtime/scene_physics2d.h"
 #include "runtime/scene_audio.h"
@@ -185,7 +186,7 @@ public:
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
     constraints_.reset();
-    tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();
+    tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     paths_.reset();
     events_.reset();
     eventConnections_.reset();
@@ -193,6 +194,7 @@ public:
     tweens_.setEvents(&events_);
     sequences_.setEvents(&events_);
     virtualCameras_.setEvents(&events_);
+    animatorGraphs_.setEvents(&events_);
     scripts_.setEvents(&events_);
     debugLines_.reset();
     scripts_.setGameView(&gameView_);
@@ -205,6 +207,7 @@ public:
     scripts_.setTweenSequences(&sequences_);
     scripts_.setPhysicsQueries(&queries_);
     scripts_.setVirtualCameras(&virtualCameras_);
+    scripts_.setAnimatorGraphs(&animatorGraphs_);
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);
@@ -262,6 +265,7 @@ public:
     tweens_.setEvents(nullptr);
     sequences_.setEvents(nullptr);
     virtualCameras_.setEvents(nullptr);
+    animatorGraphs_.setEvents(nullptr);
     scripts_.setVirtualCameras(nullptr);
     events_.reset();
     eventConnections_.reset();
@@ -273,7 +277,7 @@ public:
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
     constraints_.reset();
-    tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();
+    tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     resources_=nullptr;
     active_=false;
     paused_=false;
@@ -329,7 +333,7 @@ public:
     if(!active_) return runtime::WorldStatus::NotRunning;
     return runtime::invokeComponentMethod(operationServices(),{world_.handle(object),instance},method,arguments,result);
   }
-  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_};}
+  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_};}
   runtime::ComponentEventQueue &events() noexcept {return events_;}
   const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
   // Quem desenha o quadro publica a vista de jogo antes de avançar o mundo.
@@ -351,6 +355,7 @@ public:
   const runtime::SceneTweenSequences &tweenSequences() const noexcept {return sequences_;}
   const runtime::ScenePhysicsQueries &physicsQueries() const noexcept {return queries_;}
   const runtime::SceneVirtualCameras &virtualCameras() const noexcept {return virtualCameras_;}
+  const runtime::SceneAnimatorGraphs &animatorGraphs() const noexcept {return animatorGraphs_;}
   const runtime::ScenePaths &paths() const noexcept {return paths_;}
   runtime::ScenePaths &paths() noexcept {return paths_;}
   runtime::SceneAudio &audio() noexcept {return audio_;}
@@ -386,7 +391,7 @@ private:
     const float scriptElapsed=world_.clock().delta();
     gui_.advance(frameElapsed);
     sceneGui_.advance(world_,frameElapsed);
-    return stage(runScripts(scriptElapsed),"Update") && stage(advanceTimers(frameElapsed,std::min(elapsed,.25)),"timers") && stage(animate(scriptElapsed),"animação") &&
+    return stage(runScripts(scriptElapsed),"Update") && stage(advanceTimers(frameElapsed,std::min(elapsed,.25)),"timers") && stage(animate(scriptElapsed,static_cast<float>(std::min(elapsed,.25))),"animação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
            stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
@@ -430,8 +435,13 @@ private:
   }
   // Depois do Update dos scripts e antes da física (runtime/scene_animation.h).
   // Nó com pose publicada pela física não é escrito pela animação.
-  bool animate(float elapsed) {
+  bool animate(float elapsed,float unscaled) {
     if(!animator_.active()) return true;
+    // Animators (máquinas de estado) viram amostras do mesmo misturador.
+    std::vector<runtime::SceneAnimator::ExternalSample> samples;
+    if(animator_.library()&&!animatorGraphs_.advance(world_,*animator_.library(),elapsed,unscaled,samples)) return false;
+    animator_.setExternalSamples(std::move(samples));
+    if(!drainCommands()) return false;
     return animator_.advance(elapsed,[this](runtime::ObjectId id) {
       return world_.authorityOf(world_.handle(id))==runtime::TransformAuthority::Free;
     });
@@ -520,6 +530,7 @@ private:
   runtime::SceneTweenSequences sequences_;
   runtime::ScenePhysicsQueries queries_;
   runtime::SceneVirtualCameras virtualCameras_;
+  runtime::SceneAnimatorGraphs animatorGraphs_;
   std::vector<std::pair<runtime::ObjectId,runtime::ObjectId>> stayThisFrame_;
   runtime::SceneNumberTweens numberTweens_;
   runtime::ScenePaths paths_;

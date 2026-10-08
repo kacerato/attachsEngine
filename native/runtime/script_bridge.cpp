@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include "runtime/scene_animator_graph.h"
+#include "scene/animator.h"
 #include <iomanip>
 #include <limits>
 #include <locale>
@@ -376,6 +378,62 @@ void ScriptBridge::installExtensions() {
     if(!self.haptics_(milliseconds,amplitude)){self.lastStatus_=WorldStatus::Rejected;return 0;}
     return 1;
   };
+  animatorOperations_={};
+  // Animator: o componente é validado pelo identificador completo (mundo,
+  // objeto, geração, instância); o nome chega como UTF-8 com comprimento.
+  const auto animatorHandle=[](ScriptBridge &s,u64 id,u32 worldId,u32 generation,u64 instance,ComponentHandle &handle){
+    if(!s.world_||!s.world_->running()||!s.animators_){s.lastStatus_=WorldStatus::NotRunning;return false;}
+    if(id>std::numeric_limits<ObjectId>::max()){s.lastStatus_=WorldStatus::InvalidArgument;return false;}
+    handle={{worldId,ObjectId(id),generation},instance};
+    s.lastStatus_=s.world_->validate(handle.object);if(s.lastStatus_!=WorldStatus::Ok)return false;
+    if(s.world_->componentTypeId(handle)!=scene::Animator::descriptor.id){s.lastStatus_=WorldStatus::ComponentMissing;return false;}
+    return true;
+  };
+  static decltype(animatorHandle) handleOf=animatorHandle;
+  const auto animatorStatus=[](SceneAnimatorGraphs::Status status){
+    switch(status){
+      case SceneAnimatorGraphs::Status::Ok: return WorldStatus::Ok;
+      case SceneAnimatorGraphs::Status::UnknownComponent: return WorldStatus::ComponentUnavailable;
+      case SceneAnimatorGraphs::Status::UnknownParameter: case SceneAnimatorGraphs::Status::UnknownState: case SceneAnimatorGraphs::Status::UnknownLayer: return WorldStatus::UnknownResource;
+      default: return WorldStatus::InvalidArgument;
+    }
+  };
+  static decltype(animatorStatus) statusOf=animatorStatus;
+  animatorOperations_.parameter=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 operation,const u8 *name,int length,float value,float *result)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);ComponentHandle handle;
+    if(!handleOf(s,id,worldId,generation,instance,handle))return 0;
+    if(operation>5||!name||length<=0||length>int(scene::Animator::MaximumName)||!result){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=statusOf(s.animators_->parameter(*s.world_,handle.object.id,instance,std::string_view(reinterpret_cast<const char*>(name),usize(length)),
+                                                    SceneAnimatorGraphs::ParameterOperation(operation),value,*result));
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  animatorOperations_.play=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 layer,const u8 *state,int length,float crossFade)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);ComponentHandle handle;
+    if(!handleOf(s,id,worldId,generation,instance,handle))return 0;
+    if(!state||length<=0||length>int(scene::Animator::MaximumName)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=statusOf(s.animators_->play(*s.world_,handle.object.id,instance,layer,std::string_view(reinterpret_cast<const char*>(state),usize(length)),crossFade));
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  animatorOperations_.state=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 layer,scene::ScriptAnimatorStateInfo *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);ComponentHandle handle;
+    if(!handleOf(s,id,worldId,generation,instance,handle))return 0;
+    if(!out||out->size!=sizeof(*out)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    SceneAnimatorGraphs::Info info;s.lastStatus_=statusOf(s.animators_->info(*s.world_,handle.object.id,instance,layer,info));
+    if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    out->flags=info.transitioning?1u:0u;out->state=info.state;out->next=info.next;out->normalizedTime=info.normalizedTime;out->progress=info.progress;
+    return 1;
+  };
+  animatorOperations_.stateName=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 layer,u64 state,u8 *buffer,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge*>(context);ComponentHandle handle;
+    if(!handleOf(s,id,worldId,generation,instance,handle))return -1;
+    const auto *a=static_cast<const scene::Animator*>(s.world_->readComponent(handle));
+    if(!a||layer>=a->layers.size()){s.lastStatus_=WorldStatus::UnknownResource;return -1;}
+    const auto *found=a->layers[layer].state(state);
+    if(!found){s.lastStatus_=WorldStatus::UnknownResource;return -1;}
+    const int length=int(found->name.size());
+    if(buffer&&capacity>=length)std::memcpy(buffer,found->name.data(),usize(length));
+    s.lastStatus_=WorldStatus::Ok;return length;
+  };
   motorControlOperations_={};
   motorControlOperations_.command=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 operation,u32 source,const float *move,u32 jump,scene::ScriptMotorControlState *out)->int {
     auto &s=*static_cast<ScriptBridge*>(context);
@@ -441,6 +499,7 @@ void ScriptBridge::installExtensions() {
     if(requested==scene::kScriptHierarchy) return publish(self.hierarchyOperations_);
     if(requested==scene::kScriptScenes) return publish(self.sceneOperations_);
     if(requested==scene::kScriptMotorControl&&self.physics_)return publish(self.motorControlOperations_);
+    if(requested==scene::kScriptAnimator&&self.animators_)return publish(self.animatorOperations_);
     if(requested==scene::kScriptMotorMotion&&self.physics_)return publish(self.motorMotionOperations_);
     // Família ausente de verdade: sem vibrador, não há tabela a oferecer.
     if(requested==scene::kScriptHaptics && self.haptics_) return publish(self.hapticsOperations_);

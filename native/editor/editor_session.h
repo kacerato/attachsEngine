@@ -14,6 +14,9 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
+#include "scene/animator.h"
+#include <optional>
+#include <functional>
 #include <utility>
 
 #include "core/base.h"
@@ -82,7 +85,7 @@ namespace ae::editor {
 // ou colisor; falso para outro tipo de componente.
 bool applyPhysicsMaterialCopy(scene::ComponentValue &component,const resources::PhysicsMaterialAsset &material);
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName, Gui };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName, Gui, AnimatorName };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -1906,6 +1909,19 @@ private:
   u64 numericPathPointId_=0;
   EditorSceneVersion numericPathVersion_{};
   bool handleCurveEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  // Editor de grafo do Animator (editor_animator.cpp).
+  bool handleAnimatorEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  const scene::Animator *openAnimator() const;
+  void openAnimatorEditor();
+  void frameAnimator();
+  bool editAnimator(const std::function<bool(scene::Animator &)> &change);
+  void beginAnimatorNumber(u32 code,double current);
+  void beginAnimatorName(u32 code,const std::string &current);
+  bool applyAnimatorName(u32 code,const std::string &name);
+  bool applyAnimatorNumber(u32 code,double number);
+  u32 animatorPointer_=0;ui::UiPoint animatorPress_{};float animatorPressPan_[2]{},animatorNodeStart_[2]{};
+  u64 animatorPressNode_=0,animatorPressTransition_=0;bool animatorDragged_=false;
+  std::optional<EditorEntity> animatorDragOriginal_;
   bool commitCurveEditor();
   void saveCurveLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do

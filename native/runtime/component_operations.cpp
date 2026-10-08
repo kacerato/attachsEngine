@@ -8,6 +8,8 @@
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_virtual_cameras.h"
 #include "scene/audio_mixer.h"
+#include "runtime/scene_animator_graph.h"
+#include "scene/animator.h"
 #include "scene/audio.h"
 #include "scene/component_schema.h"
 #include "scene/path_follow.h"
@@ -77,7 +79,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,53> bindings{{
+const std::array<ComponentMethodBinding,54> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -135,6 +137,12 @@ const std::array<ComponentMethodBinding,53> bindings{{
     if(!s.audio) return WorldStatus::NotRunning;
     const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
     r=Value::makeNumber(s.audio->compressorReduction(h.object.id,h.instance));return WorldStatus::Ok;}},
+  {&scene::Animator::descriptor,"in_transition",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.animators) return WorldStatus::NotRunning;
+    const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+    SceneAnimatorGraphs::Info info;
+    if(s.animators->info(*s.world,h.object.id,h.instance,0,info)!=SceneAnimatorGraphs::Status::Ok) return WorldStatus::ComponentUnavailable;
+    r=Value::makeBoolean(info.transitioning);return WorldStatus::Ok;}},
   {&scene::AudioSnapshot::descriptor,"transition_to",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.audio) return WorldStatus::NotRunning;
     return s.audio->transitionSnapshot(*s.world,h,a[0].number);}},

@@ -114,6 +114,8 @@ Streaming com pontos de loop, prioridade/preempção de vozes, mistura espacial 
 
 ### Bloco I — Animação (F062–F066)
 
+**Estado (07/10):** parte 1 concluída — [Animator](ANIMATOR-2026-10-07.md) (F064) com editor de grafo e aceite no aparelho. Próximas partes: IK/rig (F065) e Timeline (F066).
+
 Animator com parâmetros, estados, transições, blend 1D/2D, camadas/máscaras e eventos; depois Timeline. Avaliar ozz-animation para sampling/blending antes de escrever avaliador próprio. Exige superfície de grafo no editor. Referência: [Animator Controller](https://docs.unity3d.com/6000.0/Documentation/Manual/class-AnimatorController.html).
 
 ### Bloco J — Navegação (F067–F070)

@@ -305,6 +305,17 @@ public static unsafe class NativeBehaviorRuntime
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeMotorMotionOperations {public uint Version,Size;public delegate* unmanaged<void*,ulong,uint,uint,ulong,NativeMotorMotionState*,int> State;}
     [StructLayout(LayoutKind.Sequential)]
+    public struct NativeAnimatorStateInfo {public uint Size,Flags;public ulong State,Next;public float NormalizedTime,Progress;}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeAnimatorOperations
+    {
+        public uint Version,Size;
+        public delegate* unmanaged<void*,ulong,uint,uint,ulong,uint,byte*,int,float,float*,int> Parameter;
+        public delegate* unmanaged<void*,ulong,uint,uint,ulong,uint,byte*,int,float,int> Play;
+        public delegate* unmanaged<void*,ulong,uint,uint,ulong,uint,NativeAnimatorStateInfo*,int> State;
+        public delegate* unmanaged<void*,ulong,uint,uint,ulong,uint,ulong,byte*,int,int> StateName;
+    }
+    [StructLayout(LayoutKind.Sequential)]
     public struct NativeMotorControlOperations
     {
         public uint Version,Size;
@@ -421,6 +432,33 @@ public static unsafe class NativeBehaviorRuntime
             if (view->State(access.Context, &raw) == 0 || (raw.Flags & 1) == 0) return false;
             state = new(raw.Width, raw.Height, raw.Dpi, (raw.Flags & 2) != 0, new(raw.SafeX, raw.SafeY, raw.SafeWidth, raw.SafeHeight),
                 (GameViewPlatform)raw.Platform, raw.Camera);
+            return true;
+        }
+        public bool AnimatorParameter(ulong id,uint world,uint generation,ulong instance,uint operation,string name,float value,out float result)
+        {
+            result=0;var family=Require<NativeAnimatorOperations>("astra.animator");
+            var bytes=System.Text.Encoding.UTF8.GetBytes(name);float output=0;
+            fixed(byte* text=bytes){if(family->Parameter(access.Context,id,world,generation,instance,operation,text,bytes.Length,value,&output)==0)return false;}
+            result=output;return true;
+        }
+        public bool AnimatorPlay(ulong id,uint world,uint generation,ulong instance,uint layer,string state,float crossFade)
+        {
+            var family=Require<NativeAnimatorOperations>("astra.animator");var bytes=System.Text.Encoding.UTF8.GetBytes(state);
+            fixed(byte* text=bytes){return family->Play(access.Context,id,world,generation,instance,layer,text,bytes.Length,crossFade)!=0;}
+        }
+        public bool AnimatorState(ulong id,uint world,uint generation,ulong instance,uint layer,out AnimatorStateInfo state)
+        {
+            state=default;var family=Require<NativeAnimatorOperations>("astra.animator");
+            NativeAnimatorStateInfo raw=new(){Size=(uint)sizeof(NativeAnimatorStateInfo)};
+            if(family->State(access.Context,id,world,generation,instance,layer,&raw)==0)return false;
+            string Name(ulong s)
+            {
+                if(s==0)return "";
+                var buffer=new byte[64];int length;
+                fixed(byte* b=buffer){length=family->StateName(access.Context,id,world,generation,instance,layer,s,b,buffer.Length);}
+                return length<0?"":System.Text.Encoding.UTF8.GetString(buffer,0,Math.Min(length,buffer.Length));
+            }
+            state=new(Name(raw.State),raw.NormalizedTime,(raw.Flags&1)!=0,(raw.Flags&1)!=0?Name(raw.Next):"",raw.Progress);
             return true;
         }
         public bool MotorControlCommand(ulong id,uint world,uint generation,ulong instance,uint operation,MotorControlSource source,Vector3 input,bool jump,out MotorControlState state)
