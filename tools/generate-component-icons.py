@@ -342,6 +342,8 @@ ICONS["component/event-connection"] = f'<circle cx="20" cy="64" r="10" {stroke(6
 # Animator workspace: filled angular silhouettes from the owner's Astra A
 # identity sheet. Each lime cut conveys the operation, not a background badge.
 ICONS.update({
+    "animation/controller": '<path d="M10 18h78l30 30v64H10z" fill="#eef1f5"/><path d="M88 18v30h30M28 56h22v20H28zm50 22h22v20H78zM44 72h8v12h26v8H44z" fill="#a8ff10"/>',
+    "animation/override": '<path d="M12 18h68v14H26v62h54v14H12zM60 46h54v58H60z" fill="#eef1f5"/><path d="M38 54h42V40l32 28-32 28V82H38z" fill="#a8ff10"/>',
     "animation/state": '<path d="M14 20h76l24 24v64H14z" fill="#eef1f5"/><path d="M90 20v24h24M40 44l36 20-36 20z" fill="#a8ff10"/>',
     "animation/transition": '<path d="M12 50h64V28l40 36-40 36V78H12z" fill="#eef1f5"/><path d="M76 28l40 36-40 14z" fill="#a8ff10"/>',
     "animation/parameters": '<path d="M12 26h104v10H12zm0 33h104v10H12zm0 33h104v10H12z" fill="#eef1f5"/><path d="M27 16h20v30H27zm51 33h20v30H78zM44 82h20v30H44z" fill="#a8ff10"/>',

@@ -538,6 +538,7 @@ add_library(aether_editor STATIC
   editor/editor_texture_assets.cpp
   editor/editor_audio_assets.cpp
   editor/editor_animator.cpp
+  editor/editor_animator_resources.cpp
   editor/editor_path.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp

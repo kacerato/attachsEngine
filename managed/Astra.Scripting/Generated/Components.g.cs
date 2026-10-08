@@ -5818,6 +5818,33 @@ public readonly struct Animator : IComponentFacade<Animator>
         get => Component.GetReference("motion_source");
         set => Component.SetReference("motion_source", value);
     }
+    /// <summary>Máscara · Base. Máscara da camada por instância; remapeada em hierarquia/prefab</summary>
+    public ObjectReference LayerMask0
+    {
+        get => Component.GetReference("layer_mask_0");
+        set => Component.SetReference("layer_mask_0", value);
+    }
+    /// <summary>Máscara · Camada 2. Máscara da camada por instância; remapeada em hierarquia/prefab</summary>
+    public ObjectReference LayerMask1
+    {
+        get => Component.GetReference("layer_mask_1");
+        set => Component.SetReference("layer_mask_1", value);
+    }
+    /// <summary>Máscara · Camada 3. Máscara da camada por instância; remapeada em hierarquia/prefab</summary>
+    public ObjectReference LayerMask2
+    {
+        get => Component.GetReference("layer_mask_2");
+        set => Component.SetReference("layer_mask_2", value);
+    }
+    /// <summary>Máscara · Camada 4. Máscara da camada por instância; remapeada em hierarquia/prefab</summary>
+    public ObjectReference LayerMask3
+    {
+        get => Component.GetReference("layer_mask_3");
+        set => Component.SetReference("layer_mask_3", value);
+    }
+    /// <summary>Controller. Recurso do projeto por slot</summary>
+    public AssetGuid GetController(uint slot = 0) => Component.GetResource("controller", slot);
+    public void SetController(AssetGuid value, uint slot = 0) => Component.SetResource("controller", value, slot);
     /// <summary>Em transição. Verdadeiro enquanto a camada base mistura dois estados</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public bool InTransition() => Component.Invoke("in_transition").AsBoolean();

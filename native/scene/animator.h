@@ -9,7 +9,7 @@
 // - Unity Blend Trees: https://docs.unity3d.com/6000.0/Documentation/Manual/class-BlendTree.html
 // - Unity Animation Layers / Avatar Mask: https://docs.unity3d.com/6000.0/Documentation/Manual/AnimationLayers.html
 // - Godot 4.5 AnimationNodeBlendSpace2D (triangulação): https://docs.godotengine.org/en/4.5/classes/class_animationnodeblendspace2d.html
-// Adaptações: o grafo mora no próprio componente (não num asset separado);
+// Adaptações: grafo local ou recurso .aeanimator com overrides por instância;
 // a máscara de camada é uma subárvore de objetos; só camadas de substituição
 // (sem aditivas); sem sub-máquinas de estado.
 #pragma once
@@ -49,6 +49,10 @@ struct AnimatorParameter {
 struct AnimatorMotion {
   resources::AssetGuid clip{};float threshold=0,x=0,y=0;
   bool operator==(const AnimatorMotion &) const=default;
+};
+struct AnimatorClipOverride {
+  resources::AssetGuid original{},replacement{};
+  bool operator==(const AnimatorClipOverride &) const=default;
 };
 struct AnimatorStateEvent {
   float time=0;  // tempo normalizado do estado, 0..1
@@ -93,6 +97,9 @@ public:
   std::vector<AnimatorParameter> parameters;
   std::vector<AnimatorLayer> layers;
   u64 nextId=1;
+  resources::AssetGuid controller{};
+  std::vector<AnimatorClipOverride> clipOverrides;
+  static constexpr usize MaximumOverrides=MaximumLayers*MaximumStates*MaximumMotions;
 
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
@@ -110,6 +117,12 @@ public:
   AnimatorLayer *layer(u64 id) {for(auto &l:layers) if(l.id==id) return &l;return nullptr;}
 
   bool valid() const override {
+    if(clipOverrides.size()>MaximumOverrides||(!controller.valid()&&!clipOverrides.empty())) return false;
+    for(usize k=0;k<clipOverrides.size();++k) {
+      const auto &o=clipOverrides[k];
+      if(!o.original.valid()||!o.replacement.valid()||o.original==o.replacement) return false;
+      for(usize j=0;j<k;++j) if(clipOverrides[j].original==o.original) return false;
+    }
     if(!std::isfinite(speed)||speed<-10||speed>10||target>std::numeric_limits<u32>::max()||motionSource>std::numeric_limits<u32>::max()||
        parameters.size()>MaximumParameters||layers.size()>MaximumLayers||!nextId) return false;
     std::vector<u64> ids;
@@ -168,9 +181,12 @@ public:
         for(const auto &c:t.conditions) o<<' '<<c.parameter<<' '<<static_cast<u32>(c.mode)<<' '<<c.threshold;
       }
     }
+    o<<' '<<guid(controller)<<' '<<clipOverrides.size();
+    for(const auto &entry:clipOverrides) o<<' '<<guid(entry.original)<<' '<<guid(entry.replacement);
   }
   bool read(std::istream &i,u32 version) override {
-    if(version<1||version>2) return false;
+    if(version<1||version>3) return false;
+    controller={};clipOverrides.clear();
     parameters.clear();layers.clear();
     usize count=0;
     motionSource=0;
@@ -208,11 +224,29 @@ public:
         for(auto &c:t.conditions) {u32 mode=0;if(!(i>>c.parameter>>mode>>c.threshold)) return false;c.mode=static_cast<AnimatorConditionMode>(mode);}
       }
     }
+    if(version>=3) {
+      std::string text;usize overrides=0;
+      if(!(i>>text>>overrides)||overrides>MaximumOverrides) return false;
+      if(text!="-"&&!resources::AssetGuid::parse(text,controller)) return false;
+      clipOverrides.resize(overrides);
+      for(auto &entry:clipOverrides) {
+        std::string original,replacement;
+        if(!(i>>original>>replacement)||!resources::AssetGuid::parse(original,entry.original)||
+           !resources::AssetGuid::parse(replacement,entry.replacement)) return false;
+      }
+    }
     return valid();
   }
 };
 inline const Animator &animator(const ComponentValue &v) {return static_cast<const Animator &>(v);}
 inline Animator &animator(ComponentValue &v) {return static_cast<Animator &>(v);}
+// Replacing authoring values must never replace the collection's component ID.
+inline void replaceAnimatorData(Animator &destination,const Animator &source) {
+  destination.enabled=source.enabled;destination.unscaledTime=source.unscaledTime;destination.target=source.target;
+  destination.motionSource=source.motionSource;destination.speed=source.speed;destination.nextId=source.nextId;
+  destination.parameters=source.parameters;destination.layers=source.layers;destination.controller=source.controller;
+  destination.clipOverrides=source.clipOverrides;
+}
 
 // Grafo novo: uma camada "Base" com um estado vazio "Parado" como padrão.
 inline void initializeAnimator(Animator &a) {
@@ -232,13 +266,23 @@ inline constexpr std::array<ComponentBoolean,2> animatorBooleans{{
   {"unscaled_time","Ignorar escala de tempo",[](const ComponentValue &v){return animator(v).unscaledTime;},[](ComponentValue &v,bool b){animator(v).unscaledTime=b;},
    {"Animator","","Anima em tempo real mesmo com o jogo pausado por escala (menus, cutscenes)"}},
 }};
-inline constexpr std::array<ComponentObjectReference,2> animatorReferences{{
+template<usize Index> constexpr ComponentObjectReference animatorMaskReference(const char *id,const char *name) {
+  return {id,name,"",ObjectReferenceScope::Any,"Toda a hierarquia",
+    [](const ComponentValue &v)->u64 {const auto &a=animator(v);return Index<a.layers.size()?a.layers[Index].mask:0;},
+    [](ComponentValue &v,u64 value){auto &a=animator(v);if(Index<a.layers.size()) a.layers[Index].mask=value;},
+    {"Máscaras","","Máscara da camada por instância; remapeada em hierarquia/prefab",
+      [](const ComponentValue &v){return Index<animator(v).layers.size();},
+      [](const ComponentValue &v){return Index<animator(v).layers.size();}}};
+}
+inline constexpr std::array<ComponentObjectReference,6> animatorReferences{{
   {"target","Raiz animada","",ObjectReferenceScope::Any,"Este objeto",
    [](const ComponentValue &v){return animator(v).target;},[](ComponentValue &v,u64 x){animator(v).target=x;},
    {"Animator","","Objeto cuja hierarquia os clipes animam (o modelo importado)"}},
   {"motion_source","Corpo / motor","",ObjectReferenceScope::Any,"Este objeto",
    [](const ComponentValue &v){return animator(v).motionSource;},[](ComponentValue &v,u64 x){animator(v).motionSource=x;},
    {"Animator","","Fonte dos parâmetros físicos; independe da malha e não move o corpo"}},
+  animatorMaskReference<0>("layer_mask_0","Máscara · Base"),animatorMaskReference<1>("layer_mask_1","Máscara · Camada 2"),
+  animatorMaskReference<2>("layer_mask_2","Máscara · Camada 3"),animatorMaskReference<3>("layer_mask_3","Máscara · Camada 4"),
 }};
 inline constexpr std::array<ComponentParameter,2> animatorStatePayload{{
   {"layer","Camada",ComponentValueKind::Integer},{"state","Estado",ComponentValueKind::Integer}}};
@@ -251,8 +295,17 @@ inline constexpr std::array<ComponentEvent,2> animatorEvents{{
 inline constexpr std::array<ComponentMethod,1> animatorMethods{{
   {"in_transition","Em transição","Verdadeiro enquanto a camada base mistura dois estados",{},ComponentValueKind::Boolean},
 }};
+inline constexpr std::array<ComponentResourceBinding,1> animatorResources{{
+  {"controller","Controller",resources::AssetType::AnimatorController,
+   [](const ComponentValue &){return 1u;},
+   [](const ComponentValue &v,u32){return animator(v).controller;},
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){
+     if(slot) return false;
+     auto &a=animator(v);if(a.controller!=value) a.clipOverrides.clear();a.controller=value;return true;
+   },{"Animator","","Grafo compartilhado; ausente interrompe a avaliação e expõe diagnóstico"}},
+}};
 inline const ComponentType Animator::descriptor{
-  "astra.animation.animator",2,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
-  animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},{},{},{},{},animatorMethods,animatorEvents};
+  "astra.animation.animator",3,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
+  animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},animatorResources,{},{},{},animatorMethods,animatorEvents};
 
 } // namespace ae::scene

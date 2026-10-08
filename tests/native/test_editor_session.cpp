@@ -41,6 +41,61 @@ using namespace ae::ui;
 
 namespace {UiPoint locateWidget(EditorSession &session,u32 widget);}
 
+AE_TEST(animator_controller_real_editor_resource_history_assignment_and_reopen) {
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("astra-controller-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directory(root);
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code ec;fs::remove_all(path,ec);}} cleanup{root};
+  EditorSession session;UiFont font;UiIconAtlas icons;
+  const auto read=[](const char *path){std::ifstream f(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(f),{});};
+  AE_EXPECT_TRUE(font.load(read("assets/astra-visual/ui/astra-ui-font.aeuf"))&&icons.load(read("assets/astra-visual/ui/astra-ui-icons.aeui")),"real font and atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,1100,600},{});
+  AE_EXPECT_TRUE(session.importMap({}, {}, false)&&session.setProjectDirectory(root.string().c_str()),"real project opened");
+  auto &doc=session.document();const auto first=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Porta");
+  auto values=*doc.find(first);auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));
+  const u64 instance=a.instanceId(),originalState=a.layers[0].states[0].id;
+  AE_EXPECT_TRUE(doc.applyEntityValues(first,values),"inline controller authored");
+  auto &view=const_cast<EditorScreenState&>(session.screen());view.animatorOpen=true;view.animatorEntity=first;view.animatorInstance=instance;view.animatorDrawer=3;session.update();
+  const auto tap=[&](u32 code){const auto point=locateWidget(session,animator_widget::id(code));AE_EXPECT_TRUE(point.x>=0,"real action reachable");
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();};
+  tap(animator_widget::ControllerCreate);
+  const auto &linked=scene::animator(*doc.find(first)->components.findInstance(instance));const auto guid=linked.controller;
+  AE_EXPECT_TRUE(guid.valid()&&linked.instanceId()==instance,"resource creation preserves component identity");
+  const auto *record=session.assets().find(guid);
+  AE_EXPECT_TRUE(record&&record->type==resources::AssetType::AnimatorController&&fs::exists(root/EditorImportTransaction::fromUtf8(record->path)),"real registered resource file");
+  const auto resourcePath=record->path;
+  AE_EXPECT_TRUE(locateWidget(session,animator_widget::id(animator_widget::AddState)).x<0,"instance cannot mutate shared topology accidentally");
+  tap(animator_widget::ControllerEdit);AE_EXPECT_TRUE(view.animatorEditShared,"explicit shared editing authority");
+  tap(animator_widget::AddState);
+  AE_EXPECT_TRUE(view.animatorResolved&&view.animatorResolved->layers[0].states.size()==2,"shared edit affects resolved graph");
+  const auto fresh=view.animatorResolved->layers[0].states.back().id;
+  AE_EXPECT_TRUE(fresh!=originalState&&session.history().undo(doc),"shared edit undo");session.update();
+  AE_EXPECT_TRUE(view.animatorResolved->layers[0].states.size()==1&&session.history().redo(doc),"undo restores disk graph, redo reapplies");session.update();
+  AE_EXPECT_TRUE(view.animatorResolved->layers[0].states.back().id==fresh,"redo keeps stable state identity");
+  const auto second=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Atuador");
+  values=*doc.find(second);auto &b=scene::animator(*values.components.add(scene::Animator::descriptor));const auto secondInstance=b.instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(second,values),"second generic instance");
+  view.animatorEntity=second;view.animatorInstance=secondInstance;view.animatorEditShared=false;view.animatorDrawer=3;session.update();
+  tap(animator_widget::ControllerChoose);tap(animator_widget::ControllerChoice);
+  AE_EXPECT_TRUE(view.animatorResolved&&view.animatorResolved->layers[0].states.size()==2&&scene::animator(*doc.find(second)->components.findInstance(secondInstance)).controller==guid,"second owner consumes same resource");
+  const auto archive=serializeEditorDocument(doc,0);const auto registry=session.serializeAssets();
+  EditorSession reopened;reopened.initialize(&font,&icons);reopened.setSurface({0,0,1100,600},{});reopened.importMap({}, {}, false);
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(root.string().c_str())&&reopened.loadAssets(registry)&&deserializeEditorDocument(archive,0,reopened.document()),"scene and resource reopen");
+  auto &reopenView=const_cast<EditorScreenState&>(reopened.screen());reopenView.animatorOpen=true;reopenView.animatorEntity=second;reopenView.animatorInstance=secondInstance;reopenView.animatorDrawer=3;reopened.update();
+  AE_EXPECT_TRUE(reopenView.animatorResolved&&reopenView.animatorResolved->layers[0].states.back().id==fresh,"source identities survive cold reopen");
+  AE_EXPECT_TRUE(session.startPlay(),"shared graph enters Play");std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(session.extractPlayMap(draws)&&session.playScene().animatorGraphs().configuration(session.playScene().world(),second,secondInstance)->layers[0].states.size()==2,"actual scheduler consumes shared definition");
+  view.workspace=EditorWorkspace::Scene;session.update();
+  view.animatorOpen=true;view.animatorEntity=second;view.animatorInstance=secondInstance;view.animatorDrawer=3;session.update();tap(animator_widget::ControllerDetach);
+  AE_EXPECT_TRUE(!scene::animator(*doc.find(second)->components.findInstance(secondInstance)).controller.valid()&&scene::animator(*doc.find(second)->components.findInstance(secondInstance)).layers[0].states.size()==2,"detach bakes resolved graph with identity intact");
+  AE_EXPECT_TRUE(session.history().undo(doc)&&scene::animator(*doc.find(second)->components.findInstance(secondInstance)).controller==guid,"detach reversible");
+  const auto file=root/EditorImportTransaction::fromUtf8(resourcePath);std::ifstream stream(file);const auto originalText=std::string(std::istreambuf_iterator<char>(stream),{});stream.close();
+  std::ofstream(file,std::ios::app)<<" external";
+  view.animatorEntity=first;view.animatorInstance=instance;view.animatorEditShared=true;view.animatorDrawer=3;session.update();tap(animator_widget::AddState);
+  AE_EXPECT_TRUE(view.animatorResolved->layers[0].states.size()==2,"external conflicting file not overwritten");
+  std::ofstream(file)<<originalText;
+}
+
 AE_TEST(animator_workspace_general_graph_selection_duplicate_history_and_scroll) {
   EditorSession session;UiFont font;UiIconAtlas icons;
   const auto read=[](const char *path){std::ifstream f(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(f),{});};

@@ -1,0 +1,49 @@
+{
+  "reviewed_frames": 537,
+  "skipped_frames": 0,
+  "sheets_reviewed": 18,
+  "all_sheet_frames_visually_reviewed": true,
+  "additional_full_frames": [
+    56,
+    296,
+    536
+  ],
+  "intervals": [
+    {
+      "frames": [
+        0,
+        24
+      ],
+      "observed": "authoring viewport"
+    },
+    {
+      "frames": [
+        25,
+        55
+      ],
+      "observed": "Play: both closed"
+    },
+    {
+      "frames": [
+        56,
+        115
+      ],
+      "observed": "local override: different poses"
+    },
+    {
+      "frames": [
+        116,
+        295
+      ],
+      "observed": "independent A closed / B open"
+    },
+    {
+      "frames": [
+        296,
+        536
+      ],
+      "observed": "reassigned shared controller, corresponding poses"
+    }
+  ],
+  "limits": "Pose clips and parameter steps; not continuous locomotion/FPS/foot sliding. ROI crops some B after reassignment; full frames checked. Video precedes final UI label-only correction; final APK runtime probe repeated."
+}

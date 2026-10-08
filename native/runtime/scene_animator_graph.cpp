@@ -124,16 +124,25 @@ const SceneAnimatorGraphs::Instance *SceneAnimatorGraphs::find(ObjectId owner,u6
   for(const auto &i:instances_) if(i.owner==owner&&i.instance==instance) return &i;
   return nullptr;
 }
+const scene::Animator *SceneAnimatorGraphs::configuration(const GameWorld &world,ObjectId owner,u64 instance) const {
+  const auto *authored=animatorOf(world,owner,instance);if(!authored) return nullptr;
+  if(!authored->controller.valid()) return authored;
+  const auto *runtime=find(owner,instance);
+  return runtime&&runtime->controllerAvailable&&runtime->controller==authored->controller?&runtime->resolved:nullptr;
+}
 
 void SceneAnimatorGraphs::sync(Instance &runtime,const scene::Animator &authored) {
   // Parâmetros por identidade: os novos entram com o padrão, os removidos saem.
-  std::vector<u64> ids;std::vector<float> values;
+  std::vector<u64> ids;std::vector<float> values;std::vector<scene::AnimatorParameterType> types;
   for(const auto &p:authored.parameters) {
     ids.push_back(p.id);
     const auto f=std::find(runtime.parameterIds.begin(),runtime.parameterIds.end(),p.id);
-    values.push_back(f!=runtime.parameterIds.end()?runtime.values[f-runtime.parameterIds.begin()]:p.type==scene::AnimatorParameterType::Trigger?0:p.value);
+    const auto index=static_cast<usize>(f-runtime.parameterIds.begin());types.push_back(p.type);
+    values.push_back(f!=runtime.parameterIds.end()&&index<runtime.parameterTypes.size()&&runtime.parameterTypes[index]==p.type?
+      runtime.values[index]:p.type==scene::AnimatorParameterType::Trigger?0:p.value);
   }
   runtime.parameterIds=std::move(ids);runtime.values=std::move(values);
+  runtime.parameterTypes=std::move(types);
   std::vector<LayerState> layers;
   for(const auto &l:authored.layers) {
     const auto f=std::find_if(runtime.layers.begin(),runtime.layers.end(),[&](const LayerState &s){return s.layer==l.id;});
@@ -147,11 +156,31 @@ void SceneAnimatorGraphs::sync(Instance &runtime,const scene::Animator &authored
 }
 
 SceneAnimatorGraphs::Instance *SceneAnimatorGraphs::ensure(GameWorld &world,ObjectId owner,u64 instance,const scene::Animator **component) {
-  const auto *a=animatorOf(world,owner,instance);if(component) *component=a;
+  const auto *a=animatorOf(world,owner,instance);if(component) *component=nullptr;
   if(!a) return nullptr;
-  for(auto &i:instances_) if(i.owner==owner&&i.instance==instance) {sync(i,*a);return &i;}
-  Instance created;created.owner=owner;created.instance=instance;
-  instances_.push_back(std::move(created));sync(instances_.back(),*a);return &instances_.back();
+  Instance *runtime=nullptr;
+  for(auto &i:instances_) if(i.owner==owner&&i.instance==instance) {runtime=&i;break;}
+  if(!runtime) {Instance created;created.owner=owner;created.instance=instance;instances_.push_back(std::move(created));runtime=&instances_.back();}
+  if(!a->controller.valid()) {
+    if(runtime->controller.valid()) {runtime->parameterIds.clear();runtime->layers.clear();}
+    runtime->controller={};runtime->controllerRevision=0;runtime->controllerAvailable=true;runtime->controllerDiagnostic.clear();
+    sync(*runtime,*a);if(component) *component=a;return runtime;
+  }
+  const auto *asset=resources::findAnimatorController(controllers_,a->controller);
+  if(!asset) {runtime->controllerAvailable=false;runtime->controllerDiagnostic="Controller ausente ou inválido";return runtime;}
+  bool changed=runtime->controller!=a->controller||runtime->controllerRevision!=asset->revision||!runtime->controllerAvailable;
+  const auto &cached=runtime->resolved;
+  changed=changed||cached.target!=a->target||cached.motionSource!=a->motionSource||cached.enabled!=a->enabled||
+    cached.speed!=a->speed||cached.unscaledTime!=a->unscaledTime||cached.clipOverrides!=a->clipOverrides;
+  for(const auto &layer:cached.layers) {const auto *local=a->layer(layer.id);if(layer.mask!=(local?local->mask:0)) changed=true;}
+  if(changed) {
+    if(runtime->controller!=a->controller) {runtime->parameterIds.clear();runtime->layers.clear();}
+    runtime->controllerAvailable=resources::resolveAnimatorController(*a,controllers_,runtime->resolved,runtime->controllerDiagnostic);
+    runtime->controller=a->controller;runtime->controllerRevision=asset->revision;
+    if(runtime->controllerAvailable) sync(*runtime,runtime->resolved);
+  }
+  if(runtime->controllerAvailable&&component) *component=&runtime->resolved;
+  return runtime;
 }
 
 void SceneAnimatorGraphs::emit(GameWorld &world,const Instance &runtime,std::string_view event,std::initializer_list<V> values) {
@@ -171,7 +200,7 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
   for(const auto &[owner,instance]:live) {
     if(!world.activeInHierarchy(world.handle(owner))) continue;
     const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
-    if(!runtime||!a->enabled) continue;
+    if(!runtime||!a||!a->enabled) continue;
     const ObjectId motionOwner=a->motionSource?static_cast<ObjectId>(a->motionSource):owner;
     bool bound=false;for(const auto &p:a->parameters) bound=bound||p.source!=scene::AnimatorParameterSource::Manual;
     if(bound) {
@@ -284,7 +313,8 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
         const float fraction=s.loop?normalized-std::floor(normalized):std::clamp(normalized,0.f,1.f);
         for(const auto &w:chosenWeights) {
           const auto &m=s.motions[w.motion];const float d=clipDuration(library,m.clip);
-          if(!m.clip.valid()||d<=0) continue;
+          if(!m.clip.valid()) continue;
+          if(d<=0) {runtime->controllerDiagnostic="Clipe ausente ou sem duração";continue;}
           samples.push_back({root,m.clip,fraction*d,weight*w.weight*layerWeight,li,mask});
         }
       };
@@ -299,6 +329,7 @@ SceneAnimatorGraphs::Status SceneAnimatorGraphs::parameter(GameWorld &world,Obje
                                                            ParameterOperation operation,float value,float &result) {
   result=0;const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
   if(!runtime) return Status::UnknownComponent;
+  if(!a) return Status::MissingController;
   const auto *p=a->parameter(name);if(!p) return Status::UnknownParameter;
   if(operation!=ParameterOperation::Get&&p->source!=scene::AnimatorParameterSource::Manual) return Status::BoundParameter;
   usize k=0;while(k<runtime->parameterIds.size()&&runtime->parameterIds[k]!=p->id) ++k;
@@ -320,6 +351,7 @@ SceneAnimatorGraphs::Status SceneAnimatorGraphs::parameter(GameWorld &world,Obje
 SceneAnimatorGraphs::Status SceneAnimatorGraphs::play(GameWorld &world,ObjectId owner,u64 instance,u32 layerIndex,std::string_view stateName,float crossFade) {
   const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
   if(!runtime) return Status::UnknownComponent;
+  if(!a) return Status::MissingController;
   if(layerIndex>=a->layers.size()) return Status::UnknownLayer;
   if(!std::isfinite(crossFade)||crossFade<0||crossFade>60) return Status::InvalidArgument;
   const auto &layer=a->layers[layerIndex];auto &ls=runtime->layers[layerIndex];
@@ -332,7 +364,8 @@ SceneAnimatorGraphs::Status SceneAnimatorGraphs::play(GameWorld &world,ObjectId 
 }
 
 SceneAnimatorGraphs::Status SceneAnimatorGraphs::info(const GameWorld &world,ObjectId owner,u64 instance,u32 layerIndex,Info &out) const {
-  out={};const auto *a=animatorOf(world,owner,instance);const auto *runtime=find(owner,instance);
+  out={};const auto *a=configuration(world,owner,instance);const auto *runtime=find(owner,instance);
+  if(runtime&&!runtime->controllerAvailable) return Status::MissingController;
   if(!a||!runtime) return Status::UnknownComponent;
   if(layerIndex>=a->layers.size()||layerIndex>=runtime->layers.size()) return Status::UnknownLayer;
   const auto &layer=a->layers[layerIndex];const auto &ls=runtime->layers[layerIndex];

@@ -44,7 +44,27 @@ const scene::Animator *EditorSession::openAnimator() const {
   const runtime::SceneGraph &graph=playScene_.active()&&(isPlaying()||playMirrorOpen_)?playScene_.document():static_cast<const runtime::SceneGraph&>(document_);
   const auto *entity=graph.find(state_.animatorEntity);
   const auto *c=entity?entity->components.findInstance(state_.animatorInstance):nullptr;
-  return c&&&c->type()==&scene::Animator::descriptor?&scene::animator(*c):nullptr;
+  if(!c||&c->type()!=&scene::Animator::descriptor) return nullptr;
+  const auto &instance=scene::animator(*c);
+  if(!instance.controller.valid()) return &instance;
+  if(playScene_.active()&&(isPlaying()||playMirrorOpen_)) {
+    const auto *resolved=playScene_.animatorGraphs().configuration(playScene_.world(),entity->id,c->instanceId());
+    return resolved?resolved:&instance; // Inspection only; runtime never evaluates this fallback.
+  }
+  if(animatorResourceDrag_) return &*animatorResourceDrag_;
+  std::string diagnostic;
+  if(!resources::resolveAnimatorController(instance,animatorControllers_,animatorResolved_,diagnostic)) {
+    // Keep the unavailable instance inspectable for replace/reload/detach
+    // actions; this inline graph is never used as a runtime fallback.
+    return &instance;
+  }
+  if(state_.animatorEditShared) {
+    const auto *asset=resources::findAnimatorController(animatorControllers_,instance.controller);
+    const auto controls=animatorResolved_;animatorResolved_=asset->graph;
+    animatorResolved_.controller=instance.controller;animatorResolved_.target=controls.target;animatorResolved_.motionSource=controls.motionSource;
+    for(auto &layer:animatorResolved_.layers) if(const auto *local=controls.layer(layer.id)) layer.mask=local->mask;
+  }
+  return &animatorResolved_;
 }
 
 void EditorSession::openAnimatorEditor() {
@@ -57,6 +77,7 @@ void EditorSession::openAnimatorEditor() {
   state_.animatorLayer=0;state_.animatorState=state_.animatorTransition=state_.animatorParameter=0;
   state_.animatorConnecting=false;state_.animatorConnectFrom=0;state_.animatorPicker=0;
   state_.animatorDrawer=0;state_.animatorDetailsScroll=state_.animatorParamsScroll=0;
+  state_.animatorEditShared=false;animatorResourceDrag_.reset();
   animatorPointer_=animatorSecondPointer_=animatorScrollSheet_=0;animatorDragOriginal_.reset();
   frameAnimator();
 }
@@ -72,7 +93,8 @@ void EditorSession::frameAnimator() {
     state_.animatorZoom=std::clamp(std::min((canvas.width-80)/(maxX-minX),(canvas.height-80)/(maxY-minY)),.45f,1.4f);
 }
 
-bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &change) {
+bool EditorSession::editAnimatorInstance(const std::function<bool(scene::Animator &)> &change) {
+  if(animatorResourceDrag_) {state_.status="Conclua o arrasto antes de editar";return false;}
   if(isPlaying()||playMirrorOpen_||history_.isOpen()) {state_.status="Pare o Play para editar o grafo";return false;}
   const auto *entity=document_.find(state_.animatorEntity);if(!entity) return false;
   auto values=*entity;
@@ -82,6 +104,19 @@ bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &c
   if(!change(a)) return false;
   if(!a.valid()) {state_.status="Mudança recusada: o grafo ficaria inválido";return false;}
   return history_.applyValues(document_,entity->id,values);
+}
+bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &change) {
+  if(animatorResourceDrag_) {state_.status="Conclua o arrasto antes de editar";return false;}
+  const auto *current=openAnimator();if(!current) return false;
+  if(!current->controller.valid()) return editAnimatorInstance(change);
+  if(isPlaying()||playMirrorOpen_||history_.isOpen()||!state_.animatorEditShared) {
+    state_.status="Instância: edite overrides ou abra o recurso compartilhado";return false;
+  }
+  const auto *asset=resources::findAnimatorController(animatorControllers_,current->controller);if(!asset) return false;
+  auto candidate=*asset;if(!change(candidate.graph)) return false;
+  candidate.graph=resources::AnimatorControllerAsset::portableGraph(candidate.graph);++candidate.revision;
+  std::string diagnostic;const bool ok=commitAnimatorController(candidate,diagnostic);
+  state_.status=ok?"Recurso atualizado · todas as instâncias":diagnostic;return ok;
 }
 
 void EditorSession::beginAnimatorNumber(u32 code,double current) {
@@ -169,7 +204,8 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
   if(!a||a->layers.empty()) {state_.animatorOpen=false;return false;}
   state_.animatorLayer=std::min<u32>(state_.animatorLayer,static_cast<u32>(a->layers.size())-1);
   const u32 layerIndex=state_.animatorLayer;const auto &layer=a->layers[layerIndex];
-  const bool readOnly=isPlaying();
+  const bool playing=isPlaying()||playMirrorOpen_;
+  const bool readOnly=playing||(a->controller.valid()&&!state_.animatorEditShared);
   const u32 key=routing.widgetId;
   const view::View v{layout_.animatorCanvas,state_.animatorPan[0],state_.animatorPan[1],state_.animatorZoom};
 
@@ -205,10 +241,12 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
   }
   if(key==w::id(w::Canvas)) {
     if(event.phase==ui::UiPointerPhase::Cancel) {
+      animatorResourceDrag_.reset();
       if(animatorDragOriginal_) {document_.applyEntityValues(state_.animatorEntity,*animatorDragOriginal_);animatorDragOriginal_.reset();}
       animatorPointer_=animatorSecondPointer_=animatorScrollSheet_=0;animatorDragged_=true;return true;
     }
     if(event.phase==ui::UiPointerPhase::Down&&animatorPointer_&&animatorPointer_!=event.pointerId) {
+      animatorResourceDrag_.reset();
       if(animatorDragOriginal_) {document_.applyEntityValues(state_.animatorEntity,*animatorDragOriginal_);animatorDragOriginal_.reset();}
       animatorSecondPointer_=event.pointerId;animatorSecondaryPosition_=event.position;
       animatorPinchDistance_=std::max(1.f,std::hypot(animatorPrimaryPosition_.x-event.position.x,animatorPrimaryPosition_.y-event.position.y));
@@ -236,6 +274,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       animatorPressNode_=view::hitNode(v,layer,event.position);
       animatorPressTransition_=animatorPressNode_?0:view::hitTransition(v,layer,event.position);
       animatorDragOriginal_.reset();
+      animatorResourceDrag_.reset();
       if(const auto *s=layer.state(animatorPressNode_)) {animatorNodeStart_[0]=s->x;animatorNodeStart_[1]=s->y;}
       return true;
     }
@@ -245,6 +284,11 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       animatorDragged_=true;
       const float dx=(event.position.x-animatorPress_.x)/state_.animatorZoom,dy=(event.position.y-animatorPress_.y)/state_.animatorZoom;
       if(layer.state(animatorPressNode_)&&!readOnly&&!state_.animatorConnecting&&!history_.isOpen()) {
+        if(a->controller.valid()) {
+          if(!animatorResourceDrag_) animatorResourceDrag_=*a;
+          if(auto *s=animatorResourceDrag_->layers[layerIndex].state(animatorPressNode_)) {s->x=animatorNodeStart_[0]+dx;s->y=animatorNodeStart_[1]+dy;}
+          return true;
+        }
         // Arrasto ao vivo direto no documento; o passo do histórico sai no fim.
         auto *entity=document_.find(state_.animatorEntity);if(!entity) return true;
         if(!animatorDragOriginal_) animatorDragOriginal_=*entity;
@@ -259,6 +303,13 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
     }
     if(event.phase==ui::UiPointerPhase::Up) {
       animatorPointer_=0;
+      if(animatorResourceDrag_) {
+        const auto *moved=animatorResourceDrag_->layers[layerIndex].state(animatorPressNode_);
+        const float x=moved?std::round(moved->x/16)*16:0,y=moved?std::round(moved->y/16)*16:0;
+        animatorResourceDrag_.reset();
+        editAnimator([&](scene::Animator &edit){if(auto *s=edit.layers[layerIndex].state(animatorPressNode_)) {s->x=x;s->y=y;return true;}return false;});
+        return true;
+      }
       if(animatorDragOriginal_) {
         // Fim do arrasto: volta ao original e grava a posição final (na grade de 16) num passo só.
         const auto *entity=document_.find(state_.animatorEntity);
@@ -309,6 +360,31 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
   if(code==w::ClipClose||code==w::MaskClose) {state_.animatorPicker=0;return true;}
   if(code==w::PickerPrevious) {if(state_.animatorPickerPage) --state_.animatorPickerPage;return true;}
   if(code==w::PickerNext) {++state_.animatorPickerPage;return true;}
+  if(code>=w::ControllerChoice&&code<w::ControllerChoice+0xF00&&state_.animatorPicker==0x50000u) {
+    const u32 index=code-w::ControllerChoice;state_.animatorPicker=0;
+    if(index<animatorControllers_.size()) assignAnimatorController(animatorControllers_[index].guid);
+    return true;
+  }
+  if(code>=w::ClipChoice&&code<w::ClipChoice+0xF00&&(state_.animatorPicker&0xF0000u)==0x40000u) {
+    const auto *asset=resources::findAnimatorController(animatorControllers_,a->controller);
+    const auto originals=asset?resources::animatorControllerClips(asset->graph):std::vector<resources::AssetGuid>{};
+    const u32 index=state_.animatorPicker&0xFFFFu;state_.animatorPicker=0;
+    const auto clips=mapScene_.clipCatalog();const u32 choice=code-w::ClipChoice;
+    if(index<originals.size()&&choice<clips.size()) overrideAnimatorClip(originals[index],clips[choice].clip);
+    return true;
+  }
+  if(code>=w::OverrideClip&&code<w::OverrideClip+0x400&&!isPlaying()&&!playMirrorOpen_) {
+    state_.animatorPicker=0x40000u+(code-w::OverrideClip);state_.animatorPickerPage=0;return true;
+  }
+  if(code>=w::OverrideReset&&code<w::OverrideReset+0x400&&!isPlaying()&&!playMirrorOpen_) {
+    const auto *asset=resources::findAnimatorController(animatorControllers_,a->controller);
+    const auto originals=asset?resources::animatorControllerClips(asset->graph):std::vector<resources::AssetGuid>{};
+    const u32 index=code-w::OverrideReset;if(index<originals.size()) overrideAnimatorClip(originals[index],{});return true;
+  }
+  if(code>=w::OverrideOrphanReset&&code<w::OverrideOrphanReset+scene::Animator::MaximumOverrides&&!playing) {
+    const u32 index=code-w::OverrideOrphanReset;
+    editAnimatorInstance([&](scene::Animator &edit){if(index>=edit.clipOverrides.size()) return false;edit.clipOverrides.erase(edit.clipOverrides.begin()+index);return true;});return true;
+  }
   if(code>=w::MaskChoice&&code<w::MaskChoice+5&&state_.animatorPicker==0x30000u) {
     const auto source=static_cast<scene::AnimatorParameterSource>(code-w::MaskChoice);state_.animatorPicker=0;
     editAnimator([&](scene::Animator &edit){for(auto &p:edit.parameters) if(p.id==state_.animatorParameter&&scene::animatorSourceCompatible(p.type,source)) {p.source=source;return true;}return false;});return true;
@@ -333,29 +409,50 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       document_.collectSubtree(a->target?static_cast<EditorEntityId>(a->target):entity->id,subtree);
       const u32 i=code-w::MaskChoice-1;if(i<subtree.size()) mask=subtree[i];
     }
-    editAnimator([&](scene::Animator &edit){edit.layers[layerIndex].mask=mask;return true;});
+    editAnimatorInstance([&](scene::Animator &edit){
+      const auto *resolved=openAnimator();if(!resolved||layerIndex>=resolved->layers.size()) return false;
+      const auto layerId=resolved->layers[layerIndex].id;
+      if(edit.controller.valid()) {
+        const auto *asset=resources::findAnimatorController(animatorControllers_,edit.controller);if(!asset) return false;
+        const auto masks=edit.layers;edit.parameters=asset->graph.parameters;edit.layers=asset->graph.layers;edit.nextId=asset->graph.nextId;
+        for(auto &layer:edit.layers) if(const auto found=std::find_if(masks.begin(),masks.end(),[&](const auto &local){return local.id==layer.id;});found!=masks.end()) layer.mask=found->mask;
+      }
+      auto *local=edit.layer(layerId);if(!local) return false;
+      local->mask=mask;return true;});
     return true;
   }
   if(code>=w::MaskChoice&&code<w::MaskChoice+0xF00&&state_.animatorPicker==0x20000u) {
     std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
     const u32 i=code-w::MaskChoice;state_.animatorPicker=0;
-    if(i==0) editAnimator([](scene::Animator &edit){edit.motionSource=0;return true;});
-    else if(i-1<ids.size()) editAnimator([&](scene::Animator &edit){edit.motionSource=ids[i-1];return true;});
+    if(i==0) editAnimatorInstance([](scene::Animator &edit){edit.motionSource=0;return true;});
+    else if(i-1<ids.size()) editAnimatorInstance([&](scene::Animator &edit){edit.motionSource=ids[i-1];return true;});
     return true;
   }
 
   // ---- Barra superior ----------------------------------------------------
   switch(code) {
+    case w::Controller: state_.animatorDrawer=state_.animatorDrawer==3?0:3;state_.animatorDetailsScroll=0;return true;
+    case w::ControllerCreate: createAnimatorController();return true;
+    case w::ControllerChoose: if(!isPlaying()&&!playMirrorOpen_) {state_.animatorPicker=0x50000u;state_.animatorPickerPage=0;}return true;
+    case w::ControllerDetach: detachAnimatorController();return true;
+    case w::ControllerEdit:
+      if(!isPlaying()&&!playMirrorOpen_&&resources::findAnimatorController(animatorControllers_,a->controller)) {
+        animatorResourceDrag_.reset();
+        state_.animatorEditShared=!state_.animatorEditShared;state_.animatorConnecting=false;state_.animatorState=state_.animatorParameter=state_.animatorTransition=0;
+        state_.status=state_.animatorEditShared?"Recurso: alterações afetam todas as instâncias":"Instância: overrides locais";
+      }return true;
+    case w::ControllerReload: if(!isPlaying()&&!playMirrorOpen_) {loadAnimatorControllers();state_.status="Controllers recarregados; identidades e overrides preservados";}return true;
+    case w::ControllerReset: editAnimatorInstance([](scene::Animator &edit){edit.clipOverrides.clear();return true;});return true;
     case w::ParameterTrigger:
-      if(const auto *p=a->parameter(state_.animatorParameter);p&&readOnly&&p->type==T::Trigger) {
+      if(const auto *p=a->parameter(state_.animatorParameter);p&&playing&&p->type==T::Trigger) {
         float result=0;playScene_.animatorGraphs().parameter(playScene_.world(),state_.animatorEntity,state_.animatorInstance,p->name,
           runtime::SceneAnimatorGraphs::ParameterOperation::SetTrigger,1,result);
       }return true;
     case w::Parameters: state_.animatorDrawer=state_.animatorDrawer==1?0:1;return true;
     case w::Details: state_.animatorDrawer=state_.animatorDrawer==2?0:2;return true;
-    case w::Undo: if(!readOnly) {history_.undo(document_);state_.animatorDetailsScroll=0;}return true;
-    case w::Redo: if(!readOnly) {history_.redo(document_);state_.animatorDetailsScroll=0;}return true;
-    case w::MotionSource: if(!readOnly) {state_.animatorPicker=0x20000u;state_.animatorPickerPage=0;}return true;
+    case w::Undo: if(!isPlaying()&&!playMirrorOpen_) {history_.undo(document_);state_.animatorDetailsScroll=0;}return true;
+    case w::Redo: if(!isPlaying()&&!playMirrorOpen_) {history_.redo(document_);state_.animatorDetailsScroll=0;}return true;
+    case w::MotionSource: if(!isPlaying()&&!playMirrorOpen_) {state_.animatorPicker=0x20000u;state_.animatorPickerPage=0;}return true;
     case w::ParameterSource: if(!readOnly) {state_.animatorPicker=0x30000u;state_.animatorPickerPage=0;}return true;
     case w::ParameterResponse: case w::ParameterScale:
       if(const auto *p=a->parameter(state_.animatorParameter);p&&!readOnly) beginAnimatorNumber(code,code==w::ParameterResponse?p->response:p->scale);
@@ -379,6 +476,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
         return false;
       });return true;
     case w::Close:
+      animatorResourceDrag_.reset();
       if(animatorDragOriginal_) {document_.applyEntityValues(state_.animatorEntity,*animatorDragOriginal_);animatorDragOriginal_.reset();}
       animatorPointer_=animatorSecondPointer_=animatorScrollSheet_=0;
       state_.animatorOpen=false;state_.animatorConnecting=false;state_.animatorPicker=0;return true;
@@ -405,7 +503,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       return true;
     case w::LayerName: if(!readOnly) beginAnimatorName(code,layer.name);return true;
     case w::LayerWeight: if(!readOnly&&layerIndex>0) beginAnimatorNumber(code,layer.weight);return true;
-    case w::LayerMask: if(!readOnly) {state_.animatorPicker=0x10000u;state_.animatorPickerPage=0;}return true;
+    case w::LayerMask: if(!isPlaying()&&!playMirrorOpen_) {state_.animatorPicker=0x10000u;state_.animatorPickerPage=0;}return true;
     case w::AddState: {
       u64 created=0;
       editAnimator([&](scene::Animator &edit){

@@ -394,6 +394,7 @@ void ScriptBridge::installExtensions() {
     switch(status){
       case SceneAnimatorGraphs::Status::Ok: return WorldStatus::Ok;
       case SceneAnimatorGraphs::Status::UnknownComponent: return WorldStatus::ComponentUnavailable;
+      case SceneAnimatorGraphs::Status::MissingController: return WorldStatus::UnknownResource;
       case SceneAnimatorGraphs::Status::BoundParameter: return WorldStatus::Rejected;
       case SceneAnimatorGraphs::Status::UnknownParameter: case SceneAnimatorGraphs::Status::UnknownState: case SceneAnimatorGraphs::Status::UnknownLayer: return WorldStatus::UnknownResource;
       default: return WorldStatus::InvalidArgument;
@@ -427,7 +428,7 @@ void ScriptBridge::installExtensions() {
   animatorOperations_.stateName=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 layer,u64 state,u8 *buffer,int capacity)->int {
     auto &s=*static_cast<ScriptBridge*>(context);ComponentHandle handle;
     if(!handleOf(s,id,worldId,generation,instance,handle))return -1;
-    const auto *a=static_cast<const scene::Animator*>(s.world_->readComponent(handle));
+    const auto *a=s.animators_->configuration(*s.world_,handle.object.id,instance);
     if(!a||layer>=a->layers.size()){s.lastStatus_=WorldStatus::UnknownResource;return -1;}
     const auto *found=a->layers[layer].state(state);
     if(!found){s.lastStatus_=WorldStatus::UnknownResource;return -1;}

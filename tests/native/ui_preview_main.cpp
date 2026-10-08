@@ -7,6 +7,7 @@
 #include "scene/audio.h"
 #include "scene/audio_mixer.h"
 #include "scene/animator.h"
+#include "core/sha256.h"
 #include "resources/gltf_import.h"
 #include "scene/collider.h"
 #include "scene/physics_body.h"
@@ -340,7 +341,7 @@ int writeVirtualCameraProject(const char *directory) {
 // Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
 // importado com Animator no lugar da Animação legada, mistura 1D por
 // Velocidade, gatilho de Qualquer estado e retorno por tempo de saída.
-int writeAnimatorProject(const char *directory,bool general=false) {
+int writeAnimatorProject(const char *directory,bool general=false,bool shared=false) {
   namespace fs=std::filesystem;
   const auto fail=[](const std::string &message){std::fprintf(stderr,"Animator export refused: %s\n",message.c_str());return 2;};
   if(!directory||!directory[0]) return fail("provide a new empty output directory");
@@ -349,7 +350,7 @@ int writeAnimatorProject(const char *directory,bool general=false) {
   std::vector<u8> probe,fox,license;
   const char *modelPath=general?"Fontes/Mechanism.glb":"Fontes/Fox.glb";
   const char *licensePath=general?"Fontes/Mechanism.LICENSE.txt":"Fontes/Fox.LICENSE.txt";
-  if(!readAsset(general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
+  if(!readAsset(shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
      !readAsset(general?"tests/fixtures/animator/Mechanism.LICENSE.txt":"tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
   for(const auto *folder:{"Scripts","scenes",".astra","Fontes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
   if(!editor::EditorImportTransaction::write(root/"Scripts/AnimatorProbe.cs",probe)||
@@ -403,7 +404,23 @@ int writeAnimatorProject(const char *directory,bool general=false) {
     a.parameters.push_back({a.allocateId(),"Teste manual",scene::AnimatorParameterType::Bool,0});
   }
   if(!a.valid()) return fail("animator graph invalid");
+  if(shared) {
+    editor::assignEntityName(values,"Mecanismo A");values.transform.position[0]=-70;
+    a.parameters[0].name="Abertura";a.parameters[0].source=scene::AnimatorParameterSource::Manual;a.parameters[0].response=0;a.motionSource=0;
+    resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("shared-mechanism-acceptance-20261008");asset.name="Mecanismos";
+    asset.graph=resources::AnimatorControllerAsset::portableGraph(a);a.controller=asset.guid;
+    const auto text=asset.serialize();resources::AssetRecord record;record.guid=asset.guid;record.type=resources::AssetType::AnimatorController;
+    record.path="Animação/Mecanismos.aeanimator";record.dependencies={report.source};record.contentHash=Sha256::hex({reinterpret_cast<const u8*>(text.data()),text.size()});
+    fs::create_directories(root/editor::EditorImportTransaction::fromUtf8("Animação"),ec);auto registry=session.assets();
+    if(!asset.valid()||!registry.add(record)||!editor::EditorImportTransaction::writeText(root/editor::EditorImportTransaction::fromUtf8(record.path),text)||!session.loadAssets(registry.serialize())) return fail("shared resource");
+  }
   if(!document.applyEntityValues(owner,values)) return fail("animator graph rejected by document");
+  if(shared) {
+    runtime::ObjectCloneMap mapping;const auto second=document.cloneSubtree(owner,document.root(),mapping);if(!second) return fail("clone mechanism");
+    auto copy=*document.find(second);editor::assignEntityName(copy,"Mecanismo B");copy.transform.position[0]=70;
+    scene::animator(*copy.components.edit(scene::Animator::descriptor)).clipOverrides={{clips[1].asset,clips[2].asset}};
+    if(!document.applyEntityValues(second,copy)) return fail("instance override");
+  }
   const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");
   {auto v=*document.find(cameraId);v.transform.position[1]=60;v.transform.position[2]=-260;v.components.add(scene::Camera::descriptor);document.applyEntityValues(cameraId,v);}
   const auto probeId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Sonda");
@@ -412,7 +429,7 @@ int writeAnimatorProject(const char *directory,bool general=false) {
   if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
   if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
   std::ostringstream descriptor;
-  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Animator project written: %s\n",root.generic_string().c_str());
@@ -923,6 +940,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-virtual-camera-project")return writeVirtualCameraProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-animator-general-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true);
+  if(argc>1&&std::string_view(argv[1])=="write-animator-controller-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-project")return writeAnimatorProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);

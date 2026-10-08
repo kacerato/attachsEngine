@@ -21,6 +21,7 @@
 #pragma once
 
 #include "resources/physics_material.h"
+#include "resources/animator_controller.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
 #include "renderer/scene_statistics.h"
@@ -643,6 +644,10 @@ enum : u32 {
   Parameters=0xF,Details=0x10,Duplicate=0x11,Undo=0x12,Redo=0x13,DetailsScroll=0x14,ParamsScroll=0x15,
   ParameterSource=0x16,ParameterResponse=0x17,ParameterScale=0x18,MotionSource=0x19,
   ParameterTrigger=0x20,
+  Controller=0x21,ControllerCreate=0x22,ControllerChoose=0x23,ControllerDetach=0x24,
+  ControllerEdit=0x25,ControllerReload=0x26,ControllerReset=0x27,
+  OverrideClip=0x7100,OverrideReset=0x7500,ControllerChoice=0x7900,
+  OverrideOrphanReset=0x9000,
   LayerTab=0x100,ParameterAdd=0x200,ParameterName=0x300,ParameterValue=0x400,ParameterDelete=0x500,ParameterRow=0x600,
   StateName=0x1000,StateKind=0x1001,StateBlendX=0x1004,StateBlendY=0x1005,StateSpeed=0x1006,StateSpeedParameter=0x1007,
   StateLoop=0x1008,MotionAdd=0x1009,EventAdd=0x100A,
@@ -867,6 +872,10 @@ struct EditorScreenState final {
   u64 animatorState=0,animatorTransition=0,animatorParameter=0,animatorConnectFrom=0;
   float animatorPan[2]{0,0},animatorZoom=1;
   u32 animatorDrawer=0; // 0: graph, 1: parameters, 2: selected properties
+  bool animatorEditShared=false;
+  const scene::Animator *animatorResolved=nullptr;
+  const std::vector<resources::AnimatorControllerAsset> *animatorControllers=nullptr;
+  std::string animatorControllerDiagnostic;
   float animatorDetailsScroll=0,animatorParamsScroll=0;
   // Seletor aberto: 1 + índice do clipe da mistura; 0x10000 máscara da camada.
   u32 animatorPicker=0,animatorPickerPage=0,animatorNameField=0;

@@ -115,7 +115,7 @@ AE_TEST(animator_contract_round_trip_and_validation) {
   transition(a,a.layers[0].defaultState,a.layers[0].states.back().id,.25f,{{speedId,scene::AnimatorConditionMode::Greater,.5f}});
   AE_EXPECT_TRUE(a.valid(),"grafo válido");
   std::stringstream text;a.write(text);scene::Animator back;
-  AE_EXPECT_TRUE(back.read(text,2)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
+  AE_EXPECT_TRUE(back.read(text,3)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
   back.layers[0].transitions[0].conditions[0].mode=scene::AnimatorConditionMode::Equals;
   AE_EXPECT_TRUE(!back.valid(),"Float não aceita Igual");
   back.layers[0].transitions[0].conditions[0]={back.parameters[1].id,scene::AnimatorConditionMode::IfNot,0};
@@ -198,13 +198,53 @@ AE_TEST(animator_layer_with_mask_overrides_only_its_subtree_and_emits_events) {
   AE_EXPECT_TRUE(p.x(r.hips)==frozen,"desligado congela a pose");
 }
 
+AE_TEST(animator_shared_controller_overrides_pose_archive_missing_and_revision) {
+  Rig rig;auto &inlineGraph=rig.animator();
+  inlineGraph.layers[0].states[0].name="Mover";inlineGraph.layers[0].states[0].motions={{rig.walk}};
+  param(inlineGraph,"Ajuste",scene::AnimatorParameterType::Float);
+  resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("controller-compartilhado");
+  asset.name="Mecanismo";asset.graph=resources::AnimatorControllerAsset::portableGraph(inlineGraph);
+  resources::AnimatorControllerAsset read;
+  AE_EXPECT_TRUE(asset.valid()&&resources::AnimatorControllerAsset::deserialize(asset.serialize(),read),"resource archive is portable and typed");
+  auto invalid=asset;invalid.graph.target=rig.owner;
+  AE_EXPECT_TRUE(!invalid.valid()&&!resources::AnimatorControllerAsset::deserialize(asset.serialize()+" garbage",read),"object IDs and trailing corrupt data rejected");
+  inlineGraph.controller=asset.guid;
+  const auto second=rig.g.createEntity(rig.g.root(),ObjectKind::Folder,"Segundo mecanismo");
+  const auto secondHips=rig.g.createEntity(second,ObjectKind::Folder,"Quadril");
+  auto &secondGraph=scene::animator(*rig.g.editComponents(second)->add(scene::Animator::descriptor));
+  secondGraph.controller=asset.guid;secondGraph.clipOverrides={{rig.walk,rig.run}};
+  const u64 instance=inlineGraph.instanceId(),secondInstance=secondGraph.instanceId();
+  Play play(rig);play.graphs.setControllers(std::span(&asset,1));play.step(.1f);
+  AE_EXPECT_TRUE(near(play.x(rig.hips),1)&&near(play.x(secondHips),2),"one shared graph produces different actual poses through local overrides");
+  AE_EXPECT_TRUE(play.graphs.configuration(play.world,second,secondInstance)->layers[0].states[0].id==asset.graph.layers[0].states[0].id,"stable state identity shared, runtime state separate");
+  float result=0;
+  AE_EXPECT_TRUE(play.graphs.parameter(play.world,second,secondInstance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::SetFloat,7,result)==SceneAnimatorGraphs::Status::Ok,"shared parameter API reaches effective graph");
+  AE_EXPECT_TRUE(play.graphs.parameter(play.world,rig.owner,instance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::Get,0,result)==SceneAnimatorGraphs::Status::Ok&&result==0,"runtime parameters independent");
+  std::ostringstream out;secondGraph.write(out);std::istringstream in(out.str());scene::Animator back;
+  AE_EXPECT_TRUE(back.read(in,3)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
+  back.clipOverrides.push_back(back.clipOverrides.front());AE_EXPECT_TRUE(!back.valid(),"duplicate override authorities rejected");
+  auto revision=asset;++revision.revision;revision.graph.layers[0].states[0].speed=2;
+  play.graphs.setControllers(std::span(&revision,1));play.step(.1f);
+  AE_EXPECT_TRUE(near(play.x(secondHips),2)&&play.graphs.configuration(play.world,second,secondInstance)->layers[0].states[0].speed==2,"new source revision keeps instance substitution");
+  play.graphs.setControllers({});play.step(.1f);
+  const auto *missing=play.graphs.find(second,secondInstance);
+  AE_EXPECT_TRUE(missing&&!missing->controllerAvailable&&!missing->controllerDiagnostic.empty(),"missing resource is explicit and never plays stale inline graph");
+  AE_EXPECT_TRUE(play.graphs.parameter(play.world,second,secondInstance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::Get,0,result)==SceneAnimatorGraphs::Status::MissingController,"API rejects unavailable resource");
+  auto resolved=secondGraph;std::string diagnostic;
+  AE_EXPECT_TRUE(resources::resolveAnimatorController(secondGraph,std::span(&asset,1),resolved,diagnostic),"detach resolves effective graph");
+  resolved.controller={};resolved.clipOverrides.clear();scene::replaceAnimatorData(secondGraph,resolved);
+  AE_EXPECT_TRUE(secondGraph.instanceId()==secondInstance&&secondGraph.layers[0].states[0].motions[0].clip==rig.run,"detach preserves component identity and effective clips");
+}
+
 AE_TEST(animator_v2_binding_roundtrip_and_v1_manual_migration) {
   scene::Animator a;scene::initializeAnimator(a);a.motionSource=42;
   auto &speed=param(a,"Velocidade medida",scene::AnimatorParameterType::Float);
   speed.source=scene::AnimatorParameterSource::PlanarSpeed;speed.response=.15f;speed.scale=.5f;
   auto &ground=param(a,"Apoio",scene::AnimatorParameterType::Bool);ground.source=scene::AnimatorParameterSource::Grounded;
   std::stringstream stream;a.write(stream);scene::Animator restored;
-  AE_EXPECT_TRUE(restored.read(stream,2)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
+  AE_EXPECT_TRUE(restored.read(stream,3)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
+  auto v2=stream.str();v2.resize(v2.rfind(" - 0"));std::stringstream legacy(v2);scene::Animator migratedV2;
+  AE_EXPECT_TRUE(migratedV2.read(legacy,2)&&!migratedV2.controller.valid()&&migratedV2.clipOverrides.empty()&&migratedV2.parameters==a.parameters,"v2 remains inline with physical bindings preserved");
   std::stringstream old("1 0 0 1 4 1 3 \"Peso\" 0 0.5 1 1 \"Base\" 1 0 2 1 2 \"Parado\" 0 0 0 1 0 1 0 0 0 0 0");
   scene::Animator migrated;AE_EXPECT_TRUE(migrated.read(old,1)&&migrated.motionSource==0&&migrated.parameters[0].source==scene::AnimatorParameterSource::Manual,"old graph remains script controlled");
   restored.parameters[1].source=scene::AnimatorParameterSource::PlanarSpeed;
@@ -213,11 +253,14 @@ AE_TEST(animator_v2_binding_roundtrip_and_v1_manual_migration) {
   SceneGraph sceneGraph;const auto root=sceneGraph.createEntity(sceneGraph.root(),ObjectKind::Folder,"Mecanismo");
   const auto visual=sceneGraph.createEntity(root,ObjectKind::Folder,"Parte visual");
   auto &controller=scene::animator(*sceneGraph.editComponents(root)->add(scene::Animator::descriptor));controller.target=visual;controller.motionSource=root;
+  controller.layers[0].mask=visual;controller.controller=resources::assetGuidFromSeed("shared-resource");
+  controller.clipOverrides={{resources::assetGuidFromSeed("original"),resources::assetGuidFromSeed("replacement")}};
   Prefab prefab;std::string diagnostic;AE_EXPECT_TRUE(prefab.capture(sceneGraph,root,resources::assetGuidFromSeed("mecanismo-prefab"),diagnostic),diagnostic.c_str());
   SceneGraph destination;destination.createEntity(destination.root(),ObjectKind::Folder,"Outra entidade");ObjectCloneMap mapping;
   const auto copy=prefab.instantiate(destination,destination.root(),mapping,diagnostic);AE_EXPECT_TRUE(copy,diagnostic.c_str());
   const auto &mapped=scene::animator(*destination.find(copy)->components.find(scene::Animator::descriptor));
   AE_EXPECT_TRUE(mapped.motionSource==copy&&mapped.target==mapping.at(visual),"visual and motion references remap independently in reusable prefab");
+  AE_EXPECT_TRUE(mapped.layers[0].mask==mapping.at(visual)&&mapped.controller==controller.controller&&mapped.clipOverrides==controller.clipOverrides,"prefab remaps local masks while preserving shared resource and override identity");
 }
 
 AE_TEST(animator_physical_binding_real_body_pose_and_missing_source_diagnostic) {

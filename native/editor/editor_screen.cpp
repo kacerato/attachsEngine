@@ -1872,7 +1872,7 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     }
     auto icon=takeLeft(row,22);
     builder.list.addImage(centred(icon,code?20:15,code?20:15),static_cast<UiImageId>(entry.directory?(code?UiIcon::IdeFiles:UiIcon::EditorAuthorFolder):
-        entry.name.ends_with(".cs")?(code?UiIcon::IdeCode:UiIcon::ScriptingCode):entry.name.ends_with(".prefab")?UiIcon::ScenePrefab:UiIcon::AssetsFile),code?0xffffffff:theme.color.textDim);
+        entry.name.ends_with(".cs")?(code?UiIcon::IdeCode:UiIcon::ScriptingCode):entry.name.ends_with(".prefab")?UiIcon::ScenePrefab:entry.name.ends_with(".aeanimator")?UiIcon::AnimationController:UiIcon::AssetsFile),code?0xffffffff:theme.color.textDim);
     builder.label(row,entry.name.c_str(),theme.color.text,theme.type.caption);
     builder.router.addRegion(hit,widgetId(EditorWidget::FileRowBase)+i);
   }
@@ -2879,12 +2879,13 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const auto *entity=state.document->find(state.animatorEntity);
   const auto *component=entity?entity->components.findInstance(state.animatorInstance):nullptr;
   if(!component||&component->type()!=&scene::Animator::descriptor) return;
-  const auto &a=scene::animator(*component);
+  const auto &a=state.animatorResolved?*state.animatorResolved:scene::animator(*component);
   if(a.layers.empty()) return;
   const u32 layerIndex=std::min<u32>(state.animatorLayer,static_cast<u32>(a.layers.size())-1);
   const auto &layer=a.layers[layerIndex];
   const runtime::SceneAnimatorGraphs::Instance *live=state.animatorRuntime?state.animatorRuntime->find(static_cast<runtime::ObjectId>(entity->id),component->instanceId()):nullptr;
-  const bool readOnly=state.animatorRuntime!=nullptr;
+  const bool playing=state.animatorRuntime!=nullptr;
+  const bool readOnly=playing||(a.controller.valid()&&!state.animatorEditShared);
   router.addBlocker(state.surface);
   list.addRect(state.surface,withAlpha(theme.color.voidBlack,.85f));
   const UiRect panel=deflate(state.surface,UiInsets::all(8));
@@ -2922,18 +2923,20 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   iconButton(takeRight(header,42),UiIcon::UiClose,"Fechar",w::Close);takeRight(header,4);
   iconButton(takeRight(header,42),UiIcon::AnimationFrame,"Quadro",w::Frame);takeRight(header,4);
   button(takeRight(header,36),"+",w::ZoomIn);takeRight(header,4);button(takeRight(header,36),"-",w::ZoomOut);takeRight(header,8);
-  iconButton(takeRight(header,42),UiIcon::EditorRedo,"Refazer",w::Redo,!readOnly);takeRight(header,4);
-  iconButton(takeRight(header,42),UiIcon::EditorUndo,"Desfaz",w::Undo,!readOnly);takeRight(header,8);
+  iconButton(takeRight(header,42),UiIcon::EditorRedo,"Refazer",w::Redo,!playing);takeRight(header,4);
+  iconButton(takeRight(header,42),UiIcon::EditorUndo,"Desfaz",w::Undo,!playing);takeRight(header,8);
   iconButton(takeRight(header,42),UiIcon::AnimationTransition,"Ligar",w::Connect,!readOnly,state.animatorConnecting);takeRight(header,4);
   iconButton(takeRight(header,42),UiIcon::AnimationState,"+Estado",w::AddState,!readOnly&&layer.states.size()<scene::Animator::MaximumStates);takeRight(header,8);
   iconButton(takeRight(header,42),UiIcon::AnimationParameters,"Params",w::Parameters,true,state.animatorDrawer==1);takeRight(header,4);
   iconButton(takeRight(header,42),UiIcon::UiSettings,"Ajustes",w::Details,true,state.animatorDrawer==2);
+  takeRight(header,4);iconButton(takeRight(header,42),UiIcon::AnimationController,"Recurso",w::Controller,true,state.animatorDrawer==3);
   builder.label(header,fitMiddle(list,std::string("Animator / ")+entity->name,header.width,theme.type.cardName),theme.color.text,theme.type.cardName);
   auto tabs=takeTop(content,34);takeTop(content,6);
   for(u32 i=0;i<a.layers.size();++i) {button(takeLeft(tabs,104),a.layers[i].name,w::LayerTab+i,false,true,i==layerIndex);takeLeft(tabs,4);}
   if(a.layers.size()<scene::Animator::MaximumLayers) button(takeLeft(tabs,36),"+",w::LayerAdd,false,!readOnly);
   const auto runtimeBar=takeBottom(content,28);takeBottom(content,4);
-  std::string runtimeText=readOnly?"Play":"Edição";
+  std::string runtimeText=playing?"Play":a.controller.valid()?state.animatorEditShared?"Recurso · todas as instâncias":"Instância · overrides locais":"Grafo local";
+  if(!state.animatorControllerDiagnostic.empty()) runtimeText+=" / "+state.animatorControllerDiagnostic;
   if(live) {
     if(!live->motionDiagnostic.empty()) runtimeText+="  /  "+live->motionDiagnostic;
     else if(live->motionAvailable) runtimeText+="  /  Movimento medido";
@@ -2943,6 +2946,53 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   UiRect drawer{};
   if(state.animatorDrawer) {drawer=takeRight(content,std::min(340.f,content.width*.46f));takeRight(content,8);list.addRect(drawer,theme.color.surface,3);}
   layout.animatorDetailsWindow={};layout.animatorParamsWindow={};
+  if(state.animatorDrawer==3) {
+    auto side=deflate(drawer,UiInsets::all(10));
+    builder.label(takeTop(side,26),"Controller",theme.color.text,theme.type.cardName);
+    const auto *asset=state.animatorControllers?resources::findAnimatorController(*state.animatorControllers,a.controller):nullptr;
+    builder.label(takeTop(side,28),fitMiddle(list,asset?asset->name:a.controller.valid()?"Recurso ausente":"Grafo local",side.width,theme.type.body),
+      a.controller.valid()&&!asset?theme.color.warning:theme.color.text,theme.type.body);
+    if(asset) builder.label(takeTop(side,24),"Revisão "+std::to_string(asset->revision)+" · "+std::to_string(scene::animator(*component).clipOverrides.size())+" overrides",theme.color.textMuted,theme.type.caption);
+    layout.animatorDetailsWindow=side;hitWindow=side;region(side,w::id(w::DetailsScroll));list.pushClip(side);
+    const float top=side.y-std::max(0.f,state.animatorDetailsScroll);side.y=top;side.height=65536;
+    auto actions=takeTop(side,44);const float half=actions.width*.5f-2;
+    button(takeLeft(actions,half),a.controller.valid()?"Copiar recurso":"Criar recurso",w::ControllerCreate,false,!playing);
+    takeLeft(actions,4);button(actions,"Escolher",w::ControllerChoose,false,!playing);
+    if(a.controller.valid()) {
+      actions=takeTop(side,44);
+      button(takeLeft(actions,half),state.animatorEditShared?"Voltar à instância":"Editar recurso",w::ControllerEdit,false,!playing&&asset,state.animatorEditShared);
+      takeLeft(actions,4);button(actions,"Desvincular",w::ControllerDetach,false,!playing&&asset);
+      actions=takeTop(side,44);button(takeLeft(actions,half),"Recarregar",w::ControllerReload,false,!playing);
+      takeLeft(actions,4);button(actions,"Limpar overrides",w::ControllerReset,false,!playing&&!a.clipOverrides.empty());
+    }
+    builder.label(takeTop(side,25),"Clipes · overrides desta instância",theme.color.textMuted,theme.type.caption);
+    const auto originals=asset?resources::animatorControllerClips(asset->graph):std::vector<resources::AssetGuid>{};
+    for(u32 i=0;i<originals.size();++i) {
+      const auto original=originals[i];auto replacement=original;bool overridden=false;
+      const auto &instance=scene::animator(*component);
+      for(const auto &entry:instance.clipOverrides) if(entry.original==original) {replacement=entry.replacement;overridden=true;}
+      builder.label(takeTop(side,24),fitMiddle(list,clipName(original),side.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+      auto row=takeTop(side,44);row.height-=4;
+      if(overridden) {button(takeRight(row,42),"↶",w::OverrideReset+i,false,!playing);takeRight(row,4);}
+      list.addImage(centred(takeLeft(row,28),22,22),static_cast<UiImageId>(UiIcon::AnimationOverride),overridden?theme.color.accent:theme.color.text);
+      button(row,clipName(replacement),w::OverrideClip+i,false,!playing,overridden);takeTop(side,4);
+    }
+    if(originals.empty()) builder.label(takeTop(side,40),asset?"Atribua clipes no recurso":"Crie ou escolha um controller",theme.color.textMuted,theme.type.caption);
+    // Orphans remain editable/removable even after a resource revision removes
+    // their original clip. Never silently discard instance customizations.
+    const auto &overrides=scene::animator(*component).clipOverrides;
+    for(u32 i=0;i<overrides.size();++i) if(std::find(originals.begin(),originals.end(),overrides[i].original)==originals.end()) {
+      auto row=takeTop(side,44);button(takeRight(row,42),"×",w::OverrideOrphanReset+i,false,!playing);
+      builder.label(row,"Sem origem · "+overrides[i].original.text().substr(0,8),theme.color.warning,theme.type.caption);
+    }
+    if(a.controller.valid()) {
+      takeTop(side,8);builder.label(takeTop(side,25),"Instância · referências locais",theme.color.textMuted,theme.type.caption);
+      const auto *motionOwner=state.document->find(static_cast<EditorEntityId>(a.motionSource?a.motionSource:entity->id));
+      button(takeTop(side,40),std::string("Corpo: ")+(motionOwner?motionOwner->name:"ausente"),w::MotionSource,false,!playing);
+      button(takeTop(side,40),"Máscara desta camada",w::LayerMask,false,!playing);
+    }
+    layout.animatorDetailsExtent=side.y-top;list.popClip();hitWindow=panel;
+  }
   // ---- Parâmetros ------------------------------------------------------
   if(state.animatorDrawer==1) {
   auto left=drawer;
@@ -3008,7 +3058,7 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     list.addRect(row,theme.color.surface,theme.radius.control);
     builder.label(deflate(row,UiInsets{10,0,10,0}),fitMiddle(list,value,row.width-20,theme.type.body),accent?theme.color.accent:enabled?theme.color.text:theme.color.textFaint,theme.type.body);
     const bool liveValue=code>=w::ParameterValue&&code<w::ParameterValue+0x100;
-    if(enabled&&(!readOnly||liveValue)) region(row,w::id(code));
+    if(enabled&&(!readOnly||(playing&&liveValue))) region(row,w::id(code));
   };
   const auto number=[](float v,const char *unit=""){char t[32];std::snprintf(t,sizeof t,"%.2f%s",static_cast<double>(v),unit);return std::string(t);};
   if(const auto *p=a.parameter(state.animatorParameter)) {
@@ -3024,8 +3074,8 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
         valueRow("Resposta",number(p->response," s"),w::ParameterResponse);
         valueRow("Escala",number(p->scale," ×"),w::ParameterScale);
       }
-    } else if(p->type!=scene::AnimatorParameterType::Trigger) valueRow(readOnly?"Ajustar ao vivo":"Padrão",number(live&&index<live->values.size()?live->values[index]:p->value),w::ParameterValue+index);
-    else if(readOnly) button(takeTop(side,36),"Disparar gatilho",w::ParameterTrigger);
+    } else if(p->type!=scene::AnimatorParameterType::Trigger) valueRow(playing?"Ajustar ao vivo":"Padrão",number(live&&index<live->values.size()?live->values[index]:p->value),w::ParameterValue+index);
+    else if(playing) button(takeTop(side,36),"Disparar gatilho",w::ParameterTrigger);
     if(live&&index<live->values.size()) valueRow("Valor vivo",number(live->values[index]),0,false,true);
     usize uses=0;for(const auto &l:a.layers) {for(const auto &t:l.transitions) for(const auto &c:t.conditions) uses+=c.parameter==p->id;
       for(const auto &st:l.states) uses+=st.blendX==p->id||st.blendY==p->id||st.speedParameter==p->id;}
@@ -3214,7 +3264,8 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     node(s.id,s.name,sub,theme.color.raised);
   }
   list.popClip();
-  const char *hint=readOnly?"Play · parâmetros manuais editáveis":
+  const char *hint=playing?"Play · parâmetros manuais editáveis":
+    readOnly?"Instância · edite a definição em Recurso":
     state.animatorConnecting?(state.animatorConnectFrom?"Toque no estado de destino":"Toque no estado de origem (ou em Qualquer estado)"):
     "Selecionar · mover · navegar";
   builder.label({canvas.x+12,canvas.y+canvas.height-26,canvas.width-24,20},hint,state.animatorConnecting?theme.color.warning:theme.color.textMuted,theme.type.caption);
@@ -3227,16 +3278,21 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     list.addRect(sheet,theme.color.surface,theme.radius.control);list.addBorder(sheet,theme.color.line,1,theme.radius.control);
     auto box=deflate(sheet,UiInsets::all(12));
     auto top=takeTop(box,36);
+    const bool controller=state.animatorPicker==0x50000u;
     const bool motor=state.animatorPicker==0x20000u;
     const bool mask=state.animatorPicker==0x10000u;
     const bool source=state.animatorPicker==0x30000u;
-    builder.label(takeLeft(top,300),source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":"Clipe",theme.color.text,theme.type.title);
+    builder.label(takeLeft(top,300),controller?"Controller":source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":"Clipe",theme.color.text,theme.type.title);
     button(takeRight(top,96),"Fechar",(source||mask||motor)?w::MaskClose:w::ClipClose);
     takeTop(box,8);
     auto footer=takeBottom(box,36);
     std::vector<std::pair<std::string,std::string>> rows;  // título, detalhe
     std::vector<u32> codes;
-    if(source) {
+    if(controller) {
+      if(state.animatorControllers) for(u32 i=0;i<state.animatorControllers->size()&&i<0xEFF;++i) {
+        const auto &asset=(*state.animatorControllers)[i];rows.push_back({asset.name,"Revisão "+std::to_string(asset.revision)});codes.push_back(w::ControllerChoice+i);
+      }
+    } else if(source) {
       if(const auto *p=a.parameter(state.animatorParameter)) for(u32 i=0;i<=4;++i) {
         const auto kind=static_cast<scene::AnimatorParameterSource>(i);if(!scene::animatorSourceCompatible(p->type,kind)) continue;
         rows.push_back({scene::animatorSourceName(kind),i==0?"Default e comandos do script":i==3?"Apoio resolvido do Personagem / Motor":"Movimento físico medido"});codes.push_back(w::MaskChoice+i);
@@ -4249,7 +4305,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
              binding.kind!=resources::AssetType::EnvironmentProfile&&
              binding.kind!=resources::AssetType::EnvironmentMap&&
              binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip&&binding.kind!=resources::AssetType::UiDocument&&
-             binding.kind!=resources::AssetType::PhysicsMaterial)||!show(binding.presentation)) continue;
+             binding.kind!=resources::AssetType::PhysicsMaterial&&binding.kind!=resources::AssetType::AnimatorController)||!show(binding.presentation)) continue;
     for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
   }
   if(entry.type==&scene::UiCanvas::descriptor && !searching && group=="Canvas")fields.push_back({3,widgetId(EditorWidget::GuiCanvasEdit)});
@@ -4930,6 +4986,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
               binding.kind==resources::AssetType::PhysicsMaterial?(entry.type==&scene::Collider::descriptor?"Sem material · valores desta forma":"Sem material · valores deste corpo"):
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
+              binding.kind==resources::AssetType::AnimatorController?"Grafo local":
               binding.kind==resources::AssetType::AnimationClip||binding.kind==resources::AssetType::AudioClip?"Nenhum clipe":
               binding.inheritable?"Herdar malha visual":"Sem recurso";
       } else value=asset.text().substr(0,8);
@@ -5074,6 +5131,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
        resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip?"Buscar WAV":
        resourceBinding&&resourceBinding->kind==resources::AssetType::UiDocument?"Buscar documento UI":
        resourceBinding&&resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Buscar material físico":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::AnimatorController?"Buscar controller":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AnimationClip?"Buscar clipe":"Buscar malha"):
       state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
@@ -5081,7 +5139,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
                        resourceBinding->kind==resources::AssetType::EnvironmentMap||
                        resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip||resourceBinding->kind==resources::AssetType::UiDocument||
-                       resourceBinding->kind==resources::AssetType::PhysicsMaterial)) {
+                       resourceBinding->kind==resources::AssetType::PhysicsMaterial||resourceBinding->kind==resources::AssetType::AnimatorController)) {
     if(resourceBinding->kind==resources::AssetType::PhysicsMaterial&&state.workspace!=EditorWorkspace::Play) {
       // Criar copia os valores deste corpo para um recurso; atualizar leva os
       // valores editados aqui a todos os corpos que usam o mesmo material.
@@ -5114,6 +5172,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     auto clear=takeTop(content,34);builder.label(clear,
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":
         resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Sem material · conservar os valores do corpo":
+        resourceBinding->kind==resources::AssetType::AnimatorController?"Desvincular · incorporar o grafo resolvido":
         resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":resourceBinding->kind==resources::AssetType::UiDocument?"Sem documento UI · canvas inativo":"Sem mapa HDRI",
         theme.color.textDim,theme.type.caption);
     builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
@@ -5122,7 +5181,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       auto slot=takeTop(content,50);const auto hit=slot;
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       if(selectedResource==record.guid) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
-      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:UiIcon::LightingSun),0xffffffff);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:resourceBinding->kind==resources::AssetType::AnimatorController?UiIcon::AnimationController:UiIcon::LightingSun),0xffffffff);
       const auto slash=record.path.find_last_of('/');const auto name=record.path.substr(slash==std::string::npos?0:slash+1);
       builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
       builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
@@ -5131,7 +5190,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     if(matches.empty()) builder.label(content,resourceCount&& !query.empty()?
         (resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV corresponde à busca":"Nenhum recurso corresponde à busca"):
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?
-        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::Texture?
+        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::AnimatorController?"Crie um recurso no grafo do Animator":resourceBinding->kind==resources::AssetType::Texture?
         "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":resourceBinding->kind==resources::AssetType::UiDocument?"Salve uma interface .aeui para registrar o documento":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);

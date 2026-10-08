@@ -1751,6 +1751,18 @@
       "name": "duplicate",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "animation/controller": {
+      "category": "animation",
+      "name": "controller",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/override": {
+      "category": "animation",
+      "name": "override",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

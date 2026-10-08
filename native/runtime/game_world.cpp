@@ -969,6 +969,8 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
   // ao publicador o componente efetivo (incluindo sampler e binding recém
   // escritos) antes de aceitar uma textura/material como utilizável.
   auto candidate=current->clone();
+  if(match->kind==resources::AssetType::AnimatorController&&
+     (!candidate||!resolveResource||!resolveResource(resource,match->kind,propertyId,slot,*candidate))) return WorldStatus::ComponentUnavailable;
   if(!candidate||&candidate->type()!=&current->type()||!match->write(*candidate,slot,resource))
     return WorldStatus::Rejected;
   if(environmentProfile&&&candidate->type()==&scene::Environment::descriptor) {

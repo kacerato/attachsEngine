@@ -1055,6 +1055,7 @@ public:
     loadMaterialAssets();
     loadEnvironmentProfiles();
     loadPhysicsMaterials();
+    loadAnimatorControllers();
     return true;
   }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
@@ -1130,6 +1131,7 @@ public:
       runtimeCodeGeneration_=code_.publishedGeneration();
       playScene_.configureGui(gui_.document());
       playScene_.setActiveScene(activeSceneName());
+      playScene_.animatorGraphs().setControllers(animatorControllers_);
       if(!playScene_.start(document_,mapScene_)) {
         state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
         reportProblem(EditorConsoleSeverity::Error,state_.status);
@@ -1192,6 +1194,7 @@ public:
       playScene_.stop();
       playScene_.configureGui(gui_.document());
       playScene_.setActiveScene(nextName);
+      playScene_.animatorGraphs().setControllers(animatorControllers_);
       if(!playScene_.start(next,mapScene_)) {
         state_.status="Troca de cena falhou: "+nextName+(playScene_.scriptDiagnostics().empty()?"":" · "+playScene_.scriptDiagnostics());
         reportProblem(EditorConsoleSeverity::Error,state_.status);
@@ -1912,6 +1915,16 @@ private:
   // Editor de grafo do Animator (editor_animator.cpp).
   bool handleAnimatorEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   const scene::Animator *openAnimator() const;
+  bool editAnimatorInstance(const std::function<bool(scene::Animator &)> &change);
+  void loadAnimatorControllers();
+  bool commitAnimatorController(const resources::AnimatorControllerAsset &candidate,std::string &diagnostic,bool recordHistory=true);
+  bool createAnimatorController();
+  bool assignAnimatorController(resources::AssetGuid guid);
+  bool detachAnimatorController();
+  bool overrideAnimatorClip(resources::AssetGuid original,resources::AssetGuid replacement);
+  mutable scene::Animator animatorResolved_;
+  std::optional<scene::Animator> animatorResourceDrag_;
+  std::vector<resources::AnimatorControllerAsset> animatorControllers_;
   void openAnimatorEditor();
   void frameAnimator();
   bool editAnimator(const std::function<bool(scene::Animator &)> &change);

@@ -70,6 +70,8 @@ Fechar modos de solo/ar, agachar e dimensões dinâmicas com teto/overlap, degra
 
 ### B. Animação geral e reutilização — U08
 
+**B1 fechado em 08/10/2026:** controllers compartilhados e overrides por instância, com história de recurso, persistência e aceite físico. [Plano da entrega](ANIMATOR-CONTROLLERS-2026-10-08.md) e [evidências](../../validacao/animator-controller-2026-10-08/REPORT.md). Os itens seguintes permanecem abertos; B1 não encerra B/U08 inteiro.
+
 Recurso de controller reutilizável com identidades estáveis e overrides por instância; duplicação/arquivo/importação/prefab/reimport preservam ligações. Submáquinas e estados aninhados exigem caminho estável e debug de navegação. Interrupção de transição exige pose capturada, regras de prioridade e consumo único de gatilhos/eventos. Camadas aditivas exigem pose de referência, quaternion relativo e máscaras; não basta adicionar enum.
 
 Clipes precisam de trim, rate, loop, nome, ciclo, marcadores e curvas com edição/preview/save/reimport. Timeline/sequencer exige tracks tipados, bindings persistentes, scrub determinístico, relógio, cancelamento e restauração; integra transform, morph, propriedade suportada de material/UI/áudio/câmera e eventos, mediante consumidores reais. Não aceitar `Any` ou strings sem validação como sistema universal.

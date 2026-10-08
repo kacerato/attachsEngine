@@ -13,6 +13,7 @@
 #include "runtime/game_world.h"
 #include "runtime/scene_animation.h"
 #include "scene/animator.h"
+#include "resources/animator_controller.h"
 
 #include <string>
 #include <string_view>
@@ -36,7 +37,7 @@ bool crossed(float previous,float current,float mark,bool loop);
 
 class SceneAnimatorGraphs {
 public:
-  enum class Status : u32 {Ok=0,UnknownComponent=1,UnknownParameter=2,WrongType=3,UnknownState=4,InvalidArgument=5,UnknownLayer=6,BoundParameter=7};
+  enum class Status : u32 {Ok=0,UnknownComponent=1,UnknownParameter=2,WrongType=3,UnknownState=4,InvalidArgument=5,UnknownLayer=6,BoundParameter=7,MissingController=8};
   enum class ParameterOperation : u32 {Get=0,SetFloat=1,SetInt=2,SetBool=3,SetTrigger=4,ResetTrigger=5};
   struct LayerState {
     u64 layer=0,current=0,next=0;
@@ -46,14 +47,24 @@ public:
   struct Instance {
     ObjectId owner=kInvalidObject;u64 instance=0;
     std::vector<u64> parameterIds;std::vector<float> values;
+    std::vector<scene::AnimatorParameterType> parameterTypes;
     std::vector<LayerState> layers;
     bool motionAvailable=false;
     std::string motionDiagnostic;
+    scene::Animator resolved;
+    resources::AssetGuid controller{};u32 controllerRevision=0;
+    bool controllerAvailable=true;std::string controllerDiagnostic;
   };
   struct Info {u64 state=0,next=0;float normalizedTime=0,progress=0;bool transitioning=false;std::string name,nextName;};
 
   void setEvents(ComponentEventQueue *events) noexcept {events_=events;}
   void setPhysics(const ScenePhysics *physics) noexcept {physics_=physics;}
+  // Snapshot at Play start: no disk I/O or shared authoring changes in Play.
+  void setControllers(std::span<const resources::AnimatorControllerAsset> assets) {controllers_.assign(assets.begin(),assets.end());instances_.clear();}
+  const scene::Animator *configuration(const GameWorld &world,ObjectId owner,u64 instance) const;
+  bool resolve(const scene::Animator &value,scene::Animator &out,std::string &diagnostic) const {
+    return resources::resolveAnimatorController(value,controllers_,out,diagnostic);
+  }
   void reset() {instances_.clear();}
   // Avalia todos os Animators e acrescenta as amostras para o SceneAnimator.
   bool advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,std::vector<SceneAnimator::ExternalSample> &samples);
@@ -70,6 +81,7 @@ private:
   std::vector<Instance> instances_;
   ComponentEventQueue *events_=nullptr;
   const ScenePhysics *physics_=nullptr;
+  std::vector<resources::AnimatorControllerAsset> controllers_;
 };
 
 } // namespace ae::runtime

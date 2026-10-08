@@ -150,6 +150,10 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
            (!record||record->type!=resources::AssetType::EnvironmentProfile)) break;
         if(binding->kind==resources::AssetType::PhysicsMaterial&&
            (!record||record->type!=resources::AssetType::PhysicsMaterial||!findPhysicsMaterial(request.componentResource))) break;
+        if(binding->kind==resources::AssetType::AnimatorController&&
+           (!record||!resources::findAnimatorController(animatorControllers_,request.componentResource))) {
+          state_.status="Controller ausente ou inválido";break;
+        }
         if(binding->kind==resources::AssetType::Mesh&&!mapScene_.assetSlot(request.componentResource)) break;
         if(binding->kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(request.componentResource)) break;
         if(binding->kind==resources::AssetType::Texture&&(!record||record->type!=resources::AssetType::Texture)) break;
@@ -160,11 +164,23 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         runtime::AnimationClipView clipView;
         if(binding->kind==resources::AssetType::AnimationClip&&!mapScene_.findClip(request.componentResource,clipView)) break;
       } else if(!binding->inheritable && !binding->none.valid() &&
-                binding->kind!=resources::AssetType::AnimationClip && binding->id!="texture.lightmap") break;
+                binding->kind!=resources::AssetType::AnimationClip && binding->kind!=resources::AssetType::AnimatorController && binding->id!="texture.lightmap") break;
       const auto authored=request.componentResource.valid()?request.componentResource:
           binding->inheritable?resources::AssetGuid{}:binding->none;
       auto values=*entity;auto *candidate=values.components.editInstance(request.componentInstance);
       if(!candidate||!binding->write(*candidate,request.componentResourceSlot,authored)) break;
+      if(binding->kind==resources::AssetType::AnimatorController) {
+        auto &instance=scene::animator(*candidate);
+        if(authored.valid()) {
+          const auto *asset=resources::findAnimatorController(animatorControllers_,authored);if(!asset) break;
+          auto masks=scene::animator(*source).controller==authored?instance.layers:std::vector<scene::AnimatorLayer>{};instance.parameters=asset->graph.parameters;instance.layers=asset->graph.layers;instance.nextId=asset->graph.nextId;
+          for(auto &layer:instance.layers) for(const auto &local:masks) if(local.id==layer.id) layer.mask=local.mask;
+        } else if(scene::animator(*source).controller.valid()) {
+          scene::Animator resolved;std::string diagnostic;
+          if(!resources::resolveAnimatorController(scene::animator(*source),animatorControllers_,resolved,diagnostic)) break;
+          resolved.controller={};resolved.clipOverrides.clear();scene::replaceAnimatorData(instance,resolved);
+        }
+      }
       // Escolher um material copia os valores dele para o corpo, na mesma transação.
       if(binding->kind==resources::AssetType::PhysicsMaterial&&authored.valid()) {
         const auto *material=findPhysicsMaterial(authored);
@@ -893,6 +909,17 @@ bool EditorSession::loadPlayScene(std::string_view request,runtime::SceneGraph &
 runtime::ComponentResourceResolver EditorSession::runtimeResourceResolver() {
   return [this](resources::AssetGuid guid,resources::AssetType type,std::string_view propertyId,u32 slot,
              scene::ComponentValue &candidate) {
+    if(type==resources::AssetType::AnimatorController) {
+      if(&candidate.type()!=&scene::Animator::descriptor) return false;
+      auto value=scene::animator(candidate);
+      if(guid.valid()) {
+        if(value.controller!=guid) {value.controller=guid;value.clipOverrides.clear();for(auto &layer:value.layers) layer.mask=0;}
+      }
+      scene::Animator resolved;std::string diagnostic;
+      if(!playScene_.animatorGraphs().resolve(value,resolved,diagnostic)) return false;
+      if(!guid.valid()) {resolved.controller={};resolved.clipOverrides.clear();}
+      scene::replaceAnimatorData(scene::animator(candidate),resolved);return true;
+    }
     // Clipe: vale se a fonte dele está carregada nesta sessão.
     if(type==resources::AssetType::AnimationClip) {
       runtime::AnimationClipView view;
@@ -3048,6 +3075,20 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::PhysicsMaterial) {
     if(!openPhysicsMaterialInspector(record->guid)) state_.status="Material físico registrado, mas o arquivo não pôde ser lido";
   }
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::AnimatorController) {
+    const auto guid=record->guid;
+    loadAnimatorControllers();
+    std::vector<EditorEntityId> owners;document_.collectSubtree(document_.root(),owners);
+    for(const auto id:owners) if(const auto *object=document_.find(id))
+      if(const auto *component=object->components.find(scene::Animator::descriptor);
+          component&&scene::animator(*component).controller==guid) {
+        state_.selection=state_.inspectorTarget=id;openAnimatorEditor();state_.animatorEditShared=true;state_.animatorDrawer=3;return;
+      }
+    // Unassigned resources stay editable without manufacturing a scene object.
+    state_.code=&code_;
+    if(code_.open(files_,entry.relativePath)) {state_.workspace=EditorWorkspace::Code;state_.codeFiles=false;}
+    else state_.status=code_.error();
+  }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentMap) {
     if(!openEnvironmentInspector(record->guid)) state_.status="Receita HDRI salva é inválida; Reimportar recria a partir da fonte";
   }
@@ -4339,7 +4380,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       const auto &binding=component->type().resourceBindings[bindingIndex];
       if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile&&
           binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::Texture&&binding.kind!=resources::AssetType::UiDocument&&
-          binding.kind!=resources::AssetType::PhysicsMaterial)||
+          binding.kind!=resources::AssetType::PhysicsMaterial&&binding.kind!=resources::AssetType::AnimatorController)||
          slot>=binding.slotCount(*component)||
          !binding.presentation.isEditable(*component)) return true;
       state_.resourceInstance=component->instanceId();state_.resourceProperty=std::string(binding.id);state_.resourceSlot=slot;
@@ -4833,7 +4874,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
             if(candidate.id==state_.resourceProperty) {binding=&candidate;break;}
           if(binding&&(binding->kind==resources::AssetType::EnvironmentProfile||
                       binding->kind==resources::AssetType::EnvironmentMap||binding->kind==resources::AssetType::Texture||binding->kind==resources::AssetType::AudioClip||binding->kind==resources::AssetType::UiDocument||
-                      binding->kind==resources::AssetType::PhysicsMaterial)) {
+                      binding->kind==resources::AssetType::PhysicsMaterial||binding->kind==resources::AssetType::AnimatorController)) {
             const auto index=request.property-1;
             if(index>=assets_.records().size()) return true;
             request.componentResource=assets_.records()[index].guid;
@@ -9728,6 +9769,20 @@ void EditorSession::update() {
   state_.virtualCameraRuntime=playInspecting()&&playScene_.active()?&playScene_.virtualCameras():nullptr;
   state_.audioRuntime=playInspecting()&&playScene_.active()?&playScene_.audio():nullptr;
   state_.animatorRuntime=playInspecting()&&playScene_.active()?&playScene_.animatorGraphs():nullptr;
+  state_.animatorControllers=&animatorControllers_;
+  state_.animatorControllerDiagnostic.clear();state_.animatorResolved=nullptr;
+  if(state_.animatorOpen) {
+    state_.animatorResolved=openAnimator();
+    const auto *owner=state_.document->find(state_.animatorEntity);
+    const auto *component=owner?owner->components.findInstance(state_.animatorInstance):nullptr;
+    if(component&&&component->type()==&scene::Animator::descriptor&&scene::animator(*component).controller.valid()) {
+      if(state_.animatorRuntime) {
+        if(const auto *live=state_.animatorRuntime->find(state_.animatorEntity,state_.animatorInstance)) state_.animatorControllerDiagnostic=live->controllerDiagnostic;
+      } else if(!animatorResourceDrag_) {
+        scene::Animator check;resources::resolveAnimatorController(scene::animator(*component),animatorControllers_,check,state_.animatorControllerDiagnostic);
+      }
+    }
+  }
   state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   refreshColliderAuthoring();
@@ -9856,7 +9911,7 @@ void EditorSession::update() {
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // The first pass measures current content. Clamp before the final paint,
   // including after resize or changing to shorter contextual content.
-  if(state_.animatorOpen&&state_.animatorDrawer==2)
+  if(state_.animatorOpen&&state_.animatorDrawer>=2)
     state_.animatorDetailsScroll=std::clamp(state_.animatorDetailsScroll,0.f,std::max(0.f,layout_.animatorDetailsExtent-layout_.animatorDetailsWindow.height));
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
   // altura util so encolhe quando o teclado termina de subir, um ou dois
@@ -11818,6 +11873,9 @@ bool EditorSession::resolveComponentResources(scene::ComponentValue &value,const
         runtime::AnimationClipView view;
         if(!mapScene_.findClip(asset,view)) {error="Clipe do recurso não está carregado";return false;}
         continue;
+      }
+      if(binding.kind==resources::AssetType::AnimatorController&&!resources::findAnimatorController(animatorControllers_,asset)) {
+        error="Controller do recurso ausente ou inválido";return false;
       }
       if(binding.kind==resources::AssetType::AudioClip && !audioClipAvailable(asset,error)) return false;
       if(binding.kind==resources::AssetType::EnvironmentProfile && !findEnvironmentProfile(asset)) {
