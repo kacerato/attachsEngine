@@ -340,18 +340,20 @@ int writeVirtualCameraProject(const char *directory) {
 // Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
 // importado com Animator no lugar da Animação legada, mistura 1D por
 // Velocidade, gatilho de Qualquer estado e retorno por tempo de saída.
-int writeAnimatorProject(const char *directory) {
+int writeAnimatorProject(const char *directory,bool general=false) {
   namespace fs=std::filesystem;
   const auto fail=[](const std::string &message){std::fprintf(stderr,"Animator export refused: %s\n",message.c_str());return 2;};
   if(!directory||!directory[0]) return fail("provide a new empty output directory");
   std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
   if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
   std::vector<u8> probe,fox,license;
-  if(!readAsset("tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset("tests/native/fixtures/gltf/Fox.glb",fox)||
-     !readAsset("tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
+  const char *modelPath=general?"Fontes/Mechanism.glb":"Fontes/Fox.glb";
+  const char *licensePath=general?"Fontes/Mechanism.LICENSE.txt":"Fontes/Fox.LICENSE.txt";
+  if(!readAsset(general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
+     !readAsset(general?"tests/fixtures/animator/Mechanism.LICENSE.txt":"tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
   for(const auto *folder:{"Scripts","scenes",".astra","Fontes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
   if(!editor::EditorImportTransaction::write(root/"Scripts/AnimatorProbe.cs",probe)||
-     !editor::EditorImportTransaction::write(root/"Fontes/Fox.LICENSE.txt",license)) return fail("cannot publish sources");
+     !editor::EditorImportTransaction::write(root/licensePath,license)) return fail("cannot publish sources");
   editor::EditorSession session;
   if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
   // O gravador não desenha: o publicador só guarda os buffers que o import entrega.
@@ -364,7 +366,7 @@ int writeAnimatorProject(const char *directory) {
     out={draws,materials,vertices,indices};return true;});
   // Mesmo caminho do importador sem GPU: decodifica, publica a fonte e instancia.
   resources::GltfImport model;editor::EditorSession::ModelImportReport report;
-  if(!resources::importGlb(fox,{},{},model)||!session.commitModelImport(fox,model,"Fontes/Fox.glb","",report)||
+  if(!resources::importGlb(fox,{},{},model)||!session.commitModelImport(fox,model,modelPath,"",report)||
      !session.instantiateModel(report.source,report,true)) return fail(model.diagnostic+" "+report.diagnostic);
   auto &document=session.document();
   std::vector<editor::EditorEntityId> all;document.collectSubtree(document.root(),all);
@@ -388,6 +390,18 @@ int writeAnimatorProject(const char *directory) {
   toLook.conditions={{scare,scene::AnimatorConditionMode::If,0}};
   scene::AnimatorTransition back;back.id=a.allocateId();back.from=look.id;back.to=locoId;back.hasExitTime=true;back.exitTime=.9f;back.duration=.3f;
   base.transitions={toLook,back};
+  if(general) {
+    editor::assignEntityName(values,"Mecanismo");base.states[0].name="Abertura";base.states[0].events.resize(8);
+    for(u32 e=0;e<8;++e) base.states[0].events[e]={e/8.f,e+1};
+    a.parameters[0].source=scene::AnimatorParameterSource::PlanarSpeed;a.parameters[0].response=.12f;
+    const auto physical=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Fonte física");
+    auto pv=*document.find(physical);auto *body=static_cast<scene::PhysicsBody*>(pv.components.add(scene::PhysicsBody::descriptor));
+    body->motion=scene::BodyMotion::Dynamic;body->gravityFactor=0;body->linearDamping=0;pv.components.add(scene::Collider::descriptor);
+    if(!document.applyEntityValues(physical,pv)) return fail("physical source");
+    a.motionSource=physical;
+    for(u32 i=0;i<29;++i) a.parameters.push_back({a.allocateId(),"Auxiliar "+std::to_string(i+1),scene::AnimatorParameterType::Float,0});
+    a.parameters.push_back({a.allocateId(),"Teste manual",scene::AnimatorParameterType::Bool,0});
+  }
   if(!a.valid()) return fail("animator graph invalid");
   if(!document.applyEntityValues(owner,values)) return fail("animator graph rejected by document");
   const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");
@@ -398,7 +412,7 @@ int writeAnimatorProject(const char *directory) {
   if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
   if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
   std::ostringstream descriptor;
-  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"AnimatorFox-20261007\",\"path\":"<<std::quoted(root.generic_string())
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Animator project written: %s\n",root.generic_string().c_str());
@@ -908,6 +922,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-physics-f-project")return writePhysicsFProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-virtual-camera-project")return writeVirtualCameraProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-animator-general-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-project")return writeAnimatorProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
@@ -1817,6 +1832,34 @@ int main(int argc, char **argv) {
   }
   state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
   state.document = &document;
+  if(argc>4&&std::string_view(argv[4]).starts_with("animator-workspace")) {
+    const auto id=document.createEntity(document.root(),editor::EditorEntityKind::Folder,"Mecanismo / Porta");
+    auto values=*document.find(id);auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));
+    a.parameters={{a.allocateId(),"Abertura",scene::AnimatorParameterType::Float,0},
+                  {a.allocateId(),"Acionar",scene::AnimatorParameterType::Trigger,0}};
+    a.layers[0].states[0].name="Fechada";a.layers[0].states[0].x=-120;a.layers[0].states[0].y=-40;
+    for(const auto &[name,x,y]:{std::tuple{"Abrindo",160.f,-120.f},std::tuple{"Aberta",420.f,-40.f},std::tuple{"Fechando",160.f,120.f}}) {
+      scene::AnimatorState s;s.id=a.allocateId();s.name=name;s.x=x;s.y=y;a.layers[0].states.push_back(s);
+    }
+    for(u32 i=0;i<4;++i) {scene::AnimatorTransition t;t.id=a.allocateId();t.from=a.layers[0].states[i].id;t.to=a.layers[0].states[(i+1)%4].id;
+      if(i==0) t.conditions={{a.parameters[1].id,scene::AnimatorConditionMode::If,0}};else {t.hasExitTime=true;t.exitTime=1;}a.layers[0].transitions.push_back(t);}
+    const auto instance=a.instanceId(),selected=a.layers[0].states[1].id,parameter=a.parameters[0].id;
+    const std::string mode=argv[4];
+    if(mode=="animator-workspace-properties"||mode=="animator-workspace-events") {
+      a.parameters[0].value=.4f;a.parameters.push_back({a.allocateId(),"Inclinação",scene::AnimatorParameterType::Float,.2f});
+      auto &s=a.layers[0].states[1];s.kind=scene::AnimatorMotionKind::Blend2D;s.blendX=parameter;s.blendY=a.parameters.back().id;s.motions.resize(8);s.events.resize(8);
+      for(u32 i=0;i<8;++i) {const float angle=float(i)*.785398f;s.motions[i].x=std::cos(angle);s.motions[i].y=std::sin(angle);s.events[i].time=float(i)/8;s.events[i].tag=i;}
+    }
+    if(mode=="animator-workspace-binding"||mode=="animator-workspace-source") {a.parameters[0].name="Velocidade";a.parameters[0].source=scene::AnimatorParameterSource::PlanarSpeed;a.parameters[0].response=.12f;}
+    if(!document.applyEntityValues(id,values)) return 1;
+    state.animatorOpen=true;state.animatorEntity=id;state.animatorInstance=instance;
+    state.animatorPan[0]=-100;state.animatorZoom=.85f;
+    state.animatorDrawer=mode=="animator-workspace-parameters"?1:mode=="animator-workspace-properties"||mode=="animator-workspace-events"||mode=="animator-workspace-binding"||mode=="animator-workspace-source"?2:0;
+    if(mode=="animator-workspace-properties"||mode=="animator-workspace-events") state.animatorState=selected;
+    if(mode=="animator-workspace-events") state.animatorDetailsScroll=1300;
+    if(mode=="animator-workspace-binding"||mode=="animator-workspace-source") state.animatorParameter=parameter;
+    if(mode=="animator-workspace-source") state.animatorPicker=0x30000u;
+  }
   state.selection = selection;
   state.projectName = argc>5 ? "Package preview" : "Empty Scene";
   if(argc>4 && std::string(argv[4])=="rotate") state.tool=editor::EditorGizmoMode::Rotate;
@@ -2014,6 +2057,7 @@ int main(int argc, char **argv) {
   // cena mora, a segunda desenha com a projecao certa.
   editor::EditorScreenLayout layout =
       editor::buildEditorScreen(state, ui::defaultTheme(), list, router);
+  if(state.animatorOpen&&state.animatorDrawer==2) state.animatorDetailsScroll=std::clamp(state.animatorDetailsScroll,0.f,std::max(0.f,layout.animatorDetailsExtent-layout.animatorDetailsWindow.height));
   view.rect = layout.viewport;
   // Debug.DrawLine/DrawRay como o Play desenha: mesma lista e mesma projeção.
   static runtime::DebugLines debugLines;

@@ -2890,10 +2890,17 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const UiRect panel=deflate(state.surface,UiInsets::all(8));
   list.addRect(panel,theme.color.surface,theme.radius.control);
   auto content=deflate(panel,UiInsets::all(10));
+  UiRect hitWindow=panel;
+  const auto region=[&](UiRect rect,u32 code){const auto hit=intersect(rect,hitWindow);if(!hit.isEmpty()) router.addRegion(hit,code);};
   const auto button=[&](UiRect rect,std::string_view label,u32 code,bool primary=false,bool enabled=true,bool on=false){
     list.addRect(rect,primary?theme.color.accent:on?withAlpha(theme.color.accent,.22f):theme.color.raised,theme.radius.control);
+    if(rect.width>=80&&(code==w::Duplicate||code==w::ParameterSource||(code>=w::LayerTab&&code<w::LayerTab+scene::Animator::MaximumLayers))) {
+      const auto glyph=takeLeft(rect,28);
+      const auto icon=code==w::Duplicate?UiIcon::AnimationDuplicate:code==w::ParameterSource?UiIcon::AnimationBinding:UiIcon::AnimationLayers;
+      list.addImage(centred(glyph,22,22),static_cast<UiImageId>(icon),enabled?theme.color.text:theme.color.textFaint);
+    }
     builder.label(rect,std::string(label),primary?theme.color.accentInk:on?theme.color.accent:!enabled?theme.color.textFaint:theme.color.text,theme.type.caption,UiAlign::Center);
-    if(enabled) router.addRegion(rect,w::id(code));
+    if(enabled) region(rect,w::id(code));
   };
   const auto clipName=[&](const resources::AssetGuid &clip)->std::string{
     if(!clip.valid()) return "Escolher clipe";
@@ -2903,34 +2910,58 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   };
   const auto parameterName=[&](u64 id,const char *empty)->std::string{const auto *p=a.parameter(id);return p?p->name:empty;};
 
-  // ---- Barra superior --------------------------------------------------
-  auto header=takeTop(content,40);takeTop(content,8);
-  builder.label(takeLeft(header,240),fitMiddle(list,std::string("Animator · ")+entity->name,240,theme.type.cardName),theme.color.text,theme.type.cardName);
-  for(u32 i=0;i<a.layers.size();++i) {button(takeLeft(header,112),a.layers[i].name,w::LayerTab+i,false,true,i==layerIndex);takeLeft(header,6);}
-  if(a.layers.size()<scene::Animator::MaximumLayers) button(takeLeft(header,104),"+ camada",w::LayerAdd,false,!readOnly);
-  button(takeRight(header,92),"Fechar",w::Close,true);takeRight(header,6);
-  button(takeRight(header,92),"Enquadrar",w::Frame);takeRight(header,6);
-  button(takeRight(header,40),"+",w::ZoomIn);takeRight(header,4);button(takeRight(header,40),"-",w::ZoomOut);takeRight(header,10);
-  const bool hasSelection=state.animatorState||state.animatorTransition;
-  button(takeRight(header,92),"Excluir",w::Delete,false,!readOnly&&hasSelection);takeRight(header,6);
-  button(takeRight(header,92),"Padrão",w::SetDefault,false,!readOnly&&state.animatorState&&state.animatorState!=layer.defaultState);takeRight(header,6);
-  button(takeRight(header,104),state.animatorConnecting?"Cancelar":"Transição",w::Connect,false,!readOnly,state.animatorConnecting);takeRight(header,6);
-  button(takeRight(header,104),"+ Estado",w::AddState,false,!readOnly&&layer.states.size()<scene::Animator::MaximumStates);
-
+  // Single contextual sheet; the graph owns the remaining space.
+  auto header=takeTop(content,44);takeTop(content,4);
+  const auto iconButton=[&](UiRect r,UiIcon icon,const char *name,u32 code,bool enabled=true,bool selected=false){
+    list.addRect(r,selected?withAlpha(theme.color.accent,.18f):theme.color.surface,3);
+    list.addImage({r.x+(r.width-22)*.5f,r.y+3,22,22},static_cast<UiImageId>(icon),enabled?theme.color.text:theme.color.textFaint);
+    auto caption=theme.type.caption;caption.size=10;caption.tracking=0;
+    builder.label({r.x+2,r.y+26,r.width-4,16},name,enabled?theme.color.textMuted:theme.color.textFaint,caption,UiAlign::Center);
+    if(enabled) region(r,w::id(code));
+  };
+  iconButton(takeRight(header,42),UiIcon::UiClose,"Fechar",w::Close);takeRight(header,4);
+  iconButton(takeRight(header,42),UiIcon::AnimationFrame,"Quadro",w::Frame);takeRight(header,4);
+  button(takeRight(header,36),"+",w::ZoomIn);takeRight(header,4);button(takeRight(header,36),"-",w::ZoomOut);takeRight(header,8);
+  iconButton(takeRight(header,42),UiIcon::EditorRedo,"Refazer",w::Redo,!readOnly);takeRight(header,4);
+  iconButton(takeRight(header,42),UiIcon::EditorUndo,"Desfaz",w::Undo,!readOnly);takeRight(header,8);
+  iconButton(takeRight(header,42),UiIcon::AnimationTransition,"Ligar",w::Connect,!readOnly,state.animatorConnecting);takeRight(header,4);
+  iconButton(takeRight(header,42),UiIcon::AnimationState,"+Estado",w::AddState,!readOnly&&layer.states.size()<scene::Animator::MaximumStates);takeRight(header,8);
+  iconButton(takeRight(header,42),UiIcon::AnimationParameters,"Params",w::Parameters,true,state.animatorDrawer==1);takeRight(header,4);
+  iconButton(takeRight(header,42),UiIcon::UiSettings,"Ajustes",w::Details,true,state.animatorDrawer==2);
+  builder.label(header,fitMiddle(list,std::string("Animator / ")+entity->name,header.width,theme.type.cardName),theme.color.text,theme.type.cardName);
+  auto tabs=takeTop(content,34);takeTop(content,6);
+  for(u32 i=0;i<a.layers.size();++i) {button(takeLeft(tabs,104),a.layers[i].name,w::LayerTab+i,false,true,i==layerIndex);takeLeft(tabs,4);}
+  if(a.layers.size()<scene::Animator::MaximumLayers) button(takeLeft(tabs,36),"+",w::LayerAdd,false,!readOnly);
+  const auto runtimeBar=takeBottom(content,28);takeBottom(content,4);
+  std::string runtimeText=readOnly?"Play":"Edição";
+  if(live) {
+    if(!live->motionDiagnostic.empty()) runtimeText+="  /  "+live->motionDiagnostic;
+    else if(live->motionAvailable) runtimeText+="  /  Movimento medido";
+    if(layerIndex<live->layers.size()) {const auto &ls=live->layers[layerIndex];if(const auto *current=layer.state(ls.current)) runtimeText+="  /  "+current->name;}
+  }
+  builder.label(runtimeBar,fitMiddle(list,runtimeText,runtimeBar.width,theme.type.caption),live&&!live->motionDiagnostic.empty()?theme.color.warning:theme.color.textMuted,theme.type.caption);
+  UiRect drawer{};
+  if(state.animatorDrawer) {drawer=takeRight(content,std::min(340.f,content.width*.46f));takeRight(content,8);list.addRect(drawer,theme.color.surface,3);}
+  layout.animatorDetailsWindow={};layout.animatorParamsWindow={};
   // ---- Parâmetros ------------------------------------------------------
-  auto left=takeLeft(content,250);takeLeft(content,8);
+  if(state.animatorDrawer==1) {
+  auto left=drawer;
   list.addRect(left,theme.color.raised,theme.radius.control);
   auto params=deflate(left,UiInsets::all(8));
-  builder.label(takeTop(params,20),"PARÂMETROS",theme.color.textMuted,theme.type.label);
+  builder.label(takeTop(params,24),"Parâmetros",theme.color.text,theme.type.cardName);
+  auto adds=takeBottom(params,80);
+  layout.animatorParamsWindow=params;layout.animatorParamsExtent=a.parameters.size()*44.f;
+  hitWindow=params;region(params,w::id(w::ParamsScroll));list.pushClip(params);
+  params.y-=std::clamp(state.animatorParamsScroll,0.f,std::max(0.f,layout.animatorParamsExtent-params.height));params.height=4096;
   static constexpr const char *letters[]{"F","I","B","G"};
-  for(u32 i=0;i<a.parameters.size()&&params.height>=44+90;++i) {
+  for(u32 i=0;i<a.parameters.size();++i) {
     const auto &p=a.parameters[i];
     auto row=takeTop(params,44);row.height-=4;
     const bool chosen=state.animatorParameter==p.id;
     list.addRect(row,chosen?withAlpha(theme.color.accent,.14f):theme.color.surface,theme.radius.control);
     const auto chip=centred(takeLeft(row,34),24,24);
-    list.addRect(chip,withAlpha(theme.color.accent,.25f),6);
-    builder.label(chip,letters[static_cast<u32>(p.type)],theme.color.accent,theme.type.caption,UiAlign::Center);
+    if(p.source!=scene::AnimatorParameterSource::Manual) list.addImage(chip,static_cast<UiImageId>(UiIcon::AnimationBinding),theme.color.text);
+    else builder.label(chip,letters[static_cast<u32>(p.type)],theme.color.accent,theme.type.caption,UiAlign::Center);
     float value=p.value;
     if(live) for(usize k=0;k<live->parameterIds.size();++k) if(live->parameterIds[k]==p.id) value=live->values[k];
     char text[32];
@@ -2941,64 +2972,120 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
       default: std::snprintf(text,sizeof text,"%s",live?(value!=0?"ligado":"—"):"gatilho");break;
     }
     auto valueBox=takeRight(row,chosen&&!readOnly?64:72);
-    if(chosen&&!readOnly) {const auto remove=takeRight(row,32);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);router.addRegion(remove,w::id(w::ParameterDelete+i));}
+    if(chosen&&!readOnly) {const auto remove=takeRight(row,32);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);region(remove,w::id(w::ParameterDelete+i));}
     builder.label(valueBox,text,live?theme.color.accent:theme.color.textDim,theme.type.numeric,UiAlign::End);
-    if(!readOnly&&p.type!=scene::AnimatorParameterType::Trigger) router.addRegion(valueBox,w::id(w::ParameterValue+i));
+    if(!readOnly&&p.source==scene::AnimatorParameterSource::Manual&&p.type!=scene::AnimatorParameterType::Trigger) region(valueBox,w::id(w::ParameterValue+i));
     builder.label(row,fitMiddle(list,p.name,row.width,theme.type.body),theme.color.text,theme.type.body);
-    router.addRegion(row,w::id((chosen&&!readOnly?w::ParameterName:w::ParameterRow)+i));
+    region(row,w::id(w::ParameterRow+i));
   }
   if(a.parameters.empty()) builder.label(takeTop(params,40),"Nenhum parâmetro: as transições leem estes valores",theme.color.textMuted,theme.type.caption);
-  auto adds=takeBottom(params,80);
+  list.popClip();hitWindow=panel;
   static constexpr const char *addLabels[]{"+ Float","+ Int","+ Bool","+ Gatilho"};
   for(u32 i=0;i<4;++i) {
     const UiRect cell{adds.x+(i%2)*(adds.width*.5f),adds.y+(i/2)*40.f,adds.width*.5f-4,36};
     button(cell,addLabels[i],w::ParameterAdd+i,false,!readOnly&&a.parameters.size()<scene::Animator::MaximumParameters);
   }
 
+  }
+
   // ---- Propriedades da seleção ----------------------------------------
-  auto right=takeRight(content,330);takeRight(content,8);
+  if(state.animatorDrawer==2) {
+  auto right=drawer;
   list.addRect(right,theme.color.raised,theme.radius.control);
   auto side=deflate(right,UiInsets::all(10));
+  auto actions=takeBottom(side,38);
+  button(takeLeft(actions,actions.width*.5f-2),"Duplicar",w::Duplicate,false,!readOnly&&state.animatorState!=0);
+  button(actions,"Excluir",w::Delete,false,!readOnly&&(state.animatorState||state.animatorTransition));
+  takeBottom(side,4);
+  layout.animatorDetailsWindow=side;hitWindow=side;region(side,w::id(w::DetailsScroll));list.pushClip(side);
+  // Gestures clamp against the completed layout; this new layout has no extent yet.
+  const float top=side.y-std::max(0.f,state.animatorDetailsScroll);
+  side.y=top;side.height=4096;
   const auto valueRow=[&](std::string_view label,std::string value,u32 code,bool enabled=true,bool accent=false){
     if(side.height<38) return;
     auto row=takeTop(side,38);row.height-=4;
-    builder.label(takeLeft(row,row.width-150),std::string(label),theme.color.textDim,theme.type.caption);
+    builder.label(takeLeft(row,row.width-150),fitMiddle(list,std::string(label),row.width-150,theme.type.caption),theme.color.textDim,theme.type.caption);
     list.addRect(row,theme.color.surface,theme.radius.control);
     builder.label(deflate(row,UiInsets{10,0,10,0}),fitMiddle(list,value,row.width-20,theme.type.body),accent?theme.color.accent:enabled?theme.color.text:theme.color.textFaint,theme.type.body);
-    if(enabled&&!readOnly) router.addRegion(row,w::id(code));
+    const bool liveValue=code>=w::ParameterValue&&code<w::ParameterValue+0x100;
+    if(enabled&&(!readOnly||liveValue)) region(row,w::id(code));
   };
   const auto number=[](float v,const char *unit=""){char t[32];std::snprintf(t,sizeof t,"%.2f%s",static_cast<double>(v),unit);return std::string(t);};
-  if(const auto *s=layer.state(state.animatorState)) {
+  if(const auto *p=a.parameter(state.animatorParameter)) {
+    const u32 index=static_cast<u32>(p-a.parameters.data());
+    valueRow("Nome",p->name,w::ParameterName+index);
+    valueRow("Fonte",scene::animatorSourceName(p->source),w::ParameterSource,p->type==scene::AnimatorParameterType::Float||p->type==scene::AnimatorParameterType::Bool);
+    if(p->source!=scene::AnimatorParameterSource::Manual) {
+      const auto *owner=state.document->find(static_cast<EditorEntityId>(a.motionSource?a.motionSource:entity->id));
+      valueRow("Corpo / motor",owner?owner->name:"Objeto removido",w::MotionSource);
+      if(!owner||(!runtime::physicsBody(*owner)&&!runtime::characterComponent(*owner)))
+        builder.label(takeTop(side,32),"Fonte sem corpo físico ou Personagem",theme.color.warning,theme.type.caption);
+      if(p->source!=scene::AnimatorParameterSource::Grounded) {
+        valueRow("Resposta",number(p->response," s"),w::ParameterResponse);
+        valueRow("Escala",number(p->scale," ×"),w::ParameterScale);
+      }
+    } else if(p->type!=scene::AnimatorParameterType::Trigger) valueRow(readOnly?"Ajustar ao vivo":"Padrão",number(live&&index<live->values.size()?live->values[index]:p->value),w::ParameterValue+index);
+    else if(readOnly) button(takeTop(side,36),"Disparar gatilho",w::ParameterTrigger);
+    if(live&&index<live->values.size()) valueRow("Valor vivo",number(live->values[index]),0,false,true);
+    usize uses=0;for(const auto &l:a.layers) {for(const auto &t:l.transitions) for(const auto &c:t.conditions) uses+=c.parameter==p->id;
+      for(const auto &st:l.states) uses+=st.blendX==p->id||st.blendY==p->id||st.speedParameter==p->id;}
+    builder.label(takeTop(side,28),std::to_string(uses)+" vínculos",theme.color.textMuted,theme.type.caption);
+    if(!readOnly) button(takeTop(side,36),"Excluir parâmetro",w::ParameterDelete+index);
+  } else if(const auto *s=layer.state(state.animatorState)) {
     builder.label(takeTop(side,20),"ESTADO",theme.color.textMuted,theme.type.label);
     auto nameRow=takeTop(side,40);nameRow.height-=4;
     list.addRect(nameRow,theme.color.surface,theme.radius.control);
     builder.label(deflate(nameRow,UiInsets{10,0,10,0}),s->name,theme.color.text,theme.type.cardName);
-    if(!readOnly) router.addRegion(nameRow,w::id(w::StateName));
+    if(!readOnly) region(nameRow,w::id(w::StateName));
     auto kinds=takeTop(side,36);
     static constexpr const char *kindLabels[]{"Clipe","Mistura 1D","Mistura 2D"};
     for(u32 k=0;k<3;++k) button({kinds.x+k*(kinds.width/3),kinds.y,kinds.width/3-4,32},kindLabels[k],w::StateKind+k,false,!readOnly,static_cast<u32>(s->kind)==k);
     takeTop(side,4);
+    if(!readOnly) button(takeTop(side,34),s->id==layer.defaultState?"Estado padrão":"Definir como padrão",w::SetDefault,false,s->id!=layer.defaultState);
     if(s->kind==scene::AnimatorMotionKind::Blend1D) valueRow("Parâmetro",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);
     if(s->kind==scene::AnimatorMotionKind::Blend2D) {valueRow("Parâmetro X",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);valueRow("Parâmetro Y",parameterName(s->blendY,"Escolher Float"),w::StateBlendY);}
+    if(s->kind!=scene::AnimatorMotionKind::Clip&&!s->motions.empty()) {
+      auto plot=takeTop(side,156);plot=deflate(plot,UiInsets::all(8));list.addRect(plot,theme.color.canvas,2);
+      const auto parameterValue=[&](u64 id){const auto *p=a.parameter(id);float v=p?p->value:0;
+        if(live) {for(usize i=0;i<live->parameterIds.size();++i) if(live->parameterIds[i]==id) v=live->values[i];}
+        return v;};
+      const float x=parameterValue(s->blendX),y=parameterValue(s->blendY);
+      std::vector<runtime::animator_detail::WeightedMotion> weights;
+      if(s->kind==scene::AnimatorMotionKind::Blend1D) runtime::animator_detail::blend1D(s->motions,x,weights);
+      else runtime::animator_detail::blend2D(s->motions,x,y,weights);
+      double minX=0,maxX=1,minY=-1,maxY=1;
+      for(const auto &m:s->motions) {const double px=s->kind==scene::AnimatorMotionKind::Blend1D?m.threshold:m.x;
+        minX=std::min(minX,px);maxX=std::max(maxX,px);minY=std::min(minY,static_cast<double>(m.y));maxY=std::max(maxY,static_cast<double>(m.y));}
+      const auto position=[&](double px,double py){return UiPoint{plot.x+12+static_cast<float>((px-minX)/(maxX-minX))*(plot.width-24),
+        plot.y+plot.height-12-static_cast<float>((py-minY)/(maxY-minY))*(plot.height-24)};};
+      const auto origin=position(0,0);list.addLine({plot.x+8,origin.y},{plot.right()-8,origin.y},theme.color.lineSoft,1);
+      list.addLine({origin.x,plot.y+8},{origin.x,plot.bottom()-8},theme.color.lineSoft,1);
+      for(u32 i=0;i<s->motions.size();++i) {const auto &m=s->motions[i];const auto pt=position(s->kind==scene::AnimatorMotionKind::Blend1D?m.threshold:m.x,s->kind==scene::AnimatorMotionKind::Blend1D?0:m.y);
+        float weight=0;for(const auto &w:weights) if(w.motion==i) weight=w.weight;
+        const float size=8+weight*8;list.addRect({pt.x-size*.5f,pt.y-size*.5f,size,size},weight>0?theme.color.accent:theme.color.textMuted,2);
+        builder.label({pt.x+8,pt.y-12,28,18},std::to_string(i+1),theme.color.text,theme.type.caption);}
+      const auto probe=position(std::clamp<double>(x,minX,maxX),s->kind==scene::AnimatorMotionKind::Blend1D?0:std::clamp<double>(y,minY,maxY));
+      list.addBorder({probe.x-9,probe.y-9,18,18},theme.color.warning,2,9);
+    }
     builder.label(takeTop(side,20),s->kind==scene::AnimatorMotionKind::Clip?"CLIPE":"CLIPES DA MISTURA",theme.color.textMuted,theme.type.label);
     const u32 motions=s->kind==scene::AnimatorMotionKind::Clip?1u:static_cast<u32>(s->motions.size());
     for(u32 m=0;m<motions&&side.height>=38;++m) {
       auto row=takeTop(side,38);row.height-=4;
       list.addRect(row,theme.color.surface,theme.radius.control);
-      if(s->kind!=scene::AnimatorMotionKind::Clip&&!readOnly) {const auto remove=takeRight(row,30);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);router.addRegion(remove,w::id(w::MotionRemove+m));}
+      if(s->kind!=scene::AnimatorMotionKind::Clip&&!readOnly) {const auto remove=takeRight(row,30);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);region(remove,w::id(w::MotionRemove+m));}
       if(s->kind==scene::AnimatorMotionKind::Blend1D&&m<s->motions.size()) {
         const auto box=takeRight(row,64);builder.label(box,number(s->motions[m].threshold),theme.color.accent,theme.type.numeric,UiAlign::Center);
-        if(!readOnly) router.addRegion(box,w::id(w::MotionThreshold+m));
+        if(!readOnly) region(box,w::id(w::MotionThreshold+m));
       }
       if(s->kind==scene::AnimatorMotionKind::Blend2D&&m<s->motions.size()) {
         const auto by=takeRight(row,52),bx=takeRight(row,52);
         builder.label(bx,number(s->motions[m].x),theme.color.accent,theme.type.numeric,UiAlign::Center);
         builder.label(by,number(s->motions[m].y),theme.color.accent,theme.type.numeric,UiAlign::Center);
-        if(!readOnly) {router.addRegion(bx,w::id(w::MotionX+m));router.addRegion(by,w::id(w::MotionY+m));}
+        if(!readOnly) {region(bx,w::id(w::MotionX+m));region(by,w::id(w::MotionY+m));}
       }
       const auto clip=m<s->motions.size()?s->motions[m].clip:resources::AssetGuid{};
       builder.label(deflate(row,UiInsets{10,0,6,0}),fitMiddle(list,clipName(clip),row.width-16,theme.type.body),clip.valid()?theme.color.text:theme.color.warning,theme.type.body);
-      if(!readOnly) router.addRegion(row,w::id(w::MotionClip+m));
+      if(!readOnly) region(row,w::id(w::MotionClip+m));
     }
     if(s->kind!=scene::AnimatorMotionKind::Clip&&s->motions.size()<scene::Animator::MaximumMotions&&side.height>=36) button(takeTop(side,34),"+ clipe na mistura",w::MotionAdd,false,!readOnly);
     takeTop(side,6);
@@ -3008,12 +3095,12 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     builder.label(takeTop(side,20),"EVENTOS",theme.color.textMuted,theme.type.label);
     for(u32 e=0;e<s->events.size()&&side.height>=38;++e) {
       auto row=takeTop(side,38);row.height-=4;list.addRect(row,theme.color.surface,theme.radius.control);
-      if(!readOnly) {const auto remove=takeRight(row,30);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);router.addRegion(remove,w::id(w::EventRemove+e));}
+      if(!readOnly) {const auto remove=takeRight(row,30);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);region(remove,w::id(w::EventRemove+e));}
       const auto tag=takeRight(row,70);const auto time=takeRight(row,80);
       builder.label(time,number(s->events[e].time),theme.color.accent,theme.type.numeric,UiAlign::Center);
       builder.label(tag,"→ "+std::to_string(s->events[e].tag),theme.color.accent,theme.type.numeric,UiAlign::Center);
       builder.label(deflate(row,UiInsets{10,0,0,0}),"Em",theme.color.textDim,theme.type.caption);
-      if(!readOnly) {router.addRegion(time,w::id(w::EventTime+e));router.addRegion(tag,w::id(w::EventTag+e));}
+      if(!readOnly) {region(time,w::id(w::EventTime+e));region(tag,w::id(w::EventTag+e));}
     }
     if(s->events.size()<scene::Animator::MaximumEvents&&side.height>=36) button(takeTop(side,34),"+ evento (tempo 0–1 e marca)",w::EventAdd,false,!readOnly);
   } else if(const scene::AnimatorTransition *t=[&]()->const scene::AnimatorTransition*{for(const auto &x:layer.transitions) if(x.id==state.animatorTransition) return &x;return nullptr;}()) {
@@ -3023,18 +3110,21 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     valueRow("Tempo de saída",t->hasExitTime?"sim":"não",w::TransitionExit);
     if(t->hasExitTime) valueRow("Sai em (voltas)",number(t->exitTime),w::TransitionExitTime);
     valueRow("Duração",number(t->duration," s"),w::TransitionDuration);
+    auto order=takeTop(side,36);const usize rank=static_cast<usize>(t-layer.transitions.data());
+    button(takeLeft(order,order.width*.5f-2),"Priorizar",w::TransitionEarlier,false,!readOnly&&rank>0);
+    button(order,"Adiar",w::TransitionLater,false,!readOnly&&rank+1<layer.transitions.size());
     builder.label(takeTop(side,20),"CONDIÇÕES (TODAS)",theme.color.textMuted,theme.type.label);
     static constexpr const char *modes[]{"Se","Se não","Maior que","Menor que","Igual a","Diferente de"};
     for(u32 c=0;c<t->conditions.size()&&side.height>=38;++c) {
       const auto &cond=t->conditions[c];const auto *p=a.parameter(cond.parameter);
       auto row=takeTop(side,38);row.height-=4;list.addRect(row,theme.color.surface,theme.radius.control);
-      if(!readOnly) {const auto remove=takeRight(row,30);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);router.addRegion(remove,w::id(w::ConditionRemove+c));}
+      if(!readOnly) {const auto remove=takeRight(row,30);builder.label(remove,"×",theme.color.danger,theme.type.cardName,UiAlign::Center);region(remove,w::id(w::ConditionRemove+c));}
       const bool numeric=p&&(p->type==scene::AnimatorParameterType::Float||p->type==scene::AnimatorParameterType::Int);
-      if(numeric) {const auto box=takeRight(row,60);builder.label(box,number(cond.threshold),theme.color.accent,theme.type.numeric,UiAlign::Center);if(!readOnly) router.addRegion(box,w::id(w::ConditionThreshold+c));}
+      if(numeric) {const auto box=takeRight(row,60);builder.label(box,number(cond.threshold),theme.color.accent,theme.type.numeric,UiAlign::Center);if(!readOnly) region(box,w::id(w::ConditionThreshold+c));}
       const auto mode=takeRight(row,96);builder.label(mode,modes[static_cast<u32>(cond.mode)],theme.color.accent,theme.type.caption,UiAlign::Center);
-      if(!readOnly) router.addRegion(mode,w::id(w::ConditionMode+c));
+      if(!readOnly) region(mode,w::id(w::ConditionMode+c));
       builder.label(deflate(row,UiInsets{10,0,0,0}),fitMiddle(list,p?p->name:"?",row.width-10,theme.type.body),theme.color.text,theme.type.body);
-      if(!readOnly) router.addRegion(row,w::id(w::ConditionParameter+c));
+      if(!readOnly) region(row,w::id(w::ConditionParameter+c));
     }
     if(t->conditions.size()<scene::Animator::MaximumConditions&&side.height>=36) button(takeTop(side,34),"+ condição",w::ConditionAdd,false,!readOnly&&!a.parameters.empty());
     if(t->conditions.empty()&&!t->hasExitTime) builder.label(takeTop(side,34),"Sem condição nem tempo de saída: nunca dispara",theme.color.warning,theme.type.caption);
@@ -3042,23 +3132,30 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     builder.label(takeTop(side,20),"CAMADA",theme.color.textMuted,theme.type.label);
     auto nameRow=takeTop(side,40);nameRow.height-=4;list.addRect(nameRow,theme.color.surface,theme.radius.control);
     builder.label(deflate(nameRow,UiInsets{10,0,10,0}),layer.name,theme.color.text,theme.type.cardName);
-    if(!readOnly) router.addRegion(nameRow,w::id(w::LayerName));
+    if(!readOnly) region(nameRow,w::id(w::LayerName));
     valueRow("Peso",layerIndex==0?"1 (base)":number(layer.weight),w::LayerWeight,layerIndex>0);
     const auto *mask=layer.mask?state.document->find(static_cast<EditorEntityId>(layer.mask)):nullptr;
-    valueRow("Máscara",layer.mask?(mask?std::string("Só ")+mask->name:"objeto removido"):"Corpo inteiro",w::LayerMask);
+    valueRow("Máscara",layer.mask?(mask?std::string("Só ")+mask->name:"objeto removido"):"Hierarquia inteira",w::LayerMask);
     char summary[96];std::snprintf(summary,sizeof summary,"%zu estados · %zu transições",layer.states.size(),layer.transitions.size());
     builder.label(takeTop(side,28),summary,theme.color.textMuted,theme.type.caption);
     if(layerIndex>0&&side.height>=40) button(takeTop(side,36),"Excluir camada",w::LayerDelete,false,!readOnly);
-    builder.label(takeTop(side,18),"Toque num estado ou numa seta para editar.",theme.color.textMuted,theme.type.caption);
-    builder.label(takeTop(side,18),"Camadas de cima substituem as de baixo",theme.color.textMuted,theme.type.caption);
-    builder.label(takeTop(side,18),"na proporção do peso, só na máscara.",theme.color.textMuted,theme.type.caption);
+
+  }
+
+  layout.animatorDetailsExtent=side.y-top;
+  list.popClip();hitWindow=panel;
+  if(layout.animatorDetailsExtent>layout.animatorDetailsWindow.height) {
+    const auto win=layout.animatorDetailsWindow;const float height=std::max(24.f,win.height*win.height/layout.animatorDetailsExtent);
+    const float offset=std::clamp(state.animatorDetailsScroll,0.f,layout.animatorDetailsExtent-win.height)/(layout.animatorDetailsExtent-win.height)*(win.height-height);
+    list.addRect({win.right()-2,win.y+offset,2,height},theme.color.accent,1);
+  }
   }
 
   // ---- Grafo -----------------------------------------------------------
   const UiRect canvas=content;
   layout.animatorCanvas=canvas;
-  list.addRect(canvas,theme.color.voidBlack,theme.radius.control);
-  router.addRegion(canvas,w::id(w::Canvas));
+  list.addRect(canvas,theme.color.canvas,2);
+  region(canvas,w::id(w::Canvas));
   const view::View v{canvas,state.animatorPan[0],state.animatorPan[1],state.animatorZoom};
   list.pushClip(canvas);
   const float grid=32*v.zoom;
@@ -3088,10 +3185,15 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     const auto r=view::nodeRect(v,layer,id);
     const bool chosen=id==state.animatorState,isDefault=id==layer.defaultState,source=state.animatorConnecting&&id==state.animatorConnectFrom;
     const bool current=ls&&ls->current==id,next=ls&&ls->transitioning&&ls->next==id;
-    list.addRect(r,current?withAlpha(theme.color.accent,.18f):fill,10*v.zoom);
-    list.addBorder(r,source?theme.color.warning:chosen?theme.color.accent:isDefault?withAlpha(theme.color.accent,.7f):theme.color.line,chosen||source?2.5f:1.5f,10*v.zoom);
+    list.addRect(r,current?withAlpha(theme.color.accent,.18f):fill,3*v.zoom);
+    list.addRect({r.x,r.y,4*v.zoom,r.height},current||isDefault?theme.color.accent:theme.color.line,1);
+    list.addBorder(r,source?theme.color.warning:chosen?theme.color.accent:isDefault?withAlpha(theme.color.accent,.7f):theme.color.line,chosen||source?2.f:1.f,3*v.zoom);
     if(v.zoom>=.55f) {
       auto inner=deflate(r,UiInsets{12*v.zoom,8*v.zoom,10*v.zoom,8*v.zoom});
+      const auto glyph=takeLeft(inner,28*v.zoom);takeLeft(inner,6*v.zoom);
+      const auto *st=layer.state(id);
+      const UiIcon icon=st?(st->kind==scene::AnimatorMotionKind::Clip?UiIcon::AnimationState:UiIcon::AnimationBlend):UiIcon::AnimationTransition;
+      list.addImage(centred(glyph,24*v.zoom,24*v.zoom),static_cast<UiImageId>(icon),theme.color.text);
       builder.label(takeTop(inner,inner.height*.55f),fitMiddle(list,std::string(name),inner.width,theme.type.cardName),theme.color.text,theme.type.cardName);
       builder.label(inner,fitMiddle(list,sub,inner.width,theme.type.caption),isDefault&&!current?theme.color.accent:theme.color.textMuted,theme.type.caption);
     }
@@ -3112,9 +3214,9 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     node(s.id,s.name,sub,theme.color.raised);
   }
   list.popClip();
-  const char *hint=readOnly?"Play: estado vivo em destaque · pare o Play para editar":
+  const char *hint=readOnly?"Play · parâmetros manuais editáveis":
     state.animatorConnecting?(state.animatorConnectFrom?"Toque no estado de destino":"Toque no estado de origem (ou em Qualquer estado)"):
-    "Toque para selecionar · arraste um estado para mover · arraste o fundo para navegar";
+    "Selecionar · mover · navegar";
   builder.label({canvas.x+12,canvas.y+canvas.height-26,canvas.width-24,20},hint,state.animatorConnecting?theme.color.warning:theme.color.textMuted,theme.type.caption);
 
   // ---- Seletores -------------------------------------------------------
@@ -3125,15 +3227,26 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     list.addRect(sheet,theme.color.surface,theme.radius.control);list.addBorder(sheet,theme.color.line,1,theme.radius.control);
     auto box=deflate(sheet,UiInsets::all(12));
     auto top=takeTop(box,36);
+    const bool motor=state.animatorPicker==0x20000u;
     const bool mask=state.animatorPicker==0x10000u;
-    builder.label(takeLeft(top,300),mask?"Máscara da camada":"Clipe",theme.color.text,theme.type.title);
-    button(takeRight(top,96),"Fechar",mask?w::MaskClose:w::ClipClose);
+    const bool source=state.animatorPicker==0x30000u;
+    builder.label(takeLeft(top,300),source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":"Clipe",theme.color.text,theme.type.title);
+    button(takeRight(top,96),"Fechar",(source||mask||motor)?w::MaskClose:w::ClipClose);
     takeTop(box,8);
     auto footer=takeBottom(box,36);
     std::vector<std::pair<std::string,std::string>> rows;  // título, detalhe
     std::vector<u32> codes;
-    if(mask) {
-      rows.push_back({"Corpo inteiro","Sem máscara: todos os ossos"});codes.push_back(w::MaskChoice);
+    if(source) {
+      if(const auto *p=a.parameter(state.animatorParameter)) for(u32 i=0;i<=4;++i) {
+        const auto kind=static_cast<scene::AnimatorParameterSource>(i);if(!scene::animatorSourceCompatible(p->type,kind)) continue;
+        rows.push_back({scene::animatorSourceName(kind),i==0?"Default e comandos do script":i==3?"Apoio resolvido do Personagem / Motor":"Movimento físico medido"});codes.push_back(w::MaskChoice+i);
+      }
+    } else if(motor) {
+      rows.push_back({"Este objeto",entity->name});codes.push_back(w::MaskChoice);
+      std::vector<EditorEntityId> ids;state.document->collectSubtree(state.document->root(),ids);
+      for(u32 i=0;i<ids.size()&&i<0xEFF;++i) if(const auto *e=state.document->find(ids[i])) {rows.push_back({e->name,"Fonte física explícita"});codes.push_back(w::MaskChoice+i+1);}
+    } else if(mask) {
+      rows.push_back({"Hierarquia inteira","Sem máscara: todos os nós"});codes.push_back(w::MaskChoice);
       std::vector<EditorEntityId> subtree;
       const EditorEntityId root=a.target?static_cast<EditorEntityId>(a.target):entity->id;
       state.document->collectSubtree(root,subtree);
@@ -3149,9 +3262,9 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
       auto text=deflate(row,UiInsets{12,4,12,4});
       builder.label(takeTop(text,22),fitMiddle(list,rows[i].first,text.width,theme.type.body),theme.color.text,theme.type.body);
       builder.label(text,rows[i].second,theme.color.textMuted,theme.type.caption);
-      router.addRegion(row,w::id(codes[i]));
+      region(row,w::id(codes[i]));
     }
-    if(rows.empty()) builder.label(box,"Nenhum clipe nas fontes carregadas: importe um modelo com animação",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(rows.empty()) builder.label(box,source?"Parâmetro removido":motor||mask?"Nenhum objeto disponível":"Importe uma fonte com clipes",theme.color.textMuted,theme.type.caption,UiAlign::Center);
     button(takeLeft(footer,80),"<",w::PickerPrevious,false,page>0);
     button(takeRight(footer,80),">",w::PickerNext,false,page+1<pages);
     builder.label(footer,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);

@@ -41,19 +41,23 @@ u64 cycleParameter(const scene::Animator &a,u64 current,bool allowNone) {
 }
 
 const scene::Animator *EditorSession::openAnimator() const {
-  const auto *entity=document_.find(state_.animatorEntity);
+  const runtime::SceneGraph &graph=playScene_.active()&&(isPlaying()||playMirrorOpen_)?playScene_.document():static_cast<const runtime::SceneGraph&>(document_);
+  const auto *entity=graph.find(state_.animatorEntity);
   const auto *c=entity?entity->components.findInstance(state_.animatorInstance):nullptr;
   return c&&&c->type()==&scene::Animator::descriptor?&scene::animator(*c):nullptr;
 }
 
 void EditorSession::openAnimatorEditor() {
   const auto target=state_.inspectorTarget?state_.inspectorTarget:state_.selection;
-  const auto *entity=document_.find(target);
+  const runtime::SceneGraph &graph=isPlaying()&&playScene_.active()?playScene_.document():static_cast<const runtime::SceneGraph&>(document_);
+  const auto *entity=graph.find(target);
   const auto *c=entity?entity->components.find(scene::Animator::descriptor):nullptr;
   if(!c) return;
   state_.animatorOpen=true;state_.animatorEntity=entity->id;state_.animatorInstance=c->instanceId();
   state_.animatorLayer=0;state_.animatorState=state_.animatorTransition=state_.animatorParameter=0;
   state_.animatorConnecting=false;state_.animatorConnectFrom=0;state_.animatorPicker=0;
+  state_.animatorDrawer=0;state_.animatorDetailsScroll=state_.animatorParamsScroll=0;
+  animatorPointer_=animatorSecondPointer_=animatorScrollSheet_=0;animatorDragOriginal_.reset();
   frameAnimator();
 }
 
@@ -69,7 +73,7 @@ void EditorSession::frameAnimator() {
 }
 
 bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &change) {
-  if(isPlaying()||history_.isOpen()) {state_.status="Pare o Play para editar o grafo";return false;}
+  if(isPlaying()||playMirrorOpen_||history_.isOpen()) {state_.status="Pare o Play para editar o grafo";return false;}
   const auto *entity=document_.find(state_.animatorEntity);if(!entity) return false;
   auto values=*entity;
   auto *c=values.components.editInstance(state_.animatorInstance);
@@ -113,9 +117,24 @@ bool EditorSession::applyAnimatorName(u32 code,const std::string &name) {
 bool EditorSession::applyAnimatorNumber(u32 code,double number) {
   if(!std::isfinite(number)) return false;
   const float v=static_cast<float>(number);const u32 layerIndex=state_.animatorLayer;
+  if((isPlaying()||playMirrorOpen_)&&code>=w::ParameterValue&&code<w::ParameterValue+0x100) {
+    const auto *a=openAnimator();const u32 i=code-w::ParameterValue;
+    if(!a||i>=a->parameters.size()) return false;
+    const auto &p=a->parameters[i];float result=0;
+    using Op=runtime::SceneAnimatorGraphs::ParameterOperation;
+    const auto op=p.type==T::Int?Op::SetInt:p.type==T::Bool?Op::SetBool:Op::SetFloat;
+    return playScene_.animatorGraphs().parameter(playScene_.world(),state_.animatorEntity,state_.animatorInstance,p.name,op,v,result)==runtime::SceneAnimatorGraphs::Status::Ok;
+  }
   return editAnimator([&](scene::Animator &a){
     if(layerIndex>=a.layers.size()) return false;
     auto &layer=a.layers[layerIndex];
+    if(code==w::ParameterResponse||code==w::ParameterScale) {
+      for(auto &p:a.parameters) if(p.id==state_.animatorParameter) {
+        if(code==w::ParameterResponse) p.response=std::clamp(v,0.f,10.f);else p.scale=std::clamp(v,-100.f,100.f);
+        return true;
+      }
+      return false;
+    }
     auto *s=layer.state(state_.animatorState);
     scene::AnimatorTransition *t=nullptr;for(auto &x:layer.transitions) if(x.id==state_.animatorTransition) t=&x;
     if(code==w::LayerWeight) {layer.weight=std::clamp(v,0.f,1.f);return true;}
@@ -141,7 +160,11 @@ bool EditorSession::applyAnimatorNumber(u32 code,double number) {
   });
 }
 
-bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
+bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const ui::UiPointerRouting &routing) {
+  // Capture fields use zero for no finger. Android's first physical finger is
+  // pointer 0, so keep a one-based capture identity inside this gesture handler.
+  // Router ownership continues to use the original input identity.
+  auto event=input;++event.pointerId;
   const auto *a=openAnimator();
   if(!a||a->layers.empty()) {state_.animatorOpen=false;return false;}
   state_.animatorLayer=std::min<u32>(state_.animatorLayer,static_cast<u32>(a->layers.size())-1);
@@ -150,10 +173,65 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const u
   const u32 key=routing.widgetId;
   const view::View v{layout_.animatorCanvas,state_.animatorPan[0],state_.animatorPan[1],state_.animatorZoom};
 
+  // A vertical drag scrolls the sheet even when it begins on a value row.
+  // Taps still reach the field; a scrolled release never edits that field.
+  if(!state_.animatorPicker&&key!=w::id(w::Canvas)) {
+    const bool details=view::inside(layout_.animatorDetailsWindow,event.position);
+    const bool params=view::inside(layout_.animatorParamsWindow,event.position);
+    if(event.phase==ui::UiPointerPhase::Down&&(details||params)) {
+      animatorPointer_=event.pointerId;animatorPress_=event.position;animatorDragged_=false;
+      animatorPressScroll_=details?state_.animatorDetailsScroll:state_.animatorParamsScroll;
+      animatorScrollSheet_=details?1:2;
+    } else if(event.pointerId==animatorPointer_&&event.phase==ui::UiPointerPhase::Move&&routing.dragging&&animatorScrollSheet_) {
+      const bool scrollDetails=animatorScrollSheet_==1;
+      animatorDragged_=true;const auto window=scrollDetails?layout_.animatorDetailsWindow:layout_.animatorParamsWindow;
+      const float extent=scrollDetails?layout_.animatorDetailsExtent:layout_.animatorParamsExtent;
+      (scrollDetails?state_.animatorDetailsScroll:state_.animatorParamsScroll)=std::clamp(animatorPressScroll_+animatorPress_.y-event.position.y,0.f,std::max(0.f,extent-window.height));
+      return true;
+    } else if(event.pointerId==animatorPointer_&&event.phase==ui::UiPointerPhase::Up&&animatorDragged_) {animatorPointer_=animatorScrollSheet_=0;animatorDragged_=false;return true;}
+    else if(event.pointerId==animatorPointer_&&(event.phase==ui::UiPointerPhase::Up||event.phase==ui::UiPointerPhase::Cancel)) animatorPointer_=animatorScrollSheet_=0;
+  }
+
   // ---- Grafo: selecionar, mover estados, navegar, ligar transições -------
+  if(key==w::id(w::DetailsScroll)||key==w::id(w::ParamsScroll)) {
+    const bool details=key==w::id(w::DetailsScroll);
+    float &scroll=details?state_.animatorDetailsScroll:state_.animatorParamsScroll;
+    const auto window=details?layout_.animatorDetailsWindow:layout_.animatorParamsWindow;
+    const float extent=details?layout_.animatorDetailsExtent:layout_.animatorParamsExtent;
+    if(event.phase==ui::UiPointerPhase::Down) {animatorPointer_=event.pointerId;animatorPress_=event.position;animatorPressScroll_=scroll;}
+    else if(event.pointerId==animatorPointer_&&event.phase==ui::UiPointerPhase::Move&&routing.dragging)
+      scroll=std::clamp(animatorPressScroll_+animatorPress_.y-event.position.y,0.f,std::max(0.f,extent-window.height));
+    return true;
+  }
   if(key==w::id(w::Canvas)) {
+    if(event.phase==ui::UiPointerPhase::Cancel) {
+      if(animatorDragOriginal_) {document_.applyEntityValues(state_.animatorEntity,*animatorDragOriginal_);animatorDragOriginal_.reset();}
+      animatorPointer_=animatorSecondPointer_=animatorScrollSheet_=0;animatorDragged_=true;return true;
+    }
+    if(event.phase==ui::UiPointerPhase::Down&&animatorPointer_&&animatorPointer_!=event.pointerId) {
+      if(animatorDragOriginal_) {document_.applyEntityValues(state_.animatorEntity,*animatorDragOriginal_);animatorDragOriginal_.reset();}
+      animatorSecondPointer_=event.pointerId;animatorSecondaryPosition_=event.position;
+      animatorPinchDistance_=std::max(1.f,std::hypot(animatorPrimaryPosition_.x-event.position.x,animatorPrimaryPosition_.y-event.position.y));
+      animatorPinchZoom_=state_.animatorZoom;
+      const ui::UiPoint midpoint{(animatorPrimaryPosition_.x+event.position.x)*.5f,(animatorPrimaryPosition_.y+event.position.y)*.5f};
+      view::toGraph(v,midpoint,animatorPinchAnchor_.x,animatorPinchAnchor_.y);animatorDragged_=true;return true;
+    }
+    if(animatorSecondPointer_) {
+      if(event.phase==ui::UiPointerPhase::Move) {
+        if(event.pointerId==animatorPointer_) animatorPrimaryPosition_=event.position;
+        else if(event.pointerId==animatorSecondPointer_) animatorSecondaryPosition_=event.position;else return true;
+        const float distance=std::hypot(animatorPrimaryPosition_.x-animatorSecondaryPosition_.x,animatorPrimaryPosition_.y-animatorSecondaryPosition_.y);
+        const ui::UiPoint midpoint{(animatorPrimaryPosition_.x+animatorSecondaryPosition_.x)*.5f,(animatorPrimaryPosition_.y+animatorSecondaryPosition_.y)*.5f};
+        state_.animatorZoom=std::clamp(animatorPinchZoom_*distance/animatorPinchDistance_,.35f,1.8f);
+        state_.animatorPan[0]=(midpoint.x-v.canvas.x-v.canvas.width*.5f)/state_.animatorZoom-animatorPinchAnchor_.x;
+        state_.animatorPan[1]=(midpoint.y-v.canvas.y-v.canvas.height*.5f)/state_.animatorZoom-animatorPinchAnchor_.y;
+      } else if(event.phase==ui::UiPointerPhase::Up||event.phase==ui::UiPointerPhase::Cancel) {animatorPointer_=animatorSecondPointer_=0;animatorDragged_=true;}
+      return true;
+    }
     if(event.phase==ui::UiPointerPhase::Down) {
       animatorPointer_=event.pointerId;animatorPress_=event.position;animatorDragged_=false;
+      animatorScrollSheet_=0;
+      animatorPrimaryPosition_=event.position;
       animatorPressPan_[0]=state_.animatorPan[0];animatorPressPan_[1]=state_.animatorPan[1];
       animatorPressNode_=view::hitNode(v,layer,event.position);
       animatorPressTransition_=animatorPressNode_?0:view::hitTransition(v,layer,event.position);
@@ -163,6 +241,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const u
     }
     if(event.pointerId!=animatorPointer_) return true;
     if(event.phase==ui::UiPointerPhase::Move&&routing.dragging) {
+      animatorPrimaryPosition_=event.position;
       animatorDragged_=true;
       const float dx=(event.position.x-animatorPress_.x)/state_.animatorZoom,dy=(event.position.y-animatorPress_.y)/state_.animatorZoom;
       if(layer.state(animatorPressNode_)&&!readOnly&&!state_.animatorConnecting&&!history_.isOpen()) {
@@ -213,6 +292,8 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const u
         return true;
       }
       state_.animatorParameter=0;
+      state_.animatorDetailsScroll=0;
+      if(node||animatorPressTransition_) state_.animatorDrawer=2;
       if(layer.state(node)) {state_.animatorState=node;state_.animatorTransition=0;}
       else if(animatorPressTransition_) {state_.animatorTransition=animatorPressTransition_;state_.animatorState=0;}
       else {state_.animatorState=0;state_.animatorTransition=0;}
@@ -228,6 +309,10 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const u
   if(code==w::ClipClose||code==w::MaskClose) {state_.animatorPicker=0;return true;}
   if(code==w::PickerPrevious) {if(state_.animatorPickerPage) --state_.animatorPickerPage;return true;}
   if(code==w::PickerNext) {++state_.animatorPickerPage;return true;}
+  if(code>=w::MaskChoice&&code<w::MaskChoice+5&&state_.animatorPicker==0x30000u) {
+    const auto source=static_cast<scene::AnimatorParameterSource>(code-w::MaskChoice);state_.animatorPicker=0;
+    editAnimator([&](scene::Animator &edit){for(auto &p:edit.parameters) if(p.id==state_.animatorParameter&&scene::animatorSourceCompatible(p.type,source)) {p.source=source;return true;}return false;});return true;
+  }
   if(code>=w::ClipChoice&&code<w::ClipChoice+0xF00&&state_.animatorPicker&&state_.animatorPicker<0x10000u) {
     const auto catalog=mapScene_.clipCatalog();const u32 i=code-w::ClipChoice;
     const u32 motion=state_.animatorPicker-1;state_.animatorPicker=0;
@@ -251,10 +336,52 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const u
     editAnimator([&](scene::Animator &edit){edit.layers[layerIndex].mask=mask;return true;});
     return true;
   }
+  if(code>=w::MaskChoice&&code<w::MaskChoice+0xF00&&state_.animatorPicker==0x20000u) {
+    std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+    const u32 i=code-w::MaskChoice;state_.animatorPicker=0;
+    if(i==0) editAnimator([](scene::Animator &edit){edit.motionSource=0;return true;});
+    else if(i-1<ids.size()) editAnimator([&](scene::Animator &edit){edit.motionSource=ids[i-1];return true;});
+    return true;
+  }
 
   // ---- Barra superior ----------------------------------------------------
   switch(code) {
-    case w::Close: state_.animatorOpen=false;state_.animatorConnecting=false;state_.animatorPicker=0;return true;
+    case w::ParameterTrigger:
+      if(const auto *p=a->parameter(state_.animatorParameter);p&&readOnly&&p->type==T::Trigger) {
+        float result=0;playScene_.animatorGraphs().parameter(playScene_.world(),state_.animatorEntity,state_.animatorInstance,p->name,
+          runtime::SceneAnimatorGraphs::ParameterOperation::SetTrigger,1,result);
+      }return true;
+    case w::Parameters: state_.animatorDrawer=state_.animatorDrawer==1?0:1;return true;
+    case w::Details: state_.animatorDrawer=state_.animatorDrawer==2?0:2;return true;
+    case w::Undo: if(!readOnly) {history_.undo(document_);state_.animatorDetailsScroll=0;}return true;
+    case w::Redo: if(!readOnly) {history_.redo(document_);state_.animatorDetailsScroll=0;}return true;
+    case w::MotionSource: if(!readOnly) {state_.animatorPicker=0x20000u;state_.animatorPickerPage=0;}return true;
+    case w::ParameterSource: if(!readOnly) {state_.animatorPicker=0x30000u;state_.animatorPickerPage=0;}return true;
+    case w::ParameterResponse: case w::ParameterScale:
+      if(const auto *p=a->parameter(state_.animatorParameter);p&&!readOnly) beginAnimatorNumber(code,code==w::ParameterResponse?p->response:p->scale);
+      return true;
+    case w::Duplicate: {
+      u64 created=0;
+      editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];const auto *original=l.state(state_.animatorState);
+        if(!original||l.states.size()>=scene::Animator::MaximumStates) return false;
+        auto copy=*original;copy.id=edit.allocateId();std::vector<std::string> names;for(const auto &s:l.states) names.push_back(s.name);
+        copy.name=uniqueName(names,original->name);copy.x+=32;copy.y+=80;created=copy.id;l.states.push_back(std::move(copy));return true;});
+      if(created) {state_.animatorState=created;state_.animatorDrawer=2;}return true;
+    }
+    case w::TransitionEarlier: case w::TransitionLater:
+      editAnimator([&](scene::Animator &edit){
+        auto &v=edit.layers[layerIndex].transitions;
+        for(usize i=0;i<v.size();++i) {
+          if(v[i].id!=state_.animatorTransition) continue;
+          if(code==w::TransitionEarlier&&i>0) {std::swap(v[i],v[i-1]);return true;}
+          if(code==w::TransitionLater&&i+1<v.size()) {std::swap(v[i],v[i+1]);return true;}
+        }
+        return false;
+      });return true;
+    case w::Close:
+      if(animatorDragOriginal_) {document_.applyEntityValues(state_.animatorEntity,*animatorDragOriginal_);animatorDragOriginal_.reset();}
+      animatorPointer_=animatorSecondPointer_=animatorScrollSheet_=0;
+      state_.animatorOpen=false;state_.animatorConnecting=false;state_.animatorPicker=0;return true;
     case w::Frame: frameAnimator();return true;
     case w::ZoomIn: state_.animatorZoom=std::min(1.8f,state_.animatorZoom*1.25f);return true;
     case w::ZoomOut: state_.animatorZoom=std::max(.35f,state_.animatorZoom/1.25f);return true;
@@ -339,12 +466,19 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &event,const u
     }
     return true;
   }
-  if(code>=w::ParameterRow&&code<w::ParameterRow+0x100) {const u32 i=code-w::ParameterRow;if(i<a->parameters.size()) state_.animatorParameter=a->parameters[i].id;return true;}
+  if(code>=w::ParameterRow&&code<w::ParameterRow+0x100) {const u32 i=code-w::ParameterRow;if(i<a->parameters.size()) {
+    state_.animatorParameter=a->parameters[i].id;state_.animatorState=state_.animatorTransition=0;state_.animatorDrawer=2;state_.animatorDetailsScroll=0;
+  }return true;}
   if(code>=w::ParameterName&&code<w::ParameterName+0x100) {const u32 i=code-w::ParameterName;if(i<a->parameters.size()&&!readOnly) beginAnimatorName(code,a->parameters[i].name);return true;}
   if(code>=w::ParameterValue&&code<w::ParameterValue+0x100) {
-    const u32 i=code-w::ParameterValue;if(i>=a->parameters.size()||readOnly) return true;
+    const u32 i=code-w::ParameterValue;if(i>=a->parameters.size()) return true;
     const auto &p=a->parameters[i];
-    if(p.type==T::Bool) editAnimator([&](scene::Animator &edit){edit.parameters[i].value=edit.parameters[i].value!=0?0.f:1.f;return true;});
+    if(p.source!=scene::AnimatorParameterSource::Manual) return true;
+    if(readOnly) {
+      float value=0;playScene_.animatorGraphs().parameter(playScene_.world(),state_.animatorEntity,state_.animatorInstance,p.name,
+        runtime::SceneAnimatorGraphs::ParameterOperation::Get,0,value);
+      if(p.type==T::Bool) applyAnimatorNumber(code,value==0?1:0);else if(p.type!=T::Trigger) beginAnimatorNumber(code,value);
+    } else if(p.type==T::Bool) editAnimator([&](scene::Animator &edit){edit.parameters[i].value=edit.parameters[i].value!=0?0.f:1.f;return true;});
     else if(p.type!=T::Trigger) beginAnimatorNumber(code,p.value);
     return true;
   }

@@ -1718,7 +1718,7 @@ Apply seletivo exige identidade, ordem e fronteira de alocação compatíveis.
 | `wrap_mode` | Repetição | enumeração | Reprodução | Repetir | Uma vez \| Repetir \| Vai e volta \| Segurar no fim |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
 | `clip_count` | Quantidade de clipes | enumeração | Clipes | 0 | 0 \| 1 \| 2 \| 3 \| 4 \| 5 \| 6 \| 7 \| 8 \| 9 \| 10 \| 11 \| 12 \| 13 \| 14 \| 15 \| 16 \| 17 \| 18 \| 19 \| 20 \| 21 \| 22 \| 23 \| 24 \| 25 \| 26 \| 27 \| 28 \| 29 \| 30 \| 31 \| 32 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
 
-## Animator · `astra.animation.animator` v1
+## Animator · `astra.animation.animator` v2
 
 Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor:** runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
 
@@ -1736,6 +1736,7 @@ Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor
 | `enabled` | Ativo | booleano | Animator | verdadeiro | verdadeiro \| falso |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
 | `unscaled_time` | Ignorar escala de tempo | booleano | Animator | falso | verdadeiro \| falso |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
 | `target` | Raiz animada | referência | Animator | Este objeto | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
+| `motion_source` | Corpo / motor | referência | Animator | Este objeto | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
 
 **Métodos em Play**
 

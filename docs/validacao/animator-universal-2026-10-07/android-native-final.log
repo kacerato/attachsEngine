@@ -1,0 +1,7 @@
+ninja: Entering directory `app/.cxx/RelWithDebInfo/602j185f/arm64-v8a'
+[1/4] Checking generated component contracts
+63 types / 10 family tables; 428 property declarations / 78 tables; 856 generated accessors; all outputs current
+
+[2/4] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_animator.cpp.o
+[3/4] Linking CXX static library libaether_editor.a
+[4/4] Linking CXX shared library C:\Users\donod\Downloads\atchengine\android\app\build\intermediates\cxx\RelWithDebInfo\602j185f\obj\arm64-v8a\libaether_android.so

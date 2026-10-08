@@ -24,6 +24,7 @@
 #include "editor/editor_properties.h"
 #include "scene/skinned_mesh.h"
 #include "runtime/input_actions.h"
+#include "editor/editor_animator_view.h"
 #include "editor/editor_project_tags.h"
 
 #include <cmath>
@@ -37,6 +38,66 @@
 using namespace ae;
 using namespace ae::editor;
 using namespace ae::ui;
+
+namespace {UiPoint locateWidget(EditorSession &session,u32 widget);}
+
+AE_TEST(animator_workspace_general_graph_selection_duplicate_history_and_scroll) {
+  EditorSession session;UiFont font;UiIconAtlas icons;
+  const auto read=[](const char *path){std::ifstream f(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(f),{});};
+  AE_EXPECT_TRUE(font.load(read("assets/astra-visual/ui/astra-ui-font.aeuf"))&&icons.load(read("assets/astra-visual/ui/astra-ui-icons.aeui")),"production font and icon atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,1100,600},{});
+  AE_EXPECT_TRUE(session.importMap({}, {}, false),"real empty resource map");
+  const auto object=session.document().createEntity(session.document().root(),EditorEntityKind::Folder,"Porta mecânica");
+  auto values=*session.document().find(object);auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));
+  const auto instance=a.instanceId(),initial=a.layers[0].states[0].id;
+  const auto flag=a.allocateId();a.parameters.push_back({flag,"Aberto",scene::AnimatorParameterType::Bool,0});
+  a.layers[0].states[0].name="Abrir";a.layers[0].states[0].kind=scene::AnimatorMotionKind::Blend2D;
+  a.layers[0].states[0].motions.resize(8);a.layers[0].states[0].events.resize(8);
+  AE_EXPECT_TRUE(session.document().applyEntityValues(object,values),"generic authored object");
+  auto &view=const_cast<EditorScreenState&>(session.screen());view.animatorOpen=true;view.animatorEntity=object;view.animatorInstance=instance;session.update();
+  AE_EXPECT_TRUE(session.layout().animatorCanvas.width>1000,"closed sheet preserves dominant graph");
+  const animator_view::View geometry{session.layout().animatorCanvas,view.animatorPan[0],view.animatorPan[1],view.animatorZoom};
+  const auto node=animator_view::nodeRect(geometry,a.layers[0],initial);const UiPoint point{node.x+20,node.y+20};
+  session.handlePointer({1,UiPointerPhase::Down,point,1});session.handlePointer({1,UiPointerPhase::Up,point,1.1});session.update();
+  AE_EXPECT_TRUE(view.animatorDrawer==2&&view.animatorState==initial,"selection opens contextual properties");
+  const auto window=session.layout().animatorDetailsWindow;
+  AE_EXPECT_TRUE(session.layout().animatorDetailsExtent>window.height,"all eight motions and events remain reachable");
+  const UiPoint copy{window.x+55,window.bottom()+22};const auto before=session.history().undoDepth();
+  session.handlePointer({2,UiPointerPhase::Down,copy,2});session.handlePointer({2,UiPointerPhase::Up,copy,2.1});session.update();
+  const auto &edited=scene::animator(*session.document().find(object)->components.findInstance(instance));
+  AE_EXPECT_TRUE(edited.layers[0].states.size()==2&&edited.layers[0].states[1].id!=initial&&edited.layers[0].states[1].motions.size()==8,"duplicate preserves functional data with fresh identity");
+  AE_EXPECT_TRUE(session.history().undoDepth()==before+1&&session.history().undo(session.document())&&session.history().redo(session.document()),"one reversible operation");
+  const auto depth=session.history().undoDepth();
+  const UiPoint scrollStart{window.right()-20,window.bottom()-40},scrollEnd{scrollStart.x,window.y+40};
+  session.handlePointer({3,UiPointerPhase::Down,scrollStart,3});session.handlePointer({3,UiPointerPhase::Move,scrollEnd,3.1});session.handlePointer({3,UiPointerPhase::Up,scrollEnd,3.2});session.update();
+  AE_EXPECT_TRUE(view.animatorDetailsScroll>100&&session.history().undoDepth()==depth,"scroll on property rows cannot alter authored data");
+  for(u32 pass=0;pass<5;++pass) {
+    session.handlePointer({9,UiPointerPhase::Down,scrollStart,3.3});session.handlePointer({9,UiPointerPhase::Move,scrollEnd,3.4});session.handlePointer({9,UiPointerPhase::Up,scrollEnd,3.5});session.update();
+  }
+  AE_EXPECT_TRUE(locateWidget(session,animator_widget::id(animator_widget::EventTime+7)).x>=0,"last event has a real visible hit target after scrolling");
+  AE_EXPECT_TRUE(locateWidget(session,animator_widget::id(animator_widget::StateName)).x<0,"scrolled-away properties cannot capture taps");
+  view.animatorDrawer=0;session.update();const auto canvas=session.layout().animatorCanvas;const float zoom=view.animatorZoom;
+  UiPoint first{canvas.x+canvas.width*.4f,canvas.y+canvas.height*.8f},second{first.x+100,first.y};
+  session.handlePointer({0,UiPointerPhase::Down,first,4});session.handlePointer({1,UiPointerPhase::Down,second,4.1});
+  second.x+=80;session.handlePointer({1,UiPointerPhase::Move,second,4.2});session.handlePointer({1,UiPointerPhase::Up,second,4.3});session.handlePointer({0,UiPointerPhase::Up,first,4.4});session.update();
+  AE_EXPECT_TRUE(view.animatorZoom>zoom&&session.history().undoDepth()==depth,"two-finger navigation zooms graph without authoring changes");
+  view.animatorDrawer=2;view.animatorState=0;view.animatorParameter=flag;view.animatorDetailsScroll=0;session.update();
+  const auto tap=[&](u32 code,u32 pointer){const auto point=locateWidget(session,animator_widget::id(code));AE_EXPECT_TRUE(point.x>=0,"actual contextual action reachable");session.handlePointer({pointer,UiPointerPhase::Down,point,4.5});session.handlePointer({pointer,UiPointerPhase::Up,point,4.6});session.update();};
+  tap(animator_widget::ParameterSource,7);AE_EXPECT_TRUE(view.animatorPicker==0x30000u,"typed source picker opens");
+  tap(animator_widget::MaskChoice+3,8);
+  AE_EXPECT_TRUE(scene::animator(*session.document().find(object)->components.findInstance(instance)).parameters[0].source==scene::AnimatorParameterSource::Grounded&&session.history().undoDepth()==depth+1,"picker applies real bound source in history");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"restore manual parameter for Play inspection");session.update();
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(session.document(),0),0,reopened),"general graph archive reopens");
+  const auto authored=serializeEditorDocument(session.document(),0);const auto authoredDepth=session.history().undoDepth();
+  AE_EXPECT_TRUE(session.startPlay(),"general authored graph enters real Play");std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(session.extractPlayMap(draws),"actual runtime graph scheduler");
+  view.playInspect=true;view.animatorOpen=true;view.animatorDrawer=2;view.animatorParameter=flag;view.animatorState=0;view.animatorDetailsScroll=0;session.update();
+  const auto toggle=locateWidget(session,animator_widget::id(animator_widget::ParameterValue));AE_EXPECT_TRUE(toggle.x>=0,"manual live parameter reachable");
+  session.handlePointer({6,UiPointerPhase::Down,toggle,5});session.handlePointer({6,UiPointerPhase::Up,toggle,5.1});session.update();
+  const auto *live=session.playScene().animatorGraphs().find(object,instance);
+  AE_EXPECT_TRUE(live&&!live->values.empty()&&live->values[0]==1,"live property changes runtime parameter");
+  AE_EXPECT_TRUE(serializeEditorDocument(session.document(),0)==authored&&session.history().undoDepth()==authoredDepth,"Play tweak does not overwrite defaults or enter authoring history");
+}
 
 AE_TEST(input_capture_key_is_transactional_persistent_and_consumed_by_real_actions) {
   EditorSession session;auto &state=const_cast<EditorScreenState&>(session.screen());

@@ -1703,6 +1703,54 @@
       "name": "animator",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "animation/state": {
+      "category": "animation",
+      "name": "state",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/transition": {
+      "category": "animation",
+      "name": "transition",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/parameters": {
+      "category": "animation",
+      "name": "parameters",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/layers": {
+      "category": "animation",
+      "name": "layers",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/blend": {
+      "category": "animation",
+      "name": "blend",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/binding": {
+      "category": "animation",
+      "name": "binding",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/frame": {
+      "category": "animation",
+      "name": "frame",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/duplicate": {
+      "category": "animation",
+      "name": "duplicate",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

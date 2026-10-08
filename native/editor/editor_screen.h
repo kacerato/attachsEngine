@@ -640,12 +640,16 @@ namespace animator_widget {
 enum : u32 {
   Open=0x0,Close=0x1,Canvas=0x2,AddState=0x3,Connect=0x4,SetDefault=0x5,Delete=0x6,Frame=0x7,
   LayerAdd=0x8,LayerWeight=0x9,LayerMask=0xA,LayerName=0xB,LayerDelete=0xC,ZoomIn=0xD,ZoomOut=0xE,
+  Parameters=0xF,Details=0x10,Duplicate=0x11,Undo=0x12,Redo=0x13,DetailsScroll=0x14,ParamsScroll=0x15,
+  ParameterSource=0x16,ParameterResponse=0x17,ParameterScale=0x18,MotionSource=0x19,
+  ParameterTrigger=0x20,
   LayerTab=0x100,ParameterAdd=0x200,ParameterName=0x300,ParameterValue=0x400,ParameterDelete=0x500,ParameterRow=0x600,
   StateName=0x1000,StateKind=0x1001,StateBlendX=0x1004,StateBlendY=0x1005,StateSpeed=0x1006,StateSpeedParameter=0x1007,
   StateLoop=0x1008,MotionAdd=0x1009,EventAdd=0x100A,
   MotionClip=0x1100,MotionThreshold=0x1200,MotionX=0x1300,MotionY=0x1400,MotionRemove=0x1500,
   EventTime=0x1700,EventTag=0x1800,EventRemove=0x1900,
   TransitionExit=0x2000,TransitionExitTime=0x2001,TransitionDuration=0x2002,ConditionAdd=0x2003,
+  TransitionEarlier=0x2004,TransitionLater=0x2005,
   ConditionParameter=0x2100,ConditionMode=0x2200,ConditionThreshold=0x2300,ConditionRemove=0x2400,
   ClipClose=0x3000,ClipChoice=0x3100,MaskClose=0x5000,MaskChoice=0x5100,PickerPrevious=0x6000,PickerNext=0x6001,
 };
@@ -862,6 +866,8 @@ struct EditorScreenState final {
   EditorEntityId animatorEntity=0;u64 animatorInstance=0;u32 animatorLayer=0;
   u64 animatorState=0,animatorTransition=0,animatorParameter=0,animatorConnectFrom=0;
   float animatorPan[2]{0,0},animatorZoom=1;
+  u32 animatorDrawer=0; // 0: graph, 1: parameters, 2: selected properties
+  float animatorDetailsScroll=0,animatorParamsScroll=0;
   // Seletor aberto: 1 + índice do clipe da mistura; 0x10000 máscara da camada.
   u32 animatorPicker=0,animatorPickerPage=0,animatorNameField=0;
   const runtime::SceneTimers *timerRuntime=nullptr; // session-owned runtime inspection only
@@ -1578,6 +1584,8 @@ struct EditorScreenLayout final {
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
   ui::UiRect animatorCanvas{};
+  ui::UiRect animatorDetailsWindow{},animatorParamsWindow{};
+  float animatorDetailsExtent=0,animatorParamsExtent=0;
   ui::UiRect lodBar{};
   // Janela dos Inspectors focados (vazia quando nenhum está aberto).
   ui::UiRect focusedWindow{};

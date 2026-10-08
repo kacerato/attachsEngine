@@ -2282,7 +2282,7 @@ bool EditorSession::routeToPlayMirror(const UiPointerEvent &event) {
     // O viewport, os botões do jogo e a barra superior continuam do Play.
     const auto hit=router_.hitTest(event.position);
     const bool game=hit.target==UiPointerTarget::Viewport || layout_.topBar.contains(event.position) ||
-        (hit.target==UiPointerTarget::Widget && (hit.widgetId==widgetId(EditorWidget::JumpCharacter) ||
+        (hit.target==UiPointerTarget::Widget && (animator_widget::owns(hit.widgetId) || hit.widgetId==widgetId(EditorWidget::JumpCharacter) ||
                                                  hit.widgetId==widgetId(EditorWidget::PlaySecondaryAction) || hit.widgetId==widgetId(EditorWidget::PathFollowRestart) || hit.widgetId==widgetId(EditorWidget::PathFollowStop) || (hit.widgetId>=widgetId(EditorWidget::TweenRestart)&&hit.widgetId<widgetId(EditorWidget::TweenRestart)+0x10000u) ||
                                                  (hit.widgetId>=widgetId(EditorWidget::TimerControlBase)&&hit.widgetId<widgetId(EditorWidget::TimerControlBase)+0x10000u)));
     if(game) return false;
@@ -2395,7 +2395,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     pathSlot=object&&type<object->components.size()&&object->components.at(type)->type().id=="astra.path";
   }
   const auto run=[&] {
-    if((widget>=widgetId(EditorWidget::TimerControlBase)&&widget<widgetId(EditorWidget::TimerControlBase)+0x10000u)||(widget>=widgetId(EditorWidget::TweenRestart)&&widget<widgetId(EditorWidget::TweenRestart)+0x10000u)) {
+    if(animator_widget::owns(widget)||(widget>=widgetId(EditorWidget::TimerControlBase)&&widget<widgetId(EditorWidget::TimerControlBase)+0x10000u)||(widget>=widgetId(EditorWidget::TweenRestart)&&widget<widgetId(EditorWidget::TweenRestart)+0x10000u)) {
       // Runtime commands bypass the authored-value mirror, but retain the touched
       // Inspector's owner even for objects created only in the running world.
       const auto previous=state_.inspectorTarget;state_.inspectorTarget=target?target:state_.selection;
@@ -9854,6 +9854,10 @@ void EditorSession::update() {
   const bool measureColliderUi=state_.colliderTopology||state_.physicsDiagnosticOpen;
   const auto colliderUiStart=measureColliderUi?std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
+  // The first pass measures current content. Clamp before the final paint,
+  // including after resize or changing to shorter contextual content.
+  if(state_.animatorOpen&&state_.animatorDrawer==2)
+    state_.animatorDetailsScroll=std::clamp(state_.animatorDetailsScroll,0.f,std::max(0.f,layout_.animatorDetailsExtent-layout_.animatorDetailsWindow.height));
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
   // altura util so encolhe quando o teclado termina de subir, um ou dois
   // quadros depois do toque, e a contagem de linhas visiveis daquele instante e

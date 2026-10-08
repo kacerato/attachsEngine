@@ -1,0 +1,40 @@
+{
+  "video_sha256": "9f179ecb4e27acddc84ddad54412a2dfb64b359114133f4d9442f47c5afc0080",
+  "decoded_frames": 717,
+  "extracted_frames": 717,
+  "skipped_frames": 0,
+  "duration_last_pts": 11.905989,
+  "roi": [
+    680,
+    230,
+    1400,
+    740
+  ],
+  "sheets": [
+    "sheet-00.png",
+    "sheet-01.png",
+    "sheet-02.png",
+    "sheet-03.png",
+    "sheet-04.png",
+    "sheet-05.png",
+    "sheet-06.png",
+    "sheet-07.png",
+    "sheet-08.png",
+    "sheet-09.png",
+    "sheet-10.png",
+    "sheet-11.png",
+    "sheet-12.png",
+    "sheet-13.png",
+    "sheet-14.png",
+    "sheet-15.png",
+    "sheet-16.png",
+    "sheet-17.png",
+    "sheet-18.png",
+    "sheet-19.png",
+    "sheet-20.png",
+    "sheet-21.png",
+    "sheet-22.png",
+    "sheet-23.png"
+  ],
+  "review_status": "717/717 visually reviewed; see review.json for method and findings"
+}

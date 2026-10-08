@@ -195,6 +195,7 @@ public:
     sequences_.setEvents(&events_);
     virtualCameras_.setEvents(&events_);
     animatorGraphs_.setEvents(&events_);
+    animatorGraphs_.setPhysics(&physics_);
     scripts_.setEvents(&events_);
     debugLines_.reset();
     scripts_.setGameView(&gameView_);
@@ -266,6 +267,7 @@ public:
     sequences_.setEvents(nullptr);
     virtualCameras_.setEvents(nullptr);
     animatorGraphs_.setEvents(nullptr);
+    animatorGraphs_.setPhysics(nullptr);
     scripts_.setVirtualCameras(nullptr);
     events_.reset();
     eventConnections_.reset();
@@ -356,6 +358,7 @@ public:
   const runtime::ScenePhysicsQueries &physicsQueries() const noexcept {return queries_;}
   const runtime::SceneVirtualCameras &virtualCameras() const noexcept {return virtualCameras_;}
   const runtime::SceneAnimatorGraphs &animatorGraphs() const noexcept {return animatorGraphs_;}
+  runtime::SceneAnimatorGraphs &animatorGraphs() noexcept {return animatorGraphs_;}
   const runtime::ScenePaths &paths() const noexcept {return paths_;}
   runtime::ScenePaths &paths() noexcept {return paths_;}
   runtime::SceneAudio &audio() noexcept {return audio_;}

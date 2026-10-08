@@ -1921,6 +1921,11 @@ private:
   bool applyAnimatorNumber(u32 code,double number);
   u32 animatorPointer_=0;ui::UiPoint animatorPress_{};float animatorPressPan_[2]{},animatorNodeStart_[2]{};
   u64 animatorPressNode_=0,animatorPressTransition_=0;bool animatorDragged_=false;
+  float animatorPressScroll_=0;
+  u32 animatorScrollSheet_=0;
+  u32 animatorSecondPointer_=0;
+  ui::UiPoint animatorPrimaryPosition_{},animatorSecondaryPosition_{},animatorPinchAnchor_{};
+  float animatorPinchDistance_=1,animatorPinchZoom_=1;
   std::optional<EditorEntity> animatorDragOriginal_;
   bool commitCurveEditor();
   void saveCurveLibraries();

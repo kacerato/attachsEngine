@@ -394,6 +394,7 @@ void ScriptBridge::installExtensions() {
     switch(status){
       case SceneAnimatorGraphs::Status::Ok: return WorldStatus::Ok;
       case SceneAnimatorGraphs::Status::UnknownComponent: return WorldStatus::ComponentUnavailable;
+      case SceneAnimatorGraphs::Status::BoundParameter: return WorldStatus::Rejected;
       case SceneAnimatorGraphs::Status::UnknownParameter: case SceneAnimatorGraphs::Status::UnknownState: case SceneAnimatorGraphs::Status::UnknownLayer: return WorldStatus::UnknownResource;
       default: return WorldStatus::InvalidArgument;
     }

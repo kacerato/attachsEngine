@@ -5812,6 +5812,12 @@ public readonly struct Animator : IComponentFacade<Animator>
         get => Component.GetReference("target");
         set => Component.SetReference("target", value);
     }
+    /// <summary>Corpo / motor. Fonte dos parâmetros físicos; independe da malha e não move o corpo</summary>
+    public ObjectReference MotionSource
+    {
+        get => Component.GetReference("motion_source");
+        set => Component.SetReference("motion_source", value);
+    }
     /// <summary>Em transição. Verdadeiro enquanto a camada base mistura dois estados</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public bool InTransition() => Component.Invoke("in_transition").AsBoolean();

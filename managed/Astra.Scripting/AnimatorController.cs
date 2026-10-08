@@ -24,6 +24,8 @@ public sealed partial class GameObject
 /// SetTrigger e ResetTrigger mudam os valores que as transições leem; Play e CrossFade trocam o estado
 /// de uma camada; GetCurrentState informa o estado tocando. Valores de execução: o Play sempre parte dos
 /// padrões autorados. Nome ou tipo errado lança <see cref="WorldException"/>.
+/// Parâmetros vinculados a movimento físico podem ser lidos; setters são recusados com
+/// <see cref="WorldStatus.Rejected"/> para preservar uma única origem do valor.
 /// </summary>
 public readonly struct AnimatorController
 {

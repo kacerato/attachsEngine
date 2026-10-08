@@ -180,6 +180,7 @@ public:
   u32 bodyCount() const { return static_cast<u32>(bindings_.size()); }
   u32 jointCount() const { return jointCount_; }
   AetherPhysicsWorld *world() const noexcept { return world_; }
+  bool ownsWorld(const GameWorld &world) const noexcept {return world_&&ownerWorldId_==world.worldId();}
   // Objeto dono de um corpo nativo, para mapear resultados de consulta de volta
   // à identidade do mundo. Zero quando o corpo não pertence a esta cena.
   ObjectId objectForBody(AetherBodyHandle body) const;

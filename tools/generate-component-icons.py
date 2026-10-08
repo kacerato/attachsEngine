@@ -339,6 +339,19 @@ ICONS["component/spring-arm"] = f'<circle cx="20" cy="64" r="8" {stroke(5)}/><pa
 ICONS["component/tween-sequence"] = f'<path d="M12 112h104M36 106v12M64 106v12M92 106v12" {stroke(4)}/><rect x="10" y="22" width="28" height="20" rx="4" {stroke(5)}/><path d="M38 32h12M45 26l6 6-6 6" {stroke(5)}/><rect x="52" y="22" width="28" height="20" rx="4" {stroke(5,ACCENT)}/><rect x="52" y="52" width="28" height="20" rx="4" {stroke(5,ACCENT)}/><path d="M80 32h12M87 26l6 6-6 6" {stroke(5,ACCENT)}/><rect x="94" y="22" width="24" height="20" rx="4" {stroke(5)}/><path d="M106 42v44H24V48M18 54l6-6 6 6" {stroke(4)}/>'
 ICONS["component/event-connection"] = f'<circle cx="20" cy="64" r="10" {stroke(6)}/><path d="M36 46a26 26 0 0 1 0 36M45 36a38 38 0 0 1 0 56" {stroke(5)}/><path d="M70 38l-9 26h13l-9 26" {stroke(6,ACCENT)}/><path d="M80 64h10M85 57l7 7-7 7" {stroke(5,ACCENT)}/><rect x="98" y="46" width="20" height="36" rx="4" {stroke(5)}/><circle cx="108" cy="64" r="3.5" fill="{INK}"/>'
 
+# Animator workspace: filled angular silhouettes from the owner's Astra A
+# identity sheet. Each lime cut conveys the operation, not a background badge.
+ICONS.update({
+    "animation/state": '<path d="M14 20h76l24 24v64H14z" fill="#eef1f5"/><path d="M90 20v24h24M40 44l36 20-36 20z" fill="#a8ff10"/>',
+    "animation/transition": '<path d="M12 50h64V28l40 36-40 36V78H12z" fill="#eef1f5"/><path d="M76 28l40 36-40 14z" fill="#a8ff10"/>',
+    "animation/parameters": '<path d="M12 26h104v10H12zm0 33h104v10H12zm0 33h104v10H12z" fill="#eef1f5"/><path d="M27 16h20v30H27zm51 33h20v30H78zM44 82h20v30H44z" fill="#a8ff10"/>',
+    "animation/layers": '<path d="M64 14l52 28-52 28L12 42zM12 65l52 28 52-28v16l-52 28-52-28z" fill="#eef1f5"/><path d="M64 70l52-28v16L64 86z" fill="#a8ff10"/>',
+    "animation/blend": '<path d="M12 24h34v28H12zm0 52h34v28H12zm70-14h34v28H82zM46 33l44 33-6 8-44-33zm0 54l44-24 5 9-44 24z" fill="#eef1f5"/><path d="M82 62h34v28H82z" fill="#a8ff10"/>',
+    "animation/binding": '<path d="M18 16h36v28H18zm56 68h36v28H74zM38 44h10v18h36v22H74V72H38z" fill="#eef1f5"/><path d="M66 22h42v12H66zm24-12l24 18-24 18z" fill="#a8ff10"/>',
+    "animation/frame": '<path d="M14 46V14h32v12H26v20zm68-32h32v32h-12V26H82zM14 82h12v20h20v12H14zm88 0h12v32H82v-12h20z" fill="#eef1f5"/><path d="M45 45h38v38H45z" fill="#a8ff10"/>',
+    "animation/duplicate": '<path d="M12 12h68v14H26v54H12zM38 38h52l24 24v52H38z" fill="#eef1f5"/><path d="M70 66h12v12h12v12H82v12H70V90H58V78h12z" fill="#a8ff10"/>',
+})
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),

@@ -1,0 +1,45 @@
+{
+  "reviewed_at": "2026-10-08",
+  "decoded_frames": 717,
+  "reviewed_frames": 717,
+  "skipped_frames": 0,
+  "method": "All 24 indexed sheets inspected: mechanism ROI in every decoded frame, plus full frames 0/13/222/270/716; no temporal subsampling. CSV retains original PTS and PNG hashes.",
+  "findings": [
+    {
+      "frames": [
+        0,
+        12
+      ],
+      "result": "closed panel initially stable"
+    },
+    {
+      "frames": [
+        13,
+        59
+      ],
+      "result": "continuous opening, no frozen pose or snap"
+    },
+    {
+      "frames": [
+        60,
+        222
+      ],
+      "result": "opened pose stable while source velocity measured 1.500"
+    },
+    {
+      "frames": [
+        223,
+        269
+      ],
+      "result": "continuous return to closed pose after body stops"
+    },
+    {
+      "frames": [
+        270,
+        716
+      ],
+      "result": "closed pose stable to end; no stuck walking/active pose in this mechanism fixture"
+    }
+  ],
+  "limitations": "Visual acceptance of this mechanism; not a frame-rate or general character foot-sliding measurement. ADB recording starts after Play began. Duplicate DTS warnings arise from image muxer time-base rounding; extracted count equals ffprobe decoded count, original timestamps preserved."
+}

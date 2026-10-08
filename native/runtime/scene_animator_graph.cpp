@@ -1,4 +1,5 @@
 #include "runtime/scene_animator_graph.h"
+#include "runtime/scene_physics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -149,7 +150,8 @@ SceneAnimatorGraphs::Instance *SceneAnimatorGraphs::ensure(GameWorld &world,Obje
   const auto *a=animatorOf(world,owner,instance);if(component) *component=a;
   if(!a) return nullptr;
   for(auto &i:instances_) if(i.owner==owner&&i.instance==instance) {sync(i,*a);return &i;}
-  instances_.push_back({owner,instance,{},{},{}});sync(instances_.back(),*a);return &instances_.back();
+  Instance created;created.owner=owner;created.instance=instance;
+  instances_.push_back(std::move(created));sync(instances_.back(),*a);return &instances_.back();
 }
 
 void SceneAnimatorGraphs::emit(GameWorld &world,const Instance &runtime,std::string_view event,std::initializer_list<V> values) {
@@ -170,6 +172,40 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
     if(!world.activeInHierarchy(world.handle(owner))) continue;
     const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
     if(!runtime||!a->enabled) continue;
+    const ObjectId motionOwner=a->motionSource?static_cast<ObjectId>(a->motionSource):owner;
+    bool bound=false;for(const auto &p:a->parameters) bound=bound||p.source!=scene::AnimatorParameterSource::Manual;
+    if(bound) {
+      float velocity[3]{};bool grounded=false,available=false,hasSupportState=false;
+      physics::CharacterMotor::RuntimeState character;
+      ScenePhysics::DynamicMotorState motor;
+      if(physics_&&physics_->ownsWorld(world)&&world.graph().exists(motionOwner)&&world.activeInHierarchy(world.handle(motionOwner))) {
+        if(physics_->characterState(world,motionOwner,character)==WorldStatus::Ok&&character.hasMeasuredStep) {
+          velocity[0]=character.motorVelocity.x;velocity[1]=character.motorVelocity.y;velocity[2]=character.motorVelocity.z;
+          grounded=character.groundState==AetherCharacterGroundState::OnGround;available=true;hasSupportState=true;
+        } else if(physics_->dynamicMotorState(motionOwner,motor)&&motor.hasMeasuredStep&&physics_->getBodyVelocity(motionOwner,velocity)) {
+          grounded=motor.grounded;available=true;hasSupportState=true;
+          if(grounded) for(u32 axis=0;axis<3;++axis) velocity[axis]-=motor.supportVelocity[axis];
+        } else available=physics_->getBodyVelocity(motionOwner,velocity);
+      }
+      runtime->motionAvailable=available;
+      runtime->motionDiagnostic=available?"":"Fonte física ausente, inativa ou sem passo";
+      for(const auto &p:a->parameters) if(available&&!hasSupportState&&p.source==scene::AnimatorParameterSource::Grounded)
+        runtime->motionDiagnostic="Apoio exige Personagem ou Motor; velocidades disponíveis";
+      for(usize k=0;k<a->parameters.size();++k) {
+        const auto &p=a->parameters[k];if(p.source==scene::AnimatorParameterSource::Manual) continue;
+        float target=0;
+        if(available) switch(p.source) {
+          case scene::AnimatorParameterSource::PlanarSpeed: target=std::hypot(velocity[0],velocity[2]);break;
+          case scene::AnimatorParameterSource::VerticalSpeed: target=velocity[1];break;
+          case scene::AnimatorParameterSource::Grounded: target=grounded?1.f:0.f;break;
+          case scene::AnimatorParameterSource::Speed: target=std::sqrt(velocity[0]*velocity[0]+velocity[1]*velocity[1]+velocity[2]*velocity[2]);break;
+          default: break;
+        }
+        if(p.source!=scene::AnimatorParameterSource::Grounded) target*=p.scale;
+        const float alpha=p.response>0&&available&&p.source!=scene::AnimatorParameterSource::Grounded? -std::expm1(-scaled/p.response):1.f;
+        runtime->values[k]+=alpha*(target-runtime->values[k]);
+      }
+    } else {runtime->motionAvailable=false;runtime->motionDiagnostic.clear();}
     const float delta=(a->unscaledTime?unscaled:scaled)*a->speed;
     const ObjectId root=a->target&&world.graph().exists(static_cast<ObjectId>(a->target))?static_cast<ObjectId>(a->target):owner;
     const auto value=[&](u64 parameter,float fallback){
@@ -264,6 +300,7 @@ SceneAnimatorGraphs::Status SceneAnimatorGraphs::parameter(GameWorld &world,Obje
   result=0;const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
   if(!runtime) return Status::UnknownComponent;
   const auto *p=a->parameter(name);if(!p) return Status::UnknownParameter;
+  if(operation!=ParameterOperation::Get&&p->source!=scene::AnimatorParameterSource::Manual) return Status::BoundParameter;
   usize k=0;while(k<runtime->parameterIds.size()&&runtime->parameterIds[k]!=p->id) ++k;
   if(k==runtime->parameterIds.size()) return Status::UnknownParameter;
   using T=scene::AnimatorParameterType;

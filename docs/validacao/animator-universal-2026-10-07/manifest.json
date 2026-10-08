@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/kacerato/attachsEngine",
+  "baseline": "88dec944f6ce58a9774477549fb1b5c7e6d90ddf",
+  "date": "2026-10-08",
+  "package": "dev.aether.editor.u07",
+  "versionName": "0.2.5-dev.20261007",
+  "versionCode": 13,
+  "apk_sha256": "3b9dfaecdc9cf81462f2afa4549474c6da3dd1c553e0b519d365c1634a7df02c",
+  "installed_apk_sha256": "3b9dfaecdc9cf81462f2afa4549474c6da3dd1c553e0b519d365c1634a7df02c",
+  "native_library_sha256": "6a6ce925381b0c467398597c2345e940be78794b48d8e8e2f16148c7e01970b4",
+  "host_animator": "9/9",
+  "sdk": "Release 0 errors 0 warnings",
+  "device": "POCO F7 / Android 16",
+  "device_checks": [
+    "actual non-skinned glTF transform clips + separate physics body source",
+    "mapped speed 1.500 + pose changed + bound setter Rejected",
+    "body stop => speed 0.000 + original pose restored",
+    "live Float 0.750 / Bool true / Trigger state 5 then 2",
+    "Android pointer 0+1 pinch zoom and pan",
+    "32-parameter scrolling / eighth event reached",
+    "duplicate / undo / redo",
+    "save / force-stop / cold reopen: 3 states, 32 params, copied events/clips, source preserved; manual defaults 0"
+  ],
+  "video_review_frames": 717,
+  "public_apk": "unchanged 0.2.3-preview.20261007 / code 12",
+  "distribution": "development APK installed in place; no new public release",
+  "engine_complete": false
+}

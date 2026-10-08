@@ -19,6 +19,7 @@
 #include <vector>
 
 namespace ae::runtime {
+class ScenePhysics;
 
 namespace animator_detail {
 struct WeightedMotion {u32 motion=0;float weight=0;};
@@ -35,7 +36,7 @@ bool crossed(float previous,float current,float mark,bool loop);
 
 class SceneAnimatorGraphs {
 public:
-  enum class Status : u32 {Ok=0,UnknownComponent=1,UnknownParameter=2,WrongType=3,UnknownState=4,InvalidArgument=5,UnknownLayer=6};
+  enum class Status : u32 {Ok=0,UnknownComponent=1,UnknownParameter=2,WrongType=3,UnknownState=4,InvalidArgument=5,UnknownLayer=6,BoundParameter=7};
   enum class ParameterOperation : u32 {Get=0,SetFloat=1,SetInt=2,SetBool=3,SetTrigger=4,ResetTrigger=5};
   struct LayerState {
     u64 layer=0,current=0,next=0;
@@ -46,10 +47,13 @@ public:
     ObjectId owner=kInvalidObject;u64 instance=0;
     std::vector<u64> parameterIds;std::vector<float> values;
     std::vector<LayerState> layers;
+    bool motionAvailable=false;
+    std::string motionDiagnostic;
   };
   struct Info {u64 state=0,next=0;float normalizedTime=0,progress=0;bool transitioning=false;std::string name,nextName;};
 
   void setEvents(ComponentEventQueue *events) noexcept {events_=events;}
+  void setPhysics(const ScenePhysics *physics) noexcept {physics_=physics;}
   void reset() {instances_.clear();}
   // Avalia todos os Animators e acrescenta as amostras para o SceneAnimator.
   bool advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,std::vector<SceneAnimator::ExternalSample> &samples);
@@ -65,6 +69,7 @@ private:
   void emit(GameWorld &world,const Instance &runtime,std::string_view event,std::initializer_list<scene::ComponentOperationValue> values);
   std::vector<Instance> instances_;
   ComponentEventQueue *events_=nullptr;
+  const ScenePhysics *physics_=nullptr;
 };
 
 } // namespace ae::runtime

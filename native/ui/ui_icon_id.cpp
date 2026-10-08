@@ -5,6 +5,14 @@ namespace ae::ui {
 namespace {
 constexpr const char *kNames[] = {
     "none",
+    "animation/binding",
+    "animation/blend",
+    "animation/duplicate",
+    "animation/frame",
+    "animation/layers",
+    "animation/parameters",
+    "animation/state",
+    "animation/transition",
     "assets/animation",
     "assets/bookmark",
     "assets/checker",

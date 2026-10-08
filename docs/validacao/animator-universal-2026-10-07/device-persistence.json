@@ -1,0 +1,470 @@
+{
+  "saved_sha256": "e3e1901b08908b4c34e2d7471b698bde83a422e2540929c01870655f85fd49f5",
+  "motion_source": 4,
+  "parameters": [
+    {
+      "id": "3",
+      "name": "Velocidade",
+      "type": "0",
+      "default": "0",
+      "source": "1",
+      "response": "0.119999997",
+      "scale": "1"
+    },
+    {
+      "id": "4",
+      "name": "Assustar",
+      "type": "3",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "8",
+      "name": "Auxiliar 1",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "9",
+      "name": "Auxiliar 2",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "10",
+      "name": "Auxiliar 3",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "11",
+      "name": "Auxiliar 4",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "12",
+      "name": "Auxiliar 5",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "13",
+      "name": "Auxiliar 6",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "14",
+      "name": "Auxiliar 7",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "15",
+      "name": "Auxiliar 8",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "16",
+      "name": "Auxiliar 9",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "17",
+      "name": "Auxiliar 10",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "18",
+      "name": "Auxiliar 11",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "19",
+      "name": "Auxiliar 12",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "20",
+      "name": "Auxiliar 13",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "21",
+      "name": "Auxiliar 14",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "22",
+      "name": "Auxiliar 15",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "23",
+      "name": "Auxiliar 16",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "24",
+      "name": "Auxiliar 17",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "25",
+      "name": "Auxiliar 18",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "26",
+      "name": "Auxiliar 19",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "27",
+      "name": "Auxiliar 20",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "28",
+      "name": "Auxiliar 21",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "29",
+      "name": "Auxiliar 22",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "30",
+      "name": "Auxiliar 23",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "31",
+      "name": "Auxiliar 24",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "32",
+      "name": "Auxiliar 25",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "33",
+      "name": "Auxiliar 26",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "34",
+      "name": "Auxiliar 27",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "35",
+      "name": "Auxiliar 28",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "36",
+      "name": "Auxiliar 29",
+      "type": "0",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    },
+    {
+      "id": "37",
+      "name": "Teste manual",
+      "type": "2",
+      "default": "0",
+      "source": "0",
+      "response": "0",
+      "scale": "1"
+    }
+  ],
+  "layers": [
+    {
+      "data": [
+        "1",
+        "Base",
+        "1",
+        "0",
+        "2",
+        "3"
+      ],
+      "states": [
+        {
+          "id": "2",
+          "name": "Abertura",
+          "motions": [
+            [
+              "bd35f3af763359ae2622636110db4027",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "ab187bf1fcd384e83826b3bc57855a78",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "74184828f526b1e90efa1529a606a725",
+              "2",
+              "0",
+              "0"
+            ]
+          ],
+          "events": [
+            [
+              "0",
+              "1"
+            ],
+            [
+              "0.125",
+              "2"
+            ],
+            [
+              "0.25",
+              "3"
+            ],
+            [
+              "0.375",
+              "4"
+            ],
+            [
+              "0.5",
+              "5"
+            ],
+            [
+              "0.625",
+              "6"
+            ],
+            [
+              "0.75",
+              "7"
+            ],
+            [
+              "0.875",
+              "8"
+            ]
+          ]
+        },
+        {
+          "id": "5",
+          "name": "Olhar",
+          "motions": [
+            [
+              "bd35f3af763359ae2622636110db4027",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "events": []
+        },
+        {
+          "id": "38",
+          "name": "Abertura 2",
+          "motions": [
+            [
+              "bd35f3af763359ae2622636110db4027",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "ab187bf1fcd384e83826b3bc57855a78",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "74184828f526b1e90efa1529a606a725",
+              "2",
+              "0",
+              "0"
+            ]
+          ],
+          "events": [
+            [
+              "0",
+              "1"
+            ],
+            [
+              "0.125",
+              "2"
+            ],
+            [
+              "0.25",
+              "3"
+            ],
+            [
+              "0.375",
+              "4"
+            ],
+            [
+              "0.5",
+              "5"
+            ],
+            [
+              "0.625",
+              "6"
+            ],
+            [
+              "0.75",
+              "7"
+            ],
+            [
+              "0.875",
+              "8"
+            ]
+          ]
+        }
+      ],
+      "transitions": [
+        {
+          "data": [
+            "6",
+            "0",
+            "5",
+            "0",
+            "1",
+            "0.200000003",
+            "1"
+          ],
+          "conditions": [
+            [
+              "4",
+              "0",
+              "0"
+            ]
+          ]
+        },
+        {
+          "data": [
+            "7",
+            "5",
+            "2",
+            "1",
+            "0.899999976",
+            "0.300000012",
+            "0"
+          ],
+          "conditions": []
+        }
+      ]
+    }
+  ],
+  "checks": "32 params, 3 unique states, duplicated clips/events, physical response/source, live defaults unchanged: PASS"
+}

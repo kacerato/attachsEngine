@@ -2,6 +2,12 @@
 #include "runtime/component_operations.h"
 #include "runtime/scene_animator_graph.h"
 #include "runtime/scene_animation.h"
+#include "runtime/scene_physics.h"
+#include "scene/physics_body.h"
+#include "scene/collider.h"
+#include "scene/character.h"
+#include "scene/dynamic_body_motor.h"
+#include "runtime/prefab.h"
 #include "scene/animation.h"
 #include "scene/animator.h"
 #include "scene/component_schema.h"
@@ -109,7 +115,7 @@ AE_TEST(animator_contract_round_trip_and_validation) {
   transition(a,a.layers[0].defaultState,a.layers[0].states.back().id,.25f,{{speedId,scene::AnimatorConditionMode::Greater,.5f}});
   AE_EXPECT_TRUE(a.valid(),"grafo válido");
   std::stringstream text;a.write(text);scene::Animator back;
-  AE_EXPECT_TRUE(back.read(text,1)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
+  AE_EXPECT_TRUE(back.read(text,2)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
   back.layers[0].transitions[0].conditions[0].mode=scene::AnimatorConditionMode::Equals;
   AE_EXPECT_TRUE(!back.valid(),"Float não aceita Igual");
   back.layers[0].transitions[0].conditions[0]={back.parameters[1].id,scene::AnimatorConditionMode::IfNot,0};
@@ -190,4 +196,72 @@ AE_TEST(animator_layer_with_mask_overrides_only_its_subtree_and_emits_events) {
   AE_EXPECT_TRUE(p.world.setProperty(h,"enabled",false)==WorldStatus::Ok,"desligar no Play");
   const float frozen=p.x(r.hips);p.step(.4f);
   AE_EXPECT_TRUE(p.x(r.hips)==frozen,"desligado congela a pose");
+}
+
+AE_TEST(animator_v2_binding_roundtrip_and_v1_manual_migration) {
+  scene::Animator a;scene::initializeAnimator(a);a.motionSource=42;
+  auto &speed=param(a,"Velocidade medida",scene::AnimatorParameterType::Float);
+  speed.source=scene::AnimatorParameterSource::PlanarSpeed;speed.response=.15f;speed.scale=.5f;
+  auto &ground=param(a,"Apoio",scene::AnimatorParameterType::Bool);ground.source=scene::AnimatorParameterSource::Grounded;
+  std::stringstream stream;a.write(stream);scene::Animator restored;
+  AE_EXPECT_TRUE(restored.read(stream,2)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
+  std::stringstream old("1 0 0 1 4 1 3 \"Peso\" 0 0.5 1 1 \"Base\" 1 0 2 1 2 \"Parado\" 0 0 0 1 0 1 0 0 0 0 0");
+  scene::Animator migrated;AE_EXPECT_TRUE(migrated.read(old,1)&&migrated.motionSource==0&&migrated.parameters[0].source==scene::AnimatorParameterSource::Manual,"old graph remains script controlled");
+  restored.parameters[1].source=scene::AnimatorParameterSource::PlanarSpeed;
+  AE_EXPECT_TRUE(!restored.valid(),"bool speed binding rejected");
+
+  SceneGraph sceneGraph;const auto root=sceneGraph.createEntity(sceneGraph.root(),ObjectKind::Folder,"Mecanismo");
+  const auto visual=sceneGraph.createEntity(root,ObjectKind::Folder,"Parte visual");
+  auto &controller=scene::animator(*sceneGraph.editComponents(root)->add(scene::Animator::descriptor));controller.target=visual;controller.motionSource=root;
+  Prefab prefab;std::string diagnostic;AE_EXPECT_TRUE(prefab.capture(sceneGraph,root,resources::assetGuidFromSeed("mecanismo-prefab"),diagnostic),diagnostic.c_str());
+  SceneGraph destination;destination.createEntity(destination.root(),ObjectKind::Folder,"Outra entidade");ObjectCloneMap mapping;
+  const auto copy=prefab.instantiate(destination,destination.root(),mapping,diagnostic);AE_EXPECT_TRUE(copy,diagnostic.c_str());
+  const auto &mapped=scene::animator(*destination.find(copy)->components.find(scene::Animator::descriptor));
+  AE_EXPECT_TRUE(mapped.motionSource==copy&&mapped.target==mapping.at(visual),"visual and motion references remap independently in reusable prefab");
+}
+
+AE_TEST(animator_physical_binding_real_body_pose_and_missing_source_diagnostic) {
+  Rig r;auto &a=r.animator();
+  const auto machine=r.g.createEntity(r.g.root(),ObjectKind::Folder,"Mecanismo físico");
+  auto *parts=r.g.editComponents(machine);auto &body=static_cast<scene::PhysicsBody&>(*parts->add(scene::PhysicsBody::descriptor));body.motion=scene::BodyMotion::Dynamic;
+  parts->add(scene::Collider::descriptor);a.motionSource=machine;
+  auto &speed=param(a,"Velocidade",scene::AnimatorParameterType::Float);speed.source=scene::AnimatorParameterSource::PlanarSpeed;speed.response=.2f;speed.scale=2;
+  auto &vertical=param(a,"Vertical",scene::AnimatorParameterType::Float);vertical.source=scene::AnimatorParameterSource::VerticalSpeed;
+  auto &s=a.layers[0].states[0];s.kind=scene::AnimatorMotionKind::Blend1D;s.blendX=a.parameters[0].id;s.motions={{r.idle,0},{r.walk,6}};
+  Play p(r);ScenePhysics physics;AE_EXPECT_TRUE(physics.start(p.world),"real Jolt rigid body without player or motor");
+  p.graphs.setPhysics(&physics);float velocity[]{3,4,0};AE_EXPECT_TRUE(physics.setBodyVelocity(machine,velocity),"physical velocity");
+  p.step(.1f);float value=0;
+  const float expected=6*(-std::expm1(-.1f/.2f));
+  AE_EXPECT_TRUE(p.graphs.parameter(p.world,r.owner,p.handle().instance,"Velocidade",SceneAnimatorGraphs::ParameterOperation::Get,0,value)==SceneAnimatorGraphs::Status::Ok&&std::fabs(value-expected)<1e-4f,"actual motion, scale and response feed resolved value");
+  AE_EXPECT_TRUE(std::fabs(p.x(r.hips)-expected/6)<1e-4f,"measured filtered motion drives actual pose mixer");
+  AE_EXPECT_TRUE(p.graphs.parameter(p.world,r.owner,p.handle().instance,"Vertical",SceneAnimatorGraphs::ParameterOperation::Get,0,value)==SceneAnimatorGraphs::Status::Ok&&std::fabs(value-4)<1e-4f,"vertical component independent");
+  AE_EXPECT_TRUE(p.graphs.parameter(p.world,r.owner,p.handle().instance,"Velocidade",SceneAnimatorGraphs::ParameterOperation::SetFloat,9,value)==SceneAnimatorGraphs::Status::BoundParameter,"script cannot silently compete with bound source");
+  AE_EXPECT_TRUE(p.world.setProperty(p.handle(),"motion_source",scene::ObjectReference{r.hips})==WorldStatus::Ok,"retarget source at safe point");
+  p.step(.1f);const auto *live=p.graphs.find(r.owner,p.handle().instance);
+  AE_EXPECT_TRUE(live&&!live->motionAvailable&&!live->motionDiagnostic.empty()&&std::fabs(p.x(r.hips))<1e-4f,"missing physical source is diagnosed and cannot keep phantom movement");
+}
+
+AE_TEST(animator_motion_bindings_character_and_dynamic_motor_use_resolved_motion_and_support) {
+  for(bool character:{true,false}) {
+    Rig r;auto &a=r.animator();const auto actor=r.g.createEntity(r.g.root(),ObjectKind::Folder,"Fonte de movimento independente");
+    auto source=*r.g.find(actor);source.transform.position[1]=2;
+    if(character) source.components.add(scene::Character::descriptor);
+    else {auto *body=static_cast<scene::PhysicsBody*>(source.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Dynamic;
+      for(auto &axis:body->freezeRotation) axis=true;
+      source.components.add(scene::Collider::descriptor);source.components.add(scene::DynamicBodyMotor::descriptor);}
+    r.g.applyEntityValues(actor,source);const auto floor=r.g.createEntity(r.g.root(),ObjectKind::Folder,"Apoio");auto support=*r.g.find(floor);support.transform.position[1]=-.5f;
+    support.components.add(scene::PhysicsBody::descriptor);auto *shape=static_cast<scene::Collider*>(support.components.add(scene::Collider::descriptor));shape->halfX=shape->halfZ=30;shape->halfY=.5f;r.g.applyEntityValues(floor,support);
+    a.motionSource=actor;param(a,"Medida",scene::AnimatorParameterType::Float).source=scene::AnimatorParameterSource::PlanarSpeed;
+    param(a,"No chão",scene::AnimatorParameterType::Bool).source=scene::AnimatorParameterSource::Grounded;
+    Play p(r);ScenePhysics physics;AE_EXPECT_TRUE(physics.start(p.world),"real independent motor source");p.graphs.setPhysics(&physics);
+    for(int frame=0;frame<180;++frame) {physics.advance(1./60,p.world);p.step(1.f/60);}
+    float value=0;AE_EXPECT_TRUE(p.graphs.parameter(p.world,r.owner,p.handle().instance,"No chão",SceneAnimatorGraphs::ParameterOperation::Get,0,value)==SceneAnimatorGraphs::Status::Ok&&value==1,"support comes from resolved solver state");
+    for(int frame=0;frame<45;++frame) {
+      AE_EXPECT_TRUE(character?physics.setCharacterMove(actor,1,0,0):physics.setDynamicMotorMove(actor,1,0,0),"actual movement intent");
+      physics.advance(1./60,p.world);p.step(1.f/60);
+    }
+    AE_EXPECT_TRUE(p.graphs.parameter(p.world,r.owner,p.handle().instance,"Medida",SceneAnimatorGraphs::ParameterOperation::Get,0,value)==SceneAnimatorGraphs::Status::Ok&&value>1,"actual post-solver speed drives generic graph");
+    physics.stop();p.step(1.f/60);const auto *live=p.graphs.find(r.owner,p.handle().instance);
+    AE_EXPECT_TRUE(live&&!live->motionAvailable&&!live->motionDiagnostic.empty(),"stopped physics loses binding explicitly");
+  }
 }

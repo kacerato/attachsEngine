@@ -29,9 +29,21 @@ namespace ae::scene {
 enum class AnimatorParameterType : u32 {Float=0,Int=1,Bool=2,Trigger=3};
 enum class AnimatorMotionKind : u32 {Clip=0,Blend1D=1,Blend2D=2};
 enum class AnimatorConditionMode : u32 {If=0,IfNot=1,Greater=2,Less=3,Equals=4,NotEqual=5};
+// Manual parameters retain the v1 script contract. Bound values read the
+// resolved physics state after simulation, never the requested input speed.
+enum class AnimatorParameterSource : u32 {Manual=0,PlanarSpeed=1,VerticalSpeed=2,Grounded=3,Speed=4};
+inline const char *animatorSourceName(AnimatorParameterSource source) {
+  static constexpr const char *names[]{"Script / manual","Velocidade no plano","Velocidade vertical","Apoio no chão","Velocidade total"};
+  return names[static_cast<u32>(source)<=4?static_cast<u32>(source):0];
+}
+inline bool animatorSourceCompatible(AnimatorParameterType type,AnimatorParameterSource source) {
+  return source==AnimatorParameterSource::Manual||(source==AnimatorParameterSource::Grounded?type==AnimatorParameterType::Bool:type==AnimatorParameterType::Float);
+}
 
 struct AnimatorParameter {
   u64 id=0;std::string name;AnimatorParameterType type=AnimatorParameterType::Float;float value=0;
+  AnimatorParameterSource source=AnimatorParameterSource::Manual;
+  float response=0,scale=1;
   bool operator==(const AnimatorParameter &) const=default;
 };
 struct AnimatorMotion {
@@ -76,6 +88,7 @@ public:
                          MaximumMotions=8,MaximumConditions=4,MaximumEvents=8,MaximumName=63;
   bool enabled=true,unscaledTime=false;
   u64 target=0;   // raiz animada; zero: este objeto
+  u64 motionSource=0; // physics owner; zero: this object, independent of the visual root
   float speed=1;
   std::vector<AnimatorParameter> parameters;
   std::vector<AnimatorLayer> layers;
@@ -97,13 +110,15 @@ public:
   AnimatorLayer *layer(u64 id) {for(auto &l:layers) if(l.id==id) return &l;return nullptr;}
 
   bool valid() const override {
-    if(!std::isfinite(speed)||speed<-10||speed>10||target>std::numeric_limits<u32>::max()||
+    if(!std::isfinite(speed)||speed<-10||speed>10||target>std::numeric_limits<u32>::max()||motionSource>std::numeric_limits<u32>::max()||
        parameters.size()>MaximumParameters||layers.size()>MaximumLayers||!nextId) return false;
     std::vector<u64> ids;
     const auto fresh=[&](u64 id){if(!id||id>=nextId||std::find(ids.begin(),ids.end(),id)!=ids.end()) return false;ids.push_back(id);return true;};
     for(usize i=0;i<parameters.size();++i) {
       const auto &p=parameters[i];
       if(!fresh(p.id)||!validName(p.name)||static_cast<u32>(p.type)>3||!std::isfinite(p.value)) return false;
+      if(static_cast<u32>(p.source)>4||!animatorSourceCompatible(p.type,p.source)||!std::isfinite(p.response)||p.response<0||p.response>10||
+         !std::isfinite(p.scale)||p.scale<-100||p.scale>100) return false;
       for(usize j=0;j<i;++j) if(parameters[j].name==p.name) return false;
     }
     const auto floatParameter=[&](u64 id){const auto *p=parameter(id);return id==0||(p&&(p->type==AnimatorParameterType::Float||p->type==AnimatorParameterType::Int));};
@@ -135,8 +150,8 @@ public:
   }
   void write(std::ostream &o) const override {
     const auto guid=[](const resources::AssetGuid &g){return g.valid()?g.text():std::string("-");};
-    o<<enabled<<' '<<unscaledTime<<' '<<target<<' '<<speed<<' '<<nextId<<' '<<parameters.size();
-    for(const auto &p:parameters) o<<' '<<p.id<<' '<<std::quoted(p.name)<<' '<<static_cast<u32>(p.type)<<' '<<p.value;
+    o<<enabled<<' '<<unscaledTime<<' '<<target<<' '<<motionSource<<' '<<speed<<' '<<nextId<<' '<<parameters.size();
+    for(const auto &p:parameters) o<<' '<<p.id<<' '<<std::quoted(p.name)<<' '<<static_cast<u32>(p.type)<<' '<<p.value<<' '<<static_cast<u32>(p.source)<<' '<<p.response<<' '<<p.scale;
     o<<' '<<layers.size();
     for(const auto &l:layers) {
       o<<' '<<l.id<<' '<<std::quoted(l.name)<<' '<<l.weight<<' '<<l.mask<<' '<<l.defaultState<<' '<<l.states.size();
@@ -155,12 +170,16 @@ public:
     }
   }
   bool read(std::istream &i,u32 version) override {
-    if(version!=1) return false;
+    if(version<1||version>2) return false;
     parameters.clear();layers.clear();
     usize count=0;
-    if(!(i>>enabled>>unscaledTime>>target>>speed>>nextId>>count)||count>MaximumParameters) return false;
+    motionSource=0;
+    if(!(i>>enabled>>unscaledTime>>target)) return false;
+    if(version>=2&&!(i>>motionSource)) return false;
+    if(!(i>>speed>>nextId>>count)||count>MaximumParameters) return false;
     parameters.resize(count);
-    for(auto &p:parameters) {u32 type=0;if(!(i>>p.id>>std::quoted(p.name)>>type>>p.value)) return false;p.type=static_cast<AnimatorParameterType>(type);}
+    for(auto &p:parameters) {u32 type=0;if(!(i>>p.id>>std::quoted(p.name)>>type>>p.value)) return false;p.type=static_cast<AnimatorParameterType>(type);
+      if(version>=2) {u32 source=0;if(!(i>>source>>p.response>>p.scale)) return false;p.source=static_cast<AnimatorParameterSource>(source);}}
     if(!(i>>count)||count>MaximumLayers) return false;
     layers.resize(count);
     for(auto &l:layers) {
@@ -213,10 +232,13 @@ inline constexpr std::array<ComponentBoolean,2> animatorBooleans{{
   {"unscaled_time","Ignorar escala de tempo",[](const ComponentValue &v){return animator(v).unscaledTime;},[](ComponentValue &v,bool b){animator(v).unscaledTime=b;},
    {"Animator","","Anima em tempo real mesmo com o jogo pausado por escala (menus, cutscenes)"}},
 }};
-inline constexpr std::array<ComponentObjectReference,1> animatorReferences{{
+inline constexpr std::array<ComponentObjectReference,2> animatorReferences{{
   {"target","Raiz animada","",ObjectReferenceScope::Any,"Este objeto",
    [](const ComponentValue &v){return animator(v).target;},[](ComponentValue &v,u64 x){animator(v).target=x;},
    {"Animator","","Objeto cuja hierarquia os clipes animam (o modelo importado)"}},
+  {"motion_source","Corpo / motor","",ObjectReferenceScope::Any,"Este objeto",
+   [](const ComponentValue &v){return animator(v).motionSource;},[](ComponentValue &v,u64 x){animator(v).motionSource=x;},
+   {"Animator","","Fonte dos parâmetros físicos; independe da malha e não move o corpo"}},
 }};
 inline constexpr std::array<ComponentParameter,2> animatorStatePayload{{
   {"layer","Camada",ComponentValueKind::Integer},{"state","Estado",ComponentValueKind::Integer}}};
@@ -230,7 +252,7 @@ inline constexpr std::array<ComponentMethod,1> animatorMethods{{
   {"in_transition","Em transição","Verdadeiro enquanto a camada base mistura dois estados",{},ComponentValueKind::Boolean},
 }};
 inline const ComponentType Animator::descriptor{
-  "astra.animation.animator",1,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
+  "astra.animation.animator",2,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
   animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},{},{},{},{},animatorMethods,animatorEvents};
 
 } // namespace ae::scene
