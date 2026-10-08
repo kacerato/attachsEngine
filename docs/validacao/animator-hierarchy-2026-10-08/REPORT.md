@@ -173,3 +173,28 @@ SHA-256 `0ed72a264ae13732705b1e5ccfb3a8449af8c3be2d2203077da2bed917da4bb7`.
 A diferença em relação à revisão 14 é revisão/allocator do histórico,
 sem alteração final da configuração da animação. Não apagar isso para
 simular um arquivo nunca editado. Projeto permanece disponível no Dev.
+
+## Publicação
+
+Implementação/evidências na main de kacerato/attachsEngine: commit
+`2b7faa652ca4c9cc7e129251462bcdffd48c9ced`, remoto conferido após push/LFS.
+O workspace preserva arquivos de build/cache e trabalho anterior fora deste
+commit; não foi feito reset nem adição indiscriminada.
+
+AstraDocs main: `5a119ca962626178a59030ac6f5427ae17720331`. Nota imutável
+`2026-10-08-animator-hierarquia-interrupcoes`, disponibilidade development.
+updates:record/build/check:links concluídos: 950 páginas, 217679 links,
+zero erros. HTML, Markdown, índices JSON e feed saem da mesma geração.
+Deploy produção `dpl_7eZjzgSbfBYLEfELfoB3woJJvzec`: READY, commit conferido,
+alias astraengine.com.br atribuído, sem erro de alias.
+
+Guia vivo: https://astraengine.com.br/pt-br/snapshot-2026-10-07/sistemas/animator-hierarquia/
+Atualizações: https://astraengine.com.br/atualizacoes/#2026-10-08-animator-hierarquia-interrupcoes
+Conferência por navegador: guia/screenshot real carregados; desktop e viewport
+390×844; largura de documento/client 375/375 sem overflow horizontal. Aviso de
+novidade→Atualizações→guia funciona e distingue Docs publicadas/app Dev.
+APK público e catálogo 0.2.3 não foram substituídos nesta entrega.
+
+B3 fechado com modelo/runtime/editor/histórico/persistência/API de execução,
+aceite físico e publicação. A autoria SDK e os demais recursos B4–B6 continuam
+registrados como pendentes; não fechar o objetivo global dos plugins.
