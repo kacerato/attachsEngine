@@ -1,0 +1,8 @@
+10-08 13:26:04.777  5601  8653 I Astra.Script: 8: ADDITIVE shared composition API PASS
+10-08 13:26:06.226  5601  8653 I Astra.Script: 8: ADDITIVE zero removes delta PASS
+10-08 13:26:06.974  5601  8653 I Astra.Script: 8: ADDITIVE weighted relative quaternion PASS
+10-08 13:26:06.974  5601  8653 I Astra.Script: 8: ADDITIVE instance isolation PASS
+10-08 13:26:07.722  5601  8653 I Astra.Script: 8: ADDITIVE initial pose reference PASS
+10-08 13:26:08.473  5601  8653 I Astra.Script: 8: ADDITIVE mode and reference controls PASS
+10-08 13:26:08.474  5601  8653 I Astra.Script: 8: ADDITIVE missing reference rejected PASS
+10-08 13:26:09.222  5601  8653 I Astra.Script: 8: ADDITIVE reset authored composition PASS

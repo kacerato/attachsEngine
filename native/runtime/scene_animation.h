@@ -85,10 +85,14 @@ public:
     float time = 0, weight = 0;
     u32 layer = 0;
     ObjectId mask = kInvalidObject;
+    bool additive = false;
+    resources::AssetGuid referenceClip{};
+    float referenceTime = 0;
   };
   // Valem para o próximo advance e são consumidas por ele.
   void setExternalSamples(std::vector<ExternalSample> samples) { external_ = std::move(samples); }
   const AnimationLibrary *library() const noexcept { return library_; }
+  std::string_view compositionDiagnostic() const noexcept {return compositionDiagnostic_;}
   // Liga ao grafo do Play e à biblioteca. `reset` esquece tudo: o próximo Play
   // parte do zero.
   void begin(SceneGraph &graph, const AnimationLibrary &library);
@@ -157,9 +161,14 @@ private:
   std::vector<Player> players_;
   std::unordered_map<ObjectId, Rest> rest_;
   std::vector<ExternalSample> external_;
+  std::string compositionDiagnostic_;
   // Alvos resolvidos por (dono, clipe) das amostras externas.
   struct ExternalTargets { ObjectId owner; resources::AssetGuid clip; std::vector<ObjectId> targets; };
   std::vector<ExternalTargets> externalTargets_;
+  // Retired channels of an active graph return to their baseline. Inactive
+  // graphs retain their last pose, matching the legacy enable/disable contract.
+  struct ExternalBinding {ObjectId owner;u32 layer;ObjectId target;resources::AnimationPath path;usize width;};
+  std::vector<ExternalBinding> externalBindings_;
   u32 playing_ = 0, posed_ = 0;
 };
 

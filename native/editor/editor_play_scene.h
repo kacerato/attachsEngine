@@ -196,6 +196,7 @@ public:
     virtualCameras_.setEvents(&events_);
     animatorGraphs_.setEvents(&events_);
     animatorGraphs_.setPhysics(&physics_);
+    animatorGraphs_.setLibrary(&resources);
     scripts_.setEvents(&events_);
     debugLines_.reset();
     scripts_.setGameView(&gameView_);

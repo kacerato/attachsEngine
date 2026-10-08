@@ -26,6 +26,24 @@ namespace ae::runtime {
 namespace {
 using Value=scene::ComponentOperationValue;
 using Arguments=std::span<const Value>;
+WorldStatus animatorLayerOperation(const ComponentOperationServices &s,ComponentHandle h,Arguments args,Value &result,u32 operation,u32 field=0) {
+  if(!s.animators||!s.world) return WorldStatus::NotRunning;
+  if(args.empty()||args[0].integer<0||args[0].integer>std::numeric_limits<u32>::max()) return WorldStatus::InvalidArgument;
+  const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+  float value=0;resources::AssetGuid reference{};
+  if(operation==1||operation==3) value=static_cast<float>(args[1].number);
+  if(operation==2) value=static_cast<float>(args[1].integer);
+  if(operation==4) reference={static_cast<u64>(args[1].integer),static_cast<u64>(args[2].integer)};
+  SceneAnimatorGraphs::LayerSettings info;
+  const auto changed=s.animators->layerControl(*s.world,h.object.id,h.instance,static_cast<u32>(args[0].integer),operation,value,reference,info);
+  if(changed!=WorldStatus::Ok) return changed;
+  if(field==1) result=Value::makeNumber(info.weight);
+  if(field==2) result=Value::makeInteger(static_cast<i64>(info.blend));
+  if(field==3) result=Value::makeNumber(info.referenceTime);
+  if(field==4) result=Value::makeInteger(static_cast<i64>(info.reference.high));
+  if(field==5) result=Value::makeInteger(static_cast<i64>(info.reference.low));
+  return WorldStatus::Ok;
+}
 
 // Cada função reutiliza o mesmo serviço chamado pela ABI específica do
 // componente; as duas portas produzem o mesmo efeito por construção.
@@ -79,7 +97,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,54> bindings{{
+const std::array<ComponentMethodBinding,64> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -143,6 +161,16 @@ const std::array<ComponentMethodBinding,54> bindings{{
     SceneAnimatorGraphs::Info info;
     if(s.animators->info(*s.world,h.object.id,h.instance,0,info)!=SceneAnimatorGraphs::Status::Ok) return WorldStatus::ComponentUnavailable;
     r=Value::makeBoolean(info.transitioning);return WorldStatus::Ok;}},
+  {&scene::Animator::descriptor,"get_layer_weight",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,1);}},
+  {&scene::Animator::descriptor,"set_layer_weight",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,1);}},
+  {&scene::Animator::descriptor,"get_layer_blend",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,2);}},
+  {&scene::Animator::descriptor,"set_layer_blend",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,2);}},
+  {&scene::Animator::descriptor,"get_layer_reference_time",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,3);}},
+  {&scene::Animator::descriptor,"set_layer_reference_time",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,3);}},
+  {&scene::Animator::descriptor,"set_layer_reference",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,4);}},
+  {&scene::Animator::descriptor,"get_layer_reference_high",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,4);}},
+  {&scene::Animator::descriptor,"get_layer_reference_low",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,5);}},
+  {&scene::Animator::descriptor,"reset_layer_overrides",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,5);}},
   {&scene::AudioSnapshot::descriptor,"transition_to",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.audio) return WorldStatus::NotRunning;
     return s.audio->transitionSnapshot(*s.world,h,a[0].number);}},

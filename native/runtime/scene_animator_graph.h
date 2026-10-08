@@ -43,6 +43,10 @@ public:
     u64 layer=0,current=0,next=0;
     float time=0,nextTime=0,elapsed=0,duration=0;
     bool transitioning=false,entered=false,nextEntered=false,currentFresh=true;
+    bool weightOverride=false,blendOverride=false,referenceOverride=false,timeOverride=false;
+    float runtimeWeight=1,runtimeReferenceTime=0;
+    scene::AnimatorLayerBlend runtimeBlend=scene::AnimatorLayerBlend::Override;
+    resources::AssetGuid runtimeReferenceClip{};
   };
   struct Instance {
     ObjectId owner=kInvalidObject;u64 instance=0;
@@ -56,6 +60,11 @@ public:
     bool controllerAvailable=true;std::string controllerDiagnostic;
   };
   struct Info {u64 state=0,next=0;float normalizedTime=0,progress=0;bool transitioning=false;std::string name,nextName;};
+  struct LayerSettings {float weight=1;scene::AnimatorLayerBlend blend=scene::AnimatorLayerBlend::Override;resources::AssetGuid reference{};float referenceTime=0;};
+  // Runtime overrides never mutate a shared controller or saved authoring.
+  WorldStatus layerControl(GameWorld &,ObjectId,u64,u32 layer,u32 operation,float value,
+                           resources::AssetGuid reference,LayerSettings &out);
+  void setLibrary(const AnimationLibrary *library) noexcept {library_=library;}
 
   void setEvents(ComponentEventQueue *events) noexcept {events_=events;}
   void setPhysics(const ScenePhysics *physics) noexcept {physics_=physics;}
@@ -65,7 +74,7 @@ public:
   bool resolve(const scene::Animator &value,scene::Animator &out,std::string &diagnostic) const {
     return resources::resolveAnimatorController(value,controllers_,out,diagnostic);
   }
-  void reset() {instances_.clear();}
+  void reset() {instances_.clear();library_=nullptr;}
   // Avalia todos os Animators e acrescenta as amostras para o SceneAnimator.
   bool advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,std::vector<SceneAnimator::ExternalSample> &samples);
 
@@ -82,6 +91,7 @@ private:
   ComponentEventQueue *events_=nullptr;
   const ScenePhysics *physics_=nullptr;
   std::vector<resources::AnimatorControllerAsset> controllers_;
+  const AnimationLibrary *library_=nullptr;
 };
 
 } // namespace ae::runtime

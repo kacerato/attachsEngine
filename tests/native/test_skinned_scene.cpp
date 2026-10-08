@@ -198,6 +198,27 @@ AE_TEST(animation_clip_element_ids_survive_scene_save_and_reload) {
   }
 }
 
+AE_TEST(animator_additive_imported_skin_reaches_palette_and_restores_without_authoring_mutation) {
+  EditorSession session;DeformationPublisher gpu;startSession(session,gpu);
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(test::skinnedAnimatedGlb(),"Fontes/aditivo.glb",{},report),report.diagnostic.c_str());
+  auto &doc=session.document();const auto rig=named(doc,"Rig"),hip=named(doc,"Hip"),arm=named(doc,"Arm"),body=named(doc,"Body");
+  auto values=*doc.find(rig);const auto wave=component<scene::Animation>(doc,rig)->clip;values.components.remove(scene::Animation::descriptor);
+  auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));const auto instance=a.instanceId();
+  a.layers[0].blend=scene::AnimatorLayerBlend::Additive;a.layers[0].weight=.5f;a.layers[0].referenceClip=wave;a.layers[0].states[0].motions={{wave}};
+  AE_EXPECT_TRUE(doc.applyEntityValues(rig,values),"imported hierarchy uses real Animator");
+  EditorPlayScene play;AE_EXPECT_TRUE(play.start(doc,session.mapScene())&&play.advance(.25)&&play.advance(.25),"scheduler evaluates imported additive channels");
+  AE_EXPECT_TRUE(near(play.document().find(arm)->transform.rotationDegrees[2],22.5f,.05f)&&near(play.document().find(hip)->transform.position[2],1)&&near(play.document().find(hip)->transform.scale[0],1.25f),"imported STEP/LINEAR/CUBICSPLINE contribute weighted relative poses");
+  std::vector<renderer::MapDrawState> posed;AE_EXPECT_TRUE(play.extract(session.mapScene(),posed),"renderer extraction");
+  const auto *draw=drawOf(posed,body);
+  AE_EXPECT_TRUE(draw&&draw->skinPalette&&draw->skinPalette->size()==32&&near((*draw->skinPalette)[14],1),"relative joint pose reaches renderer skin palette");
+  runtime::SceneAnimatorGraphs::LayerSettings settings;
+  AE_EXPECT_TRUE(play.animatorGraphs().layerControl(play.world(),rig,instance,0,1,0,{},settings)==runtime::WorldStatus::Ok&&play.advance(0),"zero weight at safe point");
+  posed.clear();play.extract(session.mapScene(),posed);draw=drawOf(posed,body);
+  AE_EXPECT_TRUE(draw&&draw->skinPalette&&near((*draw->skinPalette)[14],0)&&near(play.document().find(arm)->transform.rotationDegrees[2],0,.05f),"zero removes deformation from joints and renderer palette");
+  play.stop();AE_EXPECT_TRUE(near(doc.find(hip)->transform.position[2],0)&&component<scene::Animator>(doc,rig)->layers[0].weight==.5f,"Stop preserves authoring and its layer weight");
+}
+
 AE_TEST(imported_rig_binds_bones_and_clip_identity_and_plays) {
   EditorSession session;
   DeformationPublisher gpu;

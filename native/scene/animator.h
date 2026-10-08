@@ -10,8 +10,8 @@
 // - Unity Animation Layers / Avatar Mask: https://docs.unity3d.com/6000.0/Documentation/Manual/AnimationLayers.html
 // - Godot 4.5 AnimationNodeBlendSpace2D (triangulação): https://docs.godotengine.org/en/4.5/classes/class_animationnodeblendspace2d.html
 // Adaptações: grafo local ou recurso .aeanimator com overrides por instância;
-// a máscara de camada é uma subárvore de objetos; só camadas de substituição
-// (sem aditivas); sem sub-máquinas de estado.
+// a máscara de camada é uma subárvore de objetos; composição por substituição
+// ou aditiva relativa à pose inicial/clipe de referência; sem sub-máquinas.
 #pragma once
 #include "resources/asset_registry.h"
 #include "scene/components.h"
@@ -28,6 +28,7 @@ namespace ae::scene {
 
 enum class AnimatorParameterType : u32 {Float=0,Int=1,Bool=2,Trigger=3};
 enum class AnimatorMotionKind : u32 {Clip=0,Blend1D=1,Blend2D=2};
+enum class AnimatorLayerBlend : u32 {Override=0,Additive=1};
 enum class AnimatorConditionMode : u32 {If=0,IfNot=1,Greater=2,Less=3,Equals=4,NotEqual=5};
 // Manual parameters retain the v1 script contract. Bound values read the
 // resolved physics state after simulation, never the requested input speed.
@@ -80,6 +81,9 @@ struct AnimatorTransition {
 };
 struct AnimatorLayer {
   u64 id=0;std::string name;float weight=1;u64 mask=0;u64 defaultState=0;
+  AnimatorLayerBlend blend=AnimatorLayerBlend::Override;
+  resources::AssetGuid referenceClip{};
+  float referenceTime=0; // seconds; invalid GUID uses initial object pose
   std::vector<AnimatorState> states;std::vector<AnimatorTransition> transitions;
   bool operator==(const AnimatorLayer &) const=default;
   const AnimatorState *state(u64 stateId) const {for(const auto &s:states) if(s.id==stateId) return &s;return nullptr;}
@@ -137,6 +141,7 @@ public:
     const auto floatParameter=[&](u64 id){const auto *p=parameter(id);return id==0||(p&&(p->type==AnimatorParameterType::Float||p->type==AnimatorParameterType::Int));};
     for(const auto &l:layers) {
       if(!fresh(l.id)||!validName(l.name)||!std::isfinite(l.weight)||l.weight<0||l.weight>1||l.mask>std::numeric_limits<u32>::max()||
+         static_cast<u32>(l.blend)>1||!std::isfinite(l.referenceTime)||l.referenceTime<0||l.referenceTime>86400||
          l.states.size()>MaximumStates||l.transitions.size()>MaximumTransitions) return false;
       if(l.defaultState&&!l.state(l.defaultState)) return false;
       for(const auto &s:l.states) {
@@ -183,9 +188,11 @@ public:
     }
     o<<' '<<guid(controller)<<' '<<clipOverrides.size();
     for(const auto &entry:clipOverrides) o<<' '<<guid(entry.original)<<' '<<guid(entry.replacement);
+    o<<' '<<layers.size();
+    for(const auto &l:layers) o<<' '<<l.id<<' '<<static_cast<u32>(l.blend)<<' '<<guid(l.referenceClip)<<' '<<l.referenceTime;
   }
   bool read(std::istream &i,u32 version) override {
-    if(version<1||version>3) return false;
+    if(version<1||version>4) return false;
     controller={};clipOverrides.clear();
     parameters.clear();layers.clear();
     usize count=0;
@@ -235,6 +242,17 @@ public:
            !resources::AssetGuid::parse(replacement,entry.replacement)) return false;
       }
     }
+    if(version>=4) {
+      usize n=0;if(!(i>>n)||n!=layers.size()) return false;
+      for(auto &l:layers) {
+        u64 id=0;u32 mode=0;std::string ref;
+        if(!(i>>id>>mode>>ref>>l.referenceTime)||id!=l.id) return false;
+        l.blend=static_cast<AnimatorLayerBlend>(mode);
+        if(ref!="-"&&!resources::AssetGuid::parse(ref,l.referenceClip)) return false;
+      }
+    }
+    // Versions 1-3 always evaluated the base layer at full weight.
+    if(version<4&&!layers.empty()) layers[0].weight=1;
     return valid();
   }
 };
@@ -292,8 +310,22 @@ inline constexpr std::array<ComponentEvent,2> animatorEvents{{
   {"state_entered","Entrou no estado","Emitido quando um estado começa (no início da transição para ele)",animatorStatePayload},
   {"state_event","Evento do estado","Emitido quando o tempo do estado passa por um evento marcado nele",animatorEventPayload},
 }};
-inline constexpr std::array<ComponentMethod,1> animatorMethods{{
+inline constexpr std::array<ComponentParameter,1> animatorLayerArgument{{{"layer","Camada",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentParameter,2> animatorLayerNumberArguments{{{"layer","Camada",ComponentValueKind::Integer},{"value","Valor",ComponentValueKind::Number}}};
+inline constexpr std::array<ComponentParameter,2> animatorLayerBlendArguments{{{"layer","Camada",ComponentValueKind::Integer},{"mode","0 Override / 1 Additive",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentParameter,3> animatorLayerReferenceArguments{{{"layer","Camada",ComponentValueKind::Integer},{"high","GUID alto",ComponentValueKind::Integer},{"low","GUID baixo",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentMethod,11> animatorMethods{{
   {"in_transition","Em transição","Verdadeiro enquanto a camada base mistura dois estados",{},ComponentValueKind::Boolean},
+  {"get_layer_weight","Ler peso","Peso efetivo da instância",animatorLayerArgument,ComponentValueKind::Number},
+  {"set_layer_weight","Peso da instância","Não altera o recurso compartilhado",animatorLayerNumberArguments},
+  {"get_layer_blend","Ler composição","0 Override / 1 Additive",animatorLayerArgument,ComponentValueKind::Integer},
+  {"set_layer_blend","Composição da instância","0 Override / 1 Additive",animatorLayerBlendArguments},
+  {"get_layer_reference_time","Ler tempo de referência","Segundos no clipe",animatorLayerArgument,ComponentValueKind::Number},
+  {"set_layer_reference_time","Tempo de referência","Segundos no clipe",animatorLayerNumberArguments},
+  {"set_layer_reference","Referência da instância","GUID zero usa a pose inicial; desconhecido é recusado",animatorLayerReferenceArguments},
+  {"get_layer_reference_high","GUID alto","Bits da referência efetiva",animatorLayerArgument,ComponentValueKind::Integer},
+  {"get_layer_reference_low","GUID baixo","Bits da referência efetiva",animatorLayerArgument,ComponentValueKind::Integer},
+  {"reset_layer_overrides","Restaurar camada","Restaura a composição autorada, preservando estado e relógio",animatorLayerArgument},
 }};
 inline constexpr std::array<ComponentResourceBinding,1> animatorResources{{
   {"controller","Controller",resources::AssetType::AnimatorController,
@@ -305,7 +337,7 @@ inline constexpr std::array<ComponentResourceBinding,1> animatorResources{{
    },{"Animator","","Grafo compartilhado; ausente interrompe a avaliação e expõe diagnóstico"}},
 }};
 inline const ComponentType Animator::descriptor{
-  "astra.animation.animator",3,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
+  "astra.animation.animator",4,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
   animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},animatorResources,{},{},{},animatorMethods,animatorEvents};
 
 } // namespace ae::scene

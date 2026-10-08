@@ -646,6 +646,7 @@ enum : u32 {
   ParameterTrigger=0x20,
   Controller=0x21,ControllerCreate=0x22,ControllerChoose=0x23,ControllerDetach=0x24,
   ControllerEdit=0x25,ControllerReload=0x26,ControllerReset=0x27,
+  LayerBlend=0x28,LayerReferenceClip=0x29,LayerReferenceTime=0x2A,LayerReferenceReset=0x2B,LayerRuntimeReset=0x2C,
   OverrideClip=0x7100,OverrideReset=0x7500,ControllerChoice=0x7900,
   OverrideOrphanReset=0x9000,
   LayerTab=0x100,ParameterAdd=0x200,ParameterName=0x300,ParameterValue=0x400,ParameterDelete=0x500,ParameterRow=0x600,

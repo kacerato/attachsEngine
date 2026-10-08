@@ -1,4 +1,5 @@
 namespace Astra;
+public enum AnimationLayerBlendMode { Override=0, Additive=1 }
 
 /// <summary>Estado atual de uma camada do Animator (AnimatorStateInfo da Unity).</summary>
 /// <param name="Name">Estado tocando (o de origem durante uma transição).</param>
@@ -32,6 +33,16 @@ public readonly struct AnimatorController
     private readonly Component component;
     internal AnimatorController(Component value) => component = value;
     public Component Component => component;
+    /// <summary>Runtime composition settings are independent per instance and do not edit controller assets.</summary>
+    public float GetLayerWeight(uint layer) => (float)component.Invoke("get_layer_weight",ComponentValue.Integer(layer)).AsNumber();
+    public void SetLayerWeight(uint layer,float weight) => component.Invoke("set_layer_weight",ComponentValue.Integer(layer),ComponentValue.Number(weight));
+    public AnimationLayerBlendMode GetLayerBlendMode(uint layer) => (AnimationLayerBlendMode)component.Invoke("get_layer_blend",ComponentValue.Integer(layer)).AsInteger();
+    public void SetLayerBlendMode(uint layer,AnimationLayerBlendMode mode) => component.Invoke("set_layer_blend",ComponentValue.Integer(layer),ComponentValue.Integer((long)mode));
+    public float GetLayerReferenceTime(uint layer) => (float)component.Invoke("get_layer_reference_time",ComponentValue.Integer(layer)).AsNumber();
+    public void SetLayerReferenceTime(uint layer,float seconds) => component.Invoke("set_layer_reference_time",ComponentValue.Integer(layer),ComponentValue.Number(seconds));
+    public void SetLayerReferenceClip(uint layer,AssetGuid clip) => component.Invoke("set_layer_reference",ComponentValue.Integer(layer),ComponentValue.Integer(unchecked((long)clip.High)),ComponentValue.Integer(unchecked((long)clip.Low)));
+    public AssetGuid GetLayerReferenceClip(uint layer) => new(unchecked((ulong)component.Invoke("get_layer_reference_high",ComponentValue.Integer(layer)).AsInteger()),unchecked((ulong)component.Invoke("get_layer_reference_low",ComponentValue.Integer(layer)).AsInteger()));
+    public void ResetLayerOverrides(uint layer) => component.Invoke("reset_layer_overrides",ComponentValue.Integer(layer));
 
     private float Parameter(uint operation, string name, float value, string action)
     {

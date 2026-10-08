@@ -9784,6 +9784,10 @@ void EditorSession::update() {
     }
   }
   state_.timerRuntime=playInspecting()&&playScene_.active()?&playScene_.timers():nullptr;
+  if(state_.animatorRuntime) {
+    const auto diagnostic=playScene_.animator().compositionDiagnostic();
+    if(!diagnostic.empty()) {if(!state_.animatorControllerDiagnostic.empty()) state_.animatorControllerDiagnostic+=" / ";state_.animatorControllerDiagnostic+=diagnostic;}
+  }
   state_.uiTime=clockPrimed_?lastWallSeconds_:0;
   refreshColliderAuthoring();
   // Travado num objeto que deixou de existir (apagado, outra cena): volta a seguir a seleção.

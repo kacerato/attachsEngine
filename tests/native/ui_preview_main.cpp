@@ -341,7 +341,7 @@ int writeVirtualCameraProject(const char *directory) {
 // Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
 // importado com Animator no lugar da Animação legada, mistura 1D por
 // Velocidade, gatilho de Qualquer estado e retorno por tempo de saída.
-int writeAnimatorProject(const char *directory,bool general=false,bool shared=false) {
+int writeAnimatorProject(const char *directory,bool general=false,bool shared=false,bool additive=false) {
   namespace fs=std::filesystem;
   const auto fail=[](const std::string &message){std::fprintf(stderr,"Animator export refused: %s\n",message.c_str());return 2;};
   if(!directory||!directory[0]) return fail("provide a new empty output directory");
@@ -350,7 +350,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   std::vector<u8> probe,fox,license;
   const char *modelPath=general?"Fontes/Mechanism.glb":"Fontes/Fox.glb";
   const char *licensePath=general?"Fontes/Mechanism.LICENSE.txt":"Fontes/Fox.LICENSE.txt";
-  if(!readAsset(shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
+  if(!readAsset(additive?"tests/fixtures/animator/AdditiveAnimatorProbe.cs":shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
      !readAsset(general?"tests/fixtures/animator/Mechanism.LICENSE.txt":"tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
   for(const auto *folder:{"Scripts","scenes",".astra","Fontes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
   if(!editor::EditorImportTransaction::write(root/"Scripts/AnimatorProbe.cs",probe)||
@@ -404,10 +404,18 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
     a.parameters.push_back({a.allocateId(),"Teste manual",scene::AnimatorParameterType::Bool,0});
   }
   if(!a.valid()) return fail("animator graph invalid");
+  if(additive) {
+    a.parameters.clear();a.motionSource=0;base.states.resize(1);base.transitions.clear();
+    base.states[0].name="Meia abertura";base.states[0].kind=scene::AnimatorMotionKind::Clip;base.states[0].blendX=0;base.states[0].motions={{clips[1].asset}};
+    scene::AnimatorLayer delta;delta.id=a.allocateId();delta.name="Ajuste aditivo";delta.blend=scene::AnimatorLayerBlend::Additive;delta.weight=.5f;delta.referenceClip=clips[1].asset;
+    scene::AnimatorState pose;pose.id=a.allocateId();pose.name="Delta de abertura";pose.motions={{clips[2].asset}};delta.defaultState=pose.id;delta.states.push_back(pose);a.layers.push_back(delta);
+  }
   if(shared) {
     editor::assignEntityName(values,"Mecanismo A");values.transform.position[0]=-70;
-    a.parameters[0].name="Abertura";a.parameters[0].source=scene::AnimatorParameterSource::Manual;a.parameters[0].response=0;a.motionSource=0;
+    if(!additive) {a.parameters[0].name="Abertura";a.parameters[0].source=scene::AnimatorParameterSource::Manual;a.parameters[0].response=0;}
+    a.motionSource=0;
     resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("shared-mechanism-acceptance-20261008");asset.name="Mecanismos";
+    if(additive) asset.guid=resources::assetGuidFromSeed("shared-additive-acceptance-20261008");
     asset.graph=resources::AnimatorControllerAsset::portableGraph(a);a.controller=asset.guid;
     const auto text=asset.serialize();resources::AssetRecord record;record.guid=asset.guid;record.type=resources::AssetType::AnimatorController;
     record.path="Animação/Mecanismos.aeanimator";record.dependencies={report.source};record.contentHash=Sha256::hex({reinterpret_cast<const u8*>(text.data()),text.size()});
@@ -418,7 +426,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   if(shared) {
     runtime::ObjectCloneMap mapping;const auto second=document.cloneSubtree(owner,document.root(),mapping);if(!second) return fail("clone mechanism");
     auto copy=*document.find(second);editor::assignEntityName(copy,"Mecanismo B");copy.transform.position[0]=70;
-    scene::animator(*copy.components.edit(scene::Animator::descriptor)).clipOverrides={{clips[1].asset,clips[2].asset}};
+    if(!additive) scene::animator(*copy.components.edit(scene::Animator::descriptor)).clipOverrides={{clips[1].asset,clips[2].asset}};
     if(!document.applyEntityValues(second,copy)) return fail("instance override");
   }
   const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");
@@ -429,7 +437,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
   if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
   std::ostringstream descriptor;
-  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(additive?"AnimatorAdditive-20261008":shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Animator project written: %s\n",root.generic_string().c_str());
@@ -941,6 +949,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-animator-general-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-controller-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true);
+  if(argc>1&&std::string_view(argv[1])=="write-animator-additive-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-project")return writeAnimatorProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
@@ -1863,6 +1872,7 @@ int main(int argc, char **argv) {
       if(i==0) t.conditions={{a.parameters[1].id,scene::AnimatorConditionMode::If,0}};else {t.hasExitTime=true;t.exitTime=1;}a.layers[0].transitions.push_back(t);}
     const auto instance=a.instanceId(),selected=a.layers[0].states[1].id,parameter=a.parameters[0].id;
     const std::string mode=argv[4];
+    if(mode=="animator-workspace-additive") {a.layers[0].blend=scene::AnimatorLayerBlend::Additive;a.layers[0].weight=.5f;}
     if(mode=="animator-workspace-properties"||mode=="animator-workspace-events") {
       a.parameters[0].value=.4f;a.parameters.push_back({a.allocateId(),"Inclinação",scene::AnimatorParameterType::Float,.2f});
       auto &s=a.layers[0].states[1];s.kind=scene::AnimatorMotionKind::Blend2D;s.blendX=parameter;s.blendY=a.parameters.back().id;s.motions.resize(8);s.events.resize(8);
@@ -1872,7 +1882,7 @@ int main(int argc, char **argv) {
     if(!document.applyEntityValues(id,values)) return 1;
     state.animatorOpen=true;state.animatorEntity=id;state.animatorInstance=instance;
     state.animatorPan[0]=-100;state.animatorZoom=.85f;
-    state.animatorDrawer=mode=="animator-workspace-parameters"?1:mode=="animator-workspace-properties"||mode=="animator-workspace-events"||mode=="animator-workspace-binding"||mode=="animator-workspace-source"?2:0;
+    state.animatorDrawer=mode=="animator-workspace-parameters"?1:mode=="animator-workspace-additive"||mode=="animator-workspace-properties"||mode=="animator-workspace-events"||mode=="animator-workspace-binding"||mode=="animator-workspace-source"?2:0;
     if(mode=="animator-workspace-properties"||mode=="animator-workspace-events") state.animatorState=selected;
     if(mode=="animator-workspace-events") state.animatorDetailsScroll=1300;
     if(mode=="animator-workspace-binding"||mode=="animator-workspace-source") state.animatorParameter=parameter;

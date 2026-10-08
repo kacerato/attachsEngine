@@ -1,4 +1,5 @@
 #include "runtime/scene_animation.h"
+#include "resources/animation_composition.h"
 
 #include "runtime/transform_math.h"
 #include "scene/animation.h"
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <unordered_set>
 
 namespace ae::runtime {
 namespace {
@@ -73,7 +75,9 @@ void SceneAnimator::reset() {
   players_.clear();
   rest_.clear();
   external_.clear();
+  compositionDiagnostic_.clear();
   externalTargets_.clear();
+  externalBindings_.clear();
   playing_ = posed_ = 0;
 }
 
@@ -331,6 +335,7 @@ bool SceneAnimator::clipAt(ObjectId owner, u64 instance, u32 index, resources::A
 
 bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &writable) {
   playing_ = posed_ = 0;
+  compositionDiagnostic_.clear();
   if (!graph_ || !library_ || !std::isfinite(delta) || delta < 0) return graph_ == nullptr;
   auto &graph = *graph_;
 
@@ -355,6 +360,8 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     u32 layer;
     float weight;
     std::vector<float> value;
+    bool additive=false;
+    std::vector<float> reference;
   };
   struct Property {
     ObjectId object;
@@ -363,14 +370,15 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   };
   std::vector<Property> properties;
   std::unordered_map<u64, usize> propertyIndex;
-  const auto contribute = [&](ObjectId object, AnimationPath path, u32 layer, float weight, std::vector<float> value) {
+  const auto contribute = [&](ObjectId object, AnimationPath path, u32 layer, float weight, std::vector<float> value,
+                              bool additive=false,std::vector<float> reference=std::vector<float>{}) {
     const u64 key = (u64(object) << 2) | static_cast<u64>(path);
     auto found = propertyIndex.find(key);
     if (found == propertyIndex.end()) {
       found = propertyIndex.emplace(key, properties.size()).first;
       properties.push_back({object, path, {}});
     }
-    properties[found->second].list.push_back({layer, weight, std::move(value)});
+    properties[found->second].list.push_back({layer, weight, std::move(value),additive,std::move(reference)});
   };
 
   for (const auto &[owner, instance] : live) {
@@ -432,11 +440,39 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     }
   }
 
+  // Active layer markers also reach this path when a state has no clip.
+  std::unordered_set<u64> activeLayers;
+  for(const auto &sample:external_) if(graph.exists(sample.owner)) {
+    activeLayers.insert((u64(sample.owner)<<32)|sample.layer);
+  }
+  std::vector<ExternalBinding> nextBindings;
+  std::unordered_map<u64,std::unordered_set<u64>> bindingIndex;
+  for(const auto &binding:externalBindings_) {
+    if(!graph.exists(binding.owner)||!graph.exists(binding.target)) continue;
+    if(!activeLayers.contains((u64(binding.owner)<<32)|binding.layer)) {
+      nextBindings.push_back(binding);continue;
+    }
+  }
   // Amostras do Animator: mesmo caminho de mistura, com máscara por subárvore.
   for (const auto &sample : external_) {
-    if (sample.weight <= 0 || !graph.exists(sample.owner)) continue;
+    if (sample.weight < 0 || !std::isfinite(sample.weight) || !graph.exists(sample.owner)) continue;
     AnimationClipView view;
     if (!library_->findClip(sample.clip, view)) continue;
+    std::unordered_map<u64,std::vector<float>> references;
+    if(sample.additive&&sample.referenceClip.valid()) {
+      AnimationClipView ref;
+      if(!library_->findClip(sample.referenceClip,ref)||!ref.clip||!ref.source) {
+        compositionDiagnostic_="Pose de referência ausente: "+sample.referenceClip.text();
+      } else {
+      std::vector<ObjectId> refTargets;resolveAnimationTargets(graph,sample.owner,*ref.source,refTargets);
+      for(const auto &channel:ref.clip->channels) {
+        if(channel.node>=refTargets.size()||refTargets[channel.node]==kInvalidObject) continue;
+        std::vector<float> value(channel.components());
+        if(resources::sampleAnimationChannel(channel,std::clamp(sample.referenceTime,0.f,ref.clip->duration),value))
+          references.emplace((u64(refTargets[channel.node])<<2)|static_cast<u64>(channel.path),std::move(value));
+      }
+      }
+    }
     auto found = std::find_if(externalTargets_.begin(), externalTargets_.end(), [&](const ExternalTargets &e) {
       return e.owner == sample.owner && e.clip == sample.clip;
     });
@@ -459,14 +495,35 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     for (const auto &channel : view.clip->channels) {
       if (channel.node >= targets.size() || targets[channel.node] == kInvalidObject) continue;
       const ObjectId target = targets[channel.node];
-      if (!masked(target)) continue;
       if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
       std::vector<float> value(channel.components());
       if (!resources::sampleAnimationChannel(channel, sample.time, value)) continue;
-      contribute(target, channel.path, sample.layer, sample.weight, std::move(value));
+      if(bindingIndex[(u64(sample.owner)<<32)|sample.layer].insert((u64(target)<<2)|static_cast<u64>(channel.path)).second)
+        nextBindings.push_back({sample.owner,sample.layer,target,channel.path,value.size()});
+      if(!masked(target)) {
+        if(rest_.contains(target)) contribute(target,channel.path,sample.layer,0,std::move(value));
+        continue;
+      }
+      std::vector<float> ref;
+      if(sample.additive&&sample.referenceClip.valid()) {
+        const auto foundRef=references.find((u64(target)<<2)|static_cast<u64>(channel.path));
+        if(foundRef==references.end()||foundRef->second.size()!=value.size()) {
+          if(compositionDiagnostic_.empty()) compositionDiagnostic_="Referência sem canal compatível: objeto "+std::to_string(target);
+          contribute(target,channel.path,sample.layer,0,std::move(value));continue;
+        }
+        ref=foundRef->second;
+      }
+      contribute(target,channel.path,sample.layer,sample.weight,std::move(value),sample.additive,std::move(ref));
     }
   }
+  for(const auto &binding:externalBindings_) {
+    if(!graph.exists(binding.target)||!activeLayers.contains((u64(binding.owner)<<32)|binding.layer)) continue;
+    if(propertyIndex.contains((u64(binding.target)<<2)|static_cast<u64>(binding.path))) continue;
+    if(binding.path==AnimationPath::Weights||!writable||writable(binding.target))
+      contribute(binding.target,binding.path,binding.layer,0,std::vector<float>(binding.width,0));
+  }
   external_.clear();
+  externalBindings_=std::move(nextBindings);
 
   // Repouso: a pose (e os pesos) do nó quando a animação o tocou primeiro.
   const auto restOf = [&](ObjectId object) -> Rest & {
@@ -523,12 +580,29 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     for (const auto &c : property.list) if (std::find(layers.begin(), layers.end(), c.layer) == layers.end()) layers.push_back(c.layer);
     std::sort(layers.begin(), layers.end(), std::greater<>());
     float remaining = 1;
+    struct AdditiveLayer {std::vector<float> delta;float weight;};
+    std::vector<AdditiveLayer> additions;
     for (const auto layer : layers) {
+      float additiveSum=0;std::vector<float> delta(width,0.f);
+      for(const auto &c:property.list) if(c.layer==layer&&c.additive) {
+        if(c.weight<=0) continue;
+        std::vector<float> relative;
+        if(!resources::relativeAnimationPose(property.path,c.value,c.reference.empty()?restValue:c.reference,relative)) {
+          compositionDiagnostic_="Referência inválida (escala zero ou quaternion): objeto "+std::to_string(object);continue;
+        }
+        if(rotation&&additiveSum>0) {float dot=0;for(usize i=0;i<width;++i) dot+=delta[i]*relative[i];if(dot<0) for(float &v:relative) v=-v;}
+        for(usize i=0;i<width;++i) delta[i]+=relative[i]*c.weight;
+        additiveSum+=c.weight;
+      }
+      if(additiveSum>0&&remaining>1e-6f) {
+        for(float &v:delta) v/=additiveSum;
+        additions.push_back({std::move(delta),std::min(additiveSum,1.f)*remaining});
+      }
       float sum = 0;
-      for (const auto &c : property.list) if (c.layer == layer) sum += c.weight;
+      for (const auto &c : property.list) if (c.layer == layer&&!c.additive) sum += c.weight;
       if (sum <= 0) continue;
       const float take = std::min(sum, 1.0f) * remaining;
-      for (const auto &c : property.list) if (c.layer == layer) accumulate(c.value, c.weight * take / sum);
+      for (const auto &c : property.list) if (c.layer == layer&&!c.additive) accumulate(c.value, c.weight * take / sum);
       remaining -= take;
       if (remaining <= 1e-6f) break;
     }
@@ -538,6 +612,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       if (!(length > 1e-12f)) continue;
       for (auto &v : result) v /= length;
     }
+    for(auto addition=additions.rbegin();addition!=additions.rend();++addition)
+      if(!resources::applyRelativeAnimationPose(property.path,result,addition->delta,addition->weight))
+        compositionDiagnostic_="Composição aditiva inválida: objeto "+std::to_string(object);
     if (property.path == AnimationPath::Weights) {
       auto *components = graph.editComponents(object);
       auto *mesh = components ? static_cast<scene::SkinnedMesh *>(components->edit(scene::SkinnedMesh::descriptor)) : nullptr;
@@ -573,7 +650,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     Transform transform;
     // Escala negativa ou nula no clipe não cabe em TRS de Euler: o nó mantém a
     // pose anterior em vez de receber uma decomposição inventada.
-    if (!localTransformForWorld(local, identity, transform)) continue;
+    if (!localTransformForWorld(local, identity, transform)) {
+      compositionDiagnostic_="Pose TRS não representável: objeto "+std::to_string(object);continue;
+    }
     const auto &current = graph.find(object)->transform;
     if (std::equal(current.position, current.position + 3, transform.position) &&
         std::equal(current.rotationDegrees, current.rotationDegrees + 3, transform.rotationDegrees) &&

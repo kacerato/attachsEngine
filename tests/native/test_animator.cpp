@@ -11,6 +11,9 @@
 #include "scene/animation.h"
 #include "scene/animator.h"
 #include "scene/component_schema.h"
+#include "scene/skinned_mesh.h"
+#include "resources/animation_composition.h"
+#include "runtime/transform_math.h"
 
 #include <cmath>
 #include <sstream>
@@ -67,7 +70,7 @@ scene::AnimatorTransition &transition(scene::Animator &a,u64 from,u64 to,float d
 struct Play {
   GameWorld world;SceneAnimator mixer;SceneAnimatorGraphs graphs;ComponentEventQueue events;Rig &rig;
   explicit Play(Rig &r):rig(r) {
-    world.load(r.g);mixer.begin(world.poseGraph(),r.library);graphs.setEvents(&events);
+    world.load(r.g);mixer.begin(world.poseGraph(),r.library);graphs.setEvents(&events);graphs.setLibrary(&r.library);
     events.attach(ComponentEventQueue::Consumer::Scripts,true);
   }
   void step(float dt) {
@@ -84,6 +87,86 @@ struct Play {
   ComponentHandle handle() {return world.findComponent(world.handle(rig.owner),"astra.animation.animator");}
 };
 bool near(float a,float b,float e=1e-3f) {return std::abs(a-b)<=e;}
+}
+
+AE_TEST(animator_additive_pose_runtime_api_retired_channels_and_physics_authority) {
+  Rig r;auto &a=r.animator();a.layers[0].states[0].motions={{r.walk}};
+  scene::AnimatorLayer additive;additive.id=a.allocateId();additive.name="Delta";additive.blend=scene::AnimatorLayerBlend::Additive;
+  additive.weight=.5f;additive.referenceClip=r.run;
+  a.layers.push_back(additive);auto &s=state(a,"Deslocar",{r.jump},1);a.layers[1].defaultState=s.id;
+  state(a,"Maior",{r.library.add("Maior delta",0,5)},1);
+  state(a,"Sem movimento",{},1);
+  Play play(r);play.step(.1f);
+  AE_EXPECT_TRUE(near(play.x(r.hips),1.5f),"base 1 + half of (sample 3 - reference 2)");
+  AE_EXPECT_TRUE(play.graphs.play(play.world,r.owner,play.handle().instance,1,"Maior",.2f)==SceneAnimatorGraphs::Status::Ok,"crossfade additive motions");
+  play.step(.1f);AE_EXPECT_TRUE(near(play.x(r.hips),2),"transition mixes relative deltas with one layer weight");
+  play.graphs.play(play.world,r.owner,play.handle().instance,1,"Deslocar",0);play.step(0);
+  ComponentOperationServices services;services.world=&play.world;services.animators=&play.graphs;
+  using V=scene::ComponentOperationValue;V result;
+  const auto call=[&](const char *name,std::initializer_list<V> args) {return invokeComponentMethod(services,play.handle(),name,{args.begin(),args.size()},result);};
+  AE_EXPECT_TRUE(call("set_layer_weight",{V::makeInteger(1),V::makeNumber(0)})==WorldStatus::Ok,"API accepts instance weight");
+  play.step(.1f);AE_EXPECT_TRUE(near(play.x(r.hips),1),"zero weight actually removes the delta");
+  AE_EXPECT_TRUE(call("set_layer_weight",{V::makeInteger(1),V::makeNumber(1)})==WorldStatus::Ok,"full delta");
+  play.step(.1f);AE_EXPECT_TRUE(near(play.x(r.hips),2),"API changes actual pose, not authoring graph");
+  AE_EXPECT_TRUE(call("set_layer_weight",{V::makeInteger(1),V::makeNumber(2)})==WorldStatus::InvalidArgument&&
+    call("get_layer_weight",{V::makeInteger(88)})==WorldStatus::InvalidArgument,"invalid inputs rejected");
+  const auto missing=resources::assetGuidFromSeed("absent-reference");
+  AE_EXPECT_TRUE(call("set_layer_reference",{V::makeInteger(1),V::makeInteger(static_cast<i64>(missing.high)),V::makeInteger(static_cast<i64>(missing.low))})==WorldStatus::UnknownResource,"unknown reference rejected without silently switching baseline");
+  AE_EXPECT_TRUE(call("reset_layer_overrides",{V::makeInteger(1)})==WorldStatus::Ok,"restore authored composition");
+  play.step(.1f);AE_EXPECT_TRUE(near(play.x(r.hips),1.5f)&&a.layers[1].weight==.5f,"runtime changes did not mutate authoring");
+  AE_EXPECT_TRUE(play.graphs.play(play.world,r.owner,play.handle().instance,1,"Sem movimento",0)==SceneAnimatorGraphs::Status::Ok,"switch active graph to empty state");
+  play.step(.1f);AE_EXPECT_TRUE(near(play.x(r.hips),1),"retired channels restore baseline instead of freezing delta");
+  std::vector<SceneAnimator::ExternalSample> samples{{r.owner,r.jump,0,1,1,0,true,r.run,0}};
+  play.mixer.setExternalSamples(std::move(samples));play.mixer.advance(0,[&](ObjectId target){return target!=r.hips;});
+  AE_EXPECT_TRUE(near(play.x(r.hips),1),"animation does not write physics-owned transform");
+}
+
+AE_TEST(animator_additive_reference_math_mask_and_invalid_reference) {
+  Rig r;auto hips=*r.g.find(r.hips);hips.transform.position[0]=5;hips.transform.scale[0]=2;hips.transform.rotationDegrees[2]=30;
+  static_cast<scene::SkinnedMesh*>(hips.components.add(scene::SkinnedMesh::descriptor))->blendShapeWeights={20};r.g.applyEntityValues(r.hips,hips);
+  const auto clip=r.library.add("DeltaTRS",0,7);
+  auto &channels=r.library.source.clips.back().channels;
+  resources::AnimationChannel scale;scale.node=0;scale.path=resources::AnimationPath::Scale;scale.times={0,1};scale.values={4,1,1,4,1,1};channels.push_back(scale);
+  resources::AnimationChannel rotation;rotation.node=0;rotation.path=resources::AnimationPath::Rotation;rotation.times={0,1};
+  const float sin60=std::sin(3.14159265359f/3),cos60=.5f;rotation.values={0,0,sin60,cos60,0,0,sin60,cos60};channels.push_back(rotation);
+  resources::AnimationChannel morph;morph.node=0;morph.path=resources::AnimationPath::Weights;morph.weightCount=1;morph.times={0,1};morph.values={.8f,.8f};channels.push_back(morph);
+  Play p(r);p.mixer.setExternalSamples({{r.owner,clip,0,.5f,0,0,true,{},0}});p.mixer.advance(0,nullptr);
+  const auto *posed=p.world.graph().find(r.hips);float q[4];transformRotationQuaternion(posed->transform,q);
+  AE_EXPECT_TRUE(near(p.x(r.hips),6)&&near(posed->transform.scale[0],3)&&near(std::abs(q[2]),std::sin(75.f*3.14159265359f/360)),"nonidentity baseline: translation delta, scale ratio and quaternion half-angle");
+  AE_EXPECT_TRUE(near(static_cast<const scene::SkinnedMesh*>(posed->components.find(scene::SkinnedMesh::descriptor))->blendShapeWeights[0],50),"morph delta reaches actual deformer weights in percent");
+  p.mixer.setExternalSamples({{r.owner,clip,0,.5f,0,0,true,{},0},{r.owner,r.run,0,.5f,1,0}});p.mixer.advance(0,nullptr);
+  AE_EXPECT_TRUE(near(p.x(r.hips),4)&&near(p.world.graph().find(r.hips)->transform.scale[0],3),"higher override attenuates lower delta only on its authored properties");
+  p.mixer.setExternalSamples({{r.owner,clip,0,1,0,r.arm,true,{},0}});p.mixer.advance(0,nullptr);
+  AE_EXPECT_TRUE(near(p.x(r.hips),5)&&near(p.world.graph().find(r.hips)->transform.scale[0],2),"mask change removes old channels");
+  p.mixer.setExternalSamples({{r.owner,clip,0,1,0,0,true,r.walk,0}});p.mixer.advance(0,nullptr);
+  AE_EXPECT_TRUE(near(p.x(r.hips),11)&&near(p.world.graph().find(r.hips)->transform.scale[0],2)&&!p.mixer.compositionDiagnostic().empty(),"partial explicit reference reports missing TRS channels and preserves their baseline");
+  const auto absent=resources::assetGuidFromSeed("missing");p.mixer.setExternalSamples({{r.owner,clip,0,1,0,0,true,absent,0}});p.mixer.advance(0,nullptr);
+  AE_EXPECT_TRUE(near(p.x(r.hips),5)&&!p.mixer.compositionDiagnostic().empty(),"missing explicit reference cannot silently become initial pose");
+  std::vector<float> delta;
+  AE_EXPECT_TRUE(!resources::relativeAnimationPose(resources::AnimationPath::Scale,std::vector<float>{1,1,1},std::vector<float>{0,1,1},delta),"zero reference scale has explicit failure");
+  std::vector<float> opposite;
+  AE_EXPECT_TRUE(resources::relativeAnimationPose(resources::AnimationPath::Rotation,std::vector<float>{0,0,1,0},std::vector<float>{0,0,0,1},delta)&&
+    resources::relativeAnimationPose(resources::AnimationPath::Rotation,std::vector<float>{0,0,-1,0},std::vector<float>{0,0,0,1},opposite)&&delta==opposite,"180-degree antipodal representations yield the same weighted delta");
+}
+
+AE_TEST(animator_additive_archive_migration_and_shared_instance_isolation) {
+  Rig r;auto &a=r.animator();auto &layer=a.layers[0];layer.blend=scene::AnimatorLayerBlend::Additive;layer.weight=.25f;layer.referenceClip=r.walk;layer.referenceTime=.4f;layer.states[0].motions={{r.jump}};
+  resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("shared-additive");asset.name="Universal";asset.graph=resources::AnimatorControllerAsset::portableGraph(a);
+  resources::AnimatorControllerAsset back;AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(asset.serialize(),back)&&back.graph.layers==asset.graph.layers,"v2 controller preserves complete additive settings");
+  std::ostringstream tail;tail<<' '<<a.layers.size();for(const auto &l:a.layers) tail<<' '<<l.id<<' '<<u32(l.blend)<<' '<<l.referenceClip.text()<<' '<<l.referenceTime;
+  std::ostringstream raw;a.write(raw);const auto oldGraph=raw.str().substr(0,raw.str().size()-tail.str().size());
+  std::istringstream old(oldGraph);scene::Animator migrated;
+  AE_EXPECT_TRUE(migrated.read(old,3)&&migrated.layers[0].blend==scene::AnimatorLayerBlend::Override&&migrated.layers[0].weight==1&&!migrated.layers[0].referenceClip.valid(),"v3 preserves old full-weight override semantics");
+  std::ostringstream legacy;legacy<<"AEANIMATOR 1 "<<asset.guid.text()<<" 1 \"Universal\" "<<oldGraph;
+  AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(legacy.str(),back)&&back.graph.layers[0].weight==1,"v1 shared assets remain readable");
+  a.controller=asset.guid;
+  const auto second=r.g.createEntity(r.g.root(),ObjectKind::Folder,"Outro objeto"),secondHips=r.g.createEntity(second,ObjectKind::Folder,"Quadril");
+  auto &other=scene::animator(*r.g.editComponents(second)->add(scene::Animator::descriptor));other.controller=asset.guid;other.clipOverrides={{r.walk,r.run}};
+  Play p(r);p.graphs.setControllers(std::span(&asset,1));p.step(.1f);
+  AE_EXPECT_TRUE(near(p.x(r.hips),.5f)&&near(p.x(secondHips),.25f),"reference substitution changes actual delta per instance");
+  SceneAnimatorGraphs::LayerSettings result;
+  AE_EXPECT_TRUE(p.graphs.layerControl(p.world,r.owner,p.handle().instance,0,1,1,{},result)==WorldStatus::Ok,"independent runtime composition");
+  p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),2)&&near(p.x(secondHips),.25f)&&asset.graph.layers[0].weight==.25f,"shared resource remains unchanged and second instance remains independent");
 }
 
 AE_TEST(animator_blend_1d_and_2d_weights) {
@@ -115,7 +198,7 @@ AE_TEST(animator_contract_round_trip_and_validation) {
   transition(a,a.layers[0].defaultState,a.layers[0].states.back().id,.25f,{{speedId,scene::AnimatorConditionMode::Greater,.5f}});
   AE_EXPECT_TRUE(a.valid(),"grafo válido");
   std::stringstream text;a.write(text);scene::Animator back;
-  AE_EXPECT_TRUE(back.read(text,3)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
+  AE_EXPECT_TRUE(back.read(text,4)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
   back.layers[0].transitions[0].conditions[0].mode=scene::AnimatorConditionMode::Equals;
   AE_EXPECT_TRUE(!back.valid(),"Float não aceita Igual");
   back.layers[0].transitions[0].conditions[0]={back.parameters[1].id,scene::AnimatorConditionMode::IfNot,0};
@@ -221,7 +304,7 @@ AE_TEST(animator_shared_controller_overrides_pose_archive_missing_and_revision) 
   AE_EXPECT_TRUE(play.graphs.parameter(play.world,second,secondInstance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::SetFloat,7,result)==SceneAnimatorGraphs::Status::Ok,"shared parameter API reaches effective graph");
   AE_EXPECT_TRUE(play.graphs.parameter(play.world,rig.owner,instance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::Get,0,result)==SceneAnimatorGraphs::Status::Ok&&result==0,"runtime parameters independent");
   std::ostringstream out;secondGraph.write(out);std::istringstream in(out.str());scene::Animator back;
-  AE_EXPECT_TRUE(back.read(in,3)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
+  AE_EXPECT_TRUE(back.read(in,4)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
   back.clipOverrides.push_back(back.clipOverrides.front());AE_EXPECT_TRUE(!back.valid(),"duplicate override authorities rejected");
   auto revision=asset;++revision.revision;revision.graph.layers[0].states[0].speed=2;
   play.graphs.setControllers(std::span(&revision,1));play.step(.1f);
@@ -242,7 +325,7 @@ AE_TEST(animator_v2_binding_roundtrip_and_v1_manual_migration) {
   speed.source=scene::AnimatorParameterSource::PlanarSpeed;speed.response=.15f;speed.scale=.5f;
   auto &ground=param(a,"Apoio",scene::AnimatorParameterType::Bool);ground.source=scene::AnimatorParameterSource::Grounded;
   std::stringstream stream;a.write(stream);scene::Animator restored;
-  AE_EXPECT_TRUE(restored.read(stream,3)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
+  AE_EXPECT_TRUE(restored.read(stream,4)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
   auto v2=stream.str();v2.resize(v2.rfind(" - 0"));std::stringstream legacy(v2);scene::Animator migratedV2;
   AE_EXPECT_TRUE(migratedV2.read(legacy,2)&&!migratedV2.controller.valid()&&migratedV2.clipOverrides.empty()&&migratedV2.parameters==a.parameters,"v2 remains inline with physical bindings preserved");
   std::stringstream old("1 0 0 1 4 1 3 \"Peso\" 0 0.5 1 1 \"Base\" 1 0 2 1 2 \"Parado\" 0 0 0 1 0 1 0 0 0 0 0");

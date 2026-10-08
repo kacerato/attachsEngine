@@ -5848,6 +5848,36 @@ public readonly struct Animator : IComponentFacade<Animator>
     /// <summary>Em transição. Verdadeiro enquanto a camada base mistura dois estados</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public bool InTransition() => Component.Invoke("in_transition").AsBoolean();
+    /// <summary>Ler peso. Peso efetivo da instância</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double GetLayerWeight(long layer) => Component.Invoke("get_layer_weight", ComponentValue.Integer(layer)).AsNumber();
+    /// <summary>Peso da instância. Não altera o recurso compartilhado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetLayerWeight(long layer, double value) => Component.Invoke("set_layer_weight", ComponentValue.Integer(layer), ComponentValue.Number(value));
+    /// <summary>Ler composição. 0 Override / 1 Additive</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long GetLayerBlend(long layer) => Component.Invoke("get_layer_blend", ComponentValue.Integer(layer)).AsInteger();
+    /// <summary>Composição da instância. 0 Override / 1 Additive</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetLayerBlend(long layer, long mode) => Component.Invoke("set_layer_blend", ComponentValue.Integer(layer), ComponentValue.Integer(mode));
+    /// <summary>Ler tempo de referência. Segundos no clipe</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double GetLayerReferenceTime(long layer) => Component.Invoke("get_layer_reference_time", ComponentValue.Integer(layer)).AsNumber();
+    /// <summary>Tempo de referência. Segundos no clipe</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetLayerReferenceTime(long layer, double value) => Component.Invoke("set_layer_reference_time", ComponentValue.Integer(layer), ComponentValue.Number(value));
+    /// <summary>Referência da instância. GUID zero usa a pose inicial; desconhecido é recusado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetLayerReference(long layer, long high, long low) => Component.Invoke("set_layer_reference", ComponentValue.Integer(layer), ComponentValue.Integer(high), ComponentValue.Integer(low));
+    /// <summary>GUID alto. Bits da referência efetiva</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long GetLayerReferenceHigh(long layer) => Component.Invoke("get_layer_reference_high", ComponentValue.Integer(layer)).AsInteger();
+    /// <summary>GUID baixo. Bits da referência efetiva</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long GetLayerReferenceLow(long layer) => Component.Invoke("get_layer_reference_low", ComponentValue.Integer(layer)).AsInteger();
+    /// <summary>Restaurar camada. Restaura a composição autorada, preservando estado e relógio</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void ResetLayerOverrides(long layer) => Component.Invoke("reset_layer_overrides", ComponentValue.Integer(layer));
     /// <summary>Entrou no estado. Emitido quando um estado começa (no início da transição para ele). Payload: Camada: inteiro, Estado: inteiro</summary>
     public ComponentSubscription OnStateEntered(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "state_entered", handler);
     /// <summary>Evento do estado. Emitido quando o tempo do estado passa por um evento marcado nele. Payload: Camada: inteiro, Estado: inteiro, Marca: inteiro</summary>

@@ -152,6 +152,11 @@ bool EditorSession::applyAnimatorName(u32 code,const std::string &name) {
 bool EditorSession::applyAnimatorNumber(u32 code,double number) {
   if(!std::isfinite(number)) return false;
   const float v=static_cast<float>(number);const u32 layerIndex=state_.animatorLayer;
+  if((isPlaying()||playMirrorOpen_)&&(code==w::LayerWeight||code==w::LayerReferenceTime)) {
+    runtime::SceneAnimatorGraphs::LayerSettings out;
+    return playScene_.animatorGraphs().layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,
+      layerIndex,code==w::LayerWeight?1:3,v,{},out)==runtime::WorldStatus::Ok;
+  }
   if((isPlaying()||playMirrorOpen_)&&code>=w::ParameterValue&&code<w::ParameterValue+0x100) {
     const auto *a=openAnimator();const u32 i=code-w::ParameterValue;
     if(!a||i>=a->parameters.size()) return false;
@@ -173,6 +178,7 @@ bool EditorSession::applyAnimatorNumber(u32 code,double number) {
     auto *s=layer.state(state_.animatorState);
     scene::AnimatorTransition *t=nullptr;for(auto &x:layer.transitions) if(x.id==state_.animatorTransition) t=&x;
     if(code==w::LayerWeight) {layer.weight=std::clamp(v,0.f,1.f);return true;}
+    if(code==w::LayerReferenceTime) {layer.referenceTime=std::clamp(v,0.f,86400.f);return true;}
     if(code>=w::ParameterValue&&code<w::ParameterValue+0x100) {
       const u32 i=code-w::ParameterValue;if(i>=a.parameters.size()) return false;
       a.parameters[i].value=a.parameters[i].type==T::Int?std::round(v):v;return true;
@@ -401,6 +407,15 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       s->motions[motion].clip=clip;return true;});
     return true;
   }
+  if(code>=w::ClipChoice&&code<w::ClipChoice+0xF00&&state_.animatorPicker==0x60000u) {
+    const auto catalog=mapScene_.clipCatalog();const u32 choice=code-w::ClipChoice;state_.animatorPicker=0;
+    if(choice>=catalog.size()) return true;
+    if(playing) {
+      runtime::SceneAnimatorGraphs::LayerSettings out;
+      playScene_.animatorGraphs().layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,4,0,catalog[choice].clip,out);
+    } else editAnimator([&](scene::Animator &edit){edit.layers[layerIndex].referenceClip=catalog[choice].clip;return true;});
+    return true;
+  }
   if(code>=w::MaskChoice&&code<w::MaskChoice+0xF00&&state_.animatorPicker==0x10000u) {
     state_.animatorPicker=0;u64 mask=0;
     if(code>w::MaskChoice) {
@@ -502,7 +517,28 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       }
       return true;
     case w::LayerName: if(!readOnly) beginAnimatorName(code,layer.name);return true;
-    case w::LayerWeight: if(!readOnly&&layerIndex>0) beginAnimatorNumber(code,layer.weight);return true;
+    case w::LayerWeight:
+    case w::LayerReferenceTime: {
+      float v=code==w::LayerWeight?layer.weight:layer.referenceTime;
+      if(playing) {runtime::SceneAnimatorGraphs::LayerSettings out;if(playScene_.animatorGraphs().layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,0,0,{},out)==runtime::WorldStatus::Ok) v=code==w::LayerWeight?out.weight:out.referenceTime;}
+      if(!readOnly||playing) beginAnimatorNumber(code,v);
+      return true;
+    }
+    case w::LayerBlend: {
+      if(playing) {
+        runtime::SceneAnimatorGraphs::LayerSettings out;auto &graphs=playScene_.animatorGraphs();
+        if(graphs.layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,0,0,{},out)==runtime::WorldStatus::Ok)
+          graphs.layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,2,out.blend==scene::AnimatorLayerBlend::Override?1.f:0.f,{},out);
+      } else if(!readOnly) editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];l.blend=l.blend==scene::AnimatorLayerBlend::Override?scene::AnimatorLayerBlend::Additive:scene::AnimatorLayerBlend::Override;return true;});
+      return true;
+    }
+    case w::LayerReferenceClip: if(!readOnly||playing) {state_.animatorPicker=0x60000u;state_.animatorPickerPage=0;}return true;
+    case w::LayerReferenceReset: {
+      if(playing) {runtime::SceneAnimatorGraphs::LayerSettings out;auto &graphs=playScene_.animatorGraphs();graphs.layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,4,0,{},out);graphs.layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,3,0,{},out);}
+      else if(!readOnly) editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];l.referenceClip={};l.referenceTime=0;return true;});
+      return true;
+    }
+    case w::LayerRuntimeReset: {runtime::SceneAnimatorGraphs::LayerSettings out;if(playing) playScene_.animatorGraphs().layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,5,0,{},out);return true;}
     case w::LayerMask: if(!isPlaying()&&!playMirrorOpen_) {state_.animatorPicker=0x10000u;state_.animatorPickerPage=0;}return true;
     case w::AddState: {
       u64 created=0;

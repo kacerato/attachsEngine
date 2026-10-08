@@ -189,6 +189,7 @@ void SceneAnimatorGraphs::emit(GameWorld &world,const Instance &runtime,std::str
 
 bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,
                                   std::vector<SceneAnimator::ExternalSample> &samples) {
+  library_=&library;
   if(!std::isfinite(scaled)||!std::isfinite(unscaled)||scaled<0||unscaled<0) return false;
   std::vector<ObjectId> ids;world.graph().collectSubtree(world.graph().root(),ids);
   std::vector<std::pair<ObjectId,u64>> live;
@@ -304,9 +305,13 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
         }
       }
       // Amostras: estado atual (1−b) e próximo (b), cada um com sua mistura.
-      const float layerWeight=li==0?1.f:std::clamp(layer.weight,0.f,1.f);
+      const float layerWeight=ls.weightOverride?ls.runtimeWeight:layer.weight;
+      const auto layerBlend=ls.blendOverride?ls.runtimeBlend:layer.blend;
+      const auto referenceClip=ls.referenceOverride?ls.runtimeReferenceClip:layer.referenceClip;
+      const float referenceTime=ls.timeOverride?ls.runtimeReferenceTime:layer.referenceTime;
       const ObjectId mask=layer.mask&&world.graph().exists(static_cast<ObjectId>(layer.mask))?static_cast<ObjectId>(layer.mask):kInvalidObject;
       const float blend=ls.transitioning&&ls.duration>0?std::clamp(ls.elapsed/ls.duration,0.f,1.f):0;
+      samples.push_back({root,{},0,0,li,mask});
       const auto sample=[&](const scene::AnimatorState &s,float normalized,float weight){
         if(weight<=0) return;
         float duration=1;const auto chosenWeights=motionsOf(s,duration);
@@ -315,7 +320,8 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
           const auto &m=s.motions[w.motion];const float d=clipDuration(library,m.clip);
           if(!m.clip.valid()) continue;
           if(d<=0) {runtime->controllerDiagnostic="Clipe ausente ou sem duração";continue;}
-          samples.push_back({root,m.clip,fraction*d,weight*w.weight*layerWeight,li,mask});
+          samples.push_back({root,m.clip,fraction*d,weight*w.weight*layerWeight,li,mask,
+            layerBlend==scene::AnimatorLayerBlend::Additive,referenceClip,referenceTime});
         }
       };
       if(current) sample(*current,ls.time,1-blend);
@@ -323,6 +329,27 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
     }
   }
   return true;
+}
+
+WorldStatus SceneAnimatorGraphs::layerControl(GameWorld &world,ObjectId owner,u64 instance,u32 index,u32 operation,
+                                              float value,resources::AssetGuid reference,LayerSettings &out) {
+  const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
+  if(!runtime) return WorldStatus::ComponentUnavailable;
+  if(!a) return WorldStatus::UnknownResource;
+  if(index>=a->layers.size()||index>=runtime->layers.size()||operation>5) return WorldStatus::InvalidArgument;
+  auto &s=runtime->layers[index];const auto &l=a->layers[index];
+  if(operation==1) {if(!std::isfinite(value)||value<0||value>1) return WorldStatus::InvalidArgument;s.runtimeWeight=value;s.weightOverride=true;}
+  if(operation==2) {if(value!=0&&value!=1) return WorldStatus::InvalidArgument;s.runtimeBlend=static_cast<scene::AnimatorLayerBlend>(static_cast<u32>(value));s.blendOverride=true;}
+  if(operation==3) {if(!std::isfinite(value)||value<0||value>86400) return WorldStatus::InvalidArgument;s.runtimeReferenceTime=value;s.timeOverride=true;}
+  if(operation==4) {
+    AnimationClipView clip;
+    if(reference.valid()&&(!library_||!library_->findClip(reference,clip))) return WorldStatus::UnknownResource;
+    s.runtimeReferenceClip=reference;s.referenceOverride=true;
+  }
+  if(operation==5) s.weightOverride=s.blendOverride=s.referenceOverride=s.timeOverride=false;
+  out={s.weightOverride?s.runtimeWeight:l.weight,s.blendOverride?s.runtimeBlend:l.blend,
+    s.referenceOverride?s.runtimeReferenceClip:l.referenceClip,s.timeOverride?s.runtimeReferenceTime:l.referenceTime};
+  return WorldStatus::Ok;
 }
 
 SceneAnimatorGraphs::Status SceneAnimatorGraphs::parameter(GameWorld &world,ObjectId owner,u64 instance,std::string_view name,

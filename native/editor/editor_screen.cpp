@@ -3054,10 +3054,14 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const auto valueRow=[&](std::string_view label,std::string value,u32 code,bool enabled=true,bool accent=false){
     if(side.height<38) return;
     auto row=takeTop(side,38);row.height-=4;
-    builder.label(takeLeft(row,row.width-150),fitMiddle(list,std::string(label),row.width-150,theme.type.caption),theme.color.textDim,theme.type.caption);
+    auto labelBounds=takeLeft(row,row.width-150);
+    if(code==w::LayerBlend||code==w::LayerReferenceClip) {
+      list.addImage(centred(takeLeft(labelBounds,24),18,18),static_cast<UiImageId>(code==w::LayerBlend?UiIcon::AnimationAdditive:UiIcon::AnimationReferencePose),0xffffffff);
+    }
+    builder.label(labelBounds,fitMiddle(list,std::string(label),labelBounds.width,theme.type.caption),theme.color.textDim,theme.type.caption);
     list.addRect(row,theme.color.surface,theme.radius.control);
     builder.label(deflate(row,UiInsets{10,0,10,0}),fitMiddle(list,value,row.width-20,theme.type.body),accent?theme.color.accent:enabled?theme.color.text:theme.color.textFaint,theme.type.body);
-    const bool liveValue=code>=w::ParameterValue&&code<w::ParameterValue+0x100;
+    const bool liveValue=(code>=w::ParameterValue&&code<w::ParameterValue+0x100)||code==w::LayerWeight||code==w::LayerBlend||code==w::LayerReferenceClip||code==w::LayerReferenceTime;
     if(enabled&&(!readOnly||(playing&&liveValue))) region(row,w::id(code));
   };
   const auto number=[](float v,const char *unit=""){char t[32];std::snprintf(t,sizeof t,"%.2f%s",static_cast<double>(v),unit);return std::string(t);};
@@ -3183,7 +3187,21 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     auto nameRow=takeTop(side,40);nameRow.height-=4;list.addRect(nameRow,theme.color.surface,theme.radius.control);
     builder.label(deflate(nameRow,UiInsets{10,0,10,0}),layer.name,theme.color.text,theme.type.cardName);
     if(!readOnly) region(nameRow,w::id(w::LayerName));
-    valueRow("Peso",layerIndex==0?"1 (base)":number(layer.weight),w::LayerWeight,layerIndex>0);
+    const auto *runtimeLayer=live&&layerIndex<live->layers.size()?&live->layers[layerIndex]:nullptr;
+    const float effectiveWeight=runtimeLayer&&runtimeLayer->weightOverride?runtimeLayer->runtimeWeight:layer.weight;
+    const auto blendMode=runtimeLayer&&runtimeLayer->blendOverride?runtimeLayer->runtimeBlend:layer.blend;
+    const auto referenceClip=runtimeLayer&&runtimeLayer->referenceOverride?runtimeLayer->runtimeReferenceClip:layer.referenceClip;
+    const float referenceTime=runtimeLayer&&runtimeLayer->timeOverride?runtimeLayer->runtimeReferenceTime:layer.referenceTime;
+    valueRow("Composição",blendMode==scene::AnimatorLayerBlend::Additive?"Aditiva":"Substituição",w::LayerBlend);
+    valueRow("Peso",number(effectiveWeight),w::LayerWeight);
+    if(blendMode==scene::AnimatorLayerBlend::Additive) {
+      std::string name=referenceClip.valid()?"Clipe ausente":"Pose inicial";
+      if(state.resources) for(const auto &clip:state.resources->clipCatalog()) if(clip.clip==referenceClip) {name=clip.name;break;}
+      valueRow("Referência",name,w::LayerReferenceClip);
+      if(referenceClip.valid()) valueRow("Tempo · s",number(referenceTime),w::LayerReferenceTime);
+      if(referenceClip.valid()&&(!readOnly||playing)) button(takeTop(side,34),"Usar pose inicial",w::LayerReferenceReset,false,true);
+    }
+    if(playing) button(takeTop(side,34),"Restaurar composição",w::LayerRuntimeReset,false,true);
     const auto *mask=layer.mask?state.document->find(static_cast<EditorEntityId>(layer.mask)):nullptr;
     valueRow("Máscara",layer.mask?(mask?std::string("Só ")+mask->name:"objeto removido"):"Hierarquia inteira",w::LayerMask);
     char summary[96];std::snprintf(summary,sizeof summary,"%zu estados · %zu transições",layer.states.size(),layer.transitions.size());
@@ -3282,7 +3300,7 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     const bool motor=state.animatorPicker==0x20000u;
     const bool mask=state.animatorPicker==0x10000u;
     const bool source=state.animatorPicker==0x30000u;
-    builder.label(takeLeft(top,300),controller?"Controller":source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":"Clipe",theme.color.text,theme.type.title);
+    builder.label(takeLeft(top,300),controller?"Controller":source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":state.animatorPicker==0x60000u?"Pose de referência":"Clipe",theme.color.text,theme.type.title);
     button(takeRight(top,96),"Fechar",(source||mask||motor)?w::MaskClose:w::ClipClose);
     takeTop(box,8);
     auto footer=takeBottom(box,36);

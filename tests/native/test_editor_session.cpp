@@ -41,6 +41,26 @@ using namespace ae::ui;
 
 namespace {UiPoint locateWidget(EditorSession &session,u32 widget);}
 
+AE_TEST(animator_additive_editor_creation_history_and_archive) {
+  EditorSession session;UiFont font;UiIconAtlas icons;
+  const auto read=[](const char *path){std::ifstream f(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(f),{});};
+  AE_EXPECT_TRUE(font.load(read("assets/astra-visual/ui/astra-ui-font.aeuf"))&&icons.load(read("assets/astra-visual/ui/astra-ui-icons.aeui")),"production visual resources");
+  session.initialize(&font,&icons);session.setSurface({0,0,1100,600},{});session.importMap({}, {}, false);
+  auto &doc=session.document();const auto object=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Objeto animável");
+  auto values=*doc.find(object);auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));const auto instance=a.instanceId();doc.applyEntityValues(object,values);
+  auto &view=const_cast<EditorScreenState&>(session.screen());view.animatorOpen=true;view.animatorEntity=object;view.animatorInstance=instance;view.animatorDrawer=2;session.update();
+  const auto tap=[&](u32 code){const auto point=locateWidget(session,animator_widget::id(code));AE_EXPECT_TRUE(point.x>=0,"composition action reachable");
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();};
+  tap(animator_widget::LayerBlend);
+  const auto authored=[&]()->const scene::Animator& {return scene::animator(*doc.find(object)->components.findInstance(instance));};
+  AE_EXPECT_TRUE(authored().layers[0].blend==scene::AnimatorLayerBlend::Additive,"UI changes real model");
+  tap(animator_widget::LayerReferenceClip);AE_EXPECT_TRUE(view.animatorPicker==0x60000u,"reference picker opens");tap(animator_widget::ClipClose);
+  AE_EXPECT_TRUE(session.history().undo(doc)&&authored().layers[0].blend==scene::AnimatorLayerBlend::Override,"undo reverts composition");
+  AE_EXPECT_TRUE(session.history().redo(doc)&&authored().layers[0].blend==scene::AnimatorLayerBlend::Additive,"redo restores composition");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened)&&
+    scene::animator(*reopened.find(object)->components.findInstance(instance)).layers[0].blend==scene::AnimatorLayerBlend::Additive,"scene serialization preserves editor-authored composition");
+}
+
 AE_TEST(animator_controller_real_editor_resource_history_assignment_and_reopen) {
   namespace fs=std::filesystem;
   const auto root=fs::temp_directory_path()/("astra-controller-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));

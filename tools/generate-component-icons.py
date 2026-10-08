@@ -342,6 +342,8 @@ ICONS["component/event-connection"] = f'<circle cx="20" cy="64" r="10" {stroke(6
 # Animator workspace: filled angular silhouettes from the owner's Astra A
 # identity sheet. Each lime cut conveys the operation, not a background badge.
 ICONS.update({
+    "animation/additive": '<path d="M12 44l40-24 40 24-40 24zM12 72l40 24 40-24v18l-40 24-40-24z" fill="#eef1f5"/><path d="M96 18h12v16h16v12h-16v16H96V46H80V34h16z" fill="#a8ff10"/>',
+    "animation/reference-pose": '<path d="M12 16h28v12H24v28H12zm88 0h16v40h-12V28h-4zM12 84h12v16h16v12H12zm92 0h12v28H88v-12h16zM54 42h20v28h18v12H36V70h18z" fill="#eef1f5"/><path d="M54 30h20v12H54zm4 52h12v22H58z" fill="#a8ff10"/>',
     "animation/controller": '<path d="M10 18h78l30 30v64H10z" fill="#eef1f5"/><path d="M88 18v30h30M28 56h22v20H28zm50 22h22v20H78zM44 72h8v12h26v8H44z" fill="#a8ff10"/>',
     "animation/override": '<path d="M12 18h68v14H26v62h54v14H12zM60 46h54v58H60z" fill="#eef1f5"/><path d="M38 54h42V40l32 28-32 28V82H38z" fill="#a8ff10"/>',
     "animation/state": '<path d="M14 20h76l24 24v64H14z" fill="#eef1f5"/><path d="M90 20v24h24M40 44l36 20-36 20z" fill="#a8ff10"/>',
@@ -396,9 +398,11 @@ def rasterize(executable: str, svg: Path, png: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", nargs="+", choices=tuple(ICONS))
-    requested = parser.parse_args().only
+    parser.add_argument("--rasterizer", choices=("cairosvg", "browser"), default="cairosvg")
+    options = parser.parse_args()
+    requested = options.only
     selected = {name: ICONS[name] for name in requested} if requested else ICONS
-    executable = browser()
+    executable = browser() if options.rasterizer == "browser" else None
     catalogue_path = NAMED / "catalog.json"
     catalogue = json.loads(catalogue_path.read_text(encoding="utf-8"))
     for name, body in selected.items():
@@ -408,7 +412,11 @@ def main() -> None:
         svg = folder / f"{leaf}.svg"
         svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" '
                        f'viewBox="0 0 128 128" fill="none">\n{body}\n</svg>\n', encoding="utf-8")
-        rasterize(executable, svg, folder / f"{leaf}.png")
+        if executable:
+            rasterize(executable, svg, folder / f"{leaf}.png")
+        else:
+            import cairosvg
+            cairosvg.svg2png(url=str(svg), write_to=str(folder / f"{leaf}.png"), output_width=512, output_height=512)
         entry = catalogue["icons"].get(name, {})
         entry.update({"category": category, "name": leaf, "dark_ui_ready": True})
         entry.setdefault("generation", GENERATION)
