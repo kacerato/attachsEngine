@@ -647,6 +647,7 @@ enum : u32 {
   Controller=0x21,ControllerCreate=0x22,ControllerChoose=0x23,ControllerDetach=0x24,
   ControllerEdit=0x25,ControllerReload=0x26,ControllerReset=0x27,
   LayerBlend=0x28,LayerReferenceClip=0x29,LayerReferenceTime=0x2A,LayerReferenceReset=0x2B,LayerRuntimeReset=0x2C,
+  AddMachine=0x2D,EnterMachine=0x2E,NodeParent=0x2F,Navigate=0x800,
   OverrideClip=0x7100,OverrideReset=0x7500,ControllerChoice=0x7900,
   OverrideOrphanReset=0x9000,
   LayerTab=0x100,ParameterAdd=0x200,ParameterName=0x300,ParameterValue=0x400,ParameterDelete=0x500,ParameterRow=0x600,
@@ -656,6 +657,7 @@ enum : u32 {
   EventTime=0x1700,EventTag=0x1800,EventRemove=0x1900,
   TransitionExit=0x2000,TransitionExitTime=0x2001,TransitionDuration=0x2002,ConditionAdd=0x2003,
   TransitionEarlier=0x2004,TransitionLater=0x2005,
+  TransitionInterruption=0x2006,TransitionOrdered=0x2007,TransitionSelf=0x2008,TransitionOffset=0x2009,TransitionFixed=0x200A,TransitionTarget=0x200B,
   ConditionParameter=0x2100,ConditionMode=0x2200,ConditionThreshold=0x2300,ConditionRemove=0x2400,
   ClipClose=0x3000,ClipChoice=0x3100,MaskClose=0x5000,MaskChoice=0x5100,PickerPrevious=0x6000,PickerNext=0x6001,
 };
@@ -872,6 +874,9 @@ struct EditorScreenState final {
   EditorEntityId animatorEntity=0;u64 animatorInstance=0;u32 animatorLayer=0;
   u64 animatorState=0,animatorTransition=0,animatorParameter=0,animatorConnectFrom=0;
   float animatorPan[2]{0,0},animatorZoom=1;
+  struct AnimatorRoute {u64 layer=0,machine=0;float x=0,y=0,zoom=1;};
+  u64 animatorMachine=0;
+  std::vector<AnimatorRoute> animatorRoutes;
   u32 animatorDrawer=0; // 0: graph, 1: parameters, 2: selected properties
   bool animatorEditShared=false;
   const scene::Animator *animatorResolved=nullptr;

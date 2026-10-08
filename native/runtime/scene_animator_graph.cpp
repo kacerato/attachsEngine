@@ -124,6 +124,39 @@ const SceneAnimatorGraphs::Instance *SceneAnimatorGraphs::find(ObjectId owner,u6
   for(const auto &i:instances_) if(i.owner==owner&&i.instance==instance) return &i;
   return nullptr;
 }
+bool matches(const scene::AnimatorTransition &t,const SceneAnimatorGraphs::Instance &instance) {
+  for(const auto &c:t.conditions) {
+    const auto f=std::find(instance.parameterIds.begin(),instance.parameterIds.end(),c.parameter);
+    if(f==instance.parameterIds.end()) return false;
+    const float v=instance.values[f-instance.parameterIds.begin()];bool pass=false;
+    switch(c.mode) {
+      case scene::AnimatorConditionMode::If: pass=v!=0;break;
+      case scene::AnimatorConditionMode::IfNot: pass=v==0;break;
+      case scene::AnimatorConditionMode::Greater: pass=v>c.threshold;break;
+      case scene::AnimatorConditionMode::Less: pass=v<c.threshold;break;
+      case scene::AnimatorConditionMode::Equals: pass=std::lround(v)==std::lround(c.threshold);break;
+      case scene::AnimatorConditionMode::NotEqual: pass=std::lround(v)!=std::lround(c.threshold);break;
+    }
+    if(!pass) return false;
+  }
+  return true;
+}
+u64 resolveEntry(const scene::AnimatorLayer &layer,u64 node,const SceneAnimatorGraphs::Instance &instance,
+                 std::vector<const scene::AnimatorTransition*> &route) {
+  route.clear();
+  for(usize depth=0;depth<=scene::Animator::MaximumDepth;++depth) {
+    if(layer.state(node)) return node;
+    const auto *machine=layer.machine(node);if(node&&!machine) return 0;
+    const u64 scope=node;node=machine?machine->defaultState:layer.defaultState;
+    for(const auto &t:layer.transitions) if(t.entry&&t.machine==scope&&matches(t,instance)) {node=t.to;route.push_back(&t);break;}
+    if(!node) return 0;
+  }
+  return 0;
+}
+void consumeTriggers(const scene::Animator &a,const scene::AnimatorTransition &t,SceneAnimatorGraphs::Instance &instance) {
+  for(const auto &c:t.conditions) if(const auto *p=a.parameter(c.parameter);p&&p->type==scene::AnimatorParameterType::Trigger)
+    for(usize k=0;k<instance.parameterIds.size();++k) if(instance.parameterIds[k]==p->id) instance.values[k]=0;
+}
 const scene::Animator *SceneAnimatorGraphs::configuration(const GameWorld &world,ObjectId owner,u64 instance) const {
   const auto *authored=animatorOf(world,owner,instance);if(!authored) return nullptr;
   if(!authored->controller.valid()) return authored;
@@ -148,8 +181,8 @@ void SceneAnimatorGraphs::sync(Instance &runtime,const scene::Animator &authored
     const auto f=std::find_if(runtime.layers.begin(),runtime.layers.end(),[&](const LayerState &s){return s.layer==l.id;});
     LayerState s=f!=runtime.layers.end()?*f:LayerState{};
     s.layer=l.id;
-    if(!l.state(s.current)) {s.current=l.defaultState;s.time=0;s.transitioning=false;s.entered=false;s.currentFresh=true;}
-    if(s.transitioning&&!l.state(s.next)) s.transitioning=false;
+    if(!l.state(s.current)) {s.current=l.entry(0);s.time=0;s.transitioning=false;s.entered=false;s.currentFresh=true;s.frozen.reset();s.transition=0;}
+    if(s.transitioning&&!l.state(s.next)) {s.transitioning=false;s.frozen.reset();s.transition=0;}
     layers.push_back(s);
   }
   runtime.layers=std::move(layers);
@@ -185,6 +218,21 @@ SceneAnimatorGraphs::Instance *SceneAnimatorGraphs::ensure(GameWorld &world,Obje
 
 void SceneAnimatorGraphs::emit(GameWorld &world,const Instance &runtime,std::string_view event,std::initializer_list<V> values) {
   if(events_) events_->emit(world,runtime.owner,runtime.instance,scene::Animator::descriptor,event,std::span(values.begin(),values.size()));
+}
+
+void SceneAnimatorGraphs::syncMachines(GameWorld &world,const Instance &runtime,const scene::AnimatorLayer &layer,LayerState &state,u32 index) {
+  std::vector<u64> active;
+  const auto append=[&](u64 leaf) {
+    std::vector<u64> path;u64 id=layer.parent(leaf);
+    while(id&&path.size()<scene::Animator::MaximumDepth) {path.push_back(id);id=layer.parent(id);}
+    for(auto it=path.rbegin();it!=path.rend();++it) if(std::find(active.begin(),active.end(),*it)==active.end()) active.push_back(*it);
+  };
+  append(state.current);if(state.transitioning) append(state.next);
+  for(auto it=state.activeMachines.rbegin();it!=state.activeMachines.rend();++it)
+    if(std::find(active.begin(),active.end(),*it)==active.end()) emit(world,runtime,"machine_exited",{V::makeInteger(index),V::makeInteger(static_cast<i64>(*it))});
+  for(const auto id:active) if(std::find(state.activeMachines.begin(),state.activeMachines.end(),id)==state.activeMachines.end())
+    emit(world,runtime,"machine_entered",{V::makeInteger(index),V::makeInteger(static_cast<i64>(id))});
+  state.activeMachines=std::move(active);
 }
 
 bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,
@@ -256,54 +304,103 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
     const auto stateSpeed=[&](const scene::AnimatorState &s){return s.speed*(s.speedParameter?value(s.speedParameter,1):1);};
     for(u32 li=0;li<a->layers.size();++li) {
       const auto &layer=a->layers[li];auto &ls=runtime->layers[li];
-      const auto *current=layer.state(ls.current);if(!current) continue;
-      if(!ls.entered) {ls.entered=true;emit(world,*runtime,"state_entered",{V::makeInteger(li),V::makeInteger(static_cast<i64>(current->id))});}
+      if(!ls.entered) {
+        std::vector<const scene::AnimatorTransition*> entryRoute;const u64 initial=resolveEntry(layer,0,*runtime,entryRoute);
+        ls.current=initial;
+        if(initial) for(const auto *edge:entryRoute) consumeTriggers(*a,*edge,*runtime);
+      }
+      const auto *current=layer.state(ls.current);if(!current) {runtime->controllerDiagnostic="Submáquina sem estado de entrada";samples.push_back({root,{},0,0,li});continue;}
+      if(!ls.entered) {syncMachines(world,*runtime,layer,ls,li);ls.entered=true;emit(world,*runtime,"state_entered",{V::makeInteger(li),V::makeInteger(static_cast<i64>(current->id))});}
       // Avanço de tempo dos estados ativos (e eventos que o tempo atravessa).
       const auto advanceState=[&](const scene::AnimatorState &s,float &time,bool &justEntered){
         float duration=1;motionsOf(s,duration);
-        const float previous=justEntered?-1e-6f:time;justEntered=false;
+        // An offset starts the state at that clock, rather than replaying
+        // events from the skipped part of the clip.
+        const float previous=justEntered?time-1e-6f:time;justEntered=false;
         time+=delta*stateSpeed(s)/std::max(duration,1e-4f);
         for(const auto &e:s.events) if(animator_detail::crossed(previous,time,e.time,s.loop))
           emit(world,*runtime,"state_event",{V::makeInteger(li),V::makeInteger(static_cast<i64>(s.id)),V::makeInteger(e.tag)});
         return previous;
       };
-      const float previous=advanceState(*current,ls.time,ls.currentFresh);
+      const float previous=ls.frozen?ls.time:advanceState(*current,ls.time,ls.currentFresh);
+      float nextPrevious=ls.nextTime;
       if(ls.transitioning) {
         const auto *next=layer.state(ls.next);
-        if(next) advanceState(*next,ls.nextTime,ls.nextEntered);
+        if(next) nextPrevious=advanceState(*next,ls.nextTime,ls.nextEntered);
         ls.elapsed+=std::max(0.f,a->unscaledTime?unscaled:scaled);
-        if(!next||ls.elapsed>=ls.duration) {ls.current=ls.next;ls.time=ls.nextTime;ls.transitioning=false;current=layer.state(ls.current);}
-      } else {
-        // Transições: Qualquer estado primeiro, depois as do estado atual.
-        const scene::AnimatorTransition *chosen=nullptr;
-        for(u32 pass=0;pass<2&&!chosen;++pass) for(const auto &t:layer.transitions) {
-          if(pass==0?t.from!=0:t.from!=current->id) continue;
-          if(pass==0&&t.to==current->id) continue;
-          if(t.conditions.empty()&&!t.hasExitTime) continue;
-          if(t.hasExitTime&&!animator_detail::crossed(previous,ls.time,t.exitTime,current->loop)) continue;
-          bool pass_=true;
-          for(const auto &c:t.conditions) {
-            const float v=value(c.parameter,0);
-            switch(c.mode) {
-              case scene::AnimatorConditionMode::If: pass_=pass_&&v!=0;break;
-              case scene::AnimatorConditionMode::IfNot: pass_=pass_&&v==0;break;
-              case scene::AnimatorConditionMode::Greater: pass_=pass_&&v>c.threshold;break;
-              case scene::AnimatorConditionMode::Less: pass_=pass_&&v<c.threshold;break;
-              case scene::AnimatorConditionMode::Equals: pass_=pass_&&std::lround(v)==std::lround(c.threshold);break;
-              case scene::AnimatorConditionMode::NotEqual: pass_=pass_&&std::lround(v)!=std::lround(c.threshold);break;
-            }
-          }
-          if(pass_) {chosen=&t;break;}
-        }
-        if(chosen) {
-          // Gatilhos usados pela transição são consumidos.
-          for(const auto &c:chosen->conditions) if(const auto *p=a->parameter(c.parameter);p&&p->type==scene::AnimatorParameterType::Trigger)
-            for(usize k=0;k<runtime->parameterIds.size();++k) if(runtime->parameterIds[k]==p->id) runtime->values[k]=0;
-          emit(world,*runtime,"state_entered",{V::makeInteger(li),V::makeInteger(static_cast<i64>(chosen->to))});
-          if(chosen->duration<=0) {ls.current=chosen->to;ls.time=0;ls.transitioning=false;ls.currentFresh=true;current=layer.state(ls.current);}
-          else {ls.next=chosen->to;ls.nextTime=0;ls.elapsed=0;ls.duration=chosen->duration;ls.transitioning=true;ls.nextEntered=true;}
-        }
+        if(!next||ls.elapsed>=ls.duration) {ls.current=ls.next;ls.time=ls.nextTime;ls.transitioning=false;ls.frozen.reset();ls.transition=0;current=layer.state(ls.current);}
       }
+      if(!current) continue;
+      const scene::AnimatorTransition *active=nullptr;
+      for(const auto &t:layer.transitions) if(t.id==ls.transition) active=&t;
+      const auto conditions=[&](const scene::AnimatorTransition &t) {return matches(t,*runtime);};
+      // Any State is scoped. Local candidates precede ancestors; transition
+      // storage order is the authored priority within each scope/source.
+      struct Candidate {const scene::AnimatorTransition *transition;u64 source;float previous,time;};
+      std::vector<Candidate> candidates;
+      const auto append=[&](u64 source,float before,float time,bool any) {
+        const u64 leaf=source;
+        u64 scope=layer.parent(source);
+        for(usize depth=0;depth<=layer.machines.size();++depth) {
+          for(const auto &t:layer.transitions) if(!t.entry&&(any?(t.from==0&&t.machine==scope):(t.from==source)))
+            candidates.push_back({&t,leaf,before,time});
+          if(!any) break; // machine outgoing edges are followed only via Exit
+          if(!scope) break;
+          source=scope;scope=layer.parent(scope);
+        }
+      };
+      append(ls.current,previous,ls.time,true);
+      if(ls.transitioning&&ls.next!=ls.current) append(ls.next,nextPrevious,ls.nextTime,true);
+      using I=scene::AnimatorInterruption;
+      const auto policy=ls.transitioning?(active?active->interruption:I::None):I::Current;
+      if(policy==I::Current||policy==I::CurrentThenNext) append(ls.current,previous,ls.time,false);
+      if(policy==I::Next||policy==I::CurrentThenNext||policy==I::NextThenCurrent) append(ls.next,nextPrevious,ls.nextTime,false);
+      if(policy==I::NextThenCurrent) append(ls.current,previous,ls.time,false);
+      const scene::AnimatorTransition *chosen=nullptr;u64 destination=0;float sourceDuration=1,sourcePlaybackSpeed=1;
+      std::vector<const scene::AnimatorTransition*> exitRoute;
+      std::vector<const scene::AnimatorTransition*> entryRoute;
+      for(const auto &candidate:candidates) {
+        const auto &t=*candidate.transition;
+        if(ls.transitioning&&active&&active->orderedInterruption&&t.id==active->id) break;
+        if(ls.transitioning&&t.id==ls.transition&&t.from) continue;
+        if(t.conditions.empty()&&!t.hasExitTime&&!layer.machine(t.from)) continue;
+        const auto *source=layer.state(candidate.source);if(!source) source=current;
+        if(t.hasExitTime&&!animator_detail::crossed(candidate.previous,candidate.time,t.exitTime,source->loop)) continue;
+        if(!conditions(t)) continue;
+        u64 target=t.to;exitRoute.clear();
+        if(!target) {
+          u64 exited=t.machine;
+          for(usize depth=0;exited&&depth<=layer.machines.size();++depth) {
+            const scene::AnimatorTransition *outgoing=nullptr;
+            for(const auto &edge:layer.transitions) if(edge.from==exited&&conditions(edge)&&
+                (!edge.hasExitTime||animator_detail::crossed(candidate.previous,candidate.time,edge.exitTime,source->loop))) {outgoing=&edge;break;}
+            if(!outgoing) break;
+            exitRoute.push_back(outgoing);target=outgoing->to;if(target) break;exited=outgoing->machine;
+          }
+        }
+        const u64 leaf=resolveEntry(layer,target,*runtime,entryRoute);
+        if(!target||!leaf) {runtime->controllerDiagnostic="Saída sem transição de retorno válida";continue;}
+        if(!t.canTransitionToSelf&&(leaf==ls.current||(ls.transitioning&&leaf==ls.next))) continue;
+        chosen=&t;destination=leaf;motionsOf(*source,sourceDuration);sourcePlaybackSpeed=std::abs(a->speed*stateSpeed(*source));break;
+      }
+      if(chosen) {
+          const bool interrupted=ls.transitioning;const u64 oldTransition=ls.transition;
+          const auto pose=interrupted&&composer_?composer_->layerPose(owner,instance,li):nullptr;
+          if(interrupted&&!pose) runtime->controllerDiagnostic="Interrupção sem pose composta disponível";
+          else {
+          if(interrupted) ls.frozen=pose;
+          if(interrupted) emit(world,*runtime,"transition_interrupted",{V::makeInteger(li),V::makeInteger(static_cast<i64>(oldTransition)),V::makeInteger(static_cast<i64>(destination))});
+          // Gatilhos usados pela transição são consumidos.
+          consumeTriggers(*a,*chosen,*runtime);for(const auto *edge:exitRoute) consumeTriggers(*a,*edge,*runtime);
+          for(const auto *edge:entryRoute) consumeTriggers(*a,*edge,*runtime);
+          const float duration=chosen->duration*(chosen->fixedDuration?1:sourceDuration/std::max(sourcePlaybackSpeed,1e-4f));
+          if(duration<=0) {ls.current=destination;ls.time=chosen->offset;ls.transitioning=false;ls.frozen.reset();ls.transition=0;ls.currentFresh=true;current=layer.state(ls.current);}
+          else {ls.next=destination;ls.nextTime=chosen->offset;ls.elapsed=0;ls.duration=duration;ls.transition=chosen->id;ls.transitioning=true;ls.nextEntered=true;}
+          syncMachines(world,*runtime,layer,ls,li);
+          emit(world,*runtime,"state_entered",{V::makeInteger(li),V::makeInteger(static_cast<i64>(destination))});
+          }
+      }
+      syncMachines(world,*runtime,layer,ls,li);
       // Amostras: estado atual (1−b) e próximo (b), cada um com sua mistura.
       const float layerWeight=ls.weightOverride?ls.runtimeWeight:layer.weight;
       const auto layerBlend=ls.blendOverride?ls.runtimeBlend:layer.blend;
@@ -320,11 +417,19 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
           const auto &m=s.motions[w.motion];const float d=clipDuration(library,m.clip);
           if(!m.clip.valid()) continue;
           if(d<=0) {runtime->controllerDiagnostic="Clipe ausente ou sem duração";continue;}
-          samples.push_back({root,m.clip,fraction*d,weight*w.weight*layerWeight,li,mask,
-            layerBlend==scene::AnimatorLayerBlend::Additive,referenceClip,referenceTime});
+          SceneAnimator::ExternalSample contribution{root,m.clip,fraction*d,weight*w.weight,li,mask,
+            layerBlend==scene::AnimatorLayerBlend::Additive,referenceClip,referenceTime};
+          // Stable states do not need a per-frame pose snapshot. A running fade
+          // captures only its own channels for a possible interruption.
+          contribution.controllerOwner=ls.transitioning?owner:kInvalidObject;contribution.instance=instance;contribution.layerWeight=layerWeight;
+          samples.push_back(std::move(contribution));
         }
       };
-      if(current) sample(*current,ls.time,1-blend);
+      if(ls.frozen) {
+        SceneAnimator::ExternalSample contribution{root,{},0,1-blend,li,mask};
+        contribution.controllerOwner=owner;contribution.instance=instance;contribution.layerWeight=layerWeight;contribution.frozen=ls.frozen;
+        samples.push_back(std::move(contribution));
+      } else if(current) sample(*current,ls.time,1-blend);
       if(ls.transitioning) if(const auto *next=layer.state(ls.next)) sample(*next,ls.nextTime,blend);
     }
   }
@@ -382,11 +487,22 @@ SceneAnimatorGraphs::Status SceneAnimatorGraphs::play(GameWorld &world,ObjectId 
   if(layerIndex>=a->layers.size()) return Status::UnknownLayer;
   if(!std::isfinite(crossFade)||crossFade<0||crossFade>60) return Status::InvalidArgument;
   const auto &layer=a->layers[layerIndex];auto &ls=runtime->layers[layerIndex];
-  const scene::AnimatorState *target=nullptr;for(const auto &s:layer.states) if(s.name==stateName) target=&s;
+  std::vector<const scene::AnimatorTransition*> entryRoute;
+  const auto *target=layer.state(resolveEntry(layer,layer.findPath(stateName),*runtime,entryRoute));
+  if(!layer.findPath(stateName)) return Status::UnknownState;
   if(!target) return Status::UnknownState;
-  emit(world,*runtime,"state_entered",{V::makeInteger(layerIndex),V::makeInteger(static_cast<i64>(target->id))});
-  if(crossFade<=0||target->id==ls.current) {ls.current=target->id;ls.time=0;ls.transitioning=false;ls.entered=true;ls.currentFresh=true;}
+  if(crossFade>0&&ls.transitioning) {
+    auto pose=composer_?composer_->layerPose(owner,instance,layerIndex):nullptr;
+    if(!pose) return Status::InvalidArgument;
+    ls.frozen=std::move(pose);
+    emit(world,*runtime,"transition_interrupted",{V::makeInteger(layerIndex),V::makeInteger(static_cast<i64>(ls.transition)),V::makeInteger(static_cast<i64>(target->id))});
+  }
+  for(const auto *edge:entryRoute) consumeTriggers(*a,*edge,*runtime);
+  ls.transition=0;
+  if(crossFade<=0||(!ls.transitioning&&target->id==ls.current)) {ls.current=target->id;ls.time=0;ls.transitioning=false;ls.frozen.reset();ls.entered=true;ls.currentFresh=true;}
   else {ls.next=target->id;ls.nextTime=0;ls.elapsed=0;ls.duration=crossFade;ls.transitioning=true;ls.nextEntered=true;ls.entered=true;}
+  syncMachines(world,*runtime,layer,ls,layerIndex);
+  emit(world,*runtime,"state_entered",{V::makeInteger(layerIndex),V::makeInteger(static_cast<i64>(target->id))});
   return Status::Ok;
 }
 
@@ -397,8 +513,8 @@ SceneAnimatorGraphs::Status SceneAnimatorGraphs::info(const GameWorld &world,Obj
   if(layerIndex>=a->layers.size()||layerIndex>=runtime->layers.size()) return Status::UnknownLayer;
   const auto &layer=a->layers[layerIndex];const auto &ls=runtime->layers[layerIndex];
   out.state=ls.current;out.normalizedTime=ls.time;out.transitioning=ls.transitioning;
-  if(const auto *s=layer.state(ls.current)) out.name=s->name;
-  if(ls.transitioning) {out.next=ls.next;out.progress=ls.duration>0?std::clamp(ls.elapsed/ls.duration,0.f,1.f):1;if(const auto *s=layer.state(ls.next)) out.nextName=s->name;}
+  out.name=layer.path(ls.current);
+  if(ls.transitioning) {out.next=ls.next;out.progress=ls.duration>0?std::clamp(ls.elapsed/ls.duration,0.f,1.f):1;out.nextName=layer.path(ls.next);}
   return Status::Ok;
 }
 

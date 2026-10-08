@@ -1775,6 +1775,18 @@
       "name": "reference-pose",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "animation/machine": {
+      "category": "animation",
+      "name": "machine",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/interruption": {
+      "category": "animation",
+      "name": "interruption",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

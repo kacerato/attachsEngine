@@ -16,6 +16,7 @@
 #include "runtime/transform_math.h"
 
 #include <cmath>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -71,7 +72,7 @@ struct Play {
   GameWorld world;SceneAnimator mixer;SceneAnimatorGraphs graphs;ComponentEventQueue events;Rig &rig;
   explicit Play(Rig &r):rig(r) {
     world.load(r.g);mixer.begin(world.poseGraph(),r.library);graphs.setEvents(&events);graphs.setLibrary(&r.library);
-    events.attach(ComponentEventQueue::Consumer::Scripts,true);
+    graphs.setComposer(&mixer);events.attach(ComponentEventQueue::Consumer::Scripts,true);
   }
   void step(float dt) {
     world.beginFrame(dt);std::vector<SceneAnimator::ExternalSample> samples;
@@ -152,11 +153,10 @@ AE_TEST(animator_additive_reference_math_mask_and_invalid_reference) {
 AE_TEST(animator_additive_archive_migration_and_shared_instance_isolation) {
   Rig r;auto &a=r.animator();auto &layer=a.layers[0];layer.blend=scene::AnimatorLayerBlend::Additive;layer.weight=.25f;layer.referenceClip=r.walk;layer.referenceTime=.4f;layer.states[0].motions={{r.jump}};
   resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("shared-additive");asset.name="Universal";asset.graph=resources::AnimatorControllerAsset::portableGraph(a);
-  resources::AnimatorControllerAsset back;AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(asset.serialize(),back)&&back.graph.layers==asset.graph.layers,"v2 controller preserves complete additive settings");
-  std::ostringstream tail;tail<<' '<<a.layers.size();for(const auto &l:a.layers) tail<<' '<<l.id<<' '<<u32(l.blend)<<' '<<l.referenceClip.text()<<' '<<l.referenceTime;
-  std::ostringstream raw;a.write(raw);const auto oldGraph=raw.str().substr(0,raw.str().size()-tail.str().size());
-  std::istringstream old(oldGraph);scene::Animator migrated;
+  resources::AnimatorControllerAsset back;AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(asset.serialize(),back)&&back.graph.layers==asset.graph.layers,"current controller preserves complete additive settings");
+  std::ostringstream raw;a.write(raw);std::istringstream old(raw.str());scene::Animator migrated;
   AE_EXPECT_TRUE(migrated.read(old,3)&&migrated.layers[0].blend==scene::AnimatorLayerBlend::Override&&migrated.layers[0].weight==1&&!migrated.layers[0].referenceClip.valid(),"v3 preserves old full-weight override semantics");
+  const auto oldGraph=raw.str().substr(0,static_cast<usize>(old.tellg()));
   std::ostringstream legacy;legacy<<"AEANIMATOR 1 "<<asset.guid.text()<<" 1 \"Universal\" "<<oldGraph;
   AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(legacy.str(),back)&&back.graph.layers[0].weight==1,"v1 shared assets remain readable");
   a.controller=asset.guid;
@@ -167,6 +167,170 @@ AE_TEST(animator_additive_archive_migration_and_shared_instance_isolation) {
   SceneAnimatorGraphs::LayerSettings result;
   AE_EXPECT_TRUE(p.graphs.layerControl(p.world,r.owner,p.handle().instance,0,1,1,{},result)==WorldStatus::Ok,"independent runtime composition");
   p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),2)&&near(p.x(secondHips),.25f)&&asset.graph.layers[0].weight==.25f,"shared resource remains unchanged and second instance remains independent");
+}
+
+AE_TEST(animator_hierarchy_three_levels_paths_archive_and_repair) {
+  Rig r;auto &a=r.animator();auto &l=a.layers[0];
+  const auto leaf=state(a,"Ready",{r.walk}).id;
+  const auto sibling=state(a,"Ready",{r.run}).id;
+  const auto g1=a.allocateId(),g2=a.allocateId(),g3=a.allocateId(),other=a.allocateId();
+  l.machines={{g1,0,g2,"Mechanism"},{g2,g1,g3,"Cycle"},{g3,g2,leaf,"Phase"},{other,0,sibling,"Other"}};
+  l.state(leaf)->machine=g3;l.state(sibling)->machine=other;l.defaultState=g1;
+  AE_EXPECT_TRUE(a.valid()&&l.entry(0)==leaf&&l.path(leaf)=="Mechanism/Cycle/Phase/Ready","three-level entry and full identity");
+  AE_EXPECT_TRUE(!l.findPath("Ready")&&l.findPath("Other/Ready")==sibling,"ambiguous short names are refused");
+  resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("hierarchy");asset.name="Hierarchy";asset.graph=resources::AnimatorControllerAsset::portableGraph(a);
+  resources::AnimatorControllerAsset restored;AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(asset.serialize(),restored)&&restored.graph.layers==a.layers,"hierarchy persists in shared resource");
+  std::ifstream previous("tests/fixtures/animator/AnimatorV4.aeanimator");
+  const std::string previousText{std::istreambuf_iterator<char>(previous),{}};resources::AnimatorControllerAsset migrated;
+  AE_EXPECT_TRUE(resources::AnimatorControllerAsset::deserialize(previousText,migrated)&&migrated.graph.layers.size()==2&&
+    migrated.graph.layers[0].machines.empty()&&migrated.graph.layers[1].blend==scene::AnimatorLayerBlend::Additive&&
+    near(migrated.graph.layers[1].weight,.65f)&&migrated.graph.layers[1].referenceTime==.25f,
+    "actual B2 version-four resource migrates with authored additive settings preserved");
+  Prefab prefab;std::string diagnostic;
+  AE_EXPECT_TRUE(prefab.capture(r.g,r.owner,resources::assetGuidFromSeed("hierarchy-prefab"),diagnostic),diagnostic.c_str());
+  SceneGraph destination;destination.createEntity(destination.root(),ObjectKind::Folder,"Existing object");ObjectCloneMap mapping;
+  const auto clone=prefab.instantiate(destination,destination.root(),mapping,diagnostic);
+  AE_EXPECT_TRUE(clone&&scene::animator(*destination.find(clone)->components.find(scene::Animator::descriptor)).layers==a.layers,
+    "reusable prefab preserves graph IDs and paths while remapping object ownership");
+  auto broken=a;broken.layers[0].machine(g1)->parent=g3;
+  AE_EXPECT_TRUE(!broken.valid()&&!l.move(g1,g3),"cycles are refused before mutation");
+  AE_EXPECT_TRUE(l.move(sibling,g3)==false&&l.move(sibling,g1),"sibling collisions are refused; moving repairs defaults");
+  AE_EXPECT_TRUE(a.valid()&&l.machine(other)->defaultState==0,"an empty authoring group remains editable");
+  l.eraseNode(g2);
+  AE_EXPECT_TRUE(a.valid()&&!l.node(leaf)&&l.machine(g1)->defaultState==sibling,"subtree removal repairs surviving entry");
+}
+
+AE_TEST(animator_hierarchy_exit_chain_scoped_any_state_and_script_paths) {
+  Rig r;auto &a=r.animator();auto &l=a.layers[0];l.states[0].motions={{r.idle}};const auto idle=l.states[0].id;
+  const auto leaf=state(a,"Ready",{r.walk}).id,react=state(a,"React",{r.run}).id;
+  const auto g1=a.allocateId(),g2=a.allocateId(),g3=a.allocateId();
+  l.machines={{g1,0,g2,"Mechanism"},{g2,g1,g3,"Cycle"},{g3,g2,leaf,"Phase"}};
+  l.state(leaf)->machine=g3;l.state(react)->machine=g3;l.defaultState=g1;
+  const auto trigger=param(a,"React",scene::AnimatorParameterType::Trigger).id;
+  const auto alternate=param(a,"Alternate",scene::AnimatorParameterType::Bool).id;
+  auto &entryBranch=transition(a,0,react,0,{{alternate,scene::AnimatorConditionMode::If,0}});entryBranch.entry=true;entryBranch.machine=g3;
+  auto &local=transition(a,0,react,0,{{trigger,scene::AnimatorConditionMode::If,0}});local.machine=g3;
+  auto &leave=transition(a,leaf,0,0,{});leave.machine=g3;leave.hasExitTime=true;leave.exitTime=.5f;
+  transition(a,g3,0,0,{}).machine=g2;transition(a,g2,0,0,{}).machine=g1;transition(a,g1,idle,0,{});
+  AE_EXPECT_TRUE(a.valid(),"exit route graph is valid");Play p(r);p.step(.1f);
+  SceneAnimatorGraphs::Info info;p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+  AE_EXPECT_TRUE(info.name=="Mechanism/Cycle/Phase/Ready"&&near(p.x(r.hips),1),"runtime descends all entries");
+  AE_EXPECT_TRUE((p.drain()==std::vector<std::string>{"machine_entered:"+std::to_string(g1),"machine_entered:"+std::to_string(g2),
+    "machine_entered:"+std::to_string(g3),"state_entered:"+std::to_string(leaf)}),"group entry events precede the leaf, outer to inner");
+  p.step(.5f);p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+  AE_EXPECT_TRUE(info.state==idle&&near(p.x(r.hips),0),"explicit Exit follows all three outgoing machines");
+  AE_EXPECT_TRUE((p.drain()==std::vector<std::string>{"machine_exited:"+std::to_string(g3),"machine_exited:"+std::to_string(g2),
+    "machine_exited:"+std::to_string(g1),"state_entered:"+std::to_string(idle)}),"group exits are inner to outer before the destination enters");
+  float value=0;p.graphs.parameter(p.world,r.owner,p.handle().instance,"React",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);p.step(0);
+  p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+  AE_EXPECT_TRUE(info.state==idle,"local Any State cannot escape its inactive machine");
+  AE_EXPECT_TRUE(p.graphs.play(p.world,r.owner,p.handle().instance,0,"Mechanism",0)==SceneAnimatorGraphs::Status::Ok,"API enters a machine through defaults");
+  p.step(0);p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+  p.graphs.parameter(p.world,r.owner,p.handle().instance,"React",SceneAnimatorGraphs::ParameterOperation::Get,0,value);
+  AE_EXPECT_TRUE(info.state==react&&value==0&&near(p.x(r.hips),2),"local trigger fires once after entering its hierarchy");
+  p.graphs.play(p.world,r.owner,p.handle().instance,0,"Parado",0);
+  p.graphs.parameter(p.world,r.owner,p.handle().instance,"Alternate",SceneAnimatorGraphs::ParameterOperation::SetBool,1,value);
+  p.graphs.play(p.world,r.owner,p.handle().instance,0,"Mechanism",0);
+  p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+  AE_EXPECT_TRUE(info.state==react,"conditional Entry selects a different leaf through the same three-level API path");
+}
+
+AE_TEST(animator_interruption_captures_composed_pose_and_repeated_script_fades) {
+  Rig r;auto &a=r.animator();a.layers[0].states[0].motions={{r.idle}};
+  state(a,"Walk",{r.walk});state(a,"Run",{r.run});state(a,"Jump",{r.jump});
+  Play p(r);p.step(0);
+  AE_EXPECT_TRUE(p.graphs.play(p.world,r.owner,p.handle().instance,0,"Walk",1)==SceneAnimatorGraphs::Status::Ok,"first fade");
+  p.step(.4f);const float first=p.x(r.hips);AE_EXPECT_TRUE(near(first,.4f),"partially composed initial fade");
+  AE_EXPECT_TRUE(p.graphs.play(p.world,r.owner,p.handle().instance,0,"Run",1)==SceneAnimatorGraphs::Status::Ok,"interrupt fade through the real API");
+  p.step(0);AE_EXPECT_TRUE(near(p.x(r.hips),first),"interruption begins at the displayed pose");
+  p.step(.5f);const float second=p.x(r.hips);AE_EXPECT_TRUE(near(second,1.2f),"frozen composition blends toward new destination");
+  p.graphs.play(p.world,r.owner,p.handle().instance,0,"Jump",1);p.step(0);
+  AE_EXPECT_TRUE(near(p.x(r.hips),second),"a repeated interruption captures the new composition");
+  p.step(.5f);AE_EXPECT_TRUE(near(p.x(r.hips),2.1f),"repeated fades do not restart from the original clip");
+  p.graphs.play(p.world,r.owner,p.handle().instance,0,"Walk",0);p.step(0);
+  AE_EXPECT_TRUE(near(p.x(r.hips),1),"immediate Play intentionally discards frozen composition");
+}
+
+AE_TEST(animator_interruption_priority_source_and_single_trigger_consumption) {
+  Rig r;auto &a=r.animator();auto &l=a.layers[0];l.states[0].motions={{r.idle}};const auto idle=l.states[0].id;
+  const auto walk=state(a,"Walk",{r.walk}).id,run=state(a,"Run",{r.run}).id,jump=state(a,"Jump",{r.jump}).id;
+  const auto start=param(a,"Start",scene::AnimatorParameterType::Trigger).id,cancel=param(a,"Cancel",scene::AnimatorParameterType::Trigger).id;
+  transition(a,walk,run,.5f,{{cancel,scene::AnimatorConditionMode::If,0}});
+  auto &begin=transition(a,idle,walk,1,{{start,scene::AnimatorConditionMode::If,0}});begin.interruption=scene::AnimatorInterruption::Next;
+  transition(a,idle,jump,.5f,{{cancel,scene::AnimatorConditionMode::If,0}});
+  Play p(r);p.step(0);float value=0;
+  p.graphs.parameter(p.world,r.owner,p.handle().instance,"Start",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);p.step(0);p.step(.3f);
+  p.graphs.parameter(p.world,r.owner,p.handle().instance,"Cancel",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);const float before=p.x(r.hips);p.step(0);
+  SceneAnimatorGraphs::Info info;p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+  p.graphs.parameter(p.world,r.owner,p.handle().instance,"Cancel",SceneAnimatorGraphs::ParameterOperation::Get,0,value);
+  AE_EXPECT_TRUE(info.next==run&&near(p.x(r.hips),before)&&value==0,"Next-source policy selects its edge and consumes one trigger without a pose jump");
+  p.step(.5f);AE_EXPECT_TRUE(near(p.x(r.hips),2),"selected interrupted fade completes");
+}
+
+AE_TEST(animator_interruption_rotation_scale_morph_and_additive_continuity) {
+  for(bool additive:{false,true}) {
+    Rig r;
+    for(usize i=0;i<r.library.source.clips.size();++i) {
+      auto &clip=r.library.source.clips[i];const float angle=static_cast<float>(i)*.55f;
+      resources::AnimationChannel rotation;rotation.node=0;rotation.path=resources::AnimationPath::Rotation;rotation.times={0,clip.duration};
+      rotation.values={0,0,std::sin(angle),std::cos(angle),0,0,std::sin(angle),std::cos(angle)};clip.channels.push_back(rotation);
+      resources::AnimationChannel scale;scale.node=0;scale.path=resources::AnimationPath::Scale;scale.times={0,clip.duration};
+      const float v=1+static_cast<float>(i)*.3f;scale.values={v,v,v,v,v,v};clip.channels.push_back(scale);
+      resources::AnimationChannel morph;morph.node=0;morph.path=resources::AnimationPath::Weights;morph.weightCount=2;morph.times={0,clip.duration};
+      morph.values={angle,angle*.2f,angle,angle*.2f};clip.channels.push_back(morph);
+    }
+    auto &mesh=static_cast<scene::SkinnedMesh&>(*r.g.editComponents(r.hips)->add(scene::SkinnedMesh::descriptor));mesh.blendShapeWeights={10,20};
+    auto &a=r.animator();a.layers[0].weight=.37f;a.layers[0].blend=additive?scene::AnimatorLayerBlend::Additive:scene::AnimatorLayerBlend::Override;
+    a.layers[0].states[0].motions={{r.idle}};state(a,"Walk",{r.walk});state(a,"Run",{r.run});state(a,"Jump",{r.jump});
+    Play p(r);p.step(0);p.graphs.play(p.world,r.owner,p.handle().instance,0,"Walk",1);p.step(.41f);
+    const auto before=p.world.graph().find(r.hips)->transform;
+    const auto weights=static_cast<const scene::SkinnedMesh&>(*p.world.graph().find(r.hips)->components.find(scene::SkinnedMesh::descriptor)).blendShapeWeights;
+    p.graphs.play(p.world,r.owner,p.handle().instance,0,"Run",1);p.step(0);
+    const auto after=p.world.graph().find(r.hips)->transform;
+    const auto actual=static_cast<const scene::SkinnedMesh&>(*p.world.graph().find(r.hips)->components.find(scene::SkinnedMesh::descriptor)).blendShapeWeights;
+    for(u32 k=0;k<3;++k) AE_EXPECT_TRUE(near(before.position[k],after.position[k])&&near(before.rotationDegrees[k],after.rotationDegrees[k])&&near(before.scale[k],after.scale[k]),"partial-weight transform pose remains continuous in both composition modes");
+    AE_EXPECT_TRUE(near(weights[0],actual[0])&&near(weights[1],actual[1]),"morph composition remains continuous");
+    p.step(.35f);p.graphs.play(p.world,r.owner,p.handle().instance,0,"Jump",1);const auto second=p.world.graph().find(r.hips)->transform;p.step(0);
+    for(u32 k=0;k<3;++k) AE_EXPECT_TRUE(near(second.rotationDegrees[k],p.world.graph().find(r.hips)->transform.rotationDegrees[k]),"quaternion magnitude survives repeated interruption");
+  }
+}
+
+AE_TEST(animator_interruption_policies_order_offset_and_normalized_duration) {
+  using I=scene::AnimatorInterruption;
+  for(const auto policy:{I::None,I::Current,I::Next,I::CurrentThenNext,I::NextThenCurrent}) {
+    Rig r;auto &a=r.animator();auto &l=a.layers[0];l.states[0].motions={{r.idle}};const auto idle=l.states[0].id;
+    const auto walk=state(a,"Walk",{r.walk}).id,run=state(a,"Run",{r.run}).id,jump=state(a,"Jump",{r.jump}).id;
+    const auto start=param(a,"Start",scene::AnimatorParameterType::Trigger).id,cancel=param(a,"Cancel",scene::AnimatorParameterType::Trigger).id;
+    transition(a,walk,run,.5f,{{cancel,scene::AnimatorConditionMode::If,0}});
+    auto &begin=transition(a,idle,walk,1,{{start,scene::AnimatorConditionMode::If,0}});begin.interruption=policy;begin.orderedInterruption=false;
+    transition(a,idle,jump,.5f,{{cancel,scene::AnimatorConditionMode::If,0}});
+    Play p(r);p.step(0);float value=0;p.graphs.parameter(p.world,r.owner,p.handle().instance,"Start",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);p.step(0);p.step(.3f);
+    p.graphs.parameter(p.world,r.owner,p.handle().instance,"Cancel",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);p.step(0);
+    SceneAnimatorGraphs::Info info;p.graphs.info(p.world,r.owner,p.handle().instance,0,info);
+    const auto expected=policy==I::None?walk:policy==I::Next||policy==I::NextThenCurrent?run:jump;
+    p.graphs.parameter(p.world,r.owner,p.handle().instance,"Cancel",SceneAnimatorGraphs::ParameterOperation::Get,0,value);
+    AE_EXPECT_TRUE(info.next==expected&&value==(policy==I::None?1:0),"every interruption source policy controls the actual destination and trigger consumption");
+  }
+  Rig r;auto &a=r.animator();auto &l=a.layers[0];l.states[0].motions={{r.idle}};const auto idle=l.states[0].id;
+  const auto walk=state(a,"Walk",{r.walk}).id,jump=state(a,"Jump",{r.jump}).id;
+  const auto start=param(a,"Start",scene::AnimatorParameterType::Trigger).id,cancel=param(a,"Cancel",scene::AnimatorParameterType::Trigger).id;
+  auto &begin=transition(a,idle,walk,1,{{start,scene::AnimatorConditionMode::If,0}});begin.interruption=I::Current;
+  transition(a,idle,jump,1,{{cancel,scene::AnimatorConditionMode::If,0}});
+  Play ordered(r);ordered.step(0);float value=0;ordered.graphs.parameter(ordered.world,r.owner,ordered.handle().instance,"Start",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);ordered.step(0);ordered.step(.3f);
+  ordered.graphs.parameter(ordered.world,r.owner,ordered.handle().instance,"Cancel",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);ordered.step(0);
+  SceneAnimatorGraphs::Info info;ordered.graphs.info(ordered.world,r.owner,ordered.handle().instance,0,info);
+  AE_EXPECT_TRUE(info.next==walk,"ordered interruption stops at the active edge before a lower-priority current-state edge");
+  a.layers[0].transitions.clear();a.speed=2;l.states[0].speed=2;
+  l.state(jump)->events={{.2f,1},{.6f,2}};
+  auto &offset=transition(a,idle,jump,.5f,{{start,scene::AnimatorConditionMode::If,0}});offset.fixedDuration=false;offset.offset=.6f;
+  Play normalized(r);normalized.step(0);normalized.graphs.parameter(normalized.world,r.owner,normalized.handle().instance,"Start",SceneAnimatorGraphs::ParameterOperation::SetTrigger,0,value);normalized.step(0);
+  normalized.graphs.info(normalized.world,r.owner,normalized.handle().instance,0,info);
+  AE_EXPECT_TRUE(normalized.graphs.find(r.owner,normalized.handle().instance)->layers[0].nextTime==.6f,"destination offset enters the real clock");
+  normalized.step(.0625f);normalized.graphs.info(normalized.world,r.owner,normalized.handle().instance,0,info);
+  AE_EXPECT_TRUE(near(info.progress,.5f)&&near(normalized.x(r.hips),1.5f),"normalized duration uses source clip and effective playback speed");
+  const auto events=normalized.drain();
+  AE_EXPECT_TRUE(std::find(events.begin(),events.end(),"state_event:1")==events.end()&&std::count(events.begin(),events.end(),"state_event:2")==1,
+    "destination offset skips past events and emits its entry-time event once");
 }
 
 AE_TEST(animator_blend_1d_and_2d_weights) {
@@ -198,7 +362,7 @@ AE_TEST(animator_contract_round_trip_and_validation) {
   transition(a,a.layers[0].defaultState,a.layers[0].states.back().id,.25f,{{speedId,scene::AnimatorConditionMode::Greater,.5f}});
   AE_EXPECT_TRUE(a.valid(),"grafo válido");
   std::stringstream text;a.write(text);scene::Animator back;
-  AE_EXPECT_TRUE(back.read(text,4)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
+  AE_EXPECT_TRUE(back.read(text,5)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
   back.layers[0].transitions[0].conditions[0].mode=scene::AnimatorConditionMode::Equals;
   AE_EXPECT_TRUE(!back.valid(),"Float não aceita Igual");
   back.layers[0].transitions[0].conditions[0]={back.parameters[1].id,scene::AnimatorConditionMode::IfNot,0};
@@ -304,7 +468,7 @@ AE_TEST(animator_shared_controller_overrides_pose_archive_missing_and_revision) 
   AE_EXPECT_TRUE(play.graphs.parameter(play.world,second,secondInstance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::SetFloat,7,result)==SceneAnimatorGraphs::Status::Ok,"shared parameter API reaches effective graph");
   AE_EXPECT_TRUE(play.graphs.parameter(play.world,rig.owner,instance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::Get,0,result)==SceneAnimatorGraphs::Status::Ok&&result==0,"runtime parameters independent");
   std::ostringstream out;secondGraph.write(out);std::istringstream in(out.str());scene::Animator back;
-  AE_EXPECT_TRUE(back.read(in,4)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
+  AE_EXPECT_TRUE(back.read(in,5)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
   back.clipOverrides.push_back(back.clipOverrides.front());AE_EXPECT_TRUE(!back.valid(),"duplicate override authorities rejected");
   auto revision=asset;++revision.revision;revision.graph.layers[0].states[0].speed=2;
   play.graphs.setControllers(std::span(&revision,1));play.step(.1f);
@@ -325,7 +489,7 @@ AE_TEST(animator_v2_binding_roundtrip_and_v1_manual_migration) {
   speed.source=scene::AnimatorParameterSource::PlanarSpeed;speed.response=.15f;speed.scale=.5f;
   auto &ground=param(a,"Apoio",scene::AnimatorParameterType::Bool);ground.source=scene::AnimatorParameterSource::Grounded;
   std::stringstream stream;a.write(stream);scene::Animator restored;
-  AE_EXPECT_TRUE(restored.read(stream,4)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
+  AE_EXPECT_TRUE(restored.read(stream,5)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
   auto v2=stream.str();v2.resize(v2.rfind(" - 0"));std::stringstream legacy(v2);scene::Animator migratedV2;
   AE_EXPECT_TRUE(migratedV2.read(legacy,2)&&!migratedV2.controller.valid()&&migratedV2.clipOverrides.empty()&&migratedV2.parameters==a.parameters,"v2 remains inline with physical bindings preserved");
   std::stringstream old("1 0 0 1 4 1 3 \"Peso\" 0 0.5 1 1 \"Base\" 1 0 2 1 2 \"Parado\" 0 0 0 1 0 1 0 0 0 0 0");

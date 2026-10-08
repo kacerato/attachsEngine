@@ -8,7 +8,7 @@
 
 namespace ae::resources {
 struct AnimatorControllerAsset {
-  static constexpr u32 FormatVersion=2;
+  static constexpr u32 FormatVersion=3;
   static constexpr usize MaximumBytes=1024*1024;
   AssetGuid guid{};u32 revision=1;std::string name;
   scene::Animator graph;
@@ -33,8 +33,8 @@ struct AnimatorControllerAsset {
     if(text.size()>MaximumBytes) return false;
     std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
     AnimatorControllerAsset candidate;std::string magic,guid;u32 version=0;
-    if(!(in>>magic>>version>>guid>>candidate.revision>>std::quoted(candidate.name))||magic!="AEANIMATOR"||(version!=1&&version!=FormatVersion)||
-       !AssetGuid::parse(guid,candidate.guid)||!candidate.graph.read(in,version==1?3:4)||!candidate.valid()) return false;
+    if(!(in>>magic>>version>>guid>>candidate.revision>>std::quoted(candidate.name))||magic!="AEANIMATOR"||(version<1||version>FormatVersion)||
+       !AssetGuid::parse(guid,candidate.guid)||!candidate.graph.read(in,version+2)||!candidate.valid()) return false;
     in>>std::ws;if(!in.eof()) return false;
     out=std::move(candidate);return true;
   }

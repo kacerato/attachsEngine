@@ -1927,6 +1927,7 @@ private:
   std::vector<resources::AnimatorControllerAsset> animatorControllers_;
   void openAnimatorEditor();
   void frameAnimator();
+  void navigateAnimator(u64 machine);
   bool editAnimator(const std::function<bool(scene::Animator &)> &change);
   void beginAnimatorNumber(u32 code,double current);
   void beginAnimatorName(u32 code,const std::string &current);

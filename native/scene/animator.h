@@ -11,7 +11,7 @@
 // - Godot 4.5 AnimationNodeBlendSpace2D (triangulação): https://docs.godotengine.org/en/4.5/classes/class_animationnodeblendspace2d.html
 // Adaptações: grafo local ou recurso .aeanimator com overrides por instância;
 // a máscara de camada é uma subárvore de objetos; composição por substituição
-// ou aditiva relativa à pose inicial/clipe de referência; sem sub-máquinas.
+// ou aditiva relativa à pose inicial/clipe de referência; hierarquia por IDs.
 #pragma once
 #include "resources/asset_registry.h"
 #include "scene/components.h"
@@ -29,6 +29,7 @@ namespace ae::scene {
 enum class AnimatorParameterType : u32 {Float=0,Int=1,Bool=2,Trigger=3};
 enum class AnimatorMotionKind : u32 {Clip=0,Blend1D=1,Blend2D=2};
 enum class AnimatorLayerBlend : u32 {Override=0,Additive=1};
+enum class AnimatorInterruption : u32 {None=0,Current=1,Next=2,CurrentThenNext=3,NextThenCurrent=4};
 enum class AnimatorConditionMode : u32 {If=0,IfNot=1,Greater=2,Less=3,Equals=4,NotEqual=5};
 // Manual parameters retain the v1 script contract. Bound values read the
 // resolved physics state after simulation, never the requested input speed.
@@ -67,6 +68,7 @@ struct AnimatorState {
   float speed=1;u64 speedParameter=0;bool loop=true;
   float x=0,y=0;                  // posição no grafo do editor
   std::vector<AnimatorStateEvent> events;
+  u64 machine=0;                 // zero: root of this layer
   bool operator==(const AnimatorState &) const=default;
 };
 struct AnimatorCondition {
@@ -77,7 +79,16 @@ struct AnimatorTransition {
   u64 id=0,from=0,to=0;           // from zero: Qualquer estado
   bool hasExitTime=false;float exitTime=1,duration=.25f;
   std::vector<AnimatorCondition> conditions;
+  u64 machine=0;                // scope of Any State and Exit
+  AnimatorInterruption interruption=AnimatorInterruption::None;
+  bool orderedInterruption=true,canTransitionToSelf=false;
+  float offset=0;bool fixedDuration=true;
+  bool entry=false;              // from zero is Entry rather than Any State
   bool operator==(const AnimatorTransition &) const=default;
+};
+struct AnimatorMachine {
+  u64 id=0,parent=0,defaultState=0;std::string name;float x=0,y=0;
+  bool operator==(const AnimatorMachine &) const=default;
 };
 struct AnimatorLayer {
   u64 id=0;std::string name;float weight=1;u64 mask=0;u64 defaultState=0;
@@ -85,15 +96,88 @@ struct AnimatorLayer {
   resources::AssetGuid referenceClip{};
   float referenceTime=0; // seconds; invalid GUID uses initial object pose
   std::vector<AnimatorState> states;std::vector<AnimatorTransition> transitions;
+  std::vector<AnimatorMachine> machines;
   bool operator==(const AnimatorLayer &) const=default;
   const AnimatorState *state(u64 stateId) const {for(const auto &s:states) if(s.id==stateId) return &s;return nullptr;}
   AnimatorState *state(u64 stateId) {for(auto &s:states) if(s.id==stateId) return &s;return nullptr;}
+  const AnimatorMachine *machine(u64 id) const {for(const auto &m:machines) if(m.id==id) return &m;return nullptr;}
+  AnimatorMachine *machine(u64 id) {for(auto &m:machines) if(m.id==id) return &m;return nullptr;}
+  bool node(u64 id) const {return state(id)||machine(id);}
+  u64 parent(u64 id) const {if(const auto *s=state(id)) return s->machine;if(const auto *m=machine(id)) return m->parent;return 0;}
+  bool contains(u64 scope,u64 id) const {
+    if(!node(id)) return false;
+    for(usize depth=0;depth<=machines.size();++depth) {
+      if(id==scope) return true;
+      id=parent(id);if(!id) return scope==0;
+    }
+    return false;
+  }
+  u64 entry(u64 id) const {
+    if(!id) id=defaultState;
+    for(usize depth=0;depth<=machines.size();++depth) {
+      if(state(id)) return id;
+      const auto *m=machine(id);if(!m) return 0;id=m->defaultState;
+    }
+    return 0;
+  }
+  std::string path(u64 id) const {
+    std::string result;
+    for(usize depth=0;id&&depth<=machines.size();++depth) {
+      const auto *s=state(id);const auto *m=machine(id);if(!s&&!m) return {};
+      result=(s?s->name:m->name)+(result.empty()?"":"/"+result);id=parent(id);
+    }
+    return id?std::string{}:result;
+  }
+  // Full paths are authoritative; a short name works only when unambiguous.
+  u64 findPath(std::string_view name) const {
+    u64 exact=0,shortName=0;usize shortCount=0;
+    const auto consider=[&](u64 id,const std::string &label) {
+      if(path(id)==name) exact=id;
+      if(label==name) {shortName=id;++shortCount;}
+    };
+    for(const auto &s:states) consider(s.id,s.name);
+    for(const auto &m:machines) consider(m.id,m.name);
+    return exact?exact:shortCount==1?shortName:0;
+  }
+  u64 defaultOf(u64 scope) const {const auto *m=machine(scope);return scope?(m?m->defaultState:0):defaultState;}
+  bool setDefault(u64 scope,u64 id) {
+    if(id&&(!node(id)||parent(id)!=scope)) return false;
+    if(!scope) defaultState=id;else if(auto *m=machine(scope)) m->defaultState=id;else return false;
+    return true;
+  }
+  void repairDefaults() {
+    const auto repair=[&](u64 scope,u64 &id) {
+      if(id&&node(id)&&parent(id)==scope) return;
+      id=0;for(const auto &s:states) if(s.machine==scope) {id=s.id;return;}
+      for(const auto &m:machines) if(m.parent==scope) {id=m.id;return;}
+    };
+    repair(0,defaultState);for(auto &m:machines) repair(m.id,m.defaultState);
+  }
+  bool move(u64 id,u64 scope) {
+    if(!node(id)||(scope&&!machine(scope))||contains(id,scope)) return false;
+    const auto *s=state(id);const std::string name=s?s->name:machine(id)->name;
+    for(const auto &n:states) if(n.id!=id&&n.machine==scope&&n.name==name) return false;
+    for(const auto &n:machines) if(n.id!=id&&n.parent==scope&&n.name==name) return false;
+    if(auto *n=state(id)) n->machine=scope;else machine(id)->parent=scope;
+    for(auto &t:transitions) if(t.from==id||(t.entry&&t.to==id)) t.machine=scope;
+    repairDefaults();return true;
+  }
+  void eraseNode(u64 id) {
+    std::vector<u64> doomed;
+    for(const auto &s:states) if(contains(id,s.id)) doomed.push_back(s.id);
+    for(const auto &m:machines) if(contains(id,m.id)) doomed.push_back(m.id);
+    const auto removed=[&](u64 n){return std::find(doomed.begin(),doomed.end(),n)!=doomed.end();};
+    std::erase_if(states,[&](const auto &s){return removed(s.id);});
+    std::erase_if(machines,[&](const auto &m){return removed(m.id);});
+    std::erase_if(transitions,[&](const auto &t){return removed(t.from)||removed(t.to)||removed(t.machine);});
+    repairDefaults();
+  }
 };
 
 class Animator final : public ComponentValue {
 public:
   static constexpr usize MaximumParameters=32,MaximumLayers=4,MaximumStates=24,MaximumTransitions=48,
-                         MaximumMotions=8,MaximumConditions=4,MaximumEvents=8,MaximumName=63;
+                         MaximumMotions=8,MaximumConditions=4,MaximumEvents=8,MaximumName=63,MaximumMachines=32,MaximumDepth=16;
   bool enabled=true,unscaledTime=false;
   u64 target=0;   // raiz animada; zero: este objeto
   u64 motionSource=0; // physics owner; zero: this object, independent of the visual root
@@ -142,18 +226,36 @@ public:
     for(const auto &l:layers) {
       if(!fresh(l.id)||!validName(l.name)||!std::isfinite(l.weight)||l.weight<0||l.weight>1||l.mask>std::numeric_limits<u32>::max()||
          static_cast<u32>(l.blend)>1||!std::isfinite(l.referenceTime)||l.referenceTime<0||l.referenceTime>86400||
-         l.states.size()>MaximumStates||l.transitions.size()>MaximumTransitions) return false;
-      if(l.defaultState&&!l.state(l.defaultState)) return false;
+         l.states.size()>MaximumStates||l.transitions.size()>MaximumTransitions||l.machines.size()>MaximumMachines) return false;
+      if(l.defaultState&&(!l.node(l.defaultState)||l.parent(l.defaultState))) return false;
+      for(const auto &m:l.machines) {
+        if(!fresh(m.id)||!validName(m.name)||m.name.find('/')!=std::string::npos||!std::isfinite(m.x)||!std::isfinite(m.y)||
+           (m.parent&&!l.machine(m.parent))||(m.defaultState&&(!l.node(m.defaultState)||l.parent(m.defaultState)!=m.id))) return false;
+        u64 ancestor=m.id;usize depth=0;
+        while(ancestor&&depth++<=MaximumDepth) ancestor=l.parent(ancestor);
+        if(ancestor||depth>MaximumDepth) return false;
+        for(const auto &other:l.machines) if(other.id!=m.id&&other.parent==m.parent&&other.name==m.name) return false;
+      }
       for(const auto &s:l.states) {
         if(!fresh(s.id)||!validName(s.name)||static_cast<u32>(s.kind)>2||s.motions.size()>MaximumMotions||s.events.size()>MaximumEvents||
            !std::isfinite(s.speed)||s.speed<-10||s.speed>10||!std::isfinite(s.x)||!std::isfinite(s.y)||
-           !floatParameter(s.blendX)||!floatParameter(s.blendY)||!floatParameter(s.speedParameter)) return false;
+           !floatParameter(s.blendX)||!floatParameter(s.blendY)||!floatParameter(s.speedParameter)||
+           (s.machine&&!l.machine(s.machine))||(!l.machines.empty()&&s.name.find('/')!=std::string::npos)) return false;
+        if(!l.machines.empty()) {
+          for(const auto &other:l.states) if(other.id!=s.id&&other.machine==s.machine&&other.name==s.name) return false;
+          for(const auto &other:l.machines) if(other.parent==s.machine&&other.name==s.name) return false;
+        }
         for(const auto &m:s.motions) if(!std::isfinite(m.threshold)||!std::isfinite(m.x)||!std::isfinite(m.y)) return false;
         for(const auto &e:s.events) if(!std::isfinite(e.time)||e.time<0||e.time>1) return false;
       }
       for(const auto &t:l.transitions) {
-        if(!fresh(t.id)||(t.from&&!l.state(t.from))||!l.state(t.to)||!std::isfinite(t.exitTime)||t.exitTime<0||t.exitTime>100||
-           !std::isfinite(t.duration)||t.duration<0||t.duration>60||t.conditions.size()>MaximumConditions) return false;
+        if(!fresh(t.id)||(t.from&&!l.node(t.from))||(t.to&&!l.node(t.to))||(!t.to&&!t.machine)||
+           (t.machine&&!l.machine(t.machine))||!std::isfinite(t.exitTime)||t.exitTime<0||t.exitTime>100||
+           !std::isfinite(t.duration)||t.duration<0||t.duration>60||t.conditions.size()>MaximumConditions||
+           static_cast<u32>(t.interruption)>4||!std::isfinite(t.offset)||t.offset<0||t.offset>100||
+           ((t.entry||l.machine(t.from))&&(t.hasExitTime||t.duration!=0||t.offset!=0||
+             t.interruption!=AnimatorInterruption::None||!t.orderedInterruption||t.canTransitionToSelf||!t.fixedDuration))) return false;
+        if((t.entry&&(t.from||!t.to||l.parent(t.to)!=t.machine))||(t.from&&t.machine!=l.parent(t.from))) return false;
         for(const auto &c:t.conditions) {
           const auto *p=parameter(c.parameter);
           if(!p||static_cast<u32>(c.mode)>5||!std::isfinite(c.threshold)) return false;
@@ -190,9 +292,17 @@ public:
     for(const auto &entry:clipOverrides) o<<' '<<guid(entry.original)<<' '<<guid(entry.replacement);
     o<<' '<<layers.size();
     for(const auto &l:layers) o<<' '<<l.id<<' '<<static_cast<u32>(l.blend)<<' '<<guid(l.referenceClip)<<' '<<l.referenceTime;
+    o<<' '<<layers.size();
+    for(const auto &l:layers) {
+      o<<' '<<l.id<<' '<<l.machines.size();
+      for(const auto &m:l.machines) o<<' '<<m.id<<' '<<m.parent<<' '<<m.defaultState<<' '<<std::quoted(m.name)<<' '<<m.x<<' '<<m.y;
+      o<<' '<<l.states.size();for(const auto &s:l.states) o<<' '<<s.id<<' '<<s.machine;
+      o<<' '<<l.transitions.size();for(const auto &t:l.transitions)
+        o<<' '<<t.id<<' '<<t.machine<<' '<<static_cast<u32>(t.interruption)<<' '<<t.orderedInterruption<<' '<<t.canTransitionToSelf<<' '<<t.offset<<' '<<t.fixedDuration<<' '<<t.entry;
+    }
   }
   bool read(std::istream &i,u32 version) override {
-    if(version<1||version>4) return false;
+    if(version<1||version>5) return false;
     controller={};clipOverrides.clear();
     parameters.clear();layers.clear();
     usize count=0;
@@ -251,6 +361,22 @@ public:
         if(ref!="-"&&!resources::AssetGuid::parse(ref,l.referenceClip)) return false;
       }
     }
+    if(version>=5) {
+      usize n=0;if(!(i>>n)||n!=layers.size()) return false;
+      for(auto &l:layers) {
+        u64 id=0;usize count=0;
+        if(!(i>>id>>count)||id!=l.id||count>MaximumMachines) return false;
+        l.machines.resize(count);
+        for(auto &m:l.machines) if(!(i>>m.id>>m.parent>>m.defaultState>>std::quoted(m.name)>>m.x>>m.y)) return false;
+        if(!(i>>count)||count!=l.states.size()) return false;
+        for(auto &s:l.states) if(!(i>>id>>s.machine)||id!=s.id) return false;
+        if(!(i>>count)||count!=l.transitions.size()) return false;
+        for(auto &t:l.transitions) {
+          u32 mode=0;if(!(i>>id>>t.machine>>mode>>t.orderedInterruption>>t.canTransitionToSelf>>t.offset>>t.fixedDuration>>t.entry)||id!=t.id) return false;
+          t.interruption=static_cast<AnimatorInterruption>(mode);
+        }
+      }
+    }
     // Versions 1-3 always evaluated the base layer at full weight.
     if(version<4&&!layers.empty()) layers[0].weight=1;
     return valid();
@@ -306,9 +432,16 @@ inline constexpr std::array<ComponentParameter,2> animatorStatePayload{{
   {"layer","Camada",ComponentValueKind::Integer},{"state","Estado",ComponentValueKind::Integer}}};
 inline constexpr std::array<ComponentParameter,3> animatorEventPayload{{
   {"layer","Camada",ComponentValueKind::Integer},{"state","Estado",ComponentValueKind::Integer},{"tag","Marca",ComponentValueKind::Integer}}};
-inline constexpr std::array<ComponentEvent,2> animatorEvents{{
+inline constexpr std::array<ComponentParameter,2> animatorMachinePayload{{
+  {"layer","Camada",ComponentValueKind::Integer},{"machine","Grupo",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentParameter,3> animatorInterruptionPayload{{
+  {"layer","Camada",ComponentValueKind::Integer},{"transition","Transição cancelada",ComponentValueKind::Integer},{"destination","Novo estado",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentEvent,5> animatorEvents{{
   {"state_entered","Entrou no estado","Emitido quando um estado começa (no início da transição para ele)",animatorStatePayload},
   {"state_event","Evento do estado","Emitido quando o tempo do estado passa por um evento marcado nele",animatorEventPayload},
+  {"machine_entered","Entrou no grupo","Um grupo tornou-se ativo; da raiz até o grupo interno",animatorMachinePayload},
+  {"machine_exited","Saiu do grupo","Um grupo deixou de participar da reprodução; do grupo interno à raiz",animatorMachinePayload},
+  {"transition_interrupted","Mistura interrompida","Pose composta preservada; ID zero indica CrossFade solicitado pela API",animatorInterruptionPayload},
 }};
 inline constexpr std::array<ComponentParameter,1> animatorLayerArgument{{{"layer","Camada",ComponentValueKind::Integer}}};
 inline constexpr std::array<ComponentParameter,2> animatorLayerNumberArguments{{{"layer","Camada",ComponentValueKind::Integer},{"value","Valor",ComponentValueKind::Number}}};
@@ -337,7 +470,7 @@ inline constexpr std::array<ComponentResourceBinding,1> animatorResources{{
    },{"Animator","","Grafo compartilhado; ausente interrompe a avaliação e expõe diagnóstico"}},
 }};
 inline const ComponentType Animator::descriptor{
-  "astra.animation.animator",4,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
+  "astra.animation.animator",5,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
   animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},animatorResources,{},{},{},animatorMethods,animatorEvents};
 
 } // namespace ae::scene

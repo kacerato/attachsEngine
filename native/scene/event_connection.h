@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,23> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,26> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -51,8 +51,9 @@ inline constexpr std::array<EventConnectionEventKey,23> eventConnectionEventKeys
   {21,"astra.camera.virtual","deactivated"},
   {22,"astra.animation.animator","state_entered"},
   {23,"astra.animation.animator","state_event"},
+  {24,"astra.animation.animator","machine_entered"},{25,"astra.animation.animator","machine_exited"},{26,"astra.animation.animator","transition_interrupted"},
 }};
-inline constexpr std::array<ComponentEnumOption,24> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,27> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -65,6 +66,7 @@ inline constexpr std::array<ComponentEnumOption,24> eventConnectionEvents{{
   {17,"Cérebro: câmera ativada"},{18,"Cérebro: corte de câmera"},{19,"Cérebro: transição concluída"},
   {20,"Câmera virtual entrou ao vivo"},{21,"Câmera virtual saiu do ar"},
   {22,"Animator: entrou num estado"},{23,"Animator: evento do estado"},
+  {24,"Animator: entrou num grupo"},{25,"Animator: saiu de um grupo"},{26,"Animator: mistura interrompida"},
 }};
 inline constexpr std::array<EventConnectionMethodKey,29> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},

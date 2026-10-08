@@ -25,6 +25,7 @@
 #include "runtime/scene_graph.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -77,6 +78,14 @@ struct AnimationStateView {
 
 class SceneAnimator {
 public:
+  struct PoseChannel {
+    ObjectId target=kInvalidObject;resources::AnimationPath path{};
+    std::vector<float> value;float coverage=0;bool additive=false;
+  };
+  // Values are captured before upper-layer attenuation. Rotation sums retain
+  // their magnitude: normalizing here would change a partially weighted pose.
+  struct LayerPose {std::vector<PoseChannel> channels;};
+  std::shared_ptr<const LayerPose> layerPose(ObjectId owner,u64 instance,u32 layer) const;
   // Amostra pronta vinda de outro avaliador (Animator): o clipe no tempo local
   // dado, com peso e camada; `mask` limita os alvos à subárvore daquele objeto.
   struct ExternalSample {
@@ -88,6 +97,9 @@ public:
     bool additive = false;
     resources::AssetGuid referenceClip{};
     float referenceTime = 0;
+    ObjectId controllerOwner=kInvalidObject;u64 instance=0;
+    float layerWeight=1;
+    std::shared_ptr<const LayerPose> frozen{};
   };
   // Valem para o próximo advance e são consumidas por ele.
   void setExternalSamples(std::vector<ExternalSample> samples) { external_ = std::move(samples); }
@@ -129,6 +141,8 @@ public:
   u32 posedObjects() const noexcept { return posed_; }
 
 private:
+  struct CapturedLayer {ObjectId owner;u64 instance;u32 layer;std::shared_ptr<LayerPose> pose;};
+  std::vector<CapturedLayer> layerPoses_;
   struct State {
     resources::AssetGuid clip;
     bool enabled = false;

@@ -75,6 +75,7 @@ void EditorSession::openAnimatorEditor() {
   if(!c) return;
   state_.animatorOpen=true;state_.animatorEntity=entity->id;state_.animatorInstance=c->instanceId();
   state_.animatorLayer=0;state_.animatorState=state_.animatorTransition=state_.animatorParameter=0;
+  state_.animatorMachine=0;state_.animatorRoutes.clear();
   state_.animatorConnecting=false;state_.animatorConnectFrom=0;state_.animatorPicker=0;
   state_.animatorDrawer=0;state_.animatorDetailsScroll=state_.animatorParamsScroll=0;
   state_.animatorEditShared=false;animatorResourceDrag_.reset();
@@ -86,11 +87,27 @@ void EditorSession::frameAnimator() {
   const auto *a=openAnimator();if(!a||a->layers.empty()) return;
   const auto &layer=a->layers[std::min<usize>(state_.animatorLayer,a->layers.size()-1)];
   float minX=view::EntryX,minY=view::EntryY,maxX=view::AnyX+view::NodeWidth,maxY=view::AnyY+view::NodeHeight;
-  for(const auto &s:layer.states) {minX=std::min(minX,s.x);minY=std::min(minY,s.y);maxX=std::max(maxX,s.x+view::NodeWidth);maxY=std::max(maxY,s.y+view::NodeHeight);}
+  const auto include=[&](float x,float y){minX=std::min(minX,x);minY=std::min(minY,y);maxX=std::max(maxX,x+view::NodeWidth);maxY=std::max(maxY,y+view::NodeHeight);};
+  for(const auto &s:layer.states) if(s.machine==state_.animatorMachine) include(s.x,s.y);
+  for(const auto &m:layer.machines) if(m.parent==state_.animatorMachine) include(m.x,m.y);
+  if(state_.animatorMachine) include(320,-130);
   state_.animatorPan[0]=-(minX+maxX)*.5f;state_.animatorPan[1]=-(minY+maxY)*.5f;
   const auto &canvas=layout_.animatorCanvas;
   if(canvas.width>0&&canvas.height>0)
     state_.animatorZoom=std::clamp(std::min((canvas.width-80)/(maxX-minX),(canvas.height-80)/(maxY-minY)),.45f,1.4f);
+}
+
+void EditorSession::navigateAnimator(u64 machine) {
+  const auto *a=openAnimator();if(!a||state_.animatorLayer>=a->layers.size()) return;
+  const auto &layer=a->layers[state_.animatorLayer];if(machine&&!layer.machine(machine)) return;
+  auto &routes=state_.animatorRoutes;
+  auto old=std::find_if(routes.begin(),routes.end(),[&](const auto &r){return r.layer==layer.id&&r.machine==state_.animatorMachine;});
+  const EditorScreenState::AnimatorRoute saved{layer.id,state_.animatorMachine,state_.animatorPan[0],state_.animatorPan[1],state_.animatorZoom};
+  if(old==routes.end()) routes.push_back(saved);else *old=saved;
+  state_.animatorMachine=machine;state_.animatorState=state_.animatorTransition=state_.animatorParameter=state_.animatorConnectFrom=0;
+  state_.animatorConnecting=false;state_.animatorDrawer=0;state_.animatorDetailsScroll=0;
+  const auto next=std::find_if(routes.begin(),routes.end(),[&](const auto &r){return r.layer==layer.id&&r.machine==machine;});
+  if(next!=routes.end()) {state_.animatorPan[0]=next->x;state_.animatorPan[1]=next->y;state_.animatorZoom=next->zoom;}else frameAnimator();
 }
 
 bool EditorSession::editAnimatorInstance(const std::function<bool(scene::Animator &)> &change) {
@@ -136,9 +153,11 @@ bool EditorSession::applyAnimatorName(u32 code,const std::string &name) {
     auto &layer=a.layers[layerIndex];
     if(code==w::LayerName) {for(const auto &l:a.layers) if(l.id!=layer.id&&l.name==name) return false;layer.name=name;return true;}
     if(code==w::StateName) {
-      auto *s=layer.state(state_.animatorState);if(!s) return false;
-      for(const auto &o:layer.states) if(o.id!=s->id&&o.name==name) {state_.status="Já existe um estado com esse nome nesta camada";return false;}
-      s->name=name;return true;
+      const auto node=state_.animatorState;if(!layer.node(node)||(!layer.machines.empty()&&name.find('/')!=std::string::npos)) return false;
+      const auto parent=layer.parent(node);
+      for(const auto &o:layer.states) if(o.id!=node&&o.machine==parent&&o.name==name) return false;
+      for(const auto &o:layer.machines) if(o.id!=node&&o.parent==parent&&o.name==name) return false;
+      if(auto *s=layer.state(node)) s->name=name;else layer.machine(node)->name=name;return true;
     }
     if(code>=w::ParameterName&&code<w::ParameterName+0x100) {
       const u32 i=code-w::ParameterName;if(i>=a.parameters.size()) return false;
@@ -195,6 +214,7 @@ bool EditorSession::applyAnimatorNumber(u32 code,double number) {
     if(t) {
       if(code==w::TransitionExitTime) {t->exitTime=std::clamp(v,0.f,100.f);return true;}
       if(code==w::TransitionDuration) {t->duration=std::clamp(v,0.f,60.f);return true;}
+      if(code==w::TransitionOffset) {t->offset=std::clamp(v,0.f,100.f);return true;}
       if(code>=w::ConditionThreshold&&code<w::ConditionThreshold+0x100) {const u32 c=code-w::ConditionThreshold;if(c<t->conditions.size()) {t->conditions[c].threshold=v;return true;}}
     }
     return false;
@@ -213,7 +233,8 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
   const bool playing=isPlaying()||playMirrorOpen_;
   const bool readOnly=playing||(a->controller.valid()&&!state_.animatorEditShared);
   const u32 key=routing.widgetId;
-  const view::View v{layout_.animatorCanvas,state_.animatorPan[0],state_.animatorPan[1],state_.animatorZoom};
+  if(state_.animatorMachine&&!layer.machine(state_.animatorMachine)) {state_.animatorMachine=0;frameAnimator();}
+  const view::View v{layout_.animatorCanvas,state_.animatorPan[0],state_.animatorPan[1],state_.animatorZoom,state_.animatorMachine};
 
   // A vertical drag scrolls the sheet even when it begins on a value row.
   // Taps still reach the field; a scrolled release never edits that field.
@@ -281,7 +302,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       animatorPressTransition_=animatorPressNode_?0:view::hitTransition(v,layer,event.position);
       animatorDragOriginal_.reset();
       animatorResourceDrag_.reset();
-      if(const auto *s=layer.state(animatorPressNode_)) {animatorNodeStart_[0]=s->x;animatorNodeStart_[1]=s->y;}
+      view::nodePosition(layer,animatorPressNode_,animatorNodeStart_[0],animatorNodeStart_[1]);
       return true;
     }
     if(event.pointerId!=animatorPointer_) return true;
@@ -289,10 +310,10 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       animatorPrimaryPosition_=event.position;
       animatorDragged_=true;
       const float dx=(event.position.x-animatorPress_.x)/state_.animatorZoom,dy=(event.position.y-animatorPress_.y)/state_.animatorZoom;
-      if(layer.state(animatorPressNode_)&&!readOnly&&!state_.animatorConnecting&&!history_.isOpen()) {
+      if(layer.node(animatorPressNode_)&&!readOnly&&!state_.animatorConnecting&&!history_.isOpen()) {
         if(a->controller.valid()) {
           if(!animatorResourceDrag_) animatorResourceDrag_=*a;
-          if(auto *s=animatorResourceDrag_->layers[layerIndex].state(animatorPressNode_)) {s->x=animatorNodeStart_[0]+dx;s->y=animatorNodeStart_[1]+dy;}
+          view::setNodePosition(animatorResourceDrag_->layers[layerIndex],animatorPressNode_,animatorNodeStart_[0]+dx,animatorNodeStart_[1]+dy);
           return true;
         }
         // Arrasto ao vivo direto no documento; o passo do histórico sai no fim.
@@ -300,7 +321,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
         if(!animatorDragOriginal_) animatorDragOriginal_=*entity;
         auto values=*entity;
         auto &copy=scene::animator(*values.components.editInstance(state_.animatorInstance));
-        if(auto *s=copy.layers[layerIndex].state(animatorPressNode_)) {s->x=animatorNodeStart_[0]+dx;s->y=animatorNodeStart_[1]+dy;}
+        view::setNodePosition(copy.layers[layerIndex],animatorPressNode_,animatorNodeStart_[0]+dx,animatorNodeStart_[1]+dy);
         document_.applyEntityValues(entity->id,values);
       } else {
         state_.animatorPan[0]=animatorPressPan_[0]+dx;state_.animatorPan[1]=animatorPressPan_[1]+dy;
@@ -310,10 +331,9 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
     if(event.phase==ui::UiPointerPhase::Up) {
       animatorPointer_=0;
       if(animatorResourceDrag_) {
-        const auto *moved=animatorResourceDrag_->layers[layerIndex].state(animatorPressNode_);
-        const float x=moved?std::round(moved->x/16)*16:0,y=moved?std::round(moved->y/16)*16:0;
+        float x=0,y=0;view::nodePosition(animatorResourceDrag_->layers[layerIndex],animatorPressNode_,x,y);x=std::round(x/16)*16;y=std::round(y/16)*16;
         animatorResourceDrag_.reset();
-        editAnimator([&](scene::Animator &edit){if(auto *s=edit.layers[layerIndex].state(animatorPressNode_)) {s->x=x;s->y=y;return true;}return false;});
+        editAnimator([&](scene::Animator &edit){return view::setNodePosition(edit.layers[layerIndex],animatorPressNode_,x,y);});
         return true;
       }
       if(animatorDragOriginal_) {
@@ -321,7 +341,8 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
         const auto *entity=document_.find(state_.animatorEntity);
         auto finalValues=*entity;
         auto &moved=scene::animator(*finalValues.components.editInstance(state_.animatorInstance));
-        if(auto *s=moved.layers[layerIndex].state(animatorPressNode_)) {s->x=std::round(s->x/16)*16;s->y=std::round(s->y/16)*16;}
+        float x=0,y=0;view::nodePosition(moved.layers[layerIndex],animatorPressNode_,x,y);
+        view::setNodePosition(moved.layers[layerIndex],animatorPressNode_,std::round(x/16)*16,std::round(y/16)*16);
         document_.applyEntityValues(entity->id,*animatorDragOriginal_);animatorDragOriginal_.reset();
         history_.applyValues(document_,entity->id,finalValues);
         return true;
@@ -330,17 +351,19 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       const u64 node=animatorPressNode_;
       if(state_.animatorConnecting&&!readOnly) {
         if(!state_.animatorConnectFrom) {
-          if(node&&node!=view::EntryNode) {state_.animatorConnectFrom=node;state_.status="Agora toque no estado de destino";}
+          if(node&&node!=view::ExitNode) {state_.animatorConnectFrom=node;state_.status="Agora toque no destino";}
           return true;
         }
-        if(layer.state(node)) {
+        if(layer.node(node)||(node==view::ExitNode&&state_.animatorMachine)) {
           const u64 from=state_.animatorConnectFrom==view::AnyNode?0:state_.animatorConnectFrom;
-          if(from==node&&from!=0) {state_.status="Transição para o próprio estado: use Qualquer estado";return true;}
           u64 created=0;
           // Padrões da Unity: com tempo de saída em 0,75 e mistura de 0,25 s; de Qualquer estado, sem tempo de saída.
           if(editAnimator([&](scene::Animator &edit){
                auto &l=edit.layers[layerIndex];if(l.transitions.size()>=scene::Animator::MaximumTransitions) return false;
-               scene::AnimatorTransition t;t.id=edit.allocateId();t.from=from;t.to=node;t.hasExitTime=from!=0;t.exitTime=.75f;t.duration=.25f;
+               if(from==view::EntryNode&&node==view::ExitNode) return false;
+               scene::AnimatorTransition t;t.id=edit.allocateId();t.entry=from==view::EntryNode;t.from=t.entry?0:from;t.to=node==view::ExitNode?0:node;t.machine=state_.animatorMachine;
+               t.hasExitTime=from!=0&&!l.machine(from);t.exitTime=.75f;t.duration=.25f;t.canTransitionToSelf=from==node;
+               if(t.entry||l.machine(from)) {t.hasExitTime=false;t.duration=0;t.canTransitionToSelf=false;}
                created=t.id;l.transitions.push_back(t);return true;})) {
             state_.animatorTransition=created;state_.animatorState=0;state_.status="Transição criada";
           }
@@ -351,7 +374,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       state_.animatorParameter=0;
       state_.animatorDetailsScroll=0;
       if(node||animatorPressTransition_) state_.animatorDrawer=2;
-      if(layer.state(node)) {state_.animatorState=node;state_.animatorTransition=0;}
+      if(layer.node(node)) {state_.animatorState=node;state_.animatorTransition=0;}
       else if(animatorPressTransition_) {state_.animatorTransition=animatorPressTransition_;state_.animatorState=0;}
       else {state_.animatorState=0;state_.animatorTransition=0;}
       return true;
@@ -361,6 +384,28 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
   if(!routing.tapped) return true;
   if(!w::owns(key)) return true;   // o editor cobre a tela: o resto não recebe toque
   const u32 code=w::code(key);
+  if(code>=w::Navigate&&code<w::Navigate+scene::Animator::MaximumDepth+1) {
+    std::vector<u64> path{0};u64 id=state_.animatorMachine;
+    std::vector<u64> reverse;while(id&&reverse.size()<scene::Animator::MaximumDepth) {reverse.push_back(id);id=layer.parent(id);}
+    path.insert(path.end(),reverse.rbegin(),reverse.rend());
+    const auto index=code-w::Navigate;if(index<path.size()) {state_.animatorPicker=0;navigateAnimator(path[index]);}return true;
+  }
+  if(code==w::Navigate+scene::Animator::MaximumDepth+1) {state_.animatorPicker=0x90000u;state_.animatorPickerPage=0;return true;}
+  if(code==w::EnterMachine) {if(layer.machine(state_.animatorState)) navigateAnimator(state_.animatorState);return true;}
+  if(code==w::NodeParent&&!readOnly&&layer.node(state_.animatorState)) {state_.animatorPicker=0x70000u;state_.animatorPickerPage=0;return true;}
+  if(code==w::TransitionTarget&&!readOnly) {state_.animatorPicker=0x80000u;state_.animatorPickerPage=0;return true;}
+  if(code>=w::MaskChoice&&code<w::MaskChoice+0xF00&&(state_.animatorPicker==0x70000u||state_.animatorPicker==0x80000u)) {
+    const bool moving=state_.animatorPicker==0x70000u;const u32 index=code-w::MaskChoice;state_.animatorPicker=0;
+    std::vector<u64> nodes{0};if(moving) {for(const auto &m:layer.machines) nodes.push_back(m.id);}
+    else {for(const auto &m:layer.machines) nodes.push_back(m.id);for(const auto &s:layer.states) nodes.push_back(s.id);}
+    if(index>=nodes.size()) return true;
+    const u64 target=nodes[index];
+    editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];
+      if(moving) return l.move(state_.animatorState,target);
+      for(auto &t:l.transitions) if(t.id==state_.animatorTransition) {if(!target&&!t.machine) return false;t.to=target;return true;}
+      return false;});
+    return true;
+  }
 
   // ---- Seletores -----------------------------------------------------------
   if(code==w::ClipClose||code==w::MaskClose) {state_.animatorPicker=0;return true;}
@@ -474,19 +519,36 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       return true;
     case w::Duplicate: {
       u64 created=0;
-      editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];const auto *original=l.state(state_.animatorState);
-        if(!original||l.states.size()>=scene::Animator::MaximumStates) return false;
-        auto copy=*original;copy.id=edit.allocateId();std::vector<std::string> names;for(const auto &s:l.states) names.push_back(s.name);
-        copy.name=uniqueName(names,original->name);copy.x+=32;copy.y+=80;created=copy.id;l.states.push_back(std::move(copy));return true;});
-      if(created) {state_.animatorState=created;state_.animatorDrawer=2;}return true;
+      const bool applied=editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];const auto selected=state_.animatorState;
+        if(!l.node(selected)) return false;
+        const auto original=l;std::vector<std::pair<u64,u64>> remap;
+        std::vector<std::string> names;for(const auto &s:l.states) if(s.machine==l.parent(selected)) names.push_back(s.name);
+        for(const auto &m:l.machines) if(m.parent==l.parent(selected)) names.push_back(m.name);
+        for(const auto &s:original.states) if(original.contains(selected,s.id)) remap.push_back({s.id,edit.allocateId()});
+        for(const auto &m:original.machines) if(original.contains(selected,m.id)) remap.push_back({m.id,edit.allocateId()});
+        const auto mapped=[&](u64 id){for(const auto &[oldId,newId]:remap) if(oldId==id) return newId;return id;};
+        for(const auto &s:original.states) if(mapped(s.id)!=s.id) {
+          auto copy=s;copy.id=mapped(s.id);copy.machine=mapped(s.machine);
+          if(s.id==selected) {copy.name=uniqueName(names,s.name);copy.x+=32;copy.y+=80;}l.states.push_back(std::move(copy));
+        }
+        for(const auto &m:original.machines) if(mapped(m.id)!=m.id) {
+          auto copy=m;copy.id=mapped(m.id);copy.parent=mapped(m.parent);copy.defaultState=mapped(m.defaultState);
+          if(m.id==selected) {copy.name=uniqueName(names,m.name);copy.x+=32;copy.y+=80;}l.machines.push_back(std::move(copy));
+        }
+        for(const auto &t:original.transitions) if((t.from&&mapped(t.from)!=t.from)||(!t.from&&mapped(t.machine)!=t.machine)) {
+          auto copy=t;copy.id=edit.allocateId();copy.from=mapped(t.from);copy.to=mapped(t.to);copy.machine=mapped(t.machine);l.transitions.push_back(std::move(copy));
+        }
+        created=mapped(selected);return true;});
+      if(applied&&created) {state_.animatorState=created;state_.animatorDrawer=2;}return true;
     }
     case w::TransitionEarlier: case w::TransitionLater:
       editAnimator([&](scene::Animator &edit){
         auto &v=edit.layers[layerIndex].transitions;
         for(usize i=0;i<v.size();++i) {
           if(v[i].id!=state_.animatorTransition) continue;
-          if(code==w::TransitionEarlier&&i>0) {std::swap(v[i],v[i-1]);return true;}
-          if(code==w::TransitionLater&&i+1<v.size()) {std::swap(v[i],v[i+1]);return true;}
+          const auto same=[&](usize j){return v[j].from==v[i].from&&v[j].machine==v[i].machine&&v[j].entry==v[i].entry;};
+          if(code==w::TransitionEarlier) for(usize j=i;j>0;--j) if(same(j-1)) {std::swap(v[i],v[j-1]);return true;}
+          if(code==w::TransitionLater) for(usize j=i+1;j<v.size();++j) if(same(j)) {std::swap(v[i],v[j]);return true;}
         }
         return false;
       });return true;
@@ -542,35 +604,57 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
     case w::LayerMask: if(!isPlaying()&&!playMirrorOpen_) {state_.animatorPicker=0x10000u;state_.animatorPickerPage=0;}return true;
     case w::AddState: {
       u64 created=0;
-      editAnimator([&](scene::Animator &edit){
+      const bool applied=editAnimator([&](scene::Animator &edit){
         auto &l=edit.layers[layerIndex];if(l.states.size()>=scene::Animator::MaximumStates) return false;
-        std::vector<std::string> names;for(const auto &s:l.states) names.push_back(s.name);
-        scene::AnimatorState s;s.id=edit.allocateId();s.name=uniqueName(names,"Estado");
+        std::vector<std::string> names;for(const auto &s:l.states) if(s.machine==state_.animatorMachine) names.push_back(s.name);
+        for(const auto &m:l.machines) if(m.parent==state_.animatorMachine) names.push_back(m.name);
+        scene::AnimatorState s;s.id=edit.allocateId();s.machine=state_.animatorMachine;s.name=uniqueName(names,"Estado");
         // Nasce no centro da vista; se cair sobre outro estado, desce até achar lugar.
         const auto &c=layout_.animatorCanvas;
         if(c.width>0) {view::toGraph(v,{c.x+c.width*.5f,c.y+c.height*.5f},s.x,s.y);s.x-=view::NodeWidth*.5f;s.y-=view::NodeHeight*.5f;}
         else view::freeSpot(l,s.x,s.y);
         s.x=std::round(s.x/16)*16;s.y=std::round(s.y/16)*16;
-        for(u32 tries=0;tries<20;++tries) {
+        for(usize tries=0;tries<=l.states.size()+l.machines.size();++tries) {
           bool overlaps=false;
-          for(const auto &o:l.states) overlaps=overlaps||(std::abs(o.x-s.x)<view::NodeWidth+16&&std::abs(o.y-s.y)<view::NodeHeight+16);
+          for(const auto &o:l.states) if(o.machine==s.machine) overlaps=overlaps||(std::abs(o.x-s.x)<view::NodeWidth+16&&std::abs(o.y-s.y)<view::NodeHeight+16);
+          for(const auto &o:l.machines) if(o.parent==s.machine) overlaps=overlaps||(std::abs(o.x-s.x)<view::NodeWidth+16&&std::abs(o.y-s.y)<view::NodeHeight+16);
           if(!overlaps) break;
           s.y+=view::NodeHeight+32;
         }
-        if(!l.defaultState) l.defaultState=s.id;
-        created=s.id;l.states.push_back(s);return true;});
-      if(created) {state_.animatorState=created;state_.animatorTransition=0;}
+        created=s.id;l.states.push_back(s);if(!l.defaultOf(s.machine)) l.setDefault(s.machine,s.id);return true;});
+      if(applied&&created) {state_.animatorState=created;state_.animatorTransition=0;}
       return true;
     }
-    case w::SetDefault: editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];if(!l.state(state_.animatorState)) return false;l.defaultState=state_.animatorState;return true;});return true;
+    case w::AddMachine: {
+      u64 created=0;
+      bool applied=false;
+      if(!readOnly) applied=editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];if(l.machines.size()>=scene::Animator::MaximumMachines) return false;
+        std::vector<std::string> names;for(const auto &s:l.states) if(s.machine==state_.animatorMachine) names.push_back(s.name);
+        for(const auto &m:l.machines) if(m.parent==state_.animatorMachine) names.push_back(m.name);
+        scene::AnimatorMachine m;m.id=edit.allocateId();m.parent=state_.animatorMachine;m.name=uniqueName(names,"Grupo");
+        const auto &c=layout_.animatorCanvas;view::toGraph(v,{c.x+c.width*.5f,c.y+c.height*.5f},m.x,m.y);m.x-=view::NodeWidth*.5f;m.y-=view::NodeHeight*.5f;
+        m.x=std::round(m.x/16)*16;m.y=std::round(m.y/16)*16;
+        for(usize tries=0;tries<=l.states.size()+l.machines.size();++tries) {
+          bool overlaps=false;
+          for(const auto &o:l.states) if(o.machine==m.parent) overlaps=overlaps||(std::abs(o.x-m.x)<view::NodeWidth+16&&std::abs(o.y-m.y)<view::NodeHeight+16);
+          for(const auto &o:l.machines) if(o.parent==m.parent) overlaps=overlaps||(std::abs(o.x-m.x)<view::NodeWidth+16&&std::abs(o.y-m.y)<view::NodeHeight+16);
+          if(!overlaps) break;
+          m.y+=view::NodeHeight+32;
+        }
+        if(l.states.size()<scene::Animator::MaximumStates) {
+          scene::AnimatorState s;s.id=edit.allocateId();s.machine=m.id;s.name="Entrada";s.x=-view::NodeWidth*.5f;s.y=-view::NodeHeight*.5f;
+          m.defaultState=s.id;l.states.push_back(s);
+        }
+        created=m.id;l.machines.push_back(m);if(!l.defaultOf(m.parent)) l.setDefault(m.parent,m.id);return true;});
+      if(applied&&created) {state_.animatorState=created;state_.animatorDrawer=2;state_.animatorDetailsScroll=0;}return true;
+    }
+    case w::SetDefault: editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];return l.setDefault(state_.animatorMachine,state_.animatorState);});return true;
     case w::Delete:
       if(state_.animatorState) {
         const u64 doomed=state_.animatorState;
         if(editAnimator([&](scene::Animator &edit){
              auto &l=edit.layers[layerIndex];
-             std::erase_if(l.states,[&](const scene::AnimatorState &s){return s.id==doomed;});
-             std::erase_if(l.transitions,[&](const scene::AnimatorTransition &t){return t.from==doomed||t.to==doomed;});
-             if(l.defaultState==doomed) l.defaultState=l.states.empty()?0:l.states.front().id;
+             l.eraseNode(doomed);
              return true;})) state_.animatorState=0;
       } else if(state_.animatorTransition) {
         const u64 doomed=state_.animatorTransition;
@@ -581,7 +665,7 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
     default: break;
   }
   if(code>=w::LayerTab&&code<w::LayerTab+scene::Animator::MaximumLayers) {
-    state_.animatorLayer=code-w::LayerTab;state_.animatorState=state_.animatorTransition=0;state_.animatorConnecting=false;frameAnimator();return true;
+    state_.animatorLayer=code-w::LayerTab;state_.animatorMachine=0;state_.animatorState=state_.animatorTransition=0;state_.animatorConnecting=false;frameAnimator();return true;
   }
 
   // ---- Parâmetros ----------------------------------------------------------
@@ -679,12 +763,22 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
   }
 
   // ---- Transição selecionada -----------------------------------------------
+  if(const auto *m=layer.machine(state_.animatorState);m&&!readOnly&&code==w::StateName) {beginAnimatorName(code,m->name);return true;}
   const scene::AnimatorTransition *t=nullptr;for(const auto &x:layer.transitions) if(x.id==state_.animatorTransition) t=&x;
   if(t&&!readOnly) {
     const auto transition=[&](scene::Animator &edit)->scene::AnimatorTransition*{for(auto &x:edit.layers[layerIndex].transitions) if(x.id==t->id) return &x;return nullptr;};
     if(code==w::TransitionExit) {editAnimator([&](scene::Animator &edit){auto *x=transition(edit);x->hasExitTime=!x->hasExitTime;return true;});return true;}
     if(code==w::TransitionExitTime) {beginAnimatorNumber(code,t->exitTime);return true;}
     if(code==w::TransitionDuration) {beginAnimatorNumber(code,t->duration);return true;}
+    if(code==w::TransitionOffset) {beginAnimatorNumber(code,t->offset);return true;}
+    if(code==w::TransitionInterruption||code==w::TransitionOrdered||code==w::TransitionSelf||code==w::TransitionFixed) {
+      editAnimator([&](scene::Animator &edit){auto *x=transition(edit);if(!x) return false;
+        if(code==w::TransitionInterruption) x->interruption=static_cast<scene::AnimatorInterruption>((static_cast<u32>(x->interruption)+1)%5);
+        else if(code==w::TransitionOrdered) x->orderedInterruption=!x->orderedInterruption;
+        else if(code==w::TransitionSelf) x->canTransitionToSelf=!x->canTransitionToSelf;
+        else x->fixedDuration=!x->fixedDuration;
+        return true;});return true;
+    }
     if(code==w::ConditionAdd) {
       editAnimator([&](scene::Animator &edit){
         auto *x=transition(edit);if(x->conditions.size()>=scene::Animator::MaximumConditions||edit.parameters.empty()) return false;

@@ -17,6 +17,27 @@ scene::ScriptRuntimeApi pathApi() {
   return api;
 }
 }
+AE_TEST(animator_hierarchy_script_abi_full_paths_capacity_and_lifetime) {
+  editor::EditorDocument doc;const auto owner=doc.createEntity(doc.root(),runtime::ObjectKind::Folder,"Mechanism");
+  auto value=*doc.find(owner);auto &graph=scene::animator(*value.components.add(scene::Animator::descriptor));const auto instance=graph.instanceId();
+  auto &layer=graph.layers[0];const auto leaf=layer.states[0].id;const auto one=graph.allocateId(),two=graph.allocateId(),three=graph.allocateId();
+  const std::string label(63,'M');layer.machines={{one,0,two,label},{two,one,three,label},{three,two,leaf,label}};layer.states[0].machine=three;layer.defaultState=one;
+  auto *script=static_cast<scene::ScriptBehavior*>(value.components.add(scene::ScriptBehavior::descriptor));script->scriptType="test.Hierarchy";script->source="Hierarchy.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(owner,value),"valid deep authoring");editor::EditorMapScene resources;editor::EditorPlayScene play;play.setScriptRuntime(pathApi(),"/test");
+  AE_EXPECT_TRUE(play.start(doc,resources),"real Play supplies the native scripting family");
+  u32 version=0,size=0;const auto name=scene::kScriptAnimator;
+  const auto *api=static_cast<const scene::ScriptAnimatorOperations*>(pathAccess.extension(pathAccess.context,reinterpret_cast<const u8*>(name.data()),int(name.size()),&version,&size));
+  AE_EXPECT_TRUE(api&&version==1&&size==sizeof(*api),"existing versioned ABI supports variable-length paths without a layout break");
+  const auto handle=play.world().handle(owner);const auto path=layer.path(leaf);
+  AE_EXPECT_TRUE(path.size()>128&&api->play(pathAccess.context,owner,handle.world,handle.generation,instance,0,reinterpret_cast<const u8*>(path.data()),int(path.size()),0)==1,"long path enters the effective graph through the SDK transport");
+  scene::ScriptAnimatorStateInfo info;AE_EXPECT_TRUE(api->state(pathAccess.context,owner,handle.world,handle.generation,instance,0,&info)==1&&info.state==leaf,"real state identity");
+  std::array<u8,16> shortBuffer;shortBuffer.fill(0xA5);
+  AE_EXPECT_TRUE(api->stateName(pathAccess.context,owner,handle.world,handle.generation,instance,0,leaf,shortBuffer.data(),shortBuffer.size())==int(path.size())&&
+    std::all_of(shortBuffer.begin(),shortBuffer.end(),[](u8 byte){return byte==0xA5;}),"undersized buffer reports required bytes without truncation or overwrite");
+  std::vector<u8> full(path.size());AE_EXPECT_TRUE(api->stateName(pathAccess.context,owner,handle.world,handle.generation,instance,0,leaf,full.data(),full.size())==int(path.size())&&
+    std::string(reinterpret_cast<const char*>(full.data()),full.size())==path,"complete path survives the ABI");
+  play.stop();AE_EXPECT_TRUE(api->stateName(pathAccess.context,owner,handle.world,handle.generation,instance,0,leaf,full.data(),full.size())==-1,"closed Play rejects stale reads");
+}
 AE_TEST(groups_script_abi_queries_mutates_and_bounds_live_world_membership) {
   editor::EditorDocument doc;const auto id=doc.createEntity(doc.root(),runtime::ObjectKind::Folder,"Guard");
   auto value=*doc.find(id);value.groups.add("guards");

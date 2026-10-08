@@ -1,7 +1,7 @@
 # Animation Studio — evolução universal a partir dos pacotes fornecidos
 
 Data: 08/10/2026. Repositório confirmado: `kacerato/attachsEngine`, base `b900826a`.
-Estado: B2 entregue e validado em desenvolvimento; B3–B6 são plano de implementação.
+Estado: B2 entregue e validado em desenvolvimento; B3 em implementação e validação; B4–B6 seguem no plano.
 O relato de aceite está em `docs/validacao/animator-additive-2026-10-08/REPORT.md`.
 
 NÃO IREI SER SIMPLISTA NO DESIGN.
@@ -85,6 +85,10 @@ uma vez, eventos com regra documentada e ordem determinística. Entrada,
 saída, Qualquer estado local/global e destino externo precisam de contratos
 explícitos. Aceite com três níveis, retorno, interrupção no meio do fade,
 controller compartilhado, prefab e archive round-trip.
+
+B3 implementado e aceito na revisão Dev 0.2.8/code 16: Animator v5/AEANIMATOR 3; três níveis, IDs/caminhos estáveis, entrada condicional, saída encadeada e Qualquer estado por escopo. Cinco políticas de interrupção e captura por propriedade, offset/unidade; transporte SDK sem truncar caminho. Editor cria/move/duplica/remove árvores com histórico, navegação com vista preservada, breadcrumbs profundos e ligações selecionáveis separadamente. Ícones machine/interruption são SVG/PNG/atlas efetivos. Host 25/25, SDK/sonda compilados, Android Release; 15 checks C# no aparelho antes/depois da autoria e novamente no APK final. Toque, histórico, salvar/encerrar/reabrir preservam grupo movido e política/offset; 598/598 frames revisados nas 20 folhas. Relatório: `docs/validacao/animator-hierarchy-2026-10-08/REPORT.md`. Guia e Atualizações publicados separadamente no AstraDocs. Isto fecha B3; B4–B6 e a equivalência completa dos pacotes continuam pendentes. API de autoria de topologia/clipes por C# pertence à próxima expansão; não é presumida pela API runtime deste bloco.
+
+Referências desta revisão: Unity 6000.0 `NestedStateMachines.html`, `StateMachineTransitions.html` e `class-Transition.html`; código Godot 4.5-stable `animation_node_state_machine.cpp`. Tutorial oficial Unity: https://www.youtube.com/watch?v=lpekqN4_4xg (Unity 5), transcrição estudada e quadro do grafo inspecionado em 2:33; não declarar o vídeo inteiro analisado quadro a quadro. Entrada, saída e prioridade foram confrontadas com o runtime; ligação de máquina mostra apenas destino/condições/prioridade, pois o blend pertence à saída iniciadora.
 
 ### B4 — clipes, curvas e autoria de poses
 

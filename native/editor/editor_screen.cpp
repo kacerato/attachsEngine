@@ -2927,6 +2927,7 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   iconButton(takeRight(header,42),UiIcon::EditorUndo,"Desfaz",w::Undo,!playing);takeRight(header,8);
   iconButton(takeRight(header,42),UiIcon::AnimationTransition,"Ligar",w::Connect,!readOnly,state.animatorConnecting);takeRight(header,4);
   iconButton(takeRight(header,42),UiIcon::AnimationState,"+Estado",w::AddState,!readOnly&&layer.states.size()<scene::Animator::MaximumStates);takeRight(header,8);
+  iconButton(takeRight(header,42),UiIcon::AnimationMachine,"+Grupo",w::AddMachine,!readOnly&&layer.machines.size()<scene::Animator::MaximumMachines);takeRight(header,4);
   iconButton(takeRight(header,42),UiIcon::AnimationParameters,"Params",w::Parameters,true,state.animatorDrawer==1);takeRight(header,4);
   iconButton(takeRight(header,42),UiIcon::UiSettings,"Ajustes",w::Details,true,state.animatorDrawer==2);
   takeRight(header,4);iconButton(takeRight(header,42),UiIcon::AnimationController,"Recurso",w::Controller,true,state.animatorDrawer==3);
@@ -2934,13 +2935,26 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   auto tabs=takeTop(content,34);takeTop(content,6);
   for(u32 i=0;i<a.layers.size();++i) {button(takeLeft(tabs,104),a.layers[i].name,w::LayerTab+i,false,true,i==layerIndex);takeLeft(tabs,4);}
   if(a.layers.size()<scene::Animator::MaximumLayers) button(takeLeft(tabs,36),"+",w::LayerAdd,false,!readOnly);
+  auto crumbs=takeTop(content,44);takeTop(content,4);
+  std::vector<u64> route;u64 routeId=state.animatorMachine;
+  while(routeId&&route.size()<scene::Animator::MaximumDepth) {route.push_back(routeId);routeId=layer.parent(routeId);}
+  route.push_back(0);std::reverse(route.begin(),route.end());
+  const u32 crumbCapacity=std::max(3u,static_cast<u32>(crumbs.width/100));
+  std::vector<u32> visibleRoute;
+  if(route.size()<=crumbCapacity) {for(u32 i=0;i<route.size();++i) visibleRoute.push_back(i);}
+  else {visibleRoute={0,scene::Animator::MaximumDepth+1};for(u32 i=static_cast<u32>(route.size())-(crumbCapacity-2);i<route.size();++i) visibleRoute.push_back(i);}
+  const float crumbWidth=std::min(150.f,crumbs.width/static_cast<float>(visibleRoute.size()));
+  for(const auto i:visibleRoute) {
+    if(i>=route.size()) {button(takeLeft(crumbs,crumbWidth-4),"…",w::Navigate+scene::Animator::MaximumDepth+1);takeLeft(crumbs,4);continue;}
+    const auto *m=layer.machine(route[i]);button(takeLeft(crumbs,crumbWidth-4),m?m->name:layer.name,w::Navigate+i,false,true,route[i]==state.animatorMachine);takeLeft(crumbs,4);
+  }
   const auto runtimeBar=takeBottom(content,28);takeBottom(content,4);
   std::string runtimeText=playing?"Play":a.controller.valid()?state.animatorEditShared?"Recurso · todas as instâncias":"Instância · overrides locais":"Grafo local";
   if(!state.animatorControllerDiagnostic.empty()) runtimeText+=" / "+state.animatorControllerDiagnostic;
   if(live) {
     if(!live->motionDiagnostic.empty()) runtimeText+="  /  "+live->motionDiagnostic;
     else if(live->motionAvailable) runtimeText+="  /  Movimento medido";
-    if(layerIndex<live->layers.size()) {const auto &ls=live->layers[layerIndex];if(const auto *current=layer.state(ls.current)) runtimeText+="  /  "+current->name;}
+    if(layerIndex<live->layers.size()) {const auto &ls=live->layers[layerIndex];runtimeText+="  /  "+layer.path(ls.current);}
   }
   builder.label(runtimeBar,fitMiddle(list,runtimeText,runtimeBar.width,theme.type.caption),live&&!live->motionDiagnostic.empty()?theme.color.warning:theme.color.textMuted,theme.type.caption);
   UiRect drawer{};
@@ -3055,8 +3069,9 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     if(side.height<38) return;
     auto row=takeTop(side,38);row.height-=4;
     auto labelBounds=takeLeft(row,row.width-150);
-    if(code==w::LayerBlend||code==w::LayerReferenceClip) {
-      list.addImage(centred(takeLeft(labelBounds,24),18,18),static_cast<UiImageId>(code==w::LayerBlend?UiIcon::AnimationAdditive:UiIcon::AnimationReferencePose),0xffffffff);
+    if(code==w::LayerBlend||code==w::LayerReferenceClip||code==w::TransitionInterruption) {
+      const auto glyph=code==w::TransitionInterruption?UiIcon::AnimationInterruption:code==w::LayerBlend?UiIcon::AnimationAdditive:UiIcon::AnimationReferencePose;
+      list.addImage(centred(takeLeft(labelBounds,24),18,18),static_cast<UiImageId>(glyph),0xffffffff);
     }
     builder.label(labelBounds,fitMiddle(list,std::string(label),labelBounds.width,theme.type.caption),theme.color.textDim,theme.type.caption);
     list.addRect(row,theme.color.surface,theme.radius.control);
@@ -3085,6 +3100,19 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
       for(const auto &st:l.states) uses+=st.blendX==p->id||st.blendY==p->id||st.speedParameter==p->id;}
     builder.label(takeTop(side,28),std::to_string(uses)+" vínculos",theme.color.textMuted,theme.type.caption);
     if(!readOnly) button(takeTop(side,36),"Excluir parâmetro",w::ParameterDelete+index);
+  } else if(const auto *m=layer.machine(state.animatorState)) {
+    auto title=takeTop(side,42);
+    list.addImage(centred(takeLeft(title,34),28,28),static_cast<UiImageId>(UiIcon::AnimationMachine),0xffffffff);
+    builder.label(title,m->name,theme.color.text,theme.type.cardName);
+    if(!readOnly) region(title,w::id(w::StateName));
+    button(takeTop(side,38),"Abrir grupo",w::EnterMachine,true);
+    takeTop(side,6);
+    valueRow("Local",m->parent?layer.path(m->parent):layer.name,w::NodeParent);
+    valueRow("Entrada",m->defaultState?layer.path(m->defaultState):"Sem entrada",0,false);
+    if(!readOnly) button(takeTop(side,34),m->id==layer.defaultOf(state.animatorMachine)?"Entrada padrão":"Usar como entrada",w::SetDefault,false,m->id!=layer.defaultOf(state.animatorMachine));
+    usize children=0;for(const auto &s:layer.states) children+=s.machine==m->id;for(const auto &g:layer.machines) children+=g.parent==m->id;
+    builder.label(takeTop(side,28),std::to_string(children)+" nós diretos",theme.color.textMuted,theme.type.caption);
+    if(!layer.entry(m->id)) builder.label(takeTop(side,38),"Defina uma entrada dentro do grupo",theme.color.warning,theme.type.caption);
   } else if(const auto *s=layer.state(state.animatorState)) {
     builder.label(takeTop(side,20),"ESTADO",theme.color.textMuted,theme.type.label);
     auto nameRow=takeTop(side,40);nameRow.height-=4;
@@ -3095,7 +3123,8 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     static constexpr const char *kindLabels[]{"Clipe","Mistura 1D","Mistura 2D"};
     for(u32 k=0;k<3;++k) button({kinds.x+k*(kinds.width/3),kinds.y,kinds.width/3-4,32},kindLabels[k],w::StateKind+k,false,!readOnly,static_cast<u32>(s->kind)==k);
     takeTop(side,4);
-    if(!readOnly) button(takeTop(side,34),s->id==layer.defaultState?"Estado padrão":"Definir como padrão",w::SetDefault,false,s->id!=layer.defaultState);
+    if(!readOnly) button(takeTop(side,34),s->id==layer.defaultOf(state.animatorMachine)?"Estado padrão":"Definir como padrão",w::SetDefault,false,s->id!=layer.defaultOf(state.animatorMachine));
+    valueRow("Local",s->machine?layer.path(s->machine):layer.name,w::NodeParent);
     if(s->kind==scene::AnimatorMotionKind::Blend1D) valueRow("Parâmetro",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);
     if(s->kind==scene::AnimatorMotionKind::Blend2D) {valueRow("Parâmetro X",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);valueRow("Parâmetro Y",parameterName(s->blendY,"Escolher Float"),w::StateBlendY);}
     if(s->kind!=scene::AnimatorMotionKind::Clip&&!s->motions.empty()) {
@@ -3159,14 +3188,26 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     if(s->events.size()<scene::Animator::MaximumEvents&&side.height>=36) button(takeTop(side,34),"+ evento (tempo 0–1 e marca)",w::EventAdd,false,!readOnly);
   } else if(const scene::AnimatorTransition *t=[&]()->const scene::AnimatorTransition*{for(const auto &x:layer.transitions) if(x.id==state.animatorTransition) return &x;return nullptr;}()) {
     builder.label(takeTop(side,20),"TRANSIÇÃO",theme.color.textMuted,theme.type.label);
-    const auto *from=layer.state(t->from);const auto *to=layer.state(t->to);
-    builder.label(takeTop(side,30),fitMiddle(list,std::string(from?from->name:"Qualquer estado")+"  →  "+(to?to->name:"?"),side.width,theme.type.cardName),theme.color.text,theme.type.cardName);
+    const auto nodeName=[&](u64 id){if(const auto *s=layer.state(id)) return s->name;if(const auto *m=layer.machine(id)) return m->name;return std::string("Saída");};
+    builder.label(takeTop(side,30),fitMiddle(list,(t->entry?std::string("Entrada"):t->from?nodeName(t->from):std::string("Qualquer estado"))+"  →  "+nodeName(t->to),side.width,theme.type.cardName),theme.color.text,theme.type.cardName);
+    valueRow("Destino",t->to?layer.path(t->to):"Saída",w::TransitionTarget);
+    if(!t->entry&&!layer.machine(t->from)) {
+    static constexpr const char *interruptions[]{"Só Qualquer estado","Origem","Destino","Origem → destino","Destino → origem"};
+    valueRow("Interrupção",interruptions[static_cast<u32>(t->interruption)],w::TransitionInterruption);
+    valueRow("Duração",number(t->duration,t->fixedDuration?" s":" voltas"),w::TransitionDuration);
     valueRow("Tempo de saída",t->hasExitTime?"sim":"não",w::TransitionExit);
     if(t->hasExitTime) valueRow("Sai em (voltas)",number(t->exitTime),w::TransitionExitTime);
-    valueRow("Duração",number(t->duration," s"),w::TransitionDuration);
+    valueRow("Unidade",t->fixedDuration?"Segundos":"Estado de origem",w::TransitionFixed);
+    valueRow("Iniciar em",number(t->offset," voltas"),w::TransitionOffset);
+    valueRow("Por prioridade",t->orderedInterruption?"sim":"não",w::TransitionOrdered);
+    valueRow("Reentrar",t->canTransitionToSelf?"sim":"não",w::TransitionSelf);
+    }
     auto order=takeTop(side,36);const usize rank=static_cast<usize>(t-layer.transitions.data());
-    button(takeLeft(order,order.width*.5f-2),"Priorizar",w::TransitionEarlier,false,!readOnly&&rank>0);
-    button(order,"Adiar",w::TransitionLater,false,!readOnly&&rank+1<layer.transitions.size());
+    const auto sameQueue=[&](const scene::AnimatorTransition &other){return other.from==t->from&&other.machine==t->machine&&other.entry==t->entry;};
+    const bool earlier=std::any_of(layer.transitions.begin(),layer.transitions.begin()+rank,sameQueue);
+    const bool later=std::any_of(layer.transitions.begin()+rank+1,layer.transitions.end(),sameQueue);
+    button(takeLeft(order,order.width*.5f-2),"Priorizar",w::TransitionEarlier,false,!readOnly&&earlier);
+    button(order,"Adiar",w::TransitionLater,false,!readOnly&&later);
     builder.label(takeTop(side,20),"CONDIÇÕES (TODAS)",theme.color.textMuted,theme.type.label);
     static constexpr const char *modes[]{"Se","Se não","Maior que","Menor que","Igual a","Diferente de"};
     for(u32 c=0;c<t->conditions.size()&&side.height>=38;++c) {
@@ -3181,7 +3222,7 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
       if(!readOnly) region(row,w::id(w::ConditionParameter+c));
     }
     if(t->conditions.size()<scene::Animator::MaximumConditions&&side.height>=36) button(takeTop(side,34),"+ condição",w::ConditionAdd,false,!readOnly&&!a.parameters.empty());
-    if(t->conditions.empty()&&!t->hasExitTime) builder.label(takeTop(side,34),"Sem condição nem tempo de saída: nunca dispara",theme.color.warning,theme.type.caption);
+    if(t->conditions.empty()&&!t->hasExitTime&&!t->entry&&!layer.machine(t->from)) builder.label(takeTop(side,34),"Sem condição nem tempo de saída: nunca dispara",theme.color.warning,theme.type.caption);
   } else {
     builder.label(takeTop(side,20),"CAMADA",theme.color.textMuted,theme.type.label);
     auto nameRow=takeTop(side,40);nameRow.height-=4;list.addRect(nameRow,theme.color.surface,theme.radius.control);
@@ -3224,7 +3265,7 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
   layout.animatorCanvas=canvas;
   list.addRect(canvas,theme.color.canvas,2);
   region(canvas,w::id(w::Canvas));
-  const view::View v{canvas,state.animatorPan[0],state.animatorPan[1],state.animatorZoom};
+  const view::View v{canvas,state.animatorPan[0],state.animatorPan[1],state.animatorZoom,state.animatorMachine};
   list.pushClip(canvas);
   const float grid=32*v.zoom;
   if(grid>=8) {
@@ -3240,27 +3281,44 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     list.addLine(tip,{mx-ux*s-uy*s*.8f,my-uy*s+ux*s*.8f},color,width);
   };
   // Entrada → estado padrão.
-  {UiPoint a0,b0;if(layer.defaultState&&view::arrow(v,layer,view::EntryNode,layer.defaultState,a0,b0)) {list.addLine(a0,b0,withAlpha(theme.color.accent,.6f),2);arrowHead(a0,b0,withAlpha(theme.color.accent,.6f),2);}}
+  {UiPoint a0,b0;const auto entry=layer.defaultOf(state.animatorMachine);if(entry&&view::arrow(v,layer,view::EntryNode,entry,a0,b0)) {list.addLine(a0,b0,withAlpha(theme.color.accent,.6f),2);arrowHead(a0,b0,withAlpha(theme.color.accent,.6f),2);}}
   for(const auto &t:layer.transitions) {
-    UiPoint a0,b0;if(!view::arrow(v,layer,t.from?t.from:view::AnyNode,t.to,a0,b0)) continue;
+    if(t.from?layer.parent(t.from)!=state.animatorMachine:t.machine!=state.animatorMachine) continue;
+    std::array<UiPoint,5> points;const auto count=view::transitionPath(v,layer,t,points);
+    if(!count) continue;
     const bool chosen=t.id==state.animatorTransition;
-    const bool firing=live&&layerIndex<live->layers.size()&&live->layers[layerIndex].transitioning&&live->layers[layerIndex].next==t.to;
+    const bool firing=live&&layerIndex<live->layers.size()&&live->layers[layerIndex].transitioning&&live->layers[layerIndex].transition==t.id;
     const UiColor color=chosen||firing?theme.color.accent:theme.color.textMuted;
-    list.addLine(a0,b0,color,chosen?3.f:2.f);arrowHead(a0,b0,color,chosen?3.f:2.f);
+    for(u32 i=1;i<count;++i) list.addLine(points[i-1],points[i],color,chosen?3.f:2.f);
+    arrowHead(points[count-2],points[count-1],color,chosen?3.f:2.f);
   }
   const runtime::SceneAnimatorGraphs::LayerState *ls=live&&layerIndex<live->layers.size()?&live->layers[layerIndex]:nullptr;
   const auto node=[&](u64 id,std::string_view name,std::string sub,UiColor fill){
     const auto r=view::nodeRect(v,layer,id);
-    const bool chosen=id==state.animatorState,isDefault=id==layer.defaultState,source=state.animatorConnecting&&id==state.animatorConnectFrom;
-    const bool current=ls&&ls->current==id,next=ls&&ls->transitioning&&ls->next==id;
-    list.addRect(r,current?withAlpha(theme.color.accent,.18f):fill,3*v.zoom);
-    list.addRect({r.x,r.y,4*v.zoom,r.height},current||isDefault?theme.color.accent:theme.color.line,1);
-    list.addBorder(r,source?theme.color.warning:chosen?theme.color.accent:isDefault?withAlpha(theme.color.accent,.7f):theme.color.line,chosen||source?2.f:1.f,3*v.zoom);
+    const bool chosen=id==state.animatorState,isDefault=id==layer.defaultOf(state.animatorMachine),source=state.animatorConnecting&&id==state.animatorConnectFrom;
+    const bool current=ls&&layer.contains(id,ls->current),next=ls&&ls->transitioning&&layer.contains(id,ls->next);
+    const auto nodeFill=current?withAlpha(theme.color.accent,.18f):fill;
+    const auto outline=source?theme.color.warning:chosen?theme.color.accent:isDefault?withAlpha(theme.color.accent,.7f):theme.color.line;
+    if(layer.machine(id)) {
+      const float cut=12*v.zoom;
+      const UiPoint corners[]{{r.x+cut,r.y},{r.x+r.width-cut,r.y},{r.x+r.width,r.y+cut},
+        {r.x+r.width,r.y+r.height-cut},{r.x+r.width-cut,r.y+r.height},{r.x+cut,r.y+r.height},
+        {r.x,r.y+r.height-cut},{r.x,r.y+cut}};
+      const UiMeshVertex center{{r.x+r.width*.5f,r.y+r.height*.5f},{},nodeFill};
+      for(usize k=0;k<8;++k) {
+        list.addTriangle(center,{corners[k],{},nodeFill},{corners[(k+1)%8],{},nodeFill});
+        list.addLine(corners[k],corners[(k+1)%8],outline,chosen||source?2.f:1.f);
+      }
+    } else {
+      list.addRect(r,nodeFill,3*v.zoom);
+      list.addRect({r.x,r.y,4*v.zoom,r.height},current||isDefault?theme.color.accent:theme.color.line,1);
+      list.addBorder(r,outline,chosen||source?2.f:1.f,3*v.zoom);
+    }
     if(v.zoom>=.55f) {
       auto inner=deflate(r,UiInsets{12*v.zoom,8*v.zoom,10*v.zoom,8*v.zoom});
       const auto glyph=takeLeft(inner,28*v.zoom);takeLeft(inner,6*v.zoom);
       const auto *st=layer.state(id);
-      const UiIcon icon=st?(st->kind==scene::AnimatorMotionKind::Clip?UiIcon::AnimationState:UiIcon::AnimationBlend):UiIcon::AnimationTransition;
+      const UiIcon icon=layer.machine(id)?UiIcon::AnimationMachine:st?(st->kind==scene::AnimatorMotionKind::Clip?UiIcon::AnimationState:UiIcon::AnimationBlend):UiIcon::AnimationTransition;
       list.addImage(centred(glyph,24*v.zoom,24*v.zoom),static_cast<UiImageId>(icon),theme.color.text);
       builder.label(takeTop(inner,inner.height*.55f),fitMiddle(list,std::string(name),inner.width,theme.type.cardName),theme.color.text,theme.type.cardName);
       builder.label(inner,fitMiddle(list,sub,inner.width,theme.type.caption),isDefault&&!current?theme.color.accent:theme.color.textMuted,theme.type.caption);
@@ -3273,12 +3331,15 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     }
   };
   node(view::EntryNode,"Entrada","→ estado padrão",0xFF22402Au);
-  node(view::AnyNode,"Qualquer estado","transições globais",0xFF1E3A44u);
+  node(view::AnyNode,"Qualquer estado",state.animatorMachine?"neste grupo e filhos":"nesta camada",0xFF1E3A44u);
+  if(state.animatorMachine) node(view::ExitNode,"Saída","retorno no grupo pai",0xFF22402Au);
+  for(const auto &m:layer.machines) if(m.parent==state.animatorMachine) node(m.id,m.name,"Grupo · "+(m.defaultState?layer.path(m.defaultState):"sem entrada"),theme.color.surface);
   for(const auto &s:layer.states) {
+    if(s.machine!=state.animatorMachine) continue;
     std::string sub;
     if(s.kind==scene::AnimatorMotionKind::Clip) sub=s.motions.empty()||!s.motions[0].clip.valid()?"Sem clipe":"Clipe · "+clipName(s.motions[0].clip);
     else sub=std::string(s.kind==scene::AnimatorMotionKind::Blend1D?"Mistura 1D · ":"Mistura 2D · ")+std::to_string(s.motions.size())+" clipes";
-    if(s.id==layer.defaultState) sub="Padrão · "+sub;
+    if(s.id==layer.defaultOf(state.animatorMachine)) sub="Padrão · "+sub;
     node(s.id,s.name,sub,theme.color.raised);
   }
   list.popClip();
@@ -3300,13 +3361,30 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     const bool motor=state.animatorPicker==0x20000u;
     const bool mask=state.animatorPicker==0x10000u;
     const bool source=state.animatorPicker==0x30000u;
-    builder.label(takeLeft(top,300),controller?"Controller":source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":state.animatorPicker==0x60000u?"Pose de referência":"Clipe",theme.color.text,theme.type.title);
+    const bool move=state.animatorPicker==0x70000u,target=state.animatorPicker==0x80000u,navigate=state.animatorPicker==0x90000u;
+    builder.label(takeLeft(top,300),navigate?"Navegar grupos":move?"Mover para":target?"Destino da transição":controller?"Controller":source?"Fonte do parâmetro":motor?"Corpo / motor":mask?"Máscara da camada":state.animatorPicker==0x60000u?"Pose de referência":"Clipe",theme.color.text,theme.type.title);
     button(takeRight(top,96),"Fechar",(source||mask||motor)?w::MaskClose:w::ClipClose);
     takeTop(box,8);
     auto footer=takeBottom(box,36);
     std::vector<std::pair<std::string,std::string>> rows;  // título, detalhe
     std::vector<u32> codes;
-    if(controller) {
+    if(navigate) {
+      for(u32 i=0;i<route.size();++i) {const auto *m=layer.machine(route[i]);rows.push_back({m?m->name:layer.name,m?layer.path(m->id):"Raiz da camada"});codes.push_back(w::Navigate+i);}
+    } else if(move||target) {
+      const scene::AnimatorTransition *edge=nullptr;
+      for(const auto &t:layer.transitions) if(t.id==state.animatorTransition) edge=&t;
+      const bool entry=target&&edge&&edge->entry;
+      if(move||(!entry&&state.animatorMachine)) {rows.push_back({move?layer.name:"Saída",move?"Raiz da camada":"Transição no grupo pai"});codes.push_back(w::MaskChoice);}
+      for(u32 i=0;i<layer.machines.size();++i) {
+        const auto &m=layer.machines[i];if(move&&layer.contains(state.animatorState,m.id)) continue;
+        if(entry&&m.parent!=edge->machine) continue;
+        rows.push_back({layer.path(m.id),"Grupo"});codes.push_back(w::MaskChoice+i+1);
+      }
+      if(target) for(u32 i=0;i<layer.states.size();++i) {
+        if(entry&&layer.states[i].machine!=edge->machine) continue;
+        rows.push_back({layer.path(layer.states[i].id),"Estado"});codes.push_back(w::MaskChoice+1+static_cast<u32>(layer.machines.size())+i);
+      }
+    } else if(controller) {
       if(state.animatorControllers) for(u32 i=0;i<state.animatorControllers->size()&&i<0xEFF;++i) {
         const auto &asset=(*state.animatorControllers)[i];rows.push_back({asset.name,"Revisão "+std::to_string(asset.revision)});codes.push_back(w::ControllerChoice+i);
       }

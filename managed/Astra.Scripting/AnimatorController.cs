@@ -2,12 +2,18 @@ namespace Astra;
 public enum AnimationLayerBlendMode { Override=0, Additive=1 }
 
 /// <summary>Estado atual de uma camada do Animator (AnimatorStateInfo da Unity).</summary>
-/// <param name="Name">Estado tocando (o de origem durante uma transição).</param>
+/// <param name="Name">Caminho do estado tocando, como Grupo/Subgrupo/Estado (origem durante uma transição).</param>
 /// <param name="NormalizedTime">Tempo do estado em voltas: 1,5 = uma volta e meia.</param>
 /// <param name="IsInTransition">Verdadeiro enquanto mistura com <paramref name="NextName"/>.</param>
 /// <param name="NextName">Estado de destino da transição; vazio fora dela.</param>
 /// <param name="TransitionProgress">0 a 1 da transição.</param>
-public readonly record struct AnimatorStateInfo(string Name, float NormalizedTime, bool IsInTransition, string NextName, float TransitionProgress);
+public readonly record struct AnimatorStateInfo(string Name, float NormalizedTime, bool IsInTransition, string NextName, float TransitionProgress)
+{
+    public string Path => Name;
+    public string NextPath => NextName;
+    public string LeafName => Name[(Name.LastIndexOf('/') + 1)..];
+    public bool IsInMachine(string path) => !string.IsNullOrEmpty(path) && Name.StartsWith(path + "/", StringComparison.Ordinal);
+}
 
 public sealed partial class GameObject
 {
@@ -62,9 +68,9 @@ public readonly struct AnimatorController
     public void SetTrigger(string name) => Parameter(4, name, 1, "disparar gatilho");
     public void ResetTrigger(string name) => Parameter(5, name, 0, "limpar gatilho");
 
-    /// <summary>Troca a camada para o estado na hora, do início.</summary>
+    /// <summary>Troca a camada na hora. Aceita caminho de estado ou de grupo (entra pelo padrão); nome curto deve ser único.</summary>
     public void Play(string state, uint layer = 0) => CrossFade(state, 0, layer);
-    /// <summary>Transição para o estado em <paramref name="seconds"/> segundos.</summary>
+    /// <summary>Transição por caminho em segundos. Durante uma mistura, preserva a pose composta exibida como origem.</summary>
     public void CrossFade(string state, float seconds, uint layer = 0)
     {
         ArgumentException.ThrowIfNullOrEmpty(state);

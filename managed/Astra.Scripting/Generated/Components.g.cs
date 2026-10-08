@@ -1305,6 +1305,9 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         CameraVirtualSaiuDoAr = 21,
         AnimatorEntrouNumEstado = 22,
         AnimatorEventoDoEstado = 23,
+        AnimatorEntrouNumGrupo = 24,
+        AnimatorSaiuDeUmGrupo = 25,
+        AnimatorMisturaInterrompida = 26,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -5882,6 +5885,12 @@ public readonly struct Animator : IComponentFacade<Animator>
     public ComponentSubscription OnStateEntered(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "state_entered", handler);
     /// <summary>Evento do estado. Emitido quando o tempo do estado passa por um evento marcado nele. Payload: Camada: inteiro, Estado: inteiro, Marca: inteiro</summary>
     public ComponentSubscription OnStateEvent(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "state_event", handler);
+    /// <summary>Entrou no grupo. Um grupo tornou-se ativo; da raiz até o grupo interno. Payload: Camada: inteiro, Grupo: inteiro</summary>
+    public ComponentSubscription OnMachineEntered(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "machine_entered", handler);
+    /// <summary>Saiu do grupo. Um grupo deixou de participar da reprodução; do grupo interno à raiz. Payload: Camada: inteiro, Grupo: inteiro</summary>
+    public ComponentSubscription OnMachineExited(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "machine_exited", handler);
+    /// <summary>Mistura interrompida. Pose composta preservada; ID zero indica CrossFade solicitado pela API. Payload: Camada: inteiro, Transição cancelada: inteiro, Novo estado: inteiro</summary>
+    public ComponentSubscription OnTransitionInterrupted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "transition_interrupted", handler);
 }
 
 /// <summary>Campo de gravidade 2D: Gravidade XY em área sobre corpos dinâmicos 2D. Família Física 2D · Campos.</summary>

@@ -1,0 +1,8 @@
+[ok] event_connection_catalog_covers_every_declared_event_and_command
+[ok] event_connection_persists_validates_and_clones_with_remapped_receiver
+[ok] event_connection_timer_and_jolt_sensor_drive_activation_and_declared_methods
+[ok] event_connection_once_fires_a_single_time_per_play_session
+[ok] event_connection_recipes_compose_real_types_in_one_undo_step
+[ok] camera_brain_schema_rules_and_event_connection_identity
+
+6/6 testes passaram

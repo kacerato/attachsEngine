@@ -412,7 +412,8 @@ void ScriptBridge::installExtensions() {
   animatorOperations_.play=[](void *context,u64 id,u32 worldId,u32 generation,u64 instance,u32 layer,const u8 *state,int length,float crossFade)->int {
     auto &s=*static_cast<ScriptBridge*>(context);ComponentHandle handle;
     if(!handleOf(s,id,worldId,generation,instance,handle))return 0;
-    if(!state||length<=0||length>int(scene::Animator::MaximumName)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    constexpr usize maximumPath=(scene::Animator::MaximumDepth+1)*(scene::Animator::MaximumName+1)-1;
+    if(!state||length<=0||length>int(maximumPath)){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
     s.lastStatus_=statusOf(s.animators_->play(*s.world_,handle.object.id,instance,layer,std::string_view(reinterpret_cast<const char*>(state),usize(length)),crossFade));
     return s.lastStatus_==WorldStatus::Ok;
   };
@@ -432,8 +433,8 @@ void ScriptBridge::installExtensions() {
     if(!a||layer>=a->layers.size()){s.lastStatus_=WorldStatus::UnknownResource;return -1;}
     const auto *found=a->layers[layer].state(state);
     if(!found){s.lastStatus_=WorldStatus::UnknownResource;return -1;}
-    const int length=int(found->name.size());
-    if(buffer&&capacity>=length)std::memcpy(buffer,found->name.data(),usize(length));
+    const auto path=a->layers[layer].path(found->id);const int length=int(path.size());
+    if(buffer&&capacity>=length)std::memcpy(buffer,path.data(),usize(length));
     s.lastStatus_=WorldStatus::Ok;return length;
   };
   motorControlOperations_={};

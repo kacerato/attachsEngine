@@ -10,6 +10,15 @@ namespace Aether.Tests;
 public static class AstraBehaviorTests
 {
     [Test]
+    public static void AnimatorHierarchyAcceptance_CompilesAgainstRealSdk()
+    {
+        var root=new DirectoryInfo(AppContext.BaseDirectory);
+        while(root is not null&&!File.Exists(Path.Combine(root.FullName,"tests","fixtures","animator","HierarchyAnimatorProbe.cs")))root=root.Parent;
+        Assert.True(root is not null);
+        using var project=new Project(File.ReadAllText(Path.Combine(root!.FullName,"tests","fixtures","animator","HierarchyAnimatorProbe.cs")));
+        Assert.Equal("acceptance.animator",project.Compile().Types.Single().Id);
+    }
+    [Test]
     public static void U07Example_CompilesWithRealProjectCompiler()
     {
         var root=new DirectoryInfo(AppContext.BaseDirectory);

@@ -341,7 +341,7 @@ int writeVirtualCameraProject(const char *directory) {
 // Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
 // importado com Animator no lugar da Animação legada, mistura 1D por
 // Velocidade, gatilho de Qualquer estado e retorno por tempo de saída.
-int writeAnimatorProject(const char *directory,bool general=false,bool shared=false,bool additive=false) {
+int writeAnimatorProject(const char *directory,bool general=false,bool shared=false,bool additive=false,bool hierarchy=false) {
   namespace fs=std::filesystem;
   const auto fail=[](const std::string &message){std::fprintf(stderr,"Animator export refused: %s\n",message.c_str());return 2;};
   if(!directory||!directory[0]) return fail("provide a new empty output directory");
@@ -350,7 +350,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   std::vector<u8> probe,fox,license;
   const char *modelPath=general?"Fontes/Mechanism.glb":"Fontes/Fox.glb";
   const char *licensePath=general?"Fontes/Mechanism.LICENSE.txt":"Fontes/Fox.LICENSE.txt";
-  if(!readAsset(additive?"tests/fixtures/animator/AdditiveAnimatorProbe.cs":shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
+  if(!readAsset(hierarchy?"tests/fixtures/animator/HierarchyAnimatorProbe.cs":additive?"tests/fixtures/animator/AdditiveAnimatorProbe.cs":shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
      !readAsset(general?"tests/fixtures/animator/Mechanism.LICENSE.txt":"tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
   for(const auto *folder:{"Scripts","scenes",".astra","Fontes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
   if(!editor::EditorImportTransaction::write(root/"Scripts/AnimatorProbe.cs",probe)||
@@ -410,12 +410,35 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
     scene::AnimatorLayer delta;delta.id=a.allocateId();delta.name="Ajuste aditivo";delta.blend=scene::AnimatorLayerBlend::Additive;delta.weight=.5f;delta.referenceClip=clips[1].asset;
     scene::AnimatorState pose;pose.id=a.allocateId();pose.name="Delta de abertura";pose.motions={{clips[2].asset}};delta.defaultState=pose.id;delta.states.push_back(pose);a.layers.push_back(delta);
   }
+  if(hierarchy) {
+    a.parameters.clear();a.motionSource=0;base.states.resize(1);base.transitions.clear();
+    const auto activate=a.allocateId(),advance=a.allocateId(),alternate=a.allocateId(),emergency=a.allocateId();
+    a.parameters={{activate,"Acionar",scene::AnimatorParameterType::Trigger,0},{advance,"Avançar",scene::AnimatorParameterType::Trigger,0},
+      {alternate,"Alternativa",scene::AnimatorParameterType::Bool,0},{emergency,"Emergência",scene::AnimatorParameterType::Trigger,0}};
+    auto &closed=base.states[0];closed.name="Fechada";closed.kind=scene::AnimatorMotionKind::Clip;closed.blendX=0;closed.motions={{clips[0].asset}};closed.events.clear();
+    const auto mechanism=a.allocateId(),cycle=a.allocateId(),phase=a.allocateId(),half=a.allocateId(),open=a.allocateId();
+    base.machines={{mechanism,0,cycle,"Mecanismo",120,-30},{cycle,mechanism,phase,"Ciclo",120,-30},{phase,cycle,half,"Fase",120,-30}};
+    scene::AnimatorState s;s.id=half;s.name="Meia";s.machine=phase;s.motions={{clips[1].asset}};s.x=-50;s.y=-20;base.states.push_back(s);
+    s.id=open;s.name="Aberta";s.motions={{clips[2].asset}};s.x=190;s.y=-20;base.states.push_back(s);
+    const auto edge=[&](u64 from,u64 to,u64 scope,float duration,std::vector<scene::AnimatorCondition> conditions) -> scene::AnimatorTransition& {
+      scene::AnimatorTransition t;t.id=a.allocateId();t.from=from;t.to=to;t.machine=scope;t.duration=duration;t.conditions=std::move(conditions);
+      base.transitions.push_back(std::move(t));return base.transitions.back();
+    };
+    auto &start=edge(locoId,mechanism,0,1,{{activate,scene::AnimatorConditionMode::If,0}});start.interruption=scene::AnimatorInterruption::CurrentThenNext;start.orderedInterruption=false;
+    edge(half,open,phase,1,{{advance,scene::AnimatorConditionMode::If,0}});
+    edge(0,open,phase,0,{{alternate,scene::AnimatorConditionMode::If,0}}).entry=true;
+    edge(0,locoId,0,.4f,{{emergency,scene::AnimatorConditionMode::If,0}});
+    edge(open,0,phase,.3f,{{advance,scene::AnimatorConditionMode::If,0}});
+    edge(phase,0,cycle,0,{});edge(cycle,0,mechanism,0,{});edge(mechanism,locoId,0,0,{});
+    if(!a.valid()) return fail("hierarchy invalid");
+  }
   if(shared) {
     editor::assignEntityName(values,"Mecanismo A");values.transform.position[0]=-70;
-    if(!additive) {a.parameters[0].name="Abertura";a.parameters[0].source=scene::AnimatorParameterSource::Manual;a.parameters[0].response=0;}
+    if(!additive&&!hierarchy) {a.parameters[0].name="Abertura";a.parameters[0].source=scene::AnimatorParameterSource::Manual;a.parameters[0].response=0;}
     a.motionSource=0;
     resources::AnimatorControllerAsset asset;asset.guid=resources::assetGuidFromSeed("shared-mechanism-acceptance-20261008");asset.name="Mecanismos";
     if(additive) asset.guid=resources::assetGuidFromSeed("shared-additive-acceptance-20261008");
+    if(hierarchy) asset.guid=resources::assetGuidFromSeed("shared-hierarchy-acceptance-20261008");
     asset.graph=resources::AnimatorControllerAsset::portableGraph(a);a.controller=asset.guid;
     const auto text=asset.serialize();resources::AssetRecord record;record.guid=asset.guid;record.type=resources::AssetType::AnimatorController;
     record.path="Animação/Mecanismos.aeanimator";record.dependencies={report.source};record.contentHash=Sha256::hex({reinterpret_cast<const u8*>(text.data()),text.size()});
@@ -426,7 +449,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   if(shared) {
     runtime::ObjectCloneMap mapping;const auto second=document.cloneSubtree(owner,document.root(),mapping);if(!second) return fail("clone mechanism");
     auto copy=*document.find(second);editor::assignEntityName(copy,"Mecanismo B");copy.transform.position[0]=70;
-    if(!additive) scene::animator(*copy.components.edit(scene::Animator::descriptor)).clipOverrides={{clips[1].asset,clips[2].asset}};
+    if(!additive&&!hierarchy) scene::animator(*copy.components.edit(scene::Animator::descriptor)).clipOverrides={{clips[1].asset,clips[2].asset}};
     if(!document.applyEntityValues(second,copy)) return fail("instance override");
   }
   const auto cameraId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Câmera");
@@ -437,7 +460,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
   if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
   std::ostringstream descriptor;
-  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(additive?"AnimatorAdditive-20261008":shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(hierarchy?"AnimatorHierarchy-20261008":additive?"AnimatorAdditive-20261008":shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Animator project written: %s\n",root.generic_string().c_str());
@@ -950,6 +973,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-animator-general-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-controller-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-additive-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true,true);
+  if(argc>1&&std::string_view(argv[1])=="write-animator-hierarchy-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true,false,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-project")return writeAnimatorProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-property-tween-project")return writePropertyTweenProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-material-project")return writePhysicsMaterialProject(argc>2?argv[2]:nullptr);
@@ -1872,6 +1896,17 @@ int main(int argc, char **argv) {
       if(i==0) t.conditions={{a.parameters[1].id,scene::AnimatorConditionMode::If,0}};else {t.hasExitTime=true;t.exitTime=1;}a.layers[0].transitions.push_back(t);}
     const auto instance=a.instanceId(),selected=a.layers[0].states[1].id,parameter=a.parameters[0].id;
     const std::string mode=argv[4];
+    if(mode.starts_with("animator-workspace-hierarchy")||mode=="animator-workspace-interruption") {
+      auto &l=a.layers[0];const auto group=a.allocateId(),cycle=a.allocateId(),phase=a.allocateId();
+      l.machines={{group,0,cycle,"Mecanismo",160,-20},{cycle,group,phase,"Ciclo",140,100},{phase,cycle,l.states[1].id,"Abertura",160,-100}};
+      for(usize i=1;i<l.states.size();++i) l.states[i].machine=phase;
+      l.states[1].x=-60;l.states[1].y=-60;l.states[2].x=170;l.states[2].y=80;l.states[3].x=340;l.states[3].y=-60;
+      l.transitions[0].to=group;for(usize i=1;i<l.transitions.size();++i) l.transitions[i].machine=phase;
+      l.transitions[1].interruption=scene::AnimatorInterruption::CurrentThenNext;l.transitions[1].orderedInterruption=false;
+      state.animatorMachine=phase;state.animatorPan[0]=-100;state.animatorZoom=.9f;
+      if(mode=="animator-workspace-hierarchy-root") {state.animatorMachine=0;state.animatorState=group;}
+      if(mode=="animator-workspace-interruption") {state.animatorDrawer=2;state.animatorTransition=l.transitions[1].id;}
+    }
     if(mode=="animator-workspace-additive") {a.layers[0].blend=scene::AnimatorLayerBlend::Additive;a.layers[0].weight=.5f;}
     if(mode=="animator-workspace-properties"||mode=="animator-workspace-events") {
       a.parameters[0].value=.4f;a.parameters.push_back({a.allocateId(),"Inclinação",scene::AnimatorParameterType::Float,.2f});
@@ -1883,6 +1918,8 @@ int main(int argc, char **argv) {
     state.animatorOpen=true;state.animatorEntity=id;state.animatorInstance=instance;
     state.animatorPan[0]=-100;state.animatorZoom=.85f;
     state.animatorDrawer=mode=="animator-workspace-parameters"?1:mode=="animator-workspace-additive"||mode=="animator-workspace-properties"||mode=="animator-workspace-events"||mode=="animator-workspace-binding"||mode=="animator-workspace-source"?2:0;
+    if(mode=="animator-workspace-interruption") state.animatorDrawer=2;
+    if(mode=="animator-workspace-hierarchy-root") state.animatorDrawer=2;
     if(mode=="animator-workspace-properties"||mode=="animator-workspace-events") state.animatorState=selected;
     if(mode=="animator-workspace-events") state.animatorDetailsScroll=1300;
     if(mode=="animator-workspace-binding"||mode=="animator-workspace-source") state.animatorParameter=parameter;

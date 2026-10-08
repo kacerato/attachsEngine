@@ -1,0 +1,16 @@
+--------- beginning of main
+10-08 15:02:21.964 19883 23866 I Astra.Script: 8: HIERARCHY shared source PASS
+10-08 15:02:22.358 19883 23866 I Astra.Script: 8: HIERARCHY root default PASS
+10-08 15:02:22.767 19883 23866 I Astra.Script: 8: HIERARCHY three-level group entry PASS
+10-08 15:02:22.767 19883 23866 I Astra.Script: 8: HIERARCHY independent instance PASS
+10-08 15:02:23.156 19883 23866 I Astra.Script: 8: HIERARCHY conditional entry PASS
+10-08 15:02:23.559 19883 23866 I Astra.Script: 8: HIERARCHY crossfade path PASS
+10-08 15:02:23.962 19883 23866 I Astra.Script: 8: HIERARCHY first interruption PASS
+10-08 15:02:25.180 19883 23866 I Astra.Script: 8: HIERARCHY repeated pose continuity max-step=1.34 PASS
+10-08 15:02:25.180 19883 23866 I Astra.Script: 8: HIERARCHY fade leaves groups PASS
+10-08 15:02:25.514 19883 23866 I Astra.Script: 8: HIERARCHY authored group transition PASS
+10-08 15:02:25.763 19883 23866 I Astra.Script: 8: HIERARCHY next source interruption PASS
+10-08 15:02:26.963 19883 23866 I Astra.Script: 8: HIERARCHY interrupted destination PASS
+10-08 15:02:27.663 19883 23866 I Astra.Script: 8: HIERARCHY three-level Exit route PASS
+10-08 15:02:28.363 19883 23866 I Astra.Script: 8: HIERARCHY global Any State PASS
+10-08 15:02:28.363 19883 23866 I Astra.Script: 8: HIERARCHY isolation and restoration PASS

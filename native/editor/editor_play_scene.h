@@ -197,6 +197,7 @@ public:
     animatorGraphs_.setEvents(&events_);
     animatorGraphs_.setPhysics(&physics_);
     animatorGraphs_.setLibrary(&resources);
+    animatorGraphs_.setComposer(&animator_);
     scripts_.setEvents(&events_);
     debugLines_.reset();
     scripts_.setGameView(&gameView_);

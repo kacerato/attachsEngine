@@ -454,9 +454,15 @@ public static unsafe class NativeBehaviorRuntime
             string Name(ulong s)
             {
                 if(s==0)return "";
-                var buffer=new byte[64];int length;
+                Span<byte> buffer=stackalloc byte[128];int length;
                 fixed(byte* b=buffer){length=family->StateName(access.Context,id,world,generation,instance,layer,s,b,buffer.Length);}
-                return length<0?"":System.Text.Encoding.UTF8.GetString(buffer,0,Math.Min(length,buffer.Length));
+                if(length<0)return "";
+                if(length>buffer.Length) {
+                    if(length>1087)throw new WorldException(WorldStatus.InvalidArgument,"caminho do Animator excede a profundidade suportada");
+                    buffer=new byte[length];
+                    fixed(byte* b=buffer){if(family->StateName(access.Context,id,world,generation,instance,layer,s,b,buffer.Length)!=length)return "";}
+                }
+                return System.Text.Encoding.UTF8.GetString(buffer[..length]);
             }
             state=new(Name(raw.State),raw.NormalizedTime,(raw.Flags&1)!=0,(raw.Flags&1)!=0?Name(raw.Next):"",raw.Progress);
             return true;

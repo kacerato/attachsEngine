@@ -40,13 +40,15 @@ public:
   enum class Status : u32 {Ok=0,UnknownComponent=1,UnknownParameter=2,WrongType=3,UnknownState=4,InvalidArgument=5,UnknownLayer=6,BoundParameter=7,MissingController=8};
   enum class ParameterOperation : u32 {Get=0,SetFloat=1,SetInt=2,SetBool=3,SetTrigger=4,ResetTrigger=5};
   struct LayerState {
-    u64 layer=0,current=0,next=0;
+    u64 layer=0,current=0,next=0,transition=0;
     float time=0,nextTime=0,elapsed=0,duration=0;
     bool transitioning=false,entered=false,nextEntered=false,currentFresh=true;
     bool weightOverride=false,blendOverride=false,referenceOverride=false,timeOverride=false;
     float runtimeWeight=1,runtimeReferenceTime=0;
     scene::AnimatorLayerBlend runtimeBlend=scene::AnimatorLayerBlend::Override;
     resources::AssetGuid runtimeReferenceClip{};
+    std::shared_ptr<const SceneAnimator::LayerPose> frozen;
+    std::vector<u64> activeMachines;
   };
   struct Instance {
     ObjectId owner=kInvalidObject;u64 instance=0;
@@ -65,6 +67,7 @@ public:
   WorldStatus layerControl(GameWorld &,ObjectId,u64,u32 layer,u32 operation,float value,
                            resources::AssetGuid reference,LayerSettings &out);
   void setLibrary(const AnimationLibrary *library) noexcept {library_=library;}
+  void setComposer(const SceneAnimator *composer) noexcept {composer_=composer;}
 
   void setEvents(ComponentEventQueue *events) noexcept {events_=events;}
   void setPhysics(const ScenePhysics *physics) noexcept {physics_=physics;}
@@ -74,7 +77,7 @@ public:
   bool resolve(const scene::Animator &value,scene::Animator &out,std::string &diagnostic) const {
     return resources::resolveAnimatorController(value,controllers_,out,diagnostic);
   }
-  void reset() {instances_.clear();library_=nullptr;}
+  void reset() {instances_.clear();library_=nullptr;composer_=nullptr;}
   // Avalia todos os Animators e acrescenta as amostras para o SceneAnimator.
   bool advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,std::vector<SceneAnimator::ExternalSample> &samples);
 
@@ -87,11 +90,13 @@ private:
   Instance *ensure(GameWorld &world,ObjectId owner,u64 instance,const scene::Animator **component);
   void sync(Instance &runtime,const scene::Animator &authored);
   void emit(GameWorld &world,const Instance &runtime,std::string_view event,std::initializer_list<scene::ComponentOperationValue> values);
+  void syncMachines(GameWorld &,const Instance &,const scene::AnimatorLayer &,LayerState &,u32);
   std::vector<Instance> instances_;
   ComponentEventQueue *events_=nullptr;
   const ScenePhysics *physics_=nullptr;
   std::vector<resources::AnimatorControllerAsset> controllers_;
   const AnimationLibrary *library_=nullptr;
+  const SceneAnimator *composer_=nullptr;
 };
 
 } // namespace ae::runtime

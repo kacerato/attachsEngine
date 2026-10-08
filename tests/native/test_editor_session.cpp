@@ -41,6 +41,56 @@ using namespace ae::ui;
 
 namespace {UiPoint locateWidget(EditorSession &session,u32 widget);}
 
+AE_TEST(animator_parallel_links_and_self_links_remain_individually_selectable) {
+  namespace geometry=animator_view;
+  scene::Animator graph;scene::initializeAnimator(graph);auto &layer=graph.layers[0];const auto source=layer.states[0].id;
+  layer.states[0].x=-220;layer.states[0].y=0;
+  scene::AnimatorMachine group;group.id=graph.allocateId();group.name="Group";group.x=150;group.y=0;layer.machines.push_back(group);
+  for(int i=0;i<3;++i) {
+    scene::AnimatorState leaf;leaf.id=graph.allocateId();leaf.machine=group.id;leaf.name="Leaf"+std::to_string(i);layer.states.push_back(leaf);
+    scene::AnimatorTransition edge;edge.id=graph.allocateId();edge.from=source;edge.to=leaf.id;layer.transitions.push_back(edge);
+  }
+  for(int i=0;i<2;++i) {
+    scene::AnimatorTransition edge;edge.id=graph.allocateId();edge.from=edge.to=source;edge.canTransitionToSelf=true;layer.transitions.push_back(edge);
+  }
+  geometry::View view{{0,0,1100,600},0,0,1,0};
+  for(const auto &edge:layer.transitions) {
+    std::array<UiPoint,5> points;const auto count=geometry::transitionPath(view,layer,edge,points);
+    AE_EXPECT_TRUE(count>=3,"collapsed destinations and self links have separate routes");
+    const UiPoint hit=count==5?UiPoint{(points[2].x+points[3].x)*.5f,points[2].y}:points[1];
+    AE_EXPECT_TRUE(geometry::hitNode(view,layer,hit)==0&&geometry::hitTransition(view,layer,hit)==edge.id,"every drawn route selects its own transition");
+  }
+}
+
+AE_TEST(animator_hierarchy_editor_routes_subtree_duplicate_history_and_reopen) {
+  EditorSession session;UiFont font;UiIconAtlas icons;
+  const auto read=[](const char *path){std::ifstream f(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(f),{});};
+  AE_EXPECT_TRUE(font.load(read("assets/astra-visual/ui/astra-ui-font.aeuf"))&&icons.load(read("assets/astra-visual/ui/astra-ui-icons.aeui")),"production UI assets");
+  session.initialize(&font,&icons);session.setSurface({0,0,1100,600},{});session.importMap({}, {}, false);
+  auto &doc=session.document();const auto object=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Universal mechanism");
+  auto values=*doc.find(object);auto &a=scene::animator(*values.components.add(scene::Animator::descriptor));const auto instance=a.instanceId();doc.applyEntityValues(object,values);
+  auto &view=const_cast<EditorScreenState&>(session.screen());view.animatorOpen=true;view.animatorEntity=object;view.animatorInstance=instance;session.update();
+  const auto tap=[&](u32 code){const auto point=locateWidget(session,animator_widget::id(code));AE_EXPECT_TRUE(point.x>=0,"real hierarchy action reachable");
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();};
+  const auto authored=[&]()->const scene::Animator& {return scene::animator(*doc.find(object)->components.findInstance(instance));};
+  tap(animator_widget::AddMachine);const auto first=view.animatorState;
+  AE_EXPECT_TRUE(first&&authored().layers[0].machine(first)&&session.history().undoDepth()==1,"create a group and real entry in one history operation");
+  tap(animator_widget::EnterMachine);AE_EXPECT_TRUE(view.animatorMachine==first,"enter selected group");
+  view.animatorPan[0]=73;view.animatorPan[1]=29;view.animatorZoom=.65f;
+  tap(animator_widget::AddMachine);const auto second=view.animatorState;tap(animator_widget::EnterMachine);
+  tap(animator_widget::AddMachine);const auto third=view.animatorState;tap(animator_widget::EnterMachine);
+  AE_EXPECT_TRUE(view.animatorMachine==third&&authored().valid(),"three levels are editable");
+  const auto depth=session.history().undoDepth();tap(animator_widget::Navigate+1);
+  AE_EXPECT_TRUE(view.animatorMachine==first&&view.animatorPan[0]==73&&view.animatorPan[1]==29&&view.animatorZoom==.65f&&session.history().undoDepth()==depth,"breadcrumb restores view without touching authoring history");
+  tap(animator_widget::Navigate);view.animatorState=first;view.animatorDrawer=2;session.update();tap(animator_widget::Duplicate);
+  const auto copy=view.animatorState;
+  AE_EXPECT_TRUE(copy!=first&&authored().layers[0].machines.size()==6&&authored().layers[0].states.size()==7&&authored().valid(),"duplicate remaps every descendant and default ID");
+  tap(animator_widget::Delete);AE_EXPECT_TRUE(authored().layers[0].machines.size()==3&&session.history().undo(doc),"recursive deletion is reversible");session.update();
+  AE_EXPECT_TRUE(authored().layers[0].machine(copy)&&authored().layers[0].machine(second)&&authored().layers[0].machine(third),"undo restores both independent trees");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened)&&
+    scene::animator(*reopened.find(object)->components.findInstance(instance)).layers==authored().layers,"nested authoring survives scene reopen");
+}
+
 AE_TEST(animator_additive_editor_creation_history_and_archive) {
   EditorSession session;UiFont font;UiIconAtlas icons;
   const auto read=[](const char *path){std::ifstream f(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(f),{});};

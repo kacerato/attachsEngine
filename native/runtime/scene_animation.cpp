@@ -70,6 +70,7 @@ void SceneAnimator::begin(SceneGraph &graph, const AnimationLibrary &library) {
 }
 
 void SceneAnimator::reset() {
+  layerPoses_.clear();
   graph_ = nullptr;
   library_ = nullptr;
   players_.clear();
@@ -333,11 +334,17 @@ bool SceneAnimator::clipAt(ObjectId owner, u64 instance, u32 index, resources::A
   return true;
 }
 
+std::shared_ptr<const SceneAnimator::LayerPose> SceneAnimator::layerPose(ObjectId owner,u64 instance,u32 layer) const {
+  for(const auto &entry:layerPoses_) if(entry.owner==owner&&entry.instance==instance&&entry.layer==layer) return entry.pose;
+  return {};
+}
+
 bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &writable) {
   playing_ = posed_ = 0;
   compositionDiagnostic_.clear();
   if (!graph_ || !library_ || !std::isfinite(delta) || delta < 0) return graph_ == nullptr;
   auto &graph = *graph_;
+  layerPoses_.clear();
 
   // Componentes vivos; um jogador cujo componente sumiu sai junto.
   std::vector<ObjectId> ids;
@@ -362,6 +369,8 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     std::vector<float> value;
     bool additive=false;
     std::vector<float> reference;
+    bool relative=false;
+    ObjectId sourceOwner=kInvalidObject;u64 sourceInstance=0;float coverage=0;
   };
   struct Property {
     ObjectId object;
@@ -369,16 +378,19 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     std::vector<Contribution> list;
   };
   std::vector<Property> properties;
+  const ExternalSample *contributionSource=nullptr;
   std::unordered_map<u64, usize> propertyIndex;
   const auto contribute = [&](ObjectId object, AnimationPath path, u32 layer, float weight, std::vector<float> value,
-                              bool additive=false,std::vector<float> reference=std::vector<float>{}) {
+                              bool additive=false,std::vector<float> reference=std::vector<float>{},bool relative=false) {
     const u64 key = (u64(object) << 2) | static_cast<u64>(path);
     auto found = propertyIndex.find(key);
     if (found == propertyIndex.end()) {
       found = propertyIndex.emplace(key, properties.size()).first;
       properties.push_back({object, path, {}});
     }
-    properties[found->second].list.push_back({layer, weight, std::move(value),additive,std::move(reference)});
+    const auto *source=contributionSource;
+    properties[found->second].list.push_back({layer,source?weight*source->layerWeight:weight,std::move(value),additive,std::move(reference),relative,
+      source?source->controllerOwner:kInvalidObject,source?source->instance:0,source?weight:0});
   };
 
   for (const auto &[owner, instance] : live) {
@@ -456,6 +468,22 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   // Amostras do Animator: mesmo caminho de mistura, com máscara por subárvore.
   for (const auto &sample : external_) {
     if (sample.weight < 0 || !std::isfinite(sample.weight) || !graph.exists(sample.owner)) continue;
+    contributionSource=&sample;
+    if(sample.frozen) {
+      for(const auto &channel:sample.frozen->channels) {
+        if(!graph.exists(channel.target)||(channel.path!=AnimationPath::Weights&&writable&&!writable(channel.target))) continue;
+        bool allowed=sample.mask==kInvalidObject;
+        for(ObjectId id=channel.target;!allowed&&id!=kInvalidObject;) {
+          if(id==sample.mask) {allowed=true;break;}
+          const auto *entity=graph.find(id);if(!entity||id==graph.root()) break;id=entity->parent;
+        }
+        if(!allowed) continue;
+        if(bindingIndex[(u64(sample.owner)<<32)|sample.layer].insert((u64(channel.target)<<2)|static_cast<u64>(channel.path)).second)
+          nextBindings.push_back({sample.owner,sample.layer,channel.target,channel.path,channel.value.size()});
+        contribute(channel.target,channel.path,sample.layer,sample.weight*channel.coverage,channel.value,channel.additive,{},channel.additive);
+      }
+      continue;
+    }
     AnimationClipView view;
     if (!library_->findClip(sample.clip, view)) continue;
     std::unordered_map<u64,std::vector<float>> references;
@@ -516,6 +544,7 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       contribute(target,channel.path,sample.layer,sample.weight,std::move(value),sample.additive,std::move(ref));
     }
   }
+  contributionSource=nullptr;
   for(const auto &binding:externalBindings_) {
     if(!graph.exists(binding.target)||!activeLayers.contains((u64(binding.owner)<<32)|binding.layer)) continue;
     if(propertyIndex.contains((u64(binding.target)<<2)|static_cast<u64>(binding.path))) continue;
@@ -562,6 +591,27 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       break;
     }
     const usize width = restValue.size();
+    // Cache this layer's own composition, including sparse-channel coverage,
+    // before higher layers or the rest pose affect it. Frozen deltas stay deltas.
+    for(const auto &seed:property.list) if(seed.sourceOwner!=kInvalidObject&&seed.coverage>0) {
+      auto found=std::find_if(layerPoses_.begin(),layerPoses_.end(),[&](const CapturedLayer &e){return e.owner==seed.sourceOwner&&e.instance==seed.sourceInstance&&e.layer==seed.layer;});
+      if(found==layerPoses_.end()) {layerPoses_.push_back({seed.sourceOwner,seed.sourceInstance,seed.layer,std::make_shared<LayerPose>()});found=std::prev(layerPoses_.end());}
+      auto &channels=found->pose->channels;
+      if(std::any_of(channels.begin(),channels.end(),[&](const PoseChannel &c){return c.target==object&&c.path==property.path&&c.additive==seed.additive;})) continue;
+      std::vector<float> mixed(width,0),first;float sum=0;
+      for(const auto &c:property.list) if(c.sourceOwner==seed.sourceOwner&&c.sourceInstance==seed.sourceInstance&&c.layer==seed.layer&&c.additive==seed.additive&&c.coverage>0) {
+        std::vector<float> v=c.value;
+        if(v.size()!=width) continue;
+        if(c.additive&&!c.relative&&!resources::relativeAnimationPose(property.path,v,c.reference.empty()?restValue:c.reference,v)) continue;
+        if(property.path==AnimationPath::Rotation) {
+          if(first.empty()) first=v;
+          float dot=0;for(usize k=0;k<width;++k) dot+=first[k]*v[k];if(dot<0) for(float &f:v) f=-f;
+        }
+        for(usize k=0;k<width;++k) mixed[k]+=v[k]*c.coverage;
+        sum+=c.coverage;
+      }
+      if(sum>0) {for(float &f:mixed) f/=sum;channels.push_back({object,property.path,std::move(mixed),sum,seed.additive});}
+    }
     std::vector<float> result(width, 0.0f);
     const bool rotation = property.path == AnimationPath::Rotation;
     const float *reference = nullptr;
@@ -587,7 +637,8 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       for(const auto &c:property.list) if(c.layer==layer&&c.additive) {
         if(c.weight<=0) continue;
         std::vector<float> relative;
-        if(!resources::relativeAnimationPose(property.path,c.value,c.reference.empty()?restValue:c.reference,relative)) {
+        if(c.relative) relative=c.value;
+        else if(!resources::relativeAnimationPose(property.path,c.value,c.reference.empty()?restValue:c.reference,relative)) {
           compositionDiagnostic_="Referência inválida (escala zero ou quaternion): objeto "+std::to_string(object);continue;
         }
         if(rotation&&additiveSum>0) {float dot=0;for(usize i=0;i<width;++i) dot+=delta[i]*relative[i];if(dot<0) for(float &v:relative) v=-v;}

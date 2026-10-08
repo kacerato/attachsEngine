@@ -18,7 +18,11 @@ parser.add_argument("output", type=Path)
 parser.add_argument("--frames", type=Path, required=True)
 parser.add_argument("--ffmpeg", required=True)
 parser.add_argument("--ffprobe", required=True)
+parser.add_argument("--size", nargs=2, type=int, default=(1920, 886), metavar=("WIDTH", "HEIGHT"))
+parser.add_argument("--roi", nargs=4, type=int, default=(680, 230, 1400, 740), metavar=("LEFT", "TOP", "RIGHT", "BOTTOM"))
 args = parser.parse_args()
+if not (0 <= args.roi[0] < args.roi[2] <= args.size[0] and 0 <= args.roi[1] < args.roi[3] <= args.size[1]):
+    parser.error("ROI must be non-empty and inside the declared video size")
 args.output.mkdir(parents=True, exist_ok=True)
 args.frames.mkdir(parents=True, exist_ok=True)
 probe = json.loads(subprocess.check_output([
@@ -31,7 +35,7 @@ paths = sorted(args.frames.glob("*.png"))
 assert len(paths) == len(pts) > 0, (len(paths), len(pts))
 rows = []
 sheets = []
-roi = (680, 230, 1400, 740)
+roi = tuple(args.roi)
 for start in range(0, len(paths), 30):
     sheet = Image.new("RGB", (2000, 1410), (16, 18, 22))
     draw = ImageDraw.Draw(sheet)
@@ -39,7 +43,7 @@ for start in range(0, len(paths), 30):
         i = start + j
         with Image.open(path) as source:
             im = source.convert("RGB")
-        assert im.size == (1920, 886), im.size
+        assert im.size == tuple(args.size), im.size
         crop = im.crop(roi)
         mask = Image.new("L", crop.size)
         mask.putdata([255 if g > r * 1.35 and g > b * 1.15 and g > 70 else 0
@@ -51,7 +55,8 @@ for start in range(0, len(paths), 30):
                      "panel_height": bounds[3] - bounds[1] if bounds else 0})
         x, y = (j % 5) * 400, (j // 5) * 235
         draw.text((x + 5, y + 2), f"{i:04d} | {pts[i]:.3f}s", fill="white")
-        sheet.paste(crop.resize((300, 212)), (x + 45, y + 20))
+        crop.thumbnail((390, 212))
+        sheet.paste(crop, (x + (400 - crop.width) // 2, y + 20))
     out = args.output / f"sheet-{len(sheets):02d}.png"
     sheet.save(out)
     sheets.append(out.name)
