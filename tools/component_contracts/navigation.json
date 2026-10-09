@@ -1,0 +1,91 @@
+{
+  "format": 1,
+  "family": "navigation",
+  "table": "navigationSchemas",
+  "entries": [
+    {
+      "type": "NavSurface",
+      "name": "Superfície de navegação",
+      "description": "Assa a malha de navegação dos colisores estáticos e a carrega no Play",
+      "consumer": "editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play",
+      "invalidates": {
+        "cpp": "Invalidate::Policy"
+      },
+      "subfamily": "Malha",
+      "icon": "navigation/surface",
+      "searchTerms": "NavMesh NavMeshSurface NavigationRegion3D Bake Malha Pathfinding Recast",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshSurface.html",
+      "apiName": "NavSurface"
+    },
+    {
+      "type": "NavAgent",
+      "name": "Agente de navegação",
+      "description": "Anda pela malha até um destino, desviando de outros agentes",
+      "conflicts": {
+        "cpp": "navAgentConflicts"
+      },
+      "consumer": "runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Movimento",
+      "icon": "navigation/agent",
+      "searchTerms": "NavMeshAgent NavigationAgent3D SetDestination Pathfinding IA Inimigo Seguir",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshAgent.html",
+      "apiName": "NavAgent"
+    },
+    {
+      "type": "NavObstacle",
+      "name": "Obstáculo de navegação",
+      "description": "Recorta a malha onde o objeto está, em tempo de execução",
+      "conflicts": {
+        "cpp": "navObstacleConflicts"
+      },
+      "consumer": "runtime/scene_navigation.cpp → recorte no TileCache",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Malha",
+      "icon": "navigation/obstacle",
+      "searchTerms": "NavMeshObstacle NavigationObstacle3D Carve Recorte Porta Bloqueio",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshObstacle.html",
+      "apiName": "NavObstacle"
+    },
+    {
+      "type": "NavLink",
+      "name": "Link de navegação",
+      "description": "Liga dois pontos da malha: salto, escada, vão ou porta",
+      "consumer": "runtime/scene_navigation.cpp → conexão fora da malha",
+      "invalidates": {
+        "cpp": "Invalidate::Transform"
+      },
+      "subfamily": "Malha",
+      "icon": "navigation/link",
+      "searchTerms": "NavMeshLink OffMeshLink NavigationLink3D Salto Escada Ponte",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshLink.html",
+      "apiName": "NavLink"
+    },
+    {
+      "type": "NavModifier",
+      "name": "Modificador de navegação",
+      "description": "Muda a área dos colisores deste objeto no bake ou os ignora",
+      "consumer": "editor/editor_navigation.cpp → área por triângulo no bake",
+      "invalidates": {
+        "cpp": "Invalidate::Policy"
+      },
+      "subfamily": "Malha",
+      "icon": "navigation/modifier",
+      "searchTerms": "NavMeshModifier Area Área Custo Ignorar Bake",
+      "reference": "https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshModifier.html",
+      "apiName": "NavModifier"
+    }
+  ],
+  "defaults": {
+    "family": {
+      "cpp": "ComponentFamily::Navigation"
+    },
+    "structuralInPlay": {
+      "cpp": "PlayMutability::SafePoint"
+    }
+  }
+}

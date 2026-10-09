@@ -167,6 +167,28 @@ ICONS: dict[str, str] = {
     "physics/sensor-2d": f'''<rect x="20" y="20" width="88" height="88" rx="8" {stroke(5, extra='stroke-dasharray="10 8"')}/>
 <circle cx="64" cy="64" r="14" fill="{ACCENT}"/>
 <path d="M8 64h30M28 54l10 10-10 10" {stroke(5, ACCENT)}/>''',
+    "navigation/surface": f'''<path d="M64 26L120 58L64 90L8 58Z" {stroke(5)}/>
+<path d="M36 42L92 74M92 42L36 74M64 26v64" {stroke(3)}/>
+<path d="M22 58C40 56 46 44 64 44S88 60 106 58" {stroke(6, ACCENT)}/>
+<circle cx="22" cy="58" r="7" fill="{ACCENT}"/><circle cx="106" cy="58" r="7" fill="{ACCENT}"/>
+<path d="M46 102h36M54 114h20" {stroke(5)}/>''',
+    "navigation/agent": f'''<rect x="20" y="20" width="32" height="66" rx="16" {stroke(5)}/>
+<path d="M36 40l8 8-8 8" {stroke(4)}/>
+<path d="M36 104C62 104 70 78 98 78" {stroke(5, ACCENT, 'stroke-dasharray="8 7"')}/>
+<path d="M98 82V26l20 9-20 9" {stroke(5, ACCENT)}/>
+<path d="M24 104h24" {stroke(5)}/>''',
+    "navigation/obstacle": f'''<path d="M64 56L120 86L64 116L8 86Z" {stroke(5)}/>
+<path d="M64 70L92 85L64 100L36 85Z" {stroke(4, ACCENT, 'stroke-dasharray="7 6"')}/>
+<rect x="46" y="14" width="36" height="58" rx="5" {stroke(5, ACCENT)}/>
+<path d="M46 34h36M46 52h36" {stroke(3, ACCENT)}/>''',
+    "navigation/link": f'''<path d="M6 96h40M82 96h40" {stroke(6)}/>
+<path d="M26 92C32 34 96 34 102 86" {stroke(5, ACCENT, 'stroke-dasharray="9 7"')}/>
+<path d="M92 80l10 10 9-12" {stroke(5, ACCENT)}/>
+<circle cx="26" cy="96" r="7" fill="{ACCENT}"/><circle cx="102" cy="96" r="7" fill="{ACCENT}"/>''',
+    "navigation/modifier": f'''<path d="M64 22L120 52L64 82L8 52Z" {stroke(5)}/>
+<path d="M64 22L120 52L64 82Z" fill="{ACCENT}" fill-opacity=".28"/>
+<path d="M80 31v42M96 40v24M64 22v60" {stroke(3, ACCENT)}/>
+<path d="M22 94h36l10 11-10 11H22Z" {stroke(5)}/><circle cx="36" cy="105" r="4" fill="{ACCENT}"/>''',
     "physics/body-2d": f'''<rect x="24" y="22" width="74" height="74" {stroke(5)}/>
 <path d="M60 94v23M49 107l11 10 11-10M98 58h20M109 48l9 10-9 10" {stroke(5, ACCENT)}/>
 <path d="M38 38h13M38 38v13M73 80h12M85 68v12" {stroke(4)}/>''',

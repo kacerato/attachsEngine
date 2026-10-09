@@ -10,4 +10,5 @@ inline constexpr auto componentSchemas = detail::joinComponentSchemas(
     physics2dSchemas,
     audioSchemas,
     pathSchemas,
-    pathFollowSchemas);
+    pathFollowSchemas,
+    navigationSchemas);

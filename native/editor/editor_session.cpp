@@ -3573,6 +3573,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
+  if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
   if(state_.animatorOpen&&!state_.numericField&&!state_.editingAnimatorName) return handleAnimatorEditor(event,routing);
   if(state_.curveField && !state_.numericField) return handleCurveEditor(event,routing);
   if(state_.codeRecoveryPending) {
@@ -9770,6 +9771,9 @@ void EditorSession::update() {
   state_.audioRuntime=playInspecting()&&playScene_.active()?&playScene_.audio():nullptr;
   state_.animatorRuntime=playInspecting()&&playScene_.active()?&playScene_.animatorGraphs():nullptr;
   state_.animatorControllers=&animatorControllers_;
+  pumpNavigationBake();refreshNavigationView();
+  state_.navigationView=&navigationView_;
+  state_.navigationRuntime=playInspecting()&&playScene_.active()?&playScene_.navigation():nullptr;
   state_.animatorControllerDiagnostic.clear();state_.animatorResolved=nullptr;
   if(state_.animatorOpen) {
     state_.animatorResolved=openAnimator();

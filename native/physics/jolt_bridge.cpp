@@ -1240,6 +1240,41 @@ ae::i32 AetherPhysics_SetBodyGameplayLayerV1(AetherPhysicsWorld *world, AetherBo
   return 1;
 }
 
+ae::i32 AetherPhysics_GetBodyTrianglesV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                       float *vertices, ae::u64 *parts, ae::i32 capacity) {
+  if (world == nullptr || body == AetherBodyHandle_Invalid || capacity < 0 || (capacity > 0 && vertices == nullptr)) return 0;
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(), JPH::BodyID(body));
+  if (!lock.Succeeded()) return 0;
+  const auto &locked = lock.GetBody();
+  struct Leaves final : JPH::TransformedShapeCollector {
+    std::vector<JPH::TransformedShape> shapes;
+    void AddHit(const JPH::TransformedShape &shape) override { shapes.push_back(shape); }
+  } leaves;
+  locked.GetTransformedShape().CollectTransformedShapes(locked.GetWorldSpaceBounds(), leaves);
+  ae::i32 total = 0;
+  constexpr int Batch = JPH::Shape::cGetTrianglesMinTrianglesRequested * 4;
+  JPH::Float3 batch[Batch * 3];
+  for (const auto &leaf : leaves.shapes) {
+    const ae::u64 part = leaf.mShape->GetUserData();
+    JPH::Shape::GetTrianglesContext context;
+    leaf.GetTrianglesStart(context, JPH::AABox::sBiggest(), JPH::RVec3::sZero());
+    for (;;) {
+      const int count = leaf.GetTrianglesNext(context, Batch, batch);
+      if (count <= 0) break;
+      for (int t = 0; t < count; ++t, ++total) {
+        if (total >= capacity) continue;
+        for (int v = 0; v < 3; ++v) {
+          vertices[total * 9 + v * 3] = batch[t * 3 + v].x;
+          vertices[total * 9 + v * 3 + 1] = batch[t * 3 + v].y;
+          vertices[total * 9 + v * 3 + 2] = batch[t * 3 + v].z;
+        }
+        if (parts) parts[total] = part;
+      }
+    }
+  }
+  return total;
+}
+
 ae::i32 AetherPhysics_GetSubShapeUserDataV1(AetherPhysicsWorld *world, AetherBodyHandle body,
                                             ae::u32 subShapeId, ae::u64 *outUserData) {
   if (world == nullptr || outUserData == nullptr || body == AetherBodyHandle_Invalid) return 0;
@@ -2156,6 +2191,12 @@ void AetherPhysics_SetCharacterVelocity(AetherPhysicsWorld *world, AetherCharact
   CharacterSlot *slot = ResolveCharacterSlot(world, handle);
   if (slot == nullptr) return;
   slot->character->SetLinearVelocity(ToJolt(velocity));
+}
+
+void AetherPhysics_SetCharacterPositionV1(AetherPhysicsWorld *world, AetherCharacterHandle handle, AetherVec3 position) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) return;
+  slot->character->SetPosition(JPH::RVec3(position.x, position.y, position.z));
 }
 
 AetherVec3 AetherPhysics_GetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle) {

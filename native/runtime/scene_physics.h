@@ -146,6 +146,16 @@ public:
   bool rebuild(GameWorld &world, const CollisionGeometrySource *geometry);
   bool setCharacterMove(ObjectId id, float right, float forward, float yaw);
   bool setDynamicMotorMove(ObjectId id,float right,float forward,float yaw);
+  // Navegação: põe a base do Personagem em `position` (mundo) e publica a pose.
+  bool teleportCharacter(ObjectId id,const float position[3],GameWorld &world);
+  bool hasCharacter(ObjectId id) const;
+  // Guinada da pose publicada do Personagem (o motor não gira a cápsula).
+  bool setCharacterYaw(ObjectId id,float yawRadians);
+  bool hasDynamicMotor(ObjectId id) const;
+  bool hasMovingBody(ObjectId id) const;
+  // Fonte do bake de navegação: triângulos em mundo dos corpos estáticos, com o
+  // objeto do colisor que gerou cada um e a camada de jogo do corpo.
+  bool collectStaticTriangles(std::vector<float> &vertices,std::vector<ObjectId> &objects,std::vector<u32> &layers) const;
   bool setDynamicMotorScriptMove(ObjectId id,float right,float forward,float yaw);
   bool jumpDynamicMotor(ObjectId id,MotorControlSource source=MotorControlSource::Script);
   bool submitMotorControl(ObjectId,MotorControlSource,float right,float forward,float yaw,bool jump=false);

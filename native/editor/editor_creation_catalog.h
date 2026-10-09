@@ -217,14 +217,23 @@ inline constexpr resources::CurvePoint3D pathPoints[]{
   {0,{0,0,3},{-2,0,0},{2,0,0}},
   {0,{3,0,0},{0,0,2},{}}
 };
+// Navegação (bloco J): superfície para assar, agente que persegue a seleção,
+// obstáculo com caixa visual e link entre duas bordas.
+inline constexpr std::string_view navSurface="astra.navigation.surface",navAgent="astra.navigation.agent",
+  navObstacle="astra.navigation.obstacle",navLink="astra.navigation.link";
+inline const CreationComponent navigationSurface[]{{navSurface}};
+inline const CreationComponent navigationAgent[]{{character},{navAgent}};
+inline const CreationComponent navigationObstacle[]{{navObstacle}};
+inline const CreationValue navigationLinkValues[]{{navLink,"start_z",-1.5f},{navLink,"end_z",1.5f}};
+inline const CreationComponent navigationLink[]{{navLink,navigationLinkValues}};
 } // namespace recipe
 
-inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D"};
+inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação"};
 // Ícones das categorias no trilho da folha de criação (nomes do catálogo do atlas).
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
-  "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d"};
+  "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,86> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,90> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -346,6 +355,16 @@ inline const std::array<EditorCreationEntry,86> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::reverbBus,CreationPose::ViewTarget,0,{},{},"Reverb Send Return AudioEffectReverb SFX Reverb"},
   {"audio.ducking_bus",EditorWidget::None,6,"Bus com ducking","Abaixa sozinho quando o bus escolhido (falas, avisos) soa.",ui::UiIcon::AudioCompressor,
     runtime::ObjectKind::Folder,recipe::duckingBus,CreationPose::ViewTarget,0,recipe::audioCompressor,"sidechain","Ducking Duck Volume Sidechain Compressor Música"},
+  {"navigation.surface",EditorWidget::None,8,"Superfície de navegação","Assa a malha dos colisores estáticos da cena; Assar na Inspeção.",ui::UiIcon::NavigationSurface,
+    runtime::ObjectKind::Folder,recipe::navigationSurface,CreationPose::ViewTarget,0,{},{},"NavMesh NavMeshSurface NavigationRegion3D Bake Pathfinding Malha"},
+  {"navigation.agent",EditorWidget::None,8,"Agente que persegue","Personagem com Agente; persegue a seleção (vazio: destino por script).",ui::UiIcon::NavigationAgent,
+    runtime::ObjectKind::Folder,recipe::navigationAgent,CreationPose::ViewTarget,0,recipe::navAgent,"target","NavMeshAgent NavigationAgent3D Inimigo IA Perseguir SetDestination",
+    scene::PrimitiveType::Count,false,{},recipe::navAgent,scene::PrimitiveType::Cylinder},
+  {"navigation.obstacle",EditorWidget::None,8,"Obstáculo de navegação","Recorta a malha no Play; ponha numa porta ou mova para abrir caminho.",ui::UiIcon::NavigationObstacle,
+    runtime::ObjectKind::Folder,recipe::navigationObstacle,CreationPose::ViewTarget,.5f,{},{},"NavMeshObstacle Carve Porta Bloqueio Recorte",
+    scene::PrimitiveType::Count,false,{},recipe::navObstacle},
+  {"navigation.link",EditorWidget::None,8,"Link de navegação","Liga duas bordas da malha (vão, salto, escada).",ui::UiIcon::NavigationLink,
+    runtime::ObjectKind::Folder,recipe::navigationLink,CreationPose::ViewTarget,0,{},{},"NavMeshLink OffMeshLink NavigationLink3D Salto Ponte"},
   {"gameplay.animator",EditorWidget::None,5,"Animator","Máquina de estados que anima o modelo escolhido; abra o grafo na Inspeção.",ui::UiIcon::ComponentAnimator,
     runtime::ObjectKind::Folder,recipe::animatorRecipe,CreationPose::ViewTarget,0,recipe::animatorType,"target","Animator AnimatorController AnimationTree Máquina de estados Blend Tree"},
   {"audio.snapshot",EditorWidget::None,6,"Snapshot de mixer","Valores de ganho e efeitos levados com transição por script ou evento.",ui::UiIcon::AudioSnapshot,

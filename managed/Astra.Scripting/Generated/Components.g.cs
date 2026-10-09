@@ -1308,6 +1308,9 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         AnimatorEntrouNumGrupo = 24,
         AnimatorSaiuDeUmGrupo = 25,
         AnimatorMisturaInterrompida = 26,
+        AgenteChegou = 27,
+        AgenteCaminhoFalhou = 28,
+        AgenteEntrouNumLink = 29,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1361,6 +1364,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         CameraVirtualEncaixar = 27,
         SnapshotTransicionar = 28,
         SnapshotAplicar = 29,
+        AgenteParar = 30,
+        AgenteRetomar = 31,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -8026,4 +8031,562 @@ public readonly struct PathFollow : IComponentFacade<PathFollow>
     /// <summary>Em movimento. Verdadeiro enquanto avança</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public bool Playing() => Component.Invoke("playing").AsBoolean();
+}
+
+/// <summary>Superfície de navegação: Assa a malha de navegação dos colisores estáticos e a carrega no Play. Família Navegação · Malha.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshSurface.html</remarks>
+public readonly struct NavSurface : IComponentFacade<NavSurface>
+{
+    public static string TypeId => "astra.navigation.surface";
+    public static NavSurface Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public NavSurface(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Centro do volume</summary>
+    public Vector3 VolumeCenter
+    {
+        get => new(Component.GetFloat("volume_center_x"), Component.GetFloat("volume_center_y"), Component.GetFloat("volume_center_z"));
+        set => Component.SetVector3("volume_center", value);
+    }
+    /// <summary>Tamanho do volume</summary>
+    public Vector3 VolumeSize
+    {
+        get => new(Component.GetFloat("volume_size_x"), Component.GetFloat("volume_size_y"), Component.GetFloat("volume_size_z"));
+        set => Component.SetVector3("volume_size", value);
+    }
+    /// <summary>Raio do agente (m). Distância mantida das paredes; a malha recua por este raio</summary>
+    /// <remarks>Faixa válida: 0 a 50.</remarks>
+    public float AgentRadius
+    {
+        get => Component.GetFloat("agent_radius");
+        set => Component.SetFloat("agent_radius", value);
+    }
+    /// <summary>Altura do agente (m). Espaço livre mínimo acima do chão</summary>
+    /// <remarks>Faixa válida: 0.05 a 100.</remarks>
+    public float AgentHeight
+    {
+        get => Component.GetFloat("agent_height");
+        set => Component.SetFloat("agent_height", value);
+    }
+    /// <summary>Altura do degrau (m). Desnível que o agente sobe sem link</summary>
+    /// <remarks>Faixa válida: 0 a 50.</remarks>
+    public float AgentMaxClimb
+    {
+        get => Component.GetFloat("agent_max_climb");
+        set => Component.SetFloat("agent_max_climb", value);
+    }
+    /// <summary>Inclinação máxima (°). Rampas mais íngremes não entram na malha</summary>
+    /// <remarks>Faixa válida: 0 a 89.</remarks>
+    public float AgentMaxSlope
+    {
+        get => Component.GetFloat("agent_max_slope");
+        set => Component.SetFloat("agent_max_slope", value);
+    }
+    /// <summary>Tamanho da célula (m). Menor detalhe horizontal; menor é mais preciso e mais lento</summary>
+    /// <remarks>Faixa válida: 0.01 a 10.</remarks>
+    public float CellSize
+    {
+        get => Component.GetFloat("cell_size");
+        set => Component.SetFloat("cell_size", value);
+    }
+    /// <summary>Altura da célula (m). Menor detalhe vertical</summary>
+    /// <remarks>Faixa válida: 0.01 a 10.</remarks>
+    public float CellHeight
+    {
+        get => Component.GetFloat("cell_height");
+        set => Component.SetFloat("cell_height", value);
+    }
+    /// <summary>Área mínima de região (m²). Ilhas menores são descartadas</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float MinRegionArea
+    {
+        get => Component.GetFloat("min_region_area");
+        set => Component.SetFloat("min_region_area", value);
+    }
+    /// <summary>Tile (células). Lado do tile; obstáculos reconstroem só os tiles que tocam</summary>
+    /// <remarks>Faixa válida: 16 a 128.</remarks>
+    public float TileSize
+    {
+        get => Component.GetFloat("tile_size");
+        set => Component.SetFloat("tile_size", value);
+    }
+    /// <summary>Aresta máxima (m). Zero não limita o comprimento das bordas</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float EdgeMaxLength
+    {
+        get => Component.GetFloat("edge_max_length");
+        set => Component.SetFloat("edge_max_length", value);
+    }
+    /// <summary>Erro de borda (células). Quanto o contorno pode se afastar das paredes</summary>
+    /// <remarks>Faixa válida: 0.1 a 10.</remarks>
+    public float EdgeMaxError
+    {
+        get => Component.GetFloat("edge_max_error");
+        set => Component.SetFloat("edge_max_error", value);
+    }
+    /// <summary>Amostra de detalhe (células). Menor que 1 desliga a malha de detalhe de altura</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float DetailSampleDistance
+    {
+        get => Component.GetFloat("detail_sample_distance");
+        set => Component.SetFloat("detail_sample_distance", value);
+    }
+    /// <summary>Erro de detalhe (células)</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float DetailSampleMaxError
+    {
+        get => Component.GetFloat("detail_sample_max_error");
+        set => Component.SetFloat("detail_sample_max_error", value);
+    }
+    /// <summary>Ativa. Desligada não carrega a malha no Play; o bake é preservado</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum CollectOption : uint
+    {
+        TodaACena = 0,
+        EsteObjetoEFilhos = 1,
+        Volume = 2,
+    }
+    /// <summary>Coletar. Colisores estáticos que entram no bake</summary>
+    public CollectOption Collect
+    {
+        get => (CollectOption)Component.GetEnum("collect");
+        set => Component.SetEnum("collect", (uint)value);
+    }
+    public enum LayerOption : uint
+    {
+        Todas = 0,
+        Camada0 = 1,
+        Camada1 = 2,
+        Camada2 = 3,
+        Camada3 = 4,
+        Camada4 = 5,
+        Camada5 = 6,
+        Camada6 = 7,
+        Camada7 = 8,
+        Camada8 = 9,
+        Camada9 = 10,
+        Camada10 = 11,
+        Camada11 = 12,
+        Camada12 = 13,
+        Camada13 = 14,
+        Camada14 = 15,
+        Camada15 = 16,
+        Camada16 = 17,
+        Camada17 = 18,
+        Camada18 = 19,
+        Camada19 = 20,
+        Camada20 = 21,
+        Camada21 = 22,
+        Camada22 = 23,
+        Camada23 = 24,
+        Camada24 = 25,
+        Camada25 = 26,
+        Camada26 = 27,
+        Camada27 = 28,
+        Camada28 = 29,
+        Camada29 = 30,
+        Camada30 = 31,
+        Camada31 = 32,
+    }
+    /// <summary>Camada dos colisores. Todas ou só uma camada física do projeto</summary>
+    public LayerOption Layer
+    {
+        get => (LayerOption)Component.GetEnum("layer");
+        set => Component.SetEnum("layer", (uint)value);
+    }
+    /// <summary>Malha assada. Recurso do projeto por slot</summary>
+    public AssetGuid GetData(uint slot = 0) => Component.GetResource("data", slot);
+    public void SetData(AssetGuid value, uint slot = 0) => Component.SetResource("data", value, slot);
+    /// <summary>Pronta. Verdadeiro quando a malha desta superfície está carregada no Play</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool IsReady() => Component.Invoke("is_ready").AsBoolean();
+    /// <summary>Polígonos. Polígonos da malha carregada, com recortes de obstáculos</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long PolygonCount() => Component.Invoke("polygon_count").AsInteger();
+}
+
+/// <summary>Agente de navegação: Anda pela malha até um destino, desviando de outros agentes. Família Navegação · Movimento.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshAgent.html</remarks>
+public readonly struct NavAgent : IComponentFacade<NavAgent>
+{
+    public static string TypeId => "astra.navigation.agent";
+    public static NavAgent Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public NavAgent(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Velocidade (m/s)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float Speed
+    {
+        get => Component.GetFloat("speed");
+        set => Component.SetFloat("speed", value);
+    }
+    /// <summary>Aceleração (m/s²)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float Acceleration
+    {
+        get => Component.GetFloat("acceleration");
+        set => Component.SetFloat("acceleration", value);
+    }
+    /// <summary>Giro (°/s). Velocidade de giro para a direção do movimento</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float AngularSpeed
+    {
+        get => Component.GetFloat("angular_speed");
+        set => Component.SetFloat("angular_speed", value);
+    }
+    /// <summary>Distância de parada (m). Chega quando o caminho restante fica abaixo disto</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float StoppingDistance
+    {
+        get => Component.GetFloat("stopping_distance");
+        set => Component.SetFloat("stopping_distance", value);
+    }
+    /// <summary>Raio (m). Usado no desvio entre agentes</summary>
+    /// <remarks>Faixa válida: 0.05 a 50.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Altura (m)</summary>
+    /// <remarks>Faixa válida: 0.05 a 100.</remarks>
+    public float Height
+    {
+        get => Component.GetFloat("height");
+        set => Component.SetFloat("height", value);
+    }
+    /// <summary>Deslocamento da base (m). Altura do pivô acima da malha quando o agente move o próprio objeto</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float BaseOffset
+    {
+        get => Component.GetFloat("base_offset");
+        set => Component.SetFloat("base_offset", value);
+    }
+    /// <summary>Custo do salto (×)</summary>
+    /// <remarks>Faixa válida: 1 a 1000.</remarks>
+    public float JumpCost
+    {
+        get => Component.GetFloat("jump_cost");
+        set => Component.SetFloat("jump_cost", value);
+    }
+    /// <summary>Custo da área difícil (×). Multiplica o comprimento percorrido nessa área</summary>
+    /// <remarks>Faixa válida: 1 a 1000.</remarks>
+    public float DifficultCost
+    {
+        get => Component.GetFloat("difficult_cost");
+        set => Component.SetFloat("difficult_cost", value);
+    }
+    /// <summary>Refazer caminho a (m). O alvo precisa se mover isto para o caminho ser refeito</summary>
+    /// <remarks>Faixa válida: 0.05 a 100.</remarks>
+    public float RepathDistance
+    {
+        get => Component.GetFloat("repath_distance");
+        set => Component.SetFloat("repath_distance", value);
+    }
+    /// <summary>Ativo. Desligado sai da multidão e para de mover o objeto</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Frear ao chegar. Desacelera perto do destino; desligado mantém a velocidade até a distância de parada</summary>
+    public bool AutoBraking
+    {
+        get => Component.GetBool("auto_braking");
+        set => Component.SetBool("auto_braking", value);
+    }
+    /// <summary>Girar para o movimento. Gira o objeto em Y para a direção da velocidade</summary>
+    public bool UpdateRotation
+    {
+        get => Component.GetBool("update_rotation");
+        set => Component.SetBool("update_rotation", value);
+    }
+    /// <summary>Usar links e áreas de salto</summary>
+    public bool UseJump
+    {
+        get => Component.GetBool("use_jump");
+        set => Component.SetBool("use_jump", value);
+    }
+    /// <summary>Atravessar área difícil</summary>
+    public bool UseDifficult
+    {
+        get => Component.GetBool("use_difficult");
+        set => Component.SetBool("use_difficult", value);
+    }
+    public enum AvoidanceOption : uint
+    {
+        Nenhum = 0,
+        Baixo = 1,
+        Medio = 2,
+        Bom = 3,
+        Alto = 4,
+    }
+    /// <summary>Desvio de agentes. Qualidade da amostragem de velocidades contra outros agentes</summary>
+    public AvoidanceOption Avoidance
+    {
+        get => (AvoidanceOption)Component.GetEnum("avoidance");
+        set => Component.SetEnum("avoidance", (uint)value);
+    }
+    /// <summary>Superfície. Malha usada pelo agente; vazio escolhe a superfície que contém o objeto</summary>
+    public ObjectReference Surface
+    {
+        get => Component.GetReference("surface");
+        set => Component.SetReference("surface", value);
+    }
+    /// <summary>Seguir objeto. Persegue o objeto sem script; SetDestination substitui o alvo</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+    /// <summary>Ir para. Calcula o caminho e começa a andar; falso quando o ponto está longe da malha</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool SetDestination(Vector3 point) => Component.Invoke("set_destination", ComponentValue.Vector(point)).AsBoolean();
+    /// <summary>Parar. Para no lugar e guarda o destino para Retomar</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Stop() => Component.Invoke("stop");
+    /// <summary>Retomar. Volta ao último destino depois de Parar</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Resume() => Component.Invoke("resume");
+    /// <summary>Teleportar. Move o objeto e o agente para o ponto mais próximo da malha</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Warp(Vector3 point) => Component.Invoke("warp", ComponentValue.Vector(point)).AsBoolean();
+    /// <summary>Distância restante. Comprimento do caminho até o destino; infinito sem caminho</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double RemainingDistance() => Component.Invoke("remaining_distance").AsNumber();
+    /// <summary>Estado do caminho. 0 sem caminho, 1 completo, 2 parcial, 3 inválido</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long PathStatus() => Component.Invoke("path_status").AsInteger();
+    /// <summary>Tem caminho. Verdadeiro enquanto há um destino válido</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool HasPath() => Component.Invoke("has_path").AsBoolean();
+    /// <summary>Em link. Verdadeiro durante a travessia de um Link</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool IsOnLink() => Component.Invoke("is_on_link").AsBoolean();
+    /// <summary>Velocidade. Velocidade pedida pela multidão neste quadro</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public Vector3 Velocity() => Component.Invoke("velocity").AsVector3();
+    /// <summary>Chegou. Emitido uma vez quando o caminho restante fica abaixo da distância de parada</summary>
+    public ComponentSubscription OnDestinationReached(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "destination_reached", handler);
+    /// <summary>Caminho falhou. Emitido quando o destino não tem caminho</summary>
+    public ComponentSubscription OnPathFailed(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "path_failed", handler);
+    /// <summary>Entrou no link. Emitido quando o agente começa a atravessar um Link</summary>
+    public ComponentSubscription OnLinkEntered(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "link_entered", handler);
+}
+
+/// <summary>Obstáculo de navegação: Recorta a malha onde o objeto está, em tempo de execução. Família Navegação · Malha.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshObstacle.html</remarks>
+public readonly struct NavObstacle : IComponentFacade<NavObstacle>
+{
+    public static string TypeId => "astra.navigation.obstacle";
+    public static NavObstacle Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public NavObstacle(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Centro</summary>
+    public Vector3 Center
+    {
+        get => new(Component.GetFloat("center_x"), Component.GetFloat("center_y"), Component.GetFloat("center_z"));
+        set => Component.SetVector3("center", value);
+    }
+    /// <summary>Tamanho</summary>
+    public Vector3 Size
+    {
+        get => new(Component.GetFloat("size_x"), Component.GetFloat("size_y"), Component.GetFloat("size_z"));
+        set => Component.SetVector3("size", value);
+    }
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.01 a 500.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Altura (m)</summary>
+    /// <remarks>Faixa válida: 0.01 a 1000.</remarks>
+    public float Height
+    {
+        get => Component.GetFloat("height");
+        set => Component.SetFloat("height", value);
+    }
+    /// <summary>Limiar de movimento (m). Deslocamento que conta como movimento</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float MoveThreshold
+    {
+        get => Component.GetFloat("move_threshold");
+        set => Component.SetFloat("move_threshold", value);
+    }
+    /// <summary>Tempo até parado (s). Parado por este tempo volta a recortar</summary>
+    /// <remarks>Faixa válida: 0 a 60.</remarks>
+    public float StationaryTime
+    {
+        get => Component.GetFloat("stationary_time");
+        set => Component.SetFloat("stationary_time", value);
+    }
+    /// <summary>Ativo. Desligado devolve a área recortada à malha</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Recortar só parado. Em movimento o recorte sai; ao parar ele volta (menos reconstruções)</summary>
+    public bool CarveOnlyStationary
+    {
+        get => Component.GetBool("carve_only_stationary");
+        set => Component.SetBool("carve_only_stationary", value);
+    }
+    public enum ShapeOption : uint
+    {
+        Caixa = 0,
+        Cilindro = 1,
+    }
+    /// <summary>Forma. Caixa gira com o objeto em Y; cilindro fica de pé</summary>
+    public ShapeOption Shape
+    {
+        get => (ShapeOption)Component.GetEnum("shape");
+        set => Component.SetEnum("shape", (uint)value);
+    }
+    /// <summary>Recortando. Verdadeiro quando o recorte deste obstáculo está aplicado na malha</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool IsCarving() => Component.Invoke("is_carving").AsBoolean();
+}
+
+/// <summary>Link de navegação: Liga dois pontos da malha: salto, escada, vão ou porta. Família Navegação · Malha.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshLink.html</remarks>
+public readonly struct NavLink : IComponentFacade<NavLink>
+{
+    public static string TypeId => "astra.navigation.link";
+    public static NavLink Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public NavLink(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Início</summary>
+    public Vector3 Start
+    {
+        get => new(Component.GetFloat("start_x"), Component.GetFloat("start_y"), Component.GetFloat("start_z"));
+        set => Component.SetVector3("start", value);
+    }
+    /// <summary>Fim</summary>
+    public Vector3 End
+    {
+        get => new(Component.GetFloat("end_x"), Component.GetFloat("end_y"), Component.GetFloat("end_z"));
+        set => Component.SetVector3("end", value);
+    }
+    /// <summary>Raio de conexão (m). Distância da malha em que cada ponta se conecta</summary>
+    /// <remarks>Faixa válida: 0.05 a 50.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Ativo. Desligado remove a conexão da malha</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Nos dois sentidos. Desligado só vai do início para o fim</summary>
+    public bool Bidirectional
+    {
+        get => Component.GetBool("bidirectional");
+        set => Component.SetBool("bidirectional", value);
+    }
+    public enum AreaOption : uint
+    {
+        Caminhavel = 0,
+        Salto = 2,
+        Dificil = 3,
+    }
+    /// <summary>Área. Salto exige que o agente use links e áreas de salto</summary>
+    public AreaOption Area
+    {
+        get => (AreaOption)Component.GetEnum("area");
+        set => Component.SetEnum("area", (uint)value);
+    }
+}
+
+/// <summary>Modificador de navegação: Muda a área dos colisores deste objeto no bake ou os ignora. Família Navegação · Malha.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshModifier.html</remarks>
+public readonly struct NavModifier : IComponentFacade<NavModifier>
+{
+    public static string TypeId => "astra.navigation.modifier";
+    public static NavModifier Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public NavModifier(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Aplicar aos filhos. Filhos sem modificador próprio herdam este</summary>
+    public bool ApplyToChildren
+    {
+        get => Component.GetBool("apply_to_children");
+        set => Component.SetBool("apply_to_children", value);
+    }
+    public enum ModeOption : uint
+    {
+        AlterarArea = 0,
+        IgnorarNoBake = 1,
+    }
+    /// <summary>Modo. Ignorar tira os colisores do bake</summary>
+    public ModeOption Mode
+    {
+        get => (ModeOption)Component.GetEnum("mode");
+        set => Component.SetEnum("mode", (uint)value);
+    }
+    public enum AreaOption : uint
+    {
+        Caminhavel = 0,
+        NaoCaminhavel = 1,
+        Salto = 2,
+        Dificil = 3,
+    }
+    /// <summary>Área. Área do chão destes colisores na malha</summary>
+    public AreaOption Area
+    {
+        get => (AreaOption)Component.GetEnum("area");
+        set => Component.SetEnum("area", (uint)value);
+    }
 }

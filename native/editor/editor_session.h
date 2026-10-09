@@ -1056,6 +1056,7 @@ public:
     loadEnvironmentProfiles();
     loadPhysicsMaterials();
     loadAnimatorControllers();
+    loadNavMeshes();
     return true;
   }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
@@ -1132,6 +1133,7 @@ public:
       playScene_.configureGui(gui_.document());
       playScene_.setActiveScene(activeSceneName());
       playScene_.animatorGraphs().setControllers(animatorControllers_);
+      playScene_.navigation().setMeshes(navMeshes_);
       if(!playScene_.start(document_,mapScene_)) {
         state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
         reportProblem(EditorConsoleSeverity::Error,state_.status);
@@ -1195,6 +1197,7 @@ public:
       playScene_.configureGui(gui_.document());
       playScene_.setActiveScene(nextName);
       playScene_.animatorGraphs().setControllers(animatorControllers_);
+      playScene_.navigation().setMeshes(navMeshes_);
       if(!playScene_.start(next,mapScene_)) {
         state_.status="Troca de cena falhou: "+nextName+(playScene_.scriptDiagnostics().empty()?"":" · "+playScene_.scriptDiagnostics());
         reportProblem(EditorConsoleSeverity::Error,state_.status);
@@ -1925,6 +1928,26 @@ private:
   mutable scene::Animator animatorResolved_;
   std::optional<scene::Animator> animatorResourceDrag_;
   std::vector<resources::AnimatorControllerAsset> animatorControllers_;
+  // Navegação (editor_navigation.cpp): recursos .navmesh do projeto, bake em
+  // segundo plano e a vista do Inspector/viewport.
+  struct NavigationBakeJob;
+  void loadNavMeshes();
+  bool startNavigationBake(EditorEntityId surface,u64 instance);
+  void pumpNavigationBake();
+  bool clearNavigationBake(EditorEntityId surface,u64 instance);
+  void refreshNavigationView();
+  bool handleNavigationWidget(u32 widget);
+  std::vector<navigation::NavMeshData> navMeshes_;
+  std::shared_ptr<NavigationBakeJob> navigationBake_;
+  EditorNavigationView navigationView_;
+  u64 navigationViewRevision_=~u64{0};
+  resources::AssetGuid navigationOverlayGuid_{};
+public:
+  const std::vector<navigation::NavMeshData> &navMeshes() const noexcept {return navMeshes_;}
+  bool bakeNavigation(EditorEntityId surface,u64 instance) {return startNavigationBake(surface,instance);}
+  bool navigationBaking() const noexcept;
+  void waitNavigationBake();
+private:
   void openAnimatorEditor();
   void frameAnimator();
   void navigateAnimator(u64 machine);

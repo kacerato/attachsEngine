@@ -628,6 +628,13 @@ ae::u32 AetherPhysics_GetBodyGameplayLayerV1(const AetherPhysicsWorld *world, Ae
 /// folha: é ela que o Jolt devolve, não o dado da entrada do composto), então é por aqui que
 /// um chamador volta de "acertei o corpo X, subforma S" para "acertei o colisor
 /// que eu mesmo montei na posição N". Devolve 1 em sucesso.
+/// Triângulos em mundo da forma do corpo (fonte do bake de navegação). Escreve até
+/// `capacity` triângulos (9 floats cada) e, em `parts`, a parte do composto de cada
+/// um (o mesmo índice de AetherPhysics_GetSubShapeUserDataV1). Devolve o total, que
+/// pode exceder `capacity`: repita com um buffer maior. Esferas e cápsulas saem
+/// tesseladas pelo próprio Jolt.
+ae::i32 AetherPhysics_GetBodyTrianglesV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                       float *vertices, ae::u64 *parts, ae::i32 capacity);
 ae::i32 AetherPhysics_GetSubShapeUserDataV1(AetherPhysicsWorld *world, AetherBodyHandle body,
                                             ae::u32 subShapeId, ae::u64 *outUserData);
 
@@ -882,6 +889,8 @@ void AetherPhysics_DestroyCharacter(AetherPhysicsWorld *world, AetherCharacterHa
 /// manualmente — mesma responsabilidade que o comentário do Jolt atribui ao chamador.
 void AetherPhysics_SetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle, AetherVec3 velocity);
 AetherVec3 AetherPhysics_GetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+/// Teletransporta a base da cápsula (navegação: Warp e travessia de link). Velocidade preservada.
+void AetherPhysics_SetCharacterPositionV1(AetherPhysicsWorld *world, AetherCharacterHandle handle, AetherVec3 position);
 
 /// Avança a simulação do personagem em deltaTime, com suporte a degraus (JPH::CharacterVirtual::
 /// ExtendedUpdate — WalkStairs/StickToFloor, usando os defaults do Jolt para os campos de

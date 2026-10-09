@@ -110,6 +110,24 @@ else()
   target_link_libraries(aether_audio_backend PUBLIC ${CMAKE_DL_LIBS} m)
 endif()
 
+# --- Recast/Detour 1.6.0 (bloco J, navegação) ------------------------------
+# Bake de navmesh (Recast), consulta (Detour), multidão (DetourCrowd) e obstáculos
+# com recorte por tile (DetourTileCache). Vendorizado sem alterações; origem e licença em
+# third_party/recastnavigation/VERSION.txt. Entra antes das flags estritas como o Jolt,
+# mas sem RTTI e sem exceções como o resto do binário. O adaptador é navigation/.
+set(AETHER_RECAST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/recastnavigation)
+file(GLOB AETHER_RECAST_SOURCES CONFIGURE_DEPENDS
+  ${AETHER_RECAST_DIR}/Recast/Source/*.cpp
+  ${AETHER_RECAST_DIR}/Detour/Source/*.cpp
+  ${AETHER_RECAST_DIR}/DetourCrowd/Source/*.cpp
+  ${AETHER_RECAST_DIR}/DetourTileCache/Source/*.cpp)
+add_library(aether_recast STATIC ${AETHER_RECAST_SOURCES})
+target_include_directories(aether_recast SYSTEM PUBLIC
+  ${AETHER_RECAST_DIR}/Recast/Include ${AETHER_RECAST_DIR}/Detour/Include
+  ${AETHER_RECAST_DIR}/DetourCrowd/Include ${AETHER_RECAST_DIR}/DetourTileCache/Include)
+target_compile_options(aether_recast PRIVATE -w $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti> $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>)
+set_target_properties(aether_recast PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # --- SQLite 3.53.4 (item 1.4.5: índice de dependências) --------------------
 # Mesmo motivo de entrar antes das flags estritas da engine: warnings de código de terceiros
 # (aqui, C puro dentro de um build majoritariamente C++) não podem quebrar nossos alvos.
@@ -501,9 +519,11 @@ add_library(aether_runtime STATIC
   runtime/scene_animator_graph.cpp
   runtime/scene_gui.cpp
   runtime/scene_gui_input.cpp
+  navigation/navigation_mesh.cpp
+  runtime/scene_navigation.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend aether_ui)
+target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics box2d aether_audio_backend aether_ui aether_recast)
 # A ponte de scripts instancia o esquema tipado inteiro; no build de depuração do
 # MinGW ela passa do limite de seções do COFF. Só o formato do objeto muda.
 if(MINGW)
@@ -539,6 +559,7 @@ add_library(aether_editor STATIC
   editor/editor_audio_assets.cpp
   editor/editor_animator.cpp
   editor/editor_animator_resources.cpp
+  editor/editor_navigation.cpp
   editor/editor_path.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
@@ -782,6 +803,8 @@ if(NOT ANDROID)
     ../tests/native/test_joint_break.cpp
     ../tests/native/test_physics_queries.cpp
     ../tests/native/test_virtual_cameras.cpp
+    ../tests/native/test_navigation_mesh.cpp
+    ../tests/native/test_navigation_scene.cpp
     ../tests/native/test_audio_mixer.cpp
     ../tests/native/test_animator.cpp
     ../tests/native/test_body_mass.cpp

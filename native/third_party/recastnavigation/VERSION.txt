@@ -1,0 +1,8 @@
+recastnavigation 1.6.0
+Origem: https://github.com/recastnavigation/recastnavigation/tree/v1.6.0
+Commit: 6dc1667f580357e8a2154c28b7867bea7e8ad3a7 (2023-05-21)
+Licença: zlib (License.txt, sem alterações)
+Módulos copiados sem modificação: Recast, Detour, DetourCrowd, DetourTileCache
+(Include/ e Source/). Fora: DebugUtils, RecastDemo, Tests, Docs.
+Aprovação da dependência: usuário, 09/10/2026 (bloco J — Navegação).
+Consumidor: native/navigation/ (bake, recurso .navmesh, consulta e multidão).

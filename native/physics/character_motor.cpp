@@ -147,6 +147,12 @@ bool CharacterMotor::runtimeState(RuntimeState &out) const {
   out.groundState=AetherPhysics_GetCharacterGroundState(world_,character_);out.groundVelocity=AetherPhysics_GetCharacterGroundVelocity(world_,character_);out.groundNormal=AetherPhysics_GetCharacterGroundNormal(world_,character_);return true;
 }
 
+bool CharacterMotor::teleportEye(AetherVec3 eye){
+  if(!isReady()||!std::isfinite(eye.x)||!std::isfinite(eye.y)||!std::isfinite(eye.z)) return false;
+  AetherPhysics_SetCharacterPositionV1(world_,character_,{eye.x,eye.y-settings_.eyeHeight,eye.z});
+  platformCarry_={};return true;
+}
+
 AetherVec3 CharacterMotor::eyePosition() const{
   if(!isReady()) return {};
   AetherVec3 base{};

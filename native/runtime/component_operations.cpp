@@ -7,6 +7,7 @@
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_virtual_cameras.h"
+#include "runtime/scene_navigation.h"
 #include "scene/audio_mixer.h"
 #include "runtime/scene_animator_graph.h"
 #include "scene/animator.h"
@@ -26,6 +27,10 @@ namespace ae::runtime {
 namespace {
 using Value=scene::ComponentOperationValue;
 using Arguments=std::span<const Value>;
+WorldStatus navigationOperation(const ComponentOperationServices &s,ComponentHandle h,std::string_view method,Arguments args,Value &result) {
+  if(!s.navigation||!s.world) return WorldStatus::NotRunning;
+  return s.navigation->command(*s.world,h,method,args,result);
+}
 WorldStatus animatorLayerOperation(const ComponentOperationServices &s,ComponentHandle h,Arguments args,Value &result,u32 operation,u32 field=0) {
   if(!s.animators||!s.world) return WorldStatus::NotRunning;
   if(args.empty()||args[0].integer<0||args[0].integer>std::numeric_limits<u32>::max()) return WorldStatus::InvalidArgument;
@@ -97,7 +102,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,64> bindings{{
+const std::array<ComponentMethodBinding,76> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -171,6 +176,18 @@ const std::array<ComponentMethodBinding,64> bindings{{
   {&scene::Animator::descriptor,"get_layer_reference_high",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,4);}},
   {&scene::Animator::descriptor,"get_layer_reference_low",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,0,5);}},
   {&scene::Animator::descriptor,"reset_layer_overrides",[](const auto &s,ComponentHandle h,Arguments a,Value &r){return animatorLayerOperation(s,h,a,r,5);}},
+  {&scene::NavSurface::descriptor,"is_ready",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"is_ready",a,r);}},
+  {&scene::NavSurface::descriptor,"polygon_count",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"polygon_count",a,r);}},
+  {&scene::NavObstacle::descriptor,"is_carving",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"is_carving",a,r);}},
+  {&scene::NavAgent::descriptor,"set_destination",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"set_destination",a,r);}},
+  {&scene::NavAgent::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"stop",a,r);}},
+  {&scene::NavAgent::descriptor,"resume",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"resume",a,r);}},
+  {&scene::NavAgent::descriptor,"warp",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"warp",a,r);}},
+  {&scene::NavAgent::descriptor,"remaining_distance",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"remaining_distance",a,r);}},
+  {&scene::NavAgent::descriptor,"path_status",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"path_status",a,r);}},
+  {&scene::NavAgent::descriptor,"has_path",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"has_path",a,r);}},
+  {&scene::NavAgent::descriptor,"is_on_link",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"is_on_link",a,r);}},
+  {&scene::NavAgent::descriptor,"velocity",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return navigationOperation(s,h,"velocity",a,r);}},
   {&scene::AudioSnapshot::descriptor,"transition_to",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.audio) return WorldStatus::NotRunning;
     return s.audio->transitionSnapshot(*s.world,h,a[0].number);}},

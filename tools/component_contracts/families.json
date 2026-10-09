@@ -10,6 +10,7 @@
     "physics2d",
     "audio",
     "path",
-    "path_follow"
+    "path_follow",
+    "navigation"
   ]
 }

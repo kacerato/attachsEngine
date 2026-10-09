@@ -1817,6 +1817,36 @@
       "name": "sensor-2d",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "navigation/surface": {
+      "category": "navigation",
+      "name": "surface",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "navigation/agent": {
+      "category": "navigation",
+      "name": "agent",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "navigation/obstacle": {
+      "category": "navigation",
+      "name": "obstacle",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "navigation/link": {
+      "category": "navigation",
+      "name": "link",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "navigation/modifier": {
+      "category": "navigation",
+      "name": "modifier",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

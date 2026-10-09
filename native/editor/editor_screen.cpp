@@ -13,6 +13,7 @@
 #include "scene/property_tween.h"
 #include "editor/editor_property_tween.h"
 #include "runtime/scene_physics_queries.h"
+#include "runtime/scene_navigation.h"
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_audio.h"
 #include "runtime/scene_animator_graph.h"
@@ -1432,6 +1433,27 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   // renderer, com teste de profundidade e mistura contínua de escala — ver
   // renderer/grid_plan.h e editor/editor_grid.h. Aqui ficam só as ferramentas
   // e o HUD, que são coisas diferentes de "desenho no mundo".
+
+  // Malha assada da Superfície selecionada: polígonos translúcidos coloridos
+  // pela área e o contorno caminhável, como os gizmos (sem profundidade).
+  if(state.navigationView&&state.navigationView->showMesh&&state.workspace==EditorWorkspace::Scene&&!state.navigationView->triangles.empty()) {
+    const auto &nav=*state.navigationView;
+    const auto fill=[&](u8 area){
+      return area==navigation::AreaJump?withAlpha(theme.color.axisZ,.30f):area==navigation::AreaDifficult?withAlpha(theme.color.warning,.30f):withAlpha(theme.color.accent,.22f);
+    };
+    const usize triangles=std::min<usize>(nav.triangles.size()/9,40000);
+    for(usize t=0;t<triangles;++t) {
+      EditorProjectedPoint p[3];bool visible=true;
+      for(u32 k=0;k<3&&visible;++k) {p[k]=projectWorldToScreen(*state.view,&nav.triangles[t*9+k*3]);visible=p[k].valid;}
+      if(!visible) continue;
+      const auto color=fill(t<nav.areas.size()?nav.areas[t]:static_cast<u8>(navigation::AreaWalkable));
+      builder.list.addTriangle({p[0].screen,{},color},{p[1].screen,{},color},{p[2].screen,{},color});
+    }
+    for(usize e=0;e+5<nav.edges.size();e+=6) {
+      UiPoint a,b;
+      if(projectSegmentToScreen(*state.view,&nav.edges[e],&nav.edges[e+3],a,b)) builder.list.addLine(a,b,withAlpha(theme.color.accent,.85f),1.5f);
+    }
+  }
 
   if(!state.motorBakeSourcesOpen&&!state.motorBakeSettingsOpen&&(state.workspace==EditorWorkspace::Scene||state.physicsDiagnosticOpen) && (state.showComponentVisuals||state.physicsDiagnosticOpen) && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
@@ -4085,6 +4107,76 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     builder.list.addRect(open,theme.color.accent,theme.radius.control);
     builder.label(open,state.animatorRuntime?"Ver grafo ao vivo":"Abrir grafo do Animator",theme.color.accentInk,theme.type.body,UiAlign::Center);
     builder.router.addRegion(open,animator_widget::id(animator_widget::Open));
+  }
+  // Navegação: bake da Superfície (edição) e estado vivo de Agente e Superfície (Play).
+  if(entry.type==&scene::NavSurface::descriptor&&!searching) {
+    namespace nw=navigation_widget;
+    const auto *nav=state.navigationView&&state.navigationView->surface==entity.id&&state.navigationView->instance==component->instanceId()?state.navigationView:nullptr;
+    char text[160];std::string title,detail;UiColor tone=theme.color.textDim;float bar=-1;
+    if(state.navigationRuntime) {
+      const auto *world=state.navigationRuntime->surfaceWorld(static_cast<runtime::ObjectId>(entity.id));
+      if(world&&world->loaded()) {
+        const auto stats=world->stats();
+        std::snprintf(text,sizeof text,"Carregada · %u polígonos",stats.polygons);title=text;tone=theme.color.accent;
+        detail=std::to_string(state.navigationRuntime->agents().size())+" agentes na multidão · recortes ao vivo";
+      } else {title="Não carregada no Play";tone=theme.color.warning;detail=state.navigationRuntime->diagnostic().empty()?"Ative a Superfície e asse a malha":state.navigationRuntime->diagnostic();}
+    } else if(nav) {
+      if(nav->hasData) {
+        std::snprintf(text,sizeof text,"%u polígonos · %.0f m²",nav->stats.polygons,static_cast<double>(nav->stats.area));title=text;
+        std::snprintf(text,sizeof text,"%s · %u tiles · %.1f s",nav->status.c_str(),nav->stats.tiles,static_cast<double>(nav->bakeSeconds));detail=text;
+        tone=nav->stale?theme.color.warning:theme.color.accent;
+      } else {title=nav->missing?"Recurso ausente":"Sem malha assada";detail=nav->baking?nav->status:"Assar coleta os colisores estáticos da cena";tone=nav->missing?theme.color.warning:theme.color.textDim;}
+      if(nav->baking) {title="Assando navegação";bar=nav->progress;tone=theme.color.accent;}
+    }
+    inspectorStatusCard(builder,content,UiIcon::NavigationSurface,title,detail,tone,bar);
+    if(!state.navigationRuntime&&nav) {
+      auto row=takeTop(content,44);row.height-=4;
+      const float gap=6;
+      auto primary=takeLeft(row,std::max(120.f,(row.width-gap*2)*.46f));takeLeft(row,gap);
+      builder.list.addRect(primary,nav->baking?theme.color.raised:theme.color.accent,theme.radius.control);
+      auto glyph=takeLeft(primary,30);
+      builder.list.addImage(centred(glyph,18,18),static_cast<UiImageId>(nav->baking?UiIcon::UiClose:UiIcon::NavigationSurface),nav->baking?theme.color.text:theme.color.accentInk);
+      builder.label(primary,nav->baking?"Cancelar":nav->hasData?"Assar de novo":"Assar",nav->baking?theme.color.text:theme.color.accentInk,theme.type.body);
+      builder.router.addRegion({primary.x-30,primary.y,primary.width+30,primary.height},nw::id(nav->baking?nw::Cancel:nw::Bake));
+      auto show=takeLeft(row,(row.width-gap)*.5f);takeLeft(row,gap);
+      builder.list.addRect(show,nav->showMesh?withAlpha(theme.color.accent,.18f):theme.color.raised,theme.radius.control);
+      builder.list.addBorder(show,nav->showMesh?theme.color.accent:theme.color.lineSoft,1,theme.radius.control);
+      builder.label(show,nav->showMesh?"Malha visível":"Malha oculta",nav->showMesh?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(show,nw::id(nw::ShowMesh));
+      if(nav->hasData&&!nav->baking) {
+        builder.list.addRect(row,theme.color.raised,theme.radius.control);
+        builder.label(row,"Desvincular",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(row,nw::id(nw::Clear));
+      }
+    }
+  }
+  if(entry.type==&scene::NavAgent::descriptor&&!searching) {
+    const auto &agent=scene::navAgent(*component);
+    std::string title,detail;UiColor tone=theme.color.textDim;
+    static constexpr const char *drives[]{"sem movimento","move o Personagem","move o Motor dinâmico","velocidade do corpo","move a própria pose"};
+    if(state.navigationRuntime) {
+      const auto agents=state.navigationRuntime->agents();
+      const auto found=std::find_if(agents.begin(),agents.end(),[&](const auto &a){return a.id==static_cast<runtime::ObjectId>(entity.id);});
+      if(found==agents.end()) {title="Fora da malha";tone=theme.color.warning;detail=state.navigationRuntime->diagnostic().empty()?"Nenhuma superfície carregada contém o agente":state.navigationRuntime->diagnostic();}
+      else {
+        static constexpr const char *paths[]{"Sem destino","Caminho completo","Caminho parcial","Caminho inválido"};
+        const u32 status=std::min<u32>(static_cast<u32>(found->status),3);
+        float remaining=0;const float *previous=found->position;
+        for(usize i=0;i+2<found->corners.size();i+=3) {const float *c=&found->corners[i];remaining+=std::sqrt((c[0]-previous[0])*(c[0]-previous[0])+(c[2]-previous[2])*(c[2]-previous[2]));previous=c;}
+        char text[120];
+        if(found->onLink) title="Atravessando link";
+        else if(found->hasPath) {std::snprintf(text,sizeof text,"%s · %.1f m",paths[status],static_cast<double>(remaining));title=text;}
+        else title=paths[status];
+        tone=found->status==navigation::PathStatus::Invalid?theme.color.warning:found->hasPath?theme.color.accent:theme.color.textDim;
+        detail=std::string("Agente ")+drives[std::min<u32>(static_cast<u32>(found->drive),4)];
+      }
+    } else {
+      const u32 drive=entity.components.find(scene::Character::descriptor)?1:entity.components.find(scene::DynamicBodyMotor::descriptor)?2:
+                      entity.components.find(scene::PhysicsBody::descriptor)?3:4;
+      char text[120];std::snprintf(text,sizeof text,"%.1f m/s · raio %.2f m",static_cast<double>(agent.speed),static_cast<double>(agent.radius));title=text;
+      detail=std::string("No Play: ")+drives[drive]+(agent.target?" · persegue o alvo":" · destino por script ou evento");
+    }
+    inspectorStatusCard(builder,content,UiIcon::NavigationAgent,title,detail,tone);
   }
   // Mixer e fontes: cartão com o estado real no Play e o resumo na edição.
   if(audio&&!searching&&entry.type!=&scene::AudioListener::descriptor) {

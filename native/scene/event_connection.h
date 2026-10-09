@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,26> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,29> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -52,8 +52,9 @@ inline constexpr std::array<EventConnectionEventKey,26> eventConnectionEventKeys
   {22,"astra.animation.animator","state_entered"},
   {23,"astra.animation.animator","state_event"},
   {24,"astra.animation.animator","machine_entered"},{25,"astra.animation.animator","machine_exited"},{26,"astra.animation.animator","transition_interrupted"},
+  {27,"astra.navigation.agent","destination_reached"},{28,"astra.navigation.agent","path_failed"},{29,"astra.navigation.agent","link_entered"},
 }};
-inline constexpr std::array<ComponentEnumOption,27> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,30> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -67,8 +68,9 @@ inline constexpr std::array<ComponentEnumOption,27> eventConnectionEvents{{
   {20,"Câmera virtual entrou ao vivo"},{21,"Câmera virtual saiu do ar"},
   {22,"Animator: entrou num estado"},{23,"Animator: evento do estado"},
   {24,"Animator: entrou num grupo"},{25,"Animator: saiu de um grupo"},{26,"Animator: mistura interrompida"},
+  {27,"Agente: chegou"},{28,"Agente: caminho falhou"},{29,"Agente: entrou num link"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,29> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,31> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -98,8 +100,10 @@ inline constexpr std::array<EventConnectionMethodKey,29> eventConnectionMethodKe
   {27,"astra.camera.virtual","snap"},
   {28,"astra.audio.snapshot","transition_to"},
   {29,"astra.audio.snapshot","apply"},
+  {30,"astra.navigation.agent","stop"},
+  {31,"astra.navigation.agent","resume"},
 }};
-inline constexpr std::array<ComponentEnumOption,30> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,32> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -110,6 +114,7 @@ inline constexpr std::array<ComponentEnumOption,30> eventConnectionMethods{{
   {24,"Raio: atualizar agora"},{25,"Varredura: atualizar agora"},
   {26,"Câmera virtual: priorizar"},{27,"Câmera virtual: encaixar"},
   {28,"Snapshot: transicionar"},{29,"Snapshot: aplicar"},
+  {30,"Agente: parar"},{31,"Agente: retomar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},

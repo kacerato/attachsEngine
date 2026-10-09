@@ -38,6 +38,8 @@ public:
   void shutdown();
   bool update(float moveRight,float moveForward,float yawRadians,float deltaSeconds);
   bool jump(float speed);
+  // Navegação (Warp, travessia de link): move o olho para `eye` sem simular o caminho.
+  bool teleportEye(AetherVec3 eye);
   bool configureMotion(float speed,float gravity,float stepHeight,float floorSnapLength,bool inheritPlatformHorizontal=false);
   // Scalar state only: never carries old-world Jolt contacts, bodies or handles.
   struct MotionState {AetherVec3 velocity{};float pendingJump=0,accumulator=0;AetherVec3 resolvedVelocity{};bool hasMeasuredStep=false;AetherVec3 platformCarry{};};

@@ -515,6 +515,61 @@ u32 ScenePhysics::overlap(const QueryShapeDesc &shape,const float origin[3],cons
   }
   return static_cast<u32>(total);
 }
+bool ScenePhysics::teleportCharacter(ObjectId id,const float position[3],GameWorld &world) {
+  for(auto &c:characters_) if(c.id==id) {
+    if(!c.motor->teleportEye({position[0],position[1]+c.eyeHeight,position[2]})) return false;
+    c.world[12]=position[0];c.world[13]=position[1];c.world[14]=position[2];
+    auto &document=world.poseGraph();
+    const auto *entity=document.find(id);if(!entity) return false;
+    float parent[16]{};parent[0]=parent[5]=parent[10]=parent[15]=1;
+    if(entity->parent&&!worldMatrix(document,entity->parent,parent)) return false;
+    Transform local;
+    return localTransformForWorld(c.world,parent,local)&&document.setTransform(id,local);
+  }
+  return false;
+}
+bool ScenePhysics::collectStaticTriangles(std::vector<float> &vertices,std::vector<ObjectId> &objects,std::vector<u32> &layers) const {
+  vertices.clear();objects.clear();layers.clear();
+  if(!world_) return false;
+  auto *world=const_cast<AetherPhysicsWorld *>(world_);
+  std::vector<float> buffer;std::vector<u64> parts;
+  for(const auto &binding:bindings_) {
+    if(binding.moving) continue;
+    ae::i32 total=AetherPhysics_GetBodyTrianglesV1(world,binding.body,nullptr,nullptr,0);
+    if(total<=0) continue;
+    buffer.resize(static_cast<usize>(total)*9);parts.resize(static_cast<usize>(total));
+    total=std::min(total,AetherPhysics_GetBodyTrianglesV1(world,binding.body,buffer.data(),parts.data(),total));
+    const u32 layer=AetherPhysics_GetBodyGameplayLayerV1(world_,binding.body);
+    for(ae::i32 t=0;t<total;++t) {
+      const auto part=parts[static_cast<usize>(t)];
+      objects.push_back(part<binding.colliders.size()?binding.colliders[static_cast<usize>(part)].object:binding.id);
+      layers.push_back(layer);
+      vertices.insert(vertices.end(),buffer.begin()+t*9,buffer.begin()+t*9+9);
+    }
+  }
+  return true;
+}
+bool ScenePhysics::setCharacterYaw(ObjectId id,float yawRadians) {
+  if(!std::isfinite(yawRadians)) return false;
+  for(auto &c:characters_) if(c.id==id) {
+    float scale[3];
+    for(u32 k=0;k<3;++k) scale[k]=std::sqrt(c.world[k*4]*c.world[k*4]+c.world[k*4+1]*c.world[k*4+1]+c.world[k*4+2]*c.world[k*4+2]);
+    const float s=std::sin(yawRadians),co=std::cos(yawRadians);
+    const float columns[3][3]{{co,0,-s},{0,1,0},{s,0,co}};
+    for(u32 k=0;k<3;++k) for(u32 r=0;r<3;++r) c.world[k*4+r]=columns[k][r]*scale[k];
+    return true;
+  }
+  return false;
+}
+bool ScenePhysics::hasCharacter(ObjectId id) const {
+  return std::any_of(characters_.begin(),characters_.end(),[&](const auto &c){return c.id==id;});
+}
+bool ScenePhysics::hasDynamicMotor(ObjectId id) const {
+  return std::any_of(dynamicMotors_.begin(),dynamicMotors_.end(),[&](const auto &m){return m.id==id;});
+}
+bool ScenePhysics::hasMovingBody(ObjectId id) const {
+  return std::any_of(bindings_.begin(),bindings_.end(),[&](const auto &b){return b.id==id&&b.moving;});
+}
 bool ScenePhysics::setCharacterMove(ObjectId id,float right,float forward,float yaw) {
   return submitMotorControl(id,MotorControlSource::Keyboard,right,forward,yaw);
 }

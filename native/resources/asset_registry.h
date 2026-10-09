@@ -57,7 +57,8 @@ enum class AssetType : u32 {
   AudioClip = 11, // WAV validado; dados PCM consumidos pelo mundo de áudio
   UiDocument = 12, // AEUI document; instantiated by SceneGui, not an editor tab
   PhysicsMaterial = 13, // atrito, restituição e combinação compartilhados por corpos
-  AnimatorController = 14 // grafo compartilhado; instâncias conservam seus vínculos e overrides
+  AnimatorController = 14, // grafo compartilhado; instâncias conservam seus vínculos e overrides
+  NavMesh = 15 // camadas de tile assadas pela Superfície de navegação (.navmesh)
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

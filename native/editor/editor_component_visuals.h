@@ -1,4 +1,5 @@
 #pragma once
+#include "scene/navigation.h"
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_collider_geometry.h"
 #include "editor/editor_map_scene.h"
@@ -354,7 +355,68 @@ inline void virtualCameraVisual(const scene::ComponentValue &value,const EditorE
 }
 inline void cameraBrainVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *,
                               float,bool,ComponentVisual &out) {out.enabled=static_cast<const scene::CameraBrain&>(value).enabled;}
-inline const std::array<ComponentVisualProvider,41> componentVisualProviders{{
+// Navegação: o agente e os obstáculos em metros de mundo (sem escala do
+// objeto no raio do agente), o link nos pontos locais do objeto.
+inline void navAgentVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                           float,bool detail,ComponentVisual &out) {
+  const auto &a=scene::navAgent(value);out.enabled=a.enabled;
+  if(!detail||!a.valid()) return;
+  float frame[16]{1,0,0,0,0,1,0,0,0,0,1,0,world[12],world[13]-a.baseOffset,world[14],1};
+  visual_detail::ring(out,frame,a.radius,0,1);visual_detail::ring(out,frame,a.radius,a.height,1);
+  for(u32 i=0;i<4;++i) {
+    const float c=std::cos(i*1.5707963f)*a.radius,s=std::sin(i*1.5707963f)*a.radius;
+    const float p[3]{c,0,s},q[3]{c,a.height,s};visual_detail::segment(out,frame,p,q);
+  }
+  const float o[3]{0,.05f,0},f[3]{0,.05f,a.radius*1.8f};visual_detail::segment(out,frame,o,f);out.segments.back().emphasis=1;
+}
+inline void navObstacleVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                              float,bool detail,ComponentVisual &out) {
+  const auto &o=scene::navObstacle(value);out.enabled=o.enabled;
+  if(!detail||!o.valid()) return;
+  if(o.shape==scene::NavObstacleShape::Box) {
+    float c[8][3];
+    for(u32 i=0;i<8;++i) for(u32 k=0;k<3;++k) c[i][k]=o.center[k]+((i>>k)&1?.5f:-.5f)*o.size[k];
+    constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    for(const auto &e:edges) visual_detail::segment(out,world,c[e[0]],c[e[1]]);
+  } else {
+    float frame[16];std::copy(world,world+16,frame);
+    for(u32 k=0;k<3;++k) frame[12+k]=world[12+k]+world[k]*o.center[0]+world[4+k]*o.center[1]+world[8+k]*o.center[2];
+    visual_detail::ring(out,frame,o.radius,-o.height*.5f,1);visual_detail::ring(out,frame,o.radius,o.height*.5f,1);
+  }
+}
+inline void navLinkVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                          float,bool detail,ComponentVisual &out) {
+  const auto &l=scene::navLink(value);out.enabled=l.enabled;
+  if(!l.valid()) return;
+  const float dx=l.end[0]-l.start[0],dz=l.end[2]-l.start[2],lift=std::max(.3f,.25f*std::sqrt(dx*dx+dz*dz));
+  float previous[3]{l.start[0],l.start[1],l.start[2]};
+  for(u32 i=1;i<=16;++i) {
+    const float t=static_cast<float>(i)/16.f;
+    const float p[3]{l.start[0]+(l.end[0]-l.start[0])*t,l.start[1]+(l.end[1]-l.start[1])*t+4*lift*t*(1-t),l.start[2]+(l.end[2]-l.start[2])*t};
+    visual_detail::segment(out,world,previous,p);out.segments.back().emphasis=1;
+    std::copy(p,p+3,previous);
+  }
+  if(!detail) return;
+  for(const float *end:{l.start,l.end}) {
+    float frame[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    for(u32 k=0;k<3;++k) frame[12+k]=world[12+k]+world[k]*end[0]+world[4+k]*end[1]+world[8+k]*end[2];
+    visual_detail::ring(out,frame,l.radius,0,1);
+  }
+}
+inline void navSurfaceVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                             float,bool detail,ComponentVisual &out) {
+  const auto &s=scene::navSurface(value);out.enabled=s.enabled;
+  if(!detail||s.collect!=scene::NavCollect::Volume) return;
+  float c[8][3];
+  for(u32 i=0;i<8;++i) for(u32 k=0;k<3;++k) c[i][k]=s.volumeCenter[k]+((i>>k)&1?.5f:-.5f)*s.volumeSize[k];
+  constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+  for(const auto &e:edges) visual_detail::segment(out,world,c[e[0]],c[e[1]]);
+}
+inline const std::array<ComponentVisualProvider,45> componentVisualProviders{{
+  {&scene::NavSurface::descriptor,ui::UiIcon::NavigationSurface,true,navSurfaceVisual},
+  {&scene::NavAgent::descriptor,ui::UiIcon::NavigationAgent,true,navAgentVisual},
+  {&scene::NavObstacle::descriptor,ui::UiIcon::NavigationObstacle,true,navObstacleVisual},
+  {&scene::NavLink::descriptor,ui::UiIcon::NavigationLink,true,navLinkVisual},
   {&scene::GravityField2D::descriptor,ui::UiIcon::PhysicsFieldGravity2d,true,physicsField2DVisual},
   {&scene::WindField2D::descriptor,ui::UiIcon::PhysicsFieldWind2d,true,physicsField2DVisual},
   {&scene::DragField2D::descriptor,ui::UiIcon::PhysicsFieldDrag2d,true,physicsField2DVisual},

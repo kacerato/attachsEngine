@@ -5,7 +5,7 @@ Não edite à mão: acrescente a propriedade no descritor e regenere.
 Uma linha só existe aqui quando tem identidade persistente, consumidor declarado e
 capacidade do motor disponível — as três condições que `auditComponentContracts()` exige.
 
-**Registro atual:** 63 schemas; 61 tipos no Add; 61 fachadas geradas.
+**Registro atual:** 68 schemas; 66 tipos no Add; 66 fachadas geradas.
 Esses números descrevem o registro do checkout, não certificam paridade ou aceite no aparelho.
 
 | Tipo | Família | API C# | Criação |
@@ -73,6 +73,11 @@ Esses números descrevem o registro do checkout, não certificam paridade ou ace
 | `astra.audio.snapshot` | Áudio | `Astra.Components.AudioSnapshot` | Add Component |
 | `astra.path` | Lógica | `Astra.Components.PathComponent` | Add Component |
 | `astra.path.follow` | Lógica | `Astra.Components.PathFollow` | Add Component |
+| `astra.navigation.surface` | Navegação | `Astra.Components.NavSurface` | Add Component |
+| `astra.navigation.agent` | Navegação | `Astra.Components.NavAgent` | Add Component |
+| `astra.navigation.obstacle` | Navegação | `Astra.Components.NavObstacle` | Add Component |
+| `astra.navigation.link` | Navegação | `Astra.Components.NavLink` | Add Component |
+| `astra.navigation.modifier` | Navegação | `Astra.Components.NavModifier` | Add Component |
 
 ## Mola de posição · `astra.spring.position` v1
 
@@ -468,9 +473,9 @@ Evento deste objeto aciona objetos ou métodos, sem script. **Consumidor:** runt
 | `argument` | Valor | número | Então | 0 | 0 … 3600 | s | runtime/scene_event_connections.h | nada | sim | não | não |
 | `enabled` | Ativa | booleano | Conexão | verdadeiro | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `once` | Uma vez | booleano | Conexão | falso | verdadeiro \| falso |  | runtime/scene_event_connections.h | nada | sim | não | não |
-| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro \| Cérebro: câmera ativada \| Cérebro: corte de câmera \| Cérebro: transição concluída \| Câmera virtual entrou ao vivo \| Câmera virtual saiu do ar \| Animator: entrou num estado \| Animator: evento do estado |  | runtime/scene_event_connections.h | nada | não | não | não |
+| `event` | Evento | enumeração | Quando | Nenhum | Nenhum \| Timer disparou \| Tween concluiu \| Sensor 3D: entrou \| Sensor 3D: saiu \| Colisão 3D: começou \| Colisão 3D: terminou \| Sensor 2D: entrou \| Sensor 2D: saiu \| Colisão 2D: começou \| Colisão 2D: terminou \| Sequência: etapa começou \| Sequência concluiu \| Tween de propriedade concluiu \| Junta quebrou \| Personagem bateu num colisor \| Sensor 3D: dentro \| Cérebro: câmera ativada \| Cérebro: corte de câmera \| Cérebro: transição concluída \| Câmera virtual entrou ao vivo \| Câmera virtual saiu do ar \| Animator: entrou num estado \| Animator: evento do estado \| Animator: entrou num grupo \| Animator: saiu de um grupo \| Animator: mistura interrompida \| Agente: chegou \| Agente: caminho falhou \| Agente: entrou num link |  | runtime/scene_event_connections.h | nada | não | não | não |
 | `action` | Ação | enumeração | Então | Desconectado | Desconectado \| Ativar objeto \| Desativar objeto \| Alternar objeto \| Chamar método |  | runtime/scene_event_connections.h | nada | não | não | não |
-| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora \| Câmera virtual: priorizar \| Câmera virtual: encaixar \| Snapshot: transicionar \| Snapshot: aplicar |  | runtime/scene_event_connections.h | nada | sim | não | não |
+| `method` | Método | enumeração | Então | Nenhum | Nenhum \| Áudio: tocar \| Áudio: parar \| Áudio: pausar \| Áudio: retomar \| Áudio: posicionar \| Timer: iniciar \| Timer: parar \| Timer: pausar \| Timer: retomar \| Tween: reiniciar \| Tween: cancelar \| Tween: pausar \| Tween: retomar \| Percurso: reiniciar \| Percurso: parar \| Sequência: tocar \| Sequência: cancelar \| Sequência: pausar \| Sequência: retomar \| Tween de propriedade: reiniciar \| Tween de propriedade: cancelar \| Tween de propriedade: pausar \| Tween de propriedade: retomar \| Raio: atualizar agora \| Varredura: atualizar agora \| Câmera virtual: priorizar \| Câmera virtual: encaixar \| Snapshot: transicionar \| Snapshot: aplicar \| Agente: parar \| Agente: retomar |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `receiver` | Receptor | referência | Então | Este objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 | `other_filter` | Outro objeto | referência | Quando | Qualquer objeto | qualquer objeto |  | runtime/scene_event_connections.h | nada | sim | não | não |
 
@@ -1718,7 +1723,7 @@ Apply seletivo exige identidade, ordem e fronteira de alocação compatíveis.
 | `wrap_mode` | Repetição | enumeração | Reprodução | Repetir | Uma vez \| Repetir \| Vai e volta \| Segurar no fim |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
 | `clip_count` | Quantidade de clipes | enumeração | Clipes | 0 | 0 \| 1 \| 2 \| 3 \| 4 \| 5 \| 6 \| 7 \| 8 \| 9 \| 10 \| 11 \| 12 \| 13 \| 14 \| 15 \| 16 \| 17 \| 18 \| 19 \| 20 \| 21 \| 22 \| 23 \| 24 \| 25 \| 26 \| 27 \| 28 \| 29 \| 30 \| 31 \| 32 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não | não |
 
-## Animator · `astra.animation.animator` v2
+## Animator · `astra.animation.animator` v5
 
 Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor:** runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
 
@@ -1730,6 +1735,14 @@ Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor
 |---|---|---|
 | Incompatível | `astra.animation` | Animator e Animação escreveriam a mesma pose; use um dos dois neste objeto |
 
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `controller` | Controller | animator_controller | não | não | não |
+
+**Propriedades**
+
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `speed` | Velocidade | número | Animator | 1 | -10 … 10 | × | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | sim |
@@ -1737,12 +1750,26 @@ Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor
 | `unscaled_time` | Ignorar escala de tempo | booleano | Animator | falso | verdadeiro \| falso |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
 | `target` | Raiz animada | referência | Animator | Este objeto | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
 | `motion_source` | Corpo / motor | referência | Animator | Este objeto | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | não | não | não |
+| `layer_mask_0` | Máscara · Base | referência | Máscaras | Toda a hierarquia | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | sim | não | não |
+| `layer_mask_1` | Máscara · Camada 2 | referência | Máscaras | Toda a hierarquia | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | sim | não | não |
+| `layer_mask_2` | Máscara · Camada 3 | referência | Máscaras | Toda a hierarquia | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | sim | não | não |
+| `layer_mask_3` | Máscara · Camada 4 | referência | Máscaras | Toda a hierarquia | qualquer objeto |  | runtime/scene_animator_graph.cpp → amostras de clipe para o SceneAnimator | pose e bounds | sim | não | não |
 
 **Métodos em Play**
 
 | Método | Rótulo | Argumentos | Retorno | Efeito |
 |---|---|---|---|---|
 | `in_transition` | Em transição | — | booleano | Verdadeiro enquanto a camada base mistura dois estados |
+| `get_layer_weight` | Ler peso | layer: inteiro | número | Peso efetivo da instância |
+| `set_layer_weight` | Peso da instância | layer: inteiro, value: número | nada | Não altera o recurso compartilhado |
+| `get_layer_blend` | Ler composição | layer: inteiro | inteiro | 0 Override / 1 Additive |
+| `set_layer_blend` | Composição da instância | layer: inteiro, mode: inteiro | nada | 0 Override / 1 Additive |
+| `get_layer_reference_time` | Ler tempo de referência | layer: inteiro | número | Segundos no clipe |
+| `set_layer_reference_time` | Tempo de referência | layer: inteiro, value: número | nada | Segundos no clipe |
+| `set_layer_reference` | Referência da instância | layer: inteiro, high: inteiro, low: inteiro | nada | GUID zero usa a pose inicial; desconhecido é recusado |
+| `get_layer_reference_high` | GUID alto | layer: inteiro | inteiro | Bits da referência efetiva |
+| `get_layer_reference_low` | GUID baixo | layer: inteiro | inteiro | Bits da referência efetiva |
+| `reset_layer_overrides` | Restaurar camada | layer: inteiro | nada | Restaura a composição autorada, preservando estado e relógio |
 
 **Eventos em Play**
 
@@ -1750,6 +1777,9 @@ Máquina de estados: parâmetros, transições, misturas e camadas. **Consumidor
 |---|---|---|---|
 | `state_entered` | Entrou no estado | layer: inteiro, state: inteiro | Emitido quando um estado começa (no início da transição para ele) |
 | `state_event` | Evento do estado | layer: inteiro, state: inteiro, tag: inteiro | Emitido quando o tempo do estado passa por um evento marcado nele |
+| `machine_entered` | Entrou no grupo | layer: inteiro, machine: inteiro | Um grupo tornou-se ativo; da raiz até o grupo interno |
+| `machine_exited` | Saiu do grupo | layer: inteiro, machine: inteiro | Um grupo deixou de participar da reprodução; do grupo interno à raiz |
+| `transition_interrupted` | Mistura interrompida | layer: inteiro, transition: inteiro, destination: inteiro | Pose composta preservada; ID zero indica CrossFade solicitado pela API |
 
 ## Campo de gravidade 2D · `astra.physics2d.field.gravity` v1
 
@@ -2303,6 +2333,178 @@ Percorre curva em distância mundial e orienta +Z. **Consumidor:** runtime/scene
 | `stop` | Parar | — | nada | Congela pose e progresso |
 | `progress` | Progresso | — | número | Distância percorrida no mundo |
 | `playing` | Em movimento | — | booleano | Verdadeiro enquanto avança |
+
+## Superfície de navegação · `astra.navigation.surface` v1
+
+Assa a malha de navegação dos colisores estáticos e a carrega no Play. **Consumidor:** editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play. **Invalida:** política resolvida.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshSurface.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `data` | Malha assada | navmesh | não | não | não |
+
+**Propriedades**
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `agent_radius` | Raio do agente | número | Agente | 0.5 | 0 … 50 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `agent_height` | Altura do agente | número | Agente | 2 | 0.05 … 100 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `agent_max_climb` | Altura do degrau | número | Agente | 0.4 | 0 … 50 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `agent_max_slope` | Inclinação máxima | número | Agente | 45 | 0 … 89 | ° | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `volume_center_x` | Centro X | número | Coleta | 0 | -100000 … 100000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | sim | não | não |
+| `volume_center_y` | Centro Y | número | Coleta | 0 | -100000 … 100000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | sim | não | não |
+| `volume_center_z` | Centro Z | número | Coleta | 0 | -100000 … 100000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | sim | não | não |
+| `volume_size_x` | Tamanho X | número | Coleta | 20 | 0.1 … 100000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | sim | não | não |
+| `volume_size_y` | Tamanho Y | número | Coleta | 6 | 0.1 … 100000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | sim | não | não |
+| `volume_size_z` | Tamanho Z | número | Coleta | 20 | 0.1 … 100000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | sim | não | não |
+| `cell_size` | Tamanho da célula | número | Precisão | 0.2 | 0.01 … 10 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `cell_height` | Altura da célula | número | Precisão | 0.1 | 0.01 … 10 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `min_region_area` | Área mínima de região | número | Precisão | 2 | 0 … 10000 | m² | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `tile_size` | Tile | número | Precisão | 64 | 16 … 128 | células | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `edge_max_length` | Aresta máxima | número | Avançado | 12 | 0 … 1000 | m | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `edge_max_error` | Erro de borda | número | Avançado | 1.3 | 0.1 … 10 | células | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `detail_sample_distance` | Amostra de detalhe | número | Avançado | 6 | 0 … 100 | células | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `detail_sample_max_error` | Erro de detalhe | número | Avançado | 1 | 0 … 100 | células | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `enabled` | Ativa | booleano | Geral | verdadeiro | verdadeiro \| falso |  | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `collect` | Coletar | enumeração | Coleta | Toda a cena | Toda a cena \| Este objeto e filhos \| Volume |  | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+| `layer` | Camada dos colisores | enumeração | Coleta | Todas | Todas \| Camada 0 \| Camada 1 \| Camada 2 \| Camada 3 \| Camada 4 \| Camada 5 \| Camada 6 \| Camada 7 \| Camada 8 \| Camada 9 \| Camada 10 \| Camada 11 \| Camada 12 \| Camada 13 \| Camada 14 \| Camada 15 \| Camada 16 \| Camada 17 \| Camada 18 \| Camada 19 \| Camada 20 \| Camada 21 \| Camada 22 \| Camada 23 \| Camada 24 \| Camada 25 \| Camada 26 \| Camada 27 \| Camada 28 \| Camada 29 \| Camada 30 \| Camada 31 |  | editor/editor_navigation.cpp → bake; runtime/scene_navigation.cpp → malha do Play | política resolvida | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `is_ready` | Pronta | — | booleano | Verdadeiro quando a malha desta superfície está carregada no Play |
+| `polygon_count` | Polígonos | — | inteiro | Polígonos da malha carregada, com recortes de obstáculos |
+
+## Agente de navegação · `astra.navigation.agent` v1
+
+Anda pela malha até um destino, desviando de outros agentes. **Consumidor:** runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshAgent.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Incompatível | `astra.path.follow` | Agente e Seguir caminho escreveriam a mesma pose |
+| Incompatível | `astra.navigation.obstacle` | Um objeto é agente ou obstáculo, não os dois |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `speed` | Velocidade | número | Movimento | 3.5 | 0 … 1000 | m/s | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `acceleration` | Aceleração | número | Movimento | 8 | 0 … 1000 | m/s² | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `angular_speed` | Giro | número | Movimento | 120 | 0 … 3600 | °/s | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | sim | não | não |
+| `stopping_distance` | Distância de parada | número | Movimento | 0 | 0 … 1000 | m | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `radius` | Raio | número | Corpo | 0.5 | 0.05 … 50 | m | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `height` | Altura | número | Corpo | 2 | 0.05 … 100 | m | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `base_offset` | Deslocamento da base | número | Corpo | 0 | -100 … 100 | m | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `jump_cost` | Custo do salto | número | Áreas | 1 | 1 … 1000 | × | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | sim | não | não |
+| `difficult_cost` | Custo da área difícil | número | Áreas | 4 | 1 … 1000 | × | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | sim | não | não |
+| `repath_distance` | Refazer caminho a | número | Movimento | 0.5 | 0.05 … 100 | m | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | sim | não | não |
+| `enabled` | Ativo | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `auto_braking` | Frear ao chegar | booleano | Movimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `update_rotation` | Girar para o movimento | booleano | Movimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `use_jump` | Usar links e áreas de salto | booleano | Áreas | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `use_difficult` | Atravessar área difícil | booleano | Áreas | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `avoidance` | Desvio de agentes | enumeração | Corpo | Alto | Nenhum \| Baixo \| Médio \| Bom \| Alto |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `surface` | Superfície | referência | Geral | Mais próxima | astra.navigation.surface |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+| `target` | Seguir objeto | referência | Geral | Nenhum | qualquer objeto · outro objeto |  | runtime/scene_navigation.cpp → velocidade para Personagem, Motor dinâmico, corpo ou pose | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `set_destination` | Ir para | point: vetor (m) | booleano | Calcula o caminho e começa a andar; falso quando o ponto está longe da malha |
+| `stop` | Parar | — | nada | Para no lugar e guarda o destino para Retomar |
+| `resume` | Retomar | — | nada | Volta ao último destino depois de Parar |
+| `warp` | Teleportar | point: vetor (m) | booleano | Move o objeto e o agente para o ponto mais próximo da malha |
+| `remaining_distance` | Distância restante | — | número | Comprimento do caminho até o destino; infinito sem caminho |
+| `path_status` | Estado do caminho | — | inteiro | 0 sem caminho, 1 completo, 2 parcial, 3 inválido |
+| `has_path` | Tem caminho | — | booleano | Verdadeiro enquanto há um destino válido |
+| `is_on_link` | Em link | — | booleano | Verdadeiro durante a travessia de um Link |
+| `velocity` | Velocidade | — | vetor | Velocidade pedida pela multidão neste quadro |
+
+**Eventos em Play**
+
+| Evento | Rótulo | Payload | Quando |
+|---|---|---|---|
+| `destination_reached` | Chegou | — | Emitido uma vez quando o caminho restante fica abaixo da distância de parada |
+| `path_failed` | Caminho falhou | — | Emitido quando o destino não tem caminho |
+| `link_entered` | Entrou no link | — | Emitido quando o agente começa a atravessar um Link |
+
+## Obstáculo de navegação · `astra.navigation.obstacle` v1
+
+Recorta a malha onde o objeto está, em tempo de execução. **Consumidor:** runtime/scene_navigation.cpp → recorte no TileCache. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshObstacle.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| Relação no objeto | Tipo | Diagnóstico |
+|---|---|---|
+| Incompatível | `astra.navigation.agent` | Um objeto é agente ou obstáculo, não os dois |
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `center_x` | Centro X | número | Forma | 0 | -1000 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+| `center_y` | Centro Y | número | Forma | 0 | -1000 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+| `center_z` | Centro Z | número | Forma | 0 | -1000 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+| `size_x` | Tamanho X | número | Forma | 1 | 0.01 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | sim | não | não |
+| `size_y` | Tamanho Y | número | Forma | 1 | 0.01 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | sim | não | não |
+| `size_z` | Tamanho Z | número | Forma | 1 | 0.01 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | sim | não | não |
+| `radius` | Raio | número | Forma | 0.5 | 0.01 … 500 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | sim | não | não |
+| `height` | Altura | número | Forma | 2 | 0.01 … 1000 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | sim | não | não |
+| `move_threshold` | Limiar de movimento | número | Recorte | 0.1 | 0 … 100 | m | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+| `stationary_time` | Tempo até parado | número | Recorte | 0.5 | 0 … 60 | s | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | sim | não | não |
+| `enabled` | Ativo | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+| `carve_only_stationary` | Recortar só parado | booleano | Recorte | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+| `shape` | Forma | enumeração | Forma | Caixa | Caixa \| Cilindro |  | runtime/scene_navigation.cpp → recorte no TileCache | pose e bounds | não | não | não |
+
+**Métodos em Play**
+
+| Método | Rótulo | Argumentos | Retorno | Efeito |
+|---|---|---|---|---|
+| `is_carving` | Recortando | — | booleano | Verdadeiro quando o recorte deste obstáculo está aplicado na malha |
+
+## Link de navegação · `astra.navigation.link` v1
+
+Liga dois pontos da malha: salto, escada, vão ou porta. **Consumidor:** runtime/scene_navigation.cpp → conexão fora da malha. **Invalida:** pose e bounds.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshLink.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `start_x` | Início X | número | Pontos | 0 | -10000 … 10000 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `start_y` | Início Y | número | Pontos | 0 | -10000 … 10000 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `start_z` | Início Z | número | Pontos | -1 | -10000 … 10000 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `end_x` | Fim X | número | Pontos | 0 | -10000 … 10000 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `end_y` | Fim Y | número | Pontos | 0 | -10000 … 10000 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `end_z` | Fim Z | número | Pontos | 1 | -10000 … 10000 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `radius` | Raio de conexão | número | Pontos | 0.5 | 0.05 … 50 | m | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `enabled` | Ativo | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `bidirectional` | Nos dois sentidos | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+| `area` | Área | enumeração | Geral | Caminhável | Caminhável \| Salto \| Difícil |  | runtime/scene_navigation.cpp → conexão fora da malha | pose e bounds | não | não | não |
+
+## Modificador de navegação · `astra.navigation.modifier` v1
+
+Muda a área dos colisores deste objeto no bake ou os ignora. **Consumidor:** editor/editor_navigation.cpp → área por triângulo no bake. **Invalida:** política resolvida.
+
+**Referência estudada:** [documentação oficial](https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshModifier.html).
+
+**Durante Play:** estrutura em ponto seguro; propriedades em ponto seguro.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot | Tween numérico |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `apply_to_children` | Aplicar aos filhos | booleano | Geral | verdadeiro | verdadeiro \| falso |  | editor/editor_navigation.cpp → área por triângulo no bake | política resolvida | não | não | não |
+| `mode` | Modo | enumeração | Geral | Alterar área | Alterar área \| Ignorar no bake |  | editor/editor_navigation.cpp → área por triângulo no bake | política resolvida | não | não | não |
+| `area` | Área | enumeração | Geral | Não caminhável | Caminhável \| Não caminhável \| Salto \| Difícil |  | editor/editor_navigation.cpp → área por triângulo no bake | política resolvida | sim | não | não |
 
 ## Capacidades do motor
 

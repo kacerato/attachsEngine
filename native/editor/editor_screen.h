@@ -22,6 +22,7 @@
 
 #include "resources/physics_material.h"
 #include "resources/animator_controller.h"
+#include "navigation/navigation_mesh.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
 #include "renderer/scene_statistics.h"
@@ -48,7 +49,7 @@
 #include "ui/ui_theme.h"
 #include <string>
 
-namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;}
+namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;}
 namespace ae::editor {
 class EditorMapScene;
 struct ColliderTopology;
@@ -400,6 +401,8 @@ enum class EditorWidget : u32 {
   PhysicsMaterialInspectorClose=0xE3000000u,PhysicsMaterialStepBase=0xE4000000u,
   // Editor de grafo do Animator: + código de animator_widget.
   AnimatorBase=0xE5000000u,
+  // Superfície de navegação no Inspector: + código de navigation_widget.
+  NavigationBase=0xE6000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -625,7 +628,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
   {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange},{EditorWidget::FilesMultiToggle,kRange},
   {EditorWidget::PropertyTweenPick,kRange},{EditorWidget::PropertyTweenChoiceBase,kRange},{EditorWidget::PropertyTweenPickerClose,kRange},
-  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange},{EditorWidget::AnimatorBase,kRange}};
+  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange},{EditorWidget::AnimatorBase,kRange},{EditorWidget::NavigationBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -665,6 +668,11 @@ inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::Animat
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::AnimatorBase);}
 inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
 } // namespace animator_widget
+namespace navigation_widget {
+enum Code : u32 {Bake=1,Cancel=2,Clear=3,ShowMesh=4};
+inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::NavigationBase)+code;}
+inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::NavigationBase);}
+} // namespace navigation_widget
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
 }
@@ -750,6 +758,18 @@ struct EditorBackgroundTask {
   bool cancelable = false;
 };
 
+// Superfície de navegação selecionada: bake, recurso e malha para o viewport.
+struct EditorNavigationView {
+  EditorEntityId surface=0;
+  u64 instance=0;
+  bool baking=false,hasData=false,missing=false,stale=false,staleKnown=false;
+  float progress=0,bakeSeconds=0;
+  navigation::NavMeshStats stats{};
+  std::string status;
+  bool showMesh=true;
+  std::vector<float> triangles,edges;   // mundo; 9 floats por triângulo, 6 por aresta
+  std::vector<u8> areas;
+};
 struct EditorScreenState final {
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
   // recorte da câmera. As áreas seguras entram por `safeArea`.
@@ -866,6 +886,8 @@ struct EditorScreenState final {
   const runtime::SceneTweens *tweenRuntime=nullptr;
   const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
+  const EditorNavigationView *navigationView=nullptr;
+  const runtime::SceneNavigation *navigationRuntime=nullptr;
   const runtime::SceneVirtualCameras *virtualCameraRuntime=nullptr;
   const runtime::SceneAudio *audioRuntime=nullptr;
   const runtime::SceneAnimatorGraphs *animatorRuntime=nullptr;

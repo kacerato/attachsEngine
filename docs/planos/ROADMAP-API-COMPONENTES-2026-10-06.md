@@ -120,6 +120,8 @@ Animator com parâmetros, estados, transições, blend 1D/2D, camadas/máscaras 
 
 ### Bloco J — Navegação (F067–F070)
 
+**Estado (09/10):** implementado — ver [Navegação](NAVEGACAO-2026-10-09.md). Recast/Detour 1.6.0 aprovado pelo usuário em 09/10; 5 componentes, recurso `.navmesh`, bake cancelável, multidão, recortes e links. Aceite no aparelho registrado na distribuição.
+
 Recast/Detour: recurso de navmesh versionado, bake cancelável, agente que propõe velocidade ao personagem/corpo, obstáculo e link. **Dependência nova: exige aprovação do usuário antes de entrar no build.** Referência: [Recast 1.6.0](https://github.com/recastnavigation/recastnavigation/tree/v1.6.0).
 
 ### Bloco K — Partículas e linhas (F025, F075)

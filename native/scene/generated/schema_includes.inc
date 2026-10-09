@@ -10,3 +10,4 @@
 #include "scene/schemas/audio.h"
 #include "scene/schemas/path.h"
 #include "scene/schemas/path_follow.h"
+#include "scene/schemas/navigation.h"
