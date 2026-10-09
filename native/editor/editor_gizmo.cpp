@@ -171,6 +171,19 @@ bool resolveGizmoTranslation(const EditorGizmoDrag &drag, ui::UiPoint totalScree
   return isTransformValid(outTransform);
 }
 
+EditorGizmoFrame buildLocalScaleGizmoFrame(const EditorViewport &view,const float world[16],const EditorGizmoSettings &settings) noexcept {
+  auto frame=buildGizmoFrame(view,world+12,settings);if(!frame.valid)return frame;
+  for(u32 axis=0;axis<3;++axis) {
+    const float *basis=world+axis*4;const float length=std::sqrt(basis[0]*basis[0]+basis[1]*basis[1]+basis[2]*basis[2]);
+    frame.axisUsable[axis]=false;if(!std::isfinite(length)||length<1e-8f)continue;
+    float point[3];for(u32 c=0;c<3;++c)point[c]=frame.origin[c]+basis[c]*frame.axisWorldLength/length;
+    const auto projected=projectWorldToScreen(view,point);if(!projected.valid)continue;
+    frame.axisEndScreen[axis]=projected.screen;
+    const float x=projected.screen.x-frame.originScreen.x,y=projected.screen.y-frame.originScreen.y;
+    frame.axisUsable[axis]=x*x+y*y>=settings.minimumAxisPixels*settings.minimumAxisPixels;
+  }
+  return frame;
+}
 bool resolveGizmoTransform(const EditorGizmoDrag &drag, EditorGizmoMode mode,
                            ui::UiPoint delta, EditorTransform &out) noexcept {
   if (mode == EditorGizmoMode::Translate) return resolveGizmoTranslation(drag, delta, out);

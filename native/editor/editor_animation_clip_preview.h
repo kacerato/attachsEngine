@@ -14,6 +14,9 @@ public:
   AnimationClipPreview &operator=(const AnimationClipPreview &)=delete;
   bool begin(const runtime::SceneGraph &scene,runtime::ObjectId owner,const resources::AnimationClipAsset &clip,std::string &error);
   bool seek(float seconds,std::string &error);
+  // Authoring inspection only: expose one raw layer property in the isolated
+  // evaluated copy. Published clips and Play continue to use composition.
+  bool overridePose(runtime::ObjectId target,resources::AnimationPath path,std::span<const float> values,std::string &error);
   void cancel();
   bool active() const {return owner_!=runtime::kInvalidObject;}
   const runtime::SceneGraph &scene() const {return scene_;}

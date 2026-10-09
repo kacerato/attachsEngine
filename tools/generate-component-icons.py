@@ -399,6 +399,8 @@ ICONS.update({
     "animation/layer-mute": '<path d="M12 22h48v16H28v52h52V58h16v48H12z" fill="#eef1f5"/><path d="M84 18l28 28-12 12-28-28zm-6 52l36-36 12 12-36 36z" fill="#a8ff10"/>',
     "animation/layer-solo": '<path d="M12 18h104v16H28v60h88v16H12z" fill="#eef1f5"/><path d="M50 44h46v12H62v8h34v28H50V80h34v-6H50z" fill="#a8ff10"/>',
     "animation/consolidate": '<path d="M12 12h42v12H24v16h30v12H12zM12 64h42v12H24v16h30v12H12z" fill="#eef1f5"/><path d="M58 26h14v25h22V38l28 26-28 26V77H58z" fill="#a8ff10"/>',
+    "animation/auto-key": '<path d="M12 26h48v14H26v48h34v14H12zM92 26h24v76H92V88h10V40H92z" fill="#eef1f5"/><path d="M66 16L40 64h22l-8 48 36-58H68l18-38z" fill="#a8ff10"/>',
+    "animation/record-pose": '<path d="M12 12h32v14H26v76h18v14H12zM84 12h32v104H84v-14h18V26H84z" fill="#eef1f5"/><path d="M64 36L92 64 64 92 36 64z" fill="#a8ff10"/>',
     "animation/rotation-branch": '<path d="M16 12h14v44h31V28H48l20-22 22 22H75v28h29v14H75v40H61V70H16z" fill="#eef1f5"/><path d="M92 78l30 20-30 22v-15H79V91h13z" fill="#a8ff10"/>',
     "animation/layers": '<path d="M64 14l52 28-52 28L12 42zM12 65l52 28 52-28v16l-52 28-52-28z" fill="#eef1f5"/><path d="M64 70l52-28v16L64 86z" fill="#a8ff10"/>',
     "animation/blend": '<path d="M12 24h34v28H12zm0 52h34v28H12zm70-14h34v28H82zM46 33l44 33-6 8-44-33zm0 54l44-24 5 9-44 24z" fill="#eef1f5"/><path d="M82 62h34v28H82z" fill="#a8ff10"/>',

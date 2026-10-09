@@ -16,6 +16,7 @@ struct Fixture {
   alignas(ae::editor::AnimationAuthorAccess) std::array<ae::u8,offsetof(ae::editor::AnimationAuthorAccess,bake)> abi1;
   alignas(ae::editor::AnimationAuthorAccess) std::array<ae::u8,offsetof(ae::editor::AnimationAuthorAccess,sampleComposed)> abi2;
   alignas(ae::editor::AnimationAuthorAccess) std::array<ae::u8,offsetof(ae::editor::AnimationAuthorAccess,bakeAdvanced)> abi3;
+  alignas(ae::editor::AnimationAuthorAccess) std::array<ae::u8,offsetof(ae::editor::AnimationAuthorAccess,previewClip)> abi4;
 };
 }
 AE_AUTHOR_TEST_EXPORT void *author_fixture_create(const ae::u8 *root,int length) {
@@ -56,6 +57,11 @@ AE_AUTHOR_TEST_EXPORT int author_fixture_history(void *handle,int action) {
   if(action==1)return fixture.session.history().undo(fixture.session.document())?1:0;
   if(action==2)return fixture.session.history().redo(fixture.session.document())?1:0;
   return static_cast<int>(fixture.session.history().undoDepth());
+}
+AE_AUTHOR_TEST_EXPORT const void *author_fixture_access_v4(void *handle) {
+  const auto *access=author_fixture_access(handle);if(!access)return nullptr;
+  auto &fixture=*static_cast<Fixture*>(handle);auto legacy=*access;legacy.version=4;legacy.size=fixture.abi4.size();
+  std::memcpy(fixture.abi4.data(),&legacy,fixture.abi4.size());return fixture.abi4.data();
 }
 AE_AUTHOR_TEST_EXPORT int author_fixture_sample(void *handle,float time,float *values) {
   if(!handle||!values)return 0;

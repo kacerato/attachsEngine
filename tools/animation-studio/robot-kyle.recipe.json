@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "Robot Kyle — UMotion",
+  "model": "Assets/UMotionExamples/Miscellaneous/Robot Kyle/Model/Robot Kyle.fbx",
+  "heightMeters": 1.8,
+  "materials": {
+    "Robot": {
+      "baseColor": "Assets/UMotionExamples/Miscellaneous/Robot Kyle/Textures/Robot_Color.tga",
+      "normal": "Assets/UMotionExamples/Miscellaneous/Robot Kyle/Textures/Robot_Normal.tga",
+      "metallic": 0.35,
+      "roughness": 0.6
+    }
+  }
+}

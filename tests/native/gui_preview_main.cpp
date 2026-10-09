@@ -28,6 +28,7 @@ static std::vector<u8> read(const std::filesystem::path &path) {
   s.read(reinterpret_cast<char*>(out.data()),size);return out;
 }
 #include "u07_authoring_fixture.h"
+#include "animation_package_project_fixture.h"
 static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool rendered) {
   auto &g=s.document();const auto root=g.createEntity(g.root(),runtime::ObjectKind::Folder,"SharedBody");auto object=*g.find(root);
   auto *body=static_cast<scene::PhysicsBody*>(object.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;
@@ -61,6 +62,10 @@ static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool ren
 int main(int argc,char **argv) {
   if(argc<2)return 1;
   const std::filesystem::path root=AETHER_REPOSITORY_ROOT;
+  if(std::string_view(argv[1])=="write-animation-library") {
+    if(argc!=4)return 180;
+    return test::writeAnimationPackageProject(std::filesystem::absolute(argv[2]),std::filesystem::absolute(argv[3]));
+  }
   if(std::string_view(argv[1])=="inspect-u07") {
     if(argc!=3)return 171;
     auto bytes=read(argv[2]);editor::EditorDocument document;

@@ -690,10 +690,11 @@ enum : u32 {
     BakeOpen,BakeClose,BakeRate,BakeTolerance,BakeReduction,BakeMode,BakeApply,
     Layers,LayerClose,LayerPrevious,LayerNext,LayerName,LayerAdd,LayerDuplicate,LayerRemove,LayerUp,LayerDown,LayerBlend,LayerWeight,LayerReference,LayerReferenceTime,LayerMute,LayerSolo,LayerCopy,LayerChoose,LayerPickerClose,LayerPickerPrevious,LayerPickerNext,
     BakeTarget,BakeReference,BakeSeedUse,BakeSeedX,BakeSeedY,BakeSeedZ,
-    SelectMode=0xb080,Row=0xb100,Choice=0xb200,TargetChoice=0xb300,TargetEnter=0xb340,PropertyChoice=0xb380,LayerChoice=0xb3c0,PoseValue=0xb400
+    SelectMode=0xb080,Row=0xb100,Choice=0xb200,TargetChoice=0xb300,TargetEnter=0xb340,PropertyChoice=0xb380,LayerChoice=0xb3c0,PoseValue=0xb400,
+    PoseAutoKey=0xb480,PoseRecord,PoseCancel,PoseIsolate,PoseGizmo=0xb500
 };
 inline constexpr u32 id(u32 code) {return animator_widget::id(code);}
-inline constexpr bool owns(u32 widget) {return animator_widget::owns(widget)&&animator_widget::code(widget)>=Open&&animator_widget::code(widget)<0xb480;}
+inline constexpr bool owns(u32 widget) {return animator_widget::owns(widget)&&animator_widget::code(widget)>=Open&&animator_widget::code(widget)<0xb503;}
 }
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
@@ -925,6 +926,10 @@ struct EditorScreenState final {
   u32 clipAuthoringPicker=0,clipTargetPage=0;
   EditorEntityId clipTargetBranch=0,clipTargetNode=0,clipTarget=0;
   bool clipPoseShown=false;u32 clipPosePage=0;
+  bool clipPoseAutoKey=true,clipPosePending=false;
+  bool clipPoseIsolated=false;
+  const runtime::SceneGraph *clipPoseGraph=nullptr;
+  EditorGizmoHandle clipPoseAxis=EditorGizmoHandle::None;
   float clipPoseValues[resources::MaximumMorphTargets]{};u32 clipPoseCount=0;
   EditorEntityId clipOwner=0;
   resources::AssetGuid clipGuid;

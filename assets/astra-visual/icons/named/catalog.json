@@ -1901,6 +1901,18 @@
       "name": "rotation-branch",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "animation/auto-key": {
+      "category": "animation",
+      "name": "auto-key",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/record-pose": {
+      "category": "animation",
+      "name": "record-pose",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

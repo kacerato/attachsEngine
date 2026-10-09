@@ -1,6 +1,7 @@
 #include "editor/editor_animation_clip_preview.h"
 #include "scene/animation.h"
 #include "scene/skinned_mesh.h"
+#include "core/rotation_math.h"
 #include <algorithm>
 #include <cmath>
 
@@ -54,6 +55,27 @@ bool AnimationClipPreview::seek(float seconds,std::string &error) {
     error="Composição de preview recusada: "+std::string(sampler_.compositionDiagnostic());return false;
   }
   time_=seconds;return true;
+}
+bool AnimationClipPreview::overridePose(runtime::ObjectId target,resources::AnimationPath path,std::span<const float> values,std::string &error) {
+  error.clear();const auto *object=scene_.find(target);
+  if(!active()||!object) {error="Alvo da pose isolada ausente";return false;}
+  for(float v:values)if(!std::isfinite(v)) {error="Pose isolada não finita";return false;}
+  if(path==resources::AnimationPath::Weights) {
+    const auto *skin=static_cast<const scene::SkinnedMesh*>(object->components.find(scene::SkinnedMesh::descriptor));
+    if(!skin||values.size()!=skin->blendShapeWeights.size()) {error="Morph incompatível com a malha";return false;}
+    const auto instance=skin->instanceId();auto *components=scene_.editComponents(target);
+    auto *edited=static_cast<scene::SkinnedMesh*>(components->editInstance(instance));
+    for(usize i=0;i<values.size();++i)edited->blendShapeWeights[i]=values[i]*100;
+    return true;
+  }
+  auto pose=object->transform;
+  if(path==resources::AnimationPath::Rotation) {
+    if(values.size()!=4||!rotationEulerXYZNear(values.data(),pose.rotationDegrees,pose.rotationDegrees)) {error="Quaternion isolado inválido";return false;}
+  } else if(values.size()==3&&path==resources::AnimationPath::Translation)std::copy_n(values.begin(),3,pose.position);
+  else if(values.size()==3&&path==resources::AnimationPath::Scale)std::copy_n(values.begin(),3,pose.scale);
+  else {error="Propriedade da pose isolada inválida";return false;}
+  if(!runtime::isTransformValid(pose)||!scene_.setTransform(target,pose)) {error="Pose isolada singular ou inválida";return false;}
+  return true;
 }
 void AnimationClipPreview::cancel() {
   sampler_.reset();scene_.reset();source_={};owner_=runtime::kInvalidObject;time_=0;sceneRevision_=0;clipRevision_=0;

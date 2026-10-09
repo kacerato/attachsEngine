@@ -33,8 +33,8 @@ public sealed unsafe class EditorContext : IDisposable
     internal EditorContext(AnimationAuthorAccess* access)
     {
         var prefixSize = (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.Bake)).ToInt32();
-        if (access == null || (access->Version < 1 || access->Version > 4) ||
-            access->Size != (access->Version == 1 ? prefixSize : access->Version == 2 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.SampleComposed)).ToInt32() : access->Version == 3 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.BakeAdvanced)).ToInt32() : (uint)sizeof(AnimationAuthorAccess)) || access->Context == null ||
+        if (access == null || (access->Version < 1 || access->Version > 5) ||
+            access->Size != (access->Version == 1 ? prefixSize : access->Version == 2 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.SampleComposed)).ToInt32() : access->Version == 3 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.BakeAdvanced)).ToInt32() : access->Version == 4 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.PreviewClip)).ToInt32() : (uint)sizeof(AnimationAuthorAccess)) || access->Context == null ||
             access->Selected == null || access->Count == null || access->At == null || access->Create == null ||
             access->Extract == null || access->Begin == null || access->Snapshot == null || access->Apply == null ||
             access->AddTrack == null || access->Commit == null || access->Cancel == null || access->Copy == null ||
@@ -44,6 +44,7 @@ public sealed unsafe class EditorContext : IDisposable
         if (access->Version >= 2 && access->Bake == null) throw new NotSupportedException("The editor has no native bake implementation.");
         if (access->Version >= 3 && access->SampleComposed == null) throw new NotSupportedException("The editor has no layer composition evaluator.");
         if (access->Version >= 4 && (access->BakeAdvanced == null || access->Consolidate == null)) throw new NotSupportedException("The editor has no clip conversion/consolidation implementation.");
+        if (access->Version >= 5 && (access->PreviewClip == null || access->SeekPreview == null || access->StagePose == null || access->RecordPose == null || access->CancelPose == null || access->ClosePreview == null)) throw new NotSupportedException("The editor has no isolated pose authoring implementation.");
         AnimationAuthorAccess copied = default;
         Buffer.MemoryCopy(access, &copied, sizeof(AnimationAuthorAccess), access->Size);
         _access = copied;
@@ -112,6 +113,28 @@ public sealed unsafe class EditorContext : IDisposable
     {
         using var edit = BeginClip(clip); return edit.Snapshot;
     }
+    private void RequirePosePreview()
+    {
+        if (Access.Version < 5) throw new NotSupportedException("This editor does not support isolated pose authoring.");
+    }
+    /// <summary>Opens an isolated clip preview. Source-scene transforms remain unchanged.</summary>
+    public void PreviewClip(AssetGuid clip, ulong owner, float time = 0)
+    {
+        RequirePosePreview(); ref readonly var api = ref Access;
+        Require(api.PreviewClip(api.Context, new(clip), owner, time) == 1);
+    }
+    /// <summary>Seeks the preview, discarding any unrecorded pose.</summary>
+    public void SeekClipPreview(float time) { RequirePosePreview(); ref readonly var api = ref Access; Require(api.SeekPreview(api.Context, time) == 1); }
+    /// <summary>Stages one property in native track units. No resource or history is published until RecordPose.</summary>
+    public void StagePose(ulong track, ReadOnlySpan<float> values)
+    {
+        RequirePosePreview(); ref readonly var api = ref Access;
+        if (values.Length is < 1 or > 64) throw new ArgumentException("A pose requires between 1 and 64 components.", nameof(values));
+        fixed (float* p = values) Require(api.StagePose(api.Context, track, p, values.Length) == 1);
+    }
+    public void RecordPose() { RequirePosePreview(); ref readonly var api = ref Access; Require(api.RecordPose(api.Context) == 1); }
+    public void CancelPose() { RequirePosePreview(); ref readonly var api = ref Access; Require(api.CancelPose(api.Context) == 1); }
+    public void CloseClipPreview() { RequirePosePreview(); ref readonly var api = ref Access; Require(api.ClosePreview(api.Context) == 1); }
     public void Dispose() { if (!_active) return; Check(); _active = false; }
 }
 
@@ -389,6 +412,12 @@ internal unsafe struct AnimationAuthorAccess
     public delegate* unmanaged<void*, ulong, ulong, float, float*, int, int> SampleComposed;
     public delegate* unmanaged<void*, ulong, ulong, AuthorBakeRequest*, AuthorBakeReport*, int> BakeAdvanced;
     public delegate* unmanaged<void*, ulong, byte*, int, AuthorBakeRequest*, AuthorGuid*, AuthorBakeReport*, int> Consolidate;
+    public delegate* unmanaged<void*, AuthorGuid, ulong, float, int> PreviewClip;
+    public delegate* unmanaged<void*, float, int> SeekPreview;
+    public delegate* unmanaged<void*, ulong, float*, int, int> StagePose;
+    public delegate* unmanaged<void*, int> RecordPose;
+    public delegate* unmanaged<void*, int> CancelPose;
+    public delegate* unmanaged<void*, int> ClosePreview;
 }
 [StructLayout(LayoutKind.Sequential)]
 internal struct AuthorBakeSettings

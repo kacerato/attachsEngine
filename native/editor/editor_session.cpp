@@ -7360,6 +7360,10 @@ bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiP
 }
 
 void EditorSession::cancelPointers() {
+  if(clipPoseGizmo_.active) {
+    clipPoseGizmo_={};clipPoseBeforeDrag_.reset();state_.clipPoseAxis=EditorGizmoHandle::None;
+    cancelAnimationClipPose();refreshAnimationClip();appearanceChanged_=true;
+  }
   if(clipPointer_||clipDrag_) {
     clipDrag_.reset();clipPointer_=0;clipPreview_.cancel();refreshAnimationClip();appearanceChanged_=true;
   }

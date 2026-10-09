@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "Viking Walk — Final IK",
+  "model": "Assets/Plugins/RootMotion/Shared Demo Assets/Characters/Viking/Viking Walk.FBX",
+  "defaultAnimationName": "Walk",
+  "heightMeters": 1.8,
+  "frameRate": 30,
+  "materials": {
+    "07 - Default": {"baseColor": "Assets/Plugins/RootMotion/Shared Demo Assets/Characters/Viking/Textures/Viking.TGA"},
+    "Shield": {"baseColor": "Assets/Plugins/RootMotion/Shared Demo Assets/Characters/Viking/Textures/Viking Shield and Axe.tga"}
+  }
+}

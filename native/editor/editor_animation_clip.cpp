@@ -3,6 +3,8 @@
 #include "resources/animation_binding_path.h"
 #include "scene/skinned_mesh.h"
 #include "scene/import_link.h"
+#include "renderer/normal_matrix.h"
+#include "core/rotation_math.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -141,6 +143,7 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   const auto *asset=animationClipAsset(guid);
   if(!asset) {error="Clipe editável ausente";return false;}
   if(!document_.exists(owner)) {error="Raiz de preview ausente";return false;}
+  clipPoseDraft_.reset();state_.clipPosePending=false;state_.clipPoseIsolated=false;clipPoseGizmo_={};state_.clipPoseAxis=EditorGizmoHandle::None;
   std::string previewDiagnostic;
   if(!clipPreview_.begin(document_,owner,*asset,previewDiagnostic)||!clipPreview_.seek(0,previewDiagnostic))clipPreview_.cancel();
   state_.clipLayer=0;state_.clipLayersShown=state_.clipLayerPicker=false;
@@ -158,6 +161,8 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   clipEpoch_=sceneEpoch_;state_.clipDiagnostic=previewDiagnostic;appearanceChanged_=true;refreshAnimationClip();frameAnimationClip();return true;
 }
 void EditorSession::closeAnimationClip() {
+  clipPoseDraft_.reset();state_.clipPosePending=false;
+  clipPoseGizmo_={};clipPoseBeforeDrag_.reset();state_.clipPoseGraph=nullptr;state_.clipPoseAxis=EditorGizmoHandle::None;
   clipPreview_.cancel();clipDrag_.reset();clipPointer_=0;
   clipHandle_=0;state_.clipTangentPicker=false;state_.clipModeSide=0;
   viewportPointers_.clear();pinchDistance_=0;
@@ -172,15 +177,60 @@ void EditorSession::closeAnimationClip() {
 }
 bool EditorSession::seekAnimationClip(float seconds,std::string &error) {
   if(!state_.clipOpen||!clipPreview_.active()) {error="Abra um clipe";return false;}
+  // Invalid seeks must not discard a useful unrecorded pose.
+  const auto *live=animationClipAsset(state_.clipGuid);
+  if(!live||!std::isfinite(seconds)||seconds<0||seconds>live->duration) {error="Tempo de preview fora do clipe";return false;}
+  cancelAnimationClipPose();
   if(!clipPreview_.seek(seconds,error))return false;
   state_.clipTime=seconds;appearanceChanged_=true;return true;
 }
+bool EditorSession::previewAnimationClipPose(u64 trackId,std::span<const float> values,std::string &error) {
+  error.clear();const auto *live=animationClipAsset(state_.clipGuid);
+  if(!state_.clipOpen||!live||isPlaying()||clipDrag_||history_.isOpen()||!clipPreview_.active()) {error="Abra um clipe e conclua o gesto atual";return false;}
+  if(clipPoseDraft_&&(clipPoseDraft_->revision!=live->revision||clipPoseSceneRevision_!=document_.revision()||
+      clipPoseTime_!=state_.clipTime)) {cancelAnimationClipPose();error="Contexto da pose mudou; tente novamente";return false;}
+  const auto *track=live->track(trackId);
+  if(!track) {error="Trilha da pose ausente";return false;}
+  auto candidate=clipPoseDraft_?*clipPoseDraft_:*live;
+  if(!candidate.putPose(trackId,state_.clipTime,values,error))return false;
+  AnimationClipPreview checked;
+  if(!checked.begin(document_,state_.clipOwner,candidate,error)||!checked.seek(state_.clipTime,error))return false;
+  if(!clipPreview_.begin(document_,state_.clipOwner,candidate,error)||!clipPreview_.seek(state_.clipTime,error))return false;
+  state_.clipTrack=trackId;state_.clipLayer=track->layer;
+  clipPoseDraft_=std::move(candidate);clipPoseSceneRevision_=document_.revision();clipPoseTrack_=trackId;clipPoseTime_=state_.clipTime;
+  state_.clipPosePending=true;state_.clipPlaying=false;appearanceChanged_=true;refreshAnimationClip();return true;
+}
+bool EditorSession::recordAnimationClipPose(std::string &error) {
+  error.clear();const auto *live=animationClipAsset(state_.clipGuid);
+  if(!clipPoseDraft_||!live||isPlaying()||clipDrag_||clipPoseDraft_->guid!=state_.clipGuid||
+      clipPoseDraft_->revision!=live->revision||clipPoseSceneRevision_!=document_.revision()||
+      clipPoseTime_!=state_.clipTime||clipPoseTrack_!=state_.clipTrack) {error="Pose pendente ausente ou contexto modificado";return false;}
+  const auto draft=*clipPoseDraft_;
+  if(!editAnimationClipAsset(live->guid,live->revision,[&](auto &candidate){candidate=draft;return true;},error))return false;
+  clipPoseDraft_.reset();state_.clipPosePending=false;refreshAnimationClip();frameAnimationClip();appearanceChanged_=true;return true;
+}
+void EditorSession::cancelAnimationClipPose() {
+  if(!clipPoseDraft_)return;
+  clipPoseDraft_.reset();state_.clipPosePending=false;state_.clipAsset=animationClipAsset(state_.clipGuid);
+  if(state_.clipOpen&&state_.clipAsset) {
+    std::string error;
+    if(!clipPreview_.begin(document_,state_.clipOwner,*state_.clipAsset,error)||!clipPreview_.seek(std::min(state_.clipTime,state_.clipAsset->duration),error)) {
+      clipPreview_.cancel();state_.clipDiagnostic=error;
+    }
+  }
+  appearanceChanged_=true;
+}
 void EditorSession::refreshAnimationClip() {
   state_.clipAssets=&animationClipAssets_;state_.clipAsset=nullptr;
+  state_.clipPoseGraph=nullptr;
   if(!state_.clipOpen)return;
-  const auto *asset=clipDrag_?&*clipDrag_:animationClipAsset(state_.clipGuid);
+  const auto *live=animationClipAsset(state_.clipGuid);
+  if(clipPoseDraft_&&(!live||clipPoseDraft_->revision!=live->revision||clipPoseSceneRevision_!=document_.revision()||
+      clipPoseTime_!=state_.clipTime||clipPoseTrack_!=state_.clipTrack))cancelAnimationClipPose();
+  const auto *asset=clipDrag_?&*clipDrag_:clipPoseDraft_?&*clipPoseDraft_:live;
   if(!asset||clipEpoch_!=sceneEpoch_||!document_.exists(state_.clipOwner)||isPlaying()) {closeAnimationClip();return;}
   state_.clipAsset=asset;
+  if(clipPreview_.active())state_.clipPoseGraph=&clipPreview_.scene();
   if(state_.clipBakeHasReport&&(state_.clipBakeRevision!=asset->revision||state_.clipBakeTrack!=state_.clipTrack))state_.clipBakeHasReport=false;
   // Published clip revisions are immutable. Reconcile retired IDs only when
   // the evaluated revision changes, not on every editor frame or drag sample.
@@ -229,7 +279,89 @@ void EditorSession::refreshAnimationClip() {
         if(runtime::localTransformForWorld(matrix,identity,pose))std::copy_n(pose.rotationDegrees,3,state_.clipPoseValues);
       }
     }
+    if(state_.clipPoseShown&&state_.clipPoseIsolated&&clipPreview_.active()) {
+      resources::AnimationChannel channel;channel.path=track->path;channel.rotationMode=track->rotationMode;channel.weightCount=track->weightCount;channel.curves=track->curves;
+      float values[resources::MaximumMorphTargets];std::string error;
+      // The raw override belongs to one property. Remove it before isolating
+      // another property; a static preview needs no extra evaluation per frame.
+      if((clipPoseTrack_!=track->id||clipPoseTime_!=state_.clipTime)&&!clipPreview_.seek(state_.clipTime,error)) {
+        state_.clipDiagnostic=error;return;
+      }
+      if(!resources::sampleValidatedAnimationChannel(channel,state_.clipTime,values)||
+         !clipPreview_.overridePose(state_.clipTarget,track->path,std::span(values,channel.components()),error)) {
+        state_.clipDiagnostic=error.empty()?"Camada não produz uma pose isolável":error;
+      } else {clipPoseTrack_=track->id;clipPoseTime_=state_.clipTime;}
+    }
   }
+}
+bool EditorSession::handleAnimationPoseGizmo(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
+  using ui::UiPointerPhase;
+  const auto code=animator_widget::code(routing.widgetId);
+  const bool handle=clip_widget::owns(routing.widgetId)&&code>=w::PoseGizmo&&code<w::PoseGizmo+3;
+  if(!clipPoseGizmo_.active&&!handle)return false;
+  if(clipPoseGizmo_.active&&event.pointerId!=clipPosePointer_)return true;
+  const auto *asset=state_.clipAsset;const auto *track=asset?asset->track(state_.clipTrack):nullptr;
+  if(!track||!state_.clipPoseShown||!state_.clipPoseIsolated||track->path==resources::AnimationPath::Weights)return true;
+  const auto mode=track->path==resources::AnimationPath::Translation?EditorGizmoMode::Translate:
+      track->path==resources::AnimationPath::Rotation?EditorGizmoMode::Rotate:EditorGizmoMode::Scale;
+  if(!clipPoseGizmo_.active) {
+    if(event.phase!=UiPointerPhase::Down||!clipPreview_.active())return true;
+    const auto &graph=clipPreview_.scene();const auto *object=graph.find(state_.clipTarget);if(!object)return true;
+    if(!runtime::worldMatrix(graph,object->id,clipPoseWorld_)||!runtime::parentWorldMatrix(graph,object->id,clipPoseParent_)||
+       !renderer::buildNormalMatrix(clipPoseParent_,clipPoseInverse_)) {state_.clipDiagnostic="Gizmo exige pai com transformação inversível";return true;}
+    EditorGizmoSettings settings;settings.screenLengthPixels=72;clipPoseView_=view_;clipPoseAxis_=code-w::PoseGizmo;
+    auto frame=mode==EditorGizmoMode::Scale?buildLocalScaleGizmoFrame(view_,clipPoseWorld_,settings):buildGizmoFrame(view_,clipPoseWorld_+12,settings);
+    if(mode==EditorGizmoMode::Rotate) {
+      if(!gizmoRingAngle(view_,frame.origin,clipPoseAxis_,routing.start,clipPoseAngle_))return true;
+      frame.axisUsable[clipPoseAxis_]=true;clipPoseTotalAngle_=0;
+    }
+    if(!beginGizmoDrag(frame,static_cast<EditorGizmoHandle>(clipPoseAxis_+1),object->transform,settings,clipPoseGizmo_))return true;
+    clipPoseBeforeDrag_=clipPoseDraft_;clipPosePointer_=event.pointerId;clipPoseMoved_=false;state_.clipPlaying=false;
+    state_.clipPoseAxis=clipPoseGizmo_.handle;return true;
+  }
+  if(event.phase==UiPointerPhase::Cancel) {
+    clipPoseGizmo_={};state_.clipPoseAxis=EditorGizmoHandle::None;
+    cancelAnimationClipPose();clipPoseDraft_=std::move(clipPoseBeforeDrag_);state_.clipPosePending=clipPoseDraft_.has_value();
+    if(clipPoseDraft_) {std::string error;clipPreview_.begin(document_,state_.clipOwner,*clipPoseDraft_,error);clipPreview_.seek(state_.clipTime,error);}
+    refreshAnimationClip();return true;
+  }
+  if(event.phase==UiPointerPhase::Move&&routing.dragging) {
+    runtime::Transform moved;bool resolved=false;
+    if(mode==EditorGizmoMode::Rotate) {
+      float angle;
+      if(gizmoRingAngle(clipPoseView_,clipPoseGizmo_.frame.origin,clipPoseAxis_,routing.position,angle)) {
+        clipPoseTotalAngle_+=std::remainder(angle-clipPoseAngle_,6.28318530718f);clipPoseAngle_=angle;
+        float world[16];std::copy_n(clipPoseWorld_,16,world);const u32 u=(clipPoseAxis_+1)%3,v=(clipPoseAxis_+2)%3;
+        const float c=std::cos(clipPoseTotalAngle_),s=std::sin(clipPoseTotalAngle_);
+        for(u32 column=0;column<3;++column) {world[column*4+u]=c*clipPoseWorld_[column*4+u]-s*clipPoseWorld_[column*4+v];world[column*4+v]=s*clipPoseWorld_[column*4+u]+c*clipPoseWorld_[column*4+v];}
+        resolved=runtime::localTransformForWorld(world,clipPoseParent_,moved);
+        if(!resolved)state_.clipDiagnostic="Rotação exige transformação local sem shear";
+      }
+    } else {
+      resolved=resolveGizmoTransform(clipPoseGizmo_,mode,routing.totalDelta,moved);
+      if(resolved&&mode==EditorGizmoMode::Translate) {
+        float delta[3];for(u32 c=0;c<3;++c)delta[c]=moved.position[c]-clipPoseGizmo_.initial.position[c];
+        for(u32 a=0;a<3;++a) {moved.position[a]=clipPoseGizmo_.initial.position[a];for(u32 b=0;b<3;++b)moved.position[a]+=clipPoseInverse_[a*4+b]*delta[b];}
+      }
+    }
+    if(resolved) {
+      std::vector<float> values;
+      if(mode==EditorGizmoMode::Rotate) {
+        float q[4];runtime::transformRotationQuaternion(moved,q);
+        if(track->rotationMode==resources::AnimationRotationMode::Euler) {
+          float euler[3];if(!rotationEulerXYZNear(q,state_.clipPoseValues,euler))return true;values.assign(euler,euler+3);
+        } else values.assign(q,q+4);
+      } else if(mode==EditorGizmoMode::Translate)values.assign(moved.position,moved.position+3);
+      else values.assign(moved.scale,moved.scale+3);
+      std::string error;if(previewAnimationClipPose(track->id,values,error))clipPoseMoved_=true;else state_.clipDiagnostic=error;
+    }
+  }
+  if(event.phase==UiPointerPhase::Up) {
+    clipPoseGizmo_={};state_.clipPoseAxis=EditorGizmoHandle::None;clipPoseBeforeDrag_.reset();
+    if(clipPoseMoved_&&state_.clipPoseAutoKey) {std::string error;if(!recordAnimationClipPose(error))state_.clipDiagnostic=error;}
+    clipPoseMoved_=false;
+  }
+  return true;
 }
 bool EditorSession::applyAnimationClipName(std::string_view value) {
   const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
@@ -282,6 +414,19 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
   const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
   if(!state_.clipOpen||state_.clipGuid!=clipNumberGuid_||!asset||asset->revision!=clipNumberRevision_) {state_.status="Clipe mudou; reabra o campo";return false;}
   if(code==w::Time) {const bool ok=seekAnimationClip(static_cast<float>(value),error);state_.clipDiagnostic=error;return ok;}
+  if(code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets) {
+    if(document_.revision()!=clipNumberSceneRevision_||state_.clipTime!=clipNumberTime_||state_.numericEntity!=state_.clipOwner||state_.clipTrack!=clipNumberTrack_) {state_.clipDiagnostic="Pose mudou; reabra o campo";return false;}
+    const auto *track=asset->track(clipNumberTrack_);const u32 component=code-w::PoseValue;
+    if(!track||component>=state_.clipPoseCount||!state_.clipTarget)return false;
+    std::vector<float> values(state_.clipPoseValues,state_.clipPoseValues+state_.clipPoseCount);values[component]=static_cast<float>(value);
+    if(track->path==resources::AnimationPath::Weights)for(auto &v:values)v*=.01f;
+    else if(track->path==resources::AnimationPath::Rotation&&track->rotationMode!=resources::AnimationRotationMode::Euler) {
+      runtime::Transform pose;std::copy_n(values.begin(),3,pose.rotationDegrees);float q[4];runtime::transformRotationQuaternion(pose,q);values.assign(q,q+4);
+    }
+    bool ok=previewAnimationClipPose(clipNumberTrack_,values,error);
+    if(ok&&state_.clipPoseAutoKey)ok=recordAnimationClipPose(error);
+    state_.clipDiagnostic=error;return ok;
+  }
   if(code==w::BakeRate||code==w::BakeTolerance||(code>=w::BakeSeedX&&code<=w::BakeSeedZ)) {
     if(!state_.clipBakeShown||state_.clipTrack!=clipNumberTrack_) {state_.status="Trilha mudou; reabra o campo";return false;}
     if(code>=w::BakeSeedX&&code<=w::BakeSeedZ) {
@@ -307,17 +452,6 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
       if(state_.clipSelection!=clipNumberSelection_||state_.clipTime!=clipNumberTime_) {error="Seleção ou pivot mudou; reabra o campo";return false;}
       return resources::transformAnimationKeyTimes(candidate,clipNumberSelection_,clipNumberTime_,code==w::SelectionScale?value:1,code==w::SelectionOffset?value:0,error);
     }
-    if(code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets) {
-      if(document_.revision()!=clipNumberSceneRevision_||state_.clipTime!=clipNumberTime_||state_.numericEntity!=state_.clipOwner||state_.clipTrack!=clipNumberTrack_) {error="Pose mudou; reabra o campo";return false;}
-      const auto *track=candidate.track(clipNumberTrack_);const u32 component=code-w::PoseValue;
-      if(!track||component>=state_.clipPoseCount||state_.clipTarget==0)return false;
-      std::vector<float> values(state_.clipPoseValues,state_.clipPoseValues+state_.clipPoseCount);values[component]=static_cast<float>(value);
-      if(track->path==resources::AnimationPath::Weights)for(auto &v:values)v*=.01f;
-      else if(track->path==resources::AnimationPath::Rotation&&track->rotationMode!=resources::AnimationRotationMode::Euler) {
-        runtime::Transform pose;std::copy_n(values.begin(),3,pose.rotationDegrees);float q[4];runtime::transformRotationQuaternion(pose,q);values.assign(q,q+4);
-      }
-      return candidate.putPose(clipNumberTrack_,clipNumberTime_,values,error);
-    }
     if(code==w::Duration) {candidate.duration=static_cast<float>(value);return true;}
     const auto *current=selectedKey(candidate,clipNumberTrack_,clipNumberComponent_,clipNumberKey_);if(!current)return false;
     auto key=*current;
@@ -336,8 +470,16 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
   state_.clipDiagnostic=error;if(ok) {refreshAnimationClip();frameAnimationClip();}return ok;
 }
 bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
-  using ui::UiPointerPhase;const auto *asset=state_.clipAsset;
+  using ui::UiPointerPhase;
+  if(clipPoseDraft_&&event.phase==UiPointerPhase::Down&&routing.target!=ui::UiPointerTarget::Viewport) {
+    const auto code=animator_widget::code(routing.widgetId);
+    const bool poseAction=w::owns(routing.widgetId)&&(code==w::PoseAutoKey||code==w::PoseRecord||code==w::PoseCancel||code==w::PoseIsolate||
+        (code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets)||(code>=w::PoseGizmo&&code<w::PoseGizmo+3));
+    if(!poseAction) {cancelAnimationClipPose();refreshAnimationClip();}
+  }
+  const auto *asset=state_.clipAsset;
   if(!asset)return true;
+  if(handleAnimationPoseGizmo(event,routing))return true;
   const auto &canvas=layout_.clipCanvas;
   const auto timeAt=[&](float x){const float t=state_.clipStart+(x-canvas.x)/std::max(1.f,canvas.width)*(state_.clipEnd-state_.clipStart);
     return std::clamp(std::round(t*asset->displayRate)/asset->displayRate,0.f,asset->duration);};
@@ -454,6 +596,14 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   if(!routing.tapped||!w::owns(routing.widgetId))return true;
   const u32 code=animator_widget::code(routing.widgetId);std::string error;
+  if(code==w::PoseAutoKey) {state_.clipPoseAutoKey=!state_.clipPoseAutoKey;return true;}
+  if(code==w::PoseRecord) {recordAnimationClipPose(error);state_.clipDiagnostic=error;return true;}
+  if(code==w::PoseCancel) {cancelAnimationClipPose();refreshAnimationClip();return true;}
+  if(code==w::PoseIsolate) {
+    state_.clipPoseIsolated=!state_.clipPoseIsolated;state_.clipPlaying=false;
+    if(clipPreview_.active())clipPreview_.seek(state_.clipTime,error);
+    state_.clipDiagnostic=error;refreshAnimationClip();return true;
+  }
   const auto change=[&](auto operation) {
     state_.clipPlaying=false;const auto *live=animationClipAsset(state_.clipGuid);
     const bool ok=live&&editAnimationClipAsset(live->guid,live->revision,operation,error);
@@ -636,7 +786,13 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
       const auto all=rows(*state_.clipAsset,state_.clipLayer);for(usize i=0;i<all.size();++i)if(all[i].track==id) {state_.clipRow=static_cast<u32>(i);break;}frameAnimationClip();
     }
     state_.clipDiagnostic=error;
-  } else if(code==w::Pose) {state_.clipPoseShown=!state_.clipPoseShown;state_.clipAuthoringPicker=0;}
+  } else if(code==w::Pose) {
+    state_.clipPoseShown=!state_.clipPoseShown;state_.clipAuthoringPicker=0;
+    if(!state_.clipPoseShown) {
+      cancelAnimationClipPose();
+      if(clipPreview_.active()&&!clipPreview_.seek(state_.clipTime,error))state_.clipDiagnostic=error;
+    }
+  }
   else if(code==w::PosePrevious) {if(state_.clipPosePage)--state_.clipPosePage;}
   else if(code==w::PoseNext) {if((state_.clipPosePage+1)*3<state_.clipPoseCount)++state_.clipPosePage;}
   else if(code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets) {

@@ -38,7 +38,7 @@ struct AnimationAuthorBakeRequest {
 };
 static_assert(sizeof(AnimationAuthorBakeRequest)==56);
 struct AnimationAuthorAccess {
-  u32 version=4,size=sizeof(AnimationAuthorAccess);
+  u32 version=5,size=sizeof(AnimationAuthorAccess);
   void *context=nullptr;
   u64 (*selected)(void *)=nullptr;
   int (*count)(void *,u32 imported)=nullptr;
@@ -69,6 +69,14 @@ struct AnimationAuthorAccess {
   // ABI 4 leaves ABI 1/2/3 prefixes and bake request intact.
   int (*bakeAdvanced)(void *,u64 draft,u64 track,const AnimationAuthorBakeRequest *,AnimationAuthorBakeReport *)=nullptr;
   int (*consolidate)(void *,u64 draft,const u8 *name,int nameLength,const AnimationAuthorBakeRequest *,resources::AssetGuid *,AnimationAuthorBakeReport *)=nullptr;
+  // ABI 5: isolated authoring preview, never source-scene mutations. Staging
+  // uses native track units and publishes only through recordPose.
+  int (*previewClip)(void *,resources::AssetGuid,u64 owner,float time)=nullptr;
+  int (*seekPreview)(void *,float time)=nullptr;
+  int (*stagePose)(void *,u64 track,const float *values,int count)=nullptr;
+  int (*recordPose)(void *)=nullptr;
+  int (*cancelPose)(void *)=nullptr;
+  int (*closePreview)(void *)=nullptr;
 };
 class AnimationAuthoringScope final {
 public:

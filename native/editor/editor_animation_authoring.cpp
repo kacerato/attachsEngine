@@ -261,6 +261,21 @@ struct AnimationAuthoringScope::Impl {
       if(!s.session.createConsolidatedAnimationClip(draft->asset,textValue(name,length),settings,guid,report,s.error))return 0;
       s.authoredCatalogReady=false;*out=guid;*result={report.inputKeys,report.outputKeys,report.sampledFrames,report.verifiedSamples,report.maximumError};return 1;
     };
+    api.previewClip=[](void *c,resources::AssetGuid guid,u64 owner,float time)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready()||owner>std::numeric_limits<runtime::ObjectId>::max())return 0;
+      const auto *asset=s.session.animationClipAsset(guid);
+      if(!asset||!std::isfinite(time)||time<0||time>asset->duration)return s.reject("Clipe ou tempo de preview inválido");
+      return s.session.openAnimationClip(guid,static_cast<runtime::ObjectId>(owner),s.error)&&s.session.seekAnimationClip(time,s.error)?1:0;
+    };
+    api.seekPreview=[](void *c,float time)->int {auto &s=*static_cast<Impl*>(c);return s.ready()&&s.session.seekAnimationClip(time,s.error)?1:0;};
+    api.stagePose=[](void *c,u64 track,const float *values,int count)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
+      if(!values||count<1||count>static_cast<int>(resources::MaximumMorphTargets))return s.reject("Componentes da pose inválidos");
+      return s.session.previewAnimationClipPose(track,std::span(values,static_cast<usize>(count)),s.error)?1:0;
+    };
+    api.recordPose=[](void *c)->int {auto &s=*static_cast<Impl*>(c);return s.ready()&&s.session.recordAnimationClipPose(s.error)?1:0;};
+    api.cancelPose=[](void *c)->int {auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;s.session.cancelAnimationClipPose();return 1;};
+    api.closePreview=[](void *c)->int {auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;s.session.closeAnimationClip();return 1;};
   }
   bool ready() {
     // A foreign thread must not even write the diagnostic owned by the editor.

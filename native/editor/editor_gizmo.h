@@ -59,6 +59,10 @@ struct EditorGizmoFrame final {
 // atrás do plano próximo — não há onde desenhar o gizmo nesse caso.
 EditorGizmoFrame buildGizmoFrame(const EditorViewport &viewport, const float origin[3],
                                  const EditorGizmoSettings &settings) noexcept;
+// Scale changes local components: its visible axes must follow the object's
+// actual world basis instead of pretending local X is always world X.
+EditorGizmoFrame buildLocalScaleGizmoFrame(const EditorViewport &viewport,const float world[16],
+                                          const EditorGizmoSettings &settings) noexcept;
 
 // Qual eixo o toque pegou. `None` quando nenhum está dentro do limiar; nesse
 // caso o toque pertence à seleção ou à câmera, e é o chamador que decide.

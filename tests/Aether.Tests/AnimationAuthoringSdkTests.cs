@@ -18,6 +18,7 @@ public static unsafe class AnimationAuthoringSdkTests
         var legacy = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v1");
         var legacy2 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v2");
         var legacy3 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v3");
+        var legacy4 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v4");
         var end = (delegate* unmanaged<void*, void>)NativeLibrary.GetExport(library, "author_fixture_end");
         var destroy = (delegate* unmanaged<void*, void>)NativeLibrary.GetExport(library, "author_fixture_destroy");
         var history = (delegate* unmanaged<void*, int, int>)NativeLibrary.GetExport(library, "author_fixture_history");
@@ -35,7 +36,7 @@ public static unsafe class AnimationAuthoringSdkTests
             File.WriteAllText(Path.Combine(root, "Tools.cs"), Source);
             Publish(root);
             var catalog = NativeEditorCommands.Discover(root);
-            Assert.Equal(3, catalog.Count); Assert.True(catalog.Any(c => c.Id == "Tools::Author"));
+            Assert.Equal(4, catalog.Count); Assert.True(catalog.Any(c => c.Id == "Tools::Author"));
             var rootBytes = Encoding.UTF8.GetBytes(root);
             fixed (byte* p = rootBytes) fixture = create(p, rootBytes.Length);
             Assert.True(fixture != null, "production editor fixture opens a real project");
@@ -49,12 +50,15 @@ public static unsafe class AnimationAuthoringSdkTests
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy(fixture)), Report()); end(fixture);
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy2(fixture)), Report()); end(fixture);
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy3(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::Lifetime", legacy4(fixture)), Report()); end(fixture);
             Assert.Equal(2, history(fixture, 0), "lifetime probes do not publish edits");
             Assert.Equal(0, Run(root, "Tools::Consolidate", access(fixture)), Report()); end(fixture);
             Assert.Equal(3, history(fixture, 0), "new composed resource has one independent undo step");
+            Assert.Equal(0, Run(root, "Tools::PosePreview", access(fixture)), Report()); end(fixture);
+            Assert.Equal(4, history(fixture, 0), "multiple pose previews and cancellations publish only the explicit recording");
             File.WriteAllText(Path.Combine(root, "Tools.cs"), "public class Broken { invalid syntax }");
             Assert.False(new ProjectCompiler().Build(root).Success);
-            Assert.Equal(3, NativeEditorCommands.Discover(root).Count, "unpublished source cannot replace applied tools");
+            Assert.Equal(4, NativeEditorCommands.Discover(root).Count, "unpublished source cannot replace applied tools");
             File.WriteAllText(Path.Combine(root, "Tools.cs"), "using Astra.Editor; public static class Invalid { [EditorCommand(\"Async\")] public static async void Bad(EditorContext c) { await System.Threading.Tasks.Task.Yield(); } }");
             Publish(root);
             Assert.Throws<InvalidDataException>(() => NativeEditorCommands.Discover(root), "async void must be rejected before invocation");
@@ -190,6 +194,25 @@ public static unsafe class AnimationAuthoringSdkTests
             if(context.InspectClip(id).Revision!=before) throw new Exception("Dispose published a draft");
             context.Dispose();
             try { var owner=context.SelectedObject; throw new Exception("Closed context accepted"); } catch(ObjectDisposedException) {}
+          }
+          [EditorCommand("Pose isolada pela API")]
+          public static void PosePreview(EditorContext context) {
+            var id=context.Clips[0];var before=context.InspectClip(id);
+            var track=before.Tracks.First(t=>t.Layer==0 && t.Property==ClipProperty.Translation).Id;
+            context.PreviewClip(id,context.SelectedObject,.75f);
+            context.StagePose(track,new float[]{10,2,0});
+            if(context.InspectClip(id).Revision!=before.Revision) throw new Exception("Preview published the resource");
+            context.CancelPose();context.StagePose(track,new float[]{11,3,0});context.SeekClipPreview(.5f);
+            if(context.InspectClip(id).Revision!=before.Revision) throw new Exception("Seek published a draft");
+            var rotationTrack=before.Tracks.First(t=>t.Layer==0 && t.Property==ClipProperty.Rotation);
+            var rotation=rotationTrack.Id;
+            var rotationPose=rotationTrack.Rotation==ClipRotation.Euler?new float[]{15,20,30}:new float[]{0,0,0,1};
+            context.StagePose(track,new float[]{12,4,0});context.StagePose(rotation,rotationPose);
+            context.RecordPose();context.CloseClipPreview();
+            var result=context.InspectClip(id);
+            if(result.Revision!=before.Revision+1 || result.Tracks.Single(t=>t.Id==track).Curves[0].Keys.Single(k=>k.Time==.5f).Value!=12 ||
+               result.Tracks.Single(t=>t.Id==rotation).Curves[0].Keys.Single(k=>k.Time==.5f).Value!=rotationPose[0])
+              throw new Exception("Explicit recording did not publish the grouped pose");
           }
         }
         """;

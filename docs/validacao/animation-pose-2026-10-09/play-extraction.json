@@ -1,0 +1,32 @@
+{
+  "video_sha256": "6209e406c42b8119a850d679609631811edcdd58ea0de498b1e2eaff1fdf9841",
+  "decoded_frames": 230,
+  "extracted_frames": 230,
+  "skipped_frames": 0,
+  "frame_hash_format": "RGB24 bytes",
+  "full_frames_retained": [
+    0,
+    40,
+    80,
+    120
+  ],
+  "duration_last_pts": 3.874344,
+  "roi": [
+    450,
+    180,
+    900,
+    430
+  ],
+  "sheets": [
+    "sheet-00.png",
+    "sheet-01.png",
+    "sheet-02.png",
+    "sheet-03.png",
+    "sheet-04.png",
+    "sheet-05.png",
+    "sheet-06.png",
+    "sheet-07.png"
+  ],
+  "source_folder": "build/animation-pose-ui/play-frames",
+  "review_status": "all 230 extracted frames visually reviewed across sheets 00-07; see acceptance.md"
+}

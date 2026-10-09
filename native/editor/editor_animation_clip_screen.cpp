@@ -1,6 +1,7 @@
 #include "editor/editor_screen.h"
 #include "resources/animation_binding_path.h"
 #include "scene/skinned_mesh.h"
+#include "runtime/transform_math.h"
 #include "ui/ui_text.h"
 #include <cmath>
 #include <cstdio>
@@ -84,8 +85,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   button(left(header,42),"",w::Redo,state.canRedo,false,UiIcon::EditorRedo);
   button(left(header,42),"",w::Frame,true,false,UiIcon::AnimationFrame);
   button(left(header,42),"",w::Expand,true,state.clipExpanded,UiIcon::EditorAuthorFrame);
-  if(header.width>=42)button(left(header,42),"Nome",w::Name);
-  if(header.width>=64)button(left(header,64),"Pose",w::Pose,state.clipTarget!=0&&!state.clipExpanded,state.clipPoseShown,UiIcon::AnimationReferencePose);
+  if(header.width>=56)button(left(header,56),"Nome",w::Name);
+  if(header.width>=84)button(left(header,84),"Pose",w::Pose,state.clipTarget!=0&&!state.clipExpanded,state.clipPoseShown,UiIcon::AnimationReferencePose);
   if(header.width>=52)button(left(header,52),"Novo",w::New);
   const resources::AnimationClipTrack *selected=asset->track(state.clipTrack);
   const resources::AnimationCurve *curve=selected&&state.clipComponent<selected->curves.size()?&selected->curves[state.clipComponent]:nullptr;
@@ -95,7 +96,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   const bool multi=state.clipSelectionMode&&!state.clipSelection.empty()&&!state.clipSelecting;
   const bool bake=state.clipBakeShown&&selected;
   const bool layers=state.clipLayersShown;
-  const float editingHeight=state.clipExpanded?area.height:std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers?42.f:0.f));
+  const float editingHeight=state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers?
+      std::min(148.f,area.height*.4f):std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers?42.f:0.f));
   layout.viewport={area.x,area.y,area.width,std::max(0.f,area.height-editingHeight)};
   UiRect editor{area.x,layout.viewport.bottom(),area.width,editingHeight};
   list.addRect(editor,theme.color.canvas);router.addBlocker(editor);
@@ -163,8 +165,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   } else {
   button(left(transport,100),"Camadas",w::Layers,true,false,UiIcon::AnimationLayers);
   button(left(transport,74),"Chaves",w::Keys,true,!state.clipCurves);
-  button(left(transport,74),"Curvas",w::Curves,true,state.clipCurves,UiIcon::AnimationCurve);
-  button(left(transport,92),"Selecionar",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
+  button(left(transport,92),"Curvas",w::Curves,true,state.clipCurves,UiIcon::AnimationCurve);
+  button(left(transport,92),"Seleção",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
   button(left(transport,68),"Edição",w::Edits,true,state.clipEditPicker);
   if(state.surface.width>=768)button(left(transport,40),"",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
   button(left(transport,44),"",w::Play,state.clipDiagnostic.empty(),state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
@@ -280,11 +282,52 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       button(top(picker,42),std::to_string(first+i+1)+" · "+layer.name+(layer.muted?" · M":layer.solo?" · S":""),w::LayerChoice+i,true,layer.id==state.clipLayer,UiIcon::AnimationLayers);
     }
   }
+  if(state.clipPoseShown&&state.clipPoseIsolated&&!state.clipExpanded&&state.clipPoseGraph&&state.view&&selected&&selected->path!=resources::AnimationPath::Weights) {
+    float world[16];EditorGizmoSettings settings;settings.screenLengthPixels=72;
+    const auto frame=runtime::worldMatrix(*state.clipPoseGraph,state.clipTarget,world)?
+        selected->path==resources::AnimationPath::Scale?buildLocalScaleGizmoFrame(*state.view,world,settings):buildGizmoFrame(*state.view,world+12,settings):EditorGizmoFrame{};
+    if(frame.valid) {
+      list.pushClip(layout.viewport);
+      const UiColor colours[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+      for(u32 axis=0;axis<3;++axis) {
+        const bool active=static_cast<u32>(state.clipPoseAxis)==axis+1;
+        const auto color=active?theme.color.accent:colours[axis];
+        if(selected->path==resources::AnimationPath::Rotation) {
+          for(u32 segment=0;segment<64;++segment) {
+            float from[3],to[3];gizmoRingPoint(frame.origin,axis,frame.axisWorldLength,segment*6.28318530718f/64,from);
+            gizmoRingPoint(frame.origin,axis,frame.axisWorldLength,(segment+1)*6.28318530718f/64,to);
+            UiPoint a,b;if(!projectSegmentToScreen(*state.view,from,to,a,b))continue;
+            list.addLine(a,b,color,active?4:2);
+            const UiPoint mid{(a.x+b.x)*.5f,(a.y+b.y)*.5f};float angle;
+            if(layout.viewport.contains(mid)&&gizmoRingAngle(*state.view,frame.origin,axis,mid,angle))router.addRegion({mid.x-9,mid.y-9,18,18},w::id(w::PoseGizmo+axis));
+          }
+        } else if(frame.axisUsable[axis]) {
+          list.addLine(frame.originScreen,frame.axisEndScreen[axis],color,active?5:3);
+          const auto tip=frame.axisEndScreen[axis];list.addRect({tip.x-6,tip.y-6,12,12},color,selected->path==resources::AnimationPath::Scale?0:6);
+          for(u32 step=3;step<=12;++step) {
+            const float t=step/12.f,side=step==12?theme.touch.minimumTarget:18;
+            const UiPoint at{frame.originScreen.x+t*(tip.x-frame.originScreen.x),frame.originScreen.y+t*(tip.y-frame.originScreen.y)};
+            const auto hit=intersect(layout.viewport,{at.x-side*.5f,at.y-side*.5f,side,side});
+            if(!hit.isEmpty())router.addRegion(hit,w::id(w::PoseGizmo+axis));
+          }
+        }
+      }
+      list.addRect({frame.originScreen.x-3,frame.originScreen.y-3,6,6},theme.color.text,3);list.popClip();
+    }
+  }
   if(!state.clipDiagnostic.empty()) {
     const UiRect note{layout.viewport.x+8,layout.viewport.y+8,std::max(0.f,layout.viewport.width-16),32};
     list.addRect(note,theme.color.surface);label(note,state.clipDiagnostic,theme.color.warning);
   }
   if(state.clipPoseShown&&selected&&state.clipPoseCount&&!layout.viewport.isEmpty()) {
+    auto actions=deflate(UiRect{layout.viewport.x,layout.viewport.bottom()-44,layout.viewport.width,44},{8,0,8,0});
+    list.addRect(actions,theme.color.surface);router.addBlocker(actions);
+    button(left(actions,98),"Auto-key",w::PoseAutoKey,true,state.clipPoseAutoKey,UiIcon::AnimationAutoKey);
+    button(left(actions,94),"Gravar",w::PoseRecord,state.clipPosePending,false,UiIcon::AnimationRecordPose);
+    button(left(actions,102),"Cancelar",w::PoseCancel,state.clipPosePending,false,UiIcon::UiClose);
+    button(left(actions,94),"Camada",w::PoseIsolate,true,state.clipPoseIsolated,UiIcon::AnimationReferencePose);
+    const auto *poseLayer=asset->layer(state.clipLayer);
+    label(actions,std::string(state.clipPosePending?"Sem gravar · ":"")+(poseLayer?poseLayer->name:"")+(state.clipPoseIsolated?" · isolada":" · resultado"),state.clipPosePending?theme.color.warning:theme.color.textDim);
     const u32 first=std::min(state.clipPosePage*3,(state.clipPoseCount-1)/3*3),count=std::min(3u,state.clipPoseCount-first);
     if(layout.viewport.height<180) {
       // A low landscape viewport cannot fit a vertical XYZ inspector. Keep

@@ -6,6 +6,7 @@ namespace {
 constexpr const char *kNames[] = {
     "none",
     "animation/additive",
+    "animation/auto-key",
     "animation/bake",
     "animation/binding",
     "animation/blend",
@@ -22,6 +23,7 @@ constexpr const char *kNames[] = {
     "animation/machine",
     "animation/override",
     "animation/parameters",
+    "animation/record-pose",
     "animation/reduce",
     "animation/reference-pose",
     "animation/rotation-branch",

@@ -7,6 +7,8 @@
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_binding_path.h"
 #include "scene/skinned_mesh.h"
+#include "runtime/transform_math.h"
+#include "core/sha256.h"
 #include "renderer/authoring_geometry.h"
 #include "skinned_glb_fixture.h"
 #include <chrono>
@@ -16,6 +18,7 @@
 #include "ui_software_raster.h"
 #include <cstdlib>
 #include <thread>
+#include <cstring>
 using namespace ae;
 namespace {
 resources::AnimationClipAsset fixture(std::string &error) {
@@ -54,6 +57,12 @@ void tapClipAction(editor::EditorSession &session,const ui::UiFont &font,u32 cod
 }
 void captureClipSurface(editor::EditorSession &session,const ui::UiFont &font,const ui::UiIconAtlas &icons,const char *name) {
   if(const auto *directory=std::getenv("AE_CLIP_CAPTURE_DIR")) {
+    std::fprintf(stderr,"CAPTURE %s icons=%ux%u bytes=%zu pointer=%p font=%zu instances=%zu\n",name,icons.width(),icons.height(),icons.pixels().size(),static_cast<const void*>(icons.pixels().data()),font.atlasPixels().size(),session.instances().size());
+    AE_EXPECT_EQ(icons.pixels().size(),usize(icons.width())*icons.height()*4,"capture atlas has whole RGBA storage");
+    for(const auto &instance:session.instances())if(static_cast<u32>(instance.params[2])==static_cast<u32>(ui::UiInstanceKind::Icon)) {
+      AE_EXPECT_TRUE(std::isfinite(instance.bounds[2])&&std::isfinite(instance.bounds[3])&&instance.bounds[2]>0&&instance.bounds[3]>0,"capture icon dimensions must be nondegenerate");
+      for(float v:instance.atlas)AE_EXPECT_TRUE(std::isfinite(v),"capture icon UV must be finite");
+    }
     const std::filesystem::path output(directory);std::error_code ec;std::filesystem::create_directories(output,ec);
     const auto width=static_cast<u32>(session.screen().surface.width),height=static_cast<u32>(session.screen().surface.height);
     test::UiSoftwareTarget target;target.resize(width,height,.08f,.09f,.11f);test::rasterizeUi(session.instances(),font,icons,target);
@@ -61,6 +70,77 @@ void captureClipSurface(editor::EditorSession &session,const ui::UiFont &font,co
     for(usize i=0;i<target.pixels.size();i+=4)for(u32 c=0;c<3;++c)file.put(static_cast<char>(std::clamp(target.pixels[i+c]*255.f,0.f,255.f)));
   }
 }
+}
+namespace {
+// Private package fixtures are opt-in and are never copied into the repository
+// or required by CI. When supplied, this is a real engine import/sampler/skin
+// acceptance case, not a Blender-only assertion.
+void animation_character_package_native_import_sampling_and_deformation() {
+  using namespace resources;
+  const auto directory=std::filesystem::path(std::getenv("AE_ANIMATION_CHARACTER_LIBRARY"));
+  struct Library final:runtime::AnimationLibrary {
+    runtime::SourceAnimations source;
+    bool findClip(const AssetGuid &guid,runtime::AnimationClipView &out)const override {
+      for(usize i=0;i<source.clipIds.size();++i)if(source.clipIds[i]==guid) {out={&source.clips[i],&source,source.clips[i].name};return true;}
+      return false;
+    }
+  };
+  for(const auto *name:{"RobotKyle","Viking","VikingWalk","VikingRun"}) {
+    const auto path=directory/(std::string(name)+".glb");std::vector<u8> bytes;
+    AE_EXPECT_TRUE(editor::EditorImportTransaction::read(path,bytes),"generated package GLB is present");
+    const auto hash=Sha256::hex(bytes);GltfImport model;
+    AE_EXPECT_TRUE(importGlb(bytes,{}, {},model),model.diagnostic.c_str());
+    AE_EXPECT_TRUE(model.skins.size()==1&&!model.textures.empty()&&model.skippedSkins==0&&model.skippedTextures==0&&model.skippedAnimations==0&&model.unsupportedAnimationChannels==0,"native import preserves skin, textures and every supported animation channel");
+    const bool robot=std::string_view(name)=="RobotKyle";
+    AE_EXPECT_EQ(model.skins.front().joints.size(),robot?49u:22u,"all package joints survive the native importer");
+    AE_EXPECT_EQ(model.animations.size(),robot?0u:1u,"expected source clip count");
+    runtime::SceneGraph graph;std::vector<runtime::ObjectId> objects;Library library;
+    library.source.source=assetGuidFromSeed(name);library.source.clips=model.animations;
+    const float identity[]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    for(const auto &node:model.nodes) {
+      const auto id=graph.createEntity(graph.root(),runtime::ObjectKind::Folder,node.name);runtime::Transform pose;
+      AE_EXPECT_TRUE(id&&runtime::localTransformForWorld(node.localMatrix,identity,pose)&&graph.setTransform(id,pose),"native node TRS is representable without loss");objects.push_back(id);
+    }
+    for(usize i=0;i<model.nodes.size();++i) {
+      const auto &node=model.nodes[i];if(node.parent>=0)AE_EXPECT_TRUE(graph.reparent(objects[i],objects[node.parent],0),"retain imported hierarchy");
+      std::string path=animationBindingSegment(node.name);
+      for(auto parent=node.parent;parent>=0;parent=model.nodes[parent].parent)path=animationBindingSegment(model.nodes[parent].name)+"/"+path;
+      library.source.nodes.push_back({});library.source.nodeNames.push_back(node.name);library.source.nodePaths.push_back(path);
+    }
+    for(usize i=0;i<model.animations.size();++i)library.source.clipIds.push_back(assetGuidFromSeed(std::string(name)+":"+std::to_string(i)));
+    std::vector<runtime::ObjectId> targets;runtime::resolveAnimationTargets(graph,graph.root(),library.source,targets);
+    for(const auto &clip:model.animations)for(const auto &channel:clip.channels)AE_EXPECT_TRUE(channel.node<targets.size()&&targets[channel.node]==objects[channel.node],"every animated node resolves to the actual imported hierarchy");
+    runtime::SceneAnimator animator;animator.begin(graph,library);std::vector<std::vector<float>> initial(model.draws.size());bool changed=false;u32 poses=0,skinnedDraws=0;
+    for(u32 frame=0;frame<=(robot?0u:60u);++frame) {
+      if(!robot) {runtime::SceneAnimator::ExternalSample sample;sample.owner=graph.root();sample.clip=library.source.clipIds[0];sample.time=model.animations[0].duration*frame/60;sample.weight=1;
+        animator.setExternalSamples({sample});AE_EXPECT_TRUE(animator.advance(0,{})&&animator.compositionDiagnostic().empty(),"real runtime sampler evaluates the package clip");}
+      for(usize d=0;d<model.draws.size();++d) {
+        if(model.drawSkins[d]<0)continue;
+        const auto &draw=model.draws[d];const auto &skin=model.skins[model.drawSkins[d]];
+        float drawWorld[16];AE_EXPECT_TRUE(runtime::worldMatrix(graph,objects[model.drawNodes[d]],drawWorld),"mesh world transform");
+        std::vector<float> worlds(skin.joints.size()*16),palette;
+        for(usize j=0;j<skin.joints.size();++j)AE_EXPECT_TRUE(runtime::worldMatrix(graph,objects[skin.joints[j]],worlds.data()+j*16),"joint world transform");
+        AE_EXPECT_TRUE(computeSkinPalette(skin,drawWorld,worlds,palette),"actual bind matrices form a usable palette");
+        std::vector<float> positions;std::vector<u8> influences;
+        for(u32 i=0;i<draw.indexCount;++i) {
+          const usize vertex=model.indices[draw.firstIndex+i]+draw.vertexOffset;float xyz[3];std::memcpy(xyz,model.vertices.data()+vertex*renderer::MapVertexStride,sizeof xyz);
+          positions.insert(positions.end(),xyz,xyz+3);influences.insert(influences.end(),model.skinInfluences.begin()+vertex*SkinInfluenceStride,model.skinInfluences.begin()+(vertex+1)*SkinInfluenceStride);
+        }
+        AE_EXPECT_TRUE(deformPositions(positions,influences,palette,4,nullptr,{}),"production CPU skin deforms source geometry");
+        for(float v:positions)AE_EXPECT_TRUE(std::isfinite(v),"deformation stays finite over the whole clip");
+        if(!frame) {initial[d]=positions;++skinnedDraws;}
+        else for(usize i=0;i<positions.size()&&i<initial[d].size();++i)if(std::abs(positions[i]-initial[d][i])>1e-5)changed=true;
+        ++poses;
+      }
+    }
+    AE_EXPECT_TRUE(skinnedDraws&& (robot||changed),"animated character visibly changes geometry; static Kyle remains a real skin");
+    std::vector<u8> after;AE_EXPECT_TRUE(editor::EditorImportTransaction::read(path,after)&&Sha256::hex(after)==hash,"engine acceptance does not rewrite the supplied GLB");
+    std::printf("CHARACTER %s joints=%zu clips=%zu textures=%zu deformed_samples=%u source_preserved=true\n",name,model.skins[0].joints.size(),model.animations.size(),model.textures.size(),poses);
+  }
+}
+struct RegisterCharacterPackageAcceptance {
+  RegisterCharacterPackageAcceptance() {if(std::getenv("AE_ANIMATION_CHARACTER_LIBRARY"))test::registry().push_back({"animation_character_package_native_import_sampling_and_deformation",animation_character_package_native_import_sampling_and_deformation});}
+} registerCharacterPackageAcceptance;
 }
 AE_TEST(animation_clip_authoring_api_uses_real_resources_without_opening_a_panel) {
   using namespace editor;using namespace resources;
@@ -586,7 +666,7 @@ AE_TEST(animation_clip_conversion_consolidation_ui_api_publication_and_reopen) {
   AnimationAuthoringScope scope(session);const auto &api=scope.access();const auto draft=api.begin(api.context,guid,0);
   AnimationAuthorBakeRequest request;AnimationAuthorBakeReport report;AssetGuid apiCreated;
   const std::string name="API consolidada";
-  AE_EXPECT_TRUE(api.version==4&&api.consolidate(api.context,draft,reinterpret_cast<const u8*>(name.data()),name.size(),&request,&apiCreated,&report)==1&&report.verifiedSamples&&apiCreated!=guid,"ABI 4 publication without a visible panel");
+  AE_EXPECT_TRUE(api.version==5&&api.consolidate(api.context,draft,reinterpret_cast<const u8*>(name.data()),name.size(),&request,&apiCreated,&report)==1&&report.verifiedSamples&&apiCreated!=guid,"ABI 4 publication stays available in ABI 5 without a visible panel");
   const auto before=session.animationClipAsset(guid)->serialize();request.settings.rotation=1;
   const auto quaternionDraft=api.begin(api.context,apiCreated,0);
   AE_EXPECT_TRUE(!api.bakeAdvanced(api.context,quaternionDraft,rotation,&request,&report),"missing Euler reference rejected through ABI");
@@ -595,6 +675,117 @@ AE_TEST(animation_clip_conversion_consolidation_ui_api_publication_and_reopen) {
   tapClipAction(session,font,clip_widget::Edits);tapClipAction(session,font,clip_widget::BakeOpen);tapClipAction(session,font,clip_widget::BakeTarget);
   captureClipSurface(session,font,icons,"clip-consolidate-small.ppm");
   for(const auto code:{clip_widget::BakeTarget,clip_widget::BakeApply,clip_widget::BakeClose})AE_EXPECT_TRUE(clipActionPosition(session,font,code).x>=0,"touch controls fit 655x300");
+}
+AE_TEST(animation_clip_pose_draft_manual_auto_record_and_lifecycle) {
+  using namespace editor;using namespace resources;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production assets");
+  session.initialize(&font,&icons);session.setSurface({0,0,853,394},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"project");
+  const auto owner=session.document().createEntity(session.document().root(),runtime::ObjectKind::Folder,"Mecanismo");
+  AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error)&&session.openAnimationClip(guid,owner,error)&&session.seekAnimationClip(1,error),error.c_str());session.update();
+  const auto track=session.screen().clipTrack;const auto depth=session.history().undoDepth();
+  const auto before=session.animationClipAsset(guid)->serialize(),sceneBefore=serializeEditorDocument(session.document(),0);
+  const float first[]{3,0,0},second[]{3,4,0};
+  AE_EXPECT_TRUE(session.previewAnimationClipPose(track,first,error)&&session.previewAnimationClipPose(track,second,error),error.c_str());
+  AE_EXPECT_TRUE(session.screen().clipPosePending&&session.evaluatedEditorScene().find(owner)->transform.position[1]==4,"pending pose is actually composed");
+  AE_EXPECT_TRUE(session.animationClipAsset(guid)->serialize()==before&&session.history().undoDepth()==depth&&serializeEditorDocument(session.document(),0)==sceneBefore,"draft never writes project, source pose or history");
+  AE_EXPECT_TRUE(!session.seekAnimationClip(-1,error)&&session.screen().clipPosePending,"invalid seek preserves pending pose");
+  session.cancelAnimationClipPose();session.update();
+  AE_EXPECT_TRUE(!session.screen().clipPosePending&&session.evaluatedEditorScene().find(owner)->transform.position[0]==0,"cancel recomposes published pose");
+  tapClipAction(session,font,clip_widget::Pose);tapClipAction(session,font,clip_widget::PoseAutoKey);
+  AE_EXPECT_TRUE(!session.screen().clipPoseAutoKey,"manual mode is reachable");
+  tapClipAction(session,font,clip_widget::PoseValue);auto field=session.pendingTextEdit();
+  AE_EXPECT_TRUE(session.completeTextEdit(field,"5",true),"numeric editor can experiment without recording");session.update();
+  AE_EXPECT_TRUE(session.screen().clipPosePending&&session.animationClipAsset(guid)->serialize()==before,"manual edit keeps source bytes unchanged");
+  captureClipSurface(session,font,icons,"clip-pose-pending.ppm");
+  tapClipAction(session,font,clip_widget::PoseValue+1);field=session.pendingTextEdit();
+  AE_EXPECT_TRUE(session.completeTextEdit(field,"6",true),"a second component belongs to the same draft");session.update();
+  tapClipAction(session,font,clip_widget::PoseRecord);
+  AE_EXPECT_TRUE(!session.screen().clipPosePending&&session.history().undoDepth()==depth+1,"manual record publishes one complete pose transaction");
+  AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[0]==5&&session.evaluatedEditorScene().find(owner)->transform.position[1]==6,"record includes all pending components");
+  tapClipAction(session,font,clip_widget::Undo);AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[0]==0,"undo recomposes before recording");
+  tapClipAction(session,font,clip_widget::Redo);AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[1]==6,"redo restores grouped pose");
+  tapClipAction(session,font,clip_widget::PoseAutoKey);tapClipAction(session,font,clip_widget::PoseValue+2);field=session.pendingTextEdit();
+  AE_EXPECT_TRUE(session.completeTextEdit(field,"7",true),"auto-key records through the same transaction");session.update();
+  AE_EXPECT_TRUE(!session.screen().clipPosePending&&session.history().undoDepth()==depth+2&&session.evaluatedEditorScene().find(owner)->transform.position[2]==7,"auto-key publishes one pose");
+  AE_EXPECT_TRUE(session.previewAnimationClipPose(track,first,error)&&session.seekAnimationClip(0,error)&&!session.screen().clipPosePending,"valid seek discards only unrecorded changes");
+  AE_EXPECT_TRUE(session.previewAnimationClipPose(track,second,error),error.c_str());session.closeAnimationClip();
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),0),sceneBefore,"close never copies preview pose into scene");
+  AE_EXPECT_TRUE(session.openAnimationClip(guid,owner,error)&&!session.screen().clipPosePending,error.c_str());
+  session.setSurface({0,0,655,300},{});session.update();tapClipAction(session,font,clip_widget::Pose);
+  AE_EXPECT_TRUE(clipActionPosition(session,font,clip_widget::PoseAutoKey).x>=0,"auto-key remains reachable on a small landscape surface");
+  AE_EXPECT_TRUE(session.previewAnimationClipPose(track,first,error),error.c_str());session.update();
+  for(const auto action:{clip_widget::PoseRecord,clip_widget::PoseCancel})AE_EXPECT_TRUE(clipActionPosition(session,font,action).x>=0,"record and cancel fit a small surface");
+  captureClipSurface(session,font,icons,"clip-pose-pending-small.ppm");
+  tapClipAction(session,font,clip_widget::Keys);AE_EXPECT_TRUE(!session.screen().clipPosePending,"timeline navigation cannot publish a pose draft accidentally");
+  session.closeAnimationClip();EditorSession reopened;
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(project.path.string().c_str())&&reopened.loadAssets(session.serializeAssets()),"cold project reopen");
+  const auto *persisted=reopened.animationClipAsset(guid);
+  AE_EXPECT_TRUE(persisted&&persisted->track(track)->curves[2].keys[1].value==7,"recorded keys survive reopening");
+}
+AE_TEST(animation_clip_pose_gizmo_records_one_gesture_and_cancels_without_source_mutation) {
+  using namespace editor;using namespace resources;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"assets");
+  session.initialize(&font,&icons);session.setSurface({0,0,853,394},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"project");
+  const auto owner=session.document().createEntity(session.document().root(),runtime::ObjectKind::Folder,"Rotor");
+  AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error)&&session.openAnimationClip(guid,owner,error)&&session.seekAnimationClip(1,error),error.c_str());session.update();
+  const auto sceneBefore=serializeEditorDocument(session.document(),0);const auto depth=session.history().undoDepth();
+  tapClipAction(session,font,clip_widget::Pose);tapClipAction(session,font,clip_widget::PoseIsolate);
+  const auto point=clipActionPosition(session,font,clip_widget::PoseGizmo);
+  AE_EXPECT_TRUE(point.x>=0,"translation axis is visible and reachable through the real router");
+  session.handlePointer({17,UiPointerPhase::Down,point,1});
+  const auto moved=UiPoint{point.x+35,point.y};session.handlePointer({17,UiPointerPhase::Move,moved,1.1});session.update();
+  AE_EXPECT_TRUE(session.screen().clipPosePending&&session.history().undoDepth()==depth,"drag only updates an isolated pose draft");
+  session.handlePointer({17,UiPointerPhase::Move,{point.x+45,point.y},1.2});session.update();
+  session.handlePointer({17,UiPointerPhase::Up,{point.x+45,point.y},1.3});session.update();
+  AE_EXPECT_TRUE(!session.screen().clipPosePending&&session.history().undoDepth()==depth+1,"one whole drag records exactly one transaction");
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),0),sceneBefore,"pose gizmo never changes document transforms");
+  tapClipAction(session,font,clip_widget::Undo);
+  AE_EXPECT_TRUE(std::abs(session.evaluatedEditorScene().find(owner)->transform.position[0])<1e-6,"gizmo undo restores actual evaluated pose");
+  tapClipAction(session,font,clip_widget::PoseAutoKey);
+  const float pending[]{.25f,.15f,0};AE_EXPECT_TRUE(session.previewAnimationClipPose(session.screen().clipTrack,pending,error),error.c_str());session.update();
+  const auto start=clipActionPosition(session,font,clip_widget::PoseGizmo);
+  AE_EXPECT_TRUE(start.x>=0,"pending pose has a reachable gizmo");
+  session.handlePointer({18,UiPointerPhase::Down,start,2});session.handlePointer({18,UiPointerPhase::Move,{start.x+45,start.y},2.1});session.update();
+  session.handlePointer({18,UiPointerPhase::Cancel,{start.x+45,start.y},2.2});session.update();
+  AE_EXPECT_TRUE(session.screen().clipPosePending&&std::abs(session.screen().clipPoseValues[0]-.25f)<1e-6&&std::abs(session.screen().clipPoseValues[1]-.15f)<1e-6,"cancel restores the pre-gesture draft, including another edited component");
+  captureClipSurface(session,font,icons,"clip-pose-gizmo.ppm");
+  tapClipAction(session,font,clip_widget::PoseCancel);
+  tapClipAction(session,font,clip_widget::Layers);tapClipAction(session,font,clip_widget::LayerAdd);
+  tapClipAction(session,font,clip_widget::Targets);tapClipAction(session,font,clip_widget::TargetUse);tapClipAction(session,font,clip_widget::PropertyChoice);
+  const float raw[]{4,0,0};AE_EXPECT_TRUE(session.previewAnimationClipPose(session.screen().clipTrack,raw,error)&&session.recordAnimationClipPose(error),error.c_str());session.update();
+  tapClipAction(session,font,clip_widget::Layers);
+  tapClipAction(session,font,clip_widget::LayerWeight);auto field=session.pendingTextEdit();AE_EXPECT_TRUE(session.completeTextEdit(field,"0.5",true),"layer weight");session.update();
+  tapClipAction(session,font,clip_widget::LayerClose);
+  AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[0]==4,"isolated layer shows the actual editable value");
+  tapClipAction(session,font,clip_widget::Pose);
+  AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[0]==2,"leaving Pose restores composition without a source revision change");
+  tapClipAction(session,font,clip_widget::Pose);
+  AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[0]==4,"returning to Pose restores isolated property inspection");
+  tapClipAction(session,font,clip_widget::PoseIsolate);
+  AE_EXPECT_TRUE(session.evaluatedEditorScene().find(owner)->transform.position[0]==2&&session.screen().clipPoseValues[0]==4,"composition inspection restores the weighted result without rewriting authored values");
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),0),sceneBefore,"layer isolation also leaves source scene untouched");
+  // A bone/property under a rotated parent must receive the inverse-parent
+  // displacement, rather than treating world X as local X.
+  const auto parent=session.document().createEntity(session.document().root(),runtime::ObjectKind::Folder,"Pai girado");
+  auto parentValues=*session.document().find(parent);parentValues.transform.rotationDegrees[1]=90;
+  AE_EXPECT_TRUE(session.document().applyEntityValues(parent,parentValues)&&session.document().reparent(owner,parent,0),"real rotated hierarchy");
+  session.update();tapClipAction(session,font,clip_widget::PoseIsolate);tapClipAction(session,font,clip_widget::PoseAutoKey);
+  const float eye[]{0,3,-12};session.setCameraPose(eye,0,.2f);session.update();
+  const auto rotatedPoint=clipActionPosition(session,font,clip_widget::PoseGizmo);
+  AE_EXPECT_TRUE(rotatedPoint.x>=0,"world X handle remains reachable with rotated parent");
+  const auto rotatedSource=serializeEditorDocument(session.document(),0);
+  const float localX=session.screen().clipPoseValues[0],localZ=session.screen().clipPoseValues[2];
+  session.handlePointer({19,UiPointerPhase::Down,rotatedPoint,3});
+  session.handlePointer({19,UiPointerPhase::Move,{rotatedPoint.x+35,rotatedPoint.y},3.1});session.update();
+  session.handlePointer({19,UiPointerPhase::Up,{rotatedPoint.x+35,rotatedPoint.y},3.2});session.update();
+  AE_EXPECT_TRUE(std::abs(session.screen().clipPoseValues[0]-localX)<1e-4&&std::abs(session.screen().clipPoseValues[2]-localZ)>.1f,"world drag is converted into the correct local axis");
+  AE_EXPECT_EQ(serializeEditorDocument(session.document(),0),rotatedSource,"rotated-parent authoring also preserves source transforms");
 }
 AE_TEST(animation_clip_layers_mobile_api_runtime_history_and_cold_reopen) {
   using namespace editor;using namespace resources;using namespace ui;
@@ -648,7 +839,7 @@ AE_TEST(animation_clip_layers_mobile_api_runtime_history_and_cold_reopen) {
 
   AE_EXPECT_EQ(serializeEditorDocument(session.document(),0),source,"all edits leave source scene pose unchanged");
   session.closeAnimationClip();AnimationAuthoringScope scope(session);const auto &api=scope.access();const auto draft=api.begin(api.context,guid,0);
-  AE_EXPECT_TRUE(api.version==4&&draft,"API 4 independent of visible panel");float raw[3],composed[3];
+  AE_EXPECT_TRUE(api.version==5&&draft,"layer API remains independent of visible panel in ABI 5");float raw[3],composed[3];
   AE_EXPECT_TRUE(api.sample(api.context,draft,track,1,raw,3)==3&&raw[0]==4&&api.sampleComposed(api.context,draft,track,1,composed,3)==3&&composed[0]==2,"raw/composed API contract");
   AE_EXPECT_TRUE(api.cancel(api.context,draft)==1,"cancel draft");
   runtime::SceneAnimator player;player.begin(session.document(),session.mapScene());runtime::SceneAnimator::ExternalSample sample;sample.owner=owner;sample.clip=guid;sample.time=1;sample.weight=1;

@@ -159,6 +159,12 @@ public:
   bool addAnimationClipTrack(resources::AssetGuid guid,u32 expectedRevision,EditorEntityId owner,EditorEntityId target,
                              resources::AnimationPath path,resources::AnimationRotationMode mode,u64 &trackId,std::string &error);
   bool seekAnimationClip(float seconds,std::string &error);
+  // A pose draft is evaluated by the production compositor, but publishes no
+  // project bytes or history until explicitly recorded. Values use the track's
+  // native units (quaternion XYZW, Euler degrees, morph 0..1).
+  bool previewAnimationClipPose(u64 track,std::span<const float> values,std::string &error);
+  bool recordAnimationClipPose(std::string &error);
+  void cancelAnimationClipPose();
   void closeAnimationClip();
   const runtime::SceneGraph &evaluatedEditorScene() const {
     return state_.clipOpen&&clipPreview_.active()?clipPreview_.scene():static_cast<const runtime::SceneGraph&>(document_);
@@ -1990,6 +1996,16 @@ private:
   std::vector<resources::AnimationClipAsset> animationClipAssets_;
   AnimationClipPreview clipPreview_;
   std::optional<resources::AnimationClipAsset> clipDrag_;
+  std::optional<resources::AnimationClipAsset> clipPoseDraft_;
+  u64 clipPoseSceneRevision_=0,clipPoseTrack_=0;
+  float clipPoseTime_=0;
+  EditorGizmoDrag clipPoseGizmo_;
+  EditorViewport clipPoseView_;
+  std::optional<resources::AnimationClipAsset> clipPoseBeforeDrag_;
+  u32 clipPosePointer_=0,clipPoseAxis_=0;
+  bool clipPoseMoved_=false;
+  float clipPoseParent_[16]{},clipPoseWorld_[16]{},clipPoseInverse_[16]{},clipPoseAngle_=0,clipPoseTotalAngle_=0;
+  bool handleAnimationPoseGizmo(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
   u64 clipEpoch_=0;u32 clipPointer_=0,clipNumberRevision_=0,clipHandle_=0;
   resources::AssetGuid clipNumberGuid_;
   u64 clipNumberLayer_=0;
