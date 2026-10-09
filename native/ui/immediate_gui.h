@@ -35,6 +35,9 @@ public:
   std::span<const u8> atlas() const noexcept { return atlas_; }
   u32 atlasWidth() const noexcept { return atlasWidth_; }
   u32 atlasHeight() const noexcept { return atlasHeight_; }
+  // Texel branco do atlas (ImGui TexUvWhitePixel): preenchimentos sólidos de
+  // triângulos da interface amostram este ponto.
+  UiPoint whiteUv() const noexcept { return whiteUv_; }
   u32 rejectedCommands() const noexcept { return rejectedCommands_; }
   void activate() const noexcept;
 private:
@@ -43,6 +46,7 @@ private:
   std::vector<u8> fontData_;
   bool hasBegun_=false;
   u32 atlasWidth_ = 0, atlasHeight_ = 0, rejectedCommands_ = 0;
+  UiPoint whiteUv_{};
   bool pointerActive_ = false;
   u32 pointerId_ = 0;
   u32 replacementId_ = 0;

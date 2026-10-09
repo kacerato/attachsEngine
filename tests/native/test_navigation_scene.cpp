@@ -246,3 +246,28 @@ AE_TEST(navigation_session_bakes_to_project_asset_undoes_and_reloads) {
   AE_EXPECT_EQ(reopened.navMeshes().size(),usize{1},"recarregada do disco");
   AE_EXPECT_TRUE(reopened.navMeshes()[0].guid==guid&&reopened.navMeshes()[0].stats.polygons>0,"mesma malha");
 }
+
+// Primitiva criada por script sob Personagem, corpo móvel ou Agente nasce só
+// visual: um corpo próprio herdaria a pose de outra autoridade.
+AE_TEST(script_primitive_under_character_moving_body_or_agent_is_visual_only) {
+  EditorDocument doc;
+  const auto actor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Ator");
+  auto value=*doc.find(actor);editCharacter(value);doc.applyEntityValues(actor,value);
+  const auto crate=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Caixa");
+  value=*doc.find(crate);editPhysicsBody(value)->motion=scene::BodyMotion::Dynamic;editCollider(value);doc.applyEntityValues(crate,value);
+  const auto walker=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Andarilho");
+  value=*doc.find(walker);value.components.add(scene::NavAgent::descriptor);doc.applyEntityValues(walker,value);
+  const auto prop=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Enfeite");
+  runtime::GameWorld world;AE_EXPECT_TRUE(world.load(doc),"mundo");
+  const runtime::PrimitiveResource resource{1,resources::assetGuidFromSeed("primitive-test"),{}};
+  runtime::WorldStatus status{};
+  for(const auto parent:{actor,crate,walker}) {
+    const auto made=world.createPrimitive(world.handle(static_cast<runtime::ObjectId>(parent)),scene::PrimitiveType::Capsule,resource,status);
+    AE_EXPECT_TRUE(status==runtime::WorldStatus::Ok,"primitiva criada");
+    const auto *object=world.find(made);
+    AE_EXPECT_TRUE(object&&!runtime::physicsBody(*object)&&!runtime::colliderComponent(*object),"só visual sob autoridade móvel");
+  }
+  const auto free=world.createPrimitive(world.handle(static_cast<runtime::ObjectId>(prop)),scene::PrimitiveType::Cube,resource,status);
+  const auto *object=world.find(free);
+  AE_EXPECT_TRUE(object&&runtime::physicsBody(*object)&&runtime::colliderComponent(*object),"objeto livre mantém corpo e colisor");
+}

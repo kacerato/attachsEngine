@@ -413,7 +413,8 @@ void SceneNavigation::driveAgent(GameWorld &w,const Key &key,Agent &a,const scen
     case Drive::Pose: {
       t.position[0]=state.position[0];t.position[1]=state.position[1]+settings.baseOffset;t.position[2]=state.position[2];
       if(settings.updateRotation) t.rotationDegrees[1]=yaw;
-      w.setWorldTransform(handle,t);
+      if(w.setWorldTransform(handle,t)==WorldStatus::TransformOwnedByPhysics)
+        diagnostic_="Agente \""+std::string(object?object->name:"")+"\" não move a própria pose: um filho tem corpo físico; mova o corpo para o agente ou tire-o do filho";
       break;
     }
     case Drive::None: break;

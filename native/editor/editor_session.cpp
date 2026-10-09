@@ -9960,6 +9960,7 @@ void EditorSession::update() {
   // frame anterior custaria um quadro de atraso justamente quando o usuário
   // está arrastando um divisor — o momento em que ele mais olha para a borda.
   list_.begin(state_.surface, metrics);
+  list_.setSolidUv(gui_.immediate().whiteUv());
   router_.beginFrame();
   state_.colliderHandleOccluders={};
   const bool measureColliderUi=state_.colliderTopology||state_.physicsDiagnosticOpen;
@@ -10010,6 +10011,7 @@ void EditorSession::update() {
   }
 
   list_.begin(state_.surface, metrics);
+  list_.setSolidUv(gui_.immediate().whiteUv());
   router_.beginFrame();
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a

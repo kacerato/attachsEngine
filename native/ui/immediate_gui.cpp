@@ -20,6 +20,7 @@ ImmediateGui::ImmediateGui() {
   unsigned char *pixels=nullptr; int w=0,h=0;
   io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);
   atlas_.assign(pixels,pixels+static_cast<usize>(w)*h*4); atlasWidth_=static_cast<u32>(w); atlasHeight_=static_cast<u32>(h);
+  whiteUv_={io.Fonts->TexUvWhitePixel.x,io.Fonts->TexUvWhitePixel.y};
   io.Fonts->SetTexID(static_cast<ImTextureID>(1));
   ImGui::StyleColorsDark(); auto &s=ImGui::GetStyle(); const UiPalette p;
   s.WindowRounding=0; s.ChildRounding=0; s.FrameRounding=3; s.PopupRounding=3;
@@ -43,6 +44,7 @@ bool ImmediateGui::setFont(std::span<const u8> ttf,float pixels) {
   if(!io.Fonts->AddFontFromMemoryTTF(fontData_.data(),static_cast<int>(fontData_.size()),pixels,&config)) return false;
   unsigned char *rgba=nullptr;int w=0,h=0;io.Fonts->GetTexDataAsRGBA32(&rgba,&w,&h);
   atlas_.assign(rgba,rgba+static_cast<usize>(w)*h*4);atlasWidth_=static_cast<u32>(w);atlasHeight_=static_cast<u32>(h);
+  whiteUv_={io.Fonts->TexUvWhitePixel.x,io.Fonts->TexUvWhitePixel.y};
   io.Fonts->SetTexID(static_cast<ImTextureID>(1));return true;
 }
 void ImmediateGui::begin(float w,float h,float dt) { activate();hasBegun_=true;auto &io=ImGui::GetIO(); io.DisplaySize={w,h}; io.DeltaTime=std::clamp(dt,0.001f,0.1f); ImGui::NewFrame(); }

@@ -4,6 +4,8 @@
 #include "scene/event_connection.h"
 #include "scene/camera.h"
 #include "scene/virtual_camera.h"
+#include "scene/navigation.h"
+#include "scene/character.h"
 #include "scene/audio.h"
 #include "scene/audio_mixer.h"
 #include "scene/animator.h"
@@ -336,6 +338,61 @@ int writeVirtualCameraProject(const char *directory) {
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Virtual camera project written: %s\n",root.generic_string().c_str());
+  return 0;
+}
+// Aceite no aparelho do bloco J (docs/planos/NAVEGACAO-2026-10-09.md): chão e
+// parede estáticos, Caixote com Obstáculo, Superfície SEM malha (o bake é feito
+// pela interface no aparelho), Personagem que persegue o Alvo e agente de pose
+// comandado pela sonda.
+int writeNavigationProject(const char *directory) {
+  namespace fs=std::filesystem;
+  const auto fail=[](const std::string &message){std::fprintf(stderr,"Navigation export refused: %s\n",message.c_str());return 2;};
+  if(!directory||!directory[0]) return fail("provide a new empty output directory");
+  std::error_code ec;const auto root=fs::absolute(editor::EditorImportTransaction::fromUtf8(directory),ec).lexically_normal();
+  if(ec||(fs::exists(root,ec)&&(!fs::is_directory(root,ec)||!fs::is_empty(root,ec)))) return fail("output must be a new empty directory");
+  std::vector<u8> probe;
+  if(!readAsset("tests/fixtures/navigation/NavigationProbe.cs",probe)) return fail("fixture source unavailable");
+  for(const auto *folder:{"Scripts","scenes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
+  if(!editor::EditorImportTransaction::write(root/"Scripts/NavigationProbe.cs",probe)) return fail("cannot publish source");
+  editor::EditorSession session;
+  if(!session.setProjectDirectory(root.generic_string().c_str())) return fail("project directory rejected");
+  auto &document=session.document();
+  const auto object=[&](const char *name,float x,float y,float z){
+    const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,name);auto v=*document.find(id);
+    v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;document.applyEntityValues(id,v);return id;};
+  const auto solid=[&](const char *name,float x,float y,float z,float hx,float hy,float hz){
+    const auto id=object(name,x,y,z);auto v=*document.find(id);
+    static_cast<scene::PhysicsBody*>(v.components.add(scene::PhysicsBody::descriptor))->motion=scene::BodyMotion::Static;
+    auto *c=static_cast<scene::Collider*>(v.components.add(scene::Collider::descriptor));c->halfX=hx;c->halfY=hy;c->halfZ=hz;
+    document.applyEntityValues(id,v);return id;};
+  solid("Chão",0,-.5f,0,10,.5f,10);
+  solid("Parede",0,1,0,.4f,1,6);
+  const auto crateId=object("Caixote",1,1,-7);
+  {auto v=*document.find(crateId);auto &o=scene::navObstacle(*v.components.add(scene::NavObstacle::descriptor));
+   o.size[0]=o.size[1]=o.size[2]=2;if(!document.applyEntityValues(crateId,v)) return fail("crate");}
+  const auto surfaceId=object("Superfície",0,0,0);
+  {auto v=*document.find(surfaceId);v.components.add(scene::NavSurface::descriptor);if(!document.applyEntityValues(surfaceId,v)) return fail("surface");}
+  const auto targetId=object("Alvo",7,0,0);
+  const auto chaserId=object("Perseguidor",-7,.05f,0);
+  {auto v=*document.find(chaserId);static_cast<scene::Character*>(v.components.add(scene::Character::descriptor))->speed=5;
+   auto &a=scene::navAgent(*v.components.add(scene::NavAgent::descriptor));a.target=targetId;a.stoppingDistance=1;a.speed=4;
+   if(!document.applyEntityValues(chaserId,v)) return fail("chaser");}
+  const auto walkerId=object("Andarilho",-7,0,-7);
+  {auto v=*document.find(walkerId);auto &a=scene::navAgent(*v.components.add(scene::NavAgent::descriptor));a.speed=3;a.radius=.4f;
+   if(!document.applyEntityValues(walkerId,v)) return fail("walker");}
+  const auto cameraId=object("Câmera",0,20,-16);
+  {auto v=*document.find(cameraId);v.transform.rotationDegrees[0]=50;v.components.add(scene::Camera::descriptor);
+   if(!document.applyEntityValues(cameraId,v)) return fail("camera");}
+  const auto probeId=object("Sonda",0,0,0);
+  {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
+   script->scriptType="acceptance.navigation";script->source="Scripts/NavigationProbe.cs";
+   if(!document.applyEntityValues(probeId,v)) return fail("probe");}
+  if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
+  std::ostringstream descriptor;
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":\"Navegacao-20261009\",\"path\":"<<std::quoted(root.generic_string())
+            <<",\"template\":\"empty\",\"scenes\":1,\"assets\":0},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
+  if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
+  std::printf("Navigation project written: %s\n",root.generic_string().c_str());
   return 0;
 }
 // Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
@@ -969,6 +1026,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-sequence-project")return writeSequenceProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-physics-f-project")return writePhysicsFProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-virtual-camera-project")return writeVirtualCameraProject(argc>2?argv[2]:nullptr);
+  if(argc>1&&std::string_view(argv[1])=="write-navigation-project")return writeNavigationProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-animator-general-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-controller-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true);

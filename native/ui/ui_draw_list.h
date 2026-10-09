@@ -83,6 +83,12 @@ public:
   // Recomeça o frame. O recorte volta a ser `viewport` e todo comando futuro
   // nasce recortado por ele.
   void begin(const UiRect &viewport, const UiFontMetrics &metrics) noexcept;
+  // UV de um texel branco do atlas imediato: triângulos sólidos (addSolidTriangle)
+  // amostram este ponto e ficam com a cor pura dos vértices.
+  void setSolidUv(UiPoint uv) noexcept { solidUv_ = uv; }
+  bool addSolidTriangle(UiPoint a, UiPoint b, UiPoint c, UiColor color) {
+    return addTriangle({a, solidUv_, color}, {b, solidUv_, color}, {c, solidUv_, color});
+  }
 
   // Empilha um recorte, sempre interseção com o atual — um filho nunca pode
   // desenhar fora do pai, e permitir isso transformaria qualquer erro de layout
@@ -133,6 +139,7 @@ private:
 
   std::vector<UiDrawCommand> commands_;
   std::string textArena_;
+  UiPoint solidUv_{};
   UiRect clipStack_[kMaximumClipDepth]{};
   u32 clipDepth_ = 0;
   u32 culled_ = 0;

@@ -227,6 +227,7 @@ public:
     scripts_.setPhysicsQueries(&queries_);
     scripts_.setVirtualCameras(&virtualCameras_);
     scripts_.setAnimatorGraphs(&animatorGraphs_);
+    scripts_.setNavigation(&navigation_);
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);
@@ -288,6 +289,7 @@ public:
     animatorGraphs_.setEvents(nullptr);
     animatorGraphs_.setPhysics(nullptr);
     scripts_.setVirtualCameras(nullptr);
+    scripts_.setNavigation(nullptr);
     events_.reset();
     eventConnections_.reset();
     scripts_.setSceneGui(nullptr);

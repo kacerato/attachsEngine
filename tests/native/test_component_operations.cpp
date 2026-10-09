@@ -15,6 +15,8 @@
 #include "scene/script_extensions.h"
 #include "scene/timer.h"
 #include "scene/transform_tween.h"
+#include "scene/navigation.h"
+#include "navigation/navigation_mesh.h"
 
 #include <functional>
 #include <string>
@@ -299,4 +301,37 @@ AE_TEST(event_connection_recipes_compose_real_types_in_one_undo_step) {
   AE_EXPECT_TRUE(entity&&entity->components.find(scene::AudioSource::descriptor)&&physics&&physics->sensor,"audio and sensor body composed");
   AE_EXPECT_TRUE(session.history().undo(doc)&&!doc.exists(id),"one undo removes the composition");
   u32 plain=0;AE_EXPECT_TRUE(findCreationRecipe("gameplay.event_connection",&plain),"plain connection recipe");
+}
+
+// Regressão do aparelho: os métodos da navegação chegam pelo mesmo caminho dos
+// scripts (ABI astra.component.operations), não só pelo invocador do editor.
+AE_TEST(component_operations_navigation_methods_reach_scripts_through_abi) {
+  EditorDocument doc;
+  const auto floor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Chão");
+  auto value=*doc.find(floor);value.transform.position[1]=-.5f;editPhysicsBody(value);
+  auto *c=editCollider(value);c->halfX=c->halfZ=6;c->halfY=.5f;doc.applyEntityValues(floor,value);
+  const auto surface=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Superfície");
+  value=*doc.find(surface);value.components.add(scene::NavSurface::descriptor);doc.applyEntityValues(surface,value);
+  EditorMapScene resources;navigation::BakeGeometry geometry;std::string error;
+  AE_EXPECT_TRUE(EditorPlayScene::collectNavigationGeometry(doc,resources,surface,geometry,error),error.c_str());
+  navigation::BakeProgress progress;navigation::NavMeshData data;
+  AE_EXPECT_TRUE(navigation::bake(geometry,{},progress,data,error)==navigation::BakeStatus::Ok,error.c_str());
+  data.guid=resources::assetGuidFromSeed("abi-navmesh");
+  value=*doc.find(surface);scene::navSurface(*value.components.edit(scene::NavSurface::descriptor)).data=data.guid;doc.applyEntityValues(surface,value);
+  const auto walker=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Andarilho");
+  value=*doc.find(walker);const u64 instance=value.components.add(scene::NavAgent::descriptor)->instanceId();doc.applyEntityValues(walker,value);
+  attach(doc,walker);
+  EditorPlayScene play;play.setScriptRuntime(OperationsRuntime::api(),"/project");
+  play.navigation().setMeshes(std::span(&data,1));
+  AE_EXPECT_TRUE(play.start(doc,resources),"Play");
+  AE_EXPECT_TRUE(play.advance(1.0/60.0),"primeiro quadro");
+  scene::ComponentOperationValue result;
+  const auto goal=scene::ComponentOperationValue::makeVector(4,0,4);
+  AE_EXPECT_EQ(OperationsRuntime::invoke(walker,instance,"set_destination",std::span(&goal,1),result),1,"set_destination pela ABI");
+  AE_EXPECT_TRUE(result.valueKind()==scene::ComponentValueKind::Boolean&&result.boolean==1,"destino aceito");
+  for(int i=0;i<60*4;++i) play.advance(1.0/60.0);
+  AE_EXPECT_EQ(OperationsRuntime::invoke(walker,instance,"has_path",{},result),1,"has_path pela ABI");
+  const auto *p=play.document().find(walker)->transform.position;
+  AE_EXPECT_TRUE(std::hypot(p[0]-4,p[2]-4)<.5f,"agente chega comandado pela ABI");
+  play.stop();
 }

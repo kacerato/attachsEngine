@@ -1,0 +1,7 @@
+10-09 15:45:37.571 21791 23406 I Astra.Script: 10: NAV start
+10-09 15:45:37.944 21791 23406 I Astra.Script: 10: NAV malha pronta=True poligonos=12 destino=True PASS
+10-09 15:45:45.451 21791 23406 I Astra.Script: 10: NAV andarilho chegou evento=True distancia=0.20 caminho=False PASS
+10-09 15:45:45.451 21791 23406 I Astra.Script: 10: NAV perseguidor menor distancia=1.00 PASS
+10-09 15:45:53.423 21791 23406 I Astra.Script: 10: NAV perseguidor refez caminho menor distancia=1.01 PASS
+10-09 15:45:53.425 21791 23406 I Astra.Script: 10: NAV teleporte=True distancia=0.00 recusa fora da malha=True estado=3 PASS
+10-09 15:45:53.921 21791 23406 I Astra.Script: 10: NAV evento caminho falhou entregue=True PASS

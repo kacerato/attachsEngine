@@ -139,6 +139,10 @@ UiIcon iconForEntity(const EditorEntity &entity) {
   if(meshRenderer(entity)) return UiIcon::EditorAuthorObject;
   if(runtime::lightComponent(entity)) return UiIcon::EditorAuthorSun;
   if(runtime::characterComponent(entity)) return UiIcon::ComponentCharacter;
+  if(entity.components.find(scene::NavAgent::descriptor)) return UiIcon::NavigationAgent;
+  if(entity.components.find(scene::NavSurface::descriptor)) return UiIcon::NavigationSurface;
+  if(entity.components.find(scene::NavObstacle::descriptor)) return UiIcon::NavigationObstacle;
+  if(entity.components.find(scene::NavLink::descriptor)) return UiIcon::NavigationLink;
   if(runtime::physicsBody(entity)) return UiIcon::ComponentPhysics;
   if(entity.components.find(scene::PhysicsEventConnection2D::descriptor))return UiIcon::EventPhysicsConnection2d;
   if(entity.components.find(scene::PhysicsEventConnection3D::descriptor))return UiIcon::EventPhysicsConnection;
@@ -1540,7 +1544,7 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       for(u32 k=0;k<3&&visible;++k) {p[k]=projectWorldToScreen(*state.view,&nav.triangles[t*9+k*3]);visible=p[k].valid;}
       if(!visible) continue;
       const auto color=fill(t<nav.areas.size()?nav.areas[t]:static_cast<u8>(navigation::AreaWalkable));
-      builder.list.addTriangle({p[0].screen,{},color},{p[1].screen,{},color},{p[2].screen,{},color});
+      builder.list.addSolidTriangle(p[0].screen,p[1].screen,p[2].screen,color);
     }
     for(usize e=0;e+5<nav.edges.size();e+=6) {
       UiPoint a,b;
@@ -3421,7 +3425,7 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
         {r.x,r.y+r.height-cut},{r.x,r.y+cut}};
       const UiMeshVertex center{{r.x+r.width*.5f,r.y+r.height*.5f},{},nodeFill};
       for(usize k=0;k<8;++k) {
-        list.addTriangle(center,{corners[k],{},nodeFill},{corners[(k+1)%8],{},nodeFill});
+        list.addSolidTriangle(center.position,corners[k],corners[(k+1)%8],nodeFill);
         list.addLine(corners[k],corners[(k+1)%8],outline,chosen||source?2.f:1.f);
       }
     } else {

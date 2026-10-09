@@ -3,6 +3,7 @@
 #include "scene/camera_look.h"
 #include "scene/camera.h"
 #include "scene/environment.h"
+#include "scene/navigation.h"
 #include "runtime/scene_components.h"
 
 #include <algorithm>
@@ -328,6 +329,20 @@ ObjectHandle GameWorld::createPrimitive(const ObjectHandle &parent,scene::Primit
   if(!resource.mesh || !resource.asset.valid()) {status=WorldStatus::UnknownResource;return {};}
   SceneObject values;
   if(!configurePrimitive(values,type,resource)) {status=WorldStatus::Rejected;return {};}
+  // Sob Personagem, corpo móvel ou Agente de navegação um corpo próprio herdaria
+  // a pose de outra autoridade: a física o recusaria (e o Play pararia) ou ele
+  // travaria a pose do agente. A primitiva nasce
+  // só visual, como o filho visual do editor: forma e corpo ficam de fora.
+  for(auto p=parent.id;p;) {
+    const auto *ancestor=graph_.find(p);if(!ancestor) break;
+    const auto *body=physicsBody(*ancestor);
+    if(characterComponent(*ancestor)||ancestor->components.find(scene::NavAgent::descriptor)||(body&&body->motion!=scene::BodyMotion::Static)) {
+      while(values.components.remove(scene::Collider::descriptor)){}
+      while(values.components.remove(scene::PhysicsBody::descriptor)){}
+      break;
+    }
+    p=ancestor->parent;
+  }
   assignObjectName(values,scene::primitiveNames[static_cast<u32>(type)]);
   const auto id=graph_.createEntity(parent.id,ObjectKind::Mesh,values.name);
   if(!id) {status=WorldStatus::LimitReached;return {};}
