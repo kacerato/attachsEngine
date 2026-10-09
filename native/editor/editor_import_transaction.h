@@ -55,18 +55,24 @@ public:
     bytes.resize(static_cast<usize>(length));input.seekg(0);
     return bytes.empty() || static_cast<bool>(input.read(reinterpret_cast<char *>(bytes.data()),bytes.size()));
   }
-  static bool write(const std::filesystem::path &path,std::span<const u8> bytes) {
+  static bool write(const std::filesystem::path &path,std::span<const u8> bytes,std::string *diagnostic=nullptr) {
     struct Input {std::span<const u8> bytes;usize offset=0;} input{bytes};
     const auto utf8=path.u8string();
-    return platform::replaceAssetFile(reinterpret_cast<const char*>(utf8.c_str()),bytes.size(),[](void *context,void *data,size_t capacity) {
+    platform::AssetFileDiagnostic result;
+    const bool ok=platform::replaceAssetFile(reinterpret_cast<const char*>(utf8.c_str()),bytes.size(),[](void *context,void *data,size_t capacity) {
       auto &source=*static_cast<Input *>(context);
       const auto count=std::min(capacity,source.bytes.size()-source.offset);
       if(count) std::memcpy(data,source.bytes.data()+source.offset,count);
       source.offset+=count;return static_cast<int>(count);
-    },&input);
+    },&input,&result);
+    if(!ok&&diagnostic) {
+      const char *stages[]{"nenhuma","argumento","caminho","abrir","ler","gravar","flush","sincronizar","fechar","publicar"};
+      *diagnostic="Falha ao "+std::string(stages[static_cast<unsigned>(result.stage)])+" "+std::string(reinterpret_cast<const char*>(utf8.c_str()))+" · código "+std::to_string(result.code);
+    }
+    return ok;
   }
-  static bool writeText(const std::filesystem::path &path,const std::string &text) {
-    return write(path,{reinterpret_cast<const u8 *>(text.data()),text.size()});
+  static bool writeText(const std::filesystem::path &path,const std::string &text,std::string *diagnostic=nullptr) {
+    return write(path,{reinterpret_cast<const u8 *>(text.data()),text.size()},diagnostic);
   }
   struct TextEdit {std::string path,expectedHash,text;};
   // Publicação de recursos autorais pequenos (materiais/perfis). O journal
@@ -91,8 +97,8 @@ public:
       if(error||!std::filesystem::create_directory(staging,error)) {diagnostic="Não foi possível preparar os recursos.";return false;}
       for(usize i=1;i<edits.size();++i) {
         const std::string staged=relative+"/"+std::to_string(i)+".resource";
-        if(!writeText(root/fromUtf8(staged),edits[i].text)) {
-          diagnostic="Falha ao preparar os recursos; nada publicado.";std::filesystem::remove_all(staging,error);return false;
+        if(!writeText(root/fromUtf8(staged),edits[i].text,&diagnostic)) {
+          diagnostic+="; nada publicado.";std::filesystem::remove_all(staging,error);return false;
         }
         companions.push_back({staged,edits[i].path});
       }
@@ -104,9 +110,10 @@ public:
       return false;
     }
     const auto &text=edits.front().text;
-    if(!transaction.commit({reinterpret_cast<const u8*>(text.data()),text.size()},registry)) {
+    if(!transaction.commit({reinterpret_cast<const u8*>(text.data()),text.size()},registry,{},&diagnostic)) {
+      const auto reason=diagnostic;
       const bool restored=transaction.rollback();
-      diagnostic=restored?"Gravação recusada; recursos e registro restaurados.":"Recuperação pendente; backups preservados no journal.";
+      diagnostic=reason+(restored?"; recursos e registro restaurados.":"; recuperação pendente, backups preservados no journal.");
       if(restored && !staging.empty()) std::filesystem::remove_all(staging,error);
       return false;
     }
@@ -183,15 +190,19 @@ public:
     hadRegistry_=std::filesystem::exists(registry_,error);if(error) return false;
     std::filesystem::create_directories(directory_,error);if(error) return false;
     std::filesystem::create_directories(source_.parent_path(),error);if(error) return false;
-    if(hadSource_ && !write(directory_/"source.backup",current)) return false;
+    if(hadSource_ && !write(directory_/"source.backup",current,&diagnostic)) return false;
     if(hadRegistry_) {
-      if(!read(registry_,current,32u*1024u*1024u) || !write(directory_/"registry.backup",current)) return false;
+      if(!read(registry_,current,32u*1024u*1024u)) {diagnostic="Registro anterior indisponível.";return false;}
+      if(!write(directory_/"registry.backup",current,&diagnostic)) return false;
     }
     extraRelative_=extra;hadExtra_=false;
     if(!extra.empty()) {
       hadExtra_=std::filesystem::exists(extra_,error);if(error) return false;
       std::filesystem::create_directories(extra_.parent_path(),error);if(error) return false;
-      if(hadExtra_ && (!read(extra_,current,64u*1024u*1024u) || !write(directory_/"extra.backup",current))) return false;
+      if(hadExtra_) {
+        if(!read(extra_,current,64u*1024u*1024u)) {diagnostic="Mapa anterior indisponível.";return false;}
+        if(!write(directory_/"extra.backup",current,&diagnostic))return false;
+      }
     }
     companions_.clear();hadCompanion_.clear();
     if(companions.size()>MaximumCompanions) {diagnostic="Arquivos demais na pasta do modelo.";return false;}
@@ -208,10 +219,10 @@ public:
       std::filesystem::create_directories(directory_/"companions",error);if(error) return false;
     }
     relative_=relative;
-    if(!mark("prepared")) {diagnostic="Não foi possível preparar o journal de importação.";return false;}
+    if(!mark("prepared",&diagnostic)) return false;
     active_=true;return true;
   }
-  bool commit(std::span<const u8> bytes,const std::string &registry,const std::string &extra={}) {
+  bool commit(std::span<const u8> bytes,const std::string &registry,const std::string &extra={},std::string *diagnostic=nullptr) {
     if(!active_) return false;
     // Companheiros primeiro: o principal só aponta para arquivos que já estão lá.
     for(usize i=0;i<companions_.size();++i) {
@@ -221,9 +232,17 @@ public:
       if(hadCompanion_[i]) {std::filesystem::rename(target,companionBackup(i),error);if(error) return false;}
       std::filesystem::rename(staged,target,error);if(error) return false;
     }
-    if(!write(source_,bytes) || !writeText(registry_,registry)) return false;
-    if(!extraRelative_.empty() && !writeText(extra_,extra)) return false;
-    if(!mark("committed")) return false;
+    if(!write(source_,bytes,diagnostic) || !writeText(registry_,registry,diagnostic)) return false;
+    if(!extraRelative_.empty() && !writeText(extra_,extra,diagnostic)) return false;
+    if(!mark("committed",diagnostic)) return false;
+    active_=false;cleanup();return true;
+  }
+  // The same prepared journal owns resource removal. A crash before the
+  // committed marker restores both the original file and its registry.
+  bool commitRemoval(const std::string &registry) {
+    if(!active_||!hadSource_||!companions_.empty()||!extraRelative_.empty())return false;
+    std::error_code error;if(!std::filesystem::remove(source_,error)||error)return false;
+    if(!writeText(registry_,registry)||!mark("committed"))return false;
     active_=false;cleanup();return true;
   }
   bool rollback() {
@@ -240,7 +259,7 @@ private:
         safePath(root_,".astra/import-transaction/registry.backup",unused) &&
         safePath(root_,".astra/import-transaction/extra.backup",unused);
   }
-  bool mark(const char *state) {
+  bool mark(const char *state,std::string *diagnostic=nullptr) {
     std::ostringstream out;
     out<<(companions_.empty()?"ASTRA_IMPORT_2 ":"ASTRA_IMPORT_3 ")<<state<<' '<<std::quoted(relative_)<<' '<<hadSource_<<' '<<hadRegistry_<<' '
        <<std::quoted(extraRelative_.empty()?std::string("-"):extraRelative_)<<' '<<hadExtra_;
@@ -250,7 +269,7 @@ private:
         out<<' '<<std::quoted(companions_[i].staged)<<' '<<std::quoted(companions_[i].relative)<<' '<<hadCompanion_[i];
     }
     out<<'\n';
-    return writeText(journal_,out.str());
+    return writeText(journal_,out.str(),diagnostic);
   }
   bool validCompanion(const Companion &companion) const {
     return companion.staged.starts_with(".astra/import-staging/") && !companion.relative.empty() &&

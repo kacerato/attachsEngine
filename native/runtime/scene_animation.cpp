@@ -1,5 +1,6 @@
 #include "runtime/scene_animation.h"
 #include "resources/animation_composition.h"
+#include "resources/animation_binding_path.h"
 
 #include "runtime/transform_math.h"
 #include "scene/animation.h"
@@ -48,7 +49,31 @@ void resolveAnimationTargets(const SceneGraph &graph, ObjectId owner, const Sour
     const auto found = index.find(link->node);
     if (found != index.end() && targets[found->second] == kInvalidObject) targets[found->second] = id;
   }
-  // 2) Sem vínculo: nome único na subárvore (retarget por nome).
+  // 2) Explicit authored paths, resolved one parent at a time. Duplicate
+  // siblings are ambiguous; duplicate short names in different branches are
+  // valid. This preserves bindings across save/load and prefab instantiation.
+  if(!source.nodePaths.empty()) {
+    for(u32 i=0;i<targets.size()&&i<source.nodePaths.size();++i) {
+      if(targets[i]!=kInvalidObject)continue;
+      const std::string_view path=source.nodePaths[i];
+      if(path.size()>1024||path.find('\\')!=path.npos||(!path.empty()&&(path.front()=='/'||path.back()=='/')))continue;
+      ObjectId current=owner;
+      for(usize start=0;current&&start<path.size();) {
+        const auto end=path.find('/',start);const auto encoded=path.substr(start,end==path.npos?path.size()-start:end-start);
+        std::string name;if(!resources::animationBindingName(encoded,name)) {current=kInvalidObject;break;}
+        ObjectId match=kInvalidObject;bool ambiguous=false;
+        for(const auto id:graph.childrenOf(current))if(const auto *object=graph.find(id);object&&name==object->name) {
+          if(match) {ambiguous=true;break;}match=id;
+        }
+        current=ambiguous?kInvalidObject:match;
+        if(end==path.npos)break;
+        start=end+1;
+      }
+      if(graph.exists(current))targets[i]=current;
+    }
+    return;
+  }
+  // 3) Sem vínculo: nome único na subárvore (retarget por nome).
   std::unordered_map<std::string_view, i64> byName;
   for (const auto id : subtree) {
     const auto *candidate = graph.find(id);
@@ -338,6 +363,9 @@ std::shared_ptr<const SceneAnimator::LayerPose> SceneAnimator::layerPose(ObjectI
   for(const auto &entry:layerPoses_) if(entry.owner==owner&&entry.instance==instance&&entry.layer==layer) return entry.pose;
   return {};
 }
+bool sampleChannel(const SourceAnimations &source,const resources::AnimationChannel &channel,float time,std::span<float> out) {
+  return source.channelsValidated?resources::sampleValidatedAnimationChannel(channel,time,out):resources::sampleAnimationChannel(channel,time,out);
+}
 
 bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &writable) {
   playing_ = posed_ = 0;
@@ -446,7 +474,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
         const ObjectId target = targets[channel.node];
         if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
         std::vector<float> value(channel.components());
-        if (!resources::sampleAnimationChannel(channel, local, value)) continue;
+        if(!sampleChannel(*view.source,channel,local,value)) {
+          compositionDiagnostic_="Canal não produz valor válido: "+state.clip.text()+" · nó "+std::to_string(channel.node);continue;
+        }
         contribute(target, channel.path, state.layer, state.weight, std::move(value));
       }
     }
@@ -496,8 +526,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       for(const auto &channel:ref.clip->channels) {
         if(channel.node>=refTargets.size()||refTargets[channel.node]==kInvalidObject) continue;
         std::vector<float> value(channel.components());
-        if(resources::sampleAnimationChannel(channel,std::clamp(sample.referenceTime,0.f,ref.clip->duration),value))
+        if(sampleChannel(*ref.source,channel,std::clamp(sample.referenceTime,0.f,ref.clip->duration),value))
           references.emplace((u64(refTargets[channel.node])<<2)|static_cast<u64>(channel.path),std::move(value));
+        else compositionDiagnostic_="Canal de referência não produz valor válido: "+sample.referenceClip.text()+" · nó "+std::to_string(channel.node);
       }
       }
     }
@@ -525,7 +556,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       const ObjectId target = targets[channel.node];
       if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
       std::vector<float> value(channel.components());
-      if (!resources::sampleAnimationChannel(channel, sample.time, value)) continue;
+      if(!sampleChannel(*view.source,channel,sample.time,value)) {
+        compositionDiagnostic_="Canal não produz valor válido: "+sample.clip.text()+" · nó "+std::to_string(channel.node);continue;
+      }
       if(bindingIndex[(u64(sample.owner)<<32)|sample.layer].insert((u64(target)<<2)|static_cast<u64>(channel.path)).second)
         nextBindings.push_back({sample.owner,sample.layer,target,channel.path,value.size()});
       if(!masked(target)) {

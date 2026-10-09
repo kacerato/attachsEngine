@@ -3,6 +3,9 @@
 #include <cstring>
 #include <filesystem>
 #include <chrono>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 namespace {
 struct Bytes {
@@ -60,6 +63,36 @@ AE_TEST(asset_atomic_oversized_input_is_rejected) {
   AE_EXPECT_TRUE(!f.write("long", 4, 3), "length checked");
   AE_EXPECT_TRUE(!std::filesystem::exists(f.path), "no incomplete destination");
 }
+#if defined(_WIN32)
+AE_TEST(asset_atomic_locked_target_reports_publication_and_preserves_source) {
+  Fixture f;
+  AE_EXPECT_TRUE(f.write("old", 3, 3), "initial");
+  struct LockedFile {
+    HANDLE value = INVALID_HANDLE_VALUE;
+    ~LockedFile() { if (value != INVALID_HANDLE_VALUE) CloseHandle(value); }
+  } lock;
+  const auto wide = std::filesystem::path(f.path).wstring();
+  lock.value = CreateFileW(wide.c_str(), GENERIC_READ, FILE_SHARE_READ,
+      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  AE_EXPECT_TRUE(lock.value != INVALID_HANDLE_VALUE, "lock destination against replacement");
+  Bytes bytes{"new", 3};
+  ae::platform::AssetFileDiagnostic diagnostic;
+  AE_EXPECT_TRUE(!ae::platform::replaceAssetFile(f.path.c_str(), 3, readBytes,
+      &bytes, &diagnostic), "locked destination must reject publication");
+  AE_EXPECT_EQ(diagnostic.stage, ae::platform::AssetFileStage::Publish, "report failing stage");
+  AE_EXPECT_TRUE(diagnostic.code == ERROR_SHARING_VIOLATION ||
+      diagnostic.code == ERROR_ACCESS_DENIED, "retain Windows publication error");
+  AE_EXPECT_TRUE(f.matches("old"), "original remains intact");
+  AE_EXPECT_TRUE(!std::filesystem::exists(f.path + ".aether-tmp"), "failed temporary cleaned");
+  CloseHandle(lock.value);
+  lock.value = INVALID_HANDLE_VALUE;
+  bytes = {"new", 3};
+  AE_EXPECT_TRUE(ae::platform::replaceAssetFile(f.path.c_str(), 3, readBytes,
+      &bytes, &diagnostic), "publication succeeds after releasing lock");
+  AE_EXPECT_EQ(diagnostic.stage, ae::platform::AssetFileStage::None, "clear stale diagnostics");
+  AE_EXPECT_TRUE(f.matches("new"), "new contents published");
+}
+#endif
 AE_TEST(asset_build_id_requires_exact_lowercase_sha256) {
   const char *id = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   AE_EXPECT_TRUE(ae::platform::validAssetBuildId(id, 64), "valid hash");

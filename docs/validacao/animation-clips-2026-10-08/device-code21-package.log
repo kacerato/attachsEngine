@@ -1,0 +1,227 @@
+Activity Resolver Table:
+  Non-Data Actions:
+      android.intent.action.MAIN:
+        1a5b34c dev.aether.editor.u07/dev.aether.editor.shell.AstraShellActivity filter 8f6af95
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+
+Domain verification status:
+
+Key Set Manager:
+  [dev.aether.editor.u07]
+      Signing KeySets: 957
+
+Packages:
+  Package [dev.aether.editor.u07] (7a2877c):
+    appId=11123
+    pkg=Package{1cbaaff dev.aether.editor.u07}
+    codePath=/data/app/~~UaB8omUM8Z-2S_sEGXQgHQ==/dev.aether.editor.u07-4e0gZ2zezpm9MtstJrzKlQ==
+    resourcePath=/data/app/~~UaB8omUM8Z-2S_sEGXQgHQ==/dev.aether.editor.u07-4e0gZ2zezpm9MtstJrzKlQ==
+    legacyNativeLibraryDir=/data/app/~~UaB8omUM8Z-2S_sEGXQgHQ==/dev.aether.editor.u07-4e0gZ2zezpm9MtstJrzKlQ==/lib
+    extractNativeLibs=true
+    primaryCpuAbi=arm64-v8a
+    secondaryCpuAbi=null
+    cpuAbiOverride=null
+    versionCode=21 minSdk=26 targetSdk=35
+    minExtensionVersions=[]
+    versionName=0.2.9-dev.bake.20261008.5
+    hiddenApiEnforcementPolicy=2
+    usesNonSdkApi=false
+    isMiuiPreinstall=false
+    splits=[base]
+    apkSigningVersion=2
+    flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    forceQueryable=false
+    pageSizeCompat=0
+    scannedAsStoppedSystemApp=false
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    timeStamp=2026-10-08 22:01:16
+    lastUpdateTime=2026-10-08 22:01:17
+    installerPackageName=null
+    installerPackageUid=-1
+    initiatingPackageName=com.android.shell
+    originatingPackageName=null
+    packageSource=1
+    appMetadataFilePath=null
+    appMetadataSource=0
+    signatures=PackageSignatures{c373004 version:2, signatures:[6eba7677], past signatures:[]}
+    installPermissionsFixed=false
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privatePkgFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    apexModuleName=null
+    requested permissions:
+      android.permission.VIBRATE
+    install permissions:
+      android.permission.VIBRATE: granted=true
+    User 0: ceDataInode=4490110 deDataInode=4673010 installed=true hidden=false suspended=false distractionFlags=0 stopped=false notLaunched=false enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=/data/user/0/dev.aether.editor.u07
+      firstInstallTime=2026-10-07 11:11:16
+      uninstallReason=0
+      overlay paths:
+        /data/resource-cache/com.android.systemui-neutral-Xru3.frro
+        /data/resource-cache/com.android.systemui-accent-W1pY.frro
+        /data/resource-cache/com.android.systemui-dynamic-vYex.frro
+      runtime permissions:
+    User 999: ceDataInode=0 deDataInode=0 installed=false hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=true enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=null
+      firstInstallTime=1969-12-31 21:00:00
+      uninstallReason=0
+      runtime permissions:
+
+Queries:
+  system apps queryable: false
+  queries via forceQueryable:
+  queries via package name:
+  queries via component:
+    [com.android.settings,com.android.inputdevices,com.xiaomi.trustservice,miui.systemui.plugin,com.xiaomi.mirror,com.xiaomi.touchservice,com.android.keychain,com.miui.touchassistant,com.android.dynsystem,com.miui.misightservice,com.xiaomi.misettings,com.android.systemui,com.miui.cit,com.qualcomm.qti.services.systemhelper,com.android.DeviceAsWebcam,com.miui.qr,android,com.android.provision,com.xiaomi.mi_connect_service,com.android.server.telecom,com.xiaomi.mtb,com.miui.notification,com.xiaomi.barrage,com.miui.bugreport,com.miui.daemon,com.miui.powerkeeper,com.android.localtransport,com.bsp.catchlog,com.miui.securitycore,vendor.qti.frameworks.utils,com.miui.securitycenter,com.xiaomi.aiasst.vision,com.android.providers.settings,com.qualcomm.qti.xrvd.service,com.android.location.fused,com.miui.aod,com.xiaomi.aon,com.miui.audiomonitor]:
+      dev.aether.editor.u07
+    com.android.thememanager:
+      dev.aether.editor.u07
+    com.xiaomi.aicr:
+      dev.aether.editor.u07
+    com.miui.gallery:
+      dev.aether.editor.u07
+    com.miui.player:
+      dev.aether.editor.u07
+    com.android.settings.intelligence:
+      dev.aether.editor.u07
+    com.mi.globalbrowser:
+      dev.aether.editor.u07
+    com.mi.globalminusscreen:
+      dev.aether.editor.u07
+    com.google.android.as.oss:
+      dev.aether.editor.u07
+    com.miui.videoplayer:
+      dev.aether.editor.u07
+    com.miui.global.packageinstaller:
+      dev.aether.editor.u07
+    com.miui.msa.global:
+      dev.aether.editor.u07
+    com.xiaomi.account:
+      dev.aether.editor.u07
+    com.xiaomi.simactivate.service:
+      dev.aether.editor.u07
+    com.xiaomi.glgm:
+      dev.aether.editor.u07
+    com.xiaomi.payment:
+      dev.aether.editor.u07
+    com.xiaomi.mipicks:
+      dev.aether.editor.u07
+    com.miui.weather2:
+      dev.aether.editor.u07
+    com.miui.android.fashiongallery:
+      dev.aether.editor.u07
+    com.xiaomi.midrop:
+      dev.aether.editor.u07
+    com.mi.global.shop:
+      dev.aether.editor.u07
+    com.android.soundrecorder:
+      dev.aether.editor.u07
+    com.xiaomi.calendar:
+      dev.aether.editor.u07
+    com.mi.global.pocobbs:
+      dev.aether.editor.u07
+    com.duokan.phone.remotecontroller:
+      dev.aether.editor.u07
+    com.xiaomi.smarthome:
+      dev.aether.editor.u07
+    com.mi.appfinder:
+      dev.aether.editor.u07
+    com.whatsapp:
+      dev.aether.editor.u07
+    com.instagram.android:
+      dev.aether.editor.u07
+    com.nu.production:
+      dev.aether.editor.u07
+    com.qcymall.googleearphonesetup:
+      dev.aether.editor.u07
+    [com.zhiliaoapp.musically,com.rezvorck.tiktokplugin]:
+      dev.aether.editor.u07
+    com.mercadolibre:
+      dev.aether.editor.u07
+    ch.pboos.android.SleepTimer:
+      dev.aether.editor.u07
+    com.miniclip.eightballpool:
+      dev.aether.editor.u07
+    com.miui.virtualsim:
+      dev.aether.editor.u07
+    br.gov.caixa.fgts.trabalhador:
+      dev.aether.editor.u07
+    com.google.android.play.games:
+      dev.aether.editor.u07
+    com.gearup.booster.offsite:
+      dev.aether.editor.u07
+    com.tencent.rmos:
+      dev.aether.editor.u07
+    com.zzkko:
+      dev.aether.editor.u07
+    br.com.aleluiah_apps.hinario.harpa_crista:
+      dev.aether.editor.u07
+    com.mixapplications.usbtools:
+      dev.aether.editor.u07
+    ru.zdevs.zarchiver:
+      dev.aether.editor.u07
+    com.homuraanimes.appclient:
+      dev.aether.editor.u07
+    com.sofeh.android.musicstudio3:
+      dev.aether.editor.u07
+    com.facebook.katana:
+      dev.aether.editor.u07
+    com.sockslitepro.net:
+      dev.aether.editor.u07
+    com.viscouspot.gitsync:
+      dev.aether.editor.u07
+    com.uptodown:
+      dev.aether.editor.u07
+    com.moonshot.kimichat:
+      dev.aether.editor.u07
+    com.antutu.ABenchMark:
+      dev.aether.editor.u07
+    com.utorrent.client:
+      dev.aether.editor.u07
+    com.wemesh.android:
+      dev.aether.editor.u07
+    com.taobao.taobao:
+      dev.aether.editor.u07
+    com.caju.employeeApp:
+      dev.aether.editor.u07
+    com.crunchyroll.crunchyroid:
+      dev.aether.editor.u07
+    com.dts.freefireth:
+      dev.aether.editor.u07
+    emuready.gamehub.lite:
+      dev.aether.editor.u07
+    com.tencent.ig:
+      dev.aether.editor.u07
+    com.mobile.legends:
+      dev.aether.editor.u07
+    com.fingersoft.hillclimb:
+      dev.aether.editor.u07
+    com.bradesco:
+      dev.aether.editor.u07
+    air.br.com.alelo.mobile.android:
+      dev.aether.editor.u07
+    com.axlebolt.standoff2.xiaomi:
+      dev.aether.editor.u07
+    com.microsoft.office.outlook:
+      dev.aether.editor.u07
+    com.rk.love2d:
+      dev.aether.editor.u07
+  queryable via interaction:
+    User 0:
+    User 999:
+  queryable via uses-library:
+
+Dexopt state:
+  [dev.aether.editor.u07]
+    path: /data/app/~~UaB8omUM8Z-2S_sEGXQgHQ==/dev.aether.editor.u07-4e0gZ2zezpm9MtstJrzKlQ==/base.apk
+      arm64: [status=verify] [reason=install] [primary-abi]
+        [location is /data/app/~~UaB8omUM8Z-2S_sEGXQgHQ==/dev.aether.editor.u07-4e0gZ2zezpm9MtstJrzKlQ==/oat/arm64/base.odex]
+    base APK odex file size: base.odex: 16Kb base.vdex: 120Kb 
+
+Compiler stats:
+  [dev.aether.editor.u07]
+     base.apk - 140

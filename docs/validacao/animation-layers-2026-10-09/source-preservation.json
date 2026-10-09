@@ -1,0 +1,20 @@
+[
+  {
+    "path": "Fontes/Mechanism.glb",
+    "before": "ca06483178d84b27428605065b3709e41dc70e3756c540f2df589d386b6db86b",
+    "after": "ca06483178d84b27428605065b3709e41dc70e3756c540f2df589d386b6db86b",
+    "equal": true
+  },
+  {
+    "path": "Fontes/Mechanism.LICENSE.txt",
+    "before": "1043a115610469adce6fb92fdf63678e8f297af9be280a120a35619468067dbc",
+    "after": "1043a115610469adce6fb92fdf63678e8f297af9be280a120a35619468067dbc",
+    "equal": true
+  },
+  {
+    "path": "Animação/Mecanismos.aeanimator",
+    "before": "0ed72a264ae13732705b1e5ccfb3a8449af8c3be2d2203077da2bed917da4bb7",
+    "after": "0ed72a264ae13732705b1e5ccfb3a8449af8c3be2d2203077da2bed917da4bb7",
+    "equal": true
+  }
+]

@@ -1,4 +1,5 @@
 #include "resources/skeletal_animation.h"
+#include "core/rotation_math.h"
 
 #include <algorithm>
 #include <cmath>
@@ -41,35 +42,6 @@ void multiply(const float a[16], const float b[16], float out[16]) {
   std::copy(result, result + 16, out);
 }
 
-void normalizeQuaternion(float q[4]) {
-  const float length = std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-  if (!(length > 1e-12f) || !std::isfinite(length)) {
-    q[0] = q[1] = q[2] = 0;
-    q[3] = 1;
-    return;
-  }
-  for (u32 i = 0; i < 4; ++i) q[i] /= length;
-}
-
-// Slerp pelo menor arco, como a especificação pede para LINEAR em rotação.
-void slerp(const float a[4], const float b[4], float t, float out[4]) {
-  float target[4]{b[0], b[1], b[2], b[3]};
-  float cosine = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-  if (cosine < 0) {
-    cosine = -cosine;
-    for (auto &value : target) value = -value;
-  }
-  float wa = 1 - t, wb = t;
-  if (cosine < 0.9995f) {
-    const float angle = std::acos(std::min(cosine, 1.0f));
-    const float sine = std::sin(angle);
-    wa = std::sin((1 - t) * angle) / sine;
-    wb = std::sin(t * angle) / sine;
-  }
-  for (u32 i = 0; i < 4; ++i) out[i] = wa * a[i] + wb * target[i];
-  normalizeQuaternion(out);
-}
-
 } // namespace
 
 float wrapAnimationTime(float time, float duration, AnimationWrapMode mode, bool &finished) {
@@ -100,6 +72,52 @@ float wrapAnimationTime(float time, float duration, AnimationWrapMode mode, bool
 }
 
 bool validAnimationChannel(const AnimationChannel &channel) {
+  if(static_cast<u8>(channel.path)>3||static_cast<u8>(channel.interpolation)>2)return false;
+  if(static_cast<u8>(channel.rotationMode)>2||(channel.path!=AnimationPath::Rotation&&channel.rotationMode!=AnimationRotationMode::Quaternion))return false;
+  if(channel.path==AnimationPath::Weights?(!channel.weightCount||channel.weightCount>MaximumMorphTargets):channel.weightCount!=0)return false;
+  if(!channel.layerSources.empty()) {
+    if(channel.layerSources.size()>32||!channel.curves.empty()||!channel.times.empty()||!channel.values.empty()||channel.rotationMode!=AnimationRotationMode::Quaternion)return false;
+    for(const auto &source:channel.layerSources)
+      if(!source.layerSources.empty()||source.node!=channel.node||source.path!=channel.path||source.weightCount!=channel.weightCount||
+         !std::isfinite(source.layerWeight)||source.layerWeight<0||source.layerWeight>1||!std::isfinite(source.layerReferenceTime)||
+         (source.layerReferenceTime<0&&source.layerReferenceTime!=-1)||!validAnimationChannel(source))return false;
+    return !channel.layerSources.front().layerAdditive;
+  }
+  if(!channel.curves.empty()) {
+    if(!channel.times.empty()||!channel.values.empty()||channel.curves.size()!=channel.curveComponents())return false;
+    for(const auto &curve:channel.curves)if(!validAnimationCurve(curve))return false;
+    if(channel.path==AnimationPath::Rotation&&channel.rotationMode!=AnimationRotationMode::Euler) {
+      const auto &keys=channel.curves[0].keys;
+      for(u32 c=1;c<4;++c) {
+        if(channel.curves[c].keys.size()!=keys.size())return false;
+        for(usize i=0;i<keys.size();++i)if(channel.curves[c].keys[i].time!=keys[i].time)return false;
+      }
+      double cumulative=0;float previous[4]{};
+      if(channel.rotationMode==AnimationRotationMode::ProgressiveQuaternion&&channel.curves[4].keys.size()!=keys.size())return false;
+      for(usize i=0;i<keys.size();++i) {
+        float q[4];for(u32 c=0;c<4;++c)q[c]=channel.curves[c].keys[i].value;
+        if(!normalizeRotationQuaternion(q))return false;
+        if(channel.rotationMode==AnimationRotationMode::ProgressiveQuaternion) {
+          for(u32 c=0;c<4;++c) {
+            const auto &key=channel.curves[c].keys[i];
+            if(key.incoming!=AnimationTangentMode::Linear||key.outgoing!=AnimationTangentMode::Linear||key.broken||
+               key.weightedIn||key.weightedOut||key.inSlope!=0||key.outSlope!=0)return false;
+          }
+          double travel=0;if(i) {
+            float authored[4];for(u32 c=0;c<4;++c)authored[c]=channel.curves[c].keys[i].value;
+            travel=rotationDistanceDegrees(previous,authored);cumulative+=travel;
+          }
+          const auto &progress=channel.curves[4].keys[i];
+          if(progress.time!=keys[i].time||std::abs(progress.value-cumulative)>std::max(.00001,cumulative*1e-6)||
+             (i&&progress.value<channel.curves[4].keys[i-1].value))return false;
+          if(i&&travel>0&&progress.value==channel.curves[4].keys[i-1].value)return false;
+        }
+        for(u32 c=0;c<4;++c)previous[c]=channel.curves[c].keys[i].value;
+      }
+    }
+    return true;
+  }
+  if(channel.rotationMode!=AnimationRotationMode::Quaternion)return false;
   const usize keys = channel.times.size();
   if (!keys) return false;
   if (channel.path == AnimationPath::Weights && (!channel.weightCount || channel.weightCount > MaximumMorphTargets))
@@ -113,6 +131,13 @@ bool validAnimationChannel(const AnimationChannel &channel) {
   if (channel.values.size() != keys * perKey) return false;
   for (const float value : channel.values)
     if (!std::isfinite(value)) return false;
+  if (channel.path == AnimationPath::Rotation) {
+    const usize offset = channel.interpolation == AnimationInterpolation::CubicSpline ? 4 : 0;
+    for (usize i = 0; i < keys; ++i) {
+      float pose[4];std::copy_n(channel.values.data()+i*perKey+offset,4,pose);
+      if(!normalizeRotationQuaternion(pose))return false;
+    }
+  }
   return true;
 }
 
@@ -122,8 +147,100 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, float o
 }
 
 bool sampleAnimationChannel(const AnimationChannel &channel, float time, std::span<float> out) {
-  if (!validAnimationChannel(channel) || out.size() < channel.components()) return false;
+  return validAnimationChannel(channel)&&sampleValidatedAnimationChannel(channel,time,out);
+}
+bool sampleValidatedAnimationChannel(const AnimationChannel &channel,float time,std::span<float> out) {
+  if(!std::isfinite(time)||out.size()<channel.components())return false;
   const u32 components = channel.components();
+  if(!channel.layerSources.empty()) {
+    // Fixed storage, one level only, no allocations or key scans in the hot path.
+    float result[MaximumMorphTargets]{},value[MaximumMorphTargets]{},reference[MaximumMorphTargets]{};
+    const auto &base=channel.layerSources.front();
+    if(!sampleValidatedAnimationChannel(base,0,{result,components}))return false;
+    for(const auto &source:channel.layerSources) {
+      const float weight=source.layerWeight;if(weight==0)continue;
+      if(!sampleValidatedAnimationChannel(source,time,{value,components}))return false;
+      if(source.layerAdditive) {
+        std::fill_n(reference,components,channel.path==AnimationPath::Scale?1.f:0.f);
+        if(channel.path==AnimationPath::Rotation)reference[3]=1;
+        if(source.layerReferenceTime>=0&&!sampleValidatedAnimationChannel(source,source.layerReferenceTime,{reference,components}))return false;
+        if(channel.path==AnimationPath::Rotation) {
+          if(!normalizeRotationQuaternion(reference)||!normalizeRotationQuaternion(value))return false;
+          float delta[4],inverse[]{-reference[0],-reference[1],-reference[2],reference[3]},identity[]{0,0,0,1},scaled[4],next[4];
+          const auto multiply=[](const float *a,const float *b,float *q) {
+            const float r[]{a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],
+              a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]};std::copy_n(r,4,q);
+          };
+          multiply(inverse,value,delta);
+          if(!interpolateRotationArc(identity,delta,weight,scaled))return false;
+          multiply(result,scaled,next);std::copy_n(next,4,result);
+          if(!normalizeRotationQuaternion(result))return false;
+        } else for(u32 c=0;c<components;++c) {
+          if(channel.path==AnimationPath::Scale) {
+            if(std::abs(reference[c])<1e-8f)return false;
+            result[c]*=1+(value[c]/reference[c]-1)*weight;
+          } else result[c]+=(value[c]-reference[c])*weight;
+        }
+      } else if(channel.path==AnimationPath::Rotation) {
+        float next[4];if(!interpolateRotationArc(result,value,weight,next))return false;std::copy_n(next,4,result);
+      } else for(u32 c=0;c<components;++c)result[c]=static_cast<float>(double(result[c])+(double(value[c])-result[c])*weight);
+      for(u32 c=0;c<components;++c)if(!std::isfinite(result[c]))return false;
+    }
+    std::copy_n(result,components,out.begin());return true;
+  }
+  if(!channel.curves.empty()) {
+    if(channel.path==AnimationPath::Rotation&&channel.rotationMode==AnimationRotationMode::Euler) {
+      float angles[3];for(u32 c=0;c<3;++c) {
+        AnimationCurveSample value;if(!sampleValidatedAnimationCurve(channel.curves[c],time,value))return false;
+        angles[c]=static_cast<float>(value.value);
+      }
+      rotationQuaternionXYZ(angles,out.data());return normalizeRotationQuaternion(out.data());
+    }
+    if(channel.path==AnimationPath::Rotation&&channel.rotationMode==AnimationRotationMode::ProgressiveQuaternion) {
+      const auto &keys=channel.curves[0].keys;usize i=0;
+      if(time>=keys.back().time)i=keys.size()-1;
+      else if(time>keys.front().time)i=static_cast<usize>(std::upper_bound(keys.begin(),keys.end(),time,[](float t,const auto &k){return t<k.time;})-keys.begin())-1;
+      float a[4];for(u32 c=0;c<4;++c)a[c]=channel.curves[c].keys[i].value;
+      if(!normalizeRotationQuaternion(a))return false;
+      if(i+1==keys.size()||time<=keys.front().time) {std::copy(a,a+4,out.begin());return true;}
+      float b[4];for(u32 c=0;c<4;++c)b[c]=channel.curves[c].keys[i+1].value;
+      if(!normalizeRotationQuaternion(b))return false;
+      const auto &progress=channel.curves[4];const double length=double(progress.keys[i+1].value)-progress.keys[i].value;
+      // Equal orientations have a flat, non-editable progress segment.
+      if(length<=0) {std::copy(a,a+4,out.begin());return true;}
+      AnimationCurveSample value;if(!sampleValidatedAnimationCurve(progress,time,value))return false;
+      const double alpha=(value.value-progress.keys[i].value)/length;
+      if(!std::isfinite(alpha)||std::abs(alpha)>1e30)return false;
+      return interpolateRotationArc(a,b,alpha,out.data());
+    }
+    if(channel.path==AnimationPath::Rotation) {
+      const auto &keys=channel.curves[0].keys;
+      if(keys.size()>1&&time>keys.front().time&&time<keys.back().time) {
+        const auto upper=std::upper_bound(keys.begin(),keys.end(),time,[](float t,const auto &k){return t<k.time;});
+        const usize i=static_cast<usize>(upper-keys.begin())-1;bool linear=true;
+        float a[4],b[4];
+        for(u32 c=0;c<4;++c) {
+          const auto &ka=channel.curves[c].keys[i],&kb=channel.curves[c].keys[i+1];a[c]=ka.value;b[c]=kb.value;
+          linear=linear&&ka.outgoing==AnimationTangentMode::Linear&&kb.incoming==AnimationTangentMode::Linear;
+        }
+        if(linear) {
+          // Authored API values can be finite but large enough to overflow a
+          // float dot product. Never turn that into the legacy identity fallback.
+          if(!normalizeRotationQuaternion(a)||!normalizeRotationQuaternion(b))return false;
+          return interpolateRotationArc(a,b,(time-keys[i].time)/(keys[i+1].time-keys[i].time),out.data());
+        }
+      }
+    }
+    for(u32 c=0;c<components;++c) {
+      AnimationCurveSample value;if(!sampleValidatedAnimationCurve(channel.curves[c],time,value))return false;
+      out[c]=static_cast<float>(value.value);
+      if(!std::isfinite(out[c]))return false;
+    }
+    if(channel.path==AnimationPath::Rotation) {
+      if(!normalizeRotationQuaternion(out.data()))return false;
+    }
+    return true;
+  }
   const bool cubic = channel.interpolation == AnimationInterpolation::CubicSpline;
   const usize keys = channel.times.size();
   const auto value = [&](usize key, u32 part) -> const float * {
@@ -132,7 +249,7 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, std::sp
   };
   const auto emit = [&](const float *source) {
     for (u32 i = 0; i < components; ++i) out[i] = source[i];
-    if (channel.path == AnimationPath::Rotation) normalizeQuaternion(out.data());
+    if (channel.path == AnimationPath::Rotation) return normalizeRotationQuaternion(out.data());
     return true;
   };
   if (keys == 1 || time <= channel.times.front()) return emit(value(0, 1));
@@ -147,10 +264,12 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, std::sp
   if (channel.interpolation == AnimationInterpolation::Linear) {
     const float *a = value(previous, 1), *b = value(next, 1);
     if (channel.path == AnimationPath::Rotation) {
-      slerp(a, b, s, out.data());
-      return true;
+      return interpolateRotationArc(a,b,s,out.data());
     }
-    for (u32 i = 0; i < components; ++i) out[i] = a[i] + (b[i] - a[i]) * s;
+    for (u32 i = 0; i < components; ++i) {
+      out[i] = static_cast<float>(double(a[i])+(double(b[i])-a[i])*s);
+      if(!std::isfinite(out[i]))return false;
+    }
     return true;
   }
   // Hermite cúbico da especificação: v(s) = (2s³-3s²+1)·v0 + (s³-2s²+s)·Δt·b0 +
@@ -159,9 +278,11 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, std::sp
   const float s2 = s * s, s3 = s2 * s;
   const float h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
   const float *v0 = value(previous, 1), *b0 = value(previous, 2), *v1 = value(next, 1), *a1 = value(next, 0);
-  for (u32 i = 0; i < components; ++i)
-    out[i] = h00 * v0[i] + h10 * span * b0[i] + h01 * v1[i] + h11 * span * a1[i];
-  if (channel.path == AnimationPath::Rotation) normalizeQuaternion(out.data());
+  for (u32 i = 0; i < components; ++i) {
+    out[i] = static_cast<float>(double(h00)*v0[i]+double(h10)*span*b0[i]+double(h01)*v1[i]+double(h11)*span*a1[i]);
+    if(!std::isfinite(out[i]))return false;
+  }
+  if (channel.path == AnimationPath::Rotation) return normalizeRotationQuaternion(out.data());
   return true;
 }
 

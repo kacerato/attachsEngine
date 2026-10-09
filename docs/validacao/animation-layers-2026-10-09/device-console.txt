@@ -1,0 +1,64 @@
+ASTRA · Console
+Tempos relativos ao início desta sessão. Repetições consecutivas agrupadas.
+
+#1 · +2s · Importador · Informação
+Abrindo recursos do projeto…
+Projeto AnimatorClips-20261008
+
+#2 · +2s · Importador · Informação
+Projeto aberto
+Projeto AnimatorClips-20261008
+
+#3 · +5s · Editor · Informação
+Compilação automática iniciada · revisão 2
+Build 2
+Projeto AnimatorClips-20261008
+
+#4 · +8s · Editor · Informação
+Compilação concluída; aguardando publicação
+Projeto AnimatorClips-20261008
+
+#5 · +8s · Editor · Informação
+Código publicado · revisão 2
+Build 2
+Projeto AnimatorClips-20261008
+
+#6 · +185s · Editor · Informação
+Ferramenta concluída: Conferir camadas salvas
+Build 2
+Projeto AnimatorClips-20261008
+
+#7 · +207s · Editor · Informação
+Play iniciado · código publicado 2
+Build 2 · Play 1
+Projeto AnimatorClips-20261008
+
+#8 · +208s · Script · Informação
+LAYERS Animator consumes additive translation PASS
+Objeto 8
+Build 2 · Play 1
+Projeto AnimatorClips-20261008
+
+#9 · +208s · Script · Informação
+LAYERS Animator consumes additive scale PASS
+Objeto 8
+Build 2 · Play 1
+Projeto AnimatorClips-20261008
+
+#10 · +208s · Script · Informação
+LAYERS shared controller independent instance PASS
+Objeto 8
+Build 2 · Play 1
+Projeto AnimatorClips-20261008
+
+#11 · +208s · Script · Informação
+LAYERS state clip override PASS
+Objeto 8
+Build 2 · Play 1
+Projeto AnimatorClips-20261008
+
+#12 · +208s · Script · Informação
+LAYERS base rotation advances beneath corrections PASS
+Objeto 8
+Build 2 · Play 1
+Projeto AnimatorClips-20261008

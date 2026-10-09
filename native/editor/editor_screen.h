@@ -22,6 +22,10 @@
 
 #include "resources/physics_material.h"
 #include "resources/animator_controller.h"
+#include "resources/animation_clip_asset.h"
+#include "resources/animation_clip_selection.h"
+#include "resources/animation_clip_clipboard.h"
+#include "resources/animation_clip_bake.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
 #include "renderer/scene_statistics.h"
@@ -240,7 +244,7 @@ enum class EditorWidget : u32 {
   ComponentPreviewConfirm,
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
   CodeMenu, CodeSaveAll, CodeFiles, CodeTabsPrevious, CodeTabsNext, CodeFindPrevious, CodeFindNext,
-  CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
+  CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates, CodeTools, CodeToolsBack, CodeToolsPrevious, CodeToolsNext,
   ColliderFit, LodGroupFit, LodGroupStatus, SkinnedMeshStatus, AnimationStatus, ComponentClipAdd, ComponentPrevious,
   ViewsOpen, ViewsClose, ViewSave, ViewUpdate, ViewRename, ViewDelete, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear,
@@ -406,6 +410,7 @@ enum class EditorWidget : u32 {
   // Um id por modelo de script; o valor zero é o arquivo vazio.
   CodeTemplateBase=0x7c000000u,
   CodeBody=0x61000000u, CodeTabBase=0x61010000u,
+  CodeToolBase=0x61020000u,
 
   ComponentAddBase=0x67000000u,
   // + 0 = todas as famílias, + 1 + família = aquela família (scene::ComponentFamily).
@@ -665,6 +670,23 @@ inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::Animat
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::AnimatorBase);}
 inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
 } // namespace animator_widget
+namespace clip_widget {
+enum : u32 {
+  Open=0xb000,Close,New,Choose,Play,Loop,PreviousFrame,NextFrame,Time,Duration,
+  Curves,Keys,Frame,Expand,Undo,Redo,AddKey,DeleteKey,KeyTime,KeyValue,Tangent,
+  Canvas,RowsPrevious,RowsNext,ZoomIn,ZoomOut,Name,PickerPrevious,PickerNext,NewQuaternion,NewEuler,NewProgressive,
+  TangentClose,TangentLink,ModeIn,ModeOut,SlopeIn,SlopeOut,WeightIn,WeightOut,WeightedIn,WeightedOut,HandleIn,HandleOut,
+  Targets,TargetClose,TargetUp,TargetPrevious,TargetNext,TargetUse,Pose,RemoveTrack,PosePrevious,PoseNext,OwnedCatalog,ImportedCatalog,
+    Selection,SelectionAdd,SelectionClear,SelectionOffset,SelectionScale,
+    Edits,EditsClose,CopyKeys,CutKeys,PasteReplace,PasteInsertTracks,PasteInsertAll,
+    BakeOpen,BakeClose,BakeRate,BakeTolerance,BakeReduction,BakeMode,BakeApply,
+    Layers,LayerClose,LayerPrevious,LayerNext,LayerName,LayerAdd,LayerDuplicate,LayerRemove,LayerUp,LayerDown,LayerBlend,LayerWeight,LayerReference,LayerReferenceTime,LayerMute,LayerSolo,LayerCopy,LayerChoose,LayerPickerClose,LayerPickerPrevious,LayerPickerNext,
+    BakeTarget,BakeReference,BakeSeedUse,BakeSeedX,BakeSeedY,BakeSeedZ,
+    SelectMode=0xb080,Row=0xb100,Choice=0xb200,TargetChoice=0xb300,TargetEnter=0xb340,PropertyChoice=0xb380,LayerChoice=0xb3c0,PoseValue=0xb400
+};
+inline constexpr u32 id(u32 code) {return animator_widget::id(code);}
+inline constexpr bool owns(u32 widget) {return animator_widget::owns(widget)&&animator_widget::code(widget)>=Open&&animator_widget::code(widget)<0xb480;}
+}
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
 }
@@ -785,6 +807,9 @@ struct EditorScreenState final {
   // O menu da barra do IDE. Uma lista que abre num ícone é o que tira da barra
   // tudo o que não é frequente, sem escondê-lo atrás de um gesto.
   bool codeMenu = false;
+  bool codeTools=false,codeToolsBusy=false;
+  u32 codeToolsPage=0;
+  std::vector<EditorToolInfo> codeToolCatalog;
   bool codeFiles = false,platformCodeView=false,codeComposing=false;
   bool goingToLine=false,creatingCodeFolder=false;
   u32 codeFirstTab=0;
@@ -871,6 +896,35 @@ struct EditorScreenState final {
   const runtime::SceneAnimatorGraphs *animatorRuntime=nullptr;
   // Editor de grafo do Animator (tela cheia sobre o editor).
   bool animatorOpen=false,animatorConnecting=false,editingAnimatorName=false;
+  // One clip surface: shared stable selection for keys/curves and isolated pose.
+  // None of this UI state is stored as runtime animation data.
+  bool clipOpen=false,clipCurves=false,clipPlaying=false,clipLoop=true,clipExpanded=false,clipPicker=false,clipNewPicker=false,clipTangentPicker=false;
+  u32 clipModeSide=0;
+  u32 clipAuthoringPicker=0,clipTargetPage=0;
+  EditorEntityId clipTargetBranch=0,clipTargetNode=0,clipTarget=0;
+  bool clipPoseShown=false;u32 clipPosePage=0;
+  float clipPoseValues[resources::MaximumMorphTargets]{};u32 clipPoseCount=0;
+  EditorEntityId clipOwner=0;
+  resources::AssetGuid clipGuid;
+  const resources::AnimationClipAsset *clipAsset=nullptr;
+  const std::vector<resources::AnimationClipAsset> *clipAssets=nullptr;
+  struct ClipSourceEntry {resources::AssetGuid guid;std::string name;float duration=0;};
+  std::vector<ClipSourceEntry> clipSourceEntries;
+  bool clipImportedPicker=false;
+    u64 clipTrack=0,clipKey=0;u32 clipComponent=0,clipRow=0,clipPage=0;
+    std::vector<resources::AnimationKeyAddress> clipSelection;
+    bool clipSelectionMode=false,clipSelectionAdd=false,clipSelecting=false;
+    ui::UiRect clipSelectionBox{};
+    bool clipEditPicker=false;
+    u64 clipLayer=0;bool clipLayersShown=false,clipLayerPicker=false;u32 clipLayerPage=0;
+    bool clipBakeShown=false,clipBakeHasReport=false;
+    bool clipBakeConsolidate=false,clipBakeReferenceShown=false,clipBakeReportConsolidated=false;
+    resources::AnimationBakeSettings clipBakeSettings{};
+    resources::AnimationBakeReport clipBakeReport{};
+    u32 clipBakeRevision=0;u64 clipBakeTrack=0;
+    std::shared_ptr<const resources::AnimationKeyClipboard> clipClipboard;
+  float clipTime=0,clipStart=0,clipEnd=2,clipMinimum=-1,clipMaximum=1;
+  std::string clipDiagnostic;
   EditorEntityId animatorEntity=0;u64 animatorInstance=0;u32 animatorLayer=0;
   u64 animatorState=0,animatorTransition=0,animatorParameter=0,animatorConnectFrom=0;
   float animatorPan[2]{0,0},animatorZoom=1;
@@ -1599,6 +1653,8 @@ struct EditorScreenLayout final {
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
   ui::UiRect animatorCanvas{};
+  ui::UiRect clipCanvas{},clipRows{};
+  u32 clipVisibleRows=0,clipPickerRows=0,clipTargetRows=0;
   ui::UiRect animatorDetailsWindow{},animatorParamsWindow{};
   float animatorDetailsExtent=0,animatorParamsExtent=0;
   ui::UiRect lodBar{};
@@ -1650,6 +1706,8 @@ struct EditorScreenLayout final {
 // responde onde não está.
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const ui::UiTheme &theme,
                                      ui::UiDrawList &list, ui::UiInputRouter &router);
+EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const ui::UiTheme &theme,
+                                           ui::UiDrawList &list,ui::UiInputRouter &router);
 
 // O que um ponteiro fez com a tela. Devolvido para que o chamador saiba se
 // precisa reagir fora da interface — mover a câmera, por exemplo.

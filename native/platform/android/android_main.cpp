@@ -44,6 +44,7 @@
 
 #include "editor/editor_history.h"
 #include "editor/editor_session.h"
+#include "editor/editor_animation_authoring.h"
 #include "platform/android/android_editor_text_input.h"
 #include "platform/free_camera_controller.h"
 #include "core/frame_policy.h"
@@ -161,6 +162,10 @@ struct AndroidShell final {
   CodeBuildFn codeBuild=nullptr;
   CodeReportFn codeReport=nullptr;
   CodeCommitFn codeCommit=nullptr;
+  CodeBuildFn editorToolCatalog=nullptr;
+  CodeReportFn editorToolReport=nullptr;
+  using EditorToolRunFn=int (*)(const ae::u8 *,int,const ae::u8 *,int,const ae::editor::AnimationAuthorAccess *);
+  EditorToolRunFn editorToolRun=nullptr;
   ae::scene::ScriptRuntimeApi scriptRuntime{};
   // Declared after the CLR owner: joining the worker precedes host teardown.
   std::future<std::string> codeCompilation;
@@ -732,10 +737,39 @@ void updateEditorLanguage(AndroidShell &shell) {
     return result;
   });
 }
+void updateEditorTools(AndroidShell &shell) {
+  const auto request=shell.editorSession.takeEditorToolRequest();if(request.root.empty())return;
+  if(shell.editorSession.isPlaying()||shell.editorSession.screen().codeBuildBusy||request.root!=shell.editorSession.codeProjectRoot()||
+      request.epoch!=shell.editorSession.sceneVersion().epoch) {
+    shell.editorSession.completeEditorToolRequest(request,false,"Contexto da ferramenta mudou antes da execução");return;
+  }
+  if(!shell.dotNetHost.isReady())initializeDotNetHost(shell);
+  if(shell.dotNetHost.isReady()&&!shell.editorToolCatalog) {
+    constexpr const char *type="Astra.Editor.NativeEditorCommands, Astra.Scripting";
+    shell.editorToolCatalog=reinterpret_cast<AndroidShell::CodeBuildFn>(shell.dotNetHost.getManagedFunctionPointer(type,"Catalog"));
+    shell.editorToolReport=reinterpret_cast<AndroidShell::CodeReportFn>(shell.dotNetHost.getManagedFunctionPointer(type,"CopyReport"));
+    shell.editorToolRun=reinterpret_cast<AndroidShell::EditorToolRunFn>(shell.dotNetHost.getManagedFunctionPointer(type,"Run"));
+  }
+  if(!shell.editorToolCatalog||!shell.editorToolReport||!shell.editorToolRun) {
+    shell.editorSession.completeEditorToolRequest(request,false,"Host de ferramentas indisponível; código preservado");return;
+  }
+  {
+    ae::editor::AnimationAuthoringScope authoring(shell.editorSession);
+    const auto *root=reinterpret_cast<const ae::u8*>(request.root.data());
+    const int result=request.id.empty()?shell.editorToolCatalog(root,static_cast<int>(request.root.size())):
+      shell.editorToolRun(root,static_cast<int>(request.root.size()),reinterpret_cast<const ae::u8*>(request.id.data()),static_cast<int>(request.id.size()),&authoring.access());
+    const int size=shell.editorToolReport(nullptr,0);
+    if(size<0||size>2*1024*1024) {shell.editorSession.completeEditorToolRequest(request,false,"Resposta de ferramenta excede o limite");return;}
+    std::string report(static_cast<size_t>(size),'\0');
+    if(shell.editorToolReport(reinterpret_cast<ae::u8*>(report.data()),size)!=size) {shell.editorSession.completeEditorToolRequest(request,false,"Resposta incompleta da ferramenta");return;}
+    shell.editorSession.completeEditorToolRequest(request,result==0,report);
+  }
+}
 void updateEditorCodeCompiler(AndroidShell &shell) {
   if(!shell.editorUi || !shell.independentWorkspace) return;
   updateEditorLanguage(shell);
   shell.editorSession.setCodeCompilerAvailable(true);
+  updateEditorTools(shell);
   if(shell.editorSession.needsScriptRuntime()&&!shell.dotNetHost.isReady()) initializeDotNetHost(shell);
   if(shell.dotNetHost.isReady()&&!shell.scriptRuntime.available()) {
     constexpr const char *type="Astra.Runtime.NativeBehaviorRuntime, Astra.Scripting";

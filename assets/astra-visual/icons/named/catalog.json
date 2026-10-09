@@ -1787,6 +1787,60 @@
       "name": "interruption",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "animation/curve": {
+      "category": "animation",
+      "name": "curve",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/key": {
+      "category": "animation",
+      "name": "key",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/tangent": {
+      "category": "animation",
+      "name": "tangent",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/bake": {
+      "category": "animation",
+      "name": "bake",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/reduce": {
+      "category": "animation",
+      "name": "reduce",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/layer-mute": {
+      "category": "animation",
+      "name": "layer-mute",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/layer-solo": {
+      "category": "animation",
+      "name": "layer-solo",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/consolidate": {
+      "category": "animation",
+      "name": "consolidate",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "animation/rotation-branch": {
+      "category": "animation",
+      "name": "rotation-branch",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

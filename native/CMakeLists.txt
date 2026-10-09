@@ -431,6 +431,12 @@ add_library(aether_assets STATIC
   resources/gltf_import.cpp
   resources/texture_compression.cpp
   resources/skeletal_animation.cpp
+  resources/animation_curve.cpp
+  resources/animation_clip_asset.cpp
+  resources/animation_clip_edit.cpp
+  resources/animation_clip_selection.cpp
+  resources/animation_clip_clipboard.cpp
+  resources/animation_clip_bake.cpp
   resources/import_node_map.cpp
   resources/material_asset.cpp
   resources/environment_profile.cpp
@@ -539,6 +545,11 @@ add_library(aether_editor STATIC
   editor/editor_audio_assets.cpp
   editor/editor_animator.cpp
   editor/editor_animator_resources.cpp
+  editor/editor_animation_clip_resources.cpp
+  editor/editor_animation_clip_preview.cpp
+  editor/editor_animation_clip.cpp
+  editor/editor_animation_authoring.cpp
+  editor/editor_animation_clip_screen.cpp
   editor/editor_path.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
@@ -806,6 +817,10 @@ if(NOT ANDROID)
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
     ../tests/native/test_skeletal_animation.cpp
+    ../tests/native/test_animation_clip_asset.cpp
+    ../tests/native/test_animation_clip_selection.cpp
+    ../tests/native/test_animation_clip_clipboard.cpp
+    ../tests/native/test_animation_clip_editor.cpp
     ../tests/native/test_skinned_scene.cpp
     ../tests/native/test_editor_model_import.cpp
     ../tests/native/test_import_reconcile.cpp
@@ -982,6 +997,29 @@ if(NOT ANDROID)
     target_compile_options(aether_spline_frame_family_tests PRIVATE -Wa,-mbig-obj -g1)
   endif()
   add_executable(aether_family_base_tests ../tests/native/family_base_main.cpp ../tests/native/test_family_base.cpp ../tests/native/test_runtime_world.cpp)
+  # Curve/resource invariants do not need Vulkan, physics or a full editor link.
+  # The same cases are also part of aether_tests for integration builds.
+  add_executable(aether_animation_clip_resource_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_animation_clip_asset.cpp resources/animation_curve.cpp
+    resources/animation_clip_asset.cpp resources/animation_clip_edit.cpp resources/animation_clip_selection.cpp resources/animation_clip_clipboard.cpp resources/animation_clip_bake.cpp
+    ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp resources/skeletal_animation.cpp resources/asset_registry.cpp)
+  target_include_directories(aether_animation_clip_resource_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/../tests/native)
+  add_executable(aether_animation_clip_editor_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_animation_clip_editor.cpp ../tests/native/test_animation_clip_asset.cpp ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp)
+  target_include_directories(aether_animation_clip_editor_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_animation_clip_editor_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_animation_clip_editor_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
+  if(WIN32)
+    add_library(aether_animation_authoring_sdk_bridge SHARED ../tests/native/animation_authoring_sdk_bridge.cpp)
+    target_link_libraries(aether_animation_authoring_sdk_bridge PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+      aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+    if(MINGW)
+      target_compile_options(aether_animation_authoring_sdk_bridge PRIVATE -Wa,-mbig-obj -g1)
+    endif()
+  endif()
   add_executable(aether_prefab_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_prefab.cpp ../tests/native/test_prefab_structure.cpp)
   add_executable(aether_curve_gradient_family_tests ../tests/native/curve_gradient_family_main.cpp ../tests/native/test_numeric_expression.cpp ../tests/native/test_editor_session.cpp)
   add_executable(aether_audio_listener_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_runtime_audio.cpp ../tests/native/test_script_audio.cpp)

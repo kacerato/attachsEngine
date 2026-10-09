@@ -27,6 +27,7 @@
 // glTF manda (a pose do nó da malha é ignorada pelo skin).
 #include "core/base.h"
 #include "resources/asset_registry.h"
+#include "resources/animation_curve.h"
 
 #include <span>
 #include <string>
@@ -43,6 +44,10 @@ inline constexpr u32 MaximumMorphTargets = 64;
 
 enum class AnimationPath : u8 { Translation = 0, Rotation = 1, Scale = 2, Weights = 3 };
 enum class AnimationInterpolation : u8 { Step = 0, Linear = 1, CubicSpline = 2 };
+enum class AnimationRotationMode : u8 { Quaternion, Euler, ProgressiveQuaternion };
+inline constexpr u32 rotationCurveComponents(AnimationRotationMode mode) {
+  return mode==AnimationRotationMode::Euler?3u:mode==AnimationRotationMode::ProgressiveQuaternion?5u:4u;
+}
 
 struct AnimationChannel {
   u32 node = 0; // índice em GltfImport::nodes
@@ -54,6 +59,17 @@ struct AnimationChannel {
   std::vector<float> values;
   // Só para `Weights`: quantos alvos de morph a malha do nó tem.
   u32 weightCount = 0;
+  // Editable clip channels use independently timed component curves. Imported
+  // glTF channels keep their original samplers. Exactly one representation is
+  // present; authored metadata cannot be silently written to a glTF cache.
+  std::vector<AnimationCurve> curves;
+  AnimationRotationMode rotationMode=AnimationRotationMode::Quaternion;
+  // Compiled authored composition: one flat source per participating layer,
+  // base first. Imported channels never contain this representation.
+  std::vector<AnimationChannel> layerSources;
+  float layerWeight=1,layerReferenceTime=-1;
+  bool layerAdditive=false;
+  u32 curveComponents() const noexcept {return path==AnimationPath::Rotation?rotationCurveComponents(rotationMode):components();}
   u32 components() const noexcept {
     return path == AnimationPath::Rotation ? 4u : path == AnimationPath::Weights ? weightCount : 3u;
   }
@@ -108,6 +124,9 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, float o
 // Forma geral (pesos de morph têm N componentes): `out` precisa de
 // `channel.components()` floats.
 bool sampleAnimationChannel(const AnimationChannel &channel, float time, std::span<float> out);
+// Immutable channels validated when published. Avoid scanning every key on
+// every frame; arbitrary API input must use the checked entry point above.
+bool sampleValidatedAnimationChannel(const AnimationChannel &channel,float time,std::span<float> out);
 
 // Consistência estrutural (tempos crescentes e finitos, valores do tamanho da
 // interpolação). A importação recusa canais que falham aqui.

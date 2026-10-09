@@ -43,6 +43,10 @@ public:
   // Todos os clipes carregados, para o seletor do Inspector.
   struct ClipEntry { resources::AssetGuid clip, source; std::string name; float duration=0; };
   std::vector<ClipEntry> clipCatalog() const;
+  // Independent authored resources do not republish geometry or deform buffers.
+  // Swap immutable evaluated data only after resource validation/publication.
+  bool setAuthoredAnimations(std::vector<std::shared_ptr<const runtime::SourceAnimations>> animations);
+  bool validateAuthoredAnimations(const std::vector<std::shared_ptr<const runtime::SourceAnimations>> &animations) const;
   const std::vector<std::shared_ptr<const runtime::SourceAnimations>> &animationSources() const {return animationSources_;}
   // Pose deformada de um slot: paleta (vazia sem skin), pesos 0..1 dos blend
   // shapes (vazios sem eles) e limites no MUNDO. Osso ausente fica na pose de
@@ -299,7 +303,9 @@ private:
   std::vector<TextureBinding> textureLibrary_;
   std::vector<std::shared_ptr<const DrawDeformation>> deformations_;
   std::vector<std::shared_ptr<const runtime::SourceAnimations>> animationSources_;
+  std::vector<std::shared_ptr<const runtime::SourceAnimations>> authoredAnimationSources_;
   struct ClipLocation { u32 source=0, clip=0; };
+  std::unordered_map<resources::AssetGuid,ClipLocation,resources::AssetGuidHash> authoredClipIndex_;
   std::unordered_map<resources::AssetGuid,ClipLocation,resources::AssetGuidHash> clipIndex_;
   // Malha de seleção deformada de um objeto, refeita quando a pose muda.
   bool deformedPickMesh(const runtime::SceneGraph &document,EditorEntityId id,u32 assetIndex,const float drawModel[16],

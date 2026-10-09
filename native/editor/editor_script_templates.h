@@ -49,7 +49,7 @@ inline constexpr std::string_view kEditorScriptContracts =
     "}\n"
     "";
 
-inline constexpr std::array<EditorScriptTemplate,8> editorScriptTemplates{{
+inline constexpr std::array<EditorScriptTemplate,9> editorScriptTemplates{{
   {
     "SeguirAlvo",
     "Seguir alvo",
@@ -540,6 +540,40 @@ inline constexpr std::array<EditorScriptTemplate,8> editorScriptTemplates{{
     "            : 1 - Math.Clamp(Variacao, 0, 1) * 0.5f *\n"
     "                  (1 - MathF.Cos(_tempo * FrequenciaPulso * MathF.Tau));\n"
     "        luz.SetFloat(\"intensity\", MathF.Max(0, IntensidadeAcesa * fator));\n"
+    "    }\n"
+    "}\n"
+    ""
+  },
+  {
+    "AutorarAnimacao",
+    "Ferramenta de animação",
+    "Cria um clipe editável no objeto selecionado, fora de Play",
+    false,
+    "using System;\n"
+    "using System.Linq;\n"
+    "using System.Numerics;\n"
+    "using Astra.Editor;\n"
+    "\n"
+    "// Selecione um objeto, compile e abra IDE > Ferramentas do editor.\n"
+    "// O recurso fica editável no Animation Studio; sua criação e edição têm Undo.\n"
+    "// Uma ferramenta roda em Edit, sem anexar Behavior nem entrar em Play.\n"
+    "public static class AutorarAnimacao\n"
+    "{\n"
+    "    [EditorCommand(\"Criar giro no objeto\")]\n"
+    "    public static void CriarGiro(EditorContext editor)\n"
+    "    {\n"
+    "        var owner = editor.SelectedObject;\n"
+    "        if (owner == 0) throw new InvalidOperationException(\"Selecione um objeto na cena.\");\n"
+    "        var clip = editor.CreateClip(owner, 2);\n"
+    "        using var edit = editor.BeginClip(clip);\n"
+    "        var rotation = edit.Snapshot.Tracks.Single(t => t.Property == ClipProperty.Rotation).Id;\n"
+    "        var initial = edit.Sample(rotation, 0);\n"
+    "        var start = new Quaternion(initial[0], initial[1], initial[2], initial[3]);\n"
+    "        var turned = Quaternion.Normalize(start * Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2));\n"
+    "        edit.PutPose(rotation, 1, new[] { turned.X, turned.Y, turned.Z, turned.W });\n"
+    "        edit.PutPose(rotation, 2, initial);\n"
+    "        edit.SetName(\"Giro do objeto\");\n"
+    "        edit.Commit();\n"
     "    }\n"
     "}\n"
     ""
