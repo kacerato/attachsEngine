@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-09",
+  "acceptance_frames": 909,
+  "acceptance_sheets": 31,
+  "videos": [
+    {
+      "video": "controls.mp4",
+      "sha256": "e179feabfad5eafb8abc6a585d0d48cd137072d4514ffefeed98de0d1d8880bf",
+      "decoded": 477,
+      "visually_reviewed": 477,
+      "reviewed_range": [
+        0,
+        476
+      ],
+      "sheets_reviewed": [
+        "sheet-00.png",
+        "sheet-01.png",
+        "sheet-02.png",
+        "sheet-03.png",
+        "sheet-04.png",
+        "sheet-05.png",
+        "sheet-06.png",
+        "sheet-07.png",
+        "sheet-08.png",
+        "sheet-09.png",
+        "sheet-10.png",
+        "sheet-11.png",
+        "sheet-12.png",
+        "sheet-13.png",
+        "sheet-14.png",
+        "sheet-15.png"
+      ],
+      "method": "Every decoded frame, ordered 30-frame contact sheets; no temporal sampling",
+      "observations": [
+        "0–43: composição inicial",
+        "44–105: Mudo remove correção; objeto menor/mais baixo",
+        "106–175: correção restaurada",
+        "176–252: Solo e retorno; Base congelada durante isolamento",
+        "253–329: referência temporal remove offset constante; retorno à neutra restaura",
+        "330–476: alternância Additive/Override e retorno; sem corrupção visual"
+      ],
+      "acceptance": true
+    },
+    {
+      "video": "preview.mp4",
+      "sha256": "f1cb5d4d708bb869b6fa9b6959c7093853b9ffa614d1eef366857a171e08fd89",
+      "decoded": 296,
+      "visually_reviewed": 296,
+      "reviewed_range": [
+        0,
+        295
+      ],
+      "sheets_reviewed": [
+        "sheet-00.png",
+        "sheet-01.png",
+        "sheet-02.png",
+        "sheet-03.png",
+        "sheet-04.png",
+        "sheet-05.png",
+        "sheet-06.png",
+        "sheet-07.png",
+        "sheet-08.png",
+        "sheet-09.png"
+      ],
+      "method": "Every decoded frame, ordered 30-frame contact sheets; no temporal sampling",
+      "observations": [
+        "0–26: pose inicial",
+        "27–226: reprodução; A gira com correções de altura/escala, B imóvel",
+        "227–295: transporte parado e pose retida; nenhum painel sobreposto"
+      ],
+      "acceptance": true
+    },
+    {
+      "video": "runtime-final.mp4",
+      "sha256": "1afdd42daa249ee21d29d5e73a73d5d39c62d0fbd14337d7e61632bd389d17af",
+      "decoded": 136,
+      "visually_reviewed": 136,
+      "reviewed_range": [
+        0,
+        135
+      ],
+      "sheets_reviewed": [
+        "sheet-00.png",
+        "sheet-01.png",
+        "sheet-02.png",
+        "sheet-03.png",
+        "sheet-04.png"
+      ],
+      "method": "Every decoded frame, ordered 30-frame contact sheets; no temporal sampling",
+      "observations": [
+        "0: imagem anterior à entrada em Play",
+        "1–55: editor durante preparação/publicação; lacuna de captura entre PTS 0 e 2,595s",
+        "56–135: Play; A elevado/ampliado gira, B permanece independente; notificações LAYERS PASS",
+        "Não extrapolar fluidez/FPS desta captura; cinco asserts estão no console exportado"
+      ],
+      "acceptance": true
+    },
+    {
+      "video": "runtime.mp4",
+      "sha256": "6ce9de48dcf85dc05ddda9065de12a05bc36273db3928241c5b90d82a817f2b9",
+      "decoded": 291,
+      "visually_reviewed": 291,
+      "reviewed_range": [
+        0,
+        290
+      ],
+      "sheets_reviewed": [
+        "sheet-00.png",
+        "sheet-01.png",
+        "sheet-02.png",
+        "sheet-03.png",
+        "sheet-04.png",
+        "sheet-05.png",
+        "sheet-06.png",
+        "sheet-07.png",
+        "sheet-08.png",
+        "sheet-09.png"
+      ],
+      "method": "Every decoded frame, ordered 30-frame contact sheets; no temporal sampling",
+      "observations": [
+        "0–21: editor",
+        "22–290: Play com a sonda Hierarchy anterior; A composto e B independente",
+        "Vídeo suplementar: não usado como prova dos cinco asserts da sonda LAYERS"
+      ],
+      "acceptance": false
+    },
+    {
+      "video": "mix.mp4",
+      "sha256": "54dda955647b858c5e331f2c1ec0ff72a269f2ab22c7bb19a387fbada96f16d1",
+      "decoded": 597,
+      "visually_reviewed": 597,
+      "reviewed_range": [
+        0,
+        596
+      ],
+      "sheets_reviewed": [
+        "sheet-00.png",
+        "sheet-01.png",
+        "sheet-02.png",
+        "sheet-03.png",
+        "sheet-04.png",
+        "sheet-05.png",
+        "sheet-06.png",
+        "sheet-07.png",
+        "sheet-08.png",
+        "sheet-09.png",
+        "sheet-10.png",
+        "sheet-11.png",
+        "sheet-12.png",
+        "sheet-13.png",
+        "sheet-14.png",
+        "sheet-15.png",
+        "sheet-16.png",
+        "sheet-17.png",
+        "sheet-18.png",
+        "sheet-19.png"
+      ],
+      "method": "Every decoded frame, ordered 30-frame contact sheets; no temporal sampling",
+      "observations": [
+        "0–596: imagem estática; ações ocorreram fora do intervalo gravado por serialização da automação",
+        "Captura rejeitada como aceite de comportamento; substituída por controls/preview/runtime-final"
+      ],
+      "acceptance": false
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+ninja: Entering directory `build/editor-host'
+[1/6] Checking generated component contracts
+63 types / 10 family tables; 428 property declarations / 78 tables; 856 generated accessors; all outputs current
+[2/6] Building CXX object CMakeFiles/aether_assets.dir/resources/animation_clip_bake.cpp.obj
+[3/6] Linking CXX static library libaether_assets.a
+[4/6] Linking CXX static library libaether_editor.a
+[5/6] Linking CXX executable aether_animation_clip_editor_tests.exe
+[6/6] Linking CXX shared library libaether_animation_authoring_sdk_bridge.dll

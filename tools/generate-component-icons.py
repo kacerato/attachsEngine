@@ -382,6 +382,11 @@ ICONS["component/event-connection"] = f'<circle cx="20" cy="64" r="10" {stroke(6
 # Animator workspace: filled angular silhouettes from the owner's Astra A
 # identity sheet. Each lime cut conveys the operation, not a background badge.
 ICONS.update({
+    "animation/bake": '<path d="M10 12h12v82h94v12H10zM28 74c22 0 12-48 38-48 20 0 24 28 48 10v14c-30 18-40-14-48-10-12 6-2 48-38 48z" fill="#eef1f5"/><path d="M32 92l10 10-10 10-10-10zm28 0l10 10-10 10-10-10zm28 0l10 10-10 10-10-10zm28 0l10 10-10 10-10-10z" fill="#a8ff10"/>',
+    "animation/reduce": '<path d="M10 100h106v12H10zM22 74c24 0 14-44 42-44s30 28 52 8v14c-28 20-36-14-52-8S54 88 22 88z" fill="#eef1f5"/><path d="M22 94l12 12-12 12-12-12zm84 0l12 12-12 12-12-12zM50 8h28v12H50z" fill="#a8ff10"/>',
+    "animation/curve": '<path d="M12 16h12v88h92v12H12zM26 78c20 0 18-42 38-42s24 26 46 4l10 10c-28 28-44 0-54 0S58 92 26 92z" fill="#eef1f5"/><path d="M58 26l12 10-12 12-12-12zM104 30l14 10-14 14-10-14z" fill="#a8ff10"/>',
+    "animation/key": '<path d="M8 58h112v12H8z" fill="#eef1f5"/><path d="M64 20l44 44-44 44-44-44z" fill="#eef1f5"/><path d="M64 40l24 24-24 24-24-24z" fill="#a8ff10"/>',
+    "animation/tangent": '<path d="M8 104l10-8c28-20 10-60 40-64 22-4 38 24 62 10v16c-32 12-42-18-58-12-18 6 0 42-36 64L8 120zM24 14h80v10H24z" fill="#eef1f5"/><path d="M16 8h18v22H16zm80 0h18v22H96zM64 16l16 16-16 16-16-16z" fill="#a8ff10"/>',
     "animation/additive": '<path d="M12 44l40-24 40 24-40 24zM12 72l40 24 40-24v18l-40 24-40-24z" fill="#eef1f5"/><path d="M96 18h12v16h16v12h-16v16H96V46H80V34h16z" fill="#a8ff10"/>',
     "animation/reference-pose": '<path d="M12 16h28v12H24v28H12zm88 0h16v40h-12V28h-4zM12 84h12v16h16v12H12zm92 0h12v28H88v-12h16zM54 42h20v28h18v12H36V70h18z" fill="#eef1f5"/><path d="M54 30h20v12H54zm4 52h12v22H58z" fill="#a8ff10"/>',
     "animation/controller": '<path d="M10 18h78l30 30v64H10z" fill="#eef1f5"/><path d="M88 18v30h30M28 56h22v20H28zm50 22h22v20H78zM44 72h8v12h26v8H44z" fill="#a8ff10"/>',
@@ -391,6 +396,10 @@ ICONS.update({
     "animation/state": '<path d="M14 20h76l24 24v64H14z" fill="#eef1f5"/><path d="M90 20v24h24M40 44l36 20-36 20z" fill="#a8ff10"/>',
     "animation/transition": '<path d="M12 50h64V28l40 36-40 36V78H12z" fill="#eef1f5"/><path d="M76 28l40 36-40 14z" fill="#a8ff10"/>',
     "animation/parameters": '<path d="M12 26h104v10H12zm0 33h104v10H12zm0 33h104v10H12z" fill="#eef1f5"/><path d="M27 16h20v30H27zm51 33h20v30H78zM44 82h20v30H44z" fill="#a8ff10"/>',
+    "animation/layer-mute": '<path d="M12 22h48v16H28v52h52V58h16v48H12z" fill="#eef1f5"/><path d="M84 18l28 28-12 12-28-28zm-6 52l36-36 12 12-36 36z" fill="#a8ff10"/>',
+    "animation/layer-solo": '<path d="M12 18h104v16H28v60h88v16H12z" fill="#eef1f5"/><path d="M50 44h46v12H62v8h34v28H50V80h34v-6H50z" fill="#a8ff10"/>',
+    "animation/consolidate": '<path d="M12 12h42v12H24v16h30v12H12zM12 64h42v12H24v16h30v12H12z" fill="#eef1f5"/><path d="M58 26h14v25h22V38l28 26-28 26V77H58z" fill="#a8ff10"/>',
+    "animation/rotation-branch": '<path d="M16 12h14v44h31V28H48l20-22 22 22H75v28h29v14H75v40H61V70H16z" fill="#eef1f5"/><path d="M92 78l30 20-30 22v-15H79V91h13z" fill="#a8ff10"/>',
     "animation/layers": '<path d="M64 14l52 28-52 28L12 42zM12 65l52 28 52-28v16l-52 28-52-28z" fill="#eef1f5"/><path d="M64 70l52-28v16L64 86z" fill="#a8ff10"/>',
     "animation/blend": '<path d="M12 24h34v28H12zm0 52h34v28H12zm70-14h34v28H82zM46 33l44 33-6 8-44-33zm0 54l44-24 5 9-44 24z" fill="#eef1f5"/><path d="M82 62h34v28H82z" fill="#a8ff10"/>',
     "animation/binding": '<path d="M18 16h36v28H18zm56 68h36v28H74zM38 44h10v18h36v22H74V72H38z" fill="#eef1f5"/><path d="M66 22h42v12H66zm24-12l24 18-24 18z" fill="#a8ff10"/>',

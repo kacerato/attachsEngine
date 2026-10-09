@@ -1,0 +1,8 @@
+{
+  "versionName": "0.2.9-dev.bake.20261008.5",
+  "availability": "local development build; physical track bake/UI/SDK acceptance passed 2026-10-09; not publicly distributed",
+  "versionCode": 21,
+  "bytes": 104445346,
+  "sha256": "0769ac1f2d2d329a7e69c2d8f9d7b6d8bc682616a7fdc2155e75954cd6c7c57c",
+  "applicationId": "dev.aether.editor.u07"
+}

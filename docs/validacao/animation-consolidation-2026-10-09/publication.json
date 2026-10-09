@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-09",
+  "repository": "https://github.com/kacerato/AstraDocs",
+  "commit": "aefda20401e6da0b223214f85e370fd1c9863612",
+  "deployment": {
+    "id": "dpl_mhheKizxnN9pB27ygJqARL34aiSc",
+    "state": "READY",
+    "sha": "aefda20401e6da0b223214f85e370fd1c9863612",
+    "alias": "astraengine.com.br"
+  },
+  "localBuild": {
+    "htmlPages": 952,
+    "markdownPages": 951,
+    "links": 218864,
+    "errors": 0,
+    "publishedNotesPreserved": 28
+  },
+  "browser": {
+    "updatesLatest": "Animation Studio: conversão Euler e consolidação de camadas",
+    "availability": "Docs publicadas · app em desenvolvimento",
+    "guide": "/pt-br/snapshot-2026-10-07/sistemas/animation-clips/",
+    "imageLoaded": true,
+    "desktop": {
+      "viewport": 1440,
+      "scrollWidth": 1425
+    },
+    "mobile": {
+      "viewport": 390,
+      "scrollWidth": 375
+    },
+    "horizontalOverflow": false,
+    "viewportRestored": true
+  },
+  "engine": {
+    "commitPushed": false,
+    "developmentInstalled": true,
+    "publicApkChanged": false
+  }
+}

@@ -596,6 +596,8 @@ bool EditorSession::setProjectDirectory(const char *path) {
     EditorImportTransaction::discardStaging(path);
   }
   code_.clear();state_.code=&code_;
+  editorToolRequest_={};editorToolCatalogRoot_.clear();editorToolCatalogEpoch_=0;
+  state_.codeTools=false;state_.codeToolsBusy=false;state_.codeToolCatalog.clear();
   state_.files=&files_;state_.fileScroll=0;state_.fileScrollOffset=0;
   state_.console=&console_;
   closeImportPreview();state_.importAccept=false;state_.importCancel=false;
@@ -605,7 +607,9 @@ bool EditorSession::setProjectDirectory(const char *path) {
   runtime::ObjectTags tags;std::string tagError;
   if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
   cancelPointers();gui_.immediate().cancelInput();
+  const auto previousProject=files_.rootPath();
   if(!files_.setRoot(path)) return false;
+  if(previousProject!=files_.rootPath()) {closeAnimationClip();animationClipAssets_.clear();mapScene_.setAuthoredAnimations({});}
   guiTree_.clear();state_.guiRows={};state_.guiSelection={};state_.guiInspector=false;state_.collapsedGui.clear();
   guiImages_.clear();gui_.setImages(&guiImages_);playScene_.gui().setImages(&guiImages_);playScene_.sceneGui().setImages(&guiImages_);
   gui_.setImageChoices([this](){
@@ -1295,7 +1299,7 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
     if (routing.dragging) pointer->moved = true;
     // Preserve normal tap selection while inspecting through the camera;
     // gestures must not silently alter either authored pose or editor orbit.
-    if(state_.cameraViewEntity) {
+    if(state_.cameraViewEntity&&!state_.clipOpen) {
       if(state_.cameraPiloting) {
         const UiPoint delta{event.position.x-previous.x,event.position.y-previous.y};
         const float speed=std::max(.1f,camera_.distance);
@@ -1349,6 +1353,7 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
       ? distanceBetween(viewportPointers_[0].position, viewportPointers_[1].position)
       : 0.0f;
 
+  if(state_.clipOpen)return true;
   if (wasTap && viewportPointers_.empty()) {
     if(state_.motorSetupTarget==state_.selection&&state_.motorSetupPolicy==3&&state_.motorBakeSourcesOpen)
       return pickMotorBakeSource(at);
@@ -1780,11 +1785,19 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     cancelPointers();
   };
   if(!accept) {close();return true;}
-  if(edit.purpose==EditorTextPurpose::AnimatorName) {const bool ok=applyAnimatorName(edit.field,std::string(text));close();return ok;}
+  if(edit.purpose==EditorTextPurpose::AnimatorName) {
+    const bool layerName=edit.field==clip_widget::LayerName;
+    const bool clipName=edit.field==clip_widget::Name||layerName;
+    const bool ok=layerName?applyAnimationClipLayerName(trimmedName(text)):clipName?applyAnimationClipName(trimmedName(text)):applyAnimatorName(edit.field,std::string(text));
+    if(clipName&&!ok)return false;
+    close();return ok;
+  }
   if(edit.purpose==EditorTextPurpose::Number&&animator_widget::owns(edit.field)) {
     NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
     if(!evaluateNumericExpression(text,context,number,&reason)) {state_.numericError=true;state_.status=reason.empty()?"Valor inválido":reason;return false;}
-    const bool ok=applyAnimatorNumber(animator_widget::code(edit.field),number);close();return ok;
+    const bool ok=clip_widget::owns(edit.field)?applyAnimationClipNumber(animator_widget::code(edit.field),number):applyAnimatorNumber(animator_widget::code(edit.field),number);
+    if(!ok&&clip_widget::owns(edit.field)) {state_.numericError=true;return false;}
+    close();return ok;
   }
   if(edit.elementId && playMirrorOpen_){close();state_.status="Edição de pontos indisponível em Play";return false;}
   if(edit.purpose==EditorTextPurpose::InputActionName || edit.purpose==EditorTextPurpose::InputContext ||
@@ -3049,6 +3062,12 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   if(entry.directory && (entry.relativePath=="Texturas" || entry.relativePath.starts_with("Texturas/")))
     openTextureManager(entry.relativePath=="Texturas"?std::string():entry.relativePath);
   if(entry.directory) return;
+  if(entry.name.ends_with(".aeclip")) {
+    std::string error;const auto *record=assets_.findByPath(entry.relativePath);
+    if(!record||!openAnimationClip(record->guid,state_.selection?state_.selection:document_.root(),error))
+      state_.status=error.empty()?"Clipe não registrado":error;
+    return;
+  }
   if(entry.name.ends_with(".wav")) {
     resources::AssetGuid asset;std::string error;
     if(!importWaveClip(entry.relativePath,asset,error))state_.status=error;
@@ -3574,6 +3593,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(state_.gradientField) return handleGradientEditor(event,routing);
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
+  if(routing.tapped&&routing.widgetId==clip_widget::id(clip_widget::Open)) {
+    const auto owner=state_.selection?state_.selection:document_.root();std::string error;
+    if(!animationClipAssets_.empty())openAnimationClip(animationClipAssets_.front().guid,owner,error);
+    else {resources::AssetGuid guid;if(createAnimationClip(owner,2,guid,error))openAnimationClip(guid,owner,error);}
+    state_.status=error;return true;
+  }
+  if(state_.clipOpen&&!state_.numericField&&!state_.editingAnimatorName) return handleAnimationClip(event,routing);
   if(state_.animatorOpen&&!state_.numericField&&!state_.editingAnimatorName) return handleAnimatorEditor(event,routing);
   if(state_.curveField && !state_.numericField) return handleCurveEditor(event,routing);
   if(state_.codeRecoveryPending) {
@@ -5115,6 +5141,9 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::CodeOpen)) {state_.code=&code_;state_.workspace=EditorWorkspace::Code;return true;}
     if(state_.workspace==EditorWorkspace::Code) {
+      if(key>=widgetId(EditorWidget::CodeToolBase) && key-widgetId(EditorWidget::CodeToolBase)<state_.codeToolCatalog.size()) {
+        requestEditorTools(state_.codeToolCatalog[key-widgetId(EditorWidget::CodeToolBase)].id);return true;
+      }
       if(key>=widgetId(EditorWidget::CodeTabBase) && key-widgetId(EditorWidget::CodeTabBase)<code_.buffers().size()) {
         code_.select(code_.buffers()[key-widgetId(EditorWidget::CodeTabBase)].id);return true;
       }
@@ -5127,7 +5156,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           else {codeBuildGeneration_=code_.generation();codeBuildRequest_=files_.rootPath();state_.codeBuildBusy=true;state_.status="Compilando código do projeto";}
         }
         return true;
-      case EditorWidget::CodeMenu:state_.codeMenu=!state_.codeMenu;return true;
+      case EditorWidget::CodeMenu:state_.codeMenu=!state_.codeMenu;state_.codeTools=false;return true;
+      case EditorWidget::CodeTools:state_.codeTools=true;state_.codeToolsPage=0;requestEditorTools();return true;
+      case EditorWidget::CodeToolsBack:state_.codeTools=false;return true;
+      case EditorWidget::CodeToolsPrevious:if(state_.codeToolsPage) --state_.codeToolsPage;return true;
+      case EditorWidget::CodeToolsNext:if((state_.codeToolsPage+1)*6<state_.codeToolCatalog.size()) ++state_.codeToolsPage;return true;
       case EditorWidget::CodeFiles:state_.codeFiles=!state_.codeFiles;state_.codeMenu=false;return true;
       case EditorWidget::CodeConsole:state_.codeFiles=false;state_.codeMenu=false;state_.consoleCollapsed=false;state_.consoleExpanded=true;return true;
       case EditorWidget::CodeTabsPrevious:if(state_.codeFirstTab) --state_.codeFirstTab;return true;
@@ -7327,6 +7360,9 @@ bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiP
 }
 
 void EditorSession::cancelPointers() {
+  if(clipPointer_||clipDrag_) {
+    clipDrag_.reset();clipPointer_=0;clipPreview_.cancel();refreshAnimationClip();appearanceChanged_=true;
+  }
   if(topologyDragOpen_){colliderTopology_.vertices=topologyDragBase_;const auto *c=inspectedCollider(document_,colliderTopology_.object,colliderTopology_.instance);if(c)colliderTopology_.validate(c->hullTolerance);topologyDragOpen_=false;}
   guiAuthorPointers_.clear();guiAuthorPrepared_=false;
   gui_.cancelPointers();playScene_.gui().cancelPointers();playScene_.sceneGui().cancelPointers();
@@ -7363,6 +7399,17 @@ void EditorSession::advanceClock(float wallSeconds) noexcept {
   const float delta = wallSeconds - lastWallSeconds_;
   lastWallSeconds_ = wallSeconds;
   guiDeltaSeconds_=delta>0 && delta<=1?delta:0;
+  if(state_.clipOpen&&state_.clipPlaying&&delta>0&&delta<=1&&clipPreview_.active()) {
+    const auto *asset=animationClipAsset(state_.clipGuid);
+    if(asset) {
+      float t=state_.clipTime+delta;
+      if(t>=asset->duration) {
+        if(state_.clipLoop&&asset->duration>0)t=std::fmod(t,asset->duration);
+        else {t=asset->duration;state_.clipPlaying=false;}
+      }
+      std::string error;if(!seekAnimationClip(t,error)) {state_.clipPlaying=false;state_.clipDiagnostic=error;}
+    }
+  }
   // Passo negativo ou absurdo é o relógio de parede saltando (retomada do app,
   // mudança de fonte de tempo). Descartar é melhor do que teleportar a
   // simulação para um futuro que ninguém viu acontecer.
@@ -8145,7 +8192,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
   // publicação compartilhada para o shell substituir a lista uma única vez;
   // isso também faz o renderer abandonar um shared_ptr removido da GPU.
   if(environmentLibraryChanged) appearanceChanged_=true;
-  if(!doomed.empty()) {loadTextureAssets();publishMaterialLibrary();}
+  if(!doomed.empty()) {loadTextureAssets();publishMaterialLibrary();loadAnimationClipAssets();refreshAnimationClip();}
   std::string diagnostic;
   if(geometryLibraryChanged && !republishGeometry(diagnostic)) {
     report.diagnostic=diagnostic;
@@ -9758,6 +9805,7 @@ void EditorSession::refreshSkinningStatus() {
   }
 }
 void EditorSession::update() {
+  refreshAnimationClip();
   refreshMotorDecomposition();
   if(inputCapture_ && !validateInputCapture()) cancelInputBindingCapture();
   refreshScriptInspection();

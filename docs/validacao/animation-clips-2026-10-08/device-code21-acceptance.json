@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-09",
+  "package": "dev.aether.editor.u07",
+  "versionCode": 21,
+  "ui_quaternion_to_progressive": {
+    "before": 12,
+    "after": 15,
+    "sampledPoses": 49,
+    "verifiedPoints": 193,
+    "displayedErrorDegrees": 9.639e-06
+  },
+  "ui_reduction": {
+    "denseKeys": 605,
+    "reducedKeys": 15,
+    "sampledPoses": 121,
+    "verifiedPoints": 481,
+    "displayedErrorDegrees": 9.604e-06
+  },
+  "sdk": {
+    "authoredEulerPoses": 61,
+    "inputScalarKeys": 183,
+    "outputQuaternionPoses": 8,
+    "outputScalarKeys": 32,
+    "commandGuardsPassed": true
+  },
+  "history": {
+    "undoRestoresTracksAndBindings": true,
+    "redoRestoresTracksAndBindings": true,
+    "revisionAndAllocatorMonotonic": true
+  },
+  "coldReopen": {
+    "sdk": "d2c3e10778d58e7676992b87cc2fe2aaf0cd2867eac32cfbe1a63fb4891874c6",
+    "uiFirstReopen": "9faa0af401c088516ab5ba187bf32257cfc79cfb3aa89630e6e38ec70c418f5a",
+    "uiFinalReduced": "7043432ffa941612a2d79b3e82aa464a25f70b1e8ab8bb99dc4061ee2bb64320"
+  },
+  "sourceHash": "ca06483178d84b27428605065b3709e41dc70e3756c540f2df589d386b6db86b",
+  "videoFramesReviewed": 477
+}

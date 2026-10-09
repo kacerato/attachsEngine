@@ -147,6 +147,9 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   if (textureOffsets) textureOffsets->clear();
   out.clear();
   if (key.empty() || model.draws.empty() || model.nodes.empty()) return false;
+  // This is a derived glTF cache, not the editable clip resource format.
+  // Refuse authoring curves rather than discarding keys, IDs and handles.
+  for(const auto &clip:model.animations)for(const auto &channel:clip.channels)if(!channel.curves.empty()||!channel.layerSources.empty())return false;
   Writer writer{out};
   writer.raw(kMagic, sizeof kMagic);
   writer.u32v(ImportCacheSchema);

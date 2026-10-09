@@ -439,6 +439,11 @@ void EditorMapScene::setDeformation(std::vector<std::shared_ptr<const DrawDeform
 }
 
 bool EditorMapScene::findClip(const resources::AssetGuid &clip,runtime::AnimationClipView &out) const {
+  if(const auto authored=authoredClipIndex_.find(clip);authored!=authoredClipIndex_.end()) {
+    const auto &source=*authoredAnimationSources_[authored->second.source];
+    out.source=&source;out.clip=&source.clips[authored->second.clip];
+    out.name=resources::animationClipDisplayName(*out.clip,authored->second.clip);return true;
+  }
   const auto found=clipIndex_.find(clip);
   if(found==clipIndex_.end()) return false;
   const auto &source=*animationSources_[found->second.source];
@@ -452,7 +457,31 @@ std::vector<EditorMapScene::ClipEntry> EditorMapScene::clipCatalog() const {
   for(const auto &source:animationSources_)
     for(u32 c=0;c<source->clips.size();++c)
       out.push_back({source->clipIds[c],source->source,resources::animationClipDisplayName(source->clips[c],c),source->clips[c].duration});
+  for(const auto &source:authoredAnimationSources_)
+    for(u32 c=0;c<source->clips.size();++c)
+      out.push_back({source->clipIds[c],source->source,resources::animationClipDisplayName(source->clips[c],c),source->clips[c].duration});
   return out;
+}
+
+bool EditorMapScene::validateAuthoredAnimations(const std::vector<std::shared_ptr<const runtime::SourceAnimations>> &animations) const {
+  decltype(authoredClipIndex_) index;
+  for(u32 s=0;s<animations.size();++s) {
+    const auto &value=animations[s];
+    if(!value||value->clips.size()!=value->clipIds.size()||value->nodes.size()!=value->nodePaths.size()||value->nodes.empty())return false;
+    for(u32 c=0;c<value->clips.size();++c) {
+      if(!value->clipIds[c].valid()||clipIndex_.contains(value->clipIds[c])||!index.emplace(value->clipIds[c],ClipLocation{s,c}).second)return false;
+      if(!std::isfinite(value->clips[c].duration)||value->clips[c].duration<0)return false;
+      for(const auto &channel:value->clips[c].channels)if(channel.node>=value->nodes.size()||!resources::validAnimationChannel(channel))return false;
+    }
+  }
+  return true;
+}
+bool EditorMapScene::setAuthoredAnimations(std::vector<std::shared_ptr<const runtime::SourceAnimations>> animations) {
+  if(!validateAuthoredAnimations(animations))return false;
+  decltype(authoredClipIndex_) index;
+  for(u32 s=0;s<animations.size();++s)for(u32 c=0;c<animations[s]->clipIds.size();++c)
+    index.emplace(animations[s]->clipIds[c],ClipLocation{s,c});
+  authoredAnimationSources_=std::move(animations);authoredClipIndex_=std::move(index);return true;
 }
 
 bool EditorMapScene::deformedPose(const runtime::SceneGraph &document,const scene::SkinnedMesh &mesh,u32 assetIndex,

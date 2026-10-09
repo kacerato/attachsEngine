@@ -1,7 +1,11 @@
 # Animation Studio — evolução universal a partir dos pacotes fornecidos
 
-Data: 08/10/2026. Repositório confirmado: `kacerato/attachsEngine`, base `b900826a`.
-Estado: B2 entregue e validado em desenvolvimento; B3 em implementação e validação; B4–B6 seguem no plano.
+Data inicial: 08/10/2026; atualizado em 09/10. Repositório confirmado: `kacerato/attachsEngine`, base inicial `b900826a`.
+Estado: B2 e B3 entregues e validados em desenvolvimento; B4 em implementação; B5–B6 seguem no plano.
+Em 09/10 o recorte bake por trilha/UI/API do code 21 foi aceito no aparelho,
+com 477/477 quadros revisados. Guia e Atualizações publicados no AstraDocs main
+`332e3e5`, Vercel READY; APK público 0.2.3 preservado. Relatório atual:
+`docs/validacao/animation-clips-2026-10-08/BAKE.md`.
 O relato de aceite está em `docs/validacao/animator-additive-2026-10-08/REPORT.md`.
 
 NÃO IREI SER SIMPLISTA NO DESIGN.
@@ -106,6 +110,163 @@ mirror/copy pose e bake FK/IK dependem de consumidores reais. Preview pode
 cancelar/restaurar a cena; salvar/exportar é publicação transacional. API deve
 criar recursos e editar canais sem janela aberta. Aceite em mecanismo, rig,
 morph, rotação contínua, importação existente e cancelamento após erro.
+
+O universo de B4 também inclui os três modos descritos em `RotationModes.html`:
+Euler autorável, quaternion e quaternion progressivo com curva de velocidade.
+Não confundir editar quatro curvas escalares com oferecer esses três workflows.
+`CustomProperty.html` exige drivers com remapeamento/limites, propriedades
+tipadas de componentes (incluindo bool) e parâmetros do Animator, com preview
+restaurável. `ImportExport.html` exige importação de múltiplos clipes, conversão
+FK/IK, redução e relatório dos formatos exportados; parte depende de B5/B6.
+Essas dependências continuam na meta integral dos pacotes, mesmo atravessando
+a fronteira entre blocos. Os controles só entram como disponíveis após consumidor
+real e aceite. Um bloco de infraestrutura não fecha o Studio completo.
+
+Implementação B4 em andamento: recurso `AECLIP` independente da fonte; IDs de
+binding/canal/chave e revisão; curvas por componente, tangentes ponderadas,
+subdivisão preservando o segmento, retime/reverse/crop; sampling pelo consumidor
+existente, caminhos relativos sem fallback ambíguo, publicação pelo journal do
+projeto, histórico de edição do recurso e preview em cópia isolada da cena.
+Há uma superfície nativa executável de clipes/curvas, scrub, transporte,
+seleção/arraste, propriedades numéricas, tangentes, paginação, Undo/Redo e
+criação de quaternion, Euler ou progressivo. Os três ícones curve/key/tangent
+foram integrados como SVG/PNG/atlas ao pipeline real. A nova proposta visual é
+hipótese; as capturas host usam as instâncias reais da UI, mas não provam cena
+Vulkan ou uso no aparelho.
+
+Euler conserva voltas e tempos independentes por eixo usando a convenção
+Rz·Ry·Rx da cena Astra; ela não imita a ordem Z·X·Y da Unity. Quaternion linear
+usa o menor arco. Progressivo possui poses sincronizadas e distância angular
+acumulada, com handles de velocidade ponderados e overshoot; a distância deriva
+das poses. Edição de pose recalcula a distância e ajusta os handles. Corte
+progressivo subdivide a curva exata quando o limite cair em uma volta/overshoot;
+não é uma aproximação por amostras. Conversão sem perda entre quaternion linear
+e progressivo linear é explícita; trocar Euler ou remover curva de velocidade
+exige bake explícito. O backend, a faixa contextual e o SDK ABI 2 de bake estão
+validados no host e aceitos no code 21 em 09/10, conforme o registro abaixo.
+
+20 cenários passaram no host em 08/10: 14 de recurso e seis de integração.
+A superfície executável possui dopesheet com várias linhas, curvas, seleção de
+chave, handles, teclado numérico/nome, picker de hierarquia/propriedades e edição
+de pose completa. Posição, escala, rotação nos três modos e pesos de morph usam
+operações tipadas; selecionar um filho cria binding relativo canônico, com
+recusa de irmãos ambíguos. Editar a pose gera uma chave agrupada no tempo atual,
+sem modificar o transform salvo. Criar/remover canais limpa bindings sem
+reutilizar IDs. Criação, edição e remoção de canais possuem journal e histórico;
+Undo/Redo da criação remove/restaura arquivo, registro e biblioteca juntos.
+Excluir um recurso arbitrário pelo Asset Browser ainda exige ampliar o histórico.
+
+As capturas em `build/animation-clip-ui/` são da UI nativa executada com
+fontes/atlas de produção. A área vazia de cena dessa rasterização não é prova
+Vulkan nem Android. APK Dev 0.2.9/code 17 instalado: autoria de pose progressiva
+em um filho genérico, Undo/Redo, reprodução, fechar preview e encerrar/reabrir
+projeto conferidos no aparelho. Todos os 598 quadros da reprodução foram
+extraídos e examinados nas 20 folhas. Relato e limitações:
+`docs/validacao/animation-clips-2026-10-08/REPORT.md`. Esse era o aceite do code 17;
+o aceite do bake/code 21 e a publicação editorial posterior são registrados abaixo.
+
+A expansão seguinte extrai um clipe já importado para recurso editável separado,
+mantendo GUID/hash da origem e sampling Step/Linear/CubicSpline sem resampling.
+O picker distingue recursos editáveis e fontes importadas. A integração inclui
+preview, edição, journal, histórico e carga do registro real em disco. A sonda
+usa um rig GLB real com skin e compara 201 tempos por canal; não é evidência
+de renderização desse rig no aparelho. A extração não constitui merge de
+reimportação. A revisão code 18 foi compilada e instalada: extrair “Meia abertura”,
+editar a pose em 0,5 s, Undo/Redo e reabrir após encerrar o processo foram
+conferidos no aparelho. O GLB original mantém seu hash. O aceite não é
+evidência de skin/IK/retargeting. Capturas e identidade do APK estão no relatório.
+
+Seleção por área/IDs, grupos quaternion completos, transformação/exclusão
+atômicas e clipboard tipado estão conectados à timeline e ao histórico.
+O APK de desenvolvimento code 19 passou no aparelho por copiar, substituir,
+inserir, mover, escalar, recortar, Undo/Redo, preview e reabertura a frio.
+Foram examinados todos os 417 quadros da gravação do fluxo. A cópia editada
+reabriu byte a byte igual; a fonte GLB manteve seu hash. O cenário físico contém
+um track de rotação; a distinção entre inserir nos tracks selecionados e em
+todos os tracks também possui cenário host com tracks não selecionados.
+Essa entrega não declara concluídas todas as ferramentas de intervalo de B4.
+
+A API nativa de autoria funciona sem o painel: catálogo real, criação/extração,
+rascunhos isolados, snapshot versionado, bindings, curvas/poses, clipboard,
+amostragem pelo runtime e commit único no histórico. Revisão vencida, contexto
+de outro comando/thread e handles encerrados são recusados. A integração passou
+em 25/25 cenários host, incluindo a rota contextual de ferramentas do IDE.
+SDK C# e host de comandos publicados foram conectados ao backend. Uma
+verificação C#/DLL nativa real passou sem skips: rascunhos, curvas/poses,
+morphs com seis valores, grupos de rotação, sampling, commit, compositor,
+Undo/Redo, descarte, vida/thread do contexto e compilação publicada. O modelo
+“Ferramenta de animação” faz parte do caminho de criação e compila com os
+demais modelos. Não constam no APK code 19. O code 20 foi compilado, instalado
+e aceito no aparelho: criar modelo no IDE, publicar, executar sobre objeto
+genérico, abrir/editar o recurso, preview e reabertura a frio. Todos os 474
+quadros da gravação foram examinados; arquivo reabriu igual e fonte permaneceu
+intacta. A revisão não foi distribuída publicamente.
+
+A expansão de bake usa grade configurável, extremos/tempos de descontinuidade,
+refinamento, redução opcional e comparação pelo sampler real. Conserva IDs
+existentes no mesmo componente/tempo, bindings/fonte e trilhas não selecionadas;
+publicação/Undo/Redo seguem o journal e alocadores monotônicos. A UI substitui
+temporariamente o transporte por ajustes/resultados, sem folha cobrindo a cena
+ou o gráfico. Capturas 853×394 e 655×300 foram examinadas. Host 27/27 e SDK C#
+com ABI 1/2 passaram; o APK code 21 foi compilado e instalado com hash igual ao
+pacote local. Em 09/10 foi aceito no aparelho: conversão por toque, redução
+605 → 15 chaves, Undo/Redo e sonda SDK compilada/publicada no IDE com duas
+voltas Euler → Quaternion (183 → 32 chaves escalares). Todos os 477 quadros
+das duas gravações foram examinados nas 16 folhas; recursos UI/API reabriram
+byte idênticos, fonte GLB preservada. Esse aceite fecha o recorte de bake,
+não o B4 inteiro nem a biblioteca dos pacotes.
+Nessa revisão, Quaternion/progressivo → Euler era recusado; erro medido em amostras não é
+certificação contínua. Relatório específico: `docs/validacao/animation-clips-2026-10-08/BAKE.md`.
+
+Camadas de autoria não destrutivas entregues na revisão Dev 0.2.10/code 22:
+AECLIP 3, ABI 3, Base permanente, máscara esparsa por propriedade, ordem,
+duplicação/remoção/nome, Override/Additive, peso, referência e Mudo/Solo.
+Mesma composição no Studio, Animation e Animator, com API C# tipada, snapshots,
+transações, Undo/Redo, migração e recusas explícitas. Faixa contextual e novos
+ícones integrados ao atlas; Pose horizontal em viewport baixo. Host 31/31 e
+ponte C# ABI 1/2/3; APK instalado/hash conferido. No POCO F7: autoria por toque,
+comandos C# embarcados, cold reopen e cinco verificações de composição/isolamento
+no Animator. 909/909 quadros do aceite examinados em 31 folhas. Relatório:
+`docs/validacao/animation-layers-2026-10-09/LAYERS.md`. Fecha o recorte de camadas,
+sem declarar todo o B4 ou a equivalência com os pacotes.
+
+Conversão e consolidação (09/10, revisão Dev code 23): Quaternion/Progressivo
+→ Euler XYZ com referência inicial explícita, levantamento equivalente próximo
+e tratamento de gimbal; não oferece outras ordens nem recupera voltas perdidas.
+Consolidação amostra a composição real de todas as propriedades, publica outro
+GUID/caminho com Base única, preserva fonte e tem Undo/Redo de recurso completo.
+ABI 4/C# preservam prefixos 1/2/3, rascunhos e publicação independentes do painel.
+UI usa duas linhas contextuais, alternância XYZ, confirmação do ramo, Canal/Clipe
+novo e relatório; ícones novos percorrem SVG/PNG/atlas. Host 35/35, ponte real
+C#/nativa com ABI 1/2/3/4 passou. Aceite físico/publicação detalhados em
+`docs/validacao/animation-consolidation-2026-10-09/REPORT.md`.
+
+Ainda faltam demais ferramentas de intervalo e bake FK/IK/root motion,
+eventos, propriedades arbitrárias/drivers, auto-key por
+manipulação no viewport, mirror/copy pose, reimportação e workflow completo dos
+pacotes. `sourceOverride` está persistido, mas ainda não é uma política de merge
+de reimportação. Não há equivalência declarada com o B4 completo. Os pacotes
+continuam catalogados, com zero assets importados como biblioteca utilizável
+nesta expansão.
+
+Referências B4: Unity 6000.0
+https://docs.unity3d.com/6000.0/Documentation/Manual/animeditor-UsingAnimationEditor.html;
+Godot 4.5-stable `Animation::track_set_path`, `position_track_insert_key` e
+`track_remove_key`: https://github.com/godotengine/godot/blob/4.5-stable/scene/resources/animation.cpp;
+glTF 2.0.1, interpolação e recusa de quaternions nulos:
+https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#animations.
+Unity 6000.0
+https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Keyframe.html e
+https://docs.unity3d.com/6000.0/Documentation/Manual/EditingCurves.html;
+https://docs.unity3d.com/6000.0/Documentation/Manual/AnimationEulerCurveImport.html
+e https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AnimationUtility.SetEditorCurve.html;
+Godot 4.5-stable `scene/resources/animation.cpp`. Manual local UMotion 1.29p04:
+`DopesheetCurves.html`, `Curves.html`, `Layers.html`, `PoseEditor.html`,
+`RotationModes.html`, `CustomProperty.html` e `ImportExport.html`.
+Tutorial oficial https://www.youtube.com/watch?v=6jsyZifFtGQ: transcrição integral
+lida, quadro real em 1:55 examinado. Isso não declara o vídeo todo analisado
+quadro a quadro. As imagens locais de ClipEditor, CurveView e PoseEditor foram
+examinadas para estabelecer o vínculo entre seleção, propriedade e preview.
 
 ### B5 — rig, retargeting e constraints/IK
 

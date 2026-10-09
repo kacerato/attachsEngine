@@ -41,6 +41,13 @@ struct SourceAnimations {
   std::vector<resources::AssetGuid> clipIds;
   std::vector<resources::AssetGuid> nodes;
   std::vector<std::string> nodeNames;
+  // Authored clips bind by an exact relative path (including the empty path
+  // for the owner). An explicit missing/ambiguous path never falls back to a
+  // coincidentally matching short name. Imported clips leave this vector empty.
+  std::vector<std::string> nodePaths;
+  // Set only by a provider after validating every immutable channel.
+  // Untrusted/custom libraries retain the checked sampler by default.
+  bool channelsValidated=false;
 };
 
 struct AnimationClipView {

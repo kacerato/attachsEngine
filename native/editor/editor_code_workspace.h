@@ -23,6 +23,8 @@ struct EditorCodeMatch {usize offset=0,length=0;u32 line=1,column=1;};
 // `hidden`: [HideInInspector] — guardado e entregue no Play, fora do Inspector.
 struct EditorScriptProperty {std::string id,name,valueType;bool hidden=false;};
 struct EditorScriptType {std::string id,name,file;std::vector<EditorScriptProperty> properties;};
+struct EditorToolInfo {std::string id,label;};
+struct EditorToolRequest {std::string root,id;u64 epoch=0;};
 struct EditorCodeDiagnostic {
   std::string file,code,message;
   u32 line=1,column=1;

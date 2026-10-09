@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-09",
+  "total_frames": 1431,
+  "total_sheets": 48,
+  "videos": [
+    {
+      "video": "controls.mp4",
+      "frames": 598,
+      "sheets": 20,
+      "sha256": "7fd52a424b9c525e9883ee84e4c6b7c1bf71b8558dd3a7c8b50d2cdef5c01c98"
+    },
+    {
+      "video": "create-preview.mp4",
+      "frames": 476,
+      "sheets": 16,
+      "sha256": "9119dd1c27a8d8bcd7518916c12e469763d6285e1a2912a4276fc913133325cf"
+    },
+    {
+      "video": "runtime.mp4",
+      "frames": 357,
+      "sheets": 12,
+      "sha256": "66c22375cc881a1764b707a37dc9aba57aa8e4634917105b7d4edd68fb9ec438"
+    }
+  ],
+  "skipped_frames": 0
+}

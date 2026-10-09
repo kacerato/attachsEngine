@@ -19,6 +19,12 @@ public static class NativeInterop
     private static bool? _cachedSqliteAvailable;
 
     public static int SkippedForMissingLibraryCount { get; private set; }
+    public static bool AuthoringSdkBridgeAvailable(string? path)
+    {
+        var available = !string.IsNullOrEmpty(path) && File.Exists(path);
+        if (!available) ++SkippedForMissingLibraryCount;
+        return available;
+    }
 
     /// <summary>
     /// True se aether_physics.dll/.so carregou com sucesso. O resultado é cacheado (criar um

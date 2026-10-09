@@ -1,5 +1,6 @@
 #include "runtime/transform_math.h"
 #include "renderer/normal_matrix.h"
+#include "core/rotation_math.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,13 +25,7 @@ void transformMatrix(const Transform &t, float out[16]) {
 }
 
 void transformRotationQuaternion(const Transform &t, float out[4]) {
-  constexpr float half = 0.00872664626f; // graus -> radianos, dividido por dois
-  const float x = t.rotationDegrees[0] * half, y = t.rotationDegrees[1] * half, z = t.rotationDegrees[2] * half;
-  const float sx = std::sin(x), cx = std::cos(x), sy = std::sin(y), cy = std::cos(y), sz = std::sin(z), cz = std::cos(z);
-  out[0] = sx * cy * cz - cx * sy * sz;
-  out[1] = cx * sy * cz + sx * cy * sz;
-  out[2] = cx * cy * sz - sx * sy * cz;
-  out[3] = cx * cy * cz + sx * sy * sz;
+  rotationQuaternionXYZ(t.rotationDegrees,out);
 }
 
 bool worldMatrix(const SceneGraph &graph, ObjectId id, float out[16]) {

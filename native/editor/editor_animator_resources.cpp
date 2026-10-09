@@ -11,6 +11,10 @@ std::vector<resources::AssetGuid> controllerDependencies(const resources::Animat
                                                        const EditorMapScene &map,const resources::AssetRegistry &registry) {
   std::vector<resources::AssetGuid> result;
   for(const auto &clip:resources::animatorControllerClips(asset.graph)) {
+    if(const auto *record=registry.find(clip);record&&record->type==resources::AssetType::AnimationClip) {
+      if(std::find(result.begin(),result.end(),clip)==result.end())result.push_back(clip);
+      continue;
+    }
     runtime::AnimationClipView view;
     if(map.findClip(clip,view)&&view.source&&registry.find(view.source->source)&&
        std::find(result.begin(),result.end(),view.source->source)==result.end()) result.push_back(view.source->source);

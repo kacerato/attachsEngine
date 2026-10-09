@@ -42,6 +42,8 @@
 #include "platform/first_person_controller.h"
 #include "resources/texture_asset.h"
 #include "resources/audio_clip.h"
+#include "resources/animation_clip_asset.h"
+#include "editor/editor_animation_clip_preview.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
 #include "editor/editor_console.h"
@@ -138,6 +140,29 @@ public:
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
+  // Clip authoring operations are independent of the animation panel. They
+  // publish through the project journal and expose the same revision contract
+  // to the editor and native authoring clients.
+  const resources::AnimationClipAsset *animationClipAsset(resources::AssetGuid guid) const;
+  bool createAnimationClipAsset(const resources::AnimationClipAsset &value,std::string_view relative,std::string &error);
+  bool createConsolidatedAnimationClip(const resources::AnimationClipAsset &source,std::string_view name,
+       const resources::AnimationBakeSettings &,resources::AssetGuid &,resources::AnimationBakeReport &,std::string &error);
+  bool editAnimationClipAsset(resources::AssetGuid guid,u32 expectedRevision,
+       const std::function<bool(resources::AnimationClipAsset &)> &change,std::string &error);
+  bool createAnimationClip(EditorEntityId owner,float duration,resources::AssetGuid &guid,std::string &error,
+                           resources::AnimationRotationMode mode=resources::AnimationRotationMode::Quaternion);
+  // Extract an independent editable resource from a loaded model clip. Used
+  // nodes are resolved against this owner before publication; source bytes and
+  // imported interpolation remain intact. The same journal owns its history.
+  bool extractAnimationClip(resources::AssetGuid sourceClip,EditorEntityId owner,resources::AssetGuid &guid,std::string &error);
+  bool openAnimationClip(resources::AssetGuid guid,EditorEntityId owner,std::string &error);
+  bool addAnimationClipTrack(resources::AssetGuid guid,u32 expectedRevision,EditorEntityId owner,EditorEntityId target,
+                             resources::AnimationPath path,resources::AnimationRotationMode mode,u64 &trackId,std::string &error);
+  bool seekAnimationClip(float seconds,std::string &error);
+  void closeAnimationClip();
+  const runtime::SceneGraph &evaluatedEditorScene() const {
+    return state_.clipOpen&&clipPreview_.active()?clipPreview_.scene():static_cast<const runtime::SceneGraph&>(document_);
+  }
   bool changeProjectTags(const runtime::ObjectTags &next);
   bool assignTag(std::string_view name);
   bool saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error);
@@ -272,6 +297,9 @@ public:
     reportProblem(EditorConsoleSeverity::Info,"Compilação automática iniciada · revisão "+std::to_string(generation));
   }
   std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
+  bool requestEditorTools(std::string_view id={});
+  EditorToolRequest takeEditorToolRequest() {auto request=std::move(editorToolRequest_);editorToolRequest_={};return request;}
+  void completeEditorToolRequest(const EditorToolRequest &request,bool accepted,std::string_view report);
   bool completeCodeBuild(std::string_view report) {
     if(codeBuildGeneration_!=code_.generation()) {
       state_.codeBuildBusy=false;
@@ -316,7 +344,10 @@ public:
     state_.status=accepted?"Código aplicado ao projeto":"Não foi possível publicar a compilação";
     reportProblem(accepted?EditorConsoleSeverity::Info:EditorConsoleSeverity::Error,
         accepted?"Código publicado · revisão "+std::to_string(code_.publishedGeneration()):"Publicação recusada; versão anterior preservada");
-    if(accepted) reportScriptSchemaChanges();
+    if(accepted) {
+      reportScriptSchemaChanges();state_.codeToolCatalog.clear();editorToolCatalogRoot_.clear();
+      if(state_.codeTools) requestEditorTools();
+    }
   }
   void reportScriptSchemaChanges();
   const std::string &requestedScenePath() const { return requestedScenePath_; }
@@ -1057,15 +1088,17 @@ public:
     loadPhysicsMaterials();
     loadAnimatorControllers();
     loadNavMeshes();
+    loadAnimationClipAssets();
     return true;
   }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
-    if(!mapScene_.extract(document_, out)) return false;
-    applyLodGroups(document_, out);
+    const auto &graph=evaluatedEditorScene();
+    if(!mapScene_.extract(graph, out)) return false;
+    applyLodGroups(graph, out);
     // Camadas e objetos escondidos na vista da cena (só o editor; o Play
     // extrai do mundo).
     if(state_.hiddenLayers || !state_.sceneHidden.empty()) for(auto &draw:out)
-      if(const auto *entity=document_.find(static_cast<EditorEntityId>(draw.objectId));
+      if(const auto *entity=graph.find(static_cast<EditorEntityId>(draw.objectId));
          entity && ((entity->layer<32 && (state_.hiddenLayers&(1u<<entity->layer))) || state_.sceneHiddenHas(entity->id))) draw.visible=false;
     return true;
   }
@@ -1093,7 +1126,7 @@ public:
   // que faz a troca de nível chegar à tela — pela publicação de poses, porque
   // esconder desenhos não muda a topologia.
   bool lodSelectionChanged() const {
-    const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
+    const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():evaluatedEditorScene();
     // Uma troca animada muda a cobertura a cada quadro até terminar.
     if(runtime::lodCrossFadeRunning(lodClock_,lastWallSeconds_)) return true;
     // A própria consulta inicia a troca quando a câmera cruza o limite. Esse
@@ -1108,15 +1141,15 @@ public:
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
   // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
   bool extractLights(std::vector<renderer::SceneLight> &out) const {
-    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : document_, out);
+    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out);
   }
   bool extractEnvironment(renderer::SceneEnvironment &out) const {
     return runtime::collectSceneEnvironment(
-        isPlaying() && playScene_.active() ? playScene_.document() : document_, out,environmentProfiles_);
+        isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,environmentProfiles_);
   }
   bool extractEnvironmentVolumes(std::vector<renderer::SceneEnvironmentVolume> &out) const {
     return runtime::collectSceneEnvironmentVolumes(
-        isPlaying() && playScene_.active() ? playScene_.document() : document_, out,environmentProfiles_);
+        isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,environmentProfiles_);
   }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
@@ -1776,6 +1809,9 @@ private:
   runtime::SceneAudio::Output audioOutput_=runtime::SceneAudio::Output::Device;
   EditorCodeWorkspace code_;
   std::string codeBuildRequest_;
+  EditorToolRequest editorToolRequest_;
+  std::string editorToolCatalogRoot_;
+  u64 editorToolCatalogEpoch_=0;
   u64 codeBuildGeneration_=0;
   u64 runtimeCodeGeneration_=0;
   std::string requestedScenePath_;
@@ -1948,6 +1984,26 @@ public:
   bool navigationBaking() const noexcept;
   void waitNavigationBake();
 private:
+  void loadAnimationClipAssets();
+  bool publishAnimationClipCreation(const resources::AnimationClipAsset &value,std::string_view relative,std::string &error,bool recordHistory);
+  bool commitAnimationClipAsset(const resources::AnimationClipAsset &candidate,std::string &error,bool recordHistory=true);
+  std::vector<resources::AnimationClipAsset> animationClipAssets_;
+  AnimationClipPreview clipPreview_;
+  std::optional<resources::AnimationClipAsset> clipDrag_;
+  u64 clipEpoch_=0;u32 clipPointer_=0,clipNumberRevision_=0,clipHandle_=0;
+  resources::AssetGuid clipNumberGuid_;
+  u64 clipNumberLayer_=0;
+  u64 clipNumberTrack_=0,clipNumberKey_=0;u32 clipNumberComponent_=0;
+  u64 clipNumberSceneRevision_=0;float clipNumberTime_=0;
+  std::vector<resources::AnimationKeyAddress> clipNumberSelection_,clipPressSelection_;
+  ui::UiPoint clipPress_{};float clipPressTime_=0,clipPressValue_=0;
+  void refreshAnimationClip();
+  void frameAnimationClip();
+  void beginAnimationClipNumber(u32 code,double value);
+  bool applyAnimationClipNumber(u32 code,double value);
+  bool applyAnimationClipName(std::string_view value);
+  bool applyAnimationClipLayerName(std::string_view value);
+  bool handleAnimationClip(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   void openAnimatorEditor();
   void frameAnimator();
   void navigateAnimator(u64 machine);
