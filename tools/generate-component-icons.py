@@ -149,6 +149,24 @@ ICONS: dict[str, str] = {
 <rect x="94" y="23" width="20" height="20" {stroke(5, ACCENT)}/>
 <path d="M35 83c15-58 38 14 62-40M85 43h12V31" {stroke(5, ACCENT)}/>
 <path d="M15 114h99M39 108v12M64 108v12M89 108v12" {stroke(4)}/>''',
+    # Variantes que antes repetiam o ícone de outra receita.
+    "physics/character-cylinder": f'''<ellipse cx="54" cy="24" rx="26" ry="9" {stroke(5)}/>
+<path d="M28 24v70M80 24v70M28 94c0 12 52 12 52 0" {stroke(5)}/>
+<path d="M92 60h26M108 50l10 10-10 10" {stroke(5, ACCENT)}/>
+<path d="M12 116h104" {stroke(4)}/>''',
+    "path/camera": f'''<path d="M10 104C36 30 80 110 118 34" {stroke(4)}/>
+<rect x="42" y="30" width="40" height="30" rx="6" {stroke(5, ACCENT)}/>
+<path d="M82 39l14-8v28l-14-8" {stroke(5, ACCENT)}/>
+<path d="M62 60v14" {stroke(4, ACCENT)}/><circle cx="62" cy="78" r="6" fill="{ACCENT}"/>''',
+    "physics/circle-2d": f'''<circle cx="60" cy="56" r="38" {stroke(5)}/>
+<path d="M60 94v23M49 107l11 10 11-10" {stroke(5, ACCENT)}/>
+<path d="M40 44a24 24 0 0 1 36-8" {stroke(5, ACCENT)}/><path d="M70 28l7 8-10 3" {stroke(4, ACCENT)}/>''',
+    "physics/capsule-2d": f'''<rect x="38" y="10" width="44" height="88" rx="22" {stroke(5)}/>
+<path d="M60 98v19M49 107l11 10 11-10" {stroke(5, ACCENT)}/>
+<path d="M38 54h44" {stroke(4, extra='stroke-dasharray="6 6"')}/>''',
+    "physics/sensor-2d": f'''<rect x="20" y="20" width="88" height="88" rx="8" {stroke(5, extra='stroke-dasharray="10 8"')}/>
+<circle cx="64" cy="64" r="14" fill="{ACCENT}"/>
+<path d="M8 64h30M28 54l10 10-10 10" {stroke(5, ACCENT)}/>''',
     "physics/body-2d": f'''<rect x="24" y="22" width="74" height="74" {stroke(5)}/>
 <path d="M60 94v23M49 107l11 10 11-10M98 58h20M109 48l9 10-9 10" {stroke(5, ACCENT)}/>
 <path d="M38 38h13M38 38v13M73 80h12M85 68v12" {stroke(4)}/>''',

@@ -308,7 +308,8 @@ public:
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
-  bool jumpCharacter(EditorEntityId id) {return active_&&!paused_&&physics_.jumpCharacter(id,&world_);}
+  // Mesma fonte de setCharacterMove: entrada direta do jogador, sem disputar com scripts.
+  bool jumpCharacter(EditorEntityId id) {return active_&&!paused_&&physics_.jumpCharacter(id,&world_,runtime::MotorControlSource::Keyboard);}
   bool setDynamicMotorMove(EditorEntityId id,float right,float forward,float yaw) {return active_&&physics_.setDynamicMotorMove(id,right,forward,yaw);}
   bool jumpDynamicMotor(EditorEntityId id) {return active_&&!paused_&&physics_.jumpDynamicMotor(id);}
   bool advance(double elapsed) {

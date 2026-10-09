@@ -11621,7 +11621,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       break;
     case EditorWidget::HierarchyAdd:
       state.creationAsChild=document.exists(state.selection) && state.selection!=document.root();
-      state.creationMenu=true;break;
+      state.creationMenu=true;
+      // A folha abre com uma receita da categoria atual selecionada: sem ela o
+      // detalhe (destino e Criar) não aparece.
+      if(const auto query=editorSearchKey(state.creationSearch);!creationAvailable(state,state.creationSelection) ||
+         !creationListed(editorCreationCatalog[state.creationSelection],query,state.creationCategory))
+        for(u32 i=0;i<editorCreationCatalog.size();++i)
+          if(creationAvailable(state,i) && creationListed(editorCreationCatalog[i],query,state.creationCategory)) {state.creationSelection=i;break;}
+      break;
     case EditorWidget::CreationAtRoot: state.creationAsChild=false;break;
     case EditorWidget::CreationAsChild:
       if(document.exists(state.selection) && state.selection!=document.root()) state.creationAsChild=true;

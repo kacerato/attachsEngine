@@ -287,7 +287,7 @@ inline const std::array<EditorCreationEntry,86> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::kinematicSphere,CreationPose::ViewTarget,0,{},{},"Kinematic AnimatableBody3D"},
   {"physics.character",EditorWidget::None,3,"Personagem","Controlador físico com cápsula própria.",ui::UiIcon::ComponentCharacter,
     runtime::ObjectKind::Folder,recipe::characterRecipe,CreationPose::ViewTarget,1,{},{},"CharacterController CharacterBody3D"},
-  {"physics.character_cylinder",EditorWidget::None,3,"Personagem cilíndrico","Raiz Character com cilindro visual.",ui::UiIcon::ComponentCharacter,
+  {"physics.character_cylinder",EditorWidget::None,3,"Personagem cilíndrico","Raiz Character com cilindro visual.",ui::UiIcon::PhysicsCharacterCylinder,
     runtime::ObjectKind::Folder,recipe::characterRecipe,CreationPose::ViewTarget,0,{},{},"Character Cylinder Jogador Cilindro",scene::PrimitiveType::Count,false,{},recipe::character,scene::PrimitiveType::Cylinder},
   {"physics.motor_cylinder",EditorWidget::None,3,"Cilindro com motor","Exemplo físico; configure locomoção em qualquer objeto pelas suas ações.",ui::UiIcon::ComponentDynamicBodyMotor,
     runtime::ObjectKind::Folder,recipe::motorCylinder,CreationPose::ViewTarget,1,{},{},"DynamicCylinder DynamicBodyMotor Rigidbody Jogador Cilindro",scene::PrimitiveType::Count,false,{},recipe::dynamicMotor,scene::PrimitiveType::Cylinder},
@@ -355,11 +355,11 @@ inline const std::array<EditorCreationEntry,86> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::box2D,CreationPose::ViewTarget,2,{},{},"Rigidbody2D Box"},
   {"physics2d.ground",EditorWidget::None,7,"Caixa estática 2D","Colisão XY estática; tamanho editável no colisor.",ui::UiIcon::PhysicsCollider2d,
     runtime::ObjectKind::Folder,recipe::ground2D,CreationPose::ViewTarget,0,{},{},"StaticBody2D"},
-  {"physics2d.circle",EditorWidget::None,7,"Círculo dinâmico 2D","Corpo e colisor circular reais no plano XY.",ui::UiIcon::PhysicsBody2d,
+  {"physics2d.circle",EditorWidget::None,7,"Círculo dinâmico 2D","Corpo e colisor circular reais no plano XY.",ui::UiIcon::PhysicsCircle2d,
     runtime::ObjectKind::Folder,recipe::ball2D,CreationPose::ViewTarget,2,{},{},"CircleCollider2D"},
-  {"physics2d.capsule",EditorWidget::None,7,"Cápsula dinâmica 2D","Corpo e cápsula vertical reais no plano XY.",ui::UiIcon::PhysicsBody2d,
+  {"physics2d.capsule",EditorWidget::None,7,"Cápsula dinâmica 2D","Corpo e cápsula vertical reais no plano XY.",ui::UiIcon::PhysicsCapsule2d,
     runtime::ObjectKind::Folder,recipe::capsuleBody2D,CreationPose::ViewTarget,2,{},{},"CapsuleCollider2D"},
-  {"physics2d.sensor",EditorWidget::None,7,"Sensor 2D","Sensor estático com eventos; não gera resposta de contato.",ui::UiIcon::PhysicsCollider2d,
+  {"physics2d.sensor",EditorWidget::None,7,"Sensor 2D","Sensor estático com eventos; não gera resposta de contato.",ui::UiIcon::PhysicsSensor2d,
     runtime::ObjectKind::Folder,recipe::trigger2D,CreationPose::ViewTarget,0,{},{},"Trigger Area2D"},
   {"physics2d.thruster",EditorWidget::None,7,"Propulsor 2D","Corpo dinâmico e força local de 12 N em cada passo.",ui::UiIcon::PhysicsConstantForce2d,
     runtime::ObjectKind::Folder,recipe::thruster2D,CreationPose::ViewTarget,1,{},{},"ConstantForce2D"},
@@ -369,7 +369,7 @@ inline const std::array<EditorCreationEntry,86> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::path,CreationPose::ViewTarget,0,{},{},"Path3D Curve3D Spline Caminho",scene::PrimitiveType::Count,false,recipe::pathPoints},
   {"path.follower",EditorWidget::None,5,"Seguidor de caminho","Escolha um Path; avance por velocidade ou duração.",ui::UiIcon::ComponentPathFollow,
     runtime::ObjectKind::Folder,recipe::pathFollow,CreationPose::ViewTarget,0,"astra.path.follow","target","PathFollow3D Seguidor"},
-  {"path.camera",EditorWidget::None,5,"Câmera no caminho","Câmera e seguidor real; selecione o Path antes de criar.",ui::UiIcon::ComponentPathFollow,
+  {"path.camera",EditorWidget::None,5,"Câmera no caminho","Câmera e seguidor real; selecione o Path antes de criar.",ui::UiIcon::PathCamera,
     runtime::ObjectKind::Camera,recipe::pathCamera,CreationPose::EditorCamera,0,"astra.path.follow","target","Camera Rail PathFollow3D"}
 }};
 inline constexpr u32 kCreationRecipeRange=0x0010'0000u;

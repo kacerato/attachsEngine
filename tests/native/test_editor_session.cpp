@@ -1,3 +1,4 @@
+#include "script_publication_fixture.h"
 #include "renderer/primitive_geometry.h"
 #include "scene/path_follow.h"
 #include "editor/editor_component_impact.h"
@@ -1083,6 +1084,22 @@ void revealProperty(Fixture &fixture,u32 widget) {
     tapWidget(fixture,widgetId(EditorWidget::PropertyNext));
   }
 }
+// Campos de componente ficam em abas de grupo (Corpo, Material, Início...):
+// percorre cada aba e as páginas dela até o campo aparecer.
+bool revealComponentProperty(Fixture &fixture,u32 widget) {
+  for(u32 group=0;group<16;++group) {
+    if(locateWidget(fixture.session,widget).x>=0) return true;
+    const u32 tab=widgetId(EditorWidget::ComponentGroupBase)+group;
+    if(locateWidget(fixture.session,tab).x<0) continue;
+    tapWidget(fixture,tab);
+    while(fixture.session.screen().propertyPage && locateWidget(fixture.session,widgetId(EditorWidget::PropertyPrevious)).x>=0)
+      tapWidget(fixture,widgetId(EditorWidget::PropertyPrevious));
+    for(u32 page=0;page<32 && locateWidget(fixture.session,widget).x<0 &&
+        locateWidget(fixture.session,widgetId(EditorWidget::PropertyNext)).x>=0;++page)
+      tapWidget(fixture,widgetId(EditorWidget::PropertyNext));
+  }
+  return locateWidget(fixture.session,widget).x>=0;
+}
 }
 AE_TEST(editor_tags_touch_creation_search_assignment_and_missing_definition) {
   namespace fs=std::filesystem;
@@ -1925,6 +1942,7 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look"));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.camera.look")).x>=0,"look resolves its camera dependency");
   selectComponentFamily(f,scene::ComponentFamily::Physics3D);
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"prévia não adiciona o corpo");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
@@ -1934,23 +1952,23 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   AE_EXPECT_EQ(f.session.screen().expandedNative,physicsBody(*f.session.document().find(f.cube))->instanceId(),
                "new component opens in the Inspector");
   const auto revision=f.session.document().revision();
-  revealProperty(f,friction);
-  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"new component properties are reachable");
+  AE_EXPECT_TRUE(revealComponentProperty(f,friction),"new component properties are reachable");
   AE_EXPECT_EQ(f.session.document().revision(),revision,"opening the Inspector never changes authoring");
   while(f.session.screen().propertyPage) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
   const u32 motion=widgetId(EditorWidget::ComponentEnumBase)+1;
-  revealProperty(f,motion);
+  AE_EXPECT_TRUE(revealComponentProperty(f,motion),"campo Movimento alcançável");
   tapWidget(f,motion);
-  AE_EXPECT_EQ(f.session.screen().enumPicker,motion,"campo de enumeração abre a lista de opções");
+  AE_EXPECT_EQ(f.session.screen().enumPicker,motion,("campo de enumeração abre a lista de opções: "+std::to_string(f.session.screen().enumPicker)+" "+std::to_string(motion)).c_str());
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion!=scene::BodyMotion::Kinematic,"abrir a lista não muda o valor");
   tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+1);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Kinematic,"kinematic option");
   AE_EXPECT_EQ(f.session.screen().enumPicker,0u,"escolher fecha a lista");
-  revealProperty(f,motion);
+  AE_EXPECT_TRUE(revealComponentProperty(f,motion),"campo Movimento alcançável de novo");
   tapWidget(f,motion);
   tapWidget(f,widgetId(EditorWidget::ComponentEnumOptionBase)+2);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"motion enum remains an editable value");
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.body"));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"duplicate has no confirmation");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
@@ -6083,7 +6101,7 @@ AE_TEST(input_interactions_session_touch_hold_unscaled_cancel_and_fresh_press) {
  Fixture f;auto&session=f.session;auto&doc=session.document();auto map=doc.inputActions();auto action=*map.find("Saltar");
  action.interaction=runtime::InputInteraction::Hold;action.duration=.25f;map.replace(action.id,action);doc.setInputActions(map);
  auto entity=*doc.find(f.cube);AE_EXPECT_TRUE(entity.components.add(scene::Character::descriptor),"explicit character owns the jump HUD");auto*s=static_cast<scene::ScriptBehavior*>(entity.components.add(scene::ScriptBehavior::descriptor));s->scriptType="test.InputTouch";s->source="Touch.cs";doc.applyEntityValues(f.cube,entity);session.setSelection(f.cube);
- session.setScriptRuntime(inputTouchApi());AE_EXPECT_TRUE(session.startPlay(),"real session Play");session.update();
+ session.setScriptRuntime(inputTouchApi());PublishedScriptProject scripts;AE_EXPECT_TRUE(publishCompiledScript(session,scripts,"test.InputTouch","Touch.cs"),"scripts publicados pelo hospedeiro");AE_EXPECT_TRUE(session.startPlay(),"real session Play");session.update();
  std::vector<renderer::MapDrawState> draws;session.advanceClock(1);AE_EXPECT_TRUE(session.extractPlayMap(draws),"Play starts with real bridge");
  auto query=[&](){scene::ScriptInputActionState result;inputTouchAccess.inputActionCommand(inputTouchAccess.context,reinterpret_cast<const u8*>("Saltar"),6,0,&result);return result;};
  const auto button=locateWidget(session,widgetId(EditorWidget::JumpCharacter));AE_EXPECT_TRUE(button.x>=0,"authored touch action has executable button");

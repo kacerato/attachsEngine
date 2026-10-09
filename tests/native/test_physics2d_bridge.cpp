@@ -134,11 +134,11 @@ AE_TEST(corpo_plane2d_nao_gira_em_torno_de_x_ou_y_apenas_em_z) {
   AetherPhysics_DestroyWorld(world);
 }
 
-AE_TEST(corpo_dynamic_com_todos_os_dofs_de_translacao_travados_e_recusado) {
-  // AetherAllowedDOFs sem NENHUM bit de translação (só rotação, ex.: RotationZ sozinho) é
-  // inválido para um corpo Dynamic no Jolt (crasha por divisão por zero em
-  // MotionProperties::SetMassProperties — comentário completo em jolt_bridge.h). Esta
-  // fronteira recusa a criação em vez de repassar ao Jolt.
+AE_TEST(corpo_dynamic_so_com_rotacao_fica_no_lugar_e_gira) {
+  // Corpo Dynamic com todos os eixos de translação travados (Freeze Position da Unity) é um
+  // uso legítimo: roda, ventilador, catraca. O Jolt 5.6 trata esse caso em
+  // MotionProperties::SetMassProperties com massa inversa zero (antes ele dividia por zero e a
+  // fronteira recusava o corpo). Agora a fronteira aceita e o corpo não cai, mas gira.
   AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, 16);
 
   AetherBodyDesc desc{};
@@ -151,7 +151,14 @@ AE_TEST(corpo_dynamic_com_todos_os_dofs_de_translacao_travados_e_recusado) {
   desc.allowedDOFs = AetherAllowedDOFs::RotationZ; // só rotação, nenhuma translação livre
 
   AetherBodyHandle body = AetherPhysics_CreateBody(world, &desc);
-  AE_EXPECT_TRUE(body == AetherBodyHandle_Invalid, "corpo Dynamic sem nenhum eixo de translação livre deveria ser recusado, não crashar");
+  AE_EXPECT_TRUE(body != AetherBodyHandle_Invalid, "corpo Dynamic só com rotação é aceito");
+  AE_EXPECT_TRUE(AetherPhysics_SetBodyAngularVelocityV1(world, body, {0.0f, 0.0f, 3.0f}) == 1, "velocidade angular aceita");
+  for (int i = 0; i < 60; ++i) AetherPhysics_Step(world, 1.0f / 60.0f, 1); // 1 s de gravidade
+
+  AetherVec3 position{};AetherQuat rotation{};
+  AetherPhysics_GetTransform(world, body, &position, &rotation);
+  AE_EXPECT_TRUE(near(position.y, 5.0f, 0.001f) && near(position.x, 0.0f, 0.001f), "sem eixo de translação o corpo não cai");
+  AE_EXPECT_TRUE(std::abs(rotation.z) > 0.1f, "mas gira em Z");
 
   AetherPhysics_DestroyWorld(world);
 }

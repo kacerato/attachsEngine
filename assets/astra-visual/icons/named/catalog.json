@@ -1787,6 +1787,36 @@
       "name": "interruption",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "physics/character-cylinder": {
+      "category": "physics",
+      "name": "character-cylinder",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "path/camera": {
+      "category": "path",
+      "name": "camera",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/circle-2d": {
+      "category": "physics",
+      "name": "circle-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/capsule-2d": {
+      "category": "physics",
+      "name": "capsule-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "physics/sensor-2d": {
+      "category": "physics",
+      "name": "sensor-2d",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

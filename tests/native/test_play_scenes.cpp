@@ -1,3 +1,4 @@
+#include "script_publication_fixture.h"
 #include "harness.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -125,6 +126,7 @@ AE_TEST(play_scenes_session_resolves_project_scenes_and_swaps_the_world_at_frame
   static bool requested;requested=false;
   SceneRuntime::onUpdate=[]{if(!requested) requested=SceneRuntime::request("Nivel2")==1;};
   session.setScriptRuntime(SceneRuntime::api());
+  AE_EXPECT_TRUE(publishCompiledScript(session,"project.Probe","Probe.cs"),"scripts publicados pelo hospedeiro");
   AE_EXPECT_TRUE(session.startPlay(),"Play");session.update();
   std::vector<renderer::MapDrawState> draws;session.advanceClock(1);
   AE_EXPECT_TRUE(session.extractPlayMap(draws),"first frame requests the swap");
