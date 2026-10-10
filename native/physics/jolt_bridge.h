@@ -233,11 +233,10 @@ AetherPhysicsWorld *AetherPhysics_CreateWorldV2(const AetherPhysicsWorldDescV2 *
 void AetherPhysics_DestroyWorld(AetherPhysicsWorld *world);
 
 /// Cria um corpo e já o adiciona ao mundo (ativo, se dinâmico). Devolve
-/// AetherBodyHandle_Invalid se o mundo já está no teto de `maxBodies`, OU (item 4.1.6) se
-/// `motionType == Dynamic` e `allowedDOFs` não deixa nenhum eixo de translação livre — essa
-/// combinação é inválida no Jolt (crasha por divisão por zero em MotionProperties::
-/// SetMassProperties; um corpo totalmente travado deveria ser Static, não Dynamic com todos
-/// os DOFs travados) e esta fronteira recusa a criação em vez de deixar o processo abortar.
+/// AetherBodyHandle_Invalid se o mundo já está no teto de `maxBodies`, a forma é
+/// inválida ou um Dynamic não possui nenhum grau de liberdade. Jolt 5.6 aceita
+/// translação inteiramente travada com rotação livre (rodas, ventiladores,
+/// catracas): massa inversa zero preserva a posição sem impedir a rotação.
 AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const AetherBodyDesc *desc);
 
 /// Cria um único corpo estático de triangle mesh a partir de posições e índices

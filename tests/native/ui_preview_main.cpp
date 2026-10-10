@@ -39,6 +39,7 @@
 #include "scene/script_behavior.h"
 #include "scene/camera_follow.h"
 #include "scene/animation.h"
+#include "resources/animation_clip_asset.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
@@ -398,7 +399,7 @@ int writeNavigationProject(const char *directory) {
 // Aceite no aparelho do bloco I (docs/planos/ANIMATOR-2026-10-07.md): Fox
 // importado com Animator no lugar da Animação legada, mistura 1D por
 // Velocidade, gatilho de Qualquer estado e retorno por tempo de saída.
-int writeAnimatorProject(const char *directory,bool general=false,bool shared=false,bool additive=false,bool hierarchy=false) {
+int writeAnimatorProject(const char *directory,bool general=false,bool shared=false,bool additive=false,bool hierarchy=false,bool cues=false) {
   namespace fs=std::filesystem;
   const auto fail=[](const std::string &message){std::fprintf(stderr,"Animator export refused: %s\n",message.c_str());return 2;};
   if(!directory||!directory[0]) return fail("provide a new empty output directory");
@@ -407,7 +408,7 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   std::vector<u8> probe,fox,license;
   const char *modelPath=general?"Fontes/Mechanism.glb":"Fontes/Fox.glb";
   const char *licensePath=general?"Fontes/Mechanism.LICENSE.txt":"Fontes/Fox.LICENSE.txt";
-  if(!readAsset(hierarchy?"tests/fixtures/animator/HierarchyAnimatorProbe.cs":additive?"tests/fixtures/animator/AdditiveAnimatorProbe.cs":shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
+  if(!readAsset(cues?"tests/fixtures/animator/ClipCuesProbe.cs":hierarchy?"tests/fixtures/animator/HierarchyAnimatorProbe.cs":additive?"tests/fixtures/animator/AdditiveAnimatorProbe.cs":shared?"tests/fixtures/animator/SharedAnimatorProbe.cs":general?"tests/fixtures/animator/GeneralAnimatorProbe.cs":"tests/fixtures/animator/AnimatorProbe.cs",probe)||!readAsset(general?"tests/fixtures/animator/Mechanism.glb":"tests/native/fixtures/gltf/Fox.glb",fox)||
      !readAsset(general?"tests/fixtures/animator/Mechanism.LICENSE.txt":"tests/native/fixtures/gltf/Fox.LICENSE.txt",license)) return fail("fixture unavailable");
   for(const auto *folder:{"Scripts","scenes",".astra","Fontes"}){fs::create_directories(root/folder,ec);if(ec) return fail("cannot create folders");}
   if(!editor::EditorImportTransaction::write(root/"Scripts/AnimatorProbe.cs",probe)||
@@ -503,6 +504,38 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
     if(!asset.valid()||!registry.add(record)||!editor::EditorImportTransaction::writeText(root/editor::EditorImportTransaction::fromUtf8(record.path),text)||!session.loadAssets(registry.serialize())) return fail("shared resource");
   }
   if(!document.applyEntityValues(owner,values)) return fail("animator graph rejected by document");
+  if(cues) {
+    resources::AnimationClip runtimeClip;runtimeClip.name="Ciclo de eventos";runtimeClip.duration=2;
+    resources::AnimationChannel channel;channel.node=0;channel.path=resources::AnimationPath::Rotation;
+    channel.times={0,1,2};channel.values={0,0,0,1,0,.70710678f,0,.70710678f,0,0,0,1};runtimeClip.channels={channel};
+    const resources::AnimationClipBinding bindings[]{{0,{},"Painel","Painel"}};
+    resources::AnimationClipAsset clip;std::string error;u64 cueId=0;
+    if(!resources::authorAnimationClip(runtimeClip,resources::assetGuidFromSeed("device-cues-20261010"),{},{},{},bindings,clip,error)||
+       !clip.putCue({0,.25f,resources::AnimationCueKind::Event,"Trava",7,2.5},cueId,error)||
+       !clip.putCue({0,.5f,resources::AnimationCueKind::Marker,"Pose aberta"},cueId,error)||
+       !clip.putCue({0,.75f,resources::AnimationCueKind::Event,"Som",8,.125},cueId,error)||
+       !session.createAnimationClipAsset(clip,"Clipes/Ciclo.aeclip",error)) return fail(error);
+    auto authored=*document.find(owner);editor::assignEntityName(authored,"Animator");authored.transform.position[0]=-70;
+    auto &graph=scene::animator(*authored.components.edit(scene::Animator::descriptor));
+    graph.parameters.clear();graph.motionSource=0;graph.layers.resize(1);auto &layer=graph.layers[0];
+    layer.states.resize(1);layer.transitions.clear();layer.states[0].name="Ciclo";
+    layer.states[0].kind=scene::AnimatorMotionKind::Clip;layer.states[0].blendX=0;
+    layer.states[0].motions={{clip.guid}};layer.states[0].events.clear();
+    if(!document.applyEntityValues(owner,authored))return fail("cue graph");
+    runtime::ObjectCloneMap mapping;const auto second=document.cloneSubtree(owner,document.root(),mapping);
+    if(!second)return fail("cue legacy clone");
+    auto legacy=*document.find(second);editor::assignEntityName(legacy,"Animation");legacy.transform.position[0]=70;
+    legacy.components.remove(scene::Animator::descriptor);auto *player=static_cast<scene::Animation*>(legacy.components.add(scene::Animation::descriptor));
+    player->clip=clip.guid;player->appendClip(clip.guid);player->playAutomatically=true;
+    if(!document.applyEntityValues(second,legacy))return fail("cue legacy component");
+    for(const auto emitter:{owner,second}) {
+      const bool isGraph=emitter==owner;
+      const auto target=document.createEntity(document.root(),runtime::ObjectKind::Folder,isGraph?"Alvo Animator":"Alvo Animation");
+      auto v=*document.find(emitter);auto *connection=static_cast<scene::EventConnection*>(v.components.add(scene::EventConnection::descriptor));
+      connection->event=isGraph?32:30;connection->action=3;connection->receiver=target;connection->clipTag=7;connection->once=true;
+      if(!document.applyEntityValues(emitter,v))return fail("cue connection");
+    }
+  }
   if(shared) {
     runtime::ObjectCloneMap mapping;const auto second=document.cloneSubtree(owner,document.root(),mapping);if(!second) return fail("clone mechanism");
     auto copy=*document.find(second);editor::assignEntityName(copy,"Mecanismo B");copy.transform.position[0]=70;
@@ -513,11 +546,11 @@ int writeAnimatorProject(const char *directory,bool general=false,bool shared=fa
   {auto v=*document.find(cameraId);v.transform.position[1]=60;v.transform.position[2]=-260;v.components.add(scene::Camera::descriptor);document.applyEntityValues(cameraId,v);}
   const auto probeId=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Sonda");
   {auto v=*document.find(probeId);auto *script=static_cast<scene::ScriptBehavior*>(v.components.add(scene::ScriptBehavior::descriptor));
-   script->scriptType="acceptance.animator";script->source="Scripts/AnimatorProbe.cs";document.applyEntityValues(probeId,v);}
+   script->scriptType=cues?"acceptance.clip_cues":"acceptance.animator";script->source="Scripts/AnimatorProbe.cs";document.applyEntityValues(probeId,v);}
   if(!editor::EditorImportTransaction::writeText(root/"scenes/editor.aescene",editor::serializeEditorDocument(document,0))) return fail("scene");
   if(!editor::EditorImportTransaction::writeText(root/".astra/assets.astra",session.serializeAssets())) return fail("registry");
   std::ostringstream descriptor;
-  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(hierarchy?"AnimatorHierarchy-20261008":additive?"AnimatorAdditive-20261008":shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
+  descriptor<<"{\n  \"format\":\"ASTRA-PROJECT-1\",\n  \"resourceSource\":\"independent\",\n  \"project\":{\"name\":"<<std::quoted(cues?"AnimationCues-20261010":hierarchy?"AnimatorHierarchy-20261008":additive?"AnimatorAdditive-20261008":shared?"AnimatorControllers-20261008":general?"AnimatorUniversal-20261008":"AnimatorFox-20261007")<<",\"path\":"<<std::quoted(root.generic_string())
             <<",\"template\":\"empty\",\"scenes\":1,\"assets\":1},\n  \"mainScene\":\"scenes/editor.aescene\",\n  \"editorScene\":\"scenes/editor.aescene\"\n}\n";
   if(!editor::EditorImportTransaction::writeText(root/"project.json",descriptor.str())) return fail("descriptor");
   std::printf("Animator project written: %s\n",root.generic_string().c_str());
@@ -1029,6 +1062,7 @@ int main(int argc, char **argv) {
   if(argc>1&&std::string_view(argv[1])=="write-navigation-project")return writeNavigationProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-audio-mixer-project")return writeAudioMixerProject(argc>2?argv[2]:nullptr);
   if(argc>1&&std::string_view(argv[1])=="write-animator-general-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true);
+  if(argc>1&&std::string_view(argv[1])=="write-animation-cues-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,false,false,false,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-controller-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-additive-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true,true);
   if(argc>1&&std::string_view(argv[1])=="write-animator-hierarchy-project")return writeAnimatorProject(argc>2?argv[2]:nullptr,true,true,false,true);

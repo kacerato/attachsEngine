@@ -1,0 +1,16 @@
+[
+  {
+    "name": "dev.aether.editor.shell.ProjectSceneSourceTest",
+    "tests": "10",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "dev.aether.editor.shell.ProjectStoreTest",
+    "tests": "7",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+]

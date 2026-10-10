@@ -42,3 +42,13 @@ SHA 61f7d8d85581dc090ad906e865b2e96c4ff974bf14cab4b5202806c0a2075936, base 2e6ea
 Dev foi atualizada para 0.2.2-dev.20261007/código 8 com novo label, sem alteração
 da biblioteca nativa em relação ao público. Esta revisão de identificação não
 reescreve a evidência histórica do U07 nem declara um novo aceite de gameplay.
+
+## Revisão Dev aceita em 10/10/2026
+
+As versões da seção anterior são históricas. Público atual: dev.aether.editor,
+0.3.0-preview.20261009/code 28. Dev atual: dev.aether.editor.u07,
+0.3.1-dev.cues.20261010.1/code 33, instalado por atualização preservando os projetos.
+SHA-256: 17ba47c95ce03a5e2fbedf9e7b982f2d44f8b1b9151a6ed41839fc23bbe36e4e.
+Fonte funcional: 5e7df0db. Aceite de cues, SDK/atlas e vídeo em
+docs/validacao/animation-cues-android-2026-10-10/README.md. Não é distribuição
+pública nova; não substituir o download público por esse APK de desenvolvimento.

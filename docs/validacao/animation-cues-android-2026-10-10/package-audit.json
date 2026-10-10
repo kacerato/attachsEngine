@@ -1,0 +1,26 @@
+{
+  "apk_sha256": "17ba47c95ce03a5e2fbedf9e7b982f2d44f8b1b9151a6ed41839fc23bbe36e4e",
+  "installed_apk_sha256": "17ba47c95ce03a5e2fbedf9e7b982f2d44f8b1b9151a6ed41839fc23bbe36e4e",
+  "package": "dev.aether.editor.u07",
+  "versionCode": 33,
+  "versionName": "0.3.1-dev.cues.20261010.1",
+  "functional_source_commit": "5e7df0db20e0678305b7dc46e550aa3b1e7b75df",
+  "assets": {
+    "dotnet/Astra.Scripting.dll": {
+      "size": 721920,
+      "sha256": "ea9c6599c6f99323508a3146b243f446ac66b870cbb251780eef07741165e4d6",
+      "matches_generated_production": true
+    },
+    "ui/astra-ui-icons.aeui": {
+      "size": 13257252,
+      "sha256": "b590b159957e13bf2c8b4baf1cd3a261921051673413c4a7051e0e139cd300ba",
+      "matches_generated_production": true
+    },
+    "ui/astra-ui-font.aeuf": {
+      "size": 2116040,
+      "sha256": "f6b663200053b6e7f58e30e5973e7658813d8f6194b2e317bd8a4e58e49d5998",
+      "matches_generated_production": true
+    }
+  },
+  "existing_project_archives_unchanged": 13
+}

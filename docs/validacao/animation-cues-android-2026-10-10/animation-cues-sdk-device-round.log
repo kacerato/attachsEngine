@@ -1,0 +1,7 @@
+<repo>\managed\Aether.Core\Math\math.cs(6,21): warning CS8981: O nome do tipo 'math' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [<repo>\managed\Aether.Core\Aether.Core.csproj]
+<repo>\managed\Aether.Core\Math\quaternion.cs(7,15): warning CS8981: O nome do tipo 'quaternion' contém apenas caracteres ascii em caixa baixa. Esses nomes podem ficar reservados para o idioma. [<repo>\managed\Aether.Core\Aether.Core.csproj]
+
+  AnimationAuthoringSdkTests
+    [32mok[0m   AuthoringSdkCommandsCrossTheRealNativeResourceAndHistoryBoundary
+
+  [32mTUDO VERDE[0m — 1 passaram, 0 falharam, 0 pulados em 7143 ms

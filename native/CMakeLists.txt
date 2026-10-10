@@ -1033,6 +1033,14 @@ if(NOT ANDROID)
   target_include_directories(aether_animation_clip_editor_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_clip_editor_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  # Existing runtime regressions for the evaluators changed by clip cues.
+  # Reuse real cases rather than copying tests or requiring unrelated families.
+  add_executable(aether_animation_runtime_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_animator.cpp ../tests/native/test_skeletal_animation.cpp
+    ../tests/native/test_atomic_asset_file.cpp ../tests/native/test_physics2d_bridge.cpp)
+  target_include_directories(aether_animation_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_animation_runtime_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   # Reuse the environment integration scenarios without rebuilding/running the
   # entire native test catalogue for a sky authoring change.
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
@@ -1042,6 +1050,7 @@ if(NOT ANDROID)
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   if(MINGW)
     target_compile_options(aether_animation_clip_editor_tests PRIVATE -Wa,-mbig-obj -g1)
+    target_compile_options(aether_animation_runtime_tests PRIVATE -Wa,-mbig-obj -g1)
     target_compile_options(aether_environment_authoring_tests PRIVATE -Wa,-mbig-obj -g1)
   endif()
   if(WIN32)

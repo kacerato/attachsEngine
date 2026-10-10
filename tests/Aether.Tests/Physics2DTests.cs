@@ -61,14 +61,21 @@ public static class Physics2DTests
         Assert.Close(0f, position.Z, eps: 0.001f, what: "esfera 2D não pode ter se deslocado em Z");
     }
 
-    [Test] public static void CorpoDynamic_ComTodosOsDofsDeTranslacaoTravados_EhRecusado()
+    [Test] public static void CorpoDynamic_SomenteRotacao_PreservaPosicaoSobGravidade()
     {
         if (!NativeLibraryAvailable()) return;
         using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
         var body = physics.CreateBody(PhysicsShape.Sphere(0.5f), new float3(0f, 5f, 0f), quaternion.Identity,
             NativeMotionType.Dynamic, allowedDOFs: AllowedDOFs.RotationZ); // só rotação, nenhuma translação livre
 
-        Assert.False(body.IsValid, "corpo Dynamic sem nenhum eixo de translação livre deveria ser recusado, não crashar");
+        // Jolt 5.6 supports zero inverse mass with a free rotation axis. This
+        // is a valid wheel/ratchet, not a fully locked dynamic body.
+        Assert.True(body.IsValid, "corpo com rotação livre deve ser aceito");
+        physics.SetLinearVelocity(body, new float3(4f, -3f, 2f));
+        for (int i = 0; i < 60; i++) physics.Step(1f / 60f);
+        physics.GetTransform(body, out var position, out _);
+        Assert.Close(new float3(0f, 5f, 0f), position, eps: .001f,
+            what: "translação travada deve resistir à gravidade e à velocidade solicitada");
     }
 
     [Test] public static void CorpoStatic_ComDofsTravados_NaoEhAfetadoPelaValidacaoDeDynamic()

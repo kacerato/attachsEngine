@@ -1,0 +1,176 @@
+10-10 10:45:43.167 I/Astra.Script(20188): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:45:43.168 I/Astra.Script(20188): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:45:43.660 I/Astra.Script(20188): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:45:43.660 I/Astra.Script(20188): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:45:45.160 I/Astra.Script(20188): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:45:45.161 I/Astra.Script(20188): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:45:45.667 I/Astra.Script(20188): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:45:45.667 I/Astra.Script(20188): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:45:47.163 I/Astra.Script(20188): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:45:47.163 I/Astra.Script(20188): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:45:47.659 I/Astra.Script(20188): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:45:47.660 I/Astra.Script(20188): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:45:49.167 I/Astra.Script(20188): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:45:49.167 I/Astra.Script(20188): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:45:49.664 I/Astra.Script(20188): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:45:49.664 I/Astra.Script(20188): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:45:51.166 I/Astra.Script(20188): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:45:51.166 I/Astra.Script(20188): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:45:51.660 I/Astra.Script(20188): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:45:51.660 I/Astra.Script(20188): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:45:53.167 I/Astra.Script(20188): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:45:53.167 I/Astra.Script(20188): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:45:53.667 I/Astra.Script(20188): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:45:53.667 I/Astra.Script(20188): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:02.598 I/Astra.Script(23200): 10: CUES READY
+10-10 10:46:02.727 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:02.727 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:03.205 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:03.206 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:03.651 I/Astra.Script(23200): 10: CUES forward-payload-marker-isolation PASS
+10-10 10:46:03.652 I/Astra.Script(23200): 10: CUES filtered-scene-connections PASS
+10-10 10:46:05.947 I/Astra.Script(23200): 10: CUES zero-weight PASS
+10-10 10:46:06.196 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:06.196 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:06.696 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:06.696 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:07.346 I/Astra.Script(23200): 10: CUES restart-and-loop PASS
+10-10 10:46:08.145 I/Astra.Script(23200): 10: CUES pause PASS
+10-10 10:46:08.786 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:08.786 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:09.285 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:09.285 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:09.443 I/Astra.Script(23200): 10: CUES reverse PASS
+10-10 10:46:09.443 I/Astra.Script(23200): 10: CUES DONE Animation=6 Animator=6
+10-10 10:46:10.792 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:10.792 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:11.286 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:11.286 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:12.787 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:12.788 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:13.293 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:13.293 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:14.788 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:14.788 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:15.291 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:15.291 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:16.790 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:16.790 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:17.290 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:17.290 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:18.790 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:18.791 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:19.286 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:19.286 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:20.790 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:20.790 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:21.293 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:21.293 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:22.792 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:22.792 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:23.292 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:23.292 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:24.790 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:24.790 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:25.294 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:25.295 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:26.795 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:26.795 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:27.288 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:27.288 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 10:46:28.787 I/Astra.Script(23200): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 10:46:28.787 I/Astra.Script(23200): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 10:46:29.286 I/Astra.Script(23200): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 10:46:29.286 I/Astra.Script(23200): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:04.129 I/Astra.Script(31513): 10: CUES READY
+10-10 11:07:04.222 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:04.222 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:04.699 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:04.699 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:05.149 I/Astra.Script(31513): 10: CUES forward-payload-marker-isolation PASS
+10-10 11:07:05.150 I/Astra.Script(31513): 10: CUES filtered-scene-connections PASS
+10-10 11:07:07.441 I/Astra.Script(31513): 10: CUES zero-weight PASS
+10-10 11:07:07.684 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:07.684 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:08.180 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:08.181 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:08.836 I/Astra.Script(31513): 10: CUES restart-and-loop PASS
+10-10 11:07:09.639 I/Astra.Script(31513): 10: CUES pause PASS
+10-10 11:07:10.271 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:10.271 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:10.771 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:10.771 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:10.938 I/Astra.Script(31513): 10: CUES reverse PASS
+10-10 11:07:10.938 I/Astra.Script(31513): 10: CUES DONE Animation=6 Animator=6
+10-10 11:07:12.266 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:12.267 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:12.770 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:12.771 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:14.270 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:14.270 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:14.777 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:14.777 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:16.269 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:16.269 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:16.778 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:16.778 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:18.277 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:18.278 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:18.780 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:18.780 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:20.274 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:20.274 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:20.774 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:20.774 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:22.272 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:22.272 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:22.779 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:22.779 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:24.274 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:24.275 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:24.771 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:24.771 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:26.281 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:26.281 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:26.764 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:26.765 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:28.275 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:28.275 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:28.770 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:28.770 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:30.270 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:30.270 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:30.775 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:30.775 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:32.274 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:32.274 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:32.770 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:32.770 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:34.270 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:34.270 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:34.775 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:34.776 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:36.273 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:36.273 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:36.779 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:36.779 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:38.273 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:38.273 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:38.770 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:38.770 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:40.280 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:40.280 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:40.775 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:40.775 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:42.277 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:42.277 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:42.767 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:42.768 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:44.269 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:44.270 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:44.776 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:44.776 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15
+10-10 11:07:46.280 I/Astra.Script(31513): 10: CUES event Animator tag=8 value=0.125 cue=17
+10-10 11:07:46.280 I/Astra.Script(31513): 10: CUES event Animation tag=8 value=0.125 cue=17
+10-10 11:07:46.769 I/Astra.Script(31513): 10: CUES event Animator tag=7 value=2.5 cue=15
+10-10 11:07:46.770 I/Astra.Script(31513): 10: CUES event Animation tag=7 value=2.5 cue=15

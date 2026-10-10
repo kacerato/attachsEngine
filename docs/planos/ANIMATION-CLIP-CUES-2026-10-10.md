@@ -102,3 +102,16 @@ Sem ADB nesta sessão, por instrução do usuário. Não é uma nova distribuiç
 Este bloco não inclui IK, retargeting, drivers de propriedades nem bake FK/IK/root motion.
 Seleção múltipla, clipboard de cues e regiões de marcadores também não são
 anunciados como suporte; o clipboard anterior é de chaves.
+
+## Adendo: aceite Android após liberação do ADB — 10/10/2026
+
+O parágrafo acima registra a entrega anterior do host. Após autorização explícita,
+Dev code 33 (0.3.1-dev.cues.20261010.1) foi compilado e atualizado no POCO F7.
+UI por toque, SDK compilado pelo próprio IDE, persistência após force-stop e seis
+checks reais de Animation/Animator passaram. APK instalado, SDK e atlas conferem
+com o build; 13 cenas preexistentes preservadas. Vídeo: 1.538 frames inspecionados
+em 52 folhas, com lacuna de PTS explicitada. 594/594 C#, 42/42 clipes, 36/36
+regressões nativas, 1/1 ponte SDK e 17/17 Java. Evidência em
+`docs/validacao/animation-cues-android-2026-10-10/README.md`.
+Aceite fecha este bloco de eventos/marcadores; os limites funcionais anteriores
+permanecem explícitos. APK público 0.3.0/code 28 inalterado.
