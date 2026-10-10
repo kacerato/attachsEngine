@@ -30,6 +30,7 @@
 #include "resources/animation_curve.h"
 
 #include <span>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -75,10 +76,24 @@ struct AnimationChannel {
   }
 };
 
+enum class AnimationCueKind : u32 { Marker, Event };
+struct AnimationCue {
+  u64 id=0;
+  float time=0;
+  AnimationCueKind kind=AnimationCueKind::Marker;
+  std::string name;
+  u32 tag=0;
+  double value=0;
+  // Local direction, including the returning leg of ping-pong.
+  bool forward=true,reverse=true,enabled=true;
+};
+inline constexpr usize MaximumAnimationCues=4096;
+bool validAnimationCues(std::span<const AnimationCue> cues,float duration);
 struct AnimationClip {
   std::string name;
   float duration = 0;
   std::vector<AnimationChannel> channels;
+  std::vector<AnimationCue> cues;
 };
 
 // Blend shapes de um desenho. `deltas` tem `vertexCount * targetCount *
@@ -106,6 +121,10 @@ struct SkinDefinition {
 
 // Como o tempo do clipe corre depois do fim (WrapMode da Unity, Animation legado).
 enum class AnimationWrapMode : u32 { Once = 0, Loop = 1, PingPong = 2, ClampForever = 3 };
+// Half-open traversal: (from,to] forward, [to,from) backward. Seeking is not
+// traversal. Bounded merge of periodic occurrences; returns suppressed count.
+u64 visitAnimationCues(const AnimationClip &clip,double from,double to,AnimationWrapMode mode,
+                      const std::function<void(const AnimationCue &)> &deliver,u32 budget=256,bool validated=false);
 
 // Identidade persistente de um clipe: fonte + nome + ordem entre clipes de mesmo
 // nome. Renomear o clipe no DCC é trocar de clipe; reordenar não.

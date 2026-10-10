@@ -26,7 +26,7 @@ std::string fitTextMiddle(const UiDrawList &list,std::string_view value,float wi
   }
   return "...";
 }
-std::string number(float value,const char *suffix="") {char s[64];std::snprintf(s,sizeof s,"%.4g%s",static_cast<double>(value),suffix);return s;}
+std::string number(double value,const char *suffix="") {char s[64];std::snprintf(s,sizeof s,"%.4g%s",value,suffix);return s;}
 std::string bindingLabel(const resources::AnimationClipBinding &binding) {
   if(binding.path.empty())return binding.name;
   std::string label;
@@ -96,20 +96,29 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   const bool multi=state.clipSelectionMode&&!state.clipSelection.empty()&&!state.clipSelecting;
   const bool bake=state.clipBakeShown&&selected;
   const bool layers=state.clipLayersShown;
-  const bool previewFocus=state.clipPoseShown&&state.clipPreviewExpanded&&!bake&&!layers&&!state.clipExpanded;
-  const float editingHeight=previewFocus?42:state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers?
-      std::min(148.f,area.height*.4f):std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers?42.f:0.f));
+  const bool cues=state.clipCues&&!bake&&!layers;
+  const auto *cue=cues?asset->cue(state.clipCue):nullptr;
+  const bool previewFocus=!cues&&state.clipPoseShown&&state.clipPreviewExpanded&&!bake&&!layers&&!state.clipExpanded;
+  const float editingHeight=previewFocus?42:state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers&&!cues?
+      std::min(148.f,area.height*.4f):std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers||cue?42.f:0.f));
   layout.viewport={area.x,area.y,area.width,std::max(0.f,area.height-editingHeight)};
   UiRect editor{area.x,layout.viewport.bottom(),area.width,editingHeight};
   list.addRect(editor,theme.color.canvas);router.addBlocker(editor);
-  if(multi&&!bake&&!layers&&!previewFocus) {
+  if(cue) {
+    auto property=top(editor,42);list.addRect(property,theme.color.surface);const float width=property.width;
+    button(left(property,width*.29f),cue->name,w::CueName,true,true,cue->kind==resources::AnimationCueKind::Event?UiIcon::AnimationEvent:UiIcon::AnimationMarker);
+    button(left(property,width*.18f),number(cue->time," s"),w::CueTime);
+    button(left(property,width*.16f),"#"+std::to_string(cue->tag),w::CueTag,cue->kind==resources::AnimationCueKind::Event);
+    button(left(property,width*.18f),"Valor · "+number(cue->value),w::CueValue,cue->kind==resources::AnimationCueKind::Event);
+    button(property,"Opções",w::CueOptions,true,state.clipCueOptions);
+  } else if(multi&&!bake&&!layers&&!previewFocus&&!cues) {
     auto property=top(editor,42);list.addRect(property,theme.color.surface);
     label(left(property,std::min(150.f,property.width*.25f)),std::to_string(state.clipSelection.size())+" chaves",theme.color.textDim);
     button(left(property,110),"Mover · s",w::SelectionOffset);
     button(left(property,110),"Escala",w::SelectionScale);
     button(left(property,84),"Somar",w::SelectionAdd,true,state.clipSelectionAdd);
     button(left(property,74),"Limpar",w::SelectionClear);
-  } else if(key&&!bake&&!layers&&!previewFocus) {
+  } else if(key&&!bake&&!layers&&!previewFocus&&!cues) {
     auto property=top(editor,42);list.addRect(property,theme.color.surface);
     const float nameWidth=std::min(160.f,property.width*.22f);
     const bool progressive=selected&&selected->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion;
@@ -166,20 +175,55 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   } else {
   const bool compact=state.surface.width<768;
   button(left(transport,compact?44:102),compact?"":"Camadas",w::Layers,true,false,UiIcon::AnimationLayers);
-  button(left(transport,64),"Chaves",w::Keys,true,!state.clipCurves);
-  button(left(transport,44),"",w::Curves,true,state.clipCurves,UiIcon::AnimationCurve);
-  button(left(transport,44),"",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
-  button(left(transport,56),"Edição",w::Edits,true,state.clipEditPicker);
+  button(left(transport,44),"",w::Keys,true,!state.clipCurves&&!cues,UiIcon::AnimationKey);
+  button(left(transport,44),"",w::Curves,true,state.clipCurves&&!cues,UiIcon::AnimationCurve);
+  button(left(transport,44),"",w::Cues,true,cues,UiIcon::AnimationEvent);
+  if(!cues)button(left(transport,44),"",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
+  button(left(transport,44),"Editar",w::Edits,true,state.clipEditPicker);
   button(left(transport,44),"|<",w::Restart);
   button(left(transport,40),"",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
   button(left(transport,44),"",w::Play,state.clipDiagnostic.empty(),state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
   button(left(transport,40),"",w::NextFrame,true,false,UiIcon::UiChevronRight);
-  button(left(transport,56),"Loop",w::Loop,true,state.clipLoop);
+  button(left(transport,44),"Loop",w::Loop,true,state.clipLoop);
   button(left(transport,76),number(state.clipTime," s"),w::Time);
   if(transport.width>=90)button(left(transport,90),number(asset->duration," s"),w::Duration);
   if(transport.width>=88) {button(left(transport,40),"-",w::ZoomOut);button(left(transport,40),"+",w::ZoomIn);}
   }
-  if(!previewFocus) {
+  if(cues) {
+    auto body=editor;auto names=left(body,std::min(185.f,body.width*.27f));layout.clipRows=names;
+    auto actions=top(names,42);
+    const auto addCue=[&](UiRect r,u32 code,UiIcon icon) {
+      const bool enabled=asset->cues.size()<resources::MaximumAnimationCues;
+      button(r,"",code,enabled,false,icon);
+      const auto color=enabled?theme.color.text:theme.color.textFaint;
+      list.addLine({r.right()-14,r.y+8},{r.right()-6,r.y+8},color,1.5f);
+      list.addLine({r.right()-10,r.y+4},{r.right()-10,r.y+12},color,1.5f);
+    };
+    addCue(left(actions,42),w::CueAddEvent,UiIcon::AnimationEvent);
+    addCue(left(actions,42),w::CueAddMarker,UiIcon::AnimationMarker);
+    button(left(actions,42),"<",w::CuePrevious,!asset->cues.empty());button(actions,">",w::CueNext,!asset->cues.empty());
+    label(top(names,26),"Eventos · "+std::to_string(std::count_if(asset->cues.begin(),asset->cues.end(),[](const auto &c){return c.kind==resources::AnimationCueKind::Event;})),theme.color.text);
+    label(top(names,26),"Marcadores",theme.color.textDim);
+    const auto ruler=top(body,34);const auto canvas=deflate(body,{2,2,8,3});layout.clipCanvas=canvas;router.addRegion(canvas,w::id(w::Canvas));
+    const float span=std::max(.0001f,state.clipEnd-state.clipStart);
+    const auto xAt=[&](float t){return canvas.x+(t-state.clipStart)/span*canvas.width;};
+    for(u32 i=0;i<=4;++i) {const float x=canvas.x+canvas.width*i/4;
+      label({x-24,ruler.y,55,ruler.height},number(state.clipStart+span*i/4,"s"),theme.color.textMuted,UiAlign::Center);
+      list.addLine({x,canvas.y},{x,canvas.bottom()},theme.color.lineSoft,1);
+    }
+    list.pushClip(canvas);
+    for(u32 row=0;row<2;++row) {const float y=canvas.y+canvas.height*(row?.7f:.3f);list.addLine({canvas.x,y},{canvas.right(),y},theme.color.line,1);}
+    for(const auto &c:asset->cues)if(c.time>=state.clipStart&&c.time<=state.clipEnd) {
+      const float x=xAt(c.time),y=canvas.y+canvas.height*(c.kind==resources::AnimationCueKind::Event?.3f:.7f);
+      const bool active=c.id==state.clipCue;const auto color=active?theme.color.accent:c.enabled?theme.color.text:theme.color.textFaint;
+      list.addImage({x-8,y-8,16,16},static_cast<UiImageId>(c.kind==resources::AnimationCueKind::Event?UiIcon::AnimationEvent:UiIcon::AnimationMarker),c.enabled?0xffffffff:withAlpha(0xffffffff,.35f));
+      if(active) {list.addBorder({x-11,y-11,22,22},color,1,0);label({x+14,y-13,std::min(160.f,canvas.right()-x-14),26},c.name,color);}
+    }
+    const float playhead=xAt(state.clipTime);list.addLine({playhead,canvas.y},{playhead,canvas.bottom()},theme.color.accent,1.3f);
+    if(asset->cues.empty())label({canvas.x+10,canvas.y+4,canvas.width-20,32},"+ Evento · + Marcador",theme.color.textDim);
+    list.popClip();
+  }
+  if(!previewFocus&&!cues) {
   auto body=editor;const float rowsWidth=std::min(185.f,body.width*.27f);
   auto names=left(body,rowsWidth);layout.clipRows=names;
   auto navigation=top(names,34);button(left(navigation,36),"<",w::RowsPrevious,state.clipRow>0);button(left(navigation,36),">",w::RowsNext);
@@ -461,13 +505,24 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       for(u32 mode=0;mode<7;++mode)button(top(menu,36),tangentName(static_cast<resources::AnimationTangentMode>(mode)),w::SelectMode+mode);
     }
   }
+  if(cue&&state.clipCueOptions) {
+    auto sheet=UiRect{area.right()-std::min(360.f,area.width-16)-8,layout.topBar.bottom()+4,std::min(360.f,area.width-16),std::min(172.f,area.height-4)};
+    list.addRect(sheet,theme.color.surface);router.addBlocker(sheet);
+    auto title=top(sheet,42);auto close=UiRect{title.right()-42,title.y,42,title.height};title.width-=42;
+    label(title,cue->name,theme.color.text);button(close,"",w::CueOptionsClose,true,false,UiIcon::UiClose);
+    auto directions=top(sheet,42);button(left(directions,directions.width*.5f),"Avançar",w::CueForward,cue->kind==resources::AnimationCueKind::Event,cue->forward);
+    button(directions,"Reverter",w::CueReverse,cue->kind==resources::AnimationCueKind::Event,cue->reverse);
+    button(top(sheet,42),"Ativo",w::CueEnabled,true,cue->enabled);
+    auto actions=top(sheet,42);button(left(actions,actions.width*.5f),"Duplicar",w::CueDuplicate,true,false,UiIcon::AnimationDuplicate);
+    button(actions,"Excluir",w::CueDelete,true,false,UiIcon::UiRemove);
+  }
   if(state.clipEditPicker) {
     auto picker=UiRect{area.x+8,layout.topBar.bottom()+4,std::min(320.f,area.width-16),std::min(248.f,area.height-4)};
     list.addRect(picker,theme.color.surface);router.addBlocker(picker);
     auto title=top(picker,40);auto close=UiRect{title.right()-40,title.y,40,title.height};title.width-=40;
     label(title,"Edição do clipe",theme.color.text);button(close,"",w::EditsClose,true,false,UiIcon::UiClose);
-    const bool hasKeys=!state.clipSelection.empty()||key;
-    const bool canPaste=state.clipClipboard&&!state.clipClipboard->empty();
+    const bool hasKeys=!cues&&(!state.clipSelection.empty()||key);
+    const bool canPaste=!cues&&state.clipClipboard&&!state.clipClipboard->empty();
     auto copy=top(picker,40);button(left(copy,copy.width*.5f),"Copiar",w::CopyKeys,hasKeys,false,UiIcon::AssetsCopy);
     button(copy,"Recortar",w::CutKeys,hasKeys);
     button(top(picker,40),"Colar · substituir",w::PasteReplace,canPaste);

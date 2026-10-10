@@ -1,3 +1,4 @@
+#include "scene/animation_clip_events.h"
 #pragma once
 #include "resources/asset_registry.h"
 #include "resources/skeletal_animation.h"
@@ -199,6 +200,6 @@ inline const std::array<ComponentCollection,1> animationCollections{{
 }};
 inline const ComponentType Animation::descriptor{
   "astra.animation", 4, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Animation>(); },
-  animationNumbers, animationBooleans, animationEnums, nullptr, false, {}, {}, animationResources, {}, {}, animationCollections
+  animationNumbers, animationBooleans, animationEnums, nullptr, false, {}, {}, animationResources, {}, {}, animationCollections, {}, animationClipEvents
 };
 } // namespace ae::scene

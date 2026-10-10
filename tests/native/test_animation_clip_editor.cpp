@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <thread>
 #include <cstring>
+#include "runtime/component_operations.h"
 using namespace ae;
 namespace {
 resources::AnimationClipAsset fixture(std::string &error) {
@@ -676,7 +677,7 @@ AE_TEST(animation_clip_conversion_consolidation_ui_api_publication_and_reopen) {
   AnimationAuthoringScope scope(session);const auto &api=scope.access();const auto draft=api.begin(api.context,guid,0);
   AnimationAuthorBakeRequest request;AnimationAuthorBakeReport report;AssetGuid apiCreated;
   const std::string name="API consolidada";
-  AE_EXPECT_TRUE(api.version==5&&api.consolidate(api.context,draft,reinterpret_cast<const u8*>(name.data()),name.size(),&request,&apiCreated,&report)==1&&report.verifiedSamples&&apiCreated!=guid,"ABI 4 publication stays available in ABI 5 without a visible panel");
+  AE_EXPECT_TRUE(api.version==6&&api.consolidate(api.context,draft,reinterpret_cast<const u8*>(name.data()),name.size(),&request,&apiCreated,&report)==1&&report.verifiedSamples&&apiCreated!=guid,"ABI 4 publication stays available in ABI 6 without a visible panel");
   const auto before=session.animationClipAsset(guid)->serialize();request.settings.rotation=1;
   const auto quaternionDraft=api.begin(api.context,apiCreated,0);
   AE_EXPECT_TRUE(!api.bakeAdvanced(api.context,quaternionDraft,rotation,&request,&report),"missing Euler reference rejected through ABI");
@@ -934,11 +935,76 @@ AE_TEST(animation_clip_layers_mobile_api_runtime_history_and_cold_reopen) {
 
   AE_EXPECT_EQ(serializeEditorDocument(session.document(),0),source,"all edits leave source scene pose unchanged");
   session.closeAnimationClip();AnimationAuthoringScope scope(session);const auto &api=scope.access();const auto draft=api.begin(api.context,guid,0);
-  AE_EXPECT_TRUE(api.version==5&&draft,"layer API remains independent of visible panel in ABI 5");float raw[3],composed[3];
+  AE_EXPECT_TRUE(api.version==6&&draft,"layer API remains independent of visible panel in ABI 6");float raw[3],composed[3];
   AE_EXPECT_TRUE(api.sample(api.context,draft,track,1,raw,3)==3&&raw[0]==4&&api.sampleComposed(api.context,draft,track,1,composed,3)==3&&composed[0]==2,"raw/composed API contract");
   AE_EXPECT_TRUE(api.cancel(api.context,draft)==1,"cancel draft");
   runtime::SceneAnimator player;player.begin(session.document(),session.mapScene());runtime::SceneAnimator::ExternalSample sample;sample.owner=owner;sample.clip=guid;sample.time=1;sample.weight=1;
   player.setExternalSamples({sample});AE_EXPECT_TRUE(player.advance(0,{})&&session.document().find(owner)->transform.position[0]==2,"same compiled composition consumed by real runtime");player.reset();
   EditorSession reopened;AE_EXPECT_TRUE(reopened.setProjectDirectory(project.path.string().c_str())&&reopened.loadAssets(session.serializeAssets()),"cold reopening registered layer resource");
   AE_EXPECT_EQ(reopened.animationClipAsset(guid)->serialize(),session.animationClipAsset(guid)->serialize(),"all metadata, keys, IDs and ordering persist");
+}
+
+AE_TEST(animation_clip_cues_surface_drafts_history_and_cold_reopen) {
+  using namespace editor;using namespace ui;using namespace resources;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production resources live through the capture");
+  session.initialize(&font,&icons);session.setSurface({0,0,853,394},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"cue project");
+  const auto owner=session.document().createEntity(session.document().root(),EditorEntityKind::Folder,"Mecanismo");
+  AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error)&&session.openAnimationClip(guid,owner,error),error.c_str());session.update();
+  captureClipSurface(session,font,icons,"events-baseline-853.ppm");
+  tapClipAction(session,font,clip_widget::Cues);tapClipAction(session,font,clip_widget::CueAddEvent);
+  const auto id=session.screen().clipCue;AE_EXPECT_TRUE(id&&session.animationClipAsset(guid)->cue(id),"create event on current time");
+  const auto setNumber=[&](u32 code,const char *value){tapClipAction(session,font,code);const auto edit=session.pendingTextEdit();AE_EXPECT_TRUE(session.completeTextEdit(edit,value,true),"real numeric field commits cue");session.update();};
+  setNumber(clip_widget::CueTime,"0.5");setNumber(clip_widget::CueTag,"7");setNumber(clip_widget::CueValue,"2.5");
+  setNumber(clip_widget::CueTag,"16777215");tapClipAction(session,font,clip_widget::CueTag);
+  auto precise=session.pendingTextEdit();AE_EXPECT_EQ(precise.text,"16777215","opening a code field preserves all integer digits");
+  AE_EXPECT_TRUE(session.completeTextEdit(precise,precise.text,true),"confirm same code");session.update();
+  setNumber(clip_widget::CueValue,"1e100");tapClipAction(session,font,clip_widget::CueValue);precise=session.pendingTextEdit();
+  AE_EXPECT_EQ(std::strtod(precise.text.c_str(),nullptr),1e100,"payload input preserves double range");
+  AE_EXPECT_TRUE(session.completeTextEdit(precise,precise.text,true),"confirm same payload");session.update();
+  setNumber(clip_widget::CueTag,"7");setNumber(clip_widget::CueValue,"2.5");
+  tapClipAction(session,font,clip_widget::CueName);auto name=session.pendingTextEdit();
+  AE_EXPECT_TRUE(session.completeTextEdit(name,"Trava",true),"cue name commits");session.update();
+  tapClipAction(session,font,clip_widget::CueOptions);captureClipSurface(session,font,icons,"events-options-853.ppm");
+  tapClipAction(session,font,clip_widget::CueReverse);tapClipAction(session,font,clip_widget::CueOptionsClose);
+  AE_EXPECT_TRUE(!session.animationClipAsset(guid)->cue(id)->reverse,"direction property changes real resource");
+  captureClipSurface(session,font,icons,"events-selected-853.ppm");
+  // Drag/cancel and drag/commit use a single resource transaction, never key edits.
+  auto canvas=session.layout().clipCanvas;UiPoint start{canvas.x+canvas.width*.25f,canvas.y+canvas.height*.3f},end{canvas.x+canvas.width*.5f,start.y};
+  const auto before=session.animationClipAsset(guid)->serialize();const auto depth=session.history().undoDepth();
+  session.handlePointer({0,UiPointerPhase::Down,start,1});session.handlePointer({0,UiPointerPhase::Move,end,1.1});session.update();
+  captureClipSurface(session,font,icons,"events-drag-853.ppm");
+  AE_EXPECT_TRUE(session.animationClipAsset(guid)->serialize()==before,"drag preview has no publication");
+  session.handlePointer({0,UiPointerPhase::Cancel,end,1.2});session.update();
+  AE_EXPECT_EQ(session.animationClipAsset(guid)->serialize(),before,"cancel restores exact cue resource");
+  session.handlePointer({0,UiPointerPhase::Down,start,2});session.handlePointer({0,UiPointerPhase::Move,end,2.1});session.handlePointer({0,UiPointerPhase::Up,end,2.2});session.update();
+  AE_EXPECT_TRUE(session.animationClipAsset(guid)->cue(id)->time==1&&session.history().undoDepth()==depth+1,"snapped cue drag commits once");
+  tapClipAction(session,font,clip_widget::Undo);AE_EXPECT_TRUE(session.animationClipAsset(guid)->cue(id)->time==.5f,"undo restores event time");
+  tapClipAction(session,font,clip_widget::Redo);AE_EXPECT_TRUE(session.animationClipAsset(guid)->cue(id)->time==1,"redo restores same cue ID");
+  tapClipAction(session,font,clip_widget::CueAddMarker);const auto marker=session.screen().clipCue;
+  setNumber(clip_widget::CueTime,"1.5");
+  AE_EXPECT_TRUE(session.animationClipAsset(guid)->cue(marker)->kind==AnimationCueKind::Marker,"marker is authoring data, not a gameplay callback");
+  tapClipAction(session,font,clip_widget::CueOptions);tapClipAction(session,font,clip_widget::CueDuplicate);
+  const auto duplicate=session.screen().clipCue;AE_EXPECT_TRUE(duplicate!=marker,"duplicate allocates a new stable identity");
+  AE_EXPECT_EQ(session.animationClipAsset(guid)->cue(duplicate)->time,1.5f,"duplicate preserves selected point time rather than stale playhead");
+  tapClipAction(session,font,clip_widget::CueOptions);tapClipAction(session,font,clip_widget::CueDelete);
+  AE_EXPECT_TRUE(!session.animationClipAsset(guid)->cue(duplicate),"delete retires only selected cue");
+  session.setSurface({0,0,655,300},{});session.update();
+  tapClipAction(session,font,clip_widget::CueNext);
+  for(const auto action:{clip_widget::Cues,clip_widget::CueAddEvent,clip_widget::CueAddMarker,clip_widget::Play,clip_widget::Time})
+    AE_EXPECT_TRUE(clipActionPosition(session,font,action).x>=0,"cue creation and transport fit low landscape");
+  for(const auto action:{clip_widget::CueName,clip_widget::CueTime,clip_widget::CueTag,clip_widget::CueValue,clip_widget::CueOptions})
+    AE_EXPECT_TRUE(clipActionPosition(session,font,action).x>=0,"selected cue properties remain reachable in low landscape");
+  captureClipSurface(session,font,icons,"events-655.ppm");
+  session.closeAnimationClip();AnimationAuthoringScope scope(session);const auto &api=scope.access();const auto draft=api.begin(api.context,guid,0),stale=api.begin(api.context,guid,0);
+  AnimationAuthorCommand command;command.operation=static_cast<u32>(AnimationAuthorOperation::PutCue);command.first=.75;command.second=.12345678901234567;
+  command.mode=1;command.component=42;command.key.flags=7;const std::string label="Cue SDK";u64 created=0;
+  AE_EXPECT_TRUE(api.version==6&&api.apply(api.context,draft,&command,nullptr,0,reinterpret_cast<const u8*>(label.data()),label.size(),&created)==1&&created,"ABI 6 cue draft independent of UI");
+  AE_EXPECT_TRUE(!session.animationClipAsset(guid)->cue(created)&&api.commit(api.context,draft)==1,"draft publishes atomically");
+  AE_EXPECT_TRUE(api.commit(api.context,stale)==0&&api.cancel(api.context,stale)==1,"stale cue draft cannot overwrite later authoring");
+  AE_EXPECT_EQ(session.animationClipAsset(guid)->cue(created)->value,command.second,"double payload crosses native authoring ABI exactly");
+  EditorSession reopened;AE_EXPECT_TRUE(reopened.setProjectDirectory(project.path.string().c_str())&&reopened.loadAssets(session.serializeAssets()),"cold reopen");
+  AE_EXPECT_EQ(reopened.animationClipAsset(guid)->serialize(),session.animationClipAsset(guid)->serialize(),"all cues persist through resource registration and reload");
 }

@@ -3,6 +3,8 @@ using System.Text;
 
 namespace Astra.Editor;
 
+public enum ClipCueKind : uint { Marker, Event }
+public sealed record ClipCue(ulong Id, float Time, ClipCueKind Kind, string Name, uint Tag = 0, double Value = 0, bool Forward = true, bool Reverse = true, bool Enabled = true);
 public enum ClipProperty : uint { Translation, Rotation, Scale, MorphWeights }
 public enum ClipRotation : uint { Quaternion, Euler, ProgressiveQuaternion }
 public enum ClipTangent : uint { Free, Linear, Constant, Auto, ClampedAuto, Flat, NextConstant }
@@ -33,7 +35,7 @@ public sealed unsafe class EditorContext : IDisposable
     internal EditorContext(AnimationAuthorAccess* access)
     {
         var prefixSize = (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.Bake)).ToInt32();
-        if (access == null || (access->Version < 1 || access->Version > 5) ||
+        if (access == null || (access->Version < 1 || access->Version > 6) ||
             access->Size != (access->Version == 1 ? prefixSize : access->Version == 2 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.SampleComposed)).ToInt32() : access->Version == 3 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.BakeAdvanced)).ToInt32() : access->Version == 4 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.PreviewClip)).ToInt32() : (uint)sizeof(AnimationAuthorAccess)) || access->Context == null ||
             access->Selected == null || access->Count == null || access->At == null || access->Create == null ||
             access->Extract == null || access->Begin == null || access->Snapshot == null || access->Apply == null ||
@@ -165,6 +167,7 @@ public sealed unsafe class ClipEdit : IDisposable
         ReadOnlySpan<float> values = default, string text = "")
     {
         ref readonly var api = ref Api;
+        if (operation >= AuthorOperation.PutCue && api.Version < 6) throw new NotSupportedException("This editor does not support clip cues.");
         if (operation >= AuthorOperation.LayerAdd && api.Version < 3) throw new NotSupportedException("This editor build does not support authoring layers.");
         if (values.Length > 256) throw new ArgumentException("Too many pose components.", nameof(values));
         var bytes = EditorContext.Text(text, 256);
@@ -175,6 +178,11 @@ public sealed unsafe class ClipEdit : IDisposable
             _context.Require(api.Apply(api.Context, _token, &command, v, values.Length, t, bytes.Length, &result) == 1);
         return result;
     }
+    /// <summary>ID zero creates a cue; a nonzero ID updates an existing cue. Markers never execute gameplay.</summary>
+    public ulong PutCue(ClipCue cue) => Apply(AuthorOperation.PutCue, cue.Id, cue.Tag,
+        new AuthorKey { Flags = (cue.Forward ? 1u : 0) | (cue.Reverse ? 2u : 0) | (cue.Enabled ? 4u : 0) },
+        cue.Time, cue.Value, (uint)cue.Kind, text: cue.Name);
+    public void RemoveCue(ulong cue) => Apply(AuthorOperation.RemoveCue, cue);
     public ulong PutKey(ulong track, uint component, ClipKey key) => Apply(AuthorOperation.PutKey, track, component, new(key));
     public ulong SplitKey(ulong track, uint component, float time) => Apply(AuthorOperation.SplitKey, track, component, first: time);
     public void EraseKey(ClipKeyAddress address) => Apply(AuthorOperation.EraseKey, address.Track, address.Component, new AuthorKey { Id = address.Key });
@@ -346,7 +354,7 @@ public static class ClipBindingPath
     }
 }
 
-internal enum AuthorOperation : uint { PutKey, SplitKey, EraseKey, PutPose, Retime, Reverse, Crop, RotationMode, RemoveTrack, Name, DisplayRate, LayerAdd, LayerConfigure, LayerMove, LayerDuplicate, LayerRemove, LayerAddTrack, LayerCopyBase }
+internal enum AuthorOperation : uint { PutKey, SplitKey, EraseKey, PutPose, Retime, Reverse, Crop, RotationMode, RemoveTrack, Name, DisplayRate, LayerAdd, LayerConfigure, LayerMove, LayerDuplicate, LayerRemove, LayerAddTrack, LayerCopyBase, PutCue, RemoveCue }
 [StructLayout(LayoutKind.Sequential)]
 internal struct AuthorGuid
 {

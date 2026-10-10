@@ -1,3 +1,4 @@
+#include "runtime/animation_clip_events.h"
 #include "runtime/scene_animator_graph.h"
 #include "runtime/scene_physics.h"
 
@@ -237,6 +238,7 @@ void SceneAnimatorGraphs::syncMachines(GameWorld &world,const Instance &runtime,
 
 bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,
                                   std::vector<SceneAnimator::ExternalSample> &samples) {
+  u32 cueBudget=256;
   library_=&library;
   if(!std::isfinite(scaled)||!std::isfinite(unscaled)||scaled<0||unscaled<0) return false;
   std::vector<ObjectId> ids;world.graph().collectSubtree(world.graph().root(),ids);
@@ -312,21 +314,34 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
       const auto *current=layer.state(ls.current);if(!current) {runtime->controllerDiagnostic="Submáquina sem estado de entrada";samples.push_back({root,{},0,0,li});continue;}
       if(!ls.entered) {syncMachines(world,*runtime,layer,ls,li);ls.entered=true;emit(world,*runtime,"state_entered",{V::makeInteger(li),V::makeInteger(static_cast<i64>(current->id))});}
       // Avanço de tempo dos estados ativos (e eventos que o tempo atravessa).
-      const auto advanceState=[&](const scene::AnimatorState &s,float &time,bool &justEntered){
+      const auto advanceState=[&](const scene::AnimatorState &s,float &time,bool &justEntered,float cueWeight){
         float duration=1;motionsOf(s,duration);
         // An offset starts the state at that clock, rather than replaying
         // events from the skipped part of the clip.
+        const float cuePrevious=time;
         const float previous=justEntered?time-1e-6f:time;justEntered=false;
         time+=delta*stateSpeed(s)/std::max(duration,1e-4f);
+        const float cueLayerWeight=ls.weightOverride?ls.runtimeWeight:layer.weight;
+        if(events_&&cueWeight*cueLayerWeight>0) {
+          float ignored=1;const auto motions=motionsOf(s,ignored);
+          for(const auto &w:motions)if(w.weight>0) {
+            AnimationClipView view;if(!library.findClip(s.motions[w.motion].clip,view)||!view.clip)continue;
+            const double d=view.clip->duration;
+            const auto lost=emitAnimationClipCues(world,events_,owner,instance,scene::Animator::descriptor,*view.clip,
+                double(cuePrevious)*d,double(time)*d,s.loop?resources::AnimationWrapMode::Loop:resources::AnimationWrapMode::ClampForever,cueBudget,view.source&&view.source->channelsValidated);
+            emitAnimationCueLoss(world,events_,owner,instance,scene::Animator::descriptor,lost);
+          }
+        }
         for(const auto &e:s.events) if(animator_detail::crossed(previous,time,e.time,s.loop))
           emit(world,*runtime,"state_event",{V::makeInteger(li),V::makeInteger(static_cast<i64>(s.id)),V::makeInteger(e.tag)});
         return previous;
       };
-      const float previous=ls.frozen?ls.time:advanceState(*current,ls.time,ls.currentFresh);
+      const float cueBlend=ls.transitioning&&ls.duration>0?std::clamp((ls.elapsed+std::max(0.f,a->unscaledTime?unscaled:scaled))/ls.duration,0.f,1.f):0;
+      const float previous=ls.frozen?ls.time:advanceState(*current,ls.time,ls.currentFresh,1-cueBlend);
       float nextPrevious=ls.nextTime;
       if(ls.transitioning) {
         const auto *next=layer.state(ls.next);
-        if(next) nextPrevious=advanceState(*next,ls.nextTime,ls.nextEntered);
+        if(next) nextPrevious=advanceState(*next,ls.nextTime,ls.nextEntered,cueBlend);
         ls.elapsed+=std::max(0.f,a->unscaledTime?unscaled:scaled);
         if(!next||ls.elapsed>=ls.duration) {ls.current=ls.next;ls.time=ls.nextTime;ls.transitioning=false;ls.frozen.reset();ls.transition=0;current=layer.state(ls.current);}
       }

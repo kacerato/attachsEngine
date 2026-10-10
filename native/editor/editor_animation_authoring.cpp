@@ -97,11 +97,20 @@ struct AnimationAuthoringScope::Impl {
     api.apply=[](void *c,u64 token,const AnimationAuthorCommand *command,const float *values,int count,const u8 *text,int length,u64 *result)->int {
       auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);
       if(!draft)return 0;
-      if(!command||command->reserved||command->operation>static_cast<u32>(AnimationAuthorOperation::LayerCopyBase)||
+      if(!command||command->reserved||command->operation>static_cast<u32>(AnimationAuthorOperation::RemoveCue)||
          count<0||count>static_cast<int>(resources::MaximumMorphTargets)||(!values&&count)||!textArgument(text,length,256))return s.reject("Argumento de autoria inválido");
       auto candidate=draft->asset;u64 id=0;bool ok=false;
       const auto operation=static_cast<AnimationAuthorOperation>(command->operation);
       switch(operation) {
+        case AnimationAuthorOperation::PutCue: {
+          if(command->mode>1||(command->key.flags&~7u))return s.reject("Flags de evento invalidas");
+          resources::AnimationCue cue;cue.id=command->track;cue.time=static_cast<float>(command->first);
+          cue.kind=static_cast<resources::AnimationCueKind>(command->mode);cue.name=textValue(text,length);
+          cue.tag=command->component;cue.value=command->second;
+          cue.forward=command->key.flags&1;cue.reverse=command->key.flags&2;cue.enabled=command->key.flags&4;
+          ok=candidate.putCue(std::move(cue),id,s.error);break;
+        }
+        case AnimationAuthorOperation::RemoveCue:ok=candidate.removeCue(command->track,s.error);break;
         case AnimationAuthorOperation::PutKey: {
           const auto &wire=command->key;
           if(wire.incoming>6||wire.outgoing>6||(wire.flags&~7u))return s.reject("Modo ou flags de tangente inválidos");

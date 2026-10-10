@@ -14,13 +14,14 @@ public sealed record ClipSnapshot(AssetGuid Guid, uint Revision, ulong NextId, u
     string Name, AssetGuid Source, AssetGuid SourceClip, string SourceHash,
     IReadOnlyList<ClipBinding> Bindings, IReadOnlyList<ClipTrack> Tracks)
 {
+    public IReadOnlyList<ClipCue> Cues { get; init; } = Array.Empty<ClipCue>();
     public IReadOnlyList<ClipLayer> Layers { get; init; } = Array.AsReadOnly(new[] { new ClipLayer(0, "Base", ClipLayerBlend.Override, 1, null, false, false) });
     internal static ClipSnapshot Read(ReadOnlySpan<byte> utf8)
     {
         var reader = new Reader(new UTF8Encoding(false, true).GetString(utf8));
         if (reader.Token() != "AECLIP") throw new InvalidDataException("Unsupported animation snapshot format.");
         var version = reader.UInt();
-        if (version is < 2 or > 3) throw new InvalidDataException("Unsupported animation snapshot format.");
+        if (version is < 2 or > 4) throw new InvalidDataException("Unsupported animation snapshot format.");
         var guid = reader.Guid(); var revision = reader.UInt(); var next = reader.ULong();
         var rate = reader.UInt(); var duration = reader.Float(); var name = reader.String();
         var source = reader.Guid(); var sourceClip = reader.Guid(); var hash = reader.String();
@@ -55,9 +56,16 @@ public sealed record ClipSnapshot(AssetGuid Guid, uint Revision, ulong NextId, u
             }
             tracks[i] = new(id, binding, property, weights, sourceOverride, rotation, Array.AsReadOnly(curves)) { Layer = layer };
         }
+        var cues = Array.Empty<ClipCue>();
+        if (version >= 4)
+        {
+            cues = new ClipCue[reader.Count(4096)];
+            for (var i = 0; i < cues.Length; ++i)
+                cues[i] = new(reader.ULong(), reader.Float(), (ClipCueKind)reader.Range(1), reader.String(), reader.UInt(), reader.Double(), reader.Bool(), reader.Bool(), reader.Bool());
+        }
         reader.End();
         return new(guid, revision, next, rate, duration, name, source, sourceClip, hash,
-            Array.AsReadOnly(bindings), Array.AsReadOnly(tracks)) { Layers = Array.AsReadOnly(layers) };
+            Array.AsReadOnly(bindings), Array.AsReadOnly(tracks)) { Layers = Array.AsReadOnly(layers), Cues = Array.AsReadOnly(cues) };
     }
     private sealed class Reader(string text)
     {
@@ -95,6 +103,8 @@ public sealed record ClipSnapshot(AssetGuid Guid, uint Revision, ulong NextId, u
         public uint Range(uint maximum) { var value = UInt(); return value <= maximum ? value : throw new InvalidDataException("Invalid animation enumeration."); }
         public int Count(int maximum) { var value = UInt(); return value <= maximum ? (int)value : throw new InvalidDataException("Animation snapshot exceeds its structural limit."); }
         public bool Bool() => Range(1) == 1;
+        public double Double() => double.TryParse(Token(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value)
+            ? value : throw new InvalidDataException("Invalid animation number.");
         public float Float() => float.TryParse(Token(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && float.IsFinite(value)
             ? value : throw new InvalidDataException("Invalid animation number.");
         public AssetGuid Guid()

@@ -2024,6 +2024,7 @@ private:
   bool applyAnimationClipNumber(u32 code,double value);
   bool applyAnimationClipName(std::string_view value);
   bool applyAnimationClipLayerName(std::string_view value);
+  bool applyAnimationClipCueName(std::string_view value);
   bool handleAnimationClip(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   void openAnimatorEditor();
   void frameAnimator();

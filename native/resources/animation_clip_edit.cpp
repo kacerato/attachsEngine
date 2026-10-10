@@ -307,6 +307,7 @@ bool AnimationClipAsset::retime(double scale,std::string &diagnostic) {
   diagnostic.clear();
   if(!valid(&diagnostic)||!std::isfinite(scale)||scale<=0||duration*scale>86400) {diagnostic="Escala de tempo inválida";return false;}
   auto candidate=*this;candidate.duration=static_cast<float>(duration*scale);
+  for(auto &cue:candidate.cues)cue.time=static_cast<float>(cue.time*scale);
   for(auto &layer:candidate.layers)if(layer.referenceTime>=0)layer.referenceTime=static_cast<float>(layer.referenceTime*scale);
   for(auto &track:candidate.tracks) {
     for(auto &curve:track.curves) {
@@ -319,6 +320,8 @@ bool AnimationClipAsset::retime(double scale,std::string &diagnostic) {
 }
 bool AnimationClipAsset::reverse(std::string &diagnostic) {
   diagnostic.clear();if(!valid(&diagnostic))return false;auto candidate=*this;
+  for(auto &cue:candidate.cues) {cue.time=duration-cue.time;std::swap(cue.forward,cue.reverse);}
+  std::sort(candidate.cues.begin(),candidate.cues.end(),[](const auto &a,const auto &b){return a.time!=b.time?a.time<b.time:a.id<b.id;});
   for(auto &layer:candidate.layers)if(layer.referenceTime>=0)layer.referenceTime=duration-layer.referenceTime;
   for(auto &track:candidate.tracks) {
     for(auto &curve:track.curves) {
@@ -337,6 +340,8 @@ bool AnimationClipAsset::crop(float start,float end,std::string &diagnostic) {
   diagnostic.clear();
   if(!valid(&diagnostic)||!std::isfinite(start)||!std::isfinite(end)||start<0||end<start||end>duration) {diagnostic="Intervalo de corte inválido";return false;}
   auto candidate=*this;candidate.duration=end-start;
+  std::erase_if(candidate.cues,[&](const auto &c){return c.time<start||c.time>end;});
+  for(auto &cue:candidate.cues)cue.time-=start;
   for(auto &layer:candidate.layers)if(layer.referenceTime>=0) {
     if(layer.referenceTime<start||layer.referenceTime>end) {diagnostic="O corte removeria a pose de referência de uma camada; escolha outra referência antes de cortar";return false;}
     layer.referenceTime-=start;

@@ -1,3 +1,4 @@
+#include "runtime/animation_clip_events.h"
 #include "runtime/scene_animation.h"
 #include "resources/animation_composition.h"
 #include "resources/animation_binding_path.h"
@@ -95,6 +96,7 @@ void SceneAnimator::begin(SceneGraph &graph, const AnimationLibrary &library) {
 }
 
 void SceneAnimator::reset() {
+  eventWorld_=nullptr;events_=nullptr;suppressedCues_=0;
   layerPoses_.clear();
   graph_ = nullptr;
   library_ = nullptr;
@@ -368,6 +370,7 @@ bool sampleChannel(const SourceAnimations &source,const resources::AnimationChan
 }
 
 bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &writable) {
+  u32 cueBudget=256;suppressedCues_=0;
   playing_ = posed_ = 0;
   compositionDiagnostic_.clear();
   if (!graph_ || !library_ || !std::isfinite(delta) || delta < 0) return graph_ == nullptr;
@@ -449,8 +452,14 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
           continue;
         }
       }
+      const float previousTime=state.time;
       state.time += delta * state.speed;
-      if (!std::isfinite(state.time) || std::fabs(state.time) > 1e6f) state.time = 0;
+      const bool validClock=std::isfinite(state.time)&&std::fabs(state.time)<=1e6f;
+      if(!validClock)state.time=0;
+      if(eventWorld_&&state.weight>0&&validClock) {
+        const auto lost=emitAnimationClipCues(*eventWorld_,events_,owner,p->instance,scene::Animation::descriptor,*view.clip,previousTime,state.time,state.wrapMode,cueBudget,view.source&&view.source->channelsValidated);
+        suppressedCues_=lost>std::numeric_limits<u64>::max()-suppressedCues_?std::numeric_limits<u64>::max():suppressedCues_+lost;emitAnimationCueLoss(*eventWorld_,events_,owner,p->instance,scene::Animation::descriptor,lost);
+      }
       bool finished = false;
       float local = resources::wrapAnimationTime(state.time, view.clip->duration, state.wrapMode, finished);
       if (state.wrapMode == AnimationWrapMode::Once && state.time < 0) {

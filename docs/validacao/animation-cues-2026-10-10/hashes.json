@@ -1,0 +1,6 @@
+{
+  "build/editor-host/aether_animation_clip_editor_tests.exe": "08e5d6cfeea2c6fc3bed914e35af55be29ae9097f1122628bc5467f99f1e96a2",
+  "build/editor-host/libaether_animation_authoring_sdk_bridge.dll": "613cea9927a24e0f4e94dd2a44b41b6df9a323738d4b9a0398d94e765a8fd60f",
+  "assets/astra-visual/ui/astra-ui-icons.aeui": "b590b159957e13bf2c8b4baf1cd3a261921051673413c4a7051e0e139cd300ba",
+  "managed/Astra.Scripting/bin/Release/net8.0/Astra.Scripting.dll": "984aa5df4250589ab45b2d8cb7991edcaac8523a780c592790ebd47398a1c8c6"
+}

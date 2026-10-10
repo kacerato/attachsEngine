@@ -1920,6 +1920,20 @@
       "dark_ui_ready": true,
       "generation": "animation-skeleton-v1",
       "source": "tools/generate-animation-skeleton-icon.py; Astra mark primitives"
+    },
+    "animation/event": {
+      "category": "animation",
+      "name": "event",
+      "dark_ui_ready": true,
+      "generation": "animation-cues-v1",
+      "source": "tools/generate-animation-cue-icons.py; Astra mark primitives"
+    },
+    "animation/marker": {
+      "category": "animation",
+      "name": "marker",
+      "dark_ui_ready": true,
+      "generation": "animation-cues-v1",
+      "source": "tools/generate-animation-cue-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

@@ -1790,8 +1790,9 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   if(!accept) {close();return true;}
   if(edit.purpose==EditorTextPurpose::AnimatorName) {
     const bool layerName=edit.field==clip_widget::LayerName;
-    const bool clipName=edit.field==clip_widget::Name||layerName;
-    const bool ok=layerName?applyAnimationClipLayerName(trimmedName(text)):clipName?applyAnimationClipName(trimmedName(text)):applyAnimatorName(edit.field,std::string(text));
+    const bool cueName=edit.field==clip_widget::CueName;
+    const bool clipName=edit.field==clip_widget::Name||layerName||cueName;
+    const bool ok=cueName?applyAnimationClipCueName(trimmedName(text)):layerName?applyAnimationClipLayerName(trimmedName(text)):clipName?applyAnimationClipName(trimmedName(text)):applyAnimatorName(edit.field,std::string(text));
     if(clipName&&!ok)return false;
     close();return ok;
   }

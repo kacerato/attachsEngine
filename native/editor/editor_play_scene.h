@@ -211,6 +211,7 @@ public:
     virtualCameras_.setEvents(&events_);
     navigation_.setEvents(&events_);navigation_.setPhysics(&physics_);
     animatorGraphs_.setEvents(&events_);
+    animator_.setEvents(&world_,&events_);
     animatorGraphs_.setPhysics(&physics_);
     animatorGraphs_.setLibrary(&resources);
     animatorGraphs_.setComposer(&animator_);
@@ -287,6 +288,7 @@ public:
     virtualCameras_.setEvents(nullptr);
     navigation_.setEvents(nullptr);navigation_.setPhysics(nullptr);navigation_.reset();
     animatorGraphs_.setEvents(nullptr);
+    animator_.setEvents(nullptr,nullptr);
     animatorGraphs_.setPhysics(nullptr);
     scripts_.setVirtualCameras(nullptr);
     scripts_.setNavigation(nullptr);

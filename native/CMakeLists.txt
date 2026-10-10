@@ -841,6 +841,7 @@ if(NOT ANDROID)
     ../tests/native/test_gltf_import.cpp
     ../tests/native/test_skeletal_animation.cpp
     ../tests/native/test_animation_clip_asset.cpp
+    ../tests/native/test_animation_clip_events.cpp
     ../tests/native/test_animation_clip_selection.cpp
     ../tests/native/test_animation_clip_clipboard.cpp
     ../tests/native/test_animation_clip_editor.cpp
@@ -1028,7 +1029,7 @@ if(NOT ANDROID)
     ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp resources/skeletal_animation.cpp resources/asset_registry.cpp)
   target_include_directories(aether_animation_clip_resource_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/../tests/native)
   add_executable(aether_animation_clip_editor_tests ../tests/native/family_base_main.cpp
-    ../tests/native/test_animation_clip_editor.cpp ../tests/native/test_animation_clip_asset.cpp ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp)
+    ../tests/native/test_animation_clip_events.cpp ../tests/native/test_animation_clip_editor.cpp ../tests/native/test_animation_clip_asset.cpp ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp)
   target_include_directories(aether_animation_clip_editor_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_clip_editor_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)

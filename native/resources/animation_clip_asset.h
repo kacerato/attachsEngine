@@ -33,7 +33,7 @@ struct AnimationClipTrack {
   u32 components() const {return path==AnimationPath::Rotation?rotationCurveComponents(rotationMode):path==AnimationPath::Weights?weightCount:3u;}
 };
 struct AnimationClipAsset {
-  static constexpr u32 FormatVersion=3,MaximumLayers=32;
+  static constexpr u32 FormatVersion=4,MaximumLayers=32;
   static constexpr usize MaximumBytes=64*1024*1024,MaximumBindings=4096,MaximumTracks=16384,MaximumKeys=262144;
   AssetGuid guid,source,sourceClip;
   u64 nextId=1;
@@ -43,6 +43,10 @@ struct AnimationClipAsset {
   std::vector<AnimationClipBinding> bindings;
   std::vector<AnimationClipTrack> tracks;
   std::vector<AnimationClipLayer> layers{AnimationClipLayer{}};
+  std::vector<AnimationCue> cues;
+  const AnimationCue *cue(u64 id) const;
+  bool putCue(AnimationCue cue,u64 &created,std::string &error);
+  bool removeCue(u64 id,std::string &error);
   bool valid(std::string *diagnostic=nullptr) const;
   std::string serialize() const;
   static bool deserialize(std::string_view text,AnimationClipAsset &out,std::string *diagnostic=nullptr);

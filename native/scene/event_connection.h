@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,29> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,33> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -53,8 +53,10 @@ inline constexpr std::array<EventConnectionEventKey,29> eventConnectionEventKeys
   {23,"astra.animation.animator","state_event"},
   {24,"astra.animation.animator","machine_entered"},{25,"astra.animation.animator","machine_exited"},{26,"astra.animation.animator","transition_interrupted"},
   {27,"astra.navigation.agent","destination_reached"},{28,"astra.navigation.agent","path_failed"},{29,"astra.navigation.agent","link_entered"},
+  {30,"astra.animation","clip_event"},{31,"astra.animation","clip_events_lost"},
+  {32,"astra.animation.animator","clip_event"},{33,"astra.animation.animator","clip_events_lost"},
 }};
-inline constexpr std::array<ComponentEnumOption,30> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,34> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -69,6 +71,8 @@ inline constexpr std::array<ComponentEnumOption,30> eventConnectionEvents{{
   {22,"Animator: entrou num estado"},{23,"Animator: evento do estado"},
   {24,"Animator: entrou num grupo"},{25,"Animator: saiu de um grupo"},{26,"Animator: mistura interrompida"},
   {27,"Agente: chegou"},{28,"Agente: caminho falhou"},{29,"Agente: entrou num link"},
+  {30,"Animation: evento do clipe"},{31,"Animation: limite de eventos"},
+  {32,"Animator: evento do clipe"},{33,"Animator: limite de eventos"},
 }};
 inline constexpr std::array<EventConnectionMethodKey,31> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
@@ -143,7 +147,7 @@ class EventConnection final : public ComponentValue {
 public:
   bool enabled=true,once=false;
   u32 event=0,action=0,method=0;
-  float argument=0;
+  float argument=0,clipTag=-1; // -1: any; exact 24-bit integer code
   u64 receiver=0,otherFilter=0;   // receptor zero: este próprio objeto
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
@@ -151,13 +155,15 @@ public:
   bool valid() const override {
     return (event==0||findEventConnectionEvent(event)) && action<=kEventConnectionCallMethod &&
            (method==0||findEventConnectionMethod(method)) && std::isfinite(argument) && argument>=0 && argument<=3600 &&
+           std::isfinite(clipTag)&&clipTag>=-1&&clipTag<=16777215&&std::floor(clipTag)==clipTag&&
            receiver<=std::numeric_limits<u32>::max() && otherFilter<=std::numeric_limits<u32>::max();
   }
   void write(std::ostream &out) const override {
-    out<<enabled<<' '<<event<<' '<<action<<' '<<method<<' '<<argument<<' '<<receiver<<' '<<otherFilter<<' '<<once;
+    out<<enabled<<' '<<event<<' '<<action<<' '<<method<<' '<<argument<<' '<<receiver<<' '<<otherFilter<<' '<<once<<' '<<static_cast<i32>(clipTag);
   }
   bool read(std::istream &in,u32 version) override {
-    return version==1 && static_cast<bool>(in>>enabled>>event>>action>>method>>argument>>receiver>>otherFilter>>once) && valid();
+    clipTag=-1;return (version==1||version==2) && static_cast<bool>(in>>enabled>>event>>action>>method>>argument>>receiver>>otherFilter>>once) &&
+      (version<2||static_cast<bool>(in>>clipTag)) && valid();
   }
 };
 inline const EventConnection &eventConnection(const ComponentValue &v) {return static_cast<const EventConnection &>(v);}
@@ -178,11 +184,15 @@ inline constexpr std::array<ComponentEnum,3> eventConnectionEnums{{
    {"Então","","Chamado no primeiro componente do tipo correspondente no receptor",
     [](const ComponentValue &v){return eventConnection(v).action==kEventConnectionCallMethod;}}},
 }};
-inline constexpr std::array<ComponentNumber,1> eventConnectionNumbers{{
+inline constexpr std::array<ComponentNumber,2> eventConnectionNumbers{{
   {"Valor",0,3600,.05f,[](const ComponentValue &v)->const float &{return eventConnection(v).argument;},
    [](ComponentValue &v)->float *{return &eventConnection(v).argument;},"argument",
    {"Então","s","Timer: intervalo (zero usa o autorado). Áudio: posição do cursor",
     [](const ComponentValue &v){const auto &c=eventConnection(v);return c.action==kEventConnectionCallMethod&&eventConnectionTakesNumber(c.method);}}},
+  {"Código do clipe",-1,16777215,1,[](const ComponentValue &v)->const float &{return eventConnection(v).clipTag;},
+   [](ComponentValue &v)->float *{return &eventConnection(v).clipTag;},"clip_tag",
+   {"Quando","","-1 aceita qualquer código; 0..16777215 seleciona o evento do clipe",
+    [](const ComponentValue &v){return eventConnection(v).event==30||eventConnection(v).event==32;}}},
 }};
 inline constexpr std::array<ComponentObjectReference,2> eventConnectionReferences{{
   {"receiver","Receptor","",ObjectReferenceScope::Any,"Este objeto",
@@ -197,7 +207,7 @@ inline constexpr std::array<ComponentObjectReference,2> eventConnectionReference
     [](const ComponentValue &v){return eventConnectionCarriesObject(eventConnection(v).event);}}},
 }};
 inline const ComponentType EventConnection::descriptor{
-  "astra.logic.event_connection",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<EventConnection>();},
+  "astra.logic.event_connection",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<EventConnection>();},
   eventConnectionNumbers,eventConnectionBooleans,eventConnectionEnums,nullptr,true,eventConnectionReferences
 };
 

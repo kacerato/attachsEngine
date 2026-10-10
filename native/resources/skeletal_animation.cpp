@@ -3,6 +3,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <queue>
+#include <limits>
+#include <unordered_set>
 
 namespace ae::resources {
 namespace {
@@ -440,3 +443,62 @@ bool skinnedLocalBounds(const SkinDefinition &skin, const std::vector<float> &pa
 }
 
 } // namespace ae::resources
+
+namespace ae::resources {
+bool validAnimationCues(std::span<const AnimationCue> cues,float duration) {
+  if(cues.size()>MaximumAnimationCues||!std::isfinite(duration)||duration<0)return false;
+  std::unordered_set<u64> ids;float previous=-1;u64 previousId=0;
+  for(const auto &c:cues) {
+    if(!c.id||c.id>static_cast<u64>(std::numeric_limits<i64>::max())||!ids.insert(c.id).second||
+       !std::isfinite(c.time)||c.time<0||c.time>duration||static_cast<u32>(c.kind)>1||
+       c.name.empty()||c.name.size()>256||c.tag>16777215||!std::isfinite(c.value)||
+       (c.time<previous)||(c.time==previous&&c.id<=previousId))return false;
+    for(unsigned char ch:c.name)if(ch<32||ch==127)return false;
+    previous=c.time;previousId=c.id;
+  }
+  return true;
+}
+u64 visitAnimationCues(const AnimationClip &clip,double from,double to,AnimationWrapMode mode,
+                      const std::function<void(const AnimationCue &)> &deliver,u32 budget,bool validated) {
+  if(!deliver||from==to||!std::isfinite(from)||!std::isfinite(to)||
+      !std::isfinite(clip.duration)||clip.duration<=0||
+      static_cast<u32>(mode)>3||(!validated&&!validAnimationCues(clip.cues,clip.duration)))return 0;
+  const bool increasing=to>from;const double d=clip.duration;
+  struct Cursor {const AnimationCue *cue;double time,step;long double remaining;};
+  auto compare=[&](const Cursor &a,const Cursor &b){return a.time!=b.time?(increasing?a.time>b.time:a.time<b.time):a.cue->id>b.cue->id;};
+  std::priority_queue<Cursor,std::vector<Cursor>,decltype(compare)> heap(compare);
+  u64 total=0;const auto maximum=std::numeric_limits<u64>::max();
+  const auto series=[&](const AnimationCue &cue,double offset,double period,bool localForward) {
+    if(!cue.enabled||cue.kind!=AnimationCueKind::Event||(localForward?!cue.forward:!cue.reverse))return;
+    long double count=0;double first=offset;
+    if(period>0) {
+      const long double origin=(static_cast<long double>(from)-offset)/period;
+      const long double destination=(static_cast<long double>(to)-offset)/period;
+      if(increasing) {const long double start=std::floor(origin)+1;first=static_cast<double>(offset+start*period);count=std::floor(destination)-start+1;}
+      else {const long double start=std::ceil(origin)-1;first=static_cast<double>(offset+start*period);count=start-std::ceil(destination)+1;}
+    } else count=increasing?(offset>from&&offset<=to):(offset<from&&offset>=to);
+    if(!(count>0))return;
+    const u64 occurrences=count>=static_cast<long double>(maximum)?maximum:static_cast<u64>(count);
+    total=occurrences>maximum-total?maximum:total+occurrences;
+    // Beyond double's temporal precision, account for loss instead of dispatching
+    // an occurrence at the excluded origin (or outside the requested interval).
+    if(std::isfinite(first)&&(increasing?(first>from&&first<=to):(first<from&&first>=to)))
+      heap.push({&cue,first,increasing?period:-period,count});
+  };
+  for(const auto &cue:clip.cues) {
+    if(mode==AnimationWrapMode::Loop)series(cue,cue.time,d,increasing);
+    else if(mode==AnimationWrapMode::PingPong) {
+      // Direction is the local arriving leg, including each turnaround endpoint.
+      series(cue,cue.time,2*d,cue.time==0?false:cue.time==d?true:increasing);
+      if(cue.time>0&&cue.time<d)series(cue,2*d-cue.time,2*d,!increasing);
+    } else series(cue,cue.time,0,increasing);
+  }
+  u32 emitted=0;budget=std::min(budget,256u);
+  while(!heap.empty()&&emitted<budget) {
+    auto cursor=heap.top();heap.pop();deliver(*cursor.cue);++emitted;
+    const double next=cursor.time+cursor.step;
+    if(cursor.remaining>1&&cursor.step!=0&&next!=cursor.time) {cursor.time=next;--cursor.remaining;heap.push(cursor);}
+  }
+  return total>emitted?total-emitted:0;
+}
+}

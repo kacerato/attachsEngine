@@ -19,6 +19,7 @@ public static unsafe class AnimationAuthoringSdkTests
         var legacy2 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v2");
         var legacy3 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v3");
         var legacy4 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v4");
+        var legacy5 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v5");
         var end = (delegate* unmanaged<void*, void>)NativeLibrary.GetExport(library, "author_fixture_end");
         var destroy = (delegate* unmanaged<void*, void>)NativeLibrary.GetExport(library, "author_fixture_destroy");
         var history = (delegate* unmanaged<void*, int, int>)NativeLibrary.GetExport(library, "author_fixture_history");
@@ -51,6 +52,7 @@ public static unsafe class AnimationAuthoringSdkTests
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy2(fixture)), Report()); end(fixture);
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy3(fixture)), Report()); end(fixture);
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy4(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::Lifetime", legacy5(fixture)), Report()); end(fixture);
             Assert.Equal(2, history(fixture, 0), "lifetime probes do not publish edits");
             Assert.Equal(0, Run(root, "Tools::Consolidate", access(fixture)), Report()); end(fixture);
             Assert.Equal(3, history(fixture, 0), "new composed resource has one independent undo step");
@@ -138,11 +140,18 @@ public static unsafe class AnimationAuthoringSdkTests
               draft.Snapshot.Tracks.Single(t=>t.Id==euler).Rotation!=ClipRotation.Quaternion)
               throw new Exception("Real bake lost a full turn or ignored verification");
             draft.RemoveTrack(euler);
+            var cue=draft.PutCue(new ClipCue(0,.4f,ClipCueKind.Event,"Latch",7,.12345678901234567,Reverse:false));
+            var marker=draft.PutCue(new ClipCue(0,.75f,ClipCueKind.Marker,"Contact"));
+            var transient=draft.PutCue(new ClipCue(0,.8f,ClipCueKind.Event,"Temporary"));draft.RemoveCue(transient);
+            if(draft.Snapshot.Cues.Count!=2 || draft.Snapshot.Cues.Single(c=>c.Id==cue).Value!=.12345678901234567)
+              throw new Exception("Cue ABI or snapshot lost metadata");
             draft.RemoveTrack(scale); draft.SetName("Mecanismo \"SDK\""); draft.SetDisplayRate(30);
             draft.Retime(2); draft.Crop(0,2); draft.Reverse(); draft.Reverse();
             var pose=draft.Sample(root,.6f); var curve=draft.SampleCurve(root,0,.6);
             if(Math.Abs(pose[0]-3)>1e-5 || Math.Abs(curve.Value-3)>1e-5) throw new Exception("Native evaluator mismatch");
             var snapshot=draft.Snapshot;
+            if(Math.Abs(snapshot.Cues.Single(c=>c.Id==cue).Time-.8f)>1e-6 || snapshot.Cues.Single(c=>c.Id==marker).Time!=1.5f || snapshot.Cues.Single(c=>c.Id==cue).Reverse)
+              throw new Exception("Temporal transforms lost cues or direction filters");
             if(snapshot.Name!="Mecanismo \"SDK\"" || snapshot.DisplayRate!=30 || snapshot.Tracks.Count!=3 || snapshot.Duration!=2)
               throw new Exception("Versioned snapshot lost authoring fields");
             var layer=draft.AddLayer("Correção");
@@ -182,6 +191,7 @@ public static unsafe class AnimationAuthoringSdkTests
             if(report.VerifiedSamples==0 || draft.Snapshot.Tracks.Single(t=>t.Id==rotation).Rotation!=ClipRotation.Euler) throw new Exception("Euler conversion failed");
             var result=draft.CreateConsolidated("Consolidado SDK",settings);
             var output=context.InspectClip(result.Clip);
+            if(output.Cues.Count!=original.Cues.Count) throw new Exception("Consolidation lost cues");
             if(result.Clip==id || output.Layers.Count!=1 || result.Report.VerifiedSamples==0 || context.Clips.Count!=2) throw new Exception("Consolidation not published");
             if(context.InspectClip(id).Revision!=original.Revision) throw new Exception("Source draft was committed implicitly");
           }

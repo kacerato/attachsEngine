@@ -1267,6 +1267,13 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         get => Component.GetFloat("argument");
         set => Component.SetFloat("argument", value);
     }
+    /// <summary>Código do clipe. -1 aceita qualquer código; 0..16777215 seleciona o evento do clipe</summary>
+    /// <remarks>Faixa válida: -1 a 16777215.</remarks>
+    public float ClipTag
+    {
+        get => Component.GetFloat("clip_tag");
+        set => Component.SetFloat("clip_tag", value);
+    }
     /// <summary>Ativa. Desligada não reage a eventos; a configuração é preservada</summary>
     public bool Enabled
     {
@@ -1311,6 +1318,10 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         AgenteChegou = 27,
         AgenteCaminhoFalhou = 28,
         AgenteEntrouNumLink = 29,
+        AnimationEventoDoClipe = 30,
+        AnimationLimiteDeEventos = 31,
+        AnimatorEventoDoClipe = 32,
+        AnimatorLimiteDeEventos = 33,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -5776,6 +5787,10 @@ public readonly struct Animation : IComponentFacade<Animation>
     /// <summary>Clipe. Recurso do projeto por slot</summary>
     public AssetGuid GetClips(uint slot = 0) => Component.GetResource("clips", slot);
     public void SetClips(AssetGuid value, uint slot = 0) => Component.SetResource("clips", value, slot);
+    /// <summary>Evento do clipe. Código, valor e identidade local do evento; somente travessia em Play. Payload: Código: inteiro, Valor: número, ID no clipe: inteiro</summary>
+    public ComponentSubscription OnClipEvent(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "clip_event", handler);
+    /// <summary>Limite de eventos. Travessia excedeu o orçamento; não são repetidos no próximo quadro. Payload: Eventos suprimidos: inteiro</summary>
+    public ComponentSubscription OnClipEventsLost(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "clip_events_lost", handler);
 }
 
 /// <summary>Animator: Máquina de estados: parâmetros, transições, misturas e camadas. Família Animação · Máquina de estados.</summary>
@@ -5896,6 +5911,10 @@ public readonly struct Animator : IComponentFacade<Animator>
     public ComponentSubscription OnMachineExited(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "machine_exited", handler);
     /// <summary>Mistura interrompida. Pose composta preservada; ID zero indica CrossFade solicitado pela API. Payload: Camada: inteiro, Transição cancelada: inteiro, Novo estado: inteiro</summary>
     public ComponentSubscription OnTransitionInterrupted(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "transition_interrupted", handler);
+    /// <summary>Evento do clipe. Código, valor e identidade local do evento; somente travessia em Play. Payload: Código: inteiro, Valor: número, ID no clipe: inteiro</summary>
+    public ComponentSubscription OnClipEvent(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "clip_event", handler);
+    /// <summary>Limite de eventos. Travessia excedeu o orçamento; não são repetidos no próximo quadro. Payload: Eventos suprimidos: inteiro</summary>
+    public ComponentSubscription OnClipEventsLost(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "clip_events_lost", handler);
 }
 
 /// <summary>Campo de gravidade 2D: Gravidade XY em área sobre corpos dinâmicos 2D. Família Física 2D · Campos.</summary>

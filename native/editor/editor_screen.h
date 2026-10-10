@@ -690,6 +690,7 @@ enum : u32 {
     BakeOpen,BakeClose,BakeRate,BakeTolerance,BakeReduction,BakeMode,BakeApply,
     Layers,LayerClose,LayerPrevious,LayerNext,LayerName,LayerAdd,LayerDuplicate,LayerRemove,LayerUp,LayerDown,LayerBlend,LayerWeight,LayerReference,LayerReferenceTime,LayerMute,LayerSolo,LayerCopy,LayerChoose,LayerPickerClose,LayerPickerPrevious,LayerPickerNext,
     BakeTarget,BakeReference,BakeSeedUse,BakeSeedX,BakeSeedY,BakeSeedZ,
+    Cues,CueAddEvent,CueAddMarker,CueName,CueTime,CueTag,CueValue,CueOptions,CueForward,CueReverse,CueEnabled,CueDuplicate,CueDelete,CuePrevious,CueNext,CueOptionsClose,
     SelectMode=0xb080,Row=0xb100,Choice=0xb200,TargetChoice=0xb300,TargetEnter=0xb340,PropertyChoice=0xb380,LayerChoice=0xb3c0,PoseValue=0xb400,
     PoseAutoKey=0xb480,PoseRecord,PoseCancel,PoseIsolate,PoseNumbers,PoseJoints,PoseTranslate,PoseRotate,PoseScale,PoseFocus,Restart,PoseOrbit,PosePan,PoseZoom,PoseViewport,PoseGizmo=0xb500
 };
@@ -946,6 +947,7 @@ struct EditorScreenState final {
     bool clipSelectionMode=false,clipSelectionAdd=false,clipSelecting=false;
     ui::UiRect clipSelectionBox{};
     bool clipEditPicker=false;
+    bool clipCues=false,clipCueOptions=false;u64 clipCue=0;
     u64 clipLayer=0;bool clipLayersShown=false,clipLayerPicker=false;u32 clipLayerPage=0;
     bool clipBakeShown=false,clipBakeHasReport=false;
     bool clipBakeConsolidate=false,clipBakeReferenceShown=false,clipBakeReportConsolidated=false;

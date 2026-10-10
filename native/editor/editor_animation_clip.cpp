@@ -155,6 +155,7 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   state_.clipAuthoringPicker=0;state_.clipTargetPage=0;state_.clipTargetBranch=owner;state_.clipTargetNode=owner;state_.clipPoseShown=false;
   state_.clipPreviewTarget=0;state_.clipPoseNumbers=false;state_.clipPoseJoints=true;state_.clipPreviewExpanded=false;
   clipPreviewTopologyRevision_=~u64(0);
+  state_.clipCues=state_.clipCueOptions=false;state_.clipCue=0;
   state_.clipTrack=asset->tracks.front().id;state_.clipComponent=0;state_.clipKey=0;
   state_.clipSelection.clear();state_.clipSelectionMode=state_.clipSelectionAdd=state_.clipSelecting=false;state_.clipEditPicker=false;
   state_.clipBakeShown=state_.clipBakeHasReport=false;
@@ -240,6 +241,7 @@ void EditorSession::refreshAnimationClip() {
   const auto *asset=clipDrag_?&*clipDrag_:clipPoseDraft_?&*clipPoseDraft_:live;
   if(!asset||clipEpoch_!=sceneEpoch_||!document_.exists(state_.clipOwner)||isPlaying()) {closeAnimationClip();return;}
   state_.clipAsset=asset;
+  if(state_.clipCue&&!asset->cue(state_.clipCue)) {state_.clipCue=0;state_.clipCueOptions=false;}
   if(clipPreview_.active())state_.clipPoseGraph=&clipPreview_.scene();
   if(state_.clipBakeHasReport&&(state_.clipBakeRevision!=asset->revision||state_.clipBakeTrack!=state_.clipTrack))state_.clipBakeHasReport=false;
   // Published clip revisions are immutable. Reconcile retired IDs only when
@@ -453,6 +455,14 @@ bool EditorSession::applyAnimationClipName(std::string_view value) {
   const bool ok=editAnimationClipAsset(asset->guid,asset->revision,[&](auto &candidate){candidate.name=std::string(value);return true;},error);
   state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
 }
+bool EditorSession::applyAnimationClipCueName(std::string_view value) {
+  const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
+  if(!state_.clipOpen||!asset||asset->guid!=state_.clipGuid||asset->revision!=clipNumberRevision_||state_.clipCue!=clipNumberKey_) {state_.clipDiagnostic="Evento mudou; reabra o nome";return false;}
+  const bool ok=editAnimationClipAsset(asset->guid,asset->revision,[&](auto &candidate){
+    const auto *cue=candidate.cue(clipNumberKey_);if(!cue)return false;auto valueCue=*cue;valueCue.name=value;u64 id=0;return candidate.putCue(valueCue,id,error);
+  },error);
+  state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
+}
 bool EditorSession::applyAnimationClipLayerName(std::string_view value) {
   const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
   if(!state_.clipOpen||!asset||asset->guid!=state_.clipGuid||asset->revision!=clipNumberRevision_||state_.clipLayer!=clipNumberLayer_) {state_.clipDiagnostic="Camada mudou; reabra o nome";return false;}
@@ -488,13 +498,16 @@ void EditorSession::beginAnimationClipNumber(u32 code,double value) {
   const auto *asset=animationClipAsset(state_.clipGuid);if(!asset||clipDrag_)return;
   state_.clipPlaying=false;clipNumberGuid_=asset->guid;clipNumberRevision_=asset->revision;
   clipNumberLayer_=state_.clipLayer;clipNumberTrack_=state_.clipTrack;clipNumberComponent_=state_.clipComponent;clipNumberKey_=state_.clipKey;
+  if(code==w::CueTime||code==w::CueTag||code==w::CueValue)clipNumberKey_=state_.clipCue;
   clipNumberSceneRevision_=document_.revision();clipNumberTime_=state_.clipTime;
   clipNumberSelection_=state_.clipSelection;
   beginAnimatorNumber(code,value);
+  if(code==w::CueTime||code==w::CueTag||code==w::CueValue)
+    std::snprintf(state_.numericText,sizeof state_.numericText,"%.17g",value);
   state_.numericEntity=state_.clipOwner;
 }
 bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
-  if(!std::isfinite(value)||std::abs(value)>std::numeric_limits<float>::max())return false;
+  if(!std::isfinite(value)||(code!=w::CueValue&&std::abs(value)>std::numeric_limits<float>::max()))return false;
   const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
   if(!state_.clipOpen||state_.clipGuid!=clipNumberGuid_||!asset||asset->revision!=clipNumberRevision_) {state_.status="Clipe mudou; reabra o campo";return false;}
   if(code==w::Time) {const bool ok=seekAnimationClip(static_cast<float>(value),error);state_.clipDiagnostic=error;return ok;}
@@ -526,6 +539,15 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
     state_.clipBakeHasReport=false;state_.clipDiagnostic.clear();return true;
   }
   const bool ok=editAnimationClipAsset(asset->guid,asset->revision,[&](auto &candidate) {
+    if(code==w::CueTime||code==w::CueTag||code==w::CueValue) {
+      const auto *cue=candidate.cue(clipNumberKey_);
+      if(!cue||state_.clipCue!=clipNumberKey_) {error="Evento mudou; reabra o campo";return false;}
+      auto edited=*cue;
+      if(code==w::CueTime)edited.time=static_cast<float>(value);
+      else if(code==w::CueTag) {if(value<0||value>16777215||std::floor(value)!=value) {error="Codigo deve ser inteiro entre 0 e 16777215";return false;}edited.tag=static_cast<u32>(value);}
+      else edited.value=value;
+      u64 id=0;return candidate.putCue(edited,id,error);
+    }
     if(code==w::LayerWeight||code==w::LayerReferenceTime) {
       auto *l=candidate.layer(clipNumberLayer_);
       if(!l||state_.clipLayer!=clipNumberLayer_) {error="Camada mudou; reabra o campo";return false;}
@@ -569,6 +591,30 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     return std::clamp(std::round(t*asset->displayRate)/asset->displayRate,0.f,asset->duration);};
   const auto xAt=[&](float t){return canvas.x+(t-state_.clipStart)/(state_.clipEnd-state_.clipStart)*canvas.width;};
   const auto yAt=[&](float v){return canvas.bottom()-(v-state_.clipMinimum)/(state_.clipMaximum-state_.clipMinimum)*canvas.height;};
+  if(state_.clipCues&&(routing.widgetId==w::id(w::Canvas)||clipPointer_)) {
+    if(clipPointer_&&event.pointerId+1!=clipPointer_)return true;
+    if(event.phase==UiPointerPhase::Down) {
+      clipPointer_=event.pointerId+1;clipPress_=event.position;state_.clipPlaying=false;state_.clipCueOptions=false;
+      float nearest=22;state_.clipCue=0;
+      for(const auto &cue:asset->cues) {
+        const float row=cue.kind==resources::AnimationCueKind::Event?canvas.y+canvas.height*.3f:canvas.y+canvas.height*.7f;
+        const float distance=std::hypot(xAt(cue.time)-event.position.x,row-event.position.y);
+        if(distance<nearest) {nearest=distance;state_.clipCue=cue.id;}
+      }
+      std::string error;
+      seekAnimationClip(state_.clipCue?asset->cue(state_.clipCue)->time:timeAt(event.position.x),error);state_.clipDiagnostic=error;
+    } else if(event.phase==UiPointerPhase::Move&&routing.dragging&&state_.clipCue) {
+      const auto *live=animationClipAsset(state_.clipGuid);const auto *cue=live?live->cue(state_.clipCue):nullptr;
+      if(cue) {auto candidate=*live;auto moved=*cue;moved.time=timeAt(event.position.x);u64 id=0;std::string error;
+        if(candidate.putCue(moved,id,error)) {clipDrag_=std::move(candidate);state_.clipAsset=&*clipDrag_;}state_.clipDiagnostic=error;}
+    } else if(event.phase==UiPointerPhase::Up||event.phase==UiPointerPhase::Cancel) {
+      clipPointer_=0;
+      if(clipDrag_) {auto candidate=std::move(*clipDrag_);clipDrag_.reset();std::string error;
+        if(event.phase==UiPointerPhase::Up)editAnimationClipAsset(candidate.guid,candidate.revision,[&](auto &value){value=candidate;return true;},error);
+        state_.clipDiagnostic=error;refreshAnimationClip();}
+    }
+    return true;
+  }
   if(clipPointer_&&event.pointerId+1!=clipPointer_)return true;
   const u32 widgetCode=animator_widget::code(routing.widgetId);
   if(routing.widgetId==w::id(w::Canvas)||widgetCode==w::HandleIn||widgetCode==w::HandleOut||clipPointer_) {
@@ -715,8 +761,43 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     const bool ok=live&&editAnimationClipAsset(live->guid,live->revision,operation,error);
     state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
   };
+  if(code==w::Cues) {
+    state_.clipCues=!state_.clipCues;state_.clipCueOptions=false;state_.clipPlaying=false;
+    state_.clipBakeShown=state_.clipLayersShown=state_.clipTangentPicker=state_.clipEditPicker=state_.clipPicker=state_.clipNewPicker=false;
+    state_.clipAuthoringPicker=0;return true;
+  }
+  if(code>=w::CueAddEvent&&code<=w::CueOptionsClose) {
+    const auto *cue=asset->cue(state_.clipCue);
+    if(code==w::CuePrevious||code==w::CueNext) {
+      if(!asset->cues.empty()) {
+        auto i=cue?static_cast<usize>(cue-asset->cues.data()):(code==w::CuePrevious?asset->cues.size()-1:0);
+        if(cue)i=code==w::CuePrevious?(i?i-1:0):std::min(i+1,asset->cues.size()-1);
+        state_.clipCue=asset->cues[i].id;seekAnimationClip(asset->cues[i].time,error);
+      }
+      return true;
+    }
+    if(code==w::CueOptions||code==w::CueOptionsClose) {state_.clipCueOptions=code==w::CueOptions&&!state_.clipCueOptions;return true;}
+    if(code==w::CueAddEvent||code==w::CueAddMarker||code==w::CueDuplicate) {
+      if(code==w::CueDuplicate&&!cue)return true;
+      resources::AnimationCue value=cue&&code==w::CueDuplicate?*cue:resources::AnimationCue{};value.id=0;
+      if(code!=w::CueDuplicate)value.time=state_.clipTime;
+      if(code!=w::CueDuplicate) {value.kind=code==w::CueAddEvent?resources::AnimationCueKind::Event:resources::AnimationCueKind::Marker;value.name=value.kind==resources::AnimationCueKind::Event?"Evento":"Marcador";}
+      u64 id=0;if(change([&](auto &candidate){return candidate.putCue(value,id,error);}))state_.clipCue=id;
+      state_.clipCueOptions=false;return true;
+    }
+    if(!cue)return true;
+    if(code==w::CueName) {
+      state_.clipPlaying=false;clipNumberGuid_=asset->guid;clipNumberRevision_=asset->revision;clipNumberKey_=cue->id;beginAnimatorName(code,cue->name);return true;
+    }
+    if(code==w::CueTime||code==w::CueTag||code==w::CueValue) {beginAnimationClipNumber(code,code==w::CueTime?cue->time:code==w::CueTag?cue->tag:cue->value);return true;}
+    const auto id=cue->id;auto edited=*cue;
+    if(code==w::CueDelete) {change([&](auto &candidate){return candidate.removeCue(id,error);});state_.clipCueOptions=false;return true;}
+    if(code==w::CueForward)edited.forward=!edited.forward;else if(code==w::CueReverse)edited.reverse=!edited.reverse;else if(code==w::CueEnabled)edited.enabled=!edited.enabled;else return true;
+    u64 result=0;change([&](auto &candidate){return candidate.putCue(edited,result,error);});return true;
+  }
   if(code==w::Close) {closeAnimationClip();return true;}
   if(code==w::Layers) {
+    state_.clipCues=state_.clipCueOptions=false;
     state_.clipLayerPicker=false;state_.clipLayersShown=!state_.clipLayersShown;state_.clipBakeShown=false;state_.clipPlaying=false;
     state_.clipTangentPicker=state_.clipEditPicker=state_.clipPicker=state_.clipNewPicker=false;state_.clipAuthoringPicker=state_.clipModeSide=0;return true;
   }
@@ -908,7 +989,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   else if(code==w::TangentClose) {state_.clipTangentPicker=false;state_.clipModeSide=0;}
   else if(code==w::ModeIn||code==w::ModeOut) {const u32 side=code==w::ModeIn?1:2;state_.clipModeSide=state_.clipModeSide==side?0:side;}
-  else if(code==w::Curves||code==w::Keys)state_.clipCurves=code==w::Curves;
+  else if(code==w::Curves||code==w::Keys) {state_.clipCurves=code==w::Curves;state_.clipCues=state_.clipCueOptions=false;}
   else if(code==w::Expand)state_.clipExpanded=!state_.clipExpanded;
   else if(code==w::Frame)frameAnimationClip();
   else if(code==w::ZoomIn||code==w::ZoomOut) {

@@ -68,6 +68,8 @@ bool AnimationClipAsset::valid(std::string *diagnostic) const {
   std::unordered_set<std::string> paths;
   std::unordered_set<AssetGuid,AssetGuidHash> sourceNodes;
   auto idValid=[&](u64 id){return id&&id<nextId&&ids.insert(id).second;};
+  if(!validAnimationCues(cues,duration))return fail(diagnostic,"Eventos ou marcadores invalidos");
+  for(const auto &cue:cues)if(!idValid(cue.id))return fail(diagnostic,"Identidade de evento duplicada ou fora do alocador");
   if(layers.empty()||layers.size()>MaximumLayers||layers.front().id!=0)
     return fail(diagnostic,"Camada base ausente ou limite de camadas excedido");
   std::unordered_set<u64> layerIds{0};
@@ -139,6 +141,8 @@ std::string AnimationClipAsset::serialize() const {
         <<static_cast<u32>(k.incoming)<<' '<<static_cast<u32>(k.outgoing)<<' '<<(k.broken?1:0)<<' '<<(k.weightedIn?1:0)<<' '<<(k.weightedOut?1:0)<<'\n';
     }
   }
+  out<<cues.size()<<'\n'<<std::setprecision(std::numeric_limits<double>::max_digits10);
+  for(const auto &c:cues)out<<c.id<<' '<<c.time<<' '<<static_cast<u32>(c.kind)<<' '<<std::quoted(c.name)<<' '<<c.tag<<' '<<c.value<<' '<<c.forward<<' '<<c.reverse<<' '<<c.enabled<<'\n';
   return out.str();
 }
 bool AnimationClipAsset::deserialize(std::string_view text,AnimationClipAsset &out,std::string *diagnostic) {
@@ -178,13 +182,23 @@ bool AnimationClipAsset::deserialize(std::string_view text,AnimationClipAsset &o
     if(components!=t.components())return fail(diagnostic,"Número de componentes incompatível");
     t.curves.resize(components);for(auto &c:t.curves)if(!readCurve(in,c,total))return fail(diagnostic,"Curva do clipe incompleta");
   }
+  if(version>=4) {
+    if(!(in>>count)||count>MaximumAnimationCues)return fail(diagnostic,"Quantidade de eventos invalida");
+    value.cues.resize(count);
+    for(auto &c:value.cues) {
+      u32 kind=0,forward=0,reverse=0,enabled=0;
+      if(!(in>>c.id>>c.time>>kind>>std::quoted(c.name)>>c.tag>>c.value>>forward>>reverse>>enabled)||kind>1||forward>1||reverse>1||enabled>1)
+        return fail(diagnostic,"Evento incompleto ou flags invalidas");
+      c.kind=static_cast<AnimationCueKind>(kind);c.forward=forward;c.reverse=reverse;c.enabled=enabled;
+    }
+  }
   in>>std::ws;if(!in.eof())return fail(diagnostic,"Dados extras após o clipe");
   if(!value.valid(diagnostic))return false;
   out=std::move(value);return true;
 }
 bool AnimationClipAsset::compile(AnimationClip &out,std::string *diagnostic) const {
   if(!valid(diagnostic))return false;
-  AnimationClip value;value.name=name;value.duration=duration;value.channels.reserve(std::count_if(tracks.begin(),tracks.end(),[](const auto &t){return !t.layer;}));
+  AnimationClip value;value.name=name;value.duration=duration;value.cues=cues;value.channels.reserve(std::count_if(tracks.begin(),tracks.end(),[](const auto &t){return !t.layer;}));
   std::map<std::tuple<u64,u64,u8>,const AnimationClipTrack*> channels;
   for(const auto &t:tracks)channels.emplace(std::tuple{t.layer,t.binding,static_cast<u8>(t.path)},&t);
   const bool solo=std::any_of(layers.begin(),layers.end(),[](const auto &l){return l.solo&&!l.muted;});
@@ -229,6 +243,7 @@ bool AnimationClipAsset::edit(u32 expectedRevision,const std::function<bool(Anim
     return fail(&diagnostic,"Edição alterou identidade, revisão ou alocador");
   if(!candidate.valid(&diagnostic))return false;
   std::unordered_map<u64,u32> previous;
+  for(const auto &c:cues)previous.emplace(c.id,4);
   for(const auto &l:layers)if(l.id)previous.emplace(l.id,3);
   for(const auto &b:bindings)previous.emplace(b.id,0);
   for(const auto &t:tracks) {
@@ -237,6 +252,7 @@ bool AnimationClipAsset::edit(u32 expectedRevision,const std::function<bool(Anim
   auto unchangedRole=[&](u64 id,u32 role) {
     const auto old=previous.find(id);return old==previous.end()?id>=nextId:old->second==role;
   };
+  for(const auto &c:candidate.cues)if(!unchangedRole(c.id,4))return fail(&diagnostic,"Evento reutiliza identidade retirada");
   for(const auto &b:candidate.bindings)if(!unchangedRole(b.id,0))return fail(&diagnostic,"Binding reutiliza uma identidade retirada");
   for(const auto &l:candidate.layers)if(l.id&&!unchangedRole(l.id,3))return fail(&diagnostic,"Camada reutiliza uma identidade retirada");
   for(const auto &t:candidate.tracks) {
@@ -364,6 +380,8 @@ bool authorAnimationClip(const AnimationClip &clip,AssetGuid guid,AssetGuid sour
   if(bindings.empty()||bindings.size()>AnimationClipAsset::MaximumBindings||clip.channels.empty()||clip.channels.size()>AnimationClipAsset::MaximumTracks)
     return fail(&diagnostic,"Origem sem bindings/canais ou excedendo o limite");
   result.bindings.assign(bindings.begin(),bindings.end());for(auto &b:result.bindings)b.id=result.nextId++;
+  if(!validAnimationCues(clip.cues,clip.duration))return fail(&diagnostic,"Eventos da origem invalidos");
+  result.cues=clip.cues;for(auto &c:result.cues)c.id=result.nextId++;
   usize total=0;
   for(const auto &c:clip.channels) {
     if(!c.layerSources.empty())return fail(&diagnostic,"Composição exige o recurso de autoria original, não uma extração de canais compilados");
@@ -399,3 +417,26 @@ bool authorAnimationClip(const AnimationClip &clip,AssetGuid guid,AssetGuid sour
   out=std::move(result);return true;
 }
 } // namespace ae::resources
+
+namespace ae::resources {
+const AnimationCue *AnimationClipAsset::cue(u64 id) const {
+  for(const auto &c:cues)if(c.id==id)return &c;
+  return nullptr;
+}
+bool AnimationClipAsset::putCue(AnimationCue value,u64 &created,std::string &error) {
+  error.clear();if(!valid(&error))return false;
+  auto candidate=*this;
+  if(value.id) {
+    auto found=std::find_if(candidate.cues.begin(),candidate.cues.end(),[&](const auto &c){return c.id==value.id;});
+    if(found==candidate.cues.end())return fail(&error,"Evento nao pertence ao clipe");
+    *found=value;
+  } else {value.id=candidate.nextId++;candidate.cues.push_back(value);}
+  std::sort(candidate.cues.begin(),candidate.cues.end(),[](const auto &a,const auto &b){return a.time!=b.time?a.time<b.time:a.id<b.id;});
+  if(!candidate.valid(&error))return false;
+  created=value.id;*this=std::move(candidate);return true;
+}
+bool AnimationClipAsset::removeCue(u64 id,std::string &error) {
+  error.clear();if(!valid(&error)||!cue(id))return fail(&error,"Evento nao pertence ao clipe");
+  std::erase_if(cues,[&](const auto &c){return c.id==id;});return true;
+}
+}

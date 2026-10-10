@@ -32,6 +32,7 @@
 #include <vector>
 
 namespace ae::runtime {
+class GameWorld;class ComponentEventQueue;
 
 // Clipes de uma fonte importada, com a identidade (e o nome, para o retarget
 // por nome) de cada nó que os canais endereçam: `nodes[channel.node]`.
@@ -116,6 +117,8 @@ public:
   // parte do zero.
   void begin(SceneGraph &graph, const AnimationLibrary &library);
   void reset();
+  void setEvents(GameWorld *world,ComponentEventQueue *events) noexcept {eventWorld_=world;events_=events;}
+  u64 suppressedCueCount() const noexcept {return suppressedCues_;}
   bool active() const noexcept { return graph_ != nullptr; }
 
   // Avança fades e tempos, mistura e escreve poses e pesos. `writable` recusa
@@ -177,6 +180,7 @@ private:
   void syncStates(Player &player);
   float clipLength(const resources::AssetGuid &clip) const;
 
+  GameWorld *eventWorld_=nullptr;ComponentEventQueue *events_=nullptr;u64 suppressedCues_=0;
   SceneGraph *graph_ = nullptr;
   const AnimationLibrary *library_ = nullptr;
   std::vector<Player> players_;

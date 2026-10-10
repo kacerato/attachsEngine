@@ -76,6 +76,8 @@ void SceneEventConnections::deliver(const ComponentOperationServices &services,c
     // Cópia: a ação pode alterar o objeto e invalidar o valor lido.
     const auto connection=scene::eventConnection(*value);
     if(!connection.enabled || connection.action==0 || connection.event!=key->value) continue;
+    if(connection.clipTag>=0&&(connection.event==30||connection.event==32)&&
+       (!record.count||record.values[0].valueKind()!=scene::ComponentValueKind::Integer||record.values[0].integer!=static_cast<i64>(connection.clipTag)))continue;
     if(connection.otherFilter && connection.otherFilter!=other) continue;
     if(connection.once && fired_.contains({source.id,connection.instanceId()})) continue;
     const auto status=execute(services,source.id,connection);

@@ -63,6 +63,13 @@ AE_AUTHOR_TEST_EXPORT const void *author_fixture_access_v4(void *handle) {
   auto &fixture=*static_cast<Fixture*>(handle);auto legacy=*access;legacy.version=4;legacy.size=fixture.abi4.size();
   std::memcpy(fixture.abi4.data(),&legacy,fixture.abi4.size());return fixture.abi4.data();
 }
+AE_AUTHOR_TEST_EXPORT const void *author_fixture_access_v5(void *handle) {
+  const auto *access=author_fixture_access(handle);if(!access)return nullptr;
+  // ABI 6 appends commands, not function pointers. Keep an independent legacy
+  // table so changing its advertised version cannot mutate the production scope.
+  static thread_local ae::editor::AnimationAuthorAccess legacy;
+  legacy=*access;legacy.version=5;return &legacy;
+}
 AE_AUTHOR_TEST_EXPORT int author_fixture_sample(void *handle,float time,float *values) {
   if(!handle||!values)return 0;
   auto &fixture=*static_cast<Fixture*>(handle);

@@ -1,3 +1,4 @@
+#include "scene/animation_clip_events.h"
 // Animator da Astra (bloco I, F064): máquina de estados de animação com
 // parâmetros, camadas, estados (clipe, mistura 1D, mistura 2D), transições com
 // condições e tempo de saída, e eventos por estado. Avaliado por
@@ -436,12 +437,13 @@ inline constexpr std::array<ComponentParameter,2> animatorMachinePayload{{
   {"layer","Camada",ComponentValueKind::Integer},{"machine","Grupo",ComponentValueKind::Integer}}};
 inline constexpr std::array<ComponentParameter,3> animatorInterruptionPayload{{
   {"layer","Camada",ComponentValueKind::Integer},{"transition","Transição cancelada",ComponentValueKind::Integer},{"destination","Novo estado",ComponentValueKind::Integer}}};
-inline constexpr std::array<ComponentEvent,5> animatorEvents{{
+inline constexpr std::array<ComponentEvent,7> animatorEvents{{
   {"state_entered","Entrou no estado","Emitido quando um estado começa (no início da transição para ele)",animatorStatePayload},
   {"state_event","Evento do estado","Emitido quando o tempo do estado passa por um evento marcado nele",animatorEventPayload},
   {"machine_entered","Entrou no grupo","Um grupo tornou-se ativo; da raiz até o grupo interno",animatorMachinePayload},
   {"machine_exited","Saiu do grupo","Um grupo deixou de participar da reprodução; do grupo interno à raiz",animatorMachinePayload},
   {"transition_interrupted","Mistura interrompida","Pose composta preservada; ID zero indica CrossFade solicitado pela API",animatorInterruptionPayload},
+  clipCueEvent,clipCueLossEvent,
 }};
 inline constexpr std::array<ComponentParameter,1> animatorLayerArgument{{{"layer","Camada",ComponentValueKind::Integer}}};
 inline constexpr std::array<ComponentParameter,2> animatorLayerNumberArguments{{{"layer","Camada",ComponentValueKind::Integer},{"value","Valor",ComponentValueKind::Number}}};

@@ -14,7 +14,7 @@ struct AnimationAuthorKey {
 static_assert(sizeof(AnimationAuthorKey)==48);
 enum class AnimationAuthorOperation : u32 {
   PutKey,SplitKey,EraseKey,PutPose,Retime,Reverse,Crop,RotationMode,
-  RemoveTrack,Name,DisplayRate,LayerAdd,LayerConfigure,LayerMove,LayerDuplicate,LayerRemove,LayerAddTrack,LayerCopyBase
+  RemoveTrack,Name,DisplayRate,LayerAdd,LayerConfigure,LayerMove,LayerDuplicate,LayerRemove,LayerAddTrack,LayerCopyBase,PutCue,RemoveCue
 };
 struct AnimationAuthorCommand {
   u32 operation=0,component=0;
@@ -38,7 +38,7 @@ struct AnimationAuthorBakeRequest {
 };
 static_assert(sizeof(AnimationAuthorBakeRequest)==56);
 struct AnimationAuthorAccess {
-  u32 version=5,size=sizeof(AnimationAuthorAccess);
+  u32 version=6,size=sizeof(AnimationAuthorAccess);
   void *context=nullptr;
   u64 (*selected)(void *)=nullptr;
   int (*count)(void *,u32 imported)=nullptr;

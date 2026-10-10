@@ -1,0 +1,11 @@
+  Determinando os projetos a serem restaurados...
+  C:\Users\donod\Downloads\atchengine\build\animation-cues-sdk-example\Example.csproj restaurado (em 3,52 seg).
+  1 de 2 projetos estão atualizados para restauração.
+  Astra.Scripting -> C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Release\net8.0\Astra.Scripting.dll
+  Example -> C:\Users\donod\Downloads\atchengine\build\animation-cues-sdk-example\bin\Release\net8.0\Example.dll
+
+Compilação com êxito.
+    0 Aviso(s)
+    0 Erro(s)
+
+Tempo Decorrido 00:00:07.86

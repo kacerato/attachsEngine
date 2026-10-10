@@ -421,7 +421,7 @@ AE_TEST(animation_clip_progressive_flat_and_tiny_rotations_do_not_gain_fictitiou
 }
 AE_TEST(animation_clip_mode_migration_and_group_subdivision_preserve_motion_and_key_ids) {
   auto quaternion=rotationFixture();std::string error;const auto &track=quaternion.tracks[0];
-  auto legacy=quaternion.serialize();legacy.replace(0,8,"AECLIP 1");
+  auto legacy=quaternion.serialize();legacy.resize(legacy.size()-2);legacy.replace(0,8,"AECLIP 1");
   const std::string prefix=std::to_string(track.id)+" "+std::to_string(track.binding)+" 1 0 0 ";
   const std::string layerSection="1\n0 \"Base\" 0 1 -1 0 0\n";
   const auto layersAt=legacy.find(layerSection);AE_EXPECT_TRUE(layersAt!=std::string::npos,"versioned layer fixture");legacy.erase(layersAt,layerSection.size());
