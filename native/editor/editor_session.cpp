@@ -1061,13 +1061,13 @@ EditorSession::ViewportPointer *EditorSession::findViewportPointer(u32 id) noexc
   return nullptr;
 }
 
-void EditorSession::buildPickCandidates(const runtime::SceneGraph *source,bool occlusion) {
+void EditorSession::buildPickCandidates(const runtime::SceneGraph *source,bool occlusion,EditorEntityId root) {
   const auto &document=source?*source:static_cast<const runtime::SceneGraph &>(document_);
   // Editor hiding/locks must not leak into world-UI depth testing in Play.
-  const bool editorVisibility=!source || source==&document_;
+  const bool editorVisibility=!source || source==&document_ || (state_.clipOpen&&source==&clipPreview_.scene());
   candidates_.clear();
   std::vector<EditorEntityId> subtree;
-  document.collectSubtree(document.root(), subtree);
+  document.collectSubtree(root?root:document.root(), subtree);
   for (const EditorEntityId id : subtree) {
     if (id == document.root()) continue;
     const EditorEntity *entity = document.find(id);
@@ -1353,7 +1353,10 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
       ? distanceBetween(viewportPointers_[0].position, viewportPointers_[1].position)
       : 0.0f;
 
-  if(state_.clipOpen)return true;
+  if(state_.clipOpen) {
+    if(wasTap&&viewportPointers_.empty())return pickAnimationClipPreviewTarget(at);
+    return true;
+  }
   if (wasTap && viewportPointers_.empty()) {
     if(state_.motorSetupTarget==state_.selection&&state_.motorSetupPolicy==3&&state_.motorBakeSourcesOpen)
       return pickMotorBakeSource(at);

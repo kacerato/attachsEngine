@@ -1913,6 +1913,13 @@
       "name": "record-pose",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "animation/skeleton": {
+      "category": "animation",
+      "name": "skeleton",
+      "dark_ui_ready": true,
+      "generation": "animation-skeleton-v1",
+      "source": "tools/generate-animation-skeleton-icon.py; Astra mark primitives"
     }
   },
   "unmapped": []

@@ -27,6 +27,7 @@ constexpr const char *kNames[] = {
     "animation/reduce",
     "animation/reference-pose",
     "animation/rotation-branch",
+    "animation/skeleton",
     "animation/state",
     "animation/tangent",
     "animation/transition",

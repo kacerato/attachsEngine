@@ -219,13 +219,16 @@ void main() {
   } else if(environment.sceneSky.w>0.5) {
     float altitude=visibleDirection.y;
     float height=clamp(altitude,0.0,1.0);
-    float horizonBand=exp(-abs(altitude)*7.0);
+    float horizonBand=exp(-altitude*altitude*28.0);
     vec3 upper=mix(environment.skyHorizonCloudDensity.rgb,
                    environment.skyZenithCloudCoverage.rgb,
-                   pow(height,0.38));
+                   smoothstep(0.0,1.0,height));
     vec3 lower=mix(environment.groundColorSaturation.rgb,
                    environment.skyHorizonCloudDensity.rgb,
-                   smoothstep(-0.32,0.025,altitude));
+                   smoothstep(-1.0,0.0,altitude));
+    // Both hemispheres meet at the exact horizon colour with zero gradient.
+    // The old lower blend ended above zero while the upper power curve had
+    // an infinite slope there, producing a visible seam/abrupt dark band.
     vec3 atmosphereSky=altitude>=0.0?upper:lower;
     vec3 sunDirection=normalize(environment.sunDirectionIntensity.xyz);
     float alignment=clamp(dot(visibleDirection,sunDirection),-1.0,1.0);

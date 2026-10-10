@@ -2,6 +2,7 @@
 #include "scene/animation.h"
 #include "scene/light.h"
 #include "scene/environment.h"
+#include "editor/editor_theme.h"
 
 namespace ae::test {
 // Opt-in, private acceptance project. Source packages are not bundled in the
@@ -32,6 +33,7 @@ inline int writeAnimationPackageProject(const std::filesystem::path &library,
   session.setGeometryPublisher(publishGeometry);
   auto &graph=session.document();
   const char *names[]{"RobotKyle","Viking","VikingWalk","VikingRun"};
+  EditorEntityId kyleRoot=0,kyleArm=0;resources::AssetGuid kyleClip;
   u32 clipCount=0;
   for(u32 index=0;index<4;++index) {
     const auto bytes=read(library/(std::string(names[index])+".glb"));
@@ -76,6 +78,7 @@ inline int writeAnimationPackageProject(const std::filesystem::path &library,
       if(!animation)return 190;
       animation->clip=authored;animation->appendClip(authored);animation->playAutomatically=true;
       if(!graph.applyEntityValues(imported,actor))return 191;
+      kyleRoot=imported;kyleArm=arm;kyleClip=authored;
       ++clipCount;
     }
     const auto retained=read(out/(std::string("Sources/")+names[index]+".glb"));
@@ -99,7 +102,14 @@ inline int writeAnimationPackageProject(const std::filesystem::path &library,
   if(!graph.applyEntityValues(sun,entity))return 196;
   const auto environment=graph.createEntity(graph.root(),runtime::ObjectKind::Folder,"Atmosfera");entity=*graph.find(environment);
   auto &env=static_cast<scene::Environment*>(entity.components.add(scene::Environment::descriptor))->values;
-  env.sky=renderer::SkyModel::PhysicalAtmosphere;env.physicalSkyIntensity=.6f;env.bloom=false;
+  // An authorable clear-day studio look. PhysicalAtmosphere is a distinct
+  // scattering model: its planetary ground cannot be recoloured by these
+  // procedural-sky controls. Keep that model available, never fake a fallback.
+  env.sky=renderer::SkyModel::Atmosphere;env.bloom=false;
+  const renderer::SceneEnvironment daylight;
+  std::copy_n(daylight.skyZenith,3,env.skyZenith);
+  std::copy_n(daylight.skyHorizon,3,env.skyHorizon);
+  std::copy_n(daylight.ground,3,env.ground);
   if(!graph.applyEntityValues(environment,entity))return 197;
   const float eye[]{0,2,-9};session.setCameraPose(eye,0,.14f);session.saveSceneView("Palco de autoria");
   if(!session.save((out/"scenes/editor.aescene").generic_string().c_str(),0))return 198;
@@ -129,6 +139,45 @@ inline int writeAnimationPackageProject(const std::filesystem::path &library,
   player.begin(playing,reopened.mapScene());
   if(!player.advance(.4,{})||!player.advance(.2,{}))return 205;
   player.reset();
+  if(const auto *captures=std::getenv("AE_ANIMATION_PREVIEW_CAPTURE")) {
+    using namespace ui;UiFont font;UiIconAtlas icons;
+    // Font/atlas retain spans into their file storage through rasterization.
+    const auto fontBytes=read("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=read("assets/astra-visual/ui/astra-ui-icons.aeui");
+    if(!font.load(fontBytes)||!icons.load(iconBytes))return 206;
+    reopened.initialize(&font,&icons);reopened.setSurface({0,0,853,394},{});
+    const float camera[]{-3.3f,1,-4};reopened.setCameraPose(camera,0,0);
+    if(!reopened.openAnimationClip(kyleClip,kyleRoot,error)||!reopened.seekAnimationClip(1,error)||
+       !reopened.selectAnimationClipPreviewTarget(kyleArm,resources::AnimationPath::Rotation,false,error))return 207;
+    reopened.update();
+    const auto tap=[&](u32 code) {
+      UiDrawList list;list.begin(reopened.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+      buildEditorScreen(reopened.screen(),editorTheme(),list,router);
+      for(float y=2;y<reopened.screen().surface.height;y+=3)for(float x=2;x<reopened.screen().surface.width;x+=3) {
+        const UiPoint at{x,y};const auto hit=router.hitTest(at);
+        if(hit.target==UiPointerTarget::Widget&&hit.widgetId==clip_widget::id(code)) {
+          reopened.handlePointer({0,UiPointerPhase::Down,at,1});reopened.handlePointer({0,UiPointerPhase::Up,at,1.1});reopened.update();return true;
+        }
+      }
+      return false;
+    };
+    if(!tap(clip_widget::Pose)||!tap(clip_widget::PoseRotate)||!tap(clip_widget::PoseFocus)||reopened.screen().clipPreviewJoints.size()!=49)return 208;
+    if(!tap(clip_widget::PoseZoom))return 208;
+    const UiPoint from{80,reopened.layout().viewport.y+reopened.layout().viewport.height*.5f};
+    const UiPoint to{from.x,from.y-reopened.layout().viewport.height*.6f};
+    reopened.handlePointer({9,UiPointerPhase::Down,from,2});reopened.handlePointer({9,UiPointerPhase::Move,to,2.1});
+    reopened.handlePointer({9,UiPointerPhase::Up,to,2.2});reopened.update();
+    if(!tap(clip_widget::PoseOrbit))return 208;
+    std::filesystem::create_directories(captures);
+    const auto capture=[&](const char *name) {
+      UiSoftwareTarget image;const auto width=static_cast<u32>(reopened.screen().surface.width),height=static_cast<u32>(reopened.screen().surface.height);
+      image.resize(width,height,.08f,.09f,.11f);rasterizeUi(reopened.instances(),font,icons,image);
+      std::ofstream file(std::filesystem::path(captures)/name,std::ios::binary);file<<"P6\n"<<width<<' '<<height<<"\n255\n";
+      for(usize pixel=0;pixel<image.pixels.size();pixel+=4)for(u32 c=0;c<3;++c)file.put(static_cast<char>(std::clamp(image.pixels[pixel+c]*255,0.f,255.f)));
+    };
+    capture("kyle-direct-joints.ppm");reopened.setSurface({0,0,655,300},{});reopened.update();capture("kyle-direct-joints-small.ppm");
+    if(!tap(clip_widget::PoseViewport))return 209;
+    capture("kyle-direct-preview-expanded.ppm");reopened.closeAnimationClip();
+  }
   std::printf("ANIMATION_PACKAGE_PROJECT sources=4 authored_clips=%u preserved=true path=%s\n",clipCount,out.generic_string().c_str());
   return 0;
 }

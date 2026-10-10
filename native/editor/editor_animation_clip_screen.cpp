@@ -67,7 +67,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     list.pushClip(r);list.addText(inner,fitTextMiddle(list,text,inner.width,theme.type.caption),color,theme.type.caption,align);list.popClip();
   };
   const auto button=[&](UiRect r,std::string_view text,u32 code,bool enabled=true,bool active=false,UiIcon icon=UiIcon::None) {
-    r=deflate(r,{2,3,2,3});const auto hit=r;const auto foreground=enabled?theme.color.text:theme.color.textFaint;
+    const auto hit=r;r=deflate(r,{2,3,2,3});const auto foreground=enabled?theme.color.text:theme.color.textFaint;
     list.addRect(r,active?withAlpha(theme.color.accent,.16f):state.pressedWidget==w::id(code)?theme.color.line:theme.color.raised,2);
     if(active)list.addRect({r.x,r.bottom()-2,r.width,2},theme.color.accent);
     if(icon!=UiIcon::None) {
@@ -96,19 +96,20 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   const bool multi=state.clipSelectionMode&&!state.clipSelection.empty()&&!state.clipSelecting;
   const bool bake=state.clipBakeShown&&selected;
   const bool layers=state.clipLayersShown;
-  const float editingHeight=state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers?
+  const bool previewFocus=state.clipPoseShown&&state.clipPreviewExpanded&&!bake&&!layers&&!state.clipExpanded;
+  const float editingHeight=previewFocus?42:state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers?
       std::min(148.f,area.height*.4f):std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers?42.f:0.f));
   layout.viewport={area.x,area.y,area.width,std::max(0.f,area.height-editingHeight)};
   UiRect editor{area.x,layout.viewport.bottom(),area.width,editingHeight};
   list.addRect(editor,theme.color.canvas);router.addBlocker(editor);
-  if(multi&&!bake&&!layers) {
+  if(multi&&!bake&&!layers&&!previewFocus) {
     auto property=top(editor,42);list.addRect(property,theme.color.surface);
     label(left(property,std::min(150.f,property.width*.25f)),std::to_string(state.clipSelection.size())+" chaves",theme.color.textDim);
     button(left(property,110),"Mover · s",w::SelectionOffset);
     button(left(property,110),"Escala",w::SelectionScale);
     button(left(property,84),"Somar",w::SelectionAdd,true,state.clipSelectionAdd);
     button(left(property,74),"Limpar",w::SelectionClear);
-  } else if(key&&!bake&&!layers) {
+  } else if(key&&!bake&&!layers&&!previewFocus) {
     auto property=top(editor,42);list.addRect(property,theme.color.surface);
     const float nameWidth=std::min(160.f,property.width*.22f);
     const bool progressive=selected&&selected->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion;
@@ -163,19 +164,22 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     const bool needsBranch=state.clipBakeSettings.rotation==1&&(state.clipBakeConsolidate||selected->rotationMode!=resources::AnimationRotationMode::Euler);
     button(apply,state.clipBakeConsolidate?"Criar":"Aplicar",w::BakeApply,!needsBranch||state.clipBakeSettings.eulerReferenceExplicit,false,UiIcon::AnimationBake);button(close,"",w::BakeClose,true,false,UiIcon::UiClose);
   } else {
-  button(left(transport,100),"Camadas",w::Layers,true,false,UiIcon::AnimationLayers);
-  button(left(transport,74),"Chaves",w::Keys,true,!state.clipCurves);
-  button(left(transport,92),"Curvas",w::Curves,true,state.clipCurves,UiIcon::AnimationCurve);
-  button(left(transport,92),"Seleção",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
-  button(left(transport,68),"Edição",w::Edits,true,state.clipEditPicker);
-  if(state.surface.width>=768)button(left(transport,40),"",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
+  const bool compact=state.surface.width<768;
+  button(left(transport,compact?44:102),compact?"":"Camadas",w::Layers,true,false,UiIcon::AnimationLayers);
+  button(left(transport,64),"Chaves",w::Keys,true,!state.clipCurves);
+  button(left(transport,44),"",w::Curves,true,state.clipCurves,UiIcon::AnimationCurve);
+  button(left(transport,44),"",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
+  button(left(transport,56),"Edição",w::Edits,true,state.clipEditPicker);
+  button(left(transport,44),"|<",w::Restart);
+  button(left(transport,40),"",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
   button(left(transport,44),"",w::Play,state.clipDiagnostic.empty(),state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
-  if(state.surface.width>=768)button(left(transport,40),"",w::NextFrame,true,false,UiIcon::UiChevronRight);
+  button(left(transport,40),"",w::NextFrame,true,false,UiIcon::UiChevronRight);
   button(left(transport,56),"Loop",w::Loop,true,state.clipLoop);
-  button(left(transport,90),number(state.clipTime," s"),w::Time);
+  button(left(transport,76),number(state.clipTime," s"),w::Time);
   if(transport.width>=90)button(left(transport,90),number(asset->duration," s"),w::Duration);
   if(transport.width>=88) {button(left(transport,40),"-",w::ZoomOut);button(left(transport,40),"+",w::ZoomIn);}
   }
+  if(!previewFocus) {
   auto body=editor;const float rowsWidth=std::min(185.f,body.width*.27f);
   auto names=left(body,rowsWidth);layout.clipRows=names;
   auto navigation=top(names,34);button(left(navigation,36),"<",w::RowsPrevious,state.clipRow>0);button(left(navigation,36),">",w::RowsNext);
@@ -282,7 +286,38 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       button(top(picker,42),std::to_string(first+i+1)+" · "+layer.name+(layer.muted?" · M":layer.solo?" · S":""),w::LayerChoice+i,true,layer.id==state.clipLayer,UiIcon::AnimationLayers);
     }
   }
-  if(state.clipPoseShown&&state.clipPoseIsolated&&!state.clipExpanded&&state.clipPoseGraph&&state.view&&selected&&selected->path!=resources::AnimationPath::Weights) {
+  }
+  const auto previewTarget=state.clipPreviewTarget?state.clipPreviewTarget:state.clipTarget;
+  const bool targetChannel=previewTarget==state.clipTarget;
+  if(state.clipPoseShown&&!state.clipExpanded&&state.clipPoseGraph&&state.view&&state.clipPoseJoints) {
+    // These are the actual evaluated joint origins. Deliberately draw an
+    // X-ray overlay so covered joints remain discoverable; the hierarchy is
+    // the precise alternative when several joints project onto one pixel.
+    const auto &graph=*state.clipPoseGraph;
+    list.pushClip(layout.viewport);
+    for(const auto bone:state.clipPreviewJoints) {
+      const auto *node=graph.find(bone);if(!node||!graph.activeInHierarchy(bone)||!node->visible)continue;
+      bool visible=true;
+      for(auto parent=node;parent;parent=graph.find(parent->parent))
+        if(!parent->visible||state.sceneHiddenHas(parent->id)||(parent->layer<32&&(state.hiddenLayers&(1u<<parent->layer)))) {visible=false;break;}
+      if(!visible)continue;
+      float world[16];if(!runtime::worldMatrix(graph,bone,world))continue;
+      const auto projected=projectWorldToScreen(*state.view,world+12);if(!projected.valid)continue;
+      const bool active=bone==previewTarget;
+      if(std::binary_search(state.clipPreviewJoints.begin(),state.clipPreviewJoints.end(),node->parent)) {
+        float parent[16];UiPoint a,b;
+        if(runtime::worldMatrix(graph,node->parent,parent)&&projectSegmentToScreen(*state.view,parent+12,world+12,a,b))
+          list.addLine(a,b,active?theme.color.accent:withAlpha(theme.color.text,.55f),active?3:1.5f);
+      }
+      if(layout.viewport.contains(projected.screen)) {
+        const float radius=active?6:3;
+        list.addRect({projected.screen.x-radius-1,projected.screen.y-radius-1,2*radius+2,2*radius+2},theme.color.canvas,radius+1);
+        list.addRect({projected.screen.x-radius,projected.screen.y-radius,2*radius,2*radius},active?theme.color.accent:theme.color.text,radius);
+      }
+    }
+    list.popClip();
+  }
+  if(state.clipPoseShown&&targetChannel&&state.clipPoseIsolated&&!state.clipExpanded&&state.clipPoseGraph&&state.view&&selected&&selected->path!=resources::AnimationPath::Weights) {
     float world[16];EditorGizmoSettings settings;settings.screenLengthPixels=72;
     const auto frame=runtime::worldMatrix(*state.clipPoseGraph,state.clipTarget,world)?
         selected->path==resources::AnimationPath::Scale?buildLocalScaleGizmoFrame(*state.view,world,settings):buildGizmoFrame(*state.view,world+12,settings):EditorGizmoFrame{};
@@ -315,11 +350,24 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       list.addRect({frame.originScreen.x-3,frame.originScreen.y-3,6,6},theme.color.text,3);list.popClip();
     }
   }
-  if(!state.clipDiagnostic.empty()) {
-    const UiRect note{layout.viewport.x+8,layout.viewport.y+8,std::max(0.f,layout.viewport.width-16),32};
-    list.addRect(note,theme.color.surface);label(note,state.clipDiagnostic,theme.color.warning);
+  if(state.clipPoseShown&&!state.clipExpanded&&!layout.viewport.isEmpty()) {
+    auto tools=deflate(UiRect{layout.viewport.x,layout.viewport.y+4,layout.viewport.width,44},{8,0,8,0});
+    list.addRect(tools,theme.color.surface);router.addBlocker(tools);
+    button(left(tools,100),"Juntas",w::PoseJoints,!state.clipPreviewJoints.empty(),state.clipPoseJoints&&!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton);
+    const auto path=targetChannel&&selected?selected->path:resources::AnimationPath::Weights;
+    button(left(tools,44),"",w::PoseTranslate,previewTarget!=0,path==resources::AnimationPath::Translation,UiIcon::EditorMove);
+    button(left(tools,44),"",w::PoseRotate,previewTarget!=0,path==resources::AnimationPath::Rotation,UiIcon::EditorRotate);
+    button(left(tools,44),"",w::PoseScale,previewTarget!=0,path==resources::AnimationPath::Scale,UiIcon::EditorScale);
+    button(left(tools,56),targetChannel&&selected&&selected->path==resources::AnimationPath::Weights?"Pesos":"XYZ",w::PoseNumbers,targetChannel&&selected,state.clipPoseNumbers);
+    button(left(tools,44),"",w::PoseFocus,previewTarget!=0,false,UiIcon::EditorFrameObject);
+    button(left(tools,44),"",w::PoseOrbit,true,state.navigation==EditorNavigationMode::Orbit,UiIcon::EditorOrbit);
+    button(left(tools,44),"",w::PosePan,true,state.navigation==EditorNavigationMode::Pan,UiIcon::EditorPan);
+    button(left(tools,44),"",w::PoseZoom,true,state.navigation==EditorNavigationMode::Zoom,UiIcon::EditorAuthorZoom);
+    button(left(tools,44),"",w::PoseViewport,true,previewFocus,UiIcon::EditorAuthorFrame);
+    const auto *object=state.document?state.document->find(previewTarget):nullptr;
+    label(tools,object?std::string(object->name)+(targetChannel?"":" · escolher canal"):"Toque uma junta ou objeto",theme.color.textDim);
   }
-  if(state.clipPoseShown&&selected&&state.clipPoseCount&&!layout.viewport.isEmpty()) {
+  if(state.clipPoseShown&&targetChannel&&selected&&state.clipPoseCount&&!layout.viewport.isEmpty()) {
     auto actions=deflate(UiRect{layout.viewport.x,layout.viewport.bottom()-44,layout.viewport.width,44},{8,0,8,0});
     list.addRect(actions,theme.color.surface);router.addBlocker(actions);
     button(left(actions,98),"Auto-key",w::PoseAutoKey,true,state.clipPoseAutoKey,UiIcon::AnimationAutoKey);
@@ -328,12 +376,13 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     button(left(actions,94),"Camada",w::PoseIsolate,true,state.clipPoseIsolated,UiIcon::AnimationReferencePose);
     const auto *poseLayer=asset->layer(state.clipLayer);
     label(actions,std::string(state.clipPosePending?"Sem gravar · ":"")+(poseLayer?poseLayer->name:"")+(state.clipPoseIsolated?" · isolada":" · resultado"),state.clipPosePending?theme.color.warning:theme.color.textDim);
+    if(state.clipPoseNumbers) {
     const u32 first=std::min(state.clipPosePage*3,(state.clipPoseCount-1)/3*3),count=std::min(3u,state.clipPoseCount-first);
-    if(layout.viewport.height<180) {
+    {
       // A low landscape viewport cannot fit a vertical XYZ inspector. Keep
       // all three values reachable in one contextual strip, without clipping
       // fields or taking the timeline's working area.
-      auto strip=deflate(UiRect{layout.viewport.x,layout.viewport.y+4,layout.viewport.width,44},{8,0,8,0});
+      auto strip=deflate(UiRect{layout.viewport.x,layout.viewport.y+48,layout.viewport.width,44},{8,0,8,0});
       list.addRect(strip,theme.color.surface);router.addBlocker(strip);
       button(left(strip,34),"",w::RemoveTrack,asset->tracks.size()>1,false,UiIcon::UiRemove);
       const auto *object=state.document?state.document->find(state.clipTarget):nullptr;
@@ -348,19 +397,16 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
         const auto name=selected->path==resources::AnimationPath::Weights?std::to_string(component):std::string(1,"XYZ"[component]);
         button(left(strip,fieldWidth),name+" · "+number(state.clipPoseValues[component],selected->path==resources::AnimationPath::Rotation?" °":selected->path==resources::AnimationPath::Weights?" %":""),w::PoseValue+component);
       }
-    } else {
-    auto panel=UiRect{layout.viewport.right()-286,layout.viewport.y+8,std::min(278.f,layout.viewport.width-16),std::min(40.f+count*44+(state.clipPoseCount>3?34.f:0),layout.viewport.height-16)};
-    panel.x=std::max(panel.x,layout.viewport.x+8);list.addRect(panel,theme.color.surface);router.addBlocker(panel);
-    auto title=top(panel,40);button(left(title,34),"",w::RemoveTrack,asset->tracks.size()>1,false,UiIcon::UiRemove);
-    const auto *object=state.document?state.document->find(state.clipTarget):nullptr;
-    label(title,(object?std::string(object->name):"?")+" / "+pathName(*selected),theme.color.textDim);
-    for(u32 i=0;i<count;++i) {
-      auto row=top(panel,44);const u32 component=first+i;
-      label(left(row,54),selected->path==resources::AnimationPath::Weights?std::to_string(component):std::string(1,"XYZ"[component]),theme.color.textMuted);
-      button(row,number(state.clipPoseValues[component],selected->path==resources::AnimationPath::Rotation?" °":selected->path==resources::AnimationPath::Weights?" %":""),w::PoseValue+component);
     }
-    if(state.clipPoseCount>3) {auto pages=top(panel,34);button(left(pages,44),"<",w::PosePrevious,state.clipPosePage>0);button(left(pages,44),">",w::PoseNext,first+3<state.clipPoseCount);}
     }
+  }
+  if(!state.clipDiagnostic.empty()) {
+    // Context tools must not paint over errors. When XYZ occupies the low
+    // viewport, lend the key area to the diagnostic instead of hiding fields.
+    const float y=layout.viewport.y+(state.clipPoseShown?state.clipPoseNumbers?92.f:48.f:8.f);
+    const bool room=y+32<=layout.viewport.bottom()-(state.clipPoseShown?44.f:0.f);
+    const UiRect note{area.x+8,room?y:std::max(layout.viewport.bottom()+42,area.bottom()-32),std::max(0.f,area.width-16),32};
+    list.addRect(note,theme.color.surface);label(note,state.clipDiagnostic,theme.color.warning);
   }
   if(state.clipAuthoringPicker&&state.document) {
     const auto *branch=state.document->find(state.clipAuthoringPicker==2?state.clipTargetNode:state.clipTargetBranch);

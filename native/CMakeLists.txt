@@ -1032,8 +1032,16 @@ if(NOT ANDROID)
   target_include_directories(aether_animation_clip_editor_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_clip_editor_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  # Reuse the environment integration scenarios without rebuilding/running the
+  # entire native test catalogue for a sky authoring change.
+  add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_runtime_environment.cpp)
+  target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   if(MINGW)
     target_compile_options(aether_animation_clip_editor_tests PRIVATE -Wa,-mbig-obj -g1)
+    target_compile_options(aether_environment_authoring_tests PRIVATE -Wa,-mbig-obj -g1)
   endif()
   if(WIN32)
     add_library(aether_animation_authoring_sdk_bridge SHARED ../tests/native/animation_authoring_sdk_bridge.cpp)

@@ -230,6 +230,27 @@ AE_TEST(environment_profile_v2_keeps_physical_atmosphere_defaults) {
                  "perfil legado recebe padrões terrestres sem mudar o céu selecionado");
 }
 
+AE_TEST(daylight_authoring_colours_survive_profile_archive_and_runtime_resolution) {
+  EditorDocument document;scene::Environment environment;
+  AE_EXPECT_TRUE(environment.values.sky==renderer::SkyModel::Atmosphere&&
+      environment.values.skyZenith[2]>.6f&&environment.values.ground[2]>.4f&&
+      environment.values.skyHorizon[0]>environment.values.skyZenith[0],"new procedural environments use a brighter blue daytime palette");
+  resources::EnvironmentProfile profile;profile.guid=resources::assetGuidFromSeed("daylight-profile");
+  profile.name="Dia claro";profile.values=environment.values;resources::EnvironmentProfile restored;
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(),restored),"profile roundtrip");
+  const auto id=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Céu autorado");
+  auto value=*document.find(id);auto *component=static_cast<scene::Environment*>(value.components.add(scene::Environment::descriptor));
+  component->values=restored.values;
+  // An existing project's deliberately dark colour must remain authored data.
+  component->values.skyZenith[0]=.025f;component->values.skyZenith[1]=.10f;component->values.skyZenith[2]=.32f;
+  AE_EXPECT_TRUE(document.applyEntityValues(id,value),"environment component");
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(document,0),0,reopened),"scene roundtrip");
+  const auto *saved=static_cast<const scene::Environment*>(reopened.find(id)->components.find(scene::Environment::descriptor));
+  AE_EXPECT_TRUE(saved&&saved->values.skyZenith[2]==.32f&&saved->values.ground[2]==.50f,"loading preserves old/custom colours rather than replacing with defaults");
+  renderer::SceneEnvironmentVolume volume;volume.environment=saved->values;const float camera[]{0,0,0};
+  const auto resolved=renderer::resolveSceneEnvironment(std::span(&volume,1),camera,~u32(0));
+  AE_EXPECT_TRUE(resolved.active&&resolved.skyZenith[2]==.32f&&resolved.ground[2]==.50f,"runtime volume resolver consumes the persisted colours");
+}
 AE_TEST(scene_view_default_is_coherent_and_does_not_change_scene_defaults) {
   const renderer::SceneEnvironment authored{};
   const auto view=renderer::defaultSceneViewEnvironment();

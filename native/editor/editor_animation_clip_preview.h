@@ -3,6 +3,9 @@
 #include "runtime/scene_animation.h"
 
 namespace ae::editor {
+// Skin membership comes from real scene references, not joint names or a
+// character-specific rig. Cache this topology until the source scene changes.
+std::vector<runtime::ObjectId> animationPreviewJoints(const runtime::SceneGraph &scene,runtime::ObjectId owner);
 // An isolated evaluated scene, never the source document. Preview uses the
 // same clip sampler/compositor as Play but starts no scripts, events, physics
 // or audio. Cancelling destroys the evaluated copy; there is no fragile list

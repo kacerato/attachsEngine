@@ -42,9 +42,11 @@ struct SceneEnvironment final {
   float hdriExposureEv = 0.0f;
   ToneMapper toneMapper = ToneMapper::Aces;
   float priority = 0.0f;
-  float skyZenith[3]{0.025f, 0.10f, 0.32f};
-  float skyHorizon[3]{0.28f, 0.42f, 0.62f};
-  float ground[3]{0.11f, 0.12f, 0.14f};
+  // Linear-light authoring values for a clear daytime procedural sky. Saved
+  // environments keep their own colours; this does not retint physical skies.
+  float skyZenith[3]{0.14f, 0.38f, 0.72f};
+  float skyHorizon[3]{0.46f, 0.66f, 0.82f};
+  float ground[3]{0.18f, 0.32f, 0.50f};
   float atmosphere = 1.0f;
   float sunDiskDegrees = 0.53f;
   float sunDiskIntensity = 8.0f;

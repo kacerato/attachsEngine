@@ -159,6 +159,9 @@ public:
   bool addAnimationClipTrack(resources::AssetGuid guid,u32 expectedRevision,EditorEntityId owner,EditorEntityId target,
                              resources::AnimationPath path,resources::AnimationRotationMode mode,u64 &trackId,std::string &error);
   bool seekAnimationClip(float seconds,std::string &error);
+  // Selecting a preview target never publishes a resource. Creating a missing
+  // channel is an explicit property action and uses the regular asset journal.
+  bool selectAnimationClipPreviewTarget(EditorEntityId target,resources::AnimationPath path,bool create,std::string &error);
   // A pose draft is evaluated by the production compositor, but publishes no
   // project bytes or history until explicitly recorded. Values use the track's
   // native units (quaternion XYZW, Euler degrees, morph 0..1).
@@ -1761,7 +1764,7 @@ private:
     bool moved = false;
   };
 
-  void buildPickCandidates(const runtime::SceneGraph *source=nullptr,bool occlusion=false);
+  void buildPickCandidates(const runtime::SceneGraph *source=nullptr,bool occlusion=false,EditorEntityId root=0);
   void frameSubtree(EditorEntityId root);
   bool handleViewportPointer(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   bool handlePointerNow(const ui::UiPointerEvent &event);
@@ -2006,6 +2009,8 @@ private:
   bool clipPoseMoved_=false;
   float clipPoseParent_[16]{},clipPoseWorld_[16]{},clipPoseInverse_[16]{},clipPoseAngle_=0,clipPoseTotalAngle_=0;
   bool handleAnimationPoseGizmo(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
+  u64 clipPreviewTopologyRevision_=~u64(0);
+  bool pickAnimationClipPreviewTarget(ui::UiPoint position);
   u64 clipEpoch_=0;u32 clipPointer_=0,clipNumberRevision_=0,clipHandle_=0;
   resources::AssetGuid clipNumberGuid_;
   u64 clipNumberLayer_=0;

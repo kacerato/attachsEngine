@@ -4,8 +4,22 @@
 #include "core/rotation_math.h"
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
 namespace ae::editor {
+std::vector<runtime::ObjectId> animationPreviewJoints(const runtime::SceneGraph &scene,runtime::ObjectId owner) {
+  std::vector<runtime::ObjectId> nodes,result;scene.collectSubtree(owner,nodes);
+  std::unordered_set<runtime::ObjectId> seen;
+  for(const auto id:nodes)if(const auto *object=scene.find(id))
+    for(usize slot=0;slot<object->components.size();++slot) {
+      const auto *component=object->components.at(slot);
+      if(&component->type()!=&scene::SkinnedMesh::descriptor)continue;
+      const auto *skin=static_cast<const scene::SkinnedMesh*>(component);
+      for(const auto bone:skin->bones)if(bone&&scene.exists(bone)&&
+          (bone==owner||scene.isDescendantOf(bone,owner))&&seen.insert(bone).second)result.push_back(bone);
+    }
+  std::sort(result.begin(),result.end());return result;
+}
 bool AnimationClipPreview::findClip(const resources::AssetGuid &guid,runtime::AnimationClipView &out) const {
   if(source_.clipIds.empty()||guid!=source_.clipIds.front())return false;
   out={&source_.clips.front(),&source_,source_.clips.front().name};return true;
