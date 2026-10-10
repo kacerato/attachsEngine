@@ -68,6 +68,34 @@ AE_TEST(gui_runtime_anchors_clipping_capture_and_authoring_isolation) {
   for(const auto &command:drawing.commands())AE_EXPECT_TRUE(command.kind!=UiPrimitive::Rect,"press does not restore background");
   AE_EXPECT_TRUE(r.pointer({17,UiPointerPhase::Up,click})&&r.poll(e)&&e.node==button,"transparent control still emits click");
 }
+AE_TEST(gui_authored_opacity_migrates_composes_and_preserves_input_authority) {
+  GuiDocument authored;GuiHistory history;std::string error;
+  const auto group=authored.create(GuiKind::Panel),button=authored.create(GuiKind::Button,group);
+  auto parent=*authored.find(group);parent.offsets={0,0,300,200};parent.opacity=.5f;
+  AE_EXPECT_TRUE(authored.update(parent,error),"group opacity authored");
+  auto child=*authored.find(button);child.opacity=.4f;child.motion.enabled=child.motion.autoPlay=true;
+  child.motion.from.opacity=child.motion.to.opacity=.5f;child.transitions.enabled=true;
+  child.transitions.normal.pose.opacity=.5f;
+  AE_EXPECT_TRUE(authored.update(child,error),"base, motion and state remain independent");
+  const auto saved=encoded(authored);GuiDocument reopened;std::istringstream bytes(saved);
+  AE_EXPECT_TRUE(reopened.read(bytes,error)&&encoded(reopened)==saved,"AEUI6 opacity roundtrip");
+  GuiRuntime runtime;runtime.load(reopened);runtime.layout({0,0,655,300});
+  AE_EXPECT_TRUE(std::abs(runtime.placement(button)->opacity-.05f)<.00001f,"parent * base * motion * state reaches draw placement");
+  history.begin(authored);parent.opacity=.8f;authored.update(parent,error);history.commit(authored);
+  AE_EXPECT_TRUE(history.undo(authored)&&encoded(authored)==saved&&history.redo(authored)&&authored.find(group)->opacity==.8f,"one opacity edit is reversible");
+  AE_EXPECT_TRUE(runtime.setOpacity(group,0)&&runtime.placement(button)->opacity==0,"runtime update immediately affects descendants");
+  const auto bounds=runtime.placement(button)->bounds;const UiPoint point{bounds.x+10,bounds.y+10};
+  AE_EXPECT_TRUE(runtime.hit(point,true)==0&&!runtime.pointer({73,UiPointerPhase::Down,point}),"fully faded group preserves the existing no-input contract");
+  GuiEvent event;AE_EXPECT_TRUE(!runtime.poll(event),"faded group emits no click");
+  AE_EXPECT_TRUE(!runtime.setOpacity(group,-.1f)&&!runtime.setOpacity(group,1.1f)&&!runtime.setOpacity(group,std::numeric_limits<float>::quiet_NaN())&&runtime.document().find(group)->opacity==0,"invalid opacity is atomic");
+  AE_EXPECT_TRUE(reopened.find(group)->opacity==.5f,"runtime ownership preserves reopened authoring");
+  AE_EXPECT_TRUE(runtime.setOpacity(group,.5f)&&runtime.pointer({73,UiPointerPhase::Down,point})&&runtime.pointer({73,UiPointerPhase::Up,point})&&runtime.poll(event)&&event.node==button,"restoring opacity restores the same control without recreating its identity");
+  std::istringstream rows(saved);std::string line,legacy;std::getline(rows,line);legacy="AEUI 5 2 3\n";
+  std::getline(rows,line);legacy+=line+'\n';
+  while(std::getline(rows,line)){line.resize(line.find_last_of(' '));legacy+=line+'\n';}
+  std::istringstream old(legacy);GuiDocument migrated;
+  AE_EXPECT_TRUE(migrated.read(old,error)&&migrated.find(group)->opacity==1&&migrated.find(button)->opacity==1,"AEUI5 migrates to unit opacity without changing old visual semantics");
+}
 AE_TEST(gui_imgui_real_mesh_pointer_and_ime_input) {
   ImmediateGui im;UiDrawList list;UiFont font;UiIconAtlas icons;std::vector<UiInstance> instances;
   bool clicked=false;char text[64]="original";
@@ -141,6 +169,9 @@ AE_TEST(gui_script_bridge_play_commands_events_and_lifetime) {
     return access.guiCommand(access.context,world,node,operation,reinterpret_cast<const u8*>(text.data()),static_cast<int>(text.size()),value,&state);
   };
   AE_EXPECT_EQ(call(0,0,0,"start"),1,"Find authored UI");const auto world=state.world;
+  AE_EXPECT_TRUE(call(world,button,15)==1&&state.value==1&&call(world,button,16,{},.35f)==1&&state.value==.35f,"append-only opacity commands reach actual Play runtime");
+  AE_EXPECT_TRUE(play.gui().document().find(button)->opacity==.35f&&authored.find(button)->opacity==1,"opacity changes Play copy only");
+  AE_EXPECT_TRUE(call(world,button,16,{},2)==0&&call(world,button,15)==1&&state.value==.35f,"native API refuses invalid value atomically");
   AE_EXPECT_TRUE(state.node==button&&call(world,button,2,"Executar")==1&&authored.find(button)->text=="Button","native API text changes Play copy");
   scene::ScriptGuiProperties properties;
   AE_EXPECT_EQ(access.guiProperties(access.context,world,button,0,&properties),1,"read actual runtime properties");
@@ -227,6 +258,8 @@ AE_TEST(gui_scoped_canvas_abi_routes_independent_handles_and_rejects_retired_lea
   scene::ScriptGuiState state;
   const auto call=[&](u64 instance,u32 op,std::string_view text={}) {return access.guiInstanceRequest(access.context,world,instance,0,button,op,0,&state,sizeof(state),reinterpret_cast<u8*>(const_cast<char*>(text.data())),static_cast<int>(text.size()),0);};
   AE_EXPECT_EQ(call(ia,2,"first only"),1,"scoped ABI mutates first canvas");
+  AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world,ia,0,button,16,0,&state,sizeof(state),nullptr,0,.2f),1,"scoped opacity writes one lease");
+  AE_EXPECT_TRUE(play.sceneGui().find(play.world(),ia)->runtime.document().find(button)->opacity==.2f&&play.sceneGui().find(play.world(),ib)->runtime.document().find(button)->opacity==1&&authored.find(button)->opacity==1,"opacity follows canvas identity without mutating shared source or neighboring lease");
   AE_EXPECT_TRUE(play.sceneGui().find(play.world(),ia)->runtime.document().find(button)->text=="first only"&&play.sceneGui().find(play.world(),ib)->runtime.document().find(button)->text=="Button"&&play.gui().document().find(button)->text=="Button","second instance, source and legacy global runtime remain independent");
   AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world,ia,0,button,1,0,&state,sizeof(state)-1,nullptr,0,0),0,"invalid payload shape rejected before reinterpretation");
   AE_EXPECT_EQ(access.guiInstanceRequest(access.context,world+1,ia,0,button,1,0,&state,sizeof(state),nullptr,0,0),0,"foreign world rejected");
@@ -257,7 +290,7 @@ AE_TEST(gui_image_actions_persistence_duplication_and_lifecycle) {
   r.document().remove(root);AE_EXPECT_TRUE(!r.poll(event),"removed event source cannot escape as a stale handle");
   // Legacy images remain decorative; load defaults do not invent click behavior.
   GuiDocument legacy;legacy.create(GuiKind::Image);std::istringstream lines(encoded(legacy));std::string header,canvas,line;
-  std::getline(lines,header);std::getline(lines,canvas);std::getline(lines,line);for(int i=0;i<54;++i)line.erase(line.find_last_of(' '));
+  std::getline(lines,header);std::getline(lines,canvas);std::getline(lines,line);for(int i=0;i<55;++i)line.erase(line.find_last_of(' '));
   std::istringstream v2("AEUI 2 1 2\n"+canvas+"\n"+line+"\n");
   AE_EXPECT_TRUE(restored.read(v2,error)&&!restored.nodes()[0].interaction.clickable&&!restored.nodes()[0].motion.enabled,"v2 migration preserves existing meaning");
 }

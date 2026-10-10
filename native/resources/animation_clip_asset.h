@@ -1,4 +1,5 @@
 #pragma once
+#include "resources/animation_driver_bindings.h"
 #include "resources/skeletal_animation.h"
 #include <functional>
 #include <optional>
@@ -33,7 +34,7 @@ struct AnimationClipTrack {
   u32 components() const {return path==AnimationPath::Rotation?rotationCurveComponents(rotationMode):path==AnimationPath::Weights?weightCount:3u;}
 };
 struct AnimationClipAsset {
-  static constexpr u32 FormatVersion=4,MaximumLayers=32;
+  static constexpr u32 FormatVersion=7,MaximumLayers=32;
   static constexpr usize MaximumBytes=64*1024*1024,MaximumBindings=4096,MaximumTracks=16384,MaximumKeys=262144;
   AssetGuid guid,source,sourceClip;
   u64 nextId=1;
@@ -42,8 +43,14 @@ struct AnimationClipAsset {
   float duration=0;
   std::vector<AnimationClipBinding> bindings;
   std::vector<AnimationClipTrack> tracks;
+  std::vector<AnimationPropertyTrack> properties;
+  AnimationClipDrivers drivers;
   std::vector<AnimationClipLayer> layers{AnimationClipLayer{}};
   std::vector<AnimationCue> cues;
+  std::vector<AnimationRegion> regions;
+  const AnimationRegion *region(u64 id) const;
+  bool putRegion(AnimationRegion region,u64 &created,std::string &error);
+  bool removeRegion(u64 id,std::string &error);
   const AnimationCue *cue(u64 id) const;
   bool putCue(AnimationCue cue,u64 &created,std::string &error);
   bool removeCue(u64 id,std::string &error);
@@ -80,6 +87,12 @@ struct AnimationClipAsset {
   bool addTrack(AnimationClipBinding binding,AnimationPath path,AnimationRotationMode mode,
                 std::span<const float> values,u64 &trackId,std::string &diagnostic);
   bool removeTrack(u64 trackId,std::string &diagnostic);
+  const AnimationPropertyTrack *propertyTrack(u64 id) const;
+  AnimationPropertyTrack *propertyTrack(u64 id);
+  bool addPropertyTrack(AnimationClipBinding binding,AnimationPropertyAddress address,
+                        AnimationPropertyData data,u64 &created,std::string &diagnostic);
+  bool putPropertyValue(u64 track,float time,const AnimationPropertyValue &,std::string &diagnostic);
+  bool removePropertyTrack(u64 track,std::string &diagnostic);
   bool putPose(u64 trackId,float time,std::span<const float> values,std::string &diagnostic);
   bool eraseKey(u64 trackId,u32 component,u64 keyId,std::string &diagnostic);
   bool retime(double scale,std::string &diagnostic);
@@ -94,4 +107,6 @@ struct AnimationClipAsset {
 bool authorAnimationClip(const AnimationClip &clip,AssetGuid guid,AssetGuid source,AssetGuid sourceClip,
                          std::string_view sourceHash,std::span<const AnimationClipBinding> bindings,
                          AnimationClipAsset &out,std::string &diagnostic);
+bool copyAnimationPropertyRange(AnimationClipAsset &destination,const AnimationClipAsset &excerpt,float at,std::string &diagnostic);
+bool animationPropertyValuesNear(const AnimationPropertyValue &,const AnimationPropertyValue &,double tolerance);
 } // namespace ae::resources

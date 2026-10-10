@@ -1,6 +1,8 @@
 #pragma once
 #include "resources/animation_clip_asset.h"
 #include "runtime/scene_animation.h"
+#include "ui/gui_document.h"
+#include "ui/gui_world.h"
 
 namespace ae::editor {
 // Skin membership comes from real scene references, not joint names or a
@@ -16,6 +18,13 @@ public:
   AnimationClipPreview(const AnimationClipPreview &)=delete;
   AnimationClipPreview &operator=(const AnimationClipPreview &)=delete;
   bool begin(const runtime::SceneGraph &scene,runtime::ObjectId owner,const resources::AnimationClipAsset &clip,std::string &error);
+  using GuiLoader=std::function<bool(resources::AssetGuid,ui::GuiDocument &,std::string &)>;
+  void configureGuiLoader(GuiLoader loader){guiLoader_=std::move(loader);}
+  void configureDriverParameterResolver(runtime::AnimationDriverParameterResolver resolver){driverParameter_=std::move(resolver);}
+  const ui::GuiDocument *guiDocument(runtime::ObjectId object,u64 component) const;
+  void drawGui(ui::UiDrawList &,const ui::UiFontMetrics &,const renderer::PerspectiveFrustum &,
+               const ui::UiRect &viewport,const ui::UiRect &surface);
+  bool readProperty(runtime::ObjectId,const resources::AnimationPropertyAddress &,resources::AnimationPropertyValue &,std::string &);
   bool seek(float seconds,std::string &error);
   // Authoring inspection only: expose one raw layer property in the isolated
   // evaluated copy. Published clips and Play continue to use composition.
@@ -36,5 +45,8 @@ private:
   u64 sceneRevision_=0;
   u32 clipRevision_=0;
   float time_=0;
+  GuiLoader guiLoader_;
+  runtime::AnimationDriverParameterResolver driverParameter_;
+  std::map<std::pair<runtime::ObjectId,u64>,std::unique_ptr<ui::GuiRuntime>> gui_;
 };
 } // namespace ae::editor

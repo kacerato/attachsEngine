@@ -171,6 +171,15 @@ public readonly struct GuiElement
     public float Value { get => Snapshot.Value; set { if(!float.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value));Command(3,value:value); } }
     public bool Visible { get => Snapshot.Visible; set => Command(4,value:value?1:0); }
     public bool Enabled { get => Snapshot.Enabled; set => Command(5,value:value?1:0); }
+    /// <summary>Visual opacity in [0,1], multiplied by ancestors and animation.
+    /// A fully faded hierarchy does not intercept input.</summary>
+    public float Opacity {
+        get => Command(15).Value;
+        set {
+            if(!float.IsFinite(value) || value<0 || value>1)throw new ArgumentOutOfRangeException(nameof(value));
+            Command(16,value:value);
+        }
+    }
     public void SetText(string text) { ArgumentNullException.ThrowIfNull(text);Command(2,text); }
     public string Text { get => Backend.ReadGuiText(World,Id,false);set => SetText(value); }
     public string Name { get => Backend.ReadGuiText(World,Id,true);set { ArgumentException.ThrowIfNullOrEmpty(value);Command(9,value); } }

@@ -63,11 +63,13 @@ private:
   UiDrawList canvasDrawing_;
   UiDrawList toolbarDrawing_;
   UiDrawList propertyIconDrawing_;
+  UiDrawList opacityIconDrawing_;
   UiDrawList behaviorIconDrawing_[2];
   Storage storage_;
   UiRect area_{},canvas_{};
   GuiId selection_=0;
   GuiId propertiesSelection_=0;
+  u32 propertySection_=0;
   GuiNode dragNode_{};
   UiPoint dragStart_{};
   bool previewing_=false, captured_=false, canvasPointer_=false;

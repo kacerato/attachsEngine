@@ -15,13 +15,16 @@ public sealed record ClipSnapshot(AssetGuid Guid, uint Revision, ulong NextId, u
     IReadOnlyList<ClipBinding> Bindings, IReadOnlyList<ClipTrack> Tracks)
 {
     public IReadOnlyList<ClipCue> Cues { get; init; } = Array.Empty<ClipCue>();
+    public IReadOnlyList<ClipRegion> Regions { get; init; } = Array.Empty<ClipRegion>();
+    public IReadOnlyList<ClipTypedTrack> Properties { get; init; } = Array.Empty<ClipTypedTrack>();
+    public ClipDrivers Drivers { get; init; } = ClipDrivers.Empty;
     public IReadOnlyList<ClipLayer> Layers { get; init; } = Array.AsReadOnly(new[] { new ClipLayer(0, "Base", ClipLayerBlend.Override, 1, null, false, false) });
     internal static ClipSnapshot Read(ReadOnlySpan<byte> utf8)
     {
         var reader = new Reader(new UTF8Encoding(false, true).GetString(utf8));
         if (reader.Token() != "AECLIP") throw new InvalidDataException("Unsupported animation snapshot format.");
         var version = reader.UInt();
-        if (version is < 2 or > 4) throw new InvalidDataException("Unsupported animation snapshot format.");
+        if (version is < 2 or > 7) throw new InvalidDataException("Unsupported animation snapshot format.");
         var guid = reader.Guid(); var revision = reader.UInt(); var next = reader.ULong();
         var rate = reader.UInt(); var duration = reader.Float(); var name = reader.String();
         var source = reader.Guid(); var sourceClip = reader.Guid(); var hash = reader.String();
@@ -63,9 +66,76 @@ public sealed record ClipSnapshot(AssetGuid Guid, uint Revision, ulong NextId, u
             for (var i = 0; i < cues.Length; ++i)
                 cues[i] = new(reader.ULong(), reader.Float(), (ClipCueKind)reader.Range(1), reader.String(), reader.UInt(), reader.Double(), reader.Bool(), reader.Bool(), reader.Bool());
         }
+        var regions = Array.Empty<ClipRegion>();
+        if (version >= 5)
+        {
+            regions = new ClipRegion[reader.Count(1024)];
+            for (var i = 0; i < regions.Length; ++i) regions[i] = new(reader.ULong(), reader.String(), reader.Float(), reader.Float());
+        }
+        ClipCurve Curve(int maximum)
+        {
+            var count = reader.Count(maximum); total += count; var keys = new ClipKey[count];
+            for (var k = 0; k < count; ++k)
+                keys[k] = new(reader.ULong(), reader.Float(), reader.Float(), reader.Float(), reader.Float(),
+                    reader.Float(), reader.Float(), (ClipTangent)reader.Range(6), (ClipTangent)reader.Range(6),
+                    reader.Bool(), reader.Bool(), reader.Bool());
+            return new(Array.AsReadOnly(keys));
+        }
+        ClipPropertyAddress Address(ClipPropertyDomain domain, ClipValueKind kind)
+        {
+            var component = reader.ULong(); var expected = reader.UInt(); var type = reader.String(); var property = reader.String();
+            var slot = reader.UInt(); var node = reader.UInt(); var resource = reader.Guid();
+            return new(domain, kind, component, expected, type, property, slot, node, resource);
+        }
+        var properties = Array.Empty<ClipTypedTrack>();
+        if (version >= 6)
+        {
+            properties = new ClipTypedTrack[reader.Count(16384 - tracks.Length)];
+            for (var i = 0; i < properties.Length; ++i)
+            {
+                var id = reader.ULong(); var binding = reader.ULong(); var domain = (ClipPropertyDomain)reader.Range(2);
+                var kind = (ClipValueKind)reader.Range(8); var address = Address(domain, kind); var left = reader.Bool();
+                var curves = new ClipCurve[reader.Count(4)]; var count = reader.Count(262144 - total);
+                for (var c = 0; c < curves.Length; ++c) curves[c] = Curve(262144 - total - count);
+                total += count; var keys = new ClipDiscreteKey[count];
+                for (var k = 0; k < count; ++k)
+                {
+                    var key = reader.ULong(); var time = reader.Float();
+                    var value = kind switch {
+                        ClipValueKind.Boolean => ClipValue.Boolean(reader.Bool()), ClipValueKind.Enumeration => ClipValue.Enumeration(reader.UInt()),
+                        ClipValueKind.Object => ClipValue.Object(reader.ULong()), ClipValueKind.Resource => ClipValue.Resource(reader.Guid()),
+                        _ => throw new InvalidDataException("Continuous property has discrete keys.") };
+                    keys[k] = new(key, time, value);
+                }
+                properties[i] = new(id, binding, address, left, Array.AsReadOnly(curves), Array.AsReadOnly(keys));
+            }
+        }
+        var drivers = ClipDrivers.Empty;
+        if (version >= 7)
+        {
+            var nodes = new ClipDriverNode[reader.Count(512)]; var inputs = new ClipDriverInput[reader.Count(256)];
+            var targets = new ClipDriverTarget[reader.Count(128)]; var outputs = new ulong[targets.Length];
+            for (var i = 0; i < inputs.Length; ++i)
+            {
+                var kind = (ClipDriverInputKind)reader.Range(2); ulong binding = 0; ClipPropertyAddress? address = null;
+                if (kind != ClipDriverInputKind.ClipTime) { binding = reader.ULong(); address = Address((ClipPropertyDomain)reader.Range(2), ClipValueKind.Number); }
+                inputs[i] = new(kind, binding, address, reader.ULong(), reader.Guid());
+            }
+            for (var i = 0; i < targets.Length; ++i) { var binding = reader.ULong(); targets[i] = new(binding, Address((ClipPropertyDomain)reader.Range(2), ClipValueKind.Number)); }
+            var driverKeys = 0;
+            for (var i = 0; i < nodes.Length; ++i)
+            {
+                var id = reader.ULong(); var operation = (ClipDriverOperation)reader.Range(7); var first = reader.ULong(); var second = reader.ULong();
+                var input = reader.UInt(); var a = reader.Double(); var b = reader.Double(); var c = reader.Double(); var d = reader.Double();
+                var curve = Curve(Math.Min(8192 - driverKeys, 262144 - total)); driverKeys += curve.Keys.Count;
+                nodes[i] = new(id, operation, first, second, input, a, b, c, d, curve);
+            }
+            for (var i = 0; i < outputs.Length; ++i) outputs[i] = reader.ULong();
+            drivers = new(Array.AsReadOnly(inputs), Array.AsReadOnly(nodes), Array.AsReadOnly(targets), Array.AsReadOnly(outputs));
+        }
         reader.End();
         return new(guid, revision, next, rate, duration, name, source, sourceClip, hash,
-            Array.AsReadOnly(bindings), Array.AsReadOnly(tracks)) { Layers = Array.AsReadOnly(layers), Cues = Array.AsReadOnly(cues) };
+            Array.AsReadOnly(bindings), Array.AsReadOnly(tracks)) { Layers = Array.AsReadOnly(layers), Cues = Array.AsReadOnly(cues), Regions = Array.AsReadOnly(regions), Properties = Array.AsReadOnly(properties), Drivers = drivers };
     }
     private sealed class Reader(string text)
     {

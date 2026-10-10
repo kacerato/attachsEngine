@@ -13,7 +13,10 @@ namespace ae::resources {
 // aparelho e no host: o decodificador do sistema (`AImageDecoder`) só existe a
 // partir do Android 11 e o mínimo da Astra é o 8 (API 26).
 //
-// Só PNG e JPEG. Os limites valem ANTES de alocar: as dimensões são lidas do
+// PNG, JPEG, KTX2/BasisU, TGA não indexado e ClassicTIFF RGB sem compressão.
+// TIFF genérico é estrito: canal extra indefinido, 16 bits e ICC desconhecido
+// exigem as políticas efetivas do TextureProfile no importador de textura.
+// Os limites valem ANTES de alocar: as dimensões são lidas do
 // cabeçalho e recusadas primeiro, porque o tamanho comprimido de um GLB não diz
 // quanta memória uma imagem pede depois de aberta.
 struct ImageDecodeLimits {
@@ -24,7 +27,7 @@ struct ImageDecodeLimits {
 
 // KTX2 (Entrega 4) só com supercompressão Basis: transcodificado para RGBA8 por
 // Basis Universal v2_50, atrás de resources/gltf_codecs.h.
-enum class ImageContainer : u8 { Unknown, Png, Jpeg, Ktx2, RadianceHdr };
+enum class ImageContainer : u8 { Unknown, Png, Jpeg, Ktx2, RadianceHdr, Tga, Tiff };
 
 struct DecodedImage {
   u32 width = 0, height = 0;
@@ -47,7 +50,8 @@ struct DecodedHdrImage {
 
 ImageContainer detectImageContainer(std::span<const u8> bytes);
 
-// Só o cabeçalho: dimensões de uma imagem que `decodeImageRgba8` aceitaria.
+// Só o cabeçalho: dimensões de um contêiner reconhecido. TIFF ainda pode exigir
+// uma escolha autoral de canal/precisão/cor para que o preparo seja aceito.
 // Serve para planejar memória antes de decodificar qualquer pixel.
 bool readImageDimensions(std::span<const u8> bytes, const ImageDecodeLimits &limits, u32 &width, u32 &height);
 

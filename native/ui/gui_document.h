@@ -105,6 +105,9 @@ struct GuiNode final {
   UiRect offsets{24, 24, 224, 72}; // left, top, right, bottom relative to anchors
   UiColor background = 0xFF343C49, foreground = 0xFFEEF1F5, accent = 0xFF70ACF5;
   float fontSize = 18, radius = 4, value = 0, minimum = 0, maximum = 1;
+  // Multiplicative visual opacity, inherited by descendants. A completely
+  // faded hierarchy does not intercept input, matching motion opacity.
+  float opacity = 1;
   bool visible = true, enabled = true, clipChildren = true;
   GuiSizing sizing{};
   std::string image; // project-relative resource path, never an external filename
@@ -124,6 +127,9 @@ public:
   static constexpr u32 kMaximumActions = 16;
   GuiId create(GuiKind kind, GuiId parent = 0);
   bool update(const GuiNode &node, std::string &error);
+  // Independent scalar update for per-frame animation; no tree validation or
+  // node copy is needed because this property cannot affect structural rules.
+  bool setOpacity(GuiId id,float opacity);
   bool remove(GuiId id);
   GuiId duplicate(GuiId id);
   bool reorder(GuiId id,int direction);
@@ -190,6 +196,7 @@ public:
   bool setValue(GuiId id, float value);
   bool setVisible(GuiId id, bool visible);
   bool setEnabled(GuiId id, bool enabled);
+  bool setOpacity(GuiId id, float opacity);
   bool poll(GuiEvent &event);
   u32 droppedEvents() const noexcept { return droppedEvents_; }
   static constexpr u32 kMaximumPointers=32;

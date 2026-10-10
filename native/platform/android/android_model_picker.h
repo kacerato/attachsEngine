@@ -1,6 +1,7 @@
 #pragma once
 #include "core/base.h"
 #include <string>
+#include <memory>
 #include <vector>
 
 namespace ae::platform::android {
@@ -37,6 +38,7 @@ struct ModelPickerResult {
     i64 bytes = -1;
   };
   bool folder = false;
+  bool package = false;
   std::string folderName, mainRelative;
   std::vector<FolderFile> folderFiles;
 };
@@ -49,7 +51,7 @@ bool modelPickPending();
 // Devolve e CONSOME o resultado, quando há um.
 bool takeModelPickResult(ModelPickerResult &out);
 // Seletor de PASTA (S0). O resultado chega por `takeModelPickResult` com `folder`.
-void requestFolderPick();
+void requestFolderPick(bool package = false);
 
 // Cópia dos arquivos de uma pasta listada para o preparo do projeto. `sources`
 // são caminhos da listagem; `targets`, caminhos relativos a `destination` (já
@@ -66,7 +68,9 @@ struct FolderCopyState {
   std::vector<std::string> sha256; // um por arquivo, na ordem do pedido
   std::string diagnostic;
 };
-u64 requestFolderCopy(FolderCopyRequest request);
+// The lease keeps private staging alive until Java closes its streams, even
+// after cancellation releases the editor worker. Zero means a copy is closing.
+u64 requestFolderCopy(FolderCopyRequest request,std::shared_ptr<void> stagingLease = {});
 // Falso quando o token não é mais o da cópia atual.
 bool folderCopyState(u64 token, FolderCopyState &out);
 void cancelFolderCopy(u64 token);

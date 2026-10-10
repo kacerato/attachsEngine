@@ -62,7 +62,8 @@ bool AnimationClipAsset::valid(std::string *diagnostic) const {
     return fail(diagnostic,"Identidade, nome, duração ou taxa do clipe inválidos");
   if(source.valid()!=sourceClip.valid()||(source.valid()?!hashValid(sourceHash):!sourceHash.empty()))
     return fail(diagnostic,"Vínculo ou hash da origem inválido");
-  if(bindings.empty()||bindings.size()>MaximumBindings||tracks.empty()||tracks.size()>MaximumTracks)
+  if(bindings.empty()||bindings.size()>MaximumBindings||(tracks.empty()&&properties.empty())||
+     tracks.size()>MaximumTracks||properties.size()>MaximumTracks-tracks.size())
     return fail(diagnostic,"Quantidade de bindings ou canais inválida");
   std::unordered_set<u64> ids,bindingIds;
   std::unordered_set<std::string> paths;
@@ -70,6 +71,8 @@ bool AnimationClipAsset::valid(std::string *diagnostic) const {
   auto idValid=[&](u64 id){return id&&id<nextId&&ids.insert(id).second;};
   if(!validAnimationCues(cues,duration))return fail(diagnostic,"Eventos ou marcadores invalidos");
   for(const auto &cue:cues)if(!idValid(cue.id))return fail(diagnostic,"Identidade de evento duplicada ou fora do alocador");
+  if(!validAnimationRegions(regions,duration))return fail(diagnostic,"Regiões inválidas, sem duração ou fora do clipe");
+  for(const auto &region:regions)if(!idValid(region.id))return fail(diagnostic,"Identidade de região duplicada ou fora do alocador");
   if(layers.empty()||layers.size()>MaximumLayers||layers.front().id!=0)
     return fail(diagnostic,"Camada base ausente ou limite de camadas excedido");
   std::unordered_set<u64> layerIds{0};
@@ -123,6 +126,23 @@ bool AnimationClipAsset::valid(std::string *diagnostic) const {
     const auto base=baseDimensions.find({t.binding,static_cast<u8>(t.path)});
     if(base==baseDimensions.end()||base->second!=t.weightCount)return fail(diagnostic,"Canal de camada exige propriedade base compatível");
   }
+  std::unordered_set<std::string> propertyTargets;
+  for(const auto &track:properties) {
+    std::string error;
+    if(!idValid(track.id)||!bindingIds.contains(track.binding)||!validAnimationPropertyAddress(track.address)||
+       track.address.kind!=track.data.kind||!validAnimationPropertyData(track.data,duration,error)||
+       !propertyTargets.insert(std::to_string(track.binding)+":"+animationPropertyIdentity(track.address)).second)
+      return fail(diagnostic,"Canal de propriedade inválido, duplicado ou sem binding");
+    const auto addKey=[&](u64 id) {if(total>=MaximumKeys||!idValid(id))return false;++total;return true;};
+    for(const auto &curve:track.data.curves)for(const auto &key:curve.keys)if(!addKey(key.id))return fail(diagnostic,"ID ou orçamento de chave tipada inválido");
+    for(const auto &key:track.data.keys)if(!addKey(key.id))return fail(diagnostic,"ID ou orçamento de chave discreta inválido");
+  }
+  CompiledAnimationDriverBindings driverBindings;std::string driverError;
+  if(!compileAnimationDriverBindings(drivers,bindings,driverBindings,driverError)){if(diagnostic)*diagnostic=driverError;return false;}
+  for(const auto &node:drivers.graph.nodes) {
+    if(!idValid(node.id))return fail(diagnostic,"Identidade de node de driver duplicada ou fora do alocador");
+    for(const auto &key:node.curve.keys)if(total>=MaximumKeys||!idValid(key.id))return fail(diagnostic,"Identidade ou orçamento de chave de driver inválido");else ++total;
+  }
   return true;
 }
 std::string AnimationClipAsset::serialize() const {
@@ -143,6 +163,11 @@ std::string AnimationClipAsset::serialize() const {
   }
   out<<cues.size()<<'\n'<<std::setprecision(std::numeric_limits<double>::max_digits10);
   for(const auto &c:cues)out<<c.id<<' '<<c.time<<' '<<static_cast<u32>(c.kind)<<' '<<std::quoted(c.name)<<' '<<c.tag<<' '<<c.value<<' '<<c.forward<<' '<<c.reverse<<' '<<c.enabled<<'\n';
+  out<<regions.size()<<'\n';
+  for(const auto &r:regions)out<<r.id<<' '<<std::quoted(r.name)<<' '<<r.start<<' '<<r.end<<'\n';
+  out<<properties.size()<<'\n'<<std::setprecision(std::numeric_limits<float>::max_digits10);
+  for(const auto &track:properties)writeAnimationPropertyTrack(out,track);
+  out<<std::setprecision(std::numeric_limits<double>::max_digits10);writeAnimationClipDrivers(out,drivers);
   return out.str();
 }
 bool AnimationClipAsset::deserialize(std::string_view text,AnimationClipAsset &out,std::string *diagnostic) {
@@ -171,7 +196,7 @@ bool AnimationClipAsset::deserialize(std::string_view text,AnimationClipAsset &o
       l.blend=static_cast<AnimationAuthorBlend>(blend);l.muted=mute!=0;l.solo=solo!=0;
     }
   }
-  if(!(in>>count)||!count||count>MaximumTracks)return fail(diagnostic,"Quantidade de canais inválida");
+  if(!(in>>count)||(!count&&version<6)||count>MaximumTracks)return fail(diagnostic,"Quantidade de canais inválida");
   value.tracks.resize(count);
   for(auto &t:value.tracks) {
     u32 path=0,override=0,rotation=0;usize components=0;
@@ -192,13 +217,24 @@ bool AnimationClipAsset::deserialize(std::string_view text,AnimationClipAsset &o
       c.kind=static_cast<AnimationCueKind>(kind);c.forward=forward;c.reverse=reverse;c.enabled=enabled;
     }
   }
+  if(version>=5) {
+    if(!(in>>count)||count>MaximumAnimationRegions)return fail(diagnostic,"Quantidade de regiões inválida");
+    value.regions.resize(count);
+    for(auto &r:value.regions)if(!(in>>r.id>>std::quoted(r.name)>>r.start>>r.end))return fail(diagnostic,"Região incompleta");
+  }
+  if(version>=6) {
+    if(!(in>>count)||count>MaximumTracks-value.tracks.size())return fail(diagnostic,"Quantidade de propriedades tipadas inválida");
+    value.properties.resize(count);usize budget=MaximumKeys-total;std::string error;
+    for(auto &track:value.properties)if(!readAnimationPropertyTrack(in,track,budget,error)) {if(diagnostic)*diagnostic=error;return false;}
+  }
+  if(version>=7) {std::string error;if(!readAnimationClipDrivers(in,value.drivers,error)){if(diagnostic)*diagnostic=error;return false;}}
   in>>std::ws;if(!in.eof())return fail(diagnostic,"Dados extras após o clipe");
   if(!value.valid(diagnostic))return false;
   out=std::move(value);return true;
 }
 bool AnimationClipAsset::compile(AnimationClip &out,std::string *diagnostic) const {
   if(!valid(diagnostic))return false;
-  AnimationClip value;value.name=name;value.duration=duration;value.cues=cues;value.channels.reserve(std::count_if(tracks.begin(),tracks.end(),[](const auto &t){return !t.layer;}));
+  AnimationClip value;value.name=name;value.duration=duration;value.cues=cues;value.regions=regions;value.channels.reserve(std::count_if(tracks.begin(),tracks.end(),[](const auto &t){return !t.layer;}));
   std::map<std::tuple<u64,u64,u8>,const AnimationClipTrack*> channels;
   for(const auto &t:tracks)channels.emplace(std::tuple{t.layer,t.binding,static_cast<u8>(t.path)},&t);
   const bool solo=std::any_of(layers.begin(),layers.end(),[](const auto &l){return l.solo&&!l.muted;});
@@ -228,6 +264,17 @@ bool AnimationClipAsset::compile(AnimationClip &out,std::string *diagnostic) con
     if(!validAnimationChannel(c))return fail(diagnostic,"Canal não pode ser publicado ao runtime");
     value.channels.push_back(std::move(c));
   }
+  for(const auto &track:properties) {
+    const auto binding=std::find_if(bindings.begin(),bindings.end(),[&](const auto &entry){return entry.id==track.binding;});
+    CompiledAnimationPropertyTrack target;target.node=static_cast<u32>(binding-bindings.begin());target.address=track.address;std::string error;
+    if(!compileAnimationProperty(track.data,duration,target.data,error)) {if(diagnostic)*diagnostic=error;return false;}
+    value.properties.push_back(std::move(target));
+  }
+  if(!drivers.empty()) {
+    auto compiled=std::make_shared<CompiledAnimationDriverBindings>();std::string error;
+    if(!compileAnimationDriverBindings(drivers,bindings,*compiled,error)){if(diagnostic)*diagnostic=error;return false;}
+    value.drivers=std::move(compiled);
+  }
   out=std::move(value);return true;
 }
 bool AnimationClipAsset::edit(u32 expectedRevision,const std::function<bool(AnimationClipAsset &)> &change,std::string &diagnostic) {
@@ -244,20 +291,37 @@ bool AnimationClipAsset::edit(u32 expectedRevision,const std::function<bool(Anim
   if(!candidate.valid(&diagnostic))return false;
   std::unordered_map<u64,u32> previous;
   for(const auto &c:cues)previous.emplace(c.id,4);
+  for(const auto &r:regions)previous.emplace(r.id,5);
   for(const auto &l:layers)if(l.id)previous.emplace(l.id,3);
   for(const auto &b:bindings)previous.emplace(b.id,0);
   for(const auto &t:tracks) {
     previous.emplace(t.id,1);for(const auto &c:t.curves)for(const auto &k:c.keys)previous.emplace(k.id,2);
   }
+  for(const auto &track:properties) {
+    previous.emplace(track.id,6);
+    for(const auto &curve:track.data.curves)for(const auto &key:curve.keys)previous.emplace(key.id,2);
+    for(const auto &key:track.data.keys)previous.emplace(key.id,2);
+  }
+  for(const auto &node:drivers.graph.nodes) {previous.emplace(node.id,7);for(const auto &key:node.curve.keys)previous.emplace(key.id,2);}
   auto unchangedRole=[&](u64 id,u32 role) {
     const auto old=previous.find(id);return old==previous.end()?id>=nextId:old->second==role;
   };
   for(const auto &c:candidate.cues)if(!unchangedRole(c.id,4))return fail(&diagnostic,"Evento reutiliza identidade retirada");
+  for(const auto &r:candidate.regions)if(!unchangedRole(r.id,5))return fail(&diagnostic,"Região reutiliza identidade retirada");
   for(const auto &b:candidate.bindings)if(!unchangedRole(b.id,0))return fail(&diagnostic,"Binding reutiliza uma identidade retirada");
   for(const auto &l:candidate.layers)if(l.id&&!unchangedRole(l.id,3))return fail(&diagnostic,"Camada reutiliza uma identidade retirada");
   for(const auto &t:candidate.tracks) {
     if(!unchangedRole(t.id,1))return fail(&diagnostic,"Canal reutiliza uma identidade retirada");
     for(const auto &c:t.curves)for(const auto &k:c.keys)if(!unchangedRole(k.id,2))return fail(&diagnostic,"Chave reutiliza uma identidade retirada");
+  }
+  for(const auto &track:candidate.properties) {
+    if(!unchangedRole(track.id,6))return fail(&diagnostic,"Propriedade reutiliza identidade retirada");
+    for(const auto &curve:track.data.curves)for(const auto &key:curve.keys)if(!unchangedRole(key.id,2))return fail(&diagnostic,"Chave tipada reutiliza identidade retirada");
+    for(const auto &key:track.data.keys)if(!unchangedRole(key.id,2))return fail(&diagnostic,"Chave discreta reutiliza identidade retirada");
+  }
+  for(const auto &node:candidate.drivers.graph.nodes) {
+    if(!unchangedRole(node.id,7))return fail(&diagnostic,"Driver reutiliza identidade retirada");
+    for(const auto &key:node.curve.keys)if(!unchangedRole(key.id,2))return fail(&diagnostic,"Curva de driver reutiliza identidade retirada");
   }
   if(candidate.serialize()==serialize())return true;
   candidate.revision=revision+1;*this=std::move(candidate);return true;
@@ -376,12 +440,15 @@ bool authorAnimationClip(const AnimationClip &clip,AssetGuid guid,AssetGuid sour
                          std::string_view sourceHash,std::span<const AnimationClipBinding> bindings,
                          AnimationClipAsset &out,std::string &diagnostic) {
   diagnostic.clear();AnimationClipAsset result;result.guid=guid;result.source=source;result.sourceClip=sourceClip;
+  if(!clip.properties.empty()||clip.drivers)return fail(&diagnostic,"Extração importada não pode descartar propriedades ou drivers; use o recurso AECLIP original");
   result.sourceHash=sourceHash;result.name=clip.name.empty()?"Clipe":clip.name;result.duration=clip.duration;
   if(bindings.empty()||bindings.size()>AnimationClipAsset::MaximumBindings||clip.channels.empty()||clip.channels.size()>AnimationClipAsset::MaximumTracks)
     return fail(&diagnostic,"Origem sem bindings/canais ou excedendo o limite");
   result.bindings.assign(bindings.begin(),bindings.end());for(auto &b:result.bindings)b.id=result.nextId++;
   if(!validAnimationCues(clip.cues,clip.duration))return fail(&diagnostic,"Eventos da origem invalidos");
   result.cues=clip.cues;for(auto &c:result.cues)c.id=result.nextId++;
+  if(!validAnimationRegions(clip.regions,clip.duration))return fail(&diagnostic,"Regiões da origem inválidas");
+  result.regions=clip.regions;for(auto &r:result.regions)r.id=result.nextId++;
   usize total=0;
   for(const auto &c:clip.channels) {
     if(!c.layerSources.empty())return fail(&diagnostic,"Composição exige o recurso de autoria original, não uma extração de canais compilados");
@@ -422,6 +489,29 @@ namespace ae::resources {
 const AnimationCue *AnimationClipAsset::cue(u64 id) const {
   for(const auto &c:cues)if(c.id==id)return &c;
   return nullptr;
+}
+const AnimationRegion *AnimationClipAsset::region(u64 id) const {
+  for(const auto &r:regions)if(r.id==id)return &r;
+  return nullptr;
+}
+bool AnimationClipAsset::putRegion(AnimationRegion value,u64 &created,std::string &error) {
+  error.clear();if(!valid(&error))return false;
+  auto candidate=*this;
+  if(value.id) {
+    auto found=std::find_if(candidate.regions.begin(),candidate.regions.end(),[&](const auto &r){return r.id==value.id;});
+    if(found==candidate.regions.end())return fail(&error,"Região não pertence ao clipe");
+    *found=value;
+  } else {
+    if(candidate.regions.size()>=MaximumAnimationRegions||candidate.nextId>=static_cast<u64>(std::numeric_limits<i64>::max()))return fail(&error,"Limite de regiões ou identidades excedido");
+    value.id=candidate.nextId++;candidate.regions.push_back(value);
+  }
+  std::sort(candidate.regions.begin(),candidate.regions.end(),[](const auto &a,const auto &b){return a.start!=b.start?a.start<b.start:a.id<b.id;});
+  if(!candidate.valid(&error))return false;
+  created=value.id;*this=std::move(candidate);return true;
+}
+bool AnimationClipAsset::removeRegion(u64 id,std::string &error) {
+  error.clear();if(!valid(&error)||!region(id)) {if(error.empty())error="Região não pertence ao clipe";return false;}
+  std::erase_if(regions,[&](const auto &r){return r.id==id;});return true;
 }
 bool AnimationClipAsset::putCue(AnimationCue value,u64 &created,std::string &error) {
   error.clear();if(!valid(&error))return false;

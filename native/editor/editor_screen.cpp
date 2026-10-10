@@ -30,6 +30,7 @@
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
+#include "editor/editor_texture_import_screen.h"
 #include "editor/editor_number_text.h"
 #include "editor/editor_script_templates.h"
 #include "editor/editor_scene_template.h"
@@ -1947,6 +1948,13 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
       builder.label(button,item.first,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(button,widgetId(item.second));
     }
+  } else if(!several && builder.state.selectedFile.ends_with(".mat")) {
+    auto actions=takeBottom(content,48);
+    auto button=deflate(actions,UiInsets::all(3));
+    builder.list.addRect(button,theme.color.raised,theme.radius.control);
+    builder.label(button,"Converter material Unity",theme.color.text,theme.type.caption,UiAlign::Center);
+    if(builder.state.workspace!=EditorWorkspace::Play)
+      builder.router.addRegion(button,widgetId(EditorWidget::AssetReimport));
   } else if(selectedRecord&&selectedRecord->type==resources::AssetType::Prefab) {
     auto actions=takeBottom(content,40);
     auto button=deflate(actions,UiInsets::all(3));
@@ -2509,6 +2517,26 @@ void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   builder.label({inner.x,inner.y+inner.height*.5f,inner.width,inner.height*.5f},state.materialInspectorPath.c_str(),theme.color.textMuted,theme.type.caption);
   list.popClip();
   if(state.texturePicker) {buildTexturePicker(builder,content);return;}
+  if(!several && state.workspace!=EditorWorkspace::Play) {
+    auto actions=takeTop(content,48);
+    const auto *target=state.document?state.document->find(state.selection):nullptr;
+    const auto *render=target?meshRenderer(*target):nullptr;
+    const bool canPreview=state.document&&std::any_of(state.materialInspectorObjects.begin(),state.materialInspectorObjects.end(),[&](EditorEntityId id) {
+      return id==state.selection || state.document->isDescendantOf(id,state.selection);
+    });
+    const auto action=[&](UiRect hit,const char *text,EditorWidget widget,UiIcon icon) {
+      list.addRect(deflate(hit,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      if(icon!=UiIcon::None) list.addImage(centred({hit.x,hit.y,hit.width,24},18,18),static_cast<UiImageId>(icon),theme.color.text);
+      builder.label(icon==UiIcon::None?hit:UiRect{hit.x,hit.y+24,hit.width,hit.height-24},text,theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(hit,widgetId(widget));
+    };
+    if(canPreview)action(takeRight(actions,52),"Objeto",EditorWidget::MaterialInspectorPreview,UiIcon::MaterialsObjectPreview);
+    action(takeRight(actions,52),"3D",EditorWidget::MaterialInspectorStandalone,UiIcon::AssetsMaterial);
+    if(render&&render->slotCount()) {
+      const auto label="Aplicar no slot "+std::to_string(std::min(state.materialSlot,render->slotCount()-1)+1);
+      action(actions,label.c_str(),EditorWidget::MaterialInspectorApply,UiIcon::None);
+    } else builder.label(actions,"Material",theme.color.textDim,theme.type.caption);
+  }
   buildMaterialSlots(builder,content);
 }
 
@@ -7785,6 +7813,39 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   auto &list=builder.list;auto &router=builder.router;
   using Tab=EditorScreenState::ImportTab;
 
+  const auto nearlyEqual=[](float a,float b) {return std::fabs(a-b)<=std::max(std::fabs(a),std::fabs(b))*1e-5f;};
+  // Tem de ser a mesma pergunta que a sessão faz (`sameImportPreparation`):
+  // campo do perfil fora desta conta deixava publicar a prévia antiga com o
+  // perfil novo na tela — o autor pedia normais calculadas e recebia as do arquivo.
+  const bool profileApplied=nearlyEqual(state.importScale,state.importPreparedScale) &&
+                            state.importTextureDimension==state.importPreparedTextureDimension &&
+                            state.importNormals==state.importPreparedNormals &&
+                            state.importNormalWeighting==state.importPreparedNormalWeighting &&
+                            state.importSmoothingAngle==state.importPreparedSmoothingAngle &&
+                            state.importTangents==state.importPreparedTangents &&
+                            state.importCameras==state.importPreparedCameras &&
+                            state.importLights==state.importPreparedLights &&
+                            state.importTextureCompression==state.importPreparedTextureCompression &&
+                            state.importGenerateLods==state.importPreparedGenerateLods &&
+                            state.importLodLevels==state.importPreparedLodLevels &&
+                            state.importOptimizeOrder==state.importPreparedOptimizeOrder &&
+                            state.importFbxDeformation==state.importPreparedFbxDeformation &&
+                            state.importFbxReduceWeights==state.importPreparedFbxReduceWeights &&
+                            state.importFbxApproximateSteps==state.importPreparedFbxApproximateSteps &&
+                            state.importFbxBakeRate==state.importPreparedFbxBakeRate;
+
+  const bool focal=state.workspace==EditorWorkspace::Library&&!state.importTexture&&!state.importEnvironment&&!state.importBatch;
+  auto sourceExtension=std::filesystem::path(state.importPath).extension().string();
+  std::transform(sourceExtension.begin(),sourceExtension.end(),sourceExtension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+  const bool staticFbx=sourceExtension==".fbx";
+  UiRect focalActions{};
+  if(focal) {
+    auto header=takeTop(content,48);focalActions=takeRight(header,std::min(304.0f,header.width*.52f));
+    list.addImage(centred(takeLeft(header,28),20,20),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.text);
+    const auto slash=state.importPath.rfind('/');const auto name=state.importPath.substr(slash==state.importPath.npos?0:slash+1);
+    builder.label(takeTop(header,24),name.empty()?"Importar modelo":name,theme.color.text,theme.type.cardName);
+    builder.label(header,state.importStatus,theme.color.accent,theme.type.caption);
+  } else {
   auto header=takeTop(content,kPanelHeaderHeight);
   list.addImage(centred(takeLeft(header,26.0f),18.0f,18.0f),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.text);
   const float half=header.height*.5f;
@@ -7792,6 +7853,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   builder.label({header.x,header.y+half,header.width,half},state.importPath.empty()?"Escolhendo arquivo…":state.importPath,
                 theme.color.textDim,theme.type.caption); // caption: o caminho mantém a caixa do nome do arquivo
   builder.label(takeTop(content,24),state.importStatus,theme.color.accent,theme.type.caption);
+  }
 
   if(state.importBatch) {
     const auto cancel=deflate(takeBottom(content,40),UiInsets::all(2));
@@ -7803,11 +7865,11 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     return;
   }
   if(state.importTexture) {
-    auto actions=takeBottom(content,40);
+    auto actions=focal?focalActions:takeBottom(content,40);
     const bool recipeReady=resources::sameTexturePreparation(state.textureImportSettings,state.textureImportPreparedSettings);
     const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.36f:actions.width),UiInsets::all(2));
     list.addRect(cancel,theme.color.raised,theme.radius.control);
-    builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.label(cancel,focal?"Voltar":state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
     if(state.importReady) {
       const auto accept=deflate(actions,UiInsets::all(2));
@@ -7870,10 +7932,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   }
 
   if(state.importEnvironment) {
-    auto actions=takeBottom(content,40);
+    auto actions=focal?focalActions:takeBottom(content,40);
     const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.36f:actions.width),UiInsets::all(2));
     list.addRect(cancel,theme.color.raised,theme.radius.control);
-    builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.label(cancel,focal?"Voltar":state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
     if(state.importReady) {
       const auto accept=deflate(actions,UiInsets::all(2));
@@ -7911,53 +7973,52 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   const struct {const char *label;Tab tab;EditorWidget widget;} tabs[]{
       {"Resumo",Tab::Summary,EditorWidget::ImportTabSummary},{"Estrutura",Tab::Structure,EditorWidget::ImportTabStructure},
       {"Malhas",Tab::Meshes,EditorWidget::ImportTabMeshes},
-      {"Texturas",Tab::Textures,EditorWidget::ImportTabTextures},{"Perfil",Tab::Profile,EditorWidget::ImportTabProfile}};
-  auto tabRow=takeTop(content,32);
-  const float tabWidth=tabRow.width/static_cast<float>(std::size(tabs));
+      {"Texturas",Tab::Textures,EditorWidget::ImportTabTextures},{"Perfil",Tab::Profile,EditorWidget::ImportTabProfile},
+      {"Rig/Takes",Tab::Rig,EditorWidget::ImportTabRig}};
+  auto tabRow=focal?takeBottom(content,48):takeTop(content,32);
+  const float tabWidth=tabRow.width/static_cast<float>(state.importPublishedView?1:std::size(tabs));
   for(const auto &tab:tabs) {
-    const auto cell=deflate(takeLeft(tabRow,tabWidth),UiInsets::all(2));
+    if(state.importPublishedView&&tab.tab!=Tab::Rig)continue;
+    const auto hit=takeLeft(tabRow,tabWidth);
+    const auto cell=deflate(hit,UiInsets::all(2));
     const bool on=state.importTab==tab.tab;
     list.addRect(cell,on?withAlpha(theme.color.accent,.18f):theme.color.raised,theme.radius.control);
     builder.label(cell,tab.label,on?theme.color.accent:theme.color.text,theme.type.caption,UiAlign::Center);
-    router.addRegion(cell,widgetId(tab.widget));
+    router.addRegion(focal?hit:cell,widgetId(tab.widget));
   }
   takeTop(content,6);
 
-  const auto nearlyEqual=[](float a,float b) {return std::fabs(a-b)<=std::max(std::fabs(a),std::fabs(b))*1e-5f;};
-  // Tem de ser a mesma pergunta que a sessão faz (`sameImportPreparation`):
-  // campo do perfil fora desta conta deixava publicar a prévia antiga com o
-  // perfil novo na tela — o autor pedia normais calculadas e recebia as do arquivo.
-  const bool profileApplied=nearlyEqual(state.importScale,state.importPreparedScale) &&
-                            state.importTextureDimension==state.importPreparedTextureDimension &&
-                            state.importNormals==state.importPreparedNormals &&
-                            state.importNormalWeighting==state.importPreparedNormalWeighting &&
-                            state.importSmoothingAngle==state.importPreparedSmoothingAngle &&
-                            state.importTangents==state.importPreparedTangents &&
-                            state.importCameras==state.importPreparedCameras &&
-                            state.importLights==state.importPreparedLights &&
-                            state.importTextureCompression==state.importPreparedTextureCompression &&
-                            state.importGenerateLods==state.importPreparedGenerateLods &&
-                            state.importLodLevels==state.importPreparedLodLevels &&
-                            state.importOptimizeOrder==state.importPreparedOptimizeOrder;
-
   // Rodapé: cancelar sempre; publicar só com prévia pronta, perfil aplicado e
   // ambiguidades decididas. Apagado e sem toque até lá.
-  auto actions=takeBottom(content,40);
-  const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.3f:actions.width),UiInsets::all(2));
+  auto actions=focal?focalActions:takeBottom(content,40);
+  const auto cancelHit=takeLeft(actions,(state.importReady||state.importRetryable)?(focal?48.0f:actions.width*.3f):actions.width);
+  const auto cancel=deflate(cancelHit,UiInsets::all(2));
   list.addRect(cancel,theme.color.raised,theme.radius.control);
-  builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
-  router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
-  if(state.importReady) {
+  builder.label(cancel,focal?"Voltar":state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+  router.addRegion(focal?cancelHit:cancel,widgetId(EditorWidget::ImportCancel));
+  if(state.importReady||state.importRetryable) {
     const bool decided=(!state.importAmbiguities || state.importAmbiguityChoice) && profileApplied;
-    const auto resource=deflate(takeLeft(actions,actions.width*.5f),UiInsets::all(2));
-    const auto scene=deflate(actions,UiInsets::all(2));
+    const auto resourceHit=takeLeft(actions,actions.width*.5f),sceneHit=actions;
+    const auto resource=deflate(resourceHit,UiInsets::all(2)),scene=deflate(sceneHit,UiInsets::all(2));
+    const bool recipe=focal&&state.importTab==Tab::Profile;
+    if(recipe) {
+      const bool canApply=!profileApplied||state.importRetryable;
+      list.addRect(resource,canApply?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(resource,"Preparar",canApply?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      list.addRect(scene,theme.color.raised,theme.radius.control);
+      builder.label(scene,"Padrão projeto",theme.color.text,theme.type.caption,UiAlign::Center);
+      if(canApply)router.addRegion(resourceHit,widgetId(EditorWidget::ImportApplyProfile));
+      router.addRegion(sceneHit,widgetId(EditorWidget::ImportSaveDefaultProfile));
+    } else {
+
     list.addRect(resource,theme.color.raised,theme.radius.control);
     builder.label(resource,"Só recurso",decided?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
     list.addRect(scene,decided?theme.color.accent:theme.color.raised,theme.radius.control);
     builder.label(scene,"Na cena",decided?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
     if(decided) {
-      router.addRegion(resource,widgetId(EditorWidget::ImportAccept));
-      router.addRegion(scene,widgetId(EditorWidget::ImportIntoScene));
+      router.addRegion(focal?resourceHit:resource,widgetId(EditorWidget::ImportAccept));
+      router.addRegion(focal?sceneHit:scene,widgetId(EditorWidget::ImportIntoScene));
+    }
     }
     if(state.importAmbiguities) {
       auto choice=takeBottom(content,36);
@@ -7966,7 +8027,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       const auto pill=[&](UiRect rect,const char *label,bool on,EditorWidget widget) {
         list.addRect(rect,on?theme.color.accent:theme.color.raised,theme.radius.control);
         builder.label(rect,label,on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
-        router.addRegion(rect,widgetId(widget));
+        router.addRegion(focal?deflate(rect,UiInsets::all(-2)):rect,widgetId(widget));
       };
       pill(order,"Pela ordem",state.importAmbiguityChoice==1,EditorWidget::ImportMatchInOrder);
       pill(fresh,"Como novos",state.importAmbiguityChoice==2,EditorWidget::ImportTreatAsNew);
@@ -7978,11 +8039,11 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   // Paginação comum às abas de lista. Devolve o intervalo visível.
   const auto paginate=[&](usize count,float rowHeight) {
     u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/rowHeight));
-    if(count>perPage) perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-28)/rowHeight));
+    if(count>perPage) perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-(focal?48:28))/rowHeight));
     const u32 pages=std::max(1u,static_cast<u32>((count+perPage-1)/perPage));
     const u32 page=std::min(state.importPage,pages-1);
     if(pages>1) {
-      auto bar=takeBottom(content,28);
+      auto bar=takeBottom(content,focal?48:28);
       const auto previous=takeLeft(bar,70),next=takeRight(bar,70);
       builder.label(bar,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
       if(page) {builder.label(previous,"Anterior",theme.color.text,theme.type.caption);router.addRegion(previous,widgetId(EditorWidget::ImportPreviousPage));}
@@ -7992,6 +8053,41 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   };
 
   switch(state.importTab) {
+  case Tab::Rig: {
+    const float rowHeight=48;
+    auto rigHeader=takeTop(content,24);
+    list.addImage(centred(takeLeft(rigHeader,28),20,20),static_cast<UiImageId>(UiIcon::AssetsRigBinding),theme.color.text);
+    builder.label(rigHeader,std::to_string(state.importRigJoints)+" juntas · "+std::to_string(state.importRigMorphs)+
+        " alvos morph · "+std::to_string(state.importTakes.size())+" takes",theme.color.textDim,theme.type.caption);
+    if(state.importTakes.empty()) {
+      builder.label(takeTop(content,24),"Nenhum take com canal TRS/morph preparado",theme.color.textMuted,theme.type.caption);break;
+    }
+    const auto takeIndex=std::min<usize>(state.importTake,state.importTakes.size()-1);const auto &take=state.importTakes[takeIndex];
+    auto select=takeTop(content,rowHeight);const auto previous=takeLeft(select,48),next=takeRight(select,48);
+    const auto action=[&](UiRect rect,const char *label,EditorWidget widget,bool enabled) {
+      list.addRect(deflate(rect,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(rect,label,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(enabled)router.addRegion(rect,widgetId(widget));
+    };
+    action(previous,"<",EditorWidget::ImportTakePrevious,takeIndex>0);
+    action(next,">",EditorWidget::ImportTakeNext,takeIndex+1<state.importTakes.size());
+    builder.label(takeTop(select,24),take.name.empty()?"Take "+std::to_string(takeIndex+1):take.name,theme.color.text,theme.type.body,UiAlign::Center);
+    builder.label(select,decimalText(take.duration,2)+" s · "+std::to_string(take.channels)+" canais · "+std::to_string(take.morphChannels)+" morph",
+        theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(state.importPublishedView) {
+      auto bind=takeTop(content,rowHeight);const auto extract=takeRight(bind,std::min(156.f,bind.width*.4f));
+      const auto root=state.importTakeRoot<state.importNodes.size()?state.importNodes[state.importTakeRoot].name:std::string();
+      action(bind,("Origem: "+(root.empty()?std::string("raiz"):root)).c_str(),EditorWidget::ImportTakeRoot,!state.importNodes.empty());
+      action(extract,"Extrair/Editar",EditorWidget::ImportTakeExtract,true);
+    }
+    const auto message=!state.importRigDiagnostic.empty()?state.importRigDiagnostic:state.importPublishedView?
+        "A raiz selecionada na cena precisa corresponder à hierarquia, pose de referência e alvos morph. O clipe extraído abre no editor e mantém a fonte intacta.":
+        "Publique o recurso e selecione uma raiz na cena. Abrir o arquivo registrado oferece extração editável com validação do rig.";
+    const auto lines=wrapText(list,message,content.width,theme.type.caption);const auto [first,last]=paginate(lines.size(),22);
+    list.pushClip(content);for(usize index=first;index<last;++index)builder.label(takeTop(content,22),lines[index],
+        state.importRigDiagnostic.empty()?theme.color.textDim:theme.color.accent,theme.type.caption);list.popClip();
+    break;
+  }
   case Tab::Summary: {
     // O impacto na cena vem depois do resumo da fonte e é refeito a cada nó
     // marcado ou desmarcado na Estrutura; o resumo não muda com isso.
@@ -8006,11 +8102,11 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   case Tab::Structure: {
     if(state.importNodes.empty()) {builder.label(takeTop(content,24),"Sem prévia de estrutura ainda",theme.color.textMuted,theme.type.caption);break;}
     builder.label(takeTop(content,24),std::to_string(state.importNodes.size())+" nó(s) no arquivo",theme.color.textMuted,theme.type.caption);
-    const auto [first,last]=paginate(state.importNodes.size(),24);
+    const auto [first,last]=paginate(state.importNodes.size(),focal?48:24);
     list.pushClip(content);
     for(usize i=first;i<last;++i) {
       const auto &node=state.importNodes[i];
-      auto row=takeTop(content,24);
+      auto row=takeTop(content,focal?48:24);
       const auto hit=row;
       // O interruptor diz "este nó vem para a cena". Filho de nó excluído mostra
       // o estado herdado, apagado e sem toque: desmarcá-lo sozinho não teria
@@ -8048,6 +8144,18 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     };
     if(state.importMeshDetail && state.importMeshSelected<state.importMeshes.size()) {
       const auto &mesh=state.importMeshes[state.importMeshSelected];
+      if(focal) {
+        auto header=takeTop(content,48);const auto back=takeLeft(header,96);
+        builder.label(back,"< Malhas",theme.color.accent,theme.type.caption);router.addRegion(back,widgetId(EditorWidget::ImportMeshClose));
+        builder.label(header,mesh.name,theme.color.text,theme.type.cardName);
+        std::vector<std::string> lines;
+        for(const auto &value:{mesh.counts,mesh.channels,mesh.material,mesh.size,mesh.density,mesh.stretch})
+          if(!value.empty())for(const auto &line:wrapText(list,value,content.width,theme.type.caption))lines.push_back(line);
+        for(const auto &issue:mesh.issues)for(const auto &line:wrapText(list,issue,content.width,theme.type.caption))lines.push_back(line);
+        const auto [first,last]=paginate(lines.size(),24);
+        list.pushClip(content);for(usize i=first;i<last;++i)builder.label(takeTop(content,24),lines[i],theme.color.textDim,theme.type.caption);list.popClip();
+        break;
+      }
       auto header=takeTop(content,28);
       const auto back=takeLeft(header,84);
       builder.label(back,"< Malhas",theme.color.accent,theme.type.caption);
@@ -8135,7 +8243,8 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // cada campo novo do perfil empurrava "Preparar" para fora de uma tela
     // baixa, e um perfil pendente sem o botão de aplicar vira beco sem saída.
     // Os campos ocupam o que sobra acima.
-    const bool canApply=state.importReady && !profileApplied;
+    const bool canApply=(state.importReady||state.importRetryable) && (!profileApplied||state.importRetryable);
+    if(!focal) {
     const auto save=deflate(takeBottom(content,38),UiInsets::all(2));
     const auto apply=deflate(takeBottom(content,38),UiInsets::all(2));
     list.addRect(apply,canApply?theme.color.accent:theme.color.raised,theme.radius.control);
@@ -8145,29 +8254,38 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     builder.label(save,"Salvar como padrão do projeto",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(save,widgetId(EditorWidget::ImportSaveDefaultProfile));
     takeBottom(content,6);
+    }
     // Oito linhas de controle, paginadas como as outras abas: numa tela baixa
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
     enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Streaming,StreamingPriority,Normals,Weighting,Smoothing,
-                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,ProfileRowCount};
-    const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
+                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,FbxDeformation,FbxWeights,FbxSteps,FbxRate,ProfileRowCount};
+    const auto [firstRow,lastRow]=paginate(staticFbx?ProfileRowCount:FbxDeformation,focal?48:40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
+      const bool fbxControl=widget==EditorWidget::ImportFbxDeformation||widget==EditorWidget::ImportFbxWeights||widget==EditorWidget::ImportFbxSteps||widget==EditorWidget::ImportFbxRate;
+      const bool unavailable=(fbxControl&&(!staticFbx||(!state.importFbxDeformation&&widget!=EditorWidget::ImportFbxDeformation)))||(focal&&((staticFbx&&(widget==EditorWidget::ImportTextureCompressionCycle||widget==EditorWidget::ImportTextureStreamingToggle||widget==EditorWidget::ImportTextureStreamingPriorityCycle||widget==EditorWidget::ImportCamerasToggle||widget==EditorWidget::ImportLightsToggle))||
+        (widget==EditorWidget::ImportNormalWeightingCycle&&state.importNormals!=resources::GltfNormalsCalculate)||
+        (widget==EditorWidget::ImportLodLevelsCycle&&!state.importGenerateLods)));
+      if(unavailable) {
+        builder.label(takeLeft(row,row.width*.45f),label,theme.color.textMuted,theme.type.caption);
+        builder.label(row,staticFbx?"Indisponível neste perfil":"Ative a opção principal",theme.color.textMuted,theme.type.caption,UiAlign::Center);return;
+      }
       builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
       const auto cell=deflate(row,UiInsets::all(2));
       list.addRect(cell,theme.color.raised,theme.radius.control);
       builder.label(cell,value,theme.color.text,theme.type.caption,UiAlign::Center);
-      router.addRegion(cell,widgetId(widget));
+      router.addRegion(focal?deflate(cell,UiInsets::all(-2)):cell,widgetId(widget));
     };
     for(usize index=firstRow;index<lastRow;++index) {
-      auto row=takeTop(content,40);
+      auto row=takeTop(content,focal?48:40);
       switch(static_cast<ProfileRow>(index)) {
       case Scale: {
         builder.label(takeLeft(row,row.width*.4f),"Escala",theme.color.text,theme.type.caption);
-        const auto down=deflate(takeLeft(row,36),UiInsets::all(2)),up=deflate(takeRight(row,36),UiInsets::all(2));
+        const auto down=deflate(takeLeft(row,focal?48:36),UiInsets::all(2)),up=deflate(takeRight(row,focal?48:36),UiInsets::all(2));
         for(const auto &[rect,label,widget]:{std::tuple{down,"-",EditorWidget::ImportScaleDown},std::tuple{up,"+",EditorWidget::ImportScaleUp}}) {
           list.addRect(rect,theme.color.raised,theme.radius.control);
           builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
-          router.addRegion(rect,widgetId(widget));
+          router.addRegion(focal?deflate(rect,UiInsets::all(-2)):rect,widgetId(widget));
         }
         builder.label(row,scaleText(state.importScale),theme.color.text,theme.type.body,UiAlign::Center);
         break;
@@ -8184,6 +8302,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       }
       case TextureLabel:builder.label(row,"Textura máxima (px)",theme.color.text,theme.type.caption);break;
       case TextureSteps: {
+        if(focal&&staticFbx) {builder.label(row,"Imagens FBX externas ainda exigem conversão do pacote",theme.color.textMuted,theme.type.caption);break;}
         const struct {u32 value;EditorWidget widget;} steps[]{{256,EditorWidget::ImportTextureDimension256},{512,EditorWidget::ImportTextureDimension512},
                                                              {1024,EditorWidget::ImportTextureDimension1024},{2048,EditorWidget::ImportTextureDimension2048}};
         const float stepWidth=row.width/static_cast<float>(std::size(steps));
@@ -8192,7 +8311,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
           const bool on=state.importTextureDimension==step.value;
           list.addRect(cell,on?theme.color.accent:theme.color.raised,theme.radius.control);
           builder.label(cell,std::to_string(step.value),on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
-          router.addRegion(cell,widgetId(step.widget));
+          router.addRegion(focal?deflate(cell,UiInsets::all(-2)):cell,widgetId(step.widget));
         }
         break;
       }
@@ -8218,14 +8337,15 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       case Weighting:cycle(row,"Modo das normais",state.importNormalWeighting==resources::GltfNormalWeightAngle?"Por ângulo":"Por área",
                            EditorWidget::ImportNormalWeightingCycle);break;
       case Smoothing: {
+        if(focal&&state.importNormals!=resources::GltfNormalsCalculate) {builder.label(row,"Suavização: disponível ao calcular normais",theme.color.textMuted,theme.type.caption);break;}
         // Smoothing Angle: vale para toda normal gerada (Calcular, ou arquivo
         // sem NORMAL). Arestas mais agudas que o ângulo ficam duras.
         builder.label(takeLeft(row,row.width*.45f),"Ângulo de suavização",theme.color.text,theme.type.caption);
-        const auto down=deflate(takeLeft(row,36),UiInsets::all(2)),up=deflate(takeRight(row,36),UiInsets::all(2));
+        const auto down=deflate(takeLeft(row,focal?48:36),UiInsets::all(2)),up=deflate(takeRight(row,focal?48:36),UiInsets::all(2));
         for(const auto &[rect,label,widget]:{std::tuple{down,"-",EditorWidget::ImportSmoothingDown},std::tuple{up,"+",EditorWidget::ImportSmoothingUp}}) {
           list.addRect(rect,theme.color.raised,theme.radius.control);
           builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
-          router.addRegion(rect,widgetId(widget));
+          router.addRegion(focal?deflate(rect,UiInsets::all(-2)):rect,widgetId(widget));
         }
         builder.label(row,std::to_string(state.importSmoothingAngle)+"°",theme.color.text,theme.type.body,UiAlign::Center);
         break;
@@ -8240,6 +8360,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                               EditorWidget::ImportOptimizeOrderToggle);break;
       case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
       case Lights:cycle(row,"Importar luzes",state.importLights?"Sim":"Não",EditorWidget::ImportLightsToggle);break;
+      case FbxDeformation:cycle(row,"FBX rig/takes/morph",state.importFbxDeformation?"Importar":"Perfil estático",EditorWidget::ImportFbxDeformation);break;
+      case FbxWeights:cycle(row,"Mais de 4 influências",state.importFbxReduceWeights?"Reduzir top 4":"Recusar perda",EditorWidget::ImportFbxWeights);break;
+      case FbxSteps:cycle(row,"Steps FBX",state.importFbxApproximateSteps?"Aproximar no bake":"Recusar perda",EditorWidget::ImportFbxSteps);break;
+      case FbxRate:cycle(row,"Bake dos takes",state.importFbxBakeRate==60?"60 Hz":"30 Hz",EditorWidget::ImportFbxRate);break;
       case ProfileRowCount:break;
       }
     }
@@ -8893,7 +9017,7 @@ bool platformFieldActive(const EditorScreenState &state) {
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
          (state.gradientField != 0 && state.gradientText != 0) || (state.curveField != 0 && state.curveText != 0) ||
-         state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
+         state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode || state.searchingLibrary ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
          state.editingTagName || state.editingTagSearch || state.editingPhysicsLayerName || state.editingInputActionName || state.editingInputContext || state.inputEditField || state.editingAnimatorName;
 }
@@ -8913,6 +9037,7 @@ const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
   if (state.creatingScript) return state.scriptTemplate==EditorCodeWorkspace::HelperTemplate?"Auxiliar C#":"Componente C#";
+  if (state.searchingLibrary) return "Buscar na biblioteca";
   if (state.searchingTextures) return "Buscar textura";
   if (state.searchingCode) return "Localizar";
   if (state.searchingConsole) return "Console";
@@ -10312,23 +10437,104 @@ void buildWorkspaceMenu(ScreenBuilder &builder) {
   auto &list=builder.list;auto &router=builder.router;
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const u32 menuRows=6+(state.assetCount?1:0);
-    const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 48.0f+44.0f*menuRows);
+    const u32 menuRows=7+(state.assetCount?1:0);
+    const bool columns=state.surface.width>=480&&state.surface.height<48.f+48.f*menuRows;
+    const UiRect modal=centred(state.surface,std::min(columns?640.f:340.f,state.surface.width-24),48.f+48.f*(columns?(menuRows+1)/2:menuRows));
     list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Configurações do projeto","Interface (UI + ImGui)","Layout dos painéis","Fechar"};
-    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::TabGui,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
+    const char *names[]{"Voltar à edição","Recursos importados","Biblioteca de pacotes","Ambiente da cena","Configurações do projeto","Interface (UI + ImGui)","Layout dos painéis","Fechar"};
+    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::LibraryOpen,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::TabGui,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
     builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
+    u32 visible=0;const auto items=content;
     for(u32 i=0;i<std::size(actions);++i) {
       if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
-      auto row=takeTop(content,44);
+      const float width=items.width/(columns?2.f:1.f);
+      UiRect row{items.x+(columns?visible%2:0)*width,items.y+(columns?visible/2:visible)*48.f,width,48};++visible;
+      const auto hit=row;
       if(actions[i]==EditorWidget::TabGui) {
         builder.list.addImage(centred(takeLeft(row,32),24,24),static_cast<UiImageId>(UiIcon::UiInterfaceCanvas));
       }
-      builder.label(row,names[i],theme.color.text,theme.type.body);
+      list.pushClip(row);builder.label(row,names[i],theme.color.text,theme.type.body);list.popClip();
       // The full menu line is the target, including its icon.
-      router.addRegion({content.x,row.y,content.width,row.height},widgetId(actions[i]));
+      router.addRegion(hit,widgetId(actions[i]));
     }
   }
+}
+
+void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  router.addBlocker(area);list.addRect(area,theme.color.canvas);area=deflate(area,UiInsets::symmetric(12,6));
+  const auto action=[&](UiRect hit,const std::string &text,EditorWidget widget,UiIcon icon) {
+    list.addRect(deflate(hit,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    list.addImage(centred(takeLeft(hit,32),20,20),static_cast<UiImageId>(icon),theme.color.text);
+    builder.label(hit,text.c_str(),theme.color.text,theme.type.caption);
+    router.addRegion({hit.x-32,hit.y,hit.width+32,hit.height},widgetId(widget));
+  };
+  auto heading=takeTop(area,48);
+  action(takeRight(heading,128),"Importar pasta",EditorWidget::LibraryImport,UiIcon::AssetsImport);
+  action(takeLeft(heading,48),"",EditorWidget::LibraryClose,UiIcon::UiArrowLeft);
+  action(takeRight(heading,48),"",EditorWidget::LibrarySearch,UiIcon::AssetsSearch);
+  action(takeRight(heading,48),"",EditorWidget::LibraryKinds,UiIcon::AssetsFilter);
+  action(takeRight(heading,48),"",EditorWidget::LibraryPackages,UiIcon::AssetsSourcePackage);
+  constexpr const char *kinds[]{"Todos os tipos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
+  builder.label(heading,state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca",theme.color.text,theme.type.cardName);
+  if(!state.libraryDiagnostic.empty()) {
+    auto footer=takeBottom(area,48);action(takeLeft(footer,48),"",EditorWidget::LibraryPrevious,UiIcon::UiChevronLeft);
+    action(takeRight(footer,48),"",EditorWidget::LibraryNext,UiIcon::UiChevronRight);
+    if(state.libraryConflict) {
+      action(takeLeft(footer,footer.width*.5f),"Manter local",EditorWidget::LibraryKeepLocal,UiIcon::AssetsSourceConflict);
+      action(footer,"Receber origem",EditorWidget::LibraryReceiveSource,UiIcon::AssetsImport);
+    } else {
+      if(state.libraryCanInstantiate)action(takeLeft(footer,144),"Instanciar",EditorWidget::LibraryInstantiate,UiIcon::AssetsSourcePackage);
+      if(state.libraryCanAssignController)action(takeLeft(footer,144),"Vincular",EditorWidget::LibraryControllerAssign,UiIcon::AssetsSourcePackage);
+      if(state.libraryCanReimport)action(takeLeft(footer,144),"Reimportar",EditorWidget::LibraryReimport,UiIcon::AssetsImport);
+      action(footer,"Itens",EditorWidget::LibraryDetailsClose,UiIcon::AssetsList);
+    }
+    if(!state.libraryDetailName.empty()) {
+      auto title=takeTop(area,36);
+      list.addImage(centred(takeLeft(title,32),22,22),static_cast<UiImageId>(state.libraryConflict?UiIcon::AssetsSourceConflict:UiIcon::AssetsSourcePackage),theme.color.accent);
+      builder.label(title,state.libraryDetailName.c_str(),theme.color.text,theme.type.cardName);
+    }
+    const auto lines=wrapText(list,state.libraryDiagnostic,area.width,theme.type.body);
+    const auto rows=static_cast<u32>(std::max(1.f,std::floor(area.height/24.f)));
+    if(builder.layout)builder.layout->libraryDiagnosticPages=std::max(1u,static_cast<u32>((lines.size()+rows-1)/rows));
+    const auto page=std::min(state.libraryDiagnosticPage,lines.empty()?0u:static_cast<u32>((lines.size()-1)/rows));
+    list.pushClip(area);for(u32 i=page*rows;i<lines.size()&&i<(page+1)*rows;++i)
+      builder.label(takeTop(area,24),lines[i],theme.color.textDim,theme.type.body);
+    list.popClip();return;
+  }
+  std::string package="Todos os pacotes";for(const auto &entry:state.libraryPackages)if(entry.id==state.libraryPackage)package=entry.name;
+  auto footer=takeBottom(area,48);const u32 rows=static_cast<u32>(std::max(1.f,std::floor(area.height/56.f)));
+  const u32 pages=std::max(1u,static_cast<u32>((state.libraryRows.size()+rows-1)/rows));const u32 page=std::min(state.libraryPage,pages-1);
+  if(builder.layout)builder.layout->libraryPages=pages;
+  action(takeLeft(footer,48),"",EditorWidget::LibraryPrevious,UiIcon::UiChevronLeft);
+  action(takeRight(footer,48),"",EditorWidget::LibraryNext,UiIcon::UiChevronRight);
+  list.pushClip(footer);builder.label(footer,std::to_string(state.libraryRows.size())+" itens · "+std::to_string(page+1)+"/"+std::to_string(pages)+" · "+package+
+    (state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.textDim,theme.type.caption,UiAlign::Center);list.popClip();
+  if(state.libraryRows.empty()) {
+    builder.label(area,state.libraryPackages.size()>1?"Nenhum item neste filtro":"Importe uma pasta para preservar fontes e catalogar recursos",theme.color.textDim,theme.type.caption,UiAlign::Center);return;
+  }
+  list.pushClip(area);
+  for(u32 i=page*rows;i<state.libraryRows.size()&&i<(page+1)*rows;++i) {
+    const auto &item=state.libraryRows[i];auto row=takeTop(area,56);
+    const bool registered=item.state==resources::LibraryResolutionState::Registered;
+    const bool refused=item.state==resources::LibraryResolutionState::Unsupported||item.state==resources::LibraryResolutionState::MissingDependency||item.state==resources::LibraryResolutionState::MissingOutput;
+    list.addRect({row.x,row.y+row.height-1,row.width,1},theme.color.silhouette);
+    list.addRect({row.x,row.y+8,3,row.height-16},registered?theme.color.accent:refused?theme.color.textMuted:theme.color.textDim);
+    auto label=deflate(row,UiInsets::symmetric(12,3));const auto details=takeRight(label,48);
+    auto suffix=std::filesystem::path(item.name).extension().string();
+    std::transform(suffix.begin(),suffix.end(),suffix.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+    const bool texture=item.kind==resources::LibraryItemKind::Texture&&(suffix==".png"||suffix==".jpg"||suffix==".jpeg"||suffix==".ktx2"||suffix==".tga"||suffix==".tif"||suffix==".tiff");
+    const bool model=item.kind==resources::LibraryItemKind::Model&&(suffix==".glb"||suffix==".gltf"||suffix==".fbx");
+    const bool unity=item.kind==resources::LibraryItemKind::Clip||item.kind==resources::LibraryItemKind::Prefab||item.kind==resources::LibraryItemKind::Controller;
+    const char *status=registered?"Abrir":(texture||model)&&!refused?"Preparar":(item.kind==resources::LibraryItemKind::Material||unity)&&!refused?"Converter":"Diagnóstico";
+    auto statusArea=takeRight(label,96);builder.label(statusArea,status,registered?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::End);
+    builder.label(takeTop(label,26),item.name.c_str(),theme.color.text,theme.type.body);
+    builder.label(label,item.context.c_str(),theme.color.textMuted,theme.type.caption);
+    router.addRegion(row,widgetId(EditorWidget::LibraryItemBase)+i);
+    list.addImage(centred(details,20,20),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
+    router.addRegion({details.x,row.y,48,row.height},widgetId(EditorWidget::LibraryItemDetailsBase)+i);
+  }
+  list.popClip();
 }
 
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
@@ -10346,6 +10552,22 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   UiRect remaining = deflate(state.surface, state.safeArea);
   layout.topBar = takeTop(remaining, kTopBarHeight);
+  if(state.importPanel&&state.importTexture) {
+    buildTopBar(builder,layout.topBar);
+    layout.statusBar=takeBottom(remaining,kStatusBarHeight);buildStatusBar(builder,layout.statusBar);
+    layout.viewport=remaining;buildTextureImportWorkspace(state,theme,list,router,remaining);
+    if(state.backgroundPanel)buildBackgroundTasks(builder,layout);
+    buildPlatformTextField(builder);return layout;
+  }
+  if(state.workspace==EditorWorkspace::Library) {
+    if(state.importPanel) {remaining=deflate(state.surface,state.safeArea);layout.topBar={};}
+    else {buildTopBar(builder,layout.topBar);layout.statusBar=takeBottom(remaining,kStatusBarHeight);buildStatusBar(builder,layout.statusBar);}
+    layout.viewport=remaining;
+    if(state.importPanel) {router.addBlocker(remaining);list.addRect(remaining,theme.color.surface);buildImportDock(builder,deflate(remaining,UiInsets::all(8)));}
+    else buildLibraryWorkspace(builder,remaining);
+    if(state.backgroundPanel)buildBackgroundTasks(builder,layout);
+    buildWorkspaceMenu(builder);buildPlatformTextField(builder);return layout;
+  }
   if(state.workspace==EditorWorkspace::Gui) {
     buildTopBar(builder,layout.topBar);
     layout.viewport=remaining;router.addBlocker(remaining);list.addRect(remaining,theme.color.canvas);
@@ -10648,12 +10870,12 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
         list.popClip();
       }
     }
-    if(state.cameraPreviewEntity && layout.viewport.width>=280 && layout.viewport.height>=300) {
+    if(state.cameraPreviewEntity && !state.cameraPreviewMaterial && layout.viewport.width>=280 && layout.viewport.height>=300) {
       const float width=std::min(280.f,layout.viewport.width*.48f),height=width*9.f/16.f;
       const UiRect panel{layout.viewport.right()-width-10,layout.viewport.bottom()-height-160,width,height+94};
       list.addRect(panel,theme.color.surface,theme.radius.control);router.addBlocker(panel);
       const auto *camera=state.document->find(state.cameraPreviewEntity);
-      builder.label({panel.x+8,panel.y,panel.width-44,30},camera?camera->name:"Câmera",theme.color.text,theme.type.caption);
+      builder.label({panel.x+8,panel.y,panel.width-44,30},camera?(state.cameraPreviewMaterial?std::string("Material · ")+camera->name:camera->name):"Câmera",theme.color.text,theme.type.caption);
       const UiRect close{panel.right()-34,panel.y,34,30};
       builder.label(close,"×",theme.color.text,theme.type.title,UiAlign::Center);router.addRegion(close,widgetId(EditorWidget::CameraPreviewClose));
       const UiRect image{panel.x+4,panel.y+30,panel.width-8,height-4};
@@ -10673,7 +10895,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       builder.label(frequency,std::to_string(static_cast<int>(state.cameraPreviewFrequency))+" Hz máx.",theme.color.text,theme.type.caption,UiAlign::Center);
       router.addRegion(resolution,widgetId(EditorWidget::CameraPreviewResolution));
       router.addRegion(frequency,widgetId(EditorWidget::CameraPreviewFrequency));
-      builder.label({panel.x+8,panel.y+height+30,panel.width-16,28},"Ambiente e pós da câmera",theme.color.textMuted,theme.type.caption);
+      builder.label({panel.x+8,panel.y+height+30,panel.width-16,28},state.cameraPreviewMaterial?
+        (state.cameraPreviewDiagnostic.empty()?"Objeto real · ambiente da cena":state.cameraPreviewDiagnostic):"Ambiente e pós da câmera",theme.color.textMuted,theme.type.caption);
     }
     const UiIcon icons[]={UiIcon::EditorAuthorOrbit,UiIcon::EditorAuthorPan,UiIcon::EditorAuthorZoom};
     const EditorWidget actions[]={EditorWidget::NavigationOrbit,EditorWidget::NavigationPan,EditorWidget::NavigationZoom};
@@ -10962,6 +11185,41 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     builder.label(deflate(inner,UiInsets{6,0,6,0}),state.colorSampling?"Lendo a cor da tela…":"Toque em qualquer ponto da tela",
                   theme.color.text,theme.type.caption);
   } else if(state.colorField) buildColorWindow(builder,layout);
+  // A focal destination replaces crowded panels while previewing. It remains
+  // usable on 655x300 landscape instead of silently hiding the preview image.
+  if(state.workspace==EditorWorkspace::Scene && state.cameraPreviewActive &&
+     (state.cameraPreviewMaterial || layout.viewport.height<300 || layout.viewport.width<280)) {
+    auto panel=deflate(state.surface,state.safeArea);panel.y=layout.topBar.bottom();
+    panel.height=std::max(0.f,state.surface.bottom()-state.safeArea.bottom-panel.y);
+    list.addRect(panel,theme.color.canvas);router.addBlocker(panel);
+    auto content=deflate(panel,UiInsets::all(6));auto header=takeTop(content,42);
+    const auto close=takeRight(header,48);builder.label(close,"×",theme.color.text,theme.type.title,UiAlign::Center);
+    router.addRegion(close,widgetId(EditorWidget::CameraPreviewClose));
+    builder.label(header,state.cameraPreviewStandalone?"Material · prévia independente":state.cameraPreviewMaterial?"Material · objeto na cena":"Prévia da câmera",
+      theme.color.text,theme.type.body);
+    auto footer=takeBottom(content,24);list.pushClip(footer);
+    builder.label(footer,state.cameraPreviewDiagnostic.empty()?(state.cameraPreviewStandalone?"Material compartilhado · ambiente da cena":"Ambiente da cena · valores efetivos"):state.cameraPreviewDiagnostic,
+      theme.color.textMuted,theme.type.caption);list.popClip();
+    if(state.cameraPreviewStandalone) {
+      auto tools=takeRight(content,std::min(174.f,content.width*.32f));tools=deflate(tools,UiInsets{6,0,0,0});
+      const char *names[]{"Esfera","Caixa","Plano"};auto shape=takeTop(tools,42);
+      list.addRect(shape,theme.color.raised,theme.radius.control);builder.label(shape,names[std::min<u8>(state.materialPreviewShape,2)],theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(shape,widgetId(EditorWidget::MaterialPreviewShape));
+      const EditorWidget actions[]{EditorWidget::MaterialPreviewLeft,EditorWidget::MaterialPreviewRight,EditorWidget::MaterialPreviewUp,EditorWidget::MaterialPreviewDown,EditorWidget::MaterialPreviewNear,EditorWidget::MaterialPreviewFar};
+      const char *labels[]{"Órbita ‹","Órbita ›","Acima","Abaixo","Zoom +","Zoom −"};
+      for(u32 row=0;row<3;++row) {
+        auto line=takeTop(tools,42);
+        for(u32 column=0;column<2;++column) {const auto i=row*2+column;auto cell=deflate(takeLeft(line,column?line.width:line.width*.5f),UiInsets::all(2));
+          list.addRect(cell,theme.color.raised,theme.radius.control);builder.label(cell,labels[i],theme.color.text,theme.type.caption,UiAlign::Center);router.addRegion(cell,widgetId(actions[i]));}
+      }
+    }
+    const float ratio=static_cast<float>(state.cameraPreviewWidth)/std::max(1u,state.cameraPreviewHeight);
+    const float imageWidth=std::min(content.width,content.height*ratio),imageHeight=imageWidth/ratio;
+    const UiRect image{content.x+(content.width-imageWidth)*.5f,content.y+(content.height-imageHeight)*.5f,imageWidth,imageHeight};
+    if(state.cameraPreviewReady) list.addImage(image,kUiCameraPreviewImage,0xffffffff,0);
+    else {builder.label(content,state.cameraPreviewFailed?"Falha na prévia · tocar para tentar":"Preparando prévia 3D",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(state.cameraPreviewFailed) router.addRegion(content,widgetId(EditorWidget::CameraPreviewRetry));}
+  }
   buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;

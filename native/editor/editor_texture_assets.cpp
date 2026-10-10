@@ -2,6 +2,7 @@
 
 #include "core/sha256.h"
 #include "editor/editor_import_transaction.h"
+#include "editor/editor_texture_history.h"
 
 #include <chrono>
 #include <filesystem>
@@ -19,18 +20,24 @@ resources::TextureImportLimits textureLimits(const resources::GltfImportLimits &
 void EditorSession::showTextureImportPreview(std::string path,
                                               const resources::PreparedTextureImport &prepared,
                                               const resources::TextureProfile &settings) {
+  const bool sameTiff=state_.importTexture&&state_.textureImportTiff&&state_.importPath==path;
   state_.importPanel=true;state_.importTexture=true;state_.importEnvironment=false;
-  state_.importPath=std::move(path);state_.importPage=0;state_.importError=!prepared.valid();
+  state_.importPath=std::move(path);state_.importPage=sameTiff?state_.importPage:prepared.sourceTiff&&!prepared.valid()?5:0;
+  state_.importError=!prepared.valid();
   state_.importReady=prepared.valid();state_.textureImportSettings=settings;
   state_.textureImportPreparedSettings=settings;state_.textureImportReprepare=false;
   state_.textureImportSourceWidth=prepared.sourceWidth;state_.textureImportSourceHeight=prepared.sourceHeight;
   state_.textureImportDroppedMips=prepared.droppedMipLevels;state_.textureImportSourceHasAlpha=prepared.sourceHasAlpha;
+  state_.textureImportTiff=prepared.sourceTiff;state_.textureImportTiffBits=prepared.sourceTiffBits;
+  state_.textureImportTiffUndefinedExtra=prepared.sourceTiffUndefinedExtra;state_.textureImportTiffHasIcc=prepared.sourceTiffHasIcc;
+  state_.textureImportTiffMatrixSrgb=prepared.sourceTiffMatrixSrgb;
   state_.textureImportImage={};
   if(prepared.valid()) {
     const usize baseBytes=static_cast<usize>(prepared.texture->width)*prepared.texture->height*4;
     state_.textureImportImage=preview_.writeViewer(std::span<const u8>(prepared.texture->mipChain).first(baseBytes),
         prepared.texture->width,prepared.texture->height,TexturePreviewChannel::Rgba,0,TexturePreviewBackground::Checker);
     state_.importSummary=prepared.diagnostic;
+    for(const auto &loss:prepared.knownLosses) {if(!state_.importSummary.empty())state_.importSummary+=' ';state_.importSummary+=loss;}
     state_.importStatus="Textura pronta para importar";
   } else {
     state_.importSummary=prepared.diagnostic.empty()?"A prévia de textura é inválida.":prepared.diagnostic;
@@ -44,7 +51,7 @@ bool EditorSession::commitTextureImport(const std::string &path,std::span<const 
                                         const resources::TextureProfile &settings,
                                         std::string &diagnostic) {
   diagnostic.clear();
-  if(isPlaying()) {diagnostic="Pare a execução antes de publicar.";return false;}
+  if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição e pare a execução antes de publicar.";return false;}
   const auto limits=textureLimits(importLimits_);
   const auto hash=Sha256::hex(bytes);
   const auto expectedKey=resources::textureAssetCacheKey(hash,settings,true,
@@ -64,6 +71,22 @@ bool EditorSession::commitTextureImport(const std::string &path,std::span<const 
   std::vector<u8> cacheBytes;std::filesystem::path cachePath;
   const auto cacheRelative=resources::textureAssetCachePath(guid);
   const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+  const std::optional<resources::AssetRecord> before=known?std::optional(*known):std::nullopt;
+  if(!texture_history::persisted(root,known,path)) {
+    diagnostic="Metadados da textura mudaram no disco; reabra o projeto antes de publicar.";return false;
+  }
+  if(before) {
+    std::vector<u8> previous;
+    if(!texture_history::readSnapshot(root,before->contentHash,limits.image.maximumEncodedBytes,previous)) {
+      std::filesystem::path previousPath;
+      if(!EditorImportTransaction::safePath(root,path,previousPath)||
+          !EditorImportTransaction::read(previousPath,previous,limits.image.maximumEncodedBytes)||Sha256::hex(previous)!=before->contentHash) {
+        diagnostic="A versão anterior não possui cópia autoral íntegra. Restaure a fonte registrada antes de reimportar; nada publicado.";return false;
+      }
+      if(!texture_history::snapshot(root,before->contentHash,previous,diagnostic))return false;
+    }
+  }
+  if(!texture_history::snapshot(root,hash,bytes,diagnostic))return false;
   if(!resources::writeTextureAssetCache(prepared,cacheBytes)||
      !EditorImportTransaction::safePath(root,cacheRelative,cachePath)) {
     diagnostic="Derivado de textura inválido ou destino de cache recusado.";return false;
@@ -73,26 +96,32 @@ bool EditorSession::commitTextureImport(const std::string &path,std::span<const 
     diagnostic="Não foi possível gravar o cache preparado da textura.";return false;
   }
 
-  auto next=assets_;
   resources::AssetRecord record=known?*known:resources::AssetRecord{};
   record.guid=guid;record.type=resources::AssetType::Texture;record.path=path;record.source=path;
   record.contentHash=hash;record.importerVersion=resources::TextureAssetImporterRevision;
   record.importerParameters=resources::serializeTextureProfile(settings);
   record.derived.clear();record.dependencies.clear();
-  const bool registered=known?next.publishImport(guid,hash,record.importerVersion,record.importerParameters,{},{}):next.add(record);
-  if(!registered) {diagnostic="Registro recusou a textura preparada.";return false;}
-
-  EditorImportTransaction transaction(files_.rootPath());
-  if(!transaction.begin(path,expectedHash,diagnostic)) return false;
-  if(!transaction.commit(bytes,next.serialize())) {
-    diagnostic="Não foi possível gravar fonte e registro; a versão anterior foi preservada.";
-    if(!transaction.rollback()) diagnostic+=" Recuperação de disco pendente; backups preservados.";
-    return false;
-  }
-  assets_=std::move(next);assetRegistryDirty_=false;
-  std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid;});
-  loadTextureAssets();files_.rebuildTree();state_.selectedFile=path;
-  state_.status=known?"Textura reimportada; vínculos preservados":"Textura importada: "+path;
+  if(!publishTextureImportCandidate(before,record,bytes,expectedHash,diagnostic))return false;
+  state_.selectedFile=path;
+  const auto project=files_.rootPath();
+  history_.recordResource(before?"Reimportar textura":"Importar textura",[this,project,before,after=record](bool forward) {
+    if(files_.rootPath()!=project||isPlaying()||history_.isOpen())return false;
+    const auto root=EditorImportTransaction::fromUtf8(project);
+    const std::optional<resources::AssetRecord> expected=forward?before:std::optional(after);
+    const std::optional<resources::AssetRecord> target=forward?std::optional(after):before;
+    std::vector<u8> source;
+    // Undo of a first import detaches the resource while preserving its source.
+    const auto &sourceHash=target?target->contentHash:after.contentHash;
+    if(!texture_history::readSnapshot(root,sourceHash,importLimits_.image.maximumEncodedBytes,source)) {
+      state_.status="Cópia autoral da textura indisponível; nada alterado.";return false;
+    }
+    std::string error;
+    const auto diskHash=expected?expected->contentHash:after.contentHash;
+    if(!publishTextureImportCandidate(expected,target,source,diskHash,error)) {state_.status=error;return false;}
+    state_.status=forward?"Importação de textura refeita":"Importação de textura desfeita; fonte preservada";
+    return true;
+  });
+  state_.status=before?"Textura reimportada; vínculos preservados":"Textura importada: "+path;
   appearanceChanged_=true;
   return true;
 }

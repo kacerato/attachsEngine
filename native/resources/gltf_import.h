@@ -118,6 +118,10 @@ struct GltfImportLimits {
   bool generateLods = false;
   bool optimizePolygonOrder = false;
   u32 maximumLodLevels = 4;
+  // Native FBX family. The profile decides these; glTF ignores them. A legacy
+  // static recipe still refuses deformers instead of silently discarding them.
+  bool fbxDeformation=false,fbxReduceWeights=false,fbxApproximateSteps=false;
+  u8 fbxBakeRate=30;
   ImageDecodeLimits image{};
 };
 

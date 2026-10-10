@@ -1,5 +1,7 @@
+#include "resources/model_import.h"
 #include "scene/path.h"
 #include "editor/editor_component_impact.h"
+#include "editor/editor_texture_import_screen.h"
 #include "editor/editor_component_visuals.h"
 #include "editor/editor_color_picker.h"
 #include "editor/editor_component_catalog.h"
@@ -15,6 +17,7 @@
 #include "renderer/primitive_geometry.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
+#include "editor/editor_texture_history.h"
 #include "editor/editor_property_tween.h"
 #include "scene/property_tween.h"
 #include "editor/editor_number_text.h"
@@ -594,6 +597,14 @@ bool EditorSession::setProjectDirectory(const char *path) {
     if(!EditorImportTransaction::recover(path,recovery)) {state_.status=recovery;return false;}
     if(!recovery.empty()) reportProblem(EditorConsoleSeverity::Warning,recovery);
     EditorImportTransaction::discardStaging(path);
+    // Reject a corrupt catalog before changing the active project or its UI.
+    std::filesystem::path index;std::vector<u8> bytes;std::error_code error;resources::LibraryIndex candidate;
+    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(path),LibraryIndexPath,index))return false;
+    if(std::filesystem::exists(index,error)&&(!EditorImportTransaction::read(index,bytes,resources::LibraryIndex::MaximumBytes)||
+       !resources::LibraryIndex::deserialize({reinterpret_cast<const char*>(bytes.data()),bytes.size()},candidate,recovery))) {
+      state_.status=recovery.empty()?"Índice da biblioteca indisponível":recovery;return false;
+    }
+    if(error){state_.status="Índice da biblioteca inacessível";return false;}
   }
   code_.clear();state_.code=&code_;
   editorToolRequest_={};editorToolCatalogRoot_.clear();editorToolCatalogEpoch_=0;
@@ -603,12 +614,14 @@ bool EditorSession::setProjectDirectory(const char *path) {
   closeImportPreview();state_.importAccept=false;state_.importCancel=false;
   state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
   state_.folderImportRequested=false;state_.waveImportRequested=false;
+  state_.libraryImportRequested=false;state_.searchingLibrary=false;state_.libraryQuery.clear();state_.libraryPackage={};state_.libraryPage=0;
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   runtime::ObjectTags tags;std::string tagError;
   if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
   cancelPointers();gui_.immediate().cancelInput();
   const auto previousProject=files_.rootPath();
   if(!files_.setRoot(path)) return false;
+  {std::string error;if(!loadLibraryIndex(error)){state_.status=error.empty()?"Não foi possível abrir o índice da biblioteca":error;return false;}}
   if(previousProject!=files_.rootPath()) {closeAnimationClip();animationClipAssets_.clear();mapScene_.setAuthoredAnimations({});}
   guiTree_.clear();state_.guiRows={};state_.guiSelection={};state_.guiInspector=false;state_.collapsedGui.clear();
   guiImages_.clear();gui_.setImages(&guiImages_);playScene_.gui().setImages(&guiImages_);playScene_.sceneGui().setImages(&guiImages_);
@@ -619,7 +632,7 @@ bool EditorSession::setProjectDirectory(const char *path) {
       if(it->is_symlink(ec) || it->path().filename()==".astra") {if(it->is_directory(ec))it.disable_recursion_pending();continue;}
       if(!it->is_regular_file(ec))continue;
       auto extension=it->path().extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
-      if(extension==".png" || extension==".jpg" || extension==".jpeg" || extension==".ktx2")paths.push_back(it->path().lexically_relative(root).generic_string());
+      if(extension==".png" || extension==".jpg" || extension==".jpeg" || extension==".ktx2" || extension==".tga" || extension==".tif" || extension==".tiff")paths.push_back(it->path().lexically_relative(root).generic_string());
       if(paths.size()==4096)break;
     }
     std::sort(paths.begin(),paths.end());return paths;
@@ -690,6 +703,15 @@ bool EditorSession::setProjectDirectory(const char *path) {
   gui_.setHistoryActions([this](bool redo){return redo?history_.redo(document_):history_.undo(document_);},
                         [this](bool redo){return redo?history_.canRedo():history_.canUndo();});
   playScene_.configureSceneGui([this](resources::AssetGuid asset,ui::GuiDocument &doc,std::string &error){return loadGuiDocument(asset,doc,error);});
+  clipPreview_.configureGuiLoader([this](resources::AssetGuid asset,ui::GuiDocument &doc,std::string &error){return loadGuiDocument(asset,doc,error);});
+  clipPreview_.configureDriverParameterResolver([this](runtime::ObjectId object,u64 component,u64 parameter,resources::AssetGuid controller,double &value,std::string &error) {
+    const auto *entity=document_.find(object);const auto *source=entity?entity->components.findInstance(component):nullptr;
+    if(!source||&source->type()!=&scene::Animator::descriptor){error="Animator de driver ausente";return false;}
+    const auto &animator=static_cast<const scene::Animator&>(*source);scene::Animator resolved;
+    if(animator.controller!=controller||!resources::resolveAnimatorController(animator,animatorControllers_,resolved,error)){if(error.empty())error="Controlador de driver substituído";return false;}
+    const auto *p=resolved.parameter(parameter);if(!p||p->type!=scene::AnimatorParameterType::Float){error="Parâmetro de driver removido ou sem tipo Float";return false;}
+    value=p->value;return true;
+  });
   audioClips_.clear();audioStreams_.clear();
   playScene_.configureAudio([this](resources::AssetGuid asset,std::string &error){return loadAudioClip(asset,error);},audioOutput_);
   playScene_.configureAudioStreams([this](resources::AssetGuid asset,std::string &path,std::string &error){return resolveAudioStream(asset,path,error);});
@@ -741,6 +763,8 @@ bool EditorSession::assignTag(std::string_view name) {
 }
 
 void EditorSession::loadEditorPreferences() {
+  loadAnimationPoseSelections();
+  clipPoseClipboard_.reset();state_.clipPoseClipboardAvailable=false;
   state_.pickerAdvanced=false;
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
   state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
@@ -1482,6 +1506,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   }
   if(state_.creatingScript) {edit.purpose=EditorTextPurpose::ScriptName;return edit;}
   if(state_.searchingCode) {edit.purpose=EditorTextPurpose::CodeSearch;edit.text=state_.codeQuery;return edit;}
+  if(state_.searchingLibrary) {edit.purpose=EditorTextPurpose::LibrarySearch;edit.text=state_.libraryQuery;return edit;}
   if(state_.searchingConsole) {edit.purpose=EditorTextPurpose::ConsoleSearch;edit.text=state_.consoleQuery;return edit;}
   if(state_.searchingTextures) {edit.purpose=EditorTextPurpose::TextureSearch;edit.text=state_.textureQuery;return edit;}
   if(state_.goingToLine) {edit.purpose=EditorTextPurpose::CodeLine;return edit;}
@@ -1774,7 +1799,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.editingGroupName=false;state_.editingAnimatorName=false;
     state_.editingInputActionName=false;state_.editingInputContext=false;state_.inputEditField=0;
     code_.endTypingRun();
-    state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
+    state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;state_.searchingLibrary=false;
     state_.goingToLine=false;state_.creatingCodeFolder=false;state_.codeComposing=false;
     state_.searchingConsole=false;
     state_.searchingTextures=false;
@@ -1789,10 +1814,16 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   };
   if(!accept) {close();return true;}
   if(edit.purpose==EditorTextPurpose::AnimatorName) {
+    if(edit.field==clip_widget::PropertySearch) {
+      if(!applyAnimationPropertySearch(text))return false;
+      close();return true;
+    }
     const bool layerName=edit.field==clip_widget::LayerName;
     const bool cueName=edit.field==clip_widget::CueName;
-    const bool clipName=edit.field==clip_widget::Name||layerName||cueName;
-    const bool ok=cueName?applyAnimationClipCueName(trimmedName(text)):layerName?applyAnimationClipLayerName(trimmedName(text)):clipName?applyAnimationClipName(trimmedName(text)):applyAnimatorName(edit.field,std::string(text));
+    const bool regionName=edit.field==clip_widget::RegionName;
+    const bool poseSetName=edit.field==clip_widget::PoseSetSave;
+    const bool clipName=edit.field==clip_widget::Name||layerName||cueName||poseSetName||regionName;
+    const bool ok=regionName?applyAnimationClipRegionName(trimmedName(text)):poseSetName?applyAnimationPoseSelectionName(trimmedName(text)):cueName?applyAnimationClipCueName(trimmedName(text)):layerName?applyAnimationClipLayerName(trimmedName(text)):clipName?applyAnimationClipName(trimmedName(text)):applyAnimatorName(edit.field,std::string(text));
     if(clipName&&!ok)return false;
     close();return ok;
   }
@@ -2079,6 +2110,10 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
       buffer->firstLine=matches.front().line-1;++buffer->viewRevision;
     }
     state_.status=std::to_string(matches.size())+" ocorrências";close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::LibrarySearch) {
+    if(text.size()>128||text.find('\0')!=text.npos)return false;
+    state_.libraryQuery=text;state_.libraryPage=0;refreshLibraryRows();close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::PropertySearch ||
      edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch ||
@@ -3092,6 +3127,10 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Material) {
     if(!openMaterialInspector(record->guid)) state_.status="Material registrado, mas o arquivo não pôde ser lido";
   }
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record&&record->type==resources::AssetType::Mesh&&
+      std::any_of(importedSources_.begin(),importedSources_.end(),[&](const auto &source){return source.guid==record->guid&&!source.animations.empty();})) {
+    std::string diagnostic;if(!openModelTakes(record->guid,diagnostic))state_.status=diagnostic;
+  }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentProfile) {
     if(!openProfileInspector(record->guid)) state_.status="Perfil registrado, mas o arquivo não pôde ser lido";
   }
@@ -3133,6 +3172,8 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
     state_.status=selectedAsset&&selectedAsset->type==resources::AssetType::EnvironmentMap?
         "Mapa HDRI · Reimportar atualiza céu, irradiância e reflexões":
         entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":
+        selectedAsset&&selectedAsset->type==resources::AssetType::Mesh&&selectedAsset->importerParameters.starts_with("fbx-static-")?
+        "FBX estático · Instanciar adiciona à cena; Reimportar relê o original e preserva instâncias":
         selectedAsset&&selectedAsset->type==resources::AssetType::Mesh?
         "Modelo em pasta · Instanciar adiciona à cena; Reimportar relê a pasta com o perfil da fonte":"Arquivo de origem";
   }
@@ -3631,7 +3672,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(state_.importTexture) {
       if(is(EditorWidget::ImportCancel)) {state_.importCancel=true;closeImportPreview();}
       else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
-      else if(is(EditorWidget::ImportNextPage)) state_.importPage=std::min(3u,state_.importPage+1);
+      else if(is(EditorWidget::ImportNextPage)) state_.importPage=std::min(textureImportPageCount(state_)-1,state_.importPage+1);
+      else if(is(EditorWidget::TextureTiffLosses)&&state_.textureImportTiff)state_.importPage=7;
       else if(is(EditorWidget::ImportAccept) && state_.importReady &&
               resources::sameTexturePreparation(state_.textureImportSettings,state_.textureImportPreparedSettings)) {
         state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando textura…";
@@ -3648,6 +3690,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         else if(is(EditorWidget::TextureProfileAnisotropy)) profile.anisotropy=!profile.anisotropy;
         else if(is(EditorWidget::TextureProfileNormalGreen)) profile.invertNormalGreen=!profile.invertNormalGreen;
         else if(is(EditorWidget::TextureProfileCoverage)) profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;
+        else if(is(EditorWidget::TextureTiffExtra)&&state_.textureImportTiffUndefinedExtra)
+          profile.tiffUndefinedExtra=static_cast<u8>((profile.tiffUndefinedExtra+1)%3);
+        else if(is(EditorWidget::TextureTiffPrecision)&&state_.textureImportTiffBits==16)profile.tiffQuantize16=!profile.tiffQuantize16;
+        else if(is(EditorWidget::TextureTiffColor)&&state_.textureImportTiffHasIcc&&!state_.textureImportTiffMatrixSrgb)
+          profile.tiffIgnoreColorProfile=!profile.tiffIgnoreColorProfile;
         else if(is(EditorWidget::TextureProfileCoverageCutoff)) {
           profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
           if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
@@ -3708,6 +3755,26 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     else if(is(EditorWidget::ImportTabMeshes)) {state_.importTab=Tab::Meshes;state_.importPage=0;state_.importMeshDetail=false;}
     else if(is(EditorWidget::ImportTabTextures)) {state_.importTab=Tab::Textures;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabProfile)) {state_.importTab=Tab::Profile;state_.importPage=0;}
+    else if(is(EditorWidget::ImportTabRig)) {state_.importTab=Tab::Rig;state_.importPage=0;}
+    else if(is(EditorWidget::ImportFbxDeformation))state_.importFbxDeformation=!state_.importFbxDeformation;
+    else if(is(EditorWidget::ImportFbxWeights))state_.importFbxReduceWeights=!state_.importFbxReduceWeights;
+    else if(is(EditorWidget::ImportFbxSteps))state_.importFbxApproximateSteps=!state_.importFbxApproximateSteps;
+    else if(is(EditorWidget::ImportFbxRate))state_.importFbxBakeRate=state_.importFbxBakeRate==30?60:30;
+    else if(is(EditorWidget::ImportTakePrevious)) {if(state_.importTake)--state_.importTake;state_.importRigDiagnostic.clear();}
+    else if(is(EditorWidget::ImportTakeNext)) {
+      if(state_.importTake+1<state_.importTakes.size())++state_.importTake;
+      state_.importRigDiagnostic.clear();
+    }
+    else if(is(EditorWidget::ImportTakeRoot)) {
+      if(!state_.importNodes.empty())state_.importTakeRoot=(state_.importTakeRoot+1)%static_cast<u32>(state_.importNodes.size());
+      state_.importRigDiagnostic.clear();
+    }
+    else if(is(EditorWidget::ImportTakeExtract)&&state_.importPublishedView) {
+      resources::AssetGuid guid;std::string diagnostic;
+      if(extractModelTake(state_.importTakeSource,state_.importTake,state_.importTakeRoot,state_.selection,guid,diagnostic)) {
+        closeImportPreview();if(!openAnimationClip(guid,state_.selection,diagnostic))state_.status=diagnostic;
+      } else state_.importRigDiagnostic=diagnostic;
+    }
     else if(is(EditorWidget::ImportMeshClose)) state_.importMeshDetail=false;
     else if(routing.widgetId>=widgetId(EditorWidget::ImportMeshRowBase) &&
             routing.widgetId<widgetId(EditorWidget::ImportMeshRowBase)+state_.importMeshes.size()) {
@@ -3716,7 +3783,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
     else if(is(EditorWidget::ImportNextPage)) ++state_.importPage;
-    else if(is(EditorWidget::ImportCancel)) {state_.importCancel=!state_.importError;closeImportPreview();}
+    else if(is(EditorWidget::ImportCancel)) {state_.importCancel=!state_.importError||state_.importRetryable;closeImportPreview();}
     else if(is(EditorWidget::ImportMatchInOrder)) state_.importAmbiguityChoice=1;
     else if(is(EditorWidget::ImportTreatAsNew)) state_.importAmbiguityChoice=2;
     else if(is(EditorWidget::ImportScaleDown) || is(EditorWidget::ImportScaleUp)) {
@@ -3757,8 +3824,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
             routing.widgetId<widgetId(EditorWidget::ImportNodeToggleBase)+65536)
       toggleImportNodeExclusion(routing.widgetId-widgetId(EditorWidget::ImportNodeToggleBase));
     else if(is(EditorWidget::ImportApplyProfile)) {
-      if(state_.importReady && !profileApplied) {
-        state_.importReprepare=true;state_.importReady=false;state_.importStatus="Preparando com o perfil…";
+      if((state_.importReady||state_.importRetryable) && !state_.importPublishedView && (!profileApplied||state_.importRetryable)) {
+        state_.importReprepare=true;state_.importReady=false;state_.importRetryable=false;state_.importError=false;state_.importStatus="Preparando com o perfil…";
       }
     }
     else if(is(EditorWidget::ImportSaveDefaultProfile))
@@ -4094,6 +4161,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(routing.widgetId==widgetId(EditorWidget::CameraPreviewClose)) {cameraPreview_.close();return true;}
     if(routing.widgetId==widgetId(EditorWidget::CameraPreviewRetry)) {cameraPreview_.invalidateTarget();return true;}
+    if(routing.widgetId==widgetId(EditorWidget::MaterialPreviewShape)) {cameraPreview_.changeShape();return true;}
+    if(routing.widgetId>=widgetId(EditorWidget::MaterialPreviewLeft)&&routing.widgetId<=widgetId(EditorWidget::MaterialPreviewFar)) {
+      const auto key=routing.widgetId;
+      cameraPreview_.orbit(key==widgetId(EditorWidget::MaterialPreviewLeft)?-.3f:key==widgetId(EditorWidget::MaterialPreviewRight)?.3f:0,
+        key==widgetId(EditorWidget::MaterialPreviewUp)?-.2f:key==widgetId(EditorWidget::MaterialPreviewDown)?.2f:0,
+        key==widgetId(EditorWidget::MaterialPreviewNear)?.8f:key==widgetId(EditorWidget::MaterialPreviewFar)?1.25f:1);
+      return true;
+    }
     if(routing.widgetId==widgetId(EditorWidget::CameraPreviewResolution) ||
        routing.widgetId==widgetId(EditorWidget::CameraPreviewFrequency)) {
       auto width=cameraPreview_.width();auto height=cameraPreview_.height();
@@ -4594,6 +4669,77 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         state_.status="Reimportando o HDRI com a receita nova";return true;
       }
     }
+    if(key==widgetId(EditorWidget::LibraryOpen)) {
+      state_.workspaceMenu=false;if(!isPlaying()){cameraPreview_.close();state_.workspace=EditorWorkspace::Library;refreshLibraryRows();}return true;
+    }
+    if(key==widgetId(EditorWidget::LibraryClose)) {state_.workspace=EditorWorkspace::Scene;return true;}
+    if(key==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
+    if(key==widgetId(EditorWidget::LibrarySearch)) {state_.searchingLibrary=true;return true;}
+    if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticPage=0;state_.libraryConflict=false;return true;}
+    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%11;state_.libraryPage=0;refreshLibraryRows();return true;}
+    if(key==widgetId(EditorWidget::LibraryReimport)||key==widgetId(EditorWidget::LibraryKeepLocal)||key==widgetId(EditorWidget::LibraryReceiveSource)) {
+      const auto id=state_.libraryDetailItem;const auto *item=library_.item(id);if(!item)return true;
+      const auto path=item->path;std::string error;
+      const auto policy=key==widgetId(EditorWidget::LibraryKeepLocal)?resources::UnityReimportPolicy::KeepLocal:
+        key==widgetId(EditorWidget::LibraryReceiveSource)?resources::UnityReimportPolicy::ReceiveSource:resources::UnityReimportPolicy::RefuseConflict;
+      const auto guid=importUnityAsset(path,state_.selection,policy,error);
+      state_.libraryConflict=!guid.valid()&&error.find("Manter local ou Receber origem")!=error.npos;
+      state_.libraryDiagnostic=error;state_.libraryDiagnosticPage=0;state_.status=error;
+      return true;
+    }
+    if(key==widgetId(EditorWidget::LibraryInstantiate)||key==widgetId(EditorWidget::LibraryControllerAssign)) {
+      const auto resolved=library_.resolve(state_.libraryDetailItem,assets_);if(!resolved.output)return true;
+      const auto guid=resolved.output->guid;std::string error;
+      if(key==widgetId(EditorWidget::LibraryInstantiate)) {
+        if(!instantiatePrefab(guid,document_.root(),error)){state_.status=state_.libraryDiagnostic=error;return true;}
+        state_.libraryDiagnostic.clear();state_.workspace=EditorWorkspace::Scene;
+      } else {
+        const auto *owner=document_.find(state_.selection);
+        if(!owner||!owner->components.find(scene::Animator::descriptor)) {
+          state_.libraryDiagnostic="Selecione um objeto com Animator para vincular este controller. Adicione Animator pelo menu de componentes; a Biblioteca não cria objetos ocultos.";return true;
+        }
+        state_.inspectorTarget=state_.selection;openAnimatorEditor();
+        if(assignAnimatorController(guid)){state_.libraryDiagnostic.clear();state_.workspace=EditorWorkspace::Scene;}
+        else state_.libraryDiagnostic=state_.status;
+      }
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::LibraryItemDetailsBase)&&key<widgetId(EditorWidget::LibraryItemDetailsBase)+resources::LibraryIndex::MaximumItems) {
+      const auto row=key-widgetId(EditorWidget::LibraryItemDetailsBase);if(row>=state_.libraryRows.size())return true;
+      const auto *item=library_.item(state_.libraryRows[row].id);if(!item)return true;
+      state_.libraryDetailItem=item->id;state_.libraryConflict=false;const auto resolution=library_.resolve(item->id,assets_);
+      state_.libraryDetailName=std::filesystem::path(item->path).filename().string();
+      const bool ready=resolution.output&&resolution.state==resources::LibraryResolutionState::Registered;
+      state_.libraryCanInstantiate=ready&&item->kind==resources::LibraryItemKind::Prefab;
+      state_.libraryCanAssignController=ready&&item->kind==resources::LibraryItemKind::Controller;
+      state_.libraryCanReimport=item->path.ends_with(".anim")||item->path.ends_with(".prefab")||item->path.ends_with(".controller");
+      state_.libraryDiagnostic=item->path+"\nOrigem: "+item->sourceIdentity+"\nSHA-256 original: "+item->sourceHash+"\n"+resolution.diagnostic;
+      for(const auto &loss:item->knownLosses)state_.libraryDiagnostic+="\nConversão: "+loss;
+      for(const auto dep:item->dependencies){const auto *source=library_.item(dep);state_.libraryDiagnostic+="\nDependência: "+(source?source->path:dep.text()+" (ausente)");}
+      state_.libraryDiagnosticPage=0;return true;
+    }
+    if(key==widgetId(EditorWidget::LibraryPackages)) {
+      usize next=0;for(usize i=0;i<state_.libraryPackages.size();++i)if(state_.libraryPackages[i].id==state_.libraryPackage)next=(i+1)%state_.libraryPackages.size();
+      if(!state_.libraryPackages.empty())state_.libraryPackage=state_.libraryPackages[next].id;
+      state_.libraryPage=0;refreshLibraryRows();return true;
+    }
+    if(key==widgetId(EditorWidget::LibraryPrevious)) {auto &page=state_.libraryDiagnostic.empty()?state_.libraryPage:state_.libraryDiagnosticPage;if(page)--page;return true;}
+    if(key==widgetId(EditorWidget::LibraryNext)) {
+      auto &page=state_.libraryDiagnostic.empty()?state_.libraryPage:state_.libraryDiagnosticPage;
+      const auto pages=state_.libraryDiagnostic.empty()?layout_.libraryPages:layout_.libraryDiagnosticPages;
+      page=std::min(page+1,std::max(1u,pages)-1);return true;
+    }
+    if(key>=widgetId(EditorWidget::LibraryItemBase)&&key<widgetId(EditorWidget::LibraryItemBase)+resources::LibraryIndex::MaximumItems) {
+      const auto row=key-widgetId(EditorWidget::LibraryItemBase);std::string error;
+      if(row<state_.libraryRows.size()) {const auto id=state_.libraryRows[row].id;if(!openLibraryItem(id,error)) {
+        state_.libraryConflict=error.find("Manter local ou Receber origem")!=error.npos;
+        state_.status=error;state_.libraryDiagnostic=error;state_.libraryDiagnosticPage=0;
+        if(const auto *item=library_.item(id)) {state_.libraryDiagnostic+="\nFonte: "+item->path+"\nIdentidade: "+item->sourceIdentity+"\nSHA-256: "+item->sourceHash;
+          for(const auto &loss:item->knownLosses)state_.libraryDiagnostic+="\nLimite: "+loss;
+          for(const auto dep:item->dependencies)if(!library_.item(dep))state_.libraryDiagnostic+="\nDependência ausente: "+dep.text();}
+      }}
+      return true;
+    }
     // Material do projeto em Propriedades.
     if(key==widgetId(EditorWidget::MaterialInspectorClose)) {
       state_.materialInspector={};state_.materialShared=false;state_.texturePicker=false;state_.selectedFile.clear();return true;
@@ -4606,6 +4752,31 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       const u32 index=state_.materialInspectorUse%static_cast<u32>(users.size());
       pingEntity(users[index]);state_.materialInspectorUse=index+1;
       state_.status="Uso "+std::to_string(index+1)+" de "+std::to_string(users.size())+": "+document_.find(users[index])->name;
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialInspectorStandalone)) {
+      if(!cameraPreview_.pinStandalone(sceneVersion(),mapScene_,state_.materialInspector)) state_.status=cameraPreview_.diagnostic();
+      else {state_.workspace=EditorWorkspace::Scene;state_.status="Prévia independente · material compartilhado";}
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialInspectorPreview)) {
+      if(!cameraPreview_.pinMaterial(document_,sceneVersion(),mapScene_,state_.selection,state_.materialInspector))
+        state_.status=cameraPreview_.diagnostic();
+      else {state_.workspace=EditorWorkspace::Scene;state_.status="Prévia do objeto real · inclui seus descendentes e substituições locais.";}
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialInspectorApply)) {
+      const auto *target=document_.find(state_.selection);
+      const auto *render=target?meshRenderer(*target):nullptr;
+      if(!render||!render->slotCount()||!state_.materialInspector.valid()) {
+        state_.status="Selecione uma malha com slot de material.";return true;
+      }
+      const auto slot=std::min(state_.materialSlot,render->slotCount()-1);
+      const std::string name=target->name;
+      if(assignSlotMaterial(state_.selection,slot,state_.materialInspector)) {
+        state_.status="Material vinculado no slot "+std::to_string(slot+1)+" de "+name+" · substituições locais preservadas";
+        refreshMaterialSlotView();
+      } else state_.status="Não foi possível aplicar material; finalize a edição e tente novamente.";
       return true;
     }
     // Material por slot (Entrega 2).
@@ -5390,6 +5561,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::AssetReimport)) {
+      if(state_.selectedFile.ends_with(".mat")) {
+        std::string diagnostic;
+        const auto imported=importUnityMaterial(state_.selectedFile,diagnostic);
+        setImportStatus(diagnostic,imported.valid()?EditorConsoleSeverity::Info:EditorConsoleSeverity::Warning);
+        return true;
+      }
       const auto *record=assets_.findByPath(state_.selectedFile);
       if(record&&record->type==resources::AssetType::EnvironmentMap)
         environmentReimportPath_=state_.selectedFile;
@@ -5796,7 +5973,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     // O editor não conhece Android nem o seletor de arquivos: levanta o pedido
     // e quem tem o sistema na mão abre o diálogo e devolve os bytes.
     state_.modelImportRequested=true;state_.creationMenu=false;
-    state_.status="Escolha um arquivo .glb";
+    state_.status="Escolha GLB ou FBX estático; revise a receita e as perdas antes de importar.";
     return true;
   }
   if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreationRecipeBase) &&
@@ -7410,10 +7587,12 @@ void EditorSession::advanceClock(float wallSeconds) noexcept {
   if(state_.clipOpen&&state_.clipPlaying&&delta>0&&delta<=1&&clipPreview_.active()) {
     const auto *asset=animationClipAsset(state_.clipGuid);
     if(asset) {
-      float t=state_.clipTime+delta;
-      if(t>=asset->duration) {
-        if(state_.clipLoop&&asset->duration>0)t=std::fmod(t,asset->duration);
-        else {t=asset->duration;state_.clipPlaying=false;}
+      const auto *region=asset->region(state_.clipPreviewRegion);
+      const float start=region?region->start:0,end=region?region->end:asset->duration;
+      float t=(state_.clipTime<start||state_.clipTime>=end?start:state_.clipTime)+delta;
+      if(t>=end) {
+        if(state_.clipLoop&&end>start)t=start+std::fmod(t-start,end-start);
+        else {t=end;state_.clipPlaying=false;}
       }
       std::string error;if(!seekAnimationClip(t,error)) {state_.clipPlaying=false;state_.clipDiagnostic=error;}
     }
@@ -8232,14 +8411,14 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   if(sourceName.empty()) { report.diagnostic="Nome de arquivo vazio."; return false; }
 
   resources::GltfImport model;
-  if(!resources::importGlb(bytes,importLimits_,progress,model)) {
+  const auto *known=assets_.findByPath(std::string(sourceName));
+  const auto profile=importProfileFor(known?known->guid:resources::assetGuidFromSeed("fonte:"+std::string(sourceName)));
+  if(!resources::importModelSource(bytes,importLimitsFor(profile),progress,model)) {
     report.diagnostic=model.diagnostic;report.cancelled=model.cancelled;return false;
   }
   // Mesmo contrato da reabertura: a exclusão que vale é a salva com a fonte.
   // Publicar por esta porta sem ela traria de volta, em silêncio, o nó que o
   // autor tirou da cena.
-  const auto *known=assets_.findByPath(std::string(sourceName));
-  const auto profile=importProfileFor(known?known->guid:resources::assetGuidFromSeed("fonte:"+std::string(sourceName)));
   if(!publishModel(model,Sha256::hex(bytes),sourceName,report,resources::ImportAmbiguityPolicy::Refuse,
                    profile.excludedNodes)) return false;
   // Reabertura: o mapa acompanha a fonte no projeto. Mesmo conteúdo produz o
@@ -8343,10 +8522,10 @@ bool EditorSession::reopenSources(std::vector<ReopenedSource> &sources, std::vec
 bool EditorSession::stageSource(const resources::GltfImport &model, std::string_view hash, std::string_view sourceName,
                                 resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
                                 resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged,
-                                std::span<const resources::AssetGuid> excludedNodes) {
+                                std::span<const resources::AssetGuid> excludedNodes,const resources::ImportProfile *preparedProfile) {
   report={};
   staged={};
-  if(model.draws.empty() || model.nodes.empty()) {report.diagnostic="Modelo sem geometria utilizável.";return false;}
+  if(model.nodes.empty() || (model.draws.empty()&&model.animations.empty())) {report.diagnostic="Modelo sem geometria nem takes utilizáveis.";return false;}
   const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
   for(usize n=0;n<model.nodes.size();++n) {
     EditorTransform local;
@@ -8385,6 +8564,14 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
     report.diagnostic=mapDiagnostic.empty()?"Mapa de nós recusado; fonte anterior preservada.":mapDiagnostic;
     return false;
   }
+  for(const auto &skin:model.skins)for(const auto joint:skin.joints)
+    if(joint>=nodeMap.nodes.size()||nodeMap.nodes[joint].excluded) {
+      report.diagnostic="A receita exclui uma junta requerida pelo skin. Reinclua o nó e seus ancestrais.";return false;
+    }
+  for(const auto &clip:model.animations)for(const auto &channel:clip.channels)
+    if(channel.node>=nodeMap.nodes.size()||nodeMap.nodes[channel.node].excluded) {
+      report.diagnostic="A receita exclui um alvo requerido pelo take. Reinclua o nó e seus ancestrais.";return false;
+    }
 
   ImportedSource block;
   block.guid=source;
@@ -8418,12 +8605,29 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.meshLods=model.meshLods;
   block.sourceIndexCount=block.indices.size();
   block.sourceDrawCount=block.draws.size();
-  auto profile=importProfileFor(source);
+  auto profile=preparedProfile?*preparedProfile:importProfileFor(source);
   profile.excludedNodes.assign(excludedNodes.begin(),excludedNodes.end());
   if(!applyCollisionMeshRecipes(block,profile,report.diagnostic)) return false;
 
   usize slot=candidateSources.size();
   for(usize i=0;i<candidateSources.size();++i) if(candidateSources[i].guid==source) {slot=i;break;}
+  if(slot<candidateSources.size()) {
+    const auto &previous=candidateSources[slot];
+    for(usize draw=0;draw<previous.drawNodes.size()&&draw<previous.drawMorphs.size();++draw) {
+      const auto node=previous.drawNodes[draw];const auto morph=previous.drawMorphs[draw];
+      if(node>=previous.map.nodes.size()||node>=previous.nodes.size()||morph<0||static_cast<usize>(morph)>=previous.morphs.size())continue;
+      const auto &set=previous.morphs[static_cast<usize>(morph)];auto &baseline=staged.previousMorphs[previous.map.nodes[node].id];
+      baseline.names=set.names;baseline.weights=previous.nodes[node].morphWeights.size()==set.targetCount?previous.nodes[node].morphWeights:set.defaultWeights;
+      for(auto &weight:baseline.weights)weight=std::clamp(weight*100.f,-scene::SkinnedMesh::MaximumBlendShapeWeight,scene::SkinnedMesh::MaximumBlendShapeWeight);
+    }
+    for(usize draw=0;draw<previous.drawNodes.size()&&draw<previous.drawSkins.size();++draw) {
+      const auto node=previous.drawNodes[draw];const auto skin=previous.drawSkins[draw];
+      if(node>=previous.map.nodes.size()||skin<0||static_cast<usize>(skin)>=previous.skins.size())continue;
+      auto &joints=staged.previousSkinJoints[previous.map.nodes[node].id];joints.clear();
+      for(const auto joint:previous.skins[static_cast<usize>(skin)].joints)
+        joints.push_back(joint<previous.map.nodes.size()?previous.map.nodes[joint].id:resources::AssetGuid{});
+    }
+  }
   // Reimportação é decidida pelo REGISTRO, não pela biblioteca deste processo.
   // Ao reabrir o projeto, a fonte está no registro e a biblioteca está vazia --
   // se a decisão fosse pela biblioteca, cada abertura criaria os objetos de
@@ -8438,10 +8642,13 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
 
   resources::AssetRecord record=existing?*existing:resources::AssetRecord{};
   record.guid=source;record.type=resources::AssetType::Mesh;record.path=path;record.source=path;
-  record.contentHash=std::string(hash);record.importerVersion=1;record.importerParameters="glb";
+  record.contentHash=std::string(hash);record.importerVersion=1;
+  std::string extension=std::filesystem::path(path).extension().string();
+  std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+  record.importerParameters=extension==".fbx"?std::string(profile.fbxDeformation?"fbx-scene-ufbx-0.20.0/2\n":"fbx-static-ufbx-0.20.0/2\n")+resources::serializeImportProfile(profile):"glb";
   record.derived.clear();
   const bool registered=existing
-      ?nextAssets.publishImport(source,record.contentHash,1,"glb",{},record.dependencies)
+      ?nextAssets.publishImport(source,record.contentHash,1,record.importerParameters,{},record.dependencies)
       :nextAssets.add(record);
   if(!registered) {report.diagnostic="Registro recusou o recurso; publicação cancelada.";return false;}
   return true;
@@ -8575,7 +8782,7 @@ void EditorSession::refreshCollisionMeshDraft() {
 
 // Depois da biblioteca adotada: a reconciliação resolve slots pelo pacote novo.
 bool EditorSession::bindImportedDeformation(const ImportedSource &tree,const std::vector<EditorEntityId> &objectOfNode,
-                                            std::span<const EditorEntityId> roots,u32 &meshes,u32 &animations) {
+                                            std::span<const EditorEntityId> roots,u32 &meshes,u32 &animations,const StagedSource *previous) {
   const auto objectOf=[&](u32 node)->EditorEntityId {
     const auto id=node<objectOfNode.size()?objectOfNode[node]:kInvalidEntity;
     return id && document_.find(id)?id:kInvalidEntity;
@@ -8600,14 +8807,41 @@ bool EditorSession::bindImportedDeformation(const ImportedSource &tree,const std
     bool changed=created;
     if(skin) {
       std::vector<u64> bones;
-      for(const auto joint:skin->joints) bones.push_back(objectOf(joint));
+      for(const auto joint:skin->joints) {
+        const auto bone=objectOf(joint);if(!bone)return false;
+        bones.push_back(bone);
+      }
       // Religa quando a fonte mudou as juntas ou um osso deixou de existir;
       // uma troca de osso feita pelo autor, para outro objeto vivo, fica.
       bool stale=mesh->bones.size()!=bones.size();
       for(const auto bone:mesh->bones) stale=stale || !bone || !document_.find(static_cast<EditorEntityId>(bone));
-      if(created || stale) {mesh->bones=std::move(bones);changed=true;}
+      bool inherited=false;
+      if(previous&&node<tree.map.nodes.size())if(const auto old=previous->previousSkinJoints.find(tree.map.nodes[node].id);
+          old!=previous->previousSkinJoints.end()&&old->second.size()==mesh->bones.size()) {
+        inherited=true;
+        for(usize joint=0;joint<mesh->bones.size();++joint) {
+          const auto *object=document_.find(mesh->bones[joint]);const auto *link=object?scene::importLink(object->components):nullptr;
+          if(!link||link->source!=tree.guid||link->node!=old->second[joint]){inherited=false;break;}
+        }
+      }
+      if(created || stale || (inherited&&mesh->bones!=bones)) {mesh->bones=std::move(bones);changed=true;}
     }
-    if(morph && mesh->blendShapeWeights.size()!=morph->targetCount) {
+    if(morph&&previous&&node<tree.map.nodes.size()&&previous->previousMorphs.contains(tree.map.nodes[node].id)) {
+      const auto &baseline=previous->previousMorphs.at(tree.map.nodes[node].id);
+      const auto &initial=tree.nodes[node].morphWeights.size()==morph->targetCount?tree.nodes[node].morphWeights:morph->defaultWeights;
+      std::vector<float> weights(morph->targetCount);
+      for(usize target=0;target<weights.size();++target) {
+        weights[target]=std::clamp(initial[target]*100.f,-scene::SkinnedMesh::MaximumBlendShapeWeight,scene::SkinnedMesh::MaximumBlendShapeWeight);
+        usize old=baseline.weights.size();
+        if(target<morph->names.size()) {
+          const auto found=std::find(baseline.names.begin(),baseline.names.end(),morph->names[target]);
+          if(found!=baseline.names.end())old=static_cast<usize>(found-baseline.names.begin());
+        } else if(morph->names.empty()&&baseline.names.empty())old=target;
+        if(old<baseline.weights.size()&&old<mesh->blendShapeWeights.size()&&mesh->blendShapeWeights[old]!=baseline.weights[old])
+          weights[target]=mesh->blendShapeWeights[old];
+      }
+      if(weights!=mesh->blendShapeWeights){mesh->blendShapeWeights=std::move(weights);changed=true;}
+    } else if(morph && mesh->blendShapeWeights.size()!=morph->targetCount) {
       // Pesos iniciais: os do nó quando declarados, senão os da malha (0..1 → 0..100).
       const auto &initial=tree.nodes[node].morphWeights.size()==morph->targetCount?tree.nodes[node].morphWeights:morph->defaultWeights;
       const usize kept=mesh->blendShapeWeights.size();
@@ -8648,7 +8882,8 @@ void EditorSession::reconcileStagedSource(const StagedSource &staged, ModelImpor
   if(const auto *published=importNodeMap(staged.source)) {
     // Um passo de desfazer para tudo o que a reimportação fez na cena: vínculo
     // de objetos legados comprovados e reconciliação das instâncias.
-    history_.begin("Reimportar recurso");
+    const bool ownHistory=!history_.isOpen();
+    if(ownHistory)history_.begin("Reimportar recurso");
     // Objetos legados são provados contra a revisão que a cena USOU — a
     // anterior. Provar contra a nova faria os nós recém-chegados parecerem
     // conhecidos e apagados pelo usuário, e eles nunca entrariam.
@@ -8676,9 +8911,10 @@ void EditorSession::reconcileStagedSource(const StagedSource &staged, ModelImpor
         }
       }
       for(auto &[instance,entry]:instances)
-        bindImportedDeformation(tree,entry.first,entry.second,report.skinnedMeshes,report.animations);
+        if(!bindImportedDeformation(tree,entry.first,entry.second,report.skinnedMeshes,report.animations,&staged))
+          report.diagnostic="Não foi possível reconciliar skin/takes da instância.";
     }
-    history_.end();
+    if(ownHistory)history_.end();
     for(const auto &note:report.lodNotes) reportProblem(EditorConsoleSeverity::Info,note);
     if(report.reconcile.changed()) mapScene_.hydrateMaterials(document_);
     reportImportReconcile(report.reconcile,"Reimportação");
@@ -8831,57 +9067,6 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
   return true;
 }
 
-bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources::GltfImport &model,
-                                      const std::string &path,const std::string &expectedHash,ModelImportReport &report,
-                                      resources::ImportAmbiguityPolicy policy,
-                                      std::span<const resources::AssetGuid> excludedNodes,
-                                      std::span<const FolderCompanion> companions,std::string_view contentHash,
-                                      std::span<const resources::AssetGuid> sourceDependencies) {
-  report={};
-  if(isPlaying()) {report.diagnostic="Pare a execução antes de publicar.";return false;}
-  // O mapa de nós entra na MESMA transação que fonte e registro.
-  const auto *known=assets_.findByPath(path);
-  const auto mapSource=known?known->guid:resources::assetGuidFromSeed("fonte:"+path);
-  EditorImportTransaction transaction(files_.rootPath());
-  std::vector<EditorImportTransaction::Companion> moved;
-  for(const auto &companion:companions) moved.push_back({companion.staged,companion.relative});
-  if(!transaction.begin(path,expectedHash,report.diagnostic,resources::importNodeMapPath(mapSource),moved)) {
-    if(report.diagnostic.empty()) report.diagnostic="Não foi possível preparar os backups da importação.";
-    return false;
-  }
-  const auto previousSources=importedSources_;const auto previousAssets=assets_;
-  const auto previousDocument=document_;const auto previousMap=mapScene_;const auto previousHistory=history_;
-  const bool previousDirty=assetRegistryDirty_;
-  bool published=publishModel(model,contentHash.empty()?Sha256::hex(bytes):std::string(contentHash),path,report,policy,excludedNodes);
-  const bool libraryPublished=published;
-  if(published&&!sourceDependencies.empty()) {
-    const auto record=*assets_.find(report.source);
-    published=assets_.publishImport(report.source,record.contentHash,record.importerVersion,record.importerParameters,record.derived,
-                                   {sourceDependencies.begin(),sourceDependencies.end()});
-  }
-  const auto *nodeMap=published?importNodeMap(report.source):nullptr;
-  if(published && nodeMap && transaction.commit(bytes,assets_.serialize(),nodeMap->serialize())) {
-    assetRegistryDirty_=false;files_.rebuildTree();state_.selectedFile=path;
-    // Reveal each ancestor so the selected resource is actually visible.
-    for(usize i=0;i<files_.tree().size();++i) {
-      const auto entry=files_.tree()[i];
-      if(entry.directory && !entry.expanded && !entry.relativePath.empty() && path.starts_with(entry.relativePath+"/"))
-        files_.toggle(static_cast<unsigned>(i));
-    }
-    return true;
-  }
-  if(libraryPublished) {
-    report.diagnostic="Não foi possível gravar fonte e registro; importação revertida.";
-    importedSources_=previousSources;assets_=previousAssets;
-    std::string rollback;
-    if(!publishAndAdopt(flattenSources(importedSources_),rollback)) report.diagnostic+=" GPU: "+rollback;
-    // A reconciliação entrou no histórico: cena e histórico voltam juntos.
-    document_=previousDocument;mapScene_=previousMap;history_=previousHistory;assetRegistryDirty_=previousDirty;
-  }
-  if(!transaction.rollback()) report.diagnostic+=" Recuperação de disco pendente; backups preservados.";
-  return false;
-}
-
 void EditorSession::showImportPreview(std::string path,const resources::GltfImport &model,std::string_view contentHash,
                                      const resources::ImportProfile &prepared,
                                      const resources::ImportSourceReport *sourceReport) {
@@ -8895,6 +9080,16 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importPreparedTextureCompression=prepared.textureCompression;
   state_.importPreparedGenerateLods=prepared.generateLods;state_.importPreparedLodLevels=prepared.maximumLodLevels;
   state_.importPreparedOptimizeOrder=prepared.optimizePolygonOrder;
+  state_.importPreparedFbxDeformation=prepared.fbxDeformation;state_.importPreparedFbxReduceWeights=prepared.fbxReduceWeights;
+  state_.importPreparedFbxApproximateSteps=prepared.fbxApproximateSteps;state_.importPreparedFbxBakeRate=prepared.fbxBakeRate;
+  state_.importRetryable=false;state_.importPublishedView=false;state_.importTakes.clear();state_.importTake=0;state_.importTakeRoot=0;
+  state_.importTakeSource={};state_.importRigDiagnostic.clear();state_.importRigJoints=state_.importRigMorphs=0;
+  for(const auto &skin:model.skins)state_.importRigJoints+=static_cast<u32>(skin.joints.size());
+  for(const auto &morph:model.morphs)state_.importRigMorphs+=morph.targetCount;
+  for(const auto &clip:model.animations) {
+    u32 morphChannels=0;for(const auto &channel:clip.channels)if(channel.path==resources::AnimationPath::Weights)++morphChannels;
+    state_.importTakes.push_back({clip.name,clip.duration,static_cast<u32>(clip.channels.size()),morphChannels});
+  }
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
   {
@@ -9866,7 +10061,11 @@ void EditorSession::update() {
     state_.numericCurrent=stop&&stop!=text.c_str()&&std::isfinite(value)?value:0;
   }
   state_.cameraPreviewEntity=cameraPreview_.camera();
-  state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion());
+  const auto *previewMaterial=findMaterialAsset(cameraPreview_.material());
+  state_.cameraPreviewMaterial=cameraPreview_.material().valid();
+  state_.cameraPreviewActive=cameraPreview_.active();state_.cameraPreviewStandalone=cameraPreview_.standalone();
+  state_.materialPreviewShape=static_cast<u8>(cameraPreview_.shape());
+  state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion(),previewMaterial?previewMaterial->revision:0);
   state_.cameraPreviewFailed=cameraPreview_.failed();
   state_.cameraPreviewDiagnostic=cameraPreview_.diagnostic();
   state_.cameraPreviewWidth=cameraPreview_.width();state_.cameraPreviewHeight=cameraPreview_.height();
@@ -10021,6 +10220,10 @@ void EditorSession::update() {
   list_.begin(state_.surface, metrics);
   list_.setSolidUv(gui_.immediate().whiteUv());
   router_.beginFrame();
+  state_.clipGuiPreviewDraw=[this](ui::UiDrawList &draw,const ui::UiRect &viewport) {
+    if(clipPreview_.active()&&!state_.workspaceMenu)
+      clipPreview_.drawGui(draw,draw.fontMetrics(),view_.frustum,viewport,state_.surface);
+  };
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
   // altura util so encolhe quando o teclado termina de subir, um ou dois
@@ -10513,6 +10716,7 @@ bool EditorSession::openMaterialInspector(const resources::AssetGuid &guid) {
 }
 
 void EditorSession::publishMaterialLibrary() {
+  cameraPreview_.invalidateTarget();
   std::vector<std::pair<resources::AssetGuid,EditorMapScene::SharedMaterial>> library;
   library.reserve(materials_.size());
   for(const auto &material:materials_)
@@ -10771,14 +10975,19 @@ bool EditorSession::setTextureProfile(const resources::AssetGuid &texture,const 
   const auto previousViewer=viewerChain_;
   const bool previousRegistryDirty=assetRegistryDirty_;
   EditorImportTransaction transaction(files_.rootPath());
-  std::string nextRegistry;
+  std::string nextRegistry,nextLibrary;
   if(canonical) {
+    if(!texture_history::persisted(root,record,record->path)) {
+      diagnostic="Metadados da textura mudaram no disco; receita preservada.";return false;
+    }
     auto next=assets_;
     if(!next.publishImport(texture,record->contentHash,record->importerVersion,
                            resources::serializeTextureProfile(profile),record->derived,record->dependencies)) {
       diagnostic="Registro recusou a receita da textura.";return false;
     }
-    if(!transaction.begin(record->path,record->contentHash,diagnostic)) return false;
+    if(!prepareLibraryIndex(next,nextLibrary,diagnostic)||
+       !texture_history::sourceMetadata(nextLibrary,record->path,sourceBytes,&profile,importLimits_.image,diagnostic)||
+       !transaction.begin(record->path,record->contentHash,diagnostic,LibraryIndexPath))return false;
     nextRegistry=next.serialize();
     assets_=std::move(next);assetRegistryDirty_=false;
   }
@@ -10813,13 +11022,14 @@ bool EditorSession::setTextureProfile(const resources::AssetGuid &texture,const 
     if(canonical&&!transaction.rollback()) diagnostic+=" Recuperação de disco pendente; backups preservados.";
     restore();return false;
   }
-  const bool saved=canonical?transaction.commit(sourceBytes,nextRegistry):
+  const bool saved=canonical?transaction.commit(sourceBytes,nextRegistry,nextLibrary):
       writeProjectTextureProfile(files_.rootPath(),resources::textureProfilePath(texture),profile);
   if(!saved) {
     diagnostic="Perfil não gravado; publicação anterior restaurada.";
     if(canonical&&!transaction.rollback()) diagnostic+=" Recuperação de disco pendente; backups preservados.";
     restore();return false;
   }
+  if(canonical)loadLibraryIndex(diagnostic);
   if(state_.textureViewer&&state_.textureViewerIndex<textures_.size()&&
      textures_[state_.textureViewerIndex].guid==texture) {
     state_.textureProfileSaved=state_.textureProfileDraft=profile;
@@ -10849,6 +11059,7 @@ std::vector<EditorSession::TextureResidency> EditorSession::textureResidencyOf(c
 }
 
 void EditorSession::loadTextureAssets() {
+  cameraPreview_.invalidateTarget();
   textures_.clear();
   textureProfiles_.clear();
   const auto root=files_.rootPath();
@@ -11675,6 +11886,7 @@ resources::ImportProfile EditorSession::projectImportProfile() const {
 }
 
 resources::ImportProfile EditorSession::importProfileFor(const resources::AssetGuid &source) const {
+  if(publishingImportProfile_&&publishingImportProfile_->first==source)return publishingImportProfile_->second;
   resources::ImportProfile profile;
   if(source.valid() && readProjectImportProfile(files_.rootPath(),resources::importProfilePath(source),profile)) return profile;
   return projectImportProfile();
@@ -11709,6 +11921,7 @@ bool EditorSession::saveProjectImportProfile(const resources::ImportProfile &pro
 }
 
 void EditorSession::beginImportPreparation(std::string_view path,bool batch) {
+  if(!batch&&!isPlaying()) {cameraPreview_.close();state_.workspace=EditorWorkspace::Library;}
   state_.importBatch=batch;
   state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;
   state_.importSummary.clear();state_.importPath=std::string(path);state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
@@ -11728,6 +11941,11 @@ void EditorSession::beginImportPreparation(std::string_view path,bool batch) {
   state_.importTextureCompression=state_.importPreparedTextureCompression=profile.textureCompression;
   state_.importGenerateLods=state_.importPreparedGenerateLods=profile.generateLods;
   state_.importLodLevels=state_.importPreparedLodLevels=profile.maximumLodLevels;
+  state_.importFbxDeformation=state_.importPreparedFbxDeformation=profile.fbxDeformation;
+  state_.importFbxReduceWeights=state_.importPreparedFbxReduceWeights=profile.fbxReduceWeights;
+  state_.importFbxApproximateSteps=state_.importPreparedFbxApproximateSteps=profile.fbxApproximateSteps;
+  state_.importFbxBakeRate=state_.importPreparedFbxBakeRate=profile.fbxBakeRate;
+  state_.importRetryable=state_.importPublishedView=false;state_.importTakes.clear();state_.importTakeSource={};
   state_.importOptimizeOrder=state_.importPreparedOptimizeOrder=profile.optimizePolygonOrder;
   state_.importTextureStreaming=profile.textureStreaming;
   state_.importTextureStreamingPriority=profile.textureStreamingPriority;

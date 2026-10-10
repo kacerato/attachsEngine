@@ -1,4 +1,5 @@
 #include "resources/texture_asset.h"
+#include "resources/tiff_decode.h"
 
 #include "core/sha256.h"
 
@@ -225,6 +226,14 @@ bool prepareTextureImport(std::span<const u8> source, const TextureProfile &sett
   }
   if (cancelled(cancel)) { out.diagnostic = "Importação de textura cancelada."; return false; }
   u32 width = 0, height = 0;
+  if(isTiff(source)) {
+    TiffInfo info;
+    if(!inspectTiff(source,limits.image,info,out.diagnostic))return false;
+    out.sourceTiff=true;out.sourceTiffBits=info.bits;out.sourceTiffUndefinedExtra=info.undefinedExtra;
+    out.sourceTiffHasIcc=!info.colorProfile.empty();out.sourceTiffMatrixSrgb=info.matrixSrgb;
+    out.sourceWidth=info.orientation>=5?info.height:info.width;
+    out.sourceHeight=info.orientation>=5?info.width:info.height;
+  }
   if (!readImageDimensions(source, limits.image, width, height)) {
     out.diagnostic = "Imagem inválida, não suportada ou acima dos limites de importação."; return false;
   }
@@ -284,7 +293,10 @@ bool prepareTextureImport(std::span<const u8> source, const TextureProfile &sett
     out.diagnostic = "Fonte e mipmaps excedem o orçamento de memória de trabalho."; return false;
   }
   DecodedImage image;
-  if (!decodeImageRgba8(source, limits.image, image, out.diagnostic)) return false;
+  if(out.sourceTiff) {
+    const TiffDecodePolicy policy{static_cast<TiffUndefinedExtra>(settings.tiffUndefinedExtra),settings.tiffQuantize16,settings.tiffIgnoreColorProfile};
+    if(!decodeTiffRgba8(source,limits.image,policy,image,out.knownLosses,out.diagnostic,cancel))return false;
+  } else if (!decodeImageRgba8(source, limits.image, image, out.diagnostic)) return false;
   out.sourceWidth = image.width; out.sourceHeight = image.height;
   for (usize pixel = 0; pixel < image.rgba.size() / 4u; ++pixel)
     out.sourceHasAlpha |= image.rgba[pixel * 4u + 3u] != 255u;

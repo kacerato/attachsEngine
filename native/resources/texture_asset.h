@@ -30,6 +30,9 @@ struct PreparedTextureImport final {
   u32 sourceHeight = 0;
   u32 droppedMipLevels = 0;
   bool sourceHasAlpha = false;
+  bool sourceTiff=false,sourceTiffUndefinedExtra=false,sourceTiffHasIcc=false,sourceTiffMatrixSrgb=false;
+  u16 sourceTiffBits=0;
+  std::vector<std::string> knownLosses;
   std::string sourceHash;
   std::string cacheKey;
   std::string diagnostic;

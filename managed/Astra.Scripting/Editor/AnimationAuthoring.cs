@@ -5,11 +5,17 @@ namespace Astra.Editor;
 
 public enum ClipCueKind : uint { Marker, Event }
 public sealed record ClipCue(ulong Id, float Time, ClipCueKind Kind, string Name, uint Tag = 0, double Value = 0, bool Forward = true, bool Reverse = true, bool Enabled = true);
+public sealed record ClipRegion(ulong Id, string Name, float Start, float End);
+public enum ClipWrap : uint { Once, Loop, PingPong, ClampForever }
 public enum ClipProperty : uint { Translation, Rotation, Scale, MorphWeights }
 public enum ClipRotation : uint { Quaternion, Euler, ProgressiveQuaternion }
 public enum ClipTangent : uint { Free, Linear, Constant, Auto, ClampedAuto, Flat, NextConstant }
 public enum ClipLayerBlend : uint { Override, Additive }
 public enum ClipPaste : uint { Replace, InsertTracks, InsertAllTracks }
+public enum ClipPoseSpace : uint { LocalChannel, WorldTransform }
+public enum ClipPoseRelation : uint { Parents, Children, Siblings, All }
+public enum ClipArrange : uint { AlignStart, AlignEnd, AlignCenter, Distribute }
+public readonly record struct ClipPoseRecording(bool AutoKey, bool CreateChannels, bool RangeArmed, float Start, float End);
 public readonly record struct ClipKey(ulong Id, float Time, float Value,
     float IncomingSlope = 0, float OutgoingSlope = 0,
     float IncomingWeight = 1f / 3, float OutgoingWeight = 1f / 3,
@@ -35,8 +41,22 @@ public sealed unsafe class EditorContext : IDisposable
     internal EditorContext(AnimationAuthorAccess* access)
     {
         var prefixSize = (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.Bake)).ToInt32();
-        if (access == null || (access->Version < 1 || access->Version > 6) ||
-            access->Size != (access->Version == 1 ? prefixSize : access->Version == 2 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.SampleComposed)).ToInt32() : access->Version == 3 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.BakeAdvanced)).ToInt32() : access->Version == 4 ? (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.PreviewClip)).ToInt32() : (uint)sizeof(AnimationAuthorAccess)) || access->Context == null ||
+        if (access == null) throw new NotSupportedException("The editor does not provide an animation authoring ABI.");
+        var expectedSize = access->Version switch {
+            1 => prefixSize,
+            2 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.SampleComposed)).ToInt32(),
+            3 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.BakeAdvanced)).ToInt32(),
+            4 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.PreviewClip)).ToInt32(),
+            5 or 6 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.CopyCues)).ToInt32(),
+            7 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.ConfigurePoseRecording)).ToInt32(),
+            8 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.PoseSelection)).ToInt32(),
+            9 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.ArrangeSelection)).ToInt32(),
+            10 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.SampleRegion)).ToInt32(),
+            11 => (uint)Marshal.OffsetOf<AnimationAuthorAccess>(nameof(AnimationAuthorAccess.PropertyCatalog)).ToInt32(),
+            12 => (uint)sizeof(AnimationAuthorAccess),
+            _ => 0u
+        };
+        if (expectedSize == 0 || access->Size != expectedSize || access->Context == null ||
             access->Selected == null || access->Count == null || access->At == null || access->Create == null ||
             access->Extract == null || access->Begin == null || access->Snapshot == null || access->Apply == null ||
             access->AddTrack == null || access->Commit == null || access->Cancel == null || access->Copy == null ||
@@ -47,6 +67,13 @@ public sealed unsafe class EditorContext : IDisposable
         if (access->Version >= 3 && access->SampleComposed == null) throw new NotSupportedException("The editor has no layer composition evaluator.");
         if (access->Version >= 4 && (access->BakeAdvanced == null || access->Consolidate == null)) throw new NotSupportedException("The editor has no clip conversion/consolidation implementation.");
         if (access->Version >= 5 && (access->PreviewClip == null || access->SeekPreview == null || access->StagePose == null || access->RecordPose == null || access->CancelPose == null || access->ClosePreview == null)) throw new NotSupportedException("The editor has no isolated pose authoring implementation.");
+        if (access->Version >= 7 && (access->CopyCues == null || access->PasteCues == null || access->TransformCues == null || access->EraseCues == null)) throw new NotSupportedException("The editor has no cue selection implementation.");
+        if (access->Version >= 8 && (access->ConfigurePoseRecording == null || access->ConfigurePoseLocks == null || access->PoseTool == null)) throw new NotSupportedException("The editor has no pose tools implementation.");
+        if (access->Version >= 9 && (access->PoseSelection == null || access->PoseTargets == null || access->PoseSet == null || access->PoseSetName == null)) throw new NotSupportedException("The editor has no pose selection implementation.");
+        if (access->Version >= 10 && access->ArrangeSelection == null) throw new NotSupportedException("The editor has no temporal arrangement implementation.");
+        if (access->Version >= 11 && access->SampleRegion == null) throw new NotSupportedException("The editor has no animation section evaluator.");
+        if (access->Version >= 12 && (access->PropertyCatalog == null || access->AddProperty == null || access->PutProperty == null || access->SampleProperty == null || access->RemapProperty == null || access->ConfigureDrivers == null || access->BindPropertyObject == null || access->DriverParameters == null))
+            throw new NotSupportedException("The editor has no typed properties and drivers implementation.");
         AnimationAuthorAccess copied = default;
         Buffer.MemoryCopy(access, &copied, sizeof(AnimationAuthorAccess), access->Size);
         _access = copied;
@@ -79,6 +106,35 @@ public sealed unsafe class EditorContext : IDisposable
         return Utf8.GetBytes(text);
     }
     public ulong SelectedObject => Access.Selected(_access.Context);
+    public IReadOnlyList<ClipPropertyDescriptor> AnimatableProperties(ulong target)
+    {
+        ref readonly var api = ref Access;
+        if (api.Version < 12) throw new NotSupportedException("Property catalog requires editor ABI 12.");
+        var count = api.PropertyCatalog(api.Context, target, -1, null, null, 0); Require(count is >= 0 and <= 65536);
+        var entries = new ClipPropertyDescriptor[count];
+        for (var i = 0; i < count; ++i)
+        {
+            AuthorProperty property = default; var length = api.PropertyCatalog(api.Context, target, i, &property, null, 0);
+            Require(length is >= 0 and <= 65536); var label = new byte[length];
+            fixed (byte* p = label) Require(api.PropertyCatalog(api.Context, target, i, &property, p, length) == length);
+            entries[i] = new(property.Value, Utf8.GetString(label));
+        }
+        return Array.AsReadOnly(entries);
+    }
+    public IReadOnlyList<ClipDriverParameter> AnimatorDriverParameters(ulong target)
+    {
+        ref readonly var api = ref Access; if (api.Version < 12) throw new NotSupportedException("Driver catalog requires editor ABI 12.");
+        var count = api.DriverParameters(api.Context, target, -1, null, null, 0); Require(count is >= 0 and <= 65536);
+        var entries = new ClipDriverParameter[count];
+        for (var i = 0; i < count; ++i)
+        {
+            AuthorDriverParameter parameter = default; var length = api.DriverParameters(api.Context, target, i, &parameter, null, 0);
+            Require(length is >= 0 and <= 65536); var label = new byte[length];
+            fixed (byte* p = label) Require(api.DriverParameters(api.Context, target, i, &parameter, p, length) == length);
+            entries[i] = new(parameter.Property.Value, parameter.Parameter, parameter.Controller.Value, Utf8.GetString(label));
+        }
+        return Array.AsReadOnly(entries);
+    }
     public IReadOnlyList<AssetGuid> Clips => Catalog(false);
     public IReadOnlyList<AssetGuid> ImportedClips => Catalog(true);
     private IReadOnlyList<AssetGuid> Catalog(bool imported)
@@ -137,6 +193,70 @@ public sealed unsafe class EditorContext : IDisposable
     public void RecordPose() { RequirePosePreview(); ref readonly var api = ref Access; Require(api.RecordPose(api.Context) == 1); }
     public void CancelPose() { RequirePosePreview(); ref readonly var api = ref Access; Require(api.CancelPose(api.Context) == 1); }
     public void CloseClipPreview() { RequirePosePreview(); ref readonly var api = ref Access; Require(api.ClosePreview(api.Context) == 1); }
+    private void RequirePoseTools()
+    {
+        if (Access.Version < 8) throw new NotSupportedException("This editor does not support recording policy, locks or pose clipboard.");
+    }
+    public void ConfigureClipPoseRecording(ClipPoseRecording policy)
+    {
+        RequirePoseTools(); ref readonly var api = ref Access;
+        Require(api.ConfigurePoseRecording(api.Context, (policy.CreateChannels ? 1u : 0u) | (policy.RangeArmed ? 2u : 0u) | (policy.AutoKey ? 4u : 0u), policy.Start, policy.End) == 1);
+    }
+    /// <summary>Bits address local XYZ axes or morph components. Rotation bits are angles, never quaternion XYZW.</summary>
+    public void ConfigureClipPoseLocks(ClipProperty property, ulong mask)
+    {
+        RequirePoseTools(); ref readonly var api = ref Access;
+        Require(api.ConfigurePoseLocks(api.Context, (uint)property, mask) == 1);
+    }
+    /// <summary>Resets the current channel, respecting locks and the editor Auto-key policy.</summary>
+    public void ResetClipPose(bool identity = false) { RequirePoseTools(); ref readonly var api = ref Access; Require(api.PoseTool(api.Context, identity ? 0u : 1u) == 1); }
+    /// <summary>WorldTransform copies evaluated TRS on Base; LocalChannel copies raw channel units and representation.</summary>
+    public void CopyClipPose(ClipPoseSpace space = ClipPoseSpace.LocalChannel)
+    {
+        if (space is not ClipPoseSpace.LocalChannel and not ClipPoseSpace.WorldTransform) throw new ArgumentOutOfRangeException(nameof(space));
+        RequirePoseTools(); ref readonly var api = ref Access; Require(api.PoseTool(api.Context, space == ClipPoseSpace.WorldTransform ? 3u : 2u) == 1);
+    }
+    public void PasteClipPose() { RequirePoseTools(); ref readonly var api = ref Access; Require(api.PoseTool(api.Context, 4) == 1); }
+    private void RequirePoseSelection() { Check(); if (_access.Version < 9) throw new NotSupportedException("Pose selection requires editor ABI 9."); }
+    /// <summary>Transient object IDs. The primary is explicit when assigning a group; nested selected children receive their parent's motion once.</summary>
+    public IReadOnlyList<ulong> ClipPoseTargets
+    {
+        get { RequirePoseSelection(); ref readonly var api = ref Access;
+            var count = api.PoseTargets(api.Context, null, 0); Require(count is >= 0 and <= 256);
+            var targets = new ulong[count]; fixed (ulong* p = targets) Require(api.PoseTargets(api.Context, p, count) == count); return targets; }
+    }
+    public void SelectClipPoseTargets(ReadOnlySpan<ulong> targets, ulong primary = 0)
+    {
+        RequirePoseSelection(); if (targets.Length > 256) throw new ArgumentOutOfRangeException(nameof(targets));
+        if (primary == 0 && targets.Length != 0) primary = targets[0]; ref readonly var api = ref Access;
+        fixed (ulong* p = targets) Require(api.PoseSelection(api.Context, 0, p, targets.Length, primary) == 1);
+    }
+    public void ToggleClipPoseTarget(ulong target) { RequirePoseSelection(); ref readonly var api = ref Access; Require(api.PoseSelection(api.Context, 1, &target, 1, 0) == 1); }
+    public void SelectClipPoseRelation(ClipPoseRelation relation)
+    {
+        if ((uint)relation > 3) throw new ArgumentOutOfRangeException(nameof(relation)); RequirePoseSelection(); ref readonly var api = ref Access;
+        Require(api.PoseSelection(api.Context, 2 + (uint)relation, null, 0, 0) == 1);
+    }
+    public void FocusClipPoseSelection() { RequirePoseSelection(); ref readonly var api = ref Access; Require(api.PoseSelection(api.Context, 7, null, 0, 0) == 1); }
+    public void IsolateClipPoseSelection(bool isolate = true) { RequirePoseSelection(); ref readonly var api = ref Access; Require(api.PoseSelection(api.Context, isolate ? 8u : 9u, null, 0, 0) == 1); }
+    public IReadOnlyList<string> ClipPoseSelectionSets
+    {
+        get { RequirePoseSelection(); ref readonly var api = ref Access;
+            var count = api.PoseSetName(api.Context, -1, null, 0); Require(count is >= 0 and <= 32);
+            var names = new string[count]; for (var i = 0; i < count; ++i) {
+                var length = api.PoseSetName(api.Context, i, null, 0); Require(length is > 0 and <= 96); var bytes = new byte[length];
+                fixed (byte* p = bytes) Require(api.PoseSetName(api.Context, i, p, length) == length); names[i] = Utf8.GetString(bytes);
+            } return names; }
+    }
+    private void ClipPoseSet(uint operation, string name)
+    {
+        RequirePoseSelection(); ArgumentNullException.ThrowIfNull(name); var bytes = Utf8.GetBytes(name);
+        if (bytes.Length is 0 or > 96) throw new ArgumentOutOfRangeException(nameof(name)); ref readonly var api = ref Access;
+        fixed (byte* p = bytes) Require(api.PoseSet(api.Context, operation, p, bytes.Length) == 1);
+    }
+    public void SaveClipPoseSelection(string name) => ClipPoseSet(0, name);
+    public void RecallClipPoseSelection(string name) => ClipPoseSet(1, name);
+    public void RemoveClipPoseSelection(string name) => ClipPoseSet(2, name);
     public void Dispose() { if (!_active) return; Check(); _active = false; }
 }
 
@@ -149,6 +269,37 @@ public sealed unsafe class ClipEdit : IDisposable
     private ref readonly AnimationAuthorAccess Api
     {
         get { _context.Check(); ObjectDisposedException.ThrowIf(_token == 0, this); return ref _context.Access; }
+    }
+    private void RequireProperties() { if (Api.Version < 12) throw new NotSupportedException("Typed property authoring requires editor ABI 12."); }
+    public ulong BindPropertyObject(ulong owner, ulong target)
+    {
+        RequireProperties(); ref readonly var api = ref Api; ulong binding = 0;
+        _context.Require(api.BindPropertyObject(api.Context, _token, owner, target, &binding) == 1); return binding;
+    }
+    public ulong AddProperty(ulong owner, ulong target, ClipPropertyAddress address)
+    {
+        RequireProperties(); ref readonly var api = ref Api; var wire = new AuthorProperty(address); ulong id = 0;
+        _context.Require(api.AddProperty(api.Context, _token, owner, target, &wire, &id) == 1); return id;
+    }
+    public void PutProperty(ulong owner, ulong track, float time, ClipValue value)
+    {
+        RequireProperties(); ref readonly var api = ref Api; var wire = new AuthorPropertyValue(value);
+        _context.Require(api.PutProperty(api.Context, _token, owner, track, time, &wire) == 1);
+    }
+    public ClipValue SampleProperty(ulong track, float time)
+    {
+        RequireProperties(); ref readonly var api = ref Api; AuthorPropertyValue wire = default;
+        _context.Require(api.SampleProperty(api.Context, _token, track, time, &wire) == 1); return wire.Value;
+    }
+    public void RemapProperty(ulong owner, ulong track, ulong target, ClipPropertyAddress address)
+    {
+        RequireProperties(); ref readonly var api = ref Api; var wire = new AuthorProperty(address);
+        _context.Require(api.RemapProperty(api.Context, _token, owner, track, target, &wire) == 1);
+    }
+    public void ConfigureDrivers(ulong owner, ClipDrivers drivers)
+    {
+        RequireProperties(); ArgumentNullException.ThrowIfNull(drivers); ref readonly var api = ref Api; var bytes = drivers.Encode();
+        fixed (byte* p = bytes) _context.Require(api.ConfigureDrivers(api.Context, _token, owner, p, bytes.Length) == 1);
     }
     public ClipSnapshot Snapshot
     {
@@ -167,6 +318,9 @@ public sealed unsafe class ClipEdit : IDisposable
         ReadOnlySpan<float> values = default, string text = "")
     {
         ref readonly var api = ref Api;
+        if (operation >= AuthorOperation.PutRegion && api.Version < 11) throw new NotSupportedException("Region authoring requires editor ABI 11.");
+        if (operation >= AuthorOperation.CloseRange && api.Version < 10) throw new NotSupportedException("Cycle authoring requires editor ABI 10.");
+        if (operation >= AuthorOperation.InsertTime && api.Version < 7) throw new NotSupportedException("This editor does not support timeline interval edits.");
         if (operation >= AuthorOperation.PutCue && api.Version < 6) throw new NotSupportedException("This editor does not support clip cues.");
         if (operation >= AuthorOperation.LayerAdd && api.Version < 3) throw new NotSupportedException("This editor build does not support authoring layers.");
         if (values.Length > 256) throw new ArgumentException("Too many pose components.", nameof(values));
@@ -183,6 +337,69 @@ public sealed unsafe class ClipEdit : IDisposable
         new AuthorKey { Flags = (cue.Forward ? 1u : 0) | (cue.Reverse ? 2u : 0) | (cue.Enabled ? 4u : 0) },
         cue.Time, cue.Value, (uint)cue.Kind, text: cue.Name);
     public void RemoveCue(ulong cue) => Apply(AuthorOperation.RemoveCue, cue);
+    /// <summary>ID zero creates a named section; a nonzero ID edits its explicit boundaries. Sections never dispatch gameplay.</summary>
+    public ulong PutRegion(ClipRegion region) => Apply(AuthorOperation.PutRegion, region.Id, first: region.Start, second: region.End, text: region.Name);
+    public void RemoveRegion(ulong region) => Apply(AuthorOperation.RemoveRegion, region);
+    /// <summary>Evaluates the final property composition using section-relative time, without scene mutation or events.</summary>
+    public float[] SampleRegion(ulong region, ulong track, double elapsed, ClipWrap wrap = ClipWrap.Loop)
+    {
+        ref readonly var api = ref Api;
+        if (api.Version < 11) throw new NotSupportedException("Region evaluation requires editor ABI 11.");
+        var count = api.SampleRegion(api.Context, _token, region, track, elapsed, (uint)wrap, null, 0);
+        _context.Require(count > 0);
+        if (count > 256) throw new InvalidDataException("Region sample exceeds its component limit.");
+        var values = new float[count];
+        fixed (float* p = values) _context.Require(api.SampleRegion(api.Context, _token, region, track, elapsed, (uint)wrap, p, count) == count);
+        return values;
+    }
+    /// <summary>Shifts keys, cues and additive references at/after time. Spanning segments become longer.</summary>
+    public void InsertTime(float time, float length) => Apply(AuthorOperation.InsertTime, first: time, second: length);
+    /// <summary>Removes [start,end); refuses an additive reference inside or an emptied channel.</summary>
+    public void RemoveTime(float start, float end) => Apply(AuthorOperation.RemoveTime, first: start, second: end);
+    /// <summary>Copies all raw authoring layers and cues; ripple inserts the excerpt plus one display frame.</summary>
+    public void DuplicateRange(float start, float end, float destination) => Apply(AuthorOperation.DuplicateRange,
+        key: new AuthorKey { Time = destination }, first: start, second: end);
+    /// <summary>Moves authored keys, cues and reference times in the range without changing duration. Key conflicts refuse the entire edit.</summary>
+    public void MoveRange(float start, float end, float destination) => Apply(AuthorOperation.MoveRange,
+        key: new AuthorKey { Time = destination }, first: start, second: end);
+    /// <summary>Copies each raw layer's start pose onto the end. Matches pose, without promising matching velocity.</summary>
+    public void CloseRange(float start, float end) => Apply(AuthorOperation.CloseRange, first: start, second: end);
+    /// <summary>Inserts 1–64 additional contiguous closed cycles. Cues use [start,end); open seams refuse the whole edit.</summary>
+    public void RepeatRange(float start, float end, uint copies = 1, float tolerance = .001f) => Apply(AuthorOperation.RepeatRange,
+        key: new AuthorKey { Value = tolerance }, first: start, second: end, mode: copies);
+    public void ArrangeSelection(ReadOnlySpan<ClipKeyAddress> selection, ReadOnlySpan<ulong> cues, ClipArrange mode, float first, float last = 0)
+    {
+        ref readonly var api = ref Api;
+        if (api.Version < 10) throw new NotSupportedException("Selection arrangement requires editor ABI 10.");
+        var addresses = selection.IsEmpty ? Array.Empty<AuthorAddress>() : Addresses(selection);
+        fixed (AuthorAddress* p = addresses) fixed (ulong* c = cues)
+            _context.Require(api.ArrangeSelection(api.Context, _token, p, addresses.Length, c, cues.Length, (uint)mode, first, last) == 1);
+    }
+    private void RequireCueSelection()
+    {
+        if (Api.Version < 7) throw new NotSupportedException("This editor does not support cue selections.");
+    }
+    public ClipCueClipboard CopyCues(ReadOnlySpan<ulong> ids)
+    {
+        RequireCueSelection(); ref readonly var api = ref Api; ulong handle;
+        fixed (ulong* p = ids) handle = api.CopyCues(api.Context, _token, p, ids.Length);
+        _context.Require(handle != 0); return new(_context, handle);
+    }
+    public void PasteCues(ClipCueClipboard clipboard, float time)
+    {
+        RequireCueSelection(); ref readonly var api = ref Api;
+        _context.Require(api.PasteCues(api.Context, _token, clipboard.Handle(_context), time) == 1);
+    }
+    public void TransformCues(ReadOnlySpan<ulong> ids, double pivot = 0, double scale = 1, double offset = 0)
+    {
+        RequireCueSelection(); ref readonly var api = ref Api;
+        fixed (ulong* p = ids) _context.Require(api.TransformCues(api.Context, _token, p, ids.Length, pivot, scale, offset) == 1);
+    }
+    public void EraseCues(ReadOnlySpan<ulong> ids)
+    {
+        RequireCueSelection(); ref readonly var api = ref Api;
+        fixed (ulong* p = ids) _context.Require(api.EraseCues(api.Context, _token, p, ids.Length) == 1);
+    }
     public ulong PutKey(ulong track, uint component, ClipKey key) => Apply(AuthorOperation.PutKey, track, component, new(key));
     public ulong SplitKey(ulong track, uint component, float time) => Apply(AuthorOperation.SplitKey, track, component, first: time);
     public void EraseKey(ClipKeyAddress address) => Apply(AuthorOperation.EraseKey, address.Track, address.Component, new AuthorKey { Id = address.Key });
@@ -318,6 +535,25 @@ public sealed unsafe class ClipEdit : IDisposable
         _token = 0;
     }
 }
+/// <summary>Owned cue clipboard; valid only during the creating editor command.</summary>
+public sealed unsafe class ClipCueClipboard : IDisposable
+{
+    private readonly EditorContext _context;
+    private ulong _token;
+    internal ClipCueClipboard(EditorContext context, ulong token) { _context = context; _token = token; }
+    internal ulong Handle(EditorContext context)
+    {
+        _context.Check(); ObjectDisposedException.ThrowIf(_token == 0, this);
+        if (!ReferenceEquals(context, _context)) throw new InvalidOperationException("Cue clipboard belongs to another command.");
+        return _token;
+    }
+    public void Dispose()
+    {
+        if (_token == 0) return;
+        if (_context.Active) { ref readonly var api = ref _context.Access; _context.Require(api.ReleaseClipboard(api.Context, _token) == 1); }
+        _token = 0;
+    }
+}
 public sealed unsafe class ClipClipboard : IDisposable
 {
     internal EditorContext Context { get; }
@@ -354,7 +590,7 @@ public static class ClipBindingPath
     }
 }
 
-internal enum AuthorOperation : uint { PutKey, SplitKey, EraseKey, PutPose, Retime, Reverse, Crop, RotationMode, RemoveTrack, Name, DisplayRate, LayerAdd, LayerConfigure, LayerMove, LayerDuplicate, LayerRemove, LayerAddTrack, LayerCopyBase, PutCue, RemoveCue }
+internal enum AuthorOperation : uint { PutKey, SplitKey, EraseKey, PutPose, Retime, Reverse, Crop, RotationMode, RemoveTrack, Name, DisplayRate, LayerAdd, LayerConfigure, LayerMove, LayerDuplicate, LayerRemove, LayerAddTrack, LayerCopyBase, PutCue, RemoveCue, InsertTime, RemoveTime, DuplicateRange, MoveRange, CloseRange, RepeatRange, PutRegion, RemoveRegion }
 [StructLayout(LayoutKind.Sequential)]
 internal struct AuthorGuid
 {
@@ -426,6 +662,27 @@ internal unsafe struct AnimationAuthorAccess
     public delegate* unmanaged<void*, int> RecordPose;
     public delegate* unmanaged<void*, int> CancelPose;
     public delegate* unmanaged<void*, int> ClosePreview;
+    public delegate* unmanaged<void*, ulong, ulong*, int, ulong> CopyCues;
+    public delegate* unmanaged<void*, ulong, ulong, float, int> PasteCues;
+    public delegate* unmanaged<void*, ulong, ulong*, int, double, double, double, int> TransformCues;
+    public delegate* unmanaged<void*, ulong, ulong*, int, int> EraseCues;
+    public delegate* unmanaged<void*, uint, float, float, int> ConfigurePoseRecording;
+    public delegate* unmanaged<void*, uint, ulong, int> ConfigurePoseLocks;
+    public delegate* unmanaged<void*, uint, int> PoseTool;
+    public delegate* unmanaged<void*, uint, ulong*, int, ulong, int> PoseSelection;
+    public delegate* unmanaged<void*, ulong*, int, int> PoseTargets;
+    public delegate* unmanaged<void*, uint, byte*, int, int> PoseSet;
+    public delegate* unmanaged<void*, int, byte*, int, int> PoseSetName;
+    public delegate* unmanaged<void*, ulong, AuthorAddress*, int, ulong*, int, uint, float, float, int> ArrangeSelection;
+    public delegate* unmanaged<void*, ulong, ulong, ulong, double, uint, float*, int, int> SampleRegion;
+    public delegate* unmanaged<void*, ulong, int, AuthorProperty*, byte*, int, int> PropertyCatalog;
+    public delegate* unmanaged<void*, ulong, ulong, ulong, AuthorProperty*, ulong*, int> AddProperty;
+    public delegate* unmanaged<void*, ulong, ulong, ulong, float, AuthorPropertyValue*, int> PutProperty;
+    public delegate* unmanaged<void*, ulong, ulong, float, AuthorPropertyValue*, int> SampleProperty;
+    public delegate* unmanaged<void*, ulong, ulong, ulong, ulong, AuthorProperty*, int> RemapProperty;
+    public delegate* unmanaged<void*, ulong, ulong, byte*, int, int> ConfigureDrivers;
+    public delegate* unmanaged<void*, ulong, ulong, ulong, ulong*, int> BindPropertyObject;
+    public delegate* unmanaged<void*, ulong, int, AuthorDriverParameter*, byte*, int, int> DriverParameters;
 }
 [StructLayout(LayoutKind.Sequential)]
 internal struct AuthorBakeSettings

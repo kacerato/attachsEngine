@@ -1,4 +1,6 @@
 #include "resources/animation_clip_asset.h"
+#include "resources/animation_property_curve_edit.h"
+#include "resources/animation_clip_region_edit.h"
 #include "resources/animation_clip_edit_helpers.h"
 #include "core/rotation_math.h"
 #include <algorithm>
@@ -141,9 +143,12 @@ bool AnimationClipAsset::addTrack(AnimationClipBinding binding,AnimationPath pat
 bool AnimationClipAsset::removeTrack(u64 trackId,std::string &diagnostic) {
   diagnostic.clear();if(!valid(&diagnostic))return false;auto candidate=*this;
   const auto found=std::find_if(candidate.tracks.begin(),candidate.tracks.end(),[&](const auto &track){return track.id==trackId;});
-  if(found==candidate.tracks.end()||candidate.tracks.size()==1) {diagnostic="Preserve ao menos uma propriedade no clipe";return false;}
+  if(found==candidate.tracks.end()||candidate.tracks.size()+candidate.properties.size()==1) {diagnostic="Preserve ao menos uma propriedade no clipe";return false;}
   const auto binding=found->binding;candidate.tracks.erase(found);
-  if(std::none_of(candidate.tracks.begin(),candidate.tracks.end(),[&](const auto &track){return track.binding==binding;}))
+  if(std::none_of(candidate.tracks.begin(),candidate.tracks.end(),[&](const auto &track){return track.binding==binding;})&&
+     std::none_of(candidate.properties.begin(),candidate.properties.end(),[&](const auto &track){return track.binding==binding;})&&
+     std::none_of(candidate.drivers.inputs.begin(),candidate.drivers.inputs.end(),[&](const auto &input){return input.binding==binding;})&&
+     std::none_of(candidate.drivers.targets.begin(),candidate.drivers.targets.end(),[&](const auto &output){return output.binding==binding;}))
     std::erase_if(candidate.bindings,[&](const auto &value){return value.id==binding;});
   if(!candidate.valid(&diagnostic))return false;
   *this=std::move(candidate);return true;
@@ -200,6 +205,7 @@ bool AnimationClipAsset::changeRotationMode(u64 trackId,AnimationRotationMode mo
   *this=std::move(candidate);return true;
 }
 bool AnimationClipAsset::putKey(u64 trackId,u32 component,AnimationCurveKey key,u64 &resultId,std::string &diagnostic) {
+  if(propertyTrack(trackId))return putAnimationPropertyCurveKey(*this,trackId,component,key,resultId,diagnostic);
   diagnostic.clear();auto candidate=*this;auto *t=candidate.track(trackId);
   if(!t||component>=t->curves.size()) {diagnostic="Canal ausente";return false;}
   auto &curve=t->curves[component];
@@ -251,6 +257,7 @@ bool AnimationClipAsset::putKey(u64 trackId,u32 component,AnimationCurveKey key,
   t->sourceOverride=true;*this=std::move(candidate);resultId=result;return true;
 }
 bool AnimationClipAsset::splitKey(u64 trackId,u32 component,float time,u64 &resultId,std::string &diagnostic) {
+  if(propertyTrack(trackId))return splitAnimationPropertyCurveKey(*this,trackId,component,time,resultId,diagnostic);
   diagnostic.clear();if(!valid(&diagnostic))return false;auto candidate=*this;auto *track=candidate.track(trackId);
   if(!track||component>=track->curves.size()||!std::isfinite(time)||time<0||time>duration) {diagnostic="Canal ou tempo de inserção inválidos";return false;}
   const auto *source=this->track(trackId);const auto &selected=source->curves[component].keys;
@@ -291,6 +298,7 @@ bool AnimationClipAsset::splitKey(u64 trackId,u32 component,float time,u64 &resu
   result=found->id;track->sourceOverride=true;*this=std::move(candidate);resultId=result;return true;
 }
 bool AnimationClipAsset::eraseKey(u64 trackId,u32 component,u64 keyId,std::string &diagnostic) {
+  if(propertyTrack(trackId))return eraseAnimationPropertyCurveKey(*this,trackId,component,keyId,diagnostic);
   diagnostic.clear();auto candidate=*this;auto *t=candidate.track(trackId);
   if(!t||component>=t->curves.size()) {diagnostic="Canal ausente";return false;}
   const auto &curve=t->curves[component];
@@ -308,6 +316,8 @@ bool AnimationClipAsset::retime(double scale,std::string &diagnostic) {
   if(!valid(&diagnostic)||!std::isfinite(scale)||scale<=0||duration*scale>86400) {diagnostic="Escala de tempo inválida";return false;}
   auto candidate=*this;candidate.duration=static_cast<float>(duration*scale);
   for(auto &cue:candidate.cues)cue.time=static_cast<float>(cue.time*scale);
+  for(auto &r:candidate.regions) {r.start=static_cast<float>(r.start*scale);r.end=static_cast<float>(r.end*scale);}
+  sortAnimationRegions(candidate);
   for(auto &layer:candidate.layers)if(layer.referenceTime>=0)layer.referenceTime=static_cast<float>(layer.referenceTime*scale);
   for(auto &track:candidate.tracks) {
     for(auto &curve:track.curves) {
@@ -315,14 +325,18 @@ bool AnimationClipAsset::retime(double scale,std::string &diagnostic) {
     }
     track.sourceOverride=true;
   }
+  for(auto &track:candidate.properties)if(!retimeAnimationProperty(track.data,scale,0,diagnostic))return false;
   if(!candidate.valid(&diagnostic))return false;
   *this=std::move(candidate);return true;
 }
 bool AnimationClipAsset::reverse(std::string &diagnostic) {
   diagnostic.clear();if(!valid(&diagnostic))return false;auto candidate=*this;
   for(auto &cue:candidate.cues) {cue.time=duration-cue.time;std::swap(cue.forward,cue.reverse);}
+  for(auto &r:candidate.regions) {const float start=duration-r.end;r.end=duration-r.start;r.start=start;}
+  sortAnimationRegions(candidate);
   std::sort(candidate.cues.begin(),candidate.cues.end(),[](const auto &a,const auto &b){return a.time!=b.time?a.time<b.time:a.id<b.id;});
   for(auto &layer:candidate.layers)if(layer.referenceTime>=0)layer.referenceTime=duration-layer.referenceTime;
+  for(auto &track:candidate.properties)if(!reverseAnimationProperty(track.data,duration,diagnostic))return false;
   for(auto &track:candidate.tracks) {
     for(auto &curve:track.curves) {
       if(!reverseAnimationCurve(curve,0,duration)) {diagnostic="Inversão excede a precisão de tempo";return false;}
@@ -340,6 +354,8 @@ bool AnimationClipAsset::crop(float start,float end,std::string &diagnostic) {
   diagnostic.clear();
   if(!valid(&diagnostic)||!std::isfinite(start)||!std::isfinite(end)||start<0||end<start||end>duration) {diagnostic="Intervalo de corte inválido";return false;}
   auto candidate=*this;candidate.duration=end-start;
+  for(auto &track:candidate.properties)if(!cropAnimationProperty(track.data,start,end,candidate.nextId,diagnostic))return false;
+  cropAnimationRegions(candidate,start,end);
   std::erase_if(candidate.cues,[&](const auto &c){return c.time<start||c.time>end;});
   for(auto &cue:candidate.cues)cue.time-=start;
   for(auto &layer:candidate.layers)if(layer.referenceTime>=0) {

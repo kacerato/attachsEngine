@@ -1,0 +1,28 @@
+[0/2] Re-checking globbed directories...
+[1/27] Checking generated component contracts
+68 types / 11 family tables; 428 property declarations / 78 tables; 856 generated accessors; all outputs current
+[2/27] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_texture_preview.cpp.obj
+[3/27] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.obj
+[4/27] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_history.cpp.obj
+[5/27] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_view.cpp.obj
+[6/27] Building CXX object CMakeFiles/aether_rhi.dir/rhi/ui_renderer.cpp.obj
+[7/27] Linking CXX static library libaether_rhi.a
+[8/27] Building CXX object CMakeFiles/aether_editor.dir/editor/editor_animation_drivers.cpp.obj
+[9/27] Building CXX object CMakeFiles/aether_gui_core_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_gui.cpp.obj
+[10/27] Building CXX object CMakeFiles/aether_gui_core_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_gui_expansion.cpp.obj
+[11/27] Linking CXX static library libaether_editor.a
+[12/27] Building CXX object CMakeFiles/aether_animation_clip_editor_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_animation_clip_events.cpp.obj
+[13/27] Building CXX object CMakeFiles/aether_gui_core_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_scene_gui.cpp.obj
+[14/27] Building CXX object CMakeFiles/aether_animation_clip_editor_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_animation_clip_asset.cpp.obj
+[15/27] Building CXX object CMakeFiles/aether_unity_material_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_unity_material_import.cpp.obj
+[16/27] Building CXX object CMakeFiles/aether_unity_material_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_library_index.cpp.obj
+[17/27] Building CXX object CMakeFiles/aether_animation_clip_editor_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_animation_clip_editor.cpp.obj
+[18/27] Building CXX object CMakeFiles/aether_unity_material_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_editor_library.cpp.obj
+[19/27] Building CXX object CMakeFiles/aether_unity_material_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_editor_library_texture.cpp.obj
+[20/27] Building CXX object CMakeFiles/aether_unity_material_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_editor_library_fbx.cpp.obj
+[21/27] Building CXX object CMakeFiles/aether_unity_material_tests.dir/C_/Users/donod/Downloads/atchengine/tests/native/test_editor_library_unity.cpp.obj
+[22/27] Building CXX object CMakeFiles/aether_animation_authoring_sdk_bridge.dir/C_/Users/donod/Downloads/atchengine/tests/native/animation_authoring_sdk_bridge.cpp.obj
+[23/27] Linking CXX executable aether_gui_core_tests.exe
+[24/27] Linking CXX executable aether_animation_clip_editor_tests.exe
+[25/27] Linking CXX executable aether_unity_material_tests.exe
+[26/27] Linking CXX shared library libaether_animation_authoring_sdk_bridge.dll

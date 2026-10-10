@@ -49,6 +49,7 @@ public final class ModelPicker {
     // arquivos para a pasta de preparo do projeto, com SHA-256 calculado junto.
     // O .max de 500 MB e as texturas que o modelo não usa nunca são copiados.
     private static native boolean pickFolder(long token);
+    private static native boolean pickPackage(long token);
     private static native void submitFolder(long token, byte[][] paths, long[] sizes, byte[][] mainPaths,
                                             byte[][] mainContents, byte[] folderName, byte[] diagnostic);
     private static native long pollCopy();
@@ -261,6 +262,7 @@ public final class ModelPicker {
     }
 
     private static void listFolder(long token, Uri tree, ContentResolver resolver) {
+        final boolean packageFolder = pickPackage(token);
         java.util.ArrayList<String> paths = new java.util.ArrayList<>();
         java.util.ArrayList<Long> sizes = new java.util.ArrayList<>();
         java.util.ArrayList<Integer> depths = new java.util.ArrayList<>();
@@ -283,13 +285,23 @@ public final class ModelPicker {
                 try (Cursor cursor = resolver.query(children, columns, null, null, null)) {
                     while (cursor != null && cursor.moveToNext()) {
                         String id = cursor.getString(0), name = cursor.getString(1), mime = cursor.getString(2);
-                        if (id == null || name == null || name.isEmpty() || name.contains("/")) continue;
+                        if (id == null || name == null || name.isEmpty() || name.contains("/")) {
+                            if (packageFolder) {
+                                submitFolder(token, null, null, null, null, null, encode("O provedor informou uma entrada inválida; nenhum pacote será publicado."));
+                                return;
+                            }
+                            continue;
+                        }
                         String relative = entry[1].isEmpty() ? name : entry[1] + "/" + name;
                         if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
                             if (depth + 1 < MAXIMUM_FOLDER_DEPTH) pending.add(new String[] {id, relative});
+                            else {
+                                submitFolder(token, null, null, null, null, null, encode("A pasta excede 8 níveis; escolha uma subpasta para preservar todos os arquivos."));
+                                return;
+                            }
                             continue;
                         }
-                        if (paths.size() >= MAXIMUM_FOLDER_FILES) {
+                        if (paths.size() >= (packageFolder ? 4096 : MAXIMUM_FOLDER_FILES)) {
                             submitFolder(token, null, null, null, null, null,
                                          encode("A pasta tem arquivos demais; escolha a pasta do modelo, não uma pasta acima dela."));
                             return;
@@ -304,6 +316,13 @@ public final class ModelPicker {
                 }
             }
             // Principais: todo .gltf (texto, pequeno); .glb só quando não há .gltf.
+            if (packageFolder) {
+                byte[][] encodedPaths = new byte[paths.size()][];
+                long[] sizeArray = new long[paths.size()];
+                for (int i = 0; i < paths.size(); ++i) { encodedPaths[i] = encode(paths.get(i)); sizeArray[i] = sizes.get(i); }
+                submitFolder(token, encodedPaths, sizeArray, new byte[0][], new byte[0][], encode(folderName), null);
+                return;
+            }
             boolean anyGltf = false;
             for (String path : paths) anyGltf |= path.toLowerCase(java.util.Locale.ROOT).endsWith(".gltf");
             java.util.ArrayList<byte[]> mainPaths = new java.util.ArrayList<>(), mainContents = new java.util.ArrayList<>();
@@ -390,6 +409,7 @@ public final class ModelPicker {
         try {
             String root = destination.getCanonicalPath() + File.separator;
             for (int i = 0; i < sources.length; ++i) {
+                if (copyCancelled(token)) {submitCopy(token, null, null);return;}
                 File target = new File(destination, new String(targets[i], StandardCharsets.UTF_8));
                 // O nativo já normalizou o caminho; conferir aqui fecha a pasta de preparo.
                 if (!target.getCanonicalPath().startsWith(root)) {
@@ -411,8 +431,7 @@ public final class ModelPicker {
                     long sinceReport = 0;
                     while ((read = in.read(chunk)) > 0) {
                         if (copyCancelled(token)) {
-                            submitCopy(token, null, null);
-                            return;
+                            throw new java.io.InterruptedIOException("Cópia cancelada");
                         }
                         out.write(chunk, 0, read);
                         digest.update(chunk, 0, read);
@@ -429,7 +448,7 @@ public final class ModelPicker {
             }
             submitCopy(token, hashes, null);
         } catch (Exception error) {
-            submitCopy(token, null, encode("Falha ao copiar a pasta do modelo para o projeto."));
+            submitCopy(token, null, copyCancelled(token) ? null : encode("Falha ao copiar a pasta para o projeto."));
         }
     }
 

@@ -1,0 +1,388 @@
+#include "editor/editor_session.h"
+#include "editor/editor_animation_pose_selection.h"
+#include "resources/unity_animation_import.h"
+#include "resources/unity_animation_merge.h"
+#include "resources/unity_controller_import.h"
+#include "resources/unity_import_recipe.h"
+#include "resources/unity_subassets.h"
+#include "runtime/unity_prefab.h"
+#include <algorithm>
+#include <limits>
+#include <map>
+#include <memory>
+
+namespace ae::editor {
+namespace {
+using namespace resources;
+std::string hash(std::string_view text){return Sha256::hex({reinterpret_cast<const u8*>(text.data()),text.size()});}
+struct Snapshot {std::optional<AssetRecord> record;std::string text;};
+struct Dependency {
+  std::vector<AssetGuid> identities;
+  AssetGuid owner{};
+  bool loop=false;
+};
+bool equal(const AssetRecord &a,const AssetRecord &b) {
+  return a.guid==b.guid&&a.type==b.type&&a.path==b.path&&a.source==b.source&&a.contentHash==b.contentHash&&
+    a.importerVersion==b.importerVersion&&a.importerParameters==b.importerParameters&&a.dependencies==b.dependencies&&a.derived==b.derived;
+}
+u64 retainedBytes(const Snapshot &value) {
+  u64 bytes=sizeof(Snapshot)+value.text.capacity();
+  if(value.record) {
+    const auto &r=*value.record;
+    bytes+=r.path.capacity()+r.source.capacity()+r.contentHash.capacity()+r.importerParameters.capacity()+
+      r.dependencies.capacity()*sizeof(AssetGuid)+r.derived.capacity()*sizeof(std::string);
+    for(const auto &path:r.derived)bytes+=path.capacity();
+  }
+  return bytes;
+}
+std::string controllerContent(AnimatorControllerAsset value) {
+  value.revision=1;value.graph.nextId=std::numeric_limits<u64>::max();return value.serialize();
+}
+std::string prefabContent(std::string_view text,std::string &error) {
+  runtime::Prefab value;
+  if(!value.read(text,defaultEditorComponentRegistry(),error))return {};
+  auto graph=value.graph();
+  if(!graph.reserveObjectIdsUntil(65537)||!value.capture(graph,value.root(),value.asset(),error))return {};
+  return value.write();
+}
+bool sameNative(std::string_view expected,std::string_view observed,AssetType type,std::string &error) {
+  if(expected==observed)return true;
+  if(type==AssetType::AnimationClip) {
+    AnimationClipAsset before,current;
+    if(!AnimationClipAsset::deserialize(expected,before,&error)||!AnimationClipAsset::deserialize(observed,current,&error)||
+       current.revision<before.revision||current.nextId<before.nextId)return false;
+    before.revision=current.revision;before.nextId=current.nextId;return before.serialize()==current.serialize();
+  }
+  if(type==AssetType::AnimatorController) {
+    AnimatorControllerAsset before,current;
+    if(!AnimatorControllerAsset::deserialize(expected,before)||!AnimatorControllerAsset::deserialize(observed,current)||
+       current.revision<before.revision||current.graph.nextId<before.graph.nextId)return false;
+    before.revision=current.revision;before.graph.nextId=current.graph.nextId;return before.serialize()==current.serialize();
+  }
+  if(type==AssetType::Prefab) {
+    runtime::Prefab before,current;
+    if(!before.read(expected,defaultEditorComponentRegistry(),error)||!current.read(observed,defaultEditorComponentRegistry(),error)||
+       current.graph().nextObjectId()<before.graph().nextObjectId())return false;
+    return prefabContent(expected,error)==prefabContent(observed,error);
+  }
+  return false;
+}
+bool read(const std::filesystem::path &root,const std::string &relative,std::string &out,usize maximum=UnityYamlDocument::MaximumBytes) {
+  std::filesystem::path path;std::vector<u8> bytes;
+  if(!EditorImportTransaction::safePath(root,relative,path)||!EditorImportTransaction::read(path,bytes,maximum))return false;
+  out.assign(bytes.begin(),bytes.end());return true;
+}
+std::string baselinePath(const std::string &digest){return ".astra/imports/unity-baselines/"+digest+".source";}
+bool baseline(const std::filesystem::path &root,const std::string &text,std::string &digest,std::string &error) {
+  digest=hash(text);const auto relative=baselinePath(digest);std::filesystem::path path;std::error_code ec;
+  if(!EditorImportTransaction::safePath(root,relative,path))return false;
+  if(std::filesystem::exists(path,ec)) {std::string existing;return !ec&&read(root,relative,existing)&&hash(existing)==digest;}
+  std::filesystem::create_directories(path.parent_path(),ec);
+  if(ec)return false;
+  auto prepared=path;prepared+=".prepared";
+  if(!EditorImportTransaction::write(prepared,{reinterpret_cast<const u8*>(text.data()),text.size()},&error))return false;
+  std::vector<u8> verification;
+  if(!EditorImportTransaction::read(prepared,verification,UnityYamlDocument::MaximumBytes)||Sha256::hex(verification)!=digest)return false;
+  std::filesystem::rename(prepared,path,ec);return !ec;
+}
+}
+
+// One editor writer, shared by Library conversion, reimport and History. This
+// class is a Session friend to keep the substantial importer in its own TU;
+// it does not create a second registry, scene or resource ownership system.
+class UnityPackageImporter {
+public:
+  static AssetGuid import(EditorSession &session,const std::string &path,EditorEntityId owner,UnityReimportPolicy policy,std::string &error);
+private:
+  static bool resolve(EditorSession &,const std::string &,const UnityObjectReference &,AssetType,Dependency &,std::string &);
+  static bool publish(EditorSession &,const Snapshot &,Snapshot &,std::string &);
+};
+
+bool UnityPackageImporter::resolve(EditorSession &session,const std::string &origin,const UnityObjectReference &reference,
+    AssetType type,Dependency &out,std::string &error) {
+  const auto fail=[&](const std::string &message){error=message;return false;};
+  if(!reference.external()||!reference.fileId)return fail("Dependência Unity exige GUID/fileID externo completo.");
+  const LibraryPackage *scope=nullptr;
+  for(const auto &package:session.library_.packages())for(const auto &item:package.items)if(item.path==origin)scope=&package;
+  if(!scope)return fail("Converta fontes Unity a partir de um pacote preservado na Biblioteca.");
+  const LibraryItem *source=nullptr;
+  for(const auto &item:scope->items)if(item.sourceIdentity=="unity:"+reference.guid.text()) {
+    if(source)return fail("GUID Unity duplicado nesta revisão de pacote.");
+    source=&item;
+  }
+  if(!source)return fail("Dependência de origem ausente: GUID "+reference.guid.text()+" · fileID "+std::to_string(reference.fileId));
+  const auto root=EditorImportTransaction::fromUtf8(session.files_.rootPath());std::string meta;UnitySourceMetadata metadata;
+  if(!read(root,source->path+".meta",meta,1u<<20)||!readUnitySourceMetadata(meta,metadata,error)||metadata.guid!=reference.guid)
+    return fail("Metadados da dependência ausentes ou GUID alterado: "+source->path);
+  const AssetRecord *record=nullptr;
+  for(const auto &entry:session.assets_.records())if((entry.source==source->path||entry.path==source->path)&&
+      (entry.type==type||(type==AssetType::AnimationClip&&entry.type==AssetType::Mesh))) {
+    if(record)return fail("Mais de uma saída corresponde à dependência Unity: "+source->path);
+    record=&entry;
+  }
+  if(!record)return fail("Converta primeiro a dependência pela Biblioteca: "+source->path+" · fileID "+std::to_string(reference.fileId));
+  Dependency result;result.owner=record->guid;
+  if(record->type==AssetType::Mesh) {
+    const auto *subasset=metadata.find(reference.fileId);
+    if(!subasset)return fail("fileID não declarado no .meta do modelo: "+std::to_string(reference.fileId)+" · "+source->path);
+    const auto found=std::find_if(session.importedSources_.begin(),session.importedSources_.end(),[&](const auto &value){return value.guid==record->guid;});
+    if(found==session.importedSources_.end())return fail("Modelo convertido não está carregado: "+source->path);
+    if(type==AssetType::Mesh) {
+      if(subasset->classId&&subasset->classId!=43)return fail("fileID Unity não representa Mesh.");
+      u32 node=std::numeric_limits<u32>::max();
+      for(usize draw=0;draw<found->sourceDrawCount&&draw<found->names.size()&&draw<found->identities.size()&&draw<found->drawNodes.size();++draw)
+        if(found->names[draw]==subasset->name) {
+          if(node!=std::numeric_limits<u32>::max()&&node!=found->drawNodes[draw])return fail("Nome de Mesh .meta é ambíguo no modelo convertido: "+subasset->name);
+          node=found->drawNodes[draw];result.identities.push_back(found->identities[draw]);
+        }
+      if(result.identities.empty())return fail("Mesh declarada no .meta não corresponde ao resultado convertido: "+subasset->name);
+      for(const auto id:result.identities)if(!session.mapScene_.assetSlot(id))return fail("Mesh convertida ainda não foi publicada no renderer.");
+    } else {
+      if(subasset->classId&&subasset->classId!=74)return fail("fileID Unity não representa AnimationClip.");
+      const auto ids=animationClipGuids(found->guid,found->animations);
+      for(usize clip=0;clip<found->animations.size();++clip)if(found->animations[clip].name==subasset->name)result.identities.push_back(ids[clip]);
+      if(result.identities.size()!=1)return fail("Take Unity exige nome/intervalo explícito correspondente à fonte: "+subasset->name);
+      UnityYamlNode parsed;if(!readUnityMeta(meta,parsed,error))return false;
+      const auto *importer=parsed.get("ModelImporter"),*animations=importer?importer->get("animations"):nullptr;
+      const auto *clips=animations?animations->get("clipAnimations"):nullptr;bool specified=false;
+      if(clips&&clips->kind==UnityYamlNode::Kind::Sequence)for(const auto &clip:clips->elements) {
+        const auto *name=clip.get("name"),*loop=clip.get("loopTime");
+        if(name&&name->scalar==subasset->name&&loop&&loop->boolean(result.loop))specified=true;
+      }
+      if(!specified)result.loop=false;
+    }
+  } else {
+    std::string encoded;UnityYamlDocument document;
+    if(!read(root,source->path,encoded)||!readUnityYaml(encoded,document,error))return false;
+    const auto *object=document.find(reference.fileId);const u32 expected=type==AssetType::Material?21:type==AssetType::AnimationClip?74:0;
+    if(!object||object->classId!=expected)return fail("GUID existe, mas fileID/tipo da dependência não corresponde: "+source->path);
+    result.identities.push_back(record->guid);
+    if(type==AssetType::AnimationClip) {
+      UnityImportRecipe recipe;if(!UnityImportRecipe::deserialize(record->importerParameters,recipe,error))return false;
+      result.loop=recipe.loop;
+    }
+  }
+  out=std::move(result);error.clear();return true;
+}
+
+bool UnityPackageImporter::publish(EditorSession &session,const Snapshot &expected,Snapshot &target,std::string &error) {
+  const auto fail=[&](const char *message){error=message;return false;};
+  if(session.isPlaying()||session.playMirrorOpen_||session.history_.isOpen()||(!expected.record&&!target.record))return fail("Publicação Unity indisponível neste estado do editor.");
+  const auto &identity=target.record?*target.record:*expected.record;
+  const auto root=EditorImportTransaction::fromUtf8(session.files_.rootPath());const auto *current=session.assets_.find(identity.guid);
+  if(bool(current)!=bool(expected.record))return fail("Recurso Unity mudou; histórico preservado.");
+  if(current) {
+    auto logical=*expected.record;logical.contentHash=current->contentHash;
+    if(!equal(*current,logical))return fail("Receita ou dependências Unity mudaram; histórico preservado.");
+  }
+  std::string disk;std::filesystem::path absolute;std::error_code ec;
+  if(!EditorImportTransaction::safePath(root,identity.path,absolute))return false;
+  if(expected.record) {
+    if(!read(root,identity.path,disk)||hash(disk)!=current->contentHash||!sameNative(expected.text,disk,identity.type,error))return fail("Saída Unity mudou no disco; nada publicado.");
+  } else if(std::filesystem::exists(absolute,ec)||ec)return fail("Destino Unity ocupado.");
+  std::string persisted;
+  if(session.assets_.size()&&(!read(root,".astra/assets.astra",persisted,32u<<20)||persisted!=session.assets_.serialize()))return fail("Registro mudou no disco; reabra antes de converter.");
+  auto nextAssets=session.assets_;auto clips=session.animationClipAssets_;auto controllers=session.animatorControllers_;
+  const auto guid=identity.guid;
+  std::erase_if(clips,[&](const auto &value){return value.guid==guid;});
+  std::erase_if(controllers,[&](const auto &value){return value.guid==guid;});
+  if(target.record) {
+    UnityImportRecipe recipe;if(!UnityImportRecipe::deserialize(target.record->importerParameters,recipe,error))return false;
+    if(target.record->type==AssetType::AnimationClip) {
+      AnimationClipAsset value;if(!AnimationClipAsset::deserialize(target.text,value,&error)||value.guid!=guid)return false;
+      if(const auto *old=session.animationClipAsset(guid)) {
+        if(old->revision==std::numeric_limits<u32>::max())return fail("Revisão de clipe esgotada.");
+        value.revision=std::max(value.revision,old->revision+1);value.nextId=std::max(value.nextId,old->nextId);
+      }
+      target.text=value.serialize();clips.push_back(std::move(value));
+    } else if(target.record->type==AssetType::AnimatorController) {
+      AnimatorControllerAsset value;if(!AnimatorControllerAsset::deserialize(target.text,value)||value.guid!=guid)return fail("Controller nativo inválido.");
+      if(const auto *old=findAnimatorController(session.animatorControllers_,guid)) {
+        if(old->revision==std::numeric_limits<u32>::max())return fail("Revisão de controller esgotada.");
+        value.revision=std::max(value.revision,old->revision+1);value.graph.nextId=std::max(value.graph.nextId,old->graph.nextId);
+      }
+      target.text=value.serialize();controllers.push_back(std::move(value));
+    } else if(target.record->type==AssetType::Prefab) {
+      runtime::Prefab value,resolved;
+      if(!value.read(target.text,defaultEditorComponentRegistry(),error)||value.asset()!=guid||!session.preparePrefab(value,resolved,error))return false;
+      if(expected.record) {
+        runtime::Prefab old;if(!old.read(disk,defaultEditorComponentRegistry(),error))return false;
+        auto graph=value.graph();const auto frontier=std::max(graph.nextObjectId(),old.graph().nextObjectId());
+        if(!graph.reserveObjectIdsUntil(frontier)||!value.capture(graph,value.root(),guid,error))return false;
+        recipe.nextIdentity=std::max(recipe.nextIdentity,static_cast<u64>(frontier));
+        target.record->importerParameters=recipe.serialize();if(target.record->importerParameters.empty())return fail("Mapa Unity excedeu orçamento da receita.");
+      }
+      target.text=value.write();
+    } else return fail("Tipo Unity não pertence a este publicador.");
+    target.record->contentHash=hash(target.text);
+    if(current) {
+      if(!nextAssets.publishImport(guid,target.record->contentHash,target.record->importerVersion,target.record->importerParameters,
+          target.record->derived,target.record->dependencies))return fail("Registro recusou a reimportação Unity.");
+    } else if(!nextAssets.add(*target.record))return fail("Registro recusou a conversão Unity.");
+  } else {
+    if(session.sceneUsersOf(guid)||!nextAssets.remove(guid))return fail("Recurso Unity ainda está em uso; desfaça seus vínculos primeiro.");
+  }
+  std::vector<std::shared_ptr<const runtime::SourceAnimations>> library;library.reserve(clips.size());
+  for(const auto &value:clips) {
+    auto source=std::make_shared<runtime::SourceAnimations>();AnimationClip clip;
+    if(!value.compile(clip,&error))return false;
+    source->channelsValidated=true;source->source=value.source.valid()?value.source:value.guid;
+    source->clips.push_back(std::move(clip));source->clipIds.push_back(value.guid);
+    for(const auto &binding:value.bindings){source->nodes.push_back(binding.sourceNode);source->nodeNames.push_back(binding.name);source->nodePaths.push_back(binding.path);}
+    library.push_back(std::move(source));
+  }
+  if(!session.mapScene_.validateAuthoredAnimations(library))return fail("Biblioteca recusou clipe Unity antes da publicação.");
+  std::string index;if(!session.prepareLibraryIndex(nextAssets,index,error))return false;
+  LibraryIndex nextLibrary;if(!LibraryIndex::deserialize(index,nextLibrary,error))return false;
+  EditorImportTransaction transaction(session.files_.rootPath());
+  if(!transaction.begin(identity.path,expected.record?hash(disk):std::string(),error,LibraryIndexPath))return false;
+  const bool ok=target.record?transaction.commit({reinterpret_cast<const u8*>(target.text.data()),target.text.size()},nextAssets.serialize(),index,&error):transaction.commitRemoval(nextAssets.serialize(),index);
+  if(!ok){transaction.rollback();return false;}
+  session.clipPreview_.cancel();session.clipDrag_.reset();session.clipPoseDraft_.reset();
+  session.assets_=std::move(nextAssets);session.animationClipAssets_=std::move(clips);session.animatorControllers_=std::move(controllers);
+  session.mapScene_.setAuthoredAnimations(std::move(library));session.files_.rebuildTree();session.assetRegistryDirty_=false;
+  session.library_=std::move(nextLibrary);session.refreshLibraryRows();session.refreshAnimationClip();session.appearanceChanged_=true;
+  if(target.record)target.record=*session.assets_.find(guid);
+  error.clear();return true;
+}
+
+AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string &path,EditorEntityId owner,UnityReimportPolicy policy,std::string &error) {
+  const auto fail=[&](const std::string &message)->AssetGuid{error=message;return {};};
+  if(session.isPlaying()||session.playMirrorOpen_||session.history_.isOpen()||session.files_.rootPath().empty()||static_cast<u8>(policy)>2)
+    return fail("Abra um projeto em Edit e finalize a edição antes de converter Unity.");
+  const auto extension=std::filesystem::path(path).extension().string();
+  const UnityImportKind kind=extension==".anim"?UnityImportKind::Clip:extension==".prefab"?UnityImportKind::Prefab:UnityImportKind::Controller;
+  if(extension!=".anim"&&extension!=".prefab"&&extension!=".controller")return fail("Selecione .anim, .prefab ou .controller preservado na Biblioteca.");
+  const auto root=EditorImportTransaction::fromUtf8(session.files_.rootPath());std::string source,meta;
+  UnitySourceMetadata metadata;UnityYamlDocument document;
+  if(!read(root,path,source)||!read(root,path+".meta",meta,1u<<20)||!readUnitySourceMetadata(meta,metadata,error)||!readUnityYaml(source,document,error))
+    return fail(error.empty()?"Fonte Unity ou .meta ausente/inválido.":error);
+  const LibraryItem *catalog=nullptr;
+  for(const auto &package:session.library_.packages())for(const auto &item:package.items)if(item.path==path)catalog=&item;
+  if(!catalog||catalog->sourceIdentity!="unity:"+metadata.guid.text())return fail("Fonte fora da Biblioteca ou GUID .meta mudou; importe uma revisão explícita do pacote.");
+  Snapshot before,after;const AssetRecord *existing=nullptr;
+  for(const auto &record:session.assets_.records())if(record.source==path){if(existing)return fail("Mais de uma saída para esta fonte Unity.");existing=&record;}
+  UnityImportRecipe oldRecipe,recipe;std::string oldBaseline;
+  if(existing) {
+    before.record=*existing;
+    if(!read(root,existing->path,before.text)||hash(before.text)!=existing->contentHash||
+       !UnityImportRecipe::deserialize(existing->importerParameters,oldRecipe,error)||oldRecipe.kind!=kind||oldRecipe.unityGuid!=metadata.guid||
+       !read(root,baselinePath(oldRecipe.baselineHash),oldBaseline)||hash(oldBaseline)!=oldRecipe.baselineHash)return fail("Baseline/receita/saída Unity ausente ou modificada; nada publicado.");
+  }
+  AssetRecord record;record.guid=existing?existing->guid:assetGuidFromSeed("unity-native:"+catalog->id.text());
+  record.source=path;record.path=existing?existing->path:path+(kind==UnityImportKind::Clip?".aeclip":kind==UnityImportKind::Prefab?".astra.prefab":".aeanimator");
+  record.type=kind==UnityImportKind::Clip?AssetType::AnimationClip:kind==UnityImportKind::Prefab?AssetType::Prefab:AssetType::AnimatorController;
+  if(existing&&existing->type!=record.type)return fail("Tipo de saída Unity mudou; publique como recurso distinto.");
+  record.importerVersion=1;recipe.kind=kind;recipe.unityGuid=metadata.guid;recipe.sourceHash=hash(source);recipe.metaHash=hash(meta);
+  std::string native,sourceBaseline;
+  const auto dependency=[&](AssetGuid guid){if(guid.valid()&&guid!=record.guid&&std::find(record.dependencies.begin(),record.dependencies.end(),guid)==record.dependencies.end())record.dependencies.push_back(guid);};
+  if(kind==UnityImportKind::Clip) {
+    std::vector<UnityAnimationMorphBinding> morphs;
+    if(owner&&session.document_.exists(owner)) {
+      std::vector<EditorEntityId> objects;session.document_.collectSubtree(owner,objects);
+      for(const auto id:objects)if(const auto *object=session.document_.find(id))if(const auto *render=meshRenderer(*object)) {
+        UnityAnimationMorphBinding binding;if(!animationPoseTargetPath(session.document_,owner,id,binding.path,error))return {};
+        bool found=false;
+        for(u32 slot=0;slot<render->slotCount();++slot)for(const auto &model:session.importedSources_)
+          for(usize draw=0;draw<model.identities.size()&&draw<model.drawMorphs.size();++draw)if(model.identities[draw]==render->slotAsset(slot)&&model.drawMorphs[draw]>=0) {
+            const auto morph=static_cast<usize>(model.drawMorphs[draw]);
+            if(morph>=model.morphs.size())return fail("Índice morph da malha convertida inválido.");
+            const auto &set=model.morphs[morph];
+            if(found&&(binding.names!=set.names||binding.defaults!=set.defaultWeights))return fail("Submeshes do alvo têm conjuntos morph diferentes; escolha uma malha coerente.");
+            binding.names=set.names;binding.defaults=set.defaultWeights;found=true;dependency(model.guid);
+          }
+        if(found)morphs.push_back(std::move(binding));
+      }
+    }
+    UnityAnimationImport imported;if(!convertUnityAnimation(document,record.guid,metadata.guid,recipe.sourceHash,morphs,imported,error))return {};
+    auto value=imported.clip;recipe.fileId=imported.fileId;recipe.loop=imported.loop;recipe.transformations=imported.transformations;
+    if(existing) {
+      AnimationClipAsset previous,current,merged,next;UnityAnimationMergeReport report;
+      if(!AnimationClipAsset::deserialize(oldBaseline,previous,&error)||!AnimationClipAsset::deserialize(before.text,current,&error)||
+         !mergeUnityAnimation(previous,current,value,policy,merged,next,report,error)) {
+        for(const auto &conflict:report.conflicts)error+="\n"+conflict;
+        return {};
+      }
+      value=std::move(merged);sourceBaseline=next.serialize();
+      for(const auto &conflict:report.conflicts)recipe.transformations.push_back((policy==UnityReimportPolicy::KeepLocal?"Override local preservado: ":"Origem recebida: ")+conflict);
+    } else sourceBaseline=value.serialize();
+    dependency(value.source);
+    for(const auto &property:value.properties) {
+      if(property.address.resource.valid())dependency(property.address.resource);
+      for(const auto &key:property.data.keys)if(const auto *id=std::get_if<AssetGuid>(&key.value);id&&id->valid())dependency(*id);
+    }
+    for(const auto &input:value.drivers.inputs) {
+      if(input.address.resource.valid())dependency(input.address.resource);
+      if(input.controller.valid())dependency(input.controller);
+    }
+    for(const auto &target:value.drivers.targets)if(target.address.resource.valid())dependency(target.address.resource);
+    if(owner) {AnimationClipPreview preview;if(!preview.begin(session.document_,owner,value,error)||!preview.seek(0,error)||!preview.seek(value.duration,error))return {};}
+    native=value.serialize();recipe.nextIdentity=value.nextId;
+  } else if(kind==UnityImportKind::Prefab) {
+    UnityPrefabImport imported;if(!convertUnityPrefab(document,imported,error))return {};
+    runtime::UnityPrefabIdentityMap previous,identities;
+    if(existing){previous.nextObject=static_cast<u32>(oldRecipe.nextIdentity);for(const auto &[file,id]:oldRecipe.identities)previous.entries.push_back({file,static_cast<u32>(id)});}
+    const runtime::UnityPrefabResolver resolver=[&](const UnityObjectReference &reference,AssetType type,std::vector<AssetGuid> &ids,std::string &diagnostic) {
+      Dependency result;if(!resolve(session,path,reference,type,result,diagnostic))return false;
+      ids=std::move(result.identities);dependency(result.owner);return true;
+    };
+    runtime::Prefab value;
+    if(!runtime::buildUnityPrefab(imported,record.guid,resolver,existing?&previous:nullptr,value,identities,error))return {};
+    sourceBaseline=value.write();native=sourceBaseline;recipe.fileId=imported.rootFileId;
+    recipe.nextIdentity=identities.nextObject;for(const auto &entry:identities.entries)recipe.identities.emplace_back(entry.fileId,entry.object);
+    recipe.transformations=imported.transformations;
+    const auto previousContent=existing?prefabContent(oldBaseline,error):std::string();
+    const auto localContent=existing?prefabContent(before.text,error):std::string();
+    const auto incomingContent=existing?prefabContent(native,error):std::string();
+    if(existing&&(previousContent.empty()||localContent.empty()||incomingContent.empty()))return {};
+    if(existing&&localContent!=previousContent&&incomingContent!=previousContent&&incomingContent!=localContent) {
+      if(policy==UnityReimportPolicy::RefuseConflict)return fail("Prefab possui alterações locais e nova origem; escolha Manter local ou Receber origem. Instâncias da cena conservam seus overrides.");
+      if(policy==UnityReimportPolicy::KeepLocal){native=before.text;record.dependencies=existing->dependencies;recipe.transformations.push_back("Prefab autoral local preservado; origem nova registrada como baseline, sem sobrescrever instâncias.");}
+    } else if(existing&&localContent!=previousContent)native=before.text;
+  } else {
+    UnityControllerImport imported;
+    const UnityControllerClipResolver resolver=[&](const UnityObjectReference &reference,UnityControllerClip &clip,std::string &diagnostic) {
+      Dependency result;if(!resolve(session,path,reference,AssetType::AnimationClip,result,diagnostic))return false;
+      if(result.identities.size()!=1)return false;
+      clip={result.identities.front(),result.loop};dependency(result.owner);return true;
+    };
+    if(!convertUnityController(document,record.guid,resolver,imported,error))return {};
+    AnimatorControllerAsset previous,current;
+    if(existing&&(!AnimatorControllerAsset::deserialize(oldBaseline,previous)||!AnimatorControllerAsset::deserialize(before.text,current)||
+        !rebaseUnityController(imported,previous,current,oldRecipe.identities,error)))return {};
+    for(const auto &object:document.objects)if(object.classId==91)recipe.fileId=object.fileId;
+    recipe.identities=imported.identities;recipe.nextIdentity=imported.controller.graph.nextId;recipe.transformations=imported.transformations;
+    sourceBaseline=imported.controller.serialize();native=sourceBaseline;
+    const auto previousContent=existing?controllerContent(previous):std::string();
+    const auto localContent=existing?controllerContent(current):std::string();
+    const auto incomingContent=existing?controllerContent(imported.controller):std::string();
+    if(existing&&localContent!=previousContent&&incomingContent!=previousContent&&incomingContent!=localContent) {
+      if(policy==UnityReimportPolicy::RefuseConflict)return fail("Controller possui alterações locais e nova origem; escolha Manter local ou Receber origem.");
+      if(policy==UnityReimportPolicy::KeepLocal){native=before.text;record.dependencies=existing->dependencies;recipe.transformations.push_back("Grafo autoral local preservado integralmente.");}
+    } else if(existing&&localContent!=previousContent)native=before.text;
+  }
+  if(!baseline(root,sourceBaseline,recipe.baselineHash,error))return fail("Não foi possível preservar o baseline nativo imutável da conversão.");
+  record.importerParameters=recipe.serialize();record.contentHash=hash(native);
+  if(record.importerParameters.empty()||!record.valid())return fail("Receita de conversão Unity excedeu limites ou contém referências inválidas.");
+  std::string currentSource,currentMeta;
+  if(!read(root,path,currentSource)||hash(currentSource)!=recipe.sourceHash||!read(root,path+".meta",currentMeta,1u<<20)||hash(currentMeta)!=recipe.metaHash)
+    return fail("Fonte ou .meta mudou durante a conversão; nada publicado.");
+  after.record=record;after.text=std::move(native);
+  const u64 retained=retainedBytes(before)+retainedBytes(after);
+  if(retained>EditorHistory::kMaximumRetainedResourceBytes)return fail("Conversão excede orçamento de histórico; reduza o recurso antes de publicar.");
+  if(!publish(session,before,after,error))return {};
+  auto old=std::make_shared<Snapshot>(std::move(before)),next=std::make_shared<Snapshot>(std::move(after));const auto project=session.files_.rootPath();
+  session.history_.recordResource(existing?"Reimportar Unity":"Converter Unity",[&session,project,old,next](bool forward) {
+    if(session.files_.rootPath()!=project)return false;
+    std::string error;
+    const bool ok=publish(session,forward?*old:*next,forward?*next:*old,error);session.state_.status=ok?(forward?"Conversão Unity refeita":"Conversão Unity desfeita; fonte preservada"):error;return ok;
+  },retained);
+  error="Conversão Unity publicada: "+record.path+" · fonte, receita, baseline e dependências preservados";
+  session.state_.status=error;return record.guid;
+}
+
+resources::AssetGuid EditorSession::importUnityAsset(const std::string &path,EditorEntityId owner,
+    resources::UnityReimportPolicy policy,std::string &diagnostic) {
+  return UnityPackageImporter::import(*this,path,owner,policy,diagnostic);
+}
+} // namespace ae::editor

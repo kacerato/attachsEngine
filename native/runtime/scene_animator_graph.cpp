@@ -472,6 +472,15 @@ WorldStatus SceneAnimatorGraphs::layerControl(GameWorld &world,ObjectId owner,u6
   return WorldStatus::Ok;
 }
 
+SceneAnimatorGraphs::Status SceneAnimatorGraphs::parameterById(GameWorld &world,ObjectId owner,u64 instance,u64 id,resources::AssetGuid controller,float &result) {
+  const auto *entity=world.poseGraph().find(owner);const auto *value=entity?entity->components.findInstance(instance):nullptr;
+  if(!value||&value->type()!=&scene::Animator::descriptor)return Status::UnknownComponent;
+  const auto &source=static_cast<const scene::Animator&>(*value);if(source.controller!=controller)return Status::MissingController;
+  scene::Animator resolved;std::string diagnostic;if(!resolve(source,resolved,diagnostic))return Status::MissingController;
+  const auto *p=resolved.parameter(id);if(!p)return Status::UnknownParameter;
+  if(p->type!=scene::AnimatorParameterType::Float)return Status::WrongType;
+  return parameter(world,owner,instance,p->name,ParameterOperation::Get,0,result);
+}
 SceneAnimatorGraphs::Status SceneAnimatorGraphs::parameter(GameWorld &world,ObjectId owner,u64 instance,std::string_view name,
                                                            ParameterOperation operation,float value,float &result) {
   result=0;const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);

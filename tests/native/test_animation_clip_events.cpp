@@ -49,7 +49,7 @@ AE_TEST(animation_clip_cues_time_traversal_preservation_and_budget) {
   const AnimationClipBinding binding{0,{},"","Bone"};AnimationClipAsset asset;std::string error;
   AE_EXPECT_TRUE(authorAnimationClip(clip,assetGuidFromSeed("cues-authored"),{},{},{},{&binding,1},asset,error),error.c_str());
   const auto original=asset.serialize();AnimationClipAsset restored;
-  AE_EXPECT_TRUE(AnimationClipAsset::deserialize(original,restored,&error)&&restored.serialize()==original,"AECLIP 4 exact metadata and double payload round trip");
+  AE_EXPECT_TRUE(AnimationClipAsset::deserialize(original,restored,&error)&&restored.serialize()==original,"current AECLIP exact metadata and double payload round trip");
   const auto id=asset.cues[0].id;auto edited=asset.cues[0];edited.value=1.2345678901234567;u64 result=0;
   AE_EXPECT_TRUE(asset.putCue(edited,result,error)&&result==id,"editing preserves identity");
   AE_EXPECT_TRUE(asset.retime(2,error)&&asset.cue(id)->time==.5f&&asset.reverse(error)&&asset.cue(id)->time==1.5f,"global transforms include cues");
@@ -59,7 +59,10 @@ AE_TEST(animation_clip_cues_time_traversal_preservation_and_budget) {
   AnimationBakeSettings settings;AnimationBakeReport report;AnimationClipAsset consolidated;
   AE_EXPECT_TRUE(consolidateAnimationClip(asset,assetGuidFromSeed("cues-consolidated"),"Consolidated",settings,consolidated,report,error)&&consolidated.cues.size()==asset.cues.size(),error.c_str());
   AE_EXPECT_EQ(consolidated.cues.back().value,asset.cues.back().value,"bake preserves precise event payloads");
-  auto legacy=restored;legacy.cues.clear();auto text=legacy.serialize();text.replace(0,8,"AECLIP 3");text.resize(text.size()-2);
+  auto legacy=restored;legacy.cues.clear();legacy.regions.clear();auto text=legacy.serialize();
+  const std::string emptyModernTail="0\n0\n0\n0 0 0\n\n";
+  AE_EXPECT_TRUE(text.ends_with(emptyModernTail),"legacy fixture removes only the verified modern empty extensions");
+  text.replace(0,8,"AECLIP 3");text.resize(text.size()-emptyModernTail.size());
   AE_EXPECT_TRUE(AnimationClipAsset::deserialize(text,restored,&error)&&restored.cues.empty(),"legacy AECLIP 3 migrates with an empty cue list");
   scene::EventConnection connection;connection.event=30;connection.clipTag=16777215;std::ostringstream out;connection.write(out);
   scene::EventConnection reopened;std::istringstream in(out.str());AE_EXPECT_TRUE(reopened.read(in,2)&&reopened.clipTag==16777215,"largest exact connection code persists without float formatting loss");

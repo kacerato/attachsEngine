@@ -8,6 +8,9 @@ root=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('mark',root/'tools/generate-astra-mark-icons.py')
 mark=importlib.util.module_from_spec(spec);spec.loader.exec_module(mark)
 drawings={
+ 'opacity': [('poly',[(3,5),(29,5),(29,27),(3,27)]),('punch_poly',[(7,9),(25,9),(25,23),(7,23)]),
+             ('poly',[(7,9),(16,9),(16,23),(7,23)]),('poly',[(19,10),(23,10),(23,14),(19,14)]),
+             ('poly',[(17,17),(21,17),(21,21),(17,21)])],
  'joystick': mark.ring(16,16,13,9)+[('poly',mark.bar((16,16),(22,10),4)),('circle',((22,10),6))],
  'action-button': mark.ring(16,16,13,9)+[('poly',[(12,8),(22,16),(12,24)])],
  'look-area': [('poly',[(3,16),(10,7),(22,7),(29,16),(22,25),(10,25)]),('punch',((16,16),6)),('circle',((16,16),3))],

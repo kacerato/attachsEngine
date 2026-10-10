@@ -1,4 +1,5 @@
 #include "resources/animation_clip_clipboard.h"
+#include "resources/animation_clip_region_edit.h"
 #include "resources/animation_clip_edit_helpers.h"
 #include <algorithm>
 #include <cmath>
@@ -63,6 +64,7 @@ bool AnimationKeyClipboard::paste(AnimationClipAsset &clip,float at,AnimationPas
     const double shift=extent+1.0/candidate.displayRate;
     if(candidate.duration+shift>86400) {diagnostic="Inserção excede a duração máxima";return false;}
     candidate.duration=static_cast<float>(candidate.duration+shift);
+    if(mode==AnimationPasteMode::InsertAllTracks)insertAnimationRegionTime(candidate,at,shift);
     for(auto &layer:candidate.layers)if(layer.referenceTime>=at) {
       bool affected=false,unaffected=false;
       for(const auto &track:candidate.tracks)if(track.layer==layer.id)
@@ -73,6 +75,14 @@ bool AnimationKeyClipboard::paste(AnimationClipAsset &clip,float at,AnimationPas
     for(auto &track:candidate.tracks)if(mode==AnimationPasteMode::InsertAllTracks||unique.contains(track.id)) {
       for(auto &curve:track.curves)for(auto &key:curve.keys)if(key.time>=at)key.time=static_cast<float>(key.time+shift);
       track.sourceOverride=true;
+    }
+    // Whole-clip ripple is one clock: cues follow keys and layer references.
+    // Property-only insertion intentionally leaves the global cue clock alone.
+    if(mode==AnimationPasteMode::InsertAllTracks)for(auto &cue:candidate.cues)
+      if(cue.time>=at)cue.time=static_cast<float>(cue.time+shift);
+    if(mode==AnimationPasteMode::InsertAllTracks)for(auto &track:candidate.properties) {
+      for(auto &curve:track.data.curves)for(auto &key:curve.keys)if(key.time>=at)key.time=static_cast<float>(key.time+shift);
+      for(auto &key:track.data.keys)if(key.time>=at)key.time=static_cast<float>(key.time+shift);
     }
   } else if(double(at)+extent>candidate.duration) {diagnostic="Chaves coladas ultrapassam a duração do clipe";return false;}
   std::vector<AnimationKeyAddress> result;

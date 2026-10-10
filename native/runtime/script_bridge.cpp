@@ -1473,7 +1473,7 @@ void ScriptBridge::installAccess() {
   access_.guiCommand=[](void *context,u32 worldId,u32 id,u32 op,const u8 *text,int length,float value,scene::ScriptGuiState *out)->int {
     auto &self=*static_cast<ScriptBridge *>(context);
     if(!self.world_ || !self.gui_){self.lastStatus_=WorldStatus::NotRunning;return 0;}
-    if(!out || op>14 || length<0 || length>4096 || (length && !text) || !std::isfinite(value)) {
+    if(!out || op>16 || length<0 || length>4096 || (length && !text) || !std::isfinite(value)) {
       self.lastStatus_=WorldStatus::InvalidArgument;return 0;
     }
     if(op!=0 && worldId!=self.world_->worldId()){self.lastStatus_=WorldStatus::ForeignWorld;return 0;}
@@ -1507,12 +1507,16 @@ void ScriptBridge::installAccess() {
     if(op==11 || op==12)ok=self.gui_->document().reorder(id,op==11?-1:1);
     if(op==13)ok=self.gui_->playAnimation(id);
     if(op==14)ok=self.gui_->stopAnimation(id);
+    if(op==16)ok=self.gui_->setOpacity(id,value);
     if(op==9) {auto edit=*node;edit.name=string;std::string error;ok=self.gui_->document().update(edit,error);}
     if(!ok){self.lastStatus_=WorldStatus::InvalidArgument;return 0;}
     node=self.gui_->document().find(id);
     *out={self.world_->worldId(),id,static_cast<u32>(node->kind),node->visible?1u:0u,node->enabled?1u:0u,
           node->value,node->minimum,node->maximum,op==6?static_cast<u32>(event.kind)+1:0};
     if(op==6) out->value=event.value;
+    // Append-only commands use the existing scalar payload; no ABI struct
+    // changes and ordinary snapshots retain their control value semantics.
+    if(op==15 || op==16)out->value=node->opacity;
     self.lastStatus_=WorldStatus::Ok;return 1;
   };
   access_.guiProperties=[](void *context,u32 world,u32 id,u32 operation,scene::ScriptGuiProperties *out)->int {

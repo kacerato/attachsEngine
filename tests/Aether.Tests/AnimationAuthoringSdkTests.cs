@@ -20,6 +20,10 @@ public static unsafe class AnimationAuthoringSdkTests
         var legacy3 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v3");
         var legacy4 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v4");
         var legacy5 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v5");
+        var legacy7 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v7");
+        var legacy8 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v8");
+        var legacy9 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v9");
+        var legacy10 = (delegate* unmanaged<void*, void*>)NativeLibrary.GetExport(library, "author_fixture_access_v10");
         var end = (delegate* unmanaged<void*, void>)NativeLibrary.GetExport(library, "author_fixture_end");
         var destroy = (delegate* unmanaged<void*, void>)NativeLibrary.GetExport(library, "author_fixture_destroy");
         var history = (delegate* unmanaged<void*, int, int>)NativeLibrary.GetExport(library, "author_fixture_history");
@@ -30,6 +34,7 @@ public static unsafe class AnimationAuthoringSdkTests
         Assert.Equal(48, layout(1)); Assert.Equal(88, layout(2)); Assert.Equal(24, layout(3));
         Assert.Equal(32, layout(4)); Assert.Equal(24, layout(5));
         Assert.Equal(56, layout(6));
+        Assert.Equal(304, layout(7)); Assert.Equal(56, layout(8)); Assert.Equal(328, layout(9));
         var root = Path.Combine(Path.GetTempPath(), "astra-author-sdk-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root); void* fixture = null;
         try
@@ -37,7 +42,7 @@ public static unsafe class AnimationAuthoringSdkTests
             File.WriteAllText(Path.Combine(root, "Tools.cs"), Source);
             Publish(root);
             var catalog = NativeEditorCommands.Discover(root);
-            Assert.Equal(4, catalog.Count); Assert.True(catalog.Any(c => c.Id == "Tools::Author"));
+            Assert.Equal(9, catalog.Count); Assert.True(catalog.Any(c => c.Id == "Tools::Author"));
             var rootBytes = Encoding.UTF8.GetBytes(root);
             fixed (byte* p = rootBytes) fixture = create(p, rootBytes.Length);
             Assert.True(fixture != null, "production editor fixture opens a real project");
@@ -53,14 +58,33 @@ public static unsafe class AnimationAuthoringSdkTests
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy3(fixture)), Report()); end(fixture);
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy4(fixture)), Report()); end(fixture);
             Assert.Equal(0, Run(root, "Tools::Lifetime", legacy5(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::Lifetime", legacy7(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::Lifetime", legacy8(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::Lifetime", legacy9(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::Lifetime", legacy10(fixture)), Report()); end(fixture);
             Assert.Equal(2, history(fixture, 0), "lifetime probes do not publish edits");
             Assert.Equal(0, Run(root, "Tools::Consolidate", access(fixture)), Report()); end(fixture);
             Assert.Equal(3, history(fixture, 0), "new composed resource has one independent undo step");
             Assert.Equal(0, Run(root, "Tools::PosePreview", access(fixture)), Report()); end(fixture);
             Assert.Equal(4, history(fixture, 0), "multiple pose previews and cancellations publish only the explicit recording");
+            Assert.Equal(0, Run(root, "Tools::Timeline", access(fixture)), Report()); end(fixture);
+            Assert.Equal(4, history(fixture, 0), "discarded timeline draft leaves history unchanged");
+            Assert.Equal(0, Run(root, "Tools::Timeline", legacy7(fixture)), Report()); end(fixture);
+            Assert.Equal(0, Run(root, "Tools::PoseTools", access(fixture)), Report()); end(fixture);
+            Assert.Equal(5, history(fixture, 0), "pose policy/locks/clipboard publish only explicit recording");
+            Assert.Equal(0, Run(root, "Tools::PoseSelection", access(fixture)), Report()); end(fixture);
+            Assert.Equal(7, history(fixture, 0), "named set save/removal each publish one authoring preference transaction");
+            Assert.Equal(0, Run(root, "Tools::Cycles", access(fixture)), Report()); end(fixture);
+            Assert.Equal(7, history(fixture, 0), "discarded cycle draft leaves published resources and history unchanged");
+            Assert.Equal(0, Run(root, "Tools::Properties", access(fixture)), Report()); end(fixture);
+            Assert.Equal(8, history(fixture, 0), "typed keys, remap and drivers publish one native journal transaction");
+            var property = (delegate* unmanaged<void*, float, float>)NativeLibrary.GetExport(library, "author_fixture_property");
+            Assert.Close(7, property(fixture, 1), what: "actual Animator parameter drives the actual Light component");
+            Assert.Equal(1, history(fixture, 1)); Assert.Close(1, property(fixture, 1));
+            Assert.Equal(1, history(fixture, 2)); Assert.Close(7, property(fixture, 1));
             File.WriteAllText(Path.Combine(root, "Tools.cs"), "public class Broken { invalid syntax }");
             Assert.False(new ProjectCompiler().Build(root).Success);
-            Assert.Equal(4, NativeEditorCommands.Discover(root).Count, "unpublished source cannot replace applied tools");
+            Assert.Equal(9, NativeEditorCommands.Discover(root).Count, "unpublished source cannot replace applied tools");
             File.WriteAllText(Path.Combine(root, "Tools.cs"), "using Astra.Editor; public static class Invalid { [EditorCommand(\"Async\")] public static async void Bad(EditorContext c) { await System.Threading.Tasks.Task.Yield(); } }");
             Publish(root);
             Assert.Throws<InvalidDataException>(() => NativeEditorCommands.Discover(root), "async void must be rejected before invocation");
@@ -98,6 +122,35 @@ public static unsafe class AnimationAuthoringSdkTests
         using System.Threading.Tasks;
         using Astra.Editor;
         public static class Tools {
+          [EditorCommand("Propriedades e drivers tipados")]
+          public static void Properties(EditorContext context) {
+            var owner=context.SelectedObject;var id=context.Clips[0];
+            var property=context.AnimatableProperties(owner).Single(p=>p.Address.Property=="intensity");
+            var parameter=context.AnimatorDriverParameters(owner).Single(p=>p.Label.Contains("Velocidade"));
+            using var edit=context.BeginClip(id);
+            var track=edit.AddProperty(owner,owner,property.Address);
+            edit.PutProperty(owner,track,2,ClipValue.Number(9));
+            if(Math.Abs(edit.SampleProperty(track,1).X-5)>1e-5 || edit.Snapshot.Properties.Single().Id!=track)
+              throw new Exception("Typed snapshot/sampler lost the real channel");
+            try { edit.PutProperty(owner,track,1,ClipValue.Enumeration(uint.MaxValue));throw new Exception("Wrong semantic value accepted"); }
+              catch(InvalidOperationException) {}
+            edit.RemapProperty(owner,track,owner,property.Address);
+            var binding=edit.BindPropertyObject(owner,owner);
+            var drivers=new ClipDrivers(new[]{new ClipDriverInput(ClipDriverInputKind.AnimatorParameter,binding,parameter.Address,parameter.Parameter,parameter.Controller)},
+              new[]{new ClipDriverNode(1,ClipDriverOperation.Source),new ClipDriverNode(2,ClipDriverOperation.ScaleBias,First:1,A:2,B:1)},
+              new[]{new ClipDriverTarget(binding,property.Address)},new ulong[]{2});
+            edit.ConfigureDrivers(owner,drivers);
+            var before=edit.Snapshot;
+            if(before.Drivers.Nodes.Count!=2 || before.Drivers.Inputs.Single().Parameter!=parameter.Parameter || before.Properties.Single().Id!=track)
+              throw new Exception("Driver identity/snapshot lost metadata");
+            var source=before.Drivers.Nodes.Single(n=>n.Operation==ClipDriverOperation.Source);
+            var scale=before.Drivers.Nodes.Single(n=>n.Operation==ClipDriverOperation.ScaleBias);
+            try { edit.ConfigureDrivers(owner,before.Drivers with { Nodes=new[]{source with { Operation=ClipDriverOperation.Add,First=scale.Id,Second=scale.Id },scale} });throw new Exception("Cycle accepted"); }
+              catch(InvalidOperationException error) { if(!error.Message.Contains("cycle")) throw; }
+            if(edit.Snapshot.NextId!=before.NextId || edit.Snapshot.Drivers.Nodes.Single(n=>n.Id==source.Id).Operation!=ClipDriverOperation.Source)
+              throw new Exception("Rejected driver changed the draft");
+            edit.Commit();
+          }
           [EditorCommand("Autorar mecanismo")]
           public static void Author(EditorContext context) {
             var id=context.CreateClip(context.SelectedObject,2);
@@ -205,6 +258,51 @@ public static unsafe class AnimationAuthoringSdkTests
             context.Dispose();
             try { var owner=context.SelectedObject; throw new Exception("Closed context accepted"); } catch(ObjectDisposedException) {}
           }
+          [EditorCommand("Intervalos e cues pela API")]
+          public static void Timeline(EditorContext context) {
+            using var draft=context.BeginClip(context.Clips[0]);
+            var initial=draft.Snapshot;
+            draft.InsertTime(1,.5f);
+            if(draft.Snapshot.Duration!=initial.Duration+.5f) throw new Exception("Insert clock ignored");
+            draft.RemoveTime(1,1.5f);
+            draft.MoveRange(.25f,.75f,.25f);
+            if(draft.Snapshot.Duration!=initial.Duration) throw new Exception("Remove clock ignored");
+            var ids=draft.Snapshot.Cues.Select(c=>c.Id).ToArray();
+            using var clipboard=draft.CopyCues(ids);
+            draft.TransformCues(ids,offset:.01);
+            draft.EraseCues(ids);draft.PasteCues(clipboard,.1f);
+            if(draft.Snapshot.Cues.Count!=ids.Length) throw new Exception("Cue group clipboard mismatch");
+            draft.DuplicateRange(.25f,.75f,1);
+            if(draft.Snapshot.Duration<=initial.Duration+.5f) throw new Exception("Range duplicated without frame seam");
+          }
+          [EditorCommand("Ciclos e organização temporal")]
+          public static void Cycles(EditorContext context) {
+            using var draft=context.BeginClip(context.Clips[0]);
+            var initial=draft.Snapshot;
+            var track=initial.Tracks.First(t=>t.Property==ClipProperty.Translation&&t.Layer==0);
+            var keys=track.Curves[0].Keys.Select(k=>new ClipKeyAddress(track.Id,0,k.Id)).ToArray();
+            draft.ArrangeSelection(keys,Array.Empty<ulong>(),ClipArrange.Distribute,.1f,initial.Duration-.1f);
+            var changed=draft.Snapshot.Tracks.Single(t=>t.Id==track.Id).Curves[0].Keys;
+            if(changed.First().Time!=.1f || changed.Last().Time!=initial.Duration-.1f) throw new Exception("Distribution ignored the shared native operation");
+            draft.ArrangeSelection(keys,Array.Empty<ulong>(),ClipArrange.AlignCenter,initial.Duration/2);
+            draft.CloseRange(0,initial.Duration);
+            var before=draft.Sample(track.Id,initial.Duration*.25f);
+            draft.RepeatRange(0,initial.Duration);
+            var after=draft.Sample(track.Id,initial.Duration*1.25f);
+            if(draft.Snapshot.Duration!=initial.Duration*2 || before.Zip(after).Any(pair=>Math.Abs(pair.First-pair.Second)>.001)) throw new Exception("Repeated cycle lost the sampled pose");
+            var duration=draft.Snapshot.Duration;
+            try { draft.RepeatRange(0,initial.Duration,65);throw new Exception("Copy budget ignored"); } catch(InvalidOperationException) {}
+            if(draft.Snapshot.Duration!=duration) throw new Exception("Refused repetition changed the draft");
+            var region=draft.PutRegion(new ClipRegion(0,"Passo",0,initial.Duration));
+            if(draft.Snapshot.Regions.Single(r=>r.Id==region).End!=initial.Duration) throw new Exception("Region snapshot lost boundaries");
+            var composed=draft.SampleComposed(track.Id,initial.Duration*.25f);
+            var sampled=draft.SampleRegion(region,track.Id,initial.Duration*1.25,ClipWrap.Loop);
+            if(composed.Zip(sampled).Any(pair=>Math.Abs(pair.First-pair.Second)>.001)) throw new Exception("Region did not sample the native composition");
+            try { draft.PutRegion(new ClipRegion(0,"Inválida",1,1));throw new Exception("Empty region accepted"); } catch(InvalidOperationException) {}
+            if(draft.Snapshot.Regions.Count!=1) throw new Exception("Refused region changed the draft");
+            draft.RemoveRegion(region);
+            if(draft.Snapshot.Regions.Count!=0) throw new Exception("Region removal ignored");
+          }
           [EditorCommand("Pose isolada pela API")]
           public static void PosePreview(EditorContext context) {
             var id=context.Clips[0];var before=context.InspectClip(id);
@@ -223,6 +321,46 @@ public static unsafe class AnimationAuthoringSdkTests
             if(result.Revision!=before.Revision+1 || result.Tracks.Single(t=>t.Id==track).Curves[0].Keys.Single(k=>k.Time==.5f).Value!=12 ||
                result.Tracks.Single(t=>t.Id==rotation).Curves[0].Keys.Single(k=>k.Time==.5f).Value!=rotationPose[0])
               throw new Exception("Explicit recording did not publish the grouped pose");
+          }
+          [EditorCommand("Política e reutilização de pose")]
+          public static void PoseTools(EditorContext context) {
+            var id=context.Clips[0];var before=context.InspectClip(id);
+            var track=before.Tracks.First(t=>t.Layer==0 && t.Property==ClipProperty.Translation).Id;
+            context.PreviewClip(id,context.SelectedObject,.5f);
+            context.ConfigureClipPoseRecording(new ClipPoseRecording(true,false,true,1,1.5f));
+            context.ConfigureClipPoseLocks(ClipProperty.Translation,1);
+            context.StagePose(track,new float[]{99,8,9});
+            context.CopyClipPose();context.CancelPose();
+            try { context.PasteClipPose();throw new Exception("Outside armed range recorded implicitly"); }
+              catch(InvalidOperationException error) { if(!error.Message.Contains("intervalo")) throw; }
+            if(context.InspectClip(id).Revision!=before.Revision) throw new Exception("Armed range published outside its interval");
+            context.RecordPose();context.CloseClipPreview();
+            var result=context.InspectClip(id);
+            var curves=result.Tracks.Single(t=>t.Id==track).Curves;
+            if(result.Revision!=before.Revision+1 || curves[0].Keys.Single(k=>k.Time==.5f).Value!=12 ||
+               curves[1].Keys.Single(k=>k.Time==.5f).Value!=8 || curves[2].Keys.Single(k=>k.Time==.5f).Value!=9)
+              throw new Exception("Local axis locks/clipboard or explicit recording failed");
+          }
+          [EditorCommand("Seleções e conjuntos pela API")]
+          public static void PoseSelection(EditorContext context) {
+            var clip=context.Clips[0];var revision=context.InspectClip(clip).Revision;
+            context.PreviewClip(clip,context.SelectedObject,0);
+            context.SelectClipPoseRelation(ClipPoseRelation.Children);
+            var children=context.ClipPoseTargets.ToArray();
+            if(children.Length!=1) throw new Exception("Real scene children were not selected");
+            context.SaveClipPoseSelection("Conjunto Ω");
+            if(!context.ClipPoseSelectionSets.Contains("Conjunto Ω")) throw new Exception("UTF-8 set did not persist");
+            context.SelectClipPoseTargets(Array.Empty<ulong>());
+            if(context.ClipPoseTargets.Count!=0) throw new Exception("Clear selection retained an implicit target");
+            context.RecallClipPoseSelection("Conjunto Ω");
+            if(!context.ClipPoseTargets.SequenceEqual(children)) throw new Exception("Recall did not restore real scene targets");
+            context.FocusClipPoseSelection();context.IsolateClipPoseSelection();context.IsolateClipPoseSelection(false);
+            try { context.SelectClipPoseTargets(new[]{ulong.MaxValue});throw new Exception("Truncated object ID accepted"); }
+              catch(InvalidOperationException) {}
+            if(!context.ClipPoseTargets.SequenceEqual(children)) throw new Exception("Refused selection changed targets");
+            context.RemoveClipPoseSelection("Conjunto Ω");
+            if(context.ClipPoseSelectionSets.Count!=0 || context.InspectClip(clip).Revision!=revision) throw new Exception("Selection edited clip data");
+            context.CloseClipPreview();
           }
         }
         """;

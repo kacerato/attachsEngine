@@ -13,11 +13,13 @@ ae::u64 sequence = 0;
 bool pending = false;
 bool allowCompanions = true;
 bool folderMode = false;
+bool packageMode = false;
 
 // Cópia de pasta (S0): um pedido por vez, com o próprio número de sequência.
 struct CopyJob {
   ae::u64 token = 0;
-  bool active = false, cancel = false;
+  bool active = false, cancel = false, started = false;
+  std::shared_ptr<void> stagingLease;
   ae::platform::android::FolderCopyRequest request;
   ae::platform::android::FolderCopyState state;
 };
@@ -33,22 +35,25 @@ constexpr jsize kMaximumBytes = 128 * 1024 * 1024;
 
 namespace ae::platform::android {
 
-void requestFolderPick() {
+void requestFolderPick(bool package) {
   std::lock_guard lock(mutex);
   pending = true;
   allowCompanions = false;
   folderMode = true;
+  packageMode = package;
   ++sequence;
   result.reset();
 }
 
-u64 requestFolderCopy(FolderCopyRequest request) {
+u64 requestFolderCopy(FolderCopyRequest request,std::shared_ptr<void> stagingLease) {
   std::lock_guard lock(copyMutex);
+  if(copyJob.active&&!copyJob.state.finished)return 0;
   copyJob = {};
   copyJob.token = ++copySequence;
   copyJob.active = true;
   copyJob.state.totalBytes = request.totalBytes;
   copyJob.request = std::move(request);
+  copyJob.stagingLease=std::move(stagingLease);
   return copyJob.token;
 }
 
@@ -61,12 +66,18 @@ bool folderCopyState(u64 token, FolderCopyState &out) {
 
 void cancelFolderCopy(u64 token) {
   std::lock_guard lock(copyMutex);
-  if (token == copyJob.token) copyJob.cancel = true;
+  if(token!=copyJob.token)return;
+  copyJob.cancel=true;
+  if(!copyJob.started) {
+    copyJob.active=false;copyJob.state.finished=true;copyJob.state.cancelled=true;
+    copyJob.stagingLease.reset();
+  }
 }
 
 void requestModelPick(bool companions) {
   std::lock_guard lock(mutex);
   folderMode = false;
+  packageMode = false;
   // Pedir de novo enquanto um pedido está aberto NÃO é ignorado: o seletor pode
   // ter sido encerrado pelo sistema sem devolver nada, e o usuário ficaria com
   // um botão que não responde mais. O número de sequência novo faz a resposta
@@ -256,6 +267,11 @@ Java_dev_aether_editor_ModelPicker_pickFolder(JNIEnv *, jclass, jlong token) {
   std::lock_guard lock(mutex);
   return pending && static_cast<ae::u64>(token) == sequence && folderMode ? JNI_TRUE : JNI_FALSE;
 }
+extern "C" JNIEXPORT jboolean JNICALL
+Java_dev_aether_editor_ModelPicker_pickPackage(JNIEnv *, jclass, jlong token) {
+  std::lock_guard lock(mutex);
+  return pending && static_cast<ae::u64>(token)==sequence && folderMode && packageMode ? JNI_TRUE : JNI_FALSE;
+}
 
 extern "C" JNIEXPORT void JNICALL
 Java_dev_aether_editor_ModelPicker_submitFolder(JNIEnv *env, jclass, jlong token, jobjectArray paths, jlongArray sizes,
@@ -263,6 +279,7 @@ Java_dev_aether_editor_ModelPicker_submitFolder(JNIEnv *env, jclass, jlong token
                                                 jbyteArray diagnostic) {
   ae::platform::android::ModelPickerResult reply;
   reply.folder = true;
+  {std::lock_guard lock(mutex);if(!pending||static_cast<ae::u64>(token)!=sequence)return;reply.package=packageMode;}
   reply.diagnostic = jniText(env, diagnostic);
   reply.folderName = jniText(env, folderName, 1024);
   if (reply.diagnostic.empty() && paths && sizes && mainPaths && mainContents) {
@@ -280,6 +297,10 @@ Java_dev_aether_editor_ModelPicker_submitFolder(JNIEnv *env, jclass, jlong token
       // Principal: entre os candidatos, os de MENOR profundidade; exatamente um.
       // Escolher o `.gltf` mais raso cobre quem escolhe a pasta acima da do
       // modelo (o zip do Sponza traz `main_sponza/…gltf`).
+      if(reply.package) {
+        reply.accepted=count<=4096;
+        if(!reply.accepted)reply.diagnostic="O pacote excede 4096 arquivos; escolha uma subpasta.";
+      } else {
       const auto mains = env->GetArrayLength(mainPaths);
       std::vector<std::pair<std::string, jsize>> candidates;
       for (jsize i = 0; i < mains; ++i) {
@@ -315,6 +336,7 @@ Java_dev_aether_editor_ModelPicker_submitFolder(JNIEnv *env, jclass, jlong token
           reply.accepted = true;
         }
         if (content) env->DeleteLocalRef(content);
+      }
       }
     }
   }
@@ -362,7 +384,8 @@ Java_dev_aether_editor_ModelPicker_copyDestination(JNIEnv *env, jclass, jlong to
   std::string value;
   {
     std::lock_guard lock(copyMutex);
-    if (static_cast<ae::u64>(token) != copyJob.token) return nullptr;
+    if (static_cast<ae::u64>(token) != copyJob.token||copyJob.cancel||copyJob.state.finished) return nullptr;
+    copyJob.started=true;
     value = copyJob.request.destination;
   }
   auto bytes = env->NewByteArray(static_cast<jsize>(value.size()));
@@ -409,4 +432,5 @@ Java_dev_aether_editor_ModelPicker_submitCopy(JNIEnv *env, jclass, jlong token, 
   }
   copyJob.state = std::move(finished);
   copyJob.active = false;
+  copyJob.stagingLease.reset();
 }

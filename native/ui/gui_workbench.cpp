@@ -106,29 +106,41 @@ bool GuiWorkbench::drawInspector(const UiRect &area,const UiRect &surface,UiDraw
   immediate_.begin(surface.right(),surface.bottom(),dt);
   ImGui::SetNextWindowPos({area.x,area.y});ImGui::SetNextWindowSize({area.width,area.height});
   ImGui::Begin("UI Inspector##attachs",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings);
-  const float cell=std::max(40.f,(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x)*.5f);
-  const bool back=ImGui::Button("< Objeto / Canvas",{cell,36});
+  const float titleWidth=std::max(32.f,ImGui::GetContentRegionAvail().x-204.f-ImGui::GetStyle().ItemSpacing.x*4);
+  const bool back=ImGui::Button("<",{44,44});
+  if(ImGui::IsItemHovered())ImGui::SetTooltip("Objeto / Canvas");
   ImGui::SameLine();
-  if(ImGui::Button("Salvar UI",{cell,36}))save();
-  ImGui::TextWrapped("%.*s / UI",static_cast<int>(owner.size()),owner.data());
-  ImGui::TextWrapped("%s%s | Fonte comum: %u Canvas",resource_,dirty()?" *":"",sharedInstances);
-  if(ImGui::Button("+ Elemento",{cell,36}))ImGui::OpenPopup("create_context");
+  const auto *selected=document_.find(selection_);
+  const std::string title=selected?selected->name+" / "+guiKindName(selected->kind):"Elementos UI";
+  if(ImGui::Button(title.c_str(),{titleWidth,44}))ImGui::OpenPopup("source_context");
+  ImGui::SameLine();
+  if(ImGui::Button("Salvar",{72,44}))save();
+  ImGui::SameLine();
+  if(ImGui::Button("+",{44,44}))ImGui::OpenPopup("create_context");
+  if(ImGui::IsItemHovered())ImGui::SetTooltip("Criar elemento");
   ImGui::SameLine();
   ImGui::BeginDisabled(!selection_);
-  if(ImGui::Button("Acoes do elemento",{cell,36}))ImGui::OpenPopup("element_context");
+  if(ImGui::Button("...",{44,44}))ImGui::OpenPopup("element_context");
+  if(ImGui::IsItemHovered())ImGui::SetTooltip("Acoes do elemento");
   ImGui::EndDisabled();
+  if(ImGui::BeginPopup("source_context")) {
+    ImGui::TextWrapped("%.*s / UI",static_cast<int>(owner.size()),owner.data());
+    ImGui::TextWrapped("%s%s",resource_,dirty()?" *":"");
+    ImGui::TextWrapped("Fonte comum: %u Canvas. Salvar altera o recurso compartilhado.",sharedInstances);
+    ImGui::EndPopup();
+  }
   if(ImGui::BeginPopup("create_context")) {
-    for(u32 i=0;i<kGuiKindCount;++i)if(ImGui::MenuItem(guiKindName(static_cast<GuiKind>(i))))create(static_cast<GuiKind>(i));
+    for(u32 i=0;i<kGuiKindCount;++i)if(ImGui::Selectable(guiKindName(static_cast<GuiKind>(i)),false,0,{0,44}))create(static_cast<GuiKind>(i));
     ImGui::EndPopup();
   }
   if(ImGui::BeginPopup("element_context")) {
     ImGui::TextUnformatted("Altera a fonte de todos os Canvas vinculados.");
     ImGui::Separator();
-    if(ImGui::MenuItem("Duplicar"))command(NodeCommand::Duplicate);
-    if(ImGui::MenuItem("Subir"))command(NodeCommand::Up);
-    if(ImGui::MenuItem("Descer"))command(NodeCommand::Down);
+    if(ImGui::Selectable("Duplicar",false,0,{0,44}))command(NodeCommand::Duplicate);
+    if(ImGui::Selectable("Subir",false,0,{0,44}))command(NodeCommand::Up);
+    if(ImGui::Selectable("Descer",false,0,{0,44}))command(NodeCommand::Down);
     ImGui::Separator();
-    if(ImGui::MenuItem("Excluir"))command(NodeCommand::Remove);
+    if(ImGui::Selectable("Excluir",false,0,{0,44}))command(NodeCommand::Remove);
     ImGui::EndPopup();
   }
   ImGui::Separator();
@@ -173,21 +185,59 @@ void GuiWorkbench::tree() {
   }
 }
 void GuiWorkbench::properties() {
-  if(propertiesSelection_!=selection_) {propertiesSelection_=selection_;actionSelection_=stateSelection_=0;ImGui::SetScrollY(0);}
-  ImGui::TextUnformatted("PROPRIEDADES"); ImGui::Separator();
+  const bool selectionChanged=propertiesSelection_!=selection_;
+  if(selectionChanged) {propertiesSelection_=selection_;actionSelection_=stateSelection_=0;ImGui::SetScrollY(0);}
+  if(!embedded_){ImGui::TextUnformatted("PROPRIEDADES");ImGui::Separator();}
   if(canvasSettings_){canvasProperties();return;}
   const auto *stored=document_.find(selection_);
   if (!stored) { ImGui::TextWrapped("%s",embedded_?"Crie um elemento ou selecione um filho deste Canvas na Hierarquia.":"Selecione na lista ou toque em um elemento no canvas. Arraste para posicionar."); return; }
   GuiNode node=*stored;
   ImGui::PushID(static_cast<int>(node.id));
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2{8,std::max(7.f,(44.f-ImGui::GetFontSize())*.5f)});
+  if(selectionChanged)propertySection_=ImGui::GetID("Aparencia");
+  const auto section=[&](const char *label) {
+    const auto id=ImGui::GetID(label);
+    ImGui::SetNextItemOpen(propertySection_==id,ImGuiCond_Always);
+    const bool open=ImGui::CollapsingHeader(label);
+    if(ImGui::IsItemToggledOpen())propertySection_=open?id:0;
+    return open;
+  };
+  if(!embedded_) {
   const auto iconAt=ImGui::GetCursorScreenPos();
   const auto icon=node.kind==GuiKind::Joystick?UiIcon::UiJoystick:node.kind==GuiKind::ActionButton?UiIcon::UiActionButton:node.kind==GuiKind::LookArea?UiIcon::UiLookArea:guiContainer(node.kind)?UiIcon::UiAutoLayout:node.kind==GuiKind::Image?UiIcon::AssetsTexture:UiIcon::UiInterfaceCanvas;
   insertPropertyIcon(immediate_,propertyIconDrawing_,area_,icon,iconAt,20);ImGui::Dummy({20,20});ImGui::SameLine();
-  ImGui::Text("%s / ID %u",guiKindName(node.kind),node.id);
-  ImGui::SetNextItemWidth(-1);
-  bool changed=editString("Nome",node.name,257,immediate_);bool previewMotion=false;
-  if(!guiContainer(node.kind) && node.kind!=GuiKind::Image && node.kind!=GuiKind::Joystick && node.kind!=GuiKind::LookArea)changed=editString("Texto",node.text,4097,immediate_)||changed;
-  if(guiInputKind(node.kind)&&ImGui::CollapsingHeader("Entrada do jogo",ImGuiTreeNodeFlags_DefaultOpen)) {
+  ImGui::TextWrapped("%s / %s",node.name.c_str(),guiKindName(node.kind));
+  }
+  bool changed=false,previewMotion=false;
+  if (section("Aparencia")) {
+    const auto opacityIcon=ImGui::GetCursorScreenPos();
+    insertPropertyIcon(immediate_,opacityIconDrawing_,area_,UiIcon::UiOpacity,opacityIcon,24);
+    ImGui::Dummy({24,24});ImGui::SameLine();
+    ImGui::TextUnformatted("Opacidade / grupo");ImGui::SetNextItemWidth(-1);
+    changed=ImGui::SliderFloat("##Opacidade base",&node.opacity,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp)||changed;
+    keepActiveFieldVisible();
+    ImGui::TextWrapped("Afeta este elemento e seus filhos. Em zero, o grupo deixa de receber toques.");
+    bool backgroundVisible=(node.background>>24)!=0;
+    if(ImGui::Checkbox("Desenhar fundo",&backgroundVisible)) {
+      node.background=(node.background&0x00FFFFFF)|(backgroundVisible?0xFF000000:0);
+      changed=true;
+    }
+    changed=editColor("Fundo",node.background)||changed;
+    if(node.kind!=GuiKind::Image && !guiContainer(node.kind) && node.kind!=GuiKind::Joystick && node.kind!=GuiKind::LookArea) {
+      changed=editColor("Texto / Controle",node.foreground)||changed;
+      changed=ImGui::DragFloat("Fonte",&node.fontSize,0.5f,6,128,"%.1f")||changed;
+      keepActiveFieldVisible();
+    }
+    if(node.kind==GuiKind::Button || node.kind==GuiKind::Toggle || node.kind==GuiKind::Slider || node.kind==GuiKind::Progress)
+      changed=editColor("Destaque",node.accent)||changed;
+    changed=ImGui::DragFloat(node.kind==GuiKind::Joystick?"Raio do fundo":"Raio",&node.radius,0.5f,0,512,"%.1f")||changed;
+    keepActiveFieldVisible();
+  }
+  if(section("Conteudo")) {
+    changed=editString("Nome",node.name,257,immediate_)||changed;
+    if(!guiContainer(node.kind) && node.kind!=GuiKind::Image && node.kind!=GuiKind::Joystick && node.kind!=GuiKind::LookArea)changed=editString("Texto",node.text,4097,immediate_)||changed;
+  }
+  if(guiInputKind(node.kind)&&section("Entrada do jogo")) {
     auto &c=node.control;const bool button=node.kind==GuiKind::ActionButton;
     const auto choices=inputActions_?inputActions_():std::vector<InputActionChoice>{};bool valid=false;
     for(const auto &a:choices)if(a.id==c.action&&a.button==button&&(!button||a.press))valid=true;
@@ -230,7 +280,7 @@ void GuiWorkbench::properties() {
     if(previewing_)if(const auto *state=preview_.controlState(node.id))ImGui::Text("Valor %.3f / %.3f | dedo %u | %s",state->value.x,state->value.y,state->pointer,state->down?"capturado":"solto");
   }
   auto editPair=[&](const char *label,UiPoint &v){float values[]{v.x,v.y};ImGui::TextUnformatted(label);ImGui::SetNextItemWidth(-1);const bool edit=ImGui::DragFloat2((std::string("##")+label).c_str(),values,1,0,100000);keepActiveFieldVisible();v={values[0],values[1]};return edit;};
-  if(node.kind==GuiKind::Image && ImGui::CollapsingHeader("Imagem",ImGuiTreeNodeFlags_DefaultOpen)) {
+  if(node.kind==GuiKind::Image && section("Imagem")) {
     changed=editString("Recurso do projeto",node.image,1025,immediate_)||changed;
     if(ImGui::Button("Escolher imagem")){imageTarget_=0;imagePaths_=imageChoices_?imageChoices_():std::vector<std::string>{};ImGui::OpenPopup("images");}
   }
@@ -263,12 +313,12 @@ void GuiWorkbench::properties() {
       ImGui::EndChild();ImGui::EndPopup();
     }
   }
-  if(node.kind==GuiKind::Image) {
+  if(node.kind==GuiKind::Image && propertySection_==ImGui::GetID("Imagem")) {
     int fit=static_cast<int>(node.imageFit);if(ImGui::Combo("Ajuste",&fit,"Esticar\0Conter\0Cobrir\0")){node.imageFit=static_cast<GuiImageFit>(fit);changed=true;}
     changed=editColor("Tinta",node.imageTint)||changed;
     if(const auto *image=images_?images_->find(node.image):nullptr){if(!image->error.empty())ImGui::TextWrapped("%s",image->error.c_str());else ImGui::Text("%u x %u pixels",image->width,image->height);}
   }
-  if(ImGui::CollapsingHeader("Interacao",ImGuiTreeNodeFlags_DefaultOpen)) {
+  if(section("Interacao")) {
     const bool builtIn=node.kind==GuiKind::Button || node.kind==GuiKind::Toggle || node.kind==GuiKind::Slider || guiInputKind(node.kind);
     if(builtIn)ImGui::TextUnformatted("Controle com entrada propria");
     if(node.kind!=GuiKind::Button&&node.kind!=GuiKind::ActionButton)changed=ImGui::Checkbox(builtIn?"Emitir clique adicional":"Clicavel",&node.interaction.clickable)||changed;
@@ -299,7 +349,7 @@ void GuiWorkbench::properties() {
     auto &drawing=behaviorIconDrawing_[icon==UiIcon::UiActionSequence?0:1];
     auto at=ImGui::GetCursorScreenPos();at.y+=3;
     insertPropertyIcon(immediate_,drawing,area_,icon,at,20);
-    ImGui::Dummy({24,24});ImGui::SameLine();return ImGui::CollapsingHeader(label);
+    ImGui::Dummy({24,24});ImGui::SameLine();return section(label);
   };
   if(conceptHeader(UiIcon::UiActionSequence,"Sequencia de acoes")) {
     ImGui::TextWrapped("A acao principal de clique roda primeiro. As demais rodam em ordem por evento.");
@@ -352,7 +402,7 @@ void GuiWorkbench::properties() {
       ImGui::TextWrapped("Interagir testa toque, soltar e cancelar. Habilitado no alvo ou ancestral determina o estado desabilitado.");
     }
   }
-  if(ImGui::CollapsingHeader("Animacao",ImGuiTreeNodeFlags_DefaultOpen)) {
+  if(section("Animacao")) {
     auto &m=node.motion;changed=ImGui::Checkbox("Animar elemento",&m.enabled)||changed;
     if(m.enabled) {
       ImGui::TextWrapped("Posicao, escala e opacidade se propagam aos filhos. O layout dos irmaos permanece estavel.");
@@ -376,7 +426,7 @@ void GuiWorkbench::properties() {
   }
   const auto *parent=document_.find(node.parent);const bool managed=parent&&guiContainer(parent->kind)&&!node.sizing.ignore;
   if(guiContainer(node.kind) || (parent&&guiContainer(parent->kind))) {
-    if(ImGui::CollapsingHeader("Composicao automatica",ImGuiTreeNodeFlags_DefaultOpen)) {
+    if(section("Composicao automatica")) {
       if(parent && guiContainer(parent->kind)) {
       changed=editPair("Tamanho minimo",node.sizing.minimum)||changed;
       changed=editPair("Preferido (0 = medir)",node.sizing.preferred)||changed;
@@ -395,7 +445,7 @@ void GuiWorkbench::properties() {
       if(managed)ImGui::TextWrapped("O container controla este retangulo. Use tamanho, peso e ordem; Fora do fluxo libera ancoras e arraste.");
     }
   }
-  if (ImGui::CollapsingHeader("Estado",ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (section("Estado")) {
     changed=ImGui::Checkbox("Visivel",&node.visible)||changed;
     changed=ImGui::Checkbox("Habilitado",&node.enabled)||changed;
     if (node.kind==GuiKind::Slider || node.kind==GuiKind::Progress) {
@@ -414,7 +464,7 @@ void GuiWorkbench::properties() {
       if (ImGui::Checkbox("Marcado",&on)) { node.value=on?node.maximum:node.minimum;changed=true; }
     }
   }
-  if (ImGui::CollapsingHeader("Layout",ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (section("Layout")) {
     ImGui::BeginDisabled(managed);
     float minimum[]{node.anchorMin.x,node.anchorMin.y}, maximum[]{node.anchorMax.x,node.anchorMax.y};
     ImGui::TextUnformatted("Ancora inicial");ImGui::SetNextItemWidth(-1);
@@ -443,27 +493,11 @@ void GuiWorkbench::properties() {
     ImGui::EndDisabled();
     changed=ImGui::Checkbox("Recortar filhos",&node.clipChildren)||changed;
   }
-  if (ImGui::CollapsingHeader("Aparencia",ImGuiTreeNodeFlags_DefaultOpen)) {
-    bool backgroundVisible=(node.background>>24)!=0;
-    if(ImGui::Checkbox("Desenhar fundo",&backgroundVisible)) {
-      node.background=(node.background&0x00FFFFFF)|(backgroundVisible?0xFF000000:0);
-      changed=true;
-    }
-    changed=editColor("Fundo",node.background)||changed;
-    if(node.kind!=GuiKind::Image && !guiContainer(node.kind) && node.kind!=GuiKind::Joystick && node.kind!=GuiKind::LookArea) {
-      changed=editColor("Texto / Controle",node.foreground)||changed;
-      changed=ImGui::DragFloat("Fonte",&node.fontSize,0.5f,6,128,"%.1f")||changed;
-      keepActiveFieldVisible();
-    }
-    if(node.kind==GuiKind::Button || node.kind==GuiKind::Toggle || node.kind==GuiKind::Slider || node.kind==GuiKind::Progress)
-      changed=editColor("Destaque",node.accent)||changed;
-    changed=ImGui::DragFloat(node.kind==GuiKind::Joystick?"Raio do fundo":"Raio",&node.radius,0.5f,0,512,"%.1f")||changed;
-    keepActiveFieldVisible();
-  }
   if (changed) { history_.begin(document_); document_.update(node,diagnostic_); }
   if(previewMotion){history_.commit(document_);setPreview(true);preview_.playAnimation(node.id);}
   // Keep a drag/text edit together. Commit once no item owns the interaction.
   if (!ImGui::IsAnyItemActive()) history_.commit(document_);
+  ImGui::PopStyleVar();
   ImGui::PopID();
 }
 void GuiWorkbench::canvasProperties() {
@@ -574,7 +608,7 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
   if(previewing_ && !preview_.diagnostic().empty())ImGui::TextWrapped("%s",preview_.diagnostic().c_str());
   else if (!diagnostic_.empty()) ImGui::TextUnformatted(diagnostic_.c_str());
   else if (!lastEvent_.empty()) ImGui::TextUnformatted(lastEvent_.c_str());
-  else ImGui::Text("%u elementos | %s | .aeui v4",static_cast<u32>(document_.nodes().size()),previewing_?"Preview isolado":"Edicao");
+  else ImGui::Text("%u elementos | %s",static_cast<u32>(document_.nodes().size()),previewing_?"Preview isolado":"Edicao");
   ImGui::End();
   if(activeTool_ && activeTool_<=tools_.size()) {
     bool open=true;

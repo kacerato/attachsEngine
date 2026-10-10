@@ -24,8 +24,24 @@ bool compileLibrary(std::span<const ClipAsset> assets,Library &out,std::string &
   }
   out=std::move(next);return true;
 }
-std::vector<resources::AssetGuid> dependencies(const ClipAsset &asset) {
-  return asset.source.valid()?std::vector<resources::AssetGuid>{asset.source}:std::vector<resources::AssetGuid>{};
+bool dependencies(const ClipAsset &asset,const resources::AssetRegistry &registry,const EditorMapScene &scene,
+    const auto &sources,std::vector<resources::AssetGuid> &result,std::string &error) {
+  result.clear();
+  const auto add=[&](resources::AssetGuid guid){if(guid.valid()&&guid!=asset.guid&&std::find(result.begin(),result.end(),guid)==result.end())result.push_back(guid);};
+  const auto address=[&](const resources::AnimationPropertyAddress &value) {
+    if(value.domain!=resources::AnimationPropertyDomain::MaterialSlot||!value.resource.valid()||registry.find(value.resource)) {add(value.resource);return true;}
+    if(!scene.assetSlot(value.resource)) {error="Primitiva do canal material ausente; remapeie o slot";return false;}
+    // A mesh subresource is owned by its imported source. Its GUID remains in
+    // the binding, while registry dependencies point to the deletable owner.
+    for(const auto &source:sources)if(std::find(source.identities.begin(),source.identities.end(),value.resource)!=source.identities.end()) {add(source.guid);return true;}
+    // Built-in primitives belong to the engine library, not a project file.
+    return true;
+  };
+  add(asset.source);
+  for(const auto &property:asset.properties){if(!address(property.address))return false;for(const auto &key:property.data.keys)if(const auto *guid=std::get_if<resources::AssetGuid>(&key.value))add(*guid);}
+  for(const auto &input:asset.drivers.inputs){if(!address(input.address))return false;add(input.controller);}
+  for(const auto &target:asset.drivers.targets)if(!address(target.address))return false;
+  return true;
 }
 std::string hash(std::string_view text) {return Sha256::hex({reinterpret_cast<const u8*>(text.data()),text.size()});}
 }
@@ -95,7 +111,8 @@ bool EditorSession::publishAnimationClipCreation(const ClipAsset &value,std::str
   if(!compileLibrary(nextClips,library,error))return false;
   if(!mapScene_.validateAuthoredAnimations(library)) {error="Biblioteca recusou os clipes antes da publicação";return false;}
   const auto text=value.serialize();resources::AssetRecord record;record.guid=value.guid;
-  record.type=resources::AssetType::AnimationClip;record.path=relative;record.contentHash=hash(text);record.dependencies=dependencies(value);
+  record.type=resources::AssetType::AnimationClip;record.path=relative;record.contentHash=hash(text);
+  if(!dependencies(value,assets_,mapScene_,importedSources_,record.dependencies,error))return false;
   auto nextAssets=assets_;if(!nextAssets.add(record)) {error="Registro recusou o clipe ou sua origem";return false;}
   std::error_code ec;std::filesystem::create_directories(absolute.parent_path(),ec);
   if(ec) {error="Não foi possível preparar a pasta do clipe";return false;}
@@ -168,7 +185,9 @@ bool EditorSession::commitAnimationClipAsset(const ClipAsset &candidate,std::str
   Library library;if(!compileLibrary(nextClips,library,error))return false;
   if(!mapScene_.validateAuthoredAnimations(library)) {error="Biblioteca recusou os clipes antes da publicação";return false;}
   const auto text=candidate.serialize();auto nextAssets=assets_;
-  if(!nextAssets.publishImport(candidate.guid,hash(text),record->importerVersion,record->importerParameters,record->derived,dependencies(candidate))) {
+  std::vector<resources::AssetGuid> dependencyOwners;
+  if(!dependencies(candidate,assets_,mapScene_,importedSources_,dependencyOwners,error))return false;
+  if(!nextAssets.publishImport(candidate.guid,hash(text),record->importerVersion,record->importerParameters,record->derived,std::move(dependencyOwners))) {
     error="Registro recusou o clipe ou sua origem";return false;
   }
   if(!EditorImportTransaction::publishTextBatch(files_.rootPath(),{{path,Sha256::hex(bytes),text}},nextAssets.serialize(),error))return false;

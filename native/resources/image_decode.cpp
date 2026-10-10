@@ -1,5 +1,7 @@
 #include "resources/image_decode.h"
+#include "resources/tiff_decode.h"
 #include "resources/gltf_codecs.h"
+#include "resources/tga_validation.h"
 
 #include <algorithm>
 #include <array>
@@ -32,6 +34,7 @@
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_HDR
+#define STBI_ONLY_TGA
 #define STBI_NO_STDIO
 #define STBI_NO_THREAD_LOCALS
 #include "third_party/stb/stb_image.h"
@@ -66,25 +69,39 @@ ImageContainer detectImageContainer(std::span<const u8> bytes) {
   if (bytes.size() >= 8 && std::memcmp(bytes.data(), png, 8) == 0) return ImageContainer::Png;
   if (bytes.size() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return ImageContainer::Jpeg;
   if (isKtx2(bytes)) return ImageContainer::Ktx2;
+  if (isTiff(bytes)) return ImageContainer::Tiff;
   static constexpr char radiance[] = "#?RADIANCE";
   static constexpr char rgbe[] = "#?RGBE";
   if ((bytes.size() >= sizeof(radiance)-1 && std::memcmp(bytes.data(),radiance,sizeof(radiance)-1)==0) ||
       (bytes.size() >= sizeof(rgbe)-1 && std::memcmp(bytes.data(),rgbe,sizeof(rgbe)-1)==0))
     return ImageContainer::RadianceHdr;
+  TgaImageInfo tga;
+  if(readTgaInfo(bytes,tga))return ImageContainer::Tga;
   return ImageContainer::Unknown;
 }
 
 bool readImageDimensions(std::span<const u8> bytes, const ImageDecodeLimits &limits, u32 &width, u32 &height) {
   width = height = 0;
+  if(isTiff(bytes)) {
+    TiffInfo info;std::string diagnostic;
+    if(!inspectTiff(bytes,limits,info,diagnostic))return false;
+    width=info.orientation>=5?info.height:info.width;height=info.orientation>=5?info.width:info.height;return true;
+  }
   if (bytes.empty() || bytes.size() > limits.maximumEncodedBytes || bytes.size() > 0x7fffffffu ||
       (detectImageContainer(bytes) != ImageContainer::Png &&
        detectImageContainer(bytes) != ImageContainer::Jpeg &&
-       detectImageContainer(bytes) != ImageContainer::Ktx2))
+       detectImageContainer(bytes) != ImageContainer::Ktx2 &&
+       detectImageContainer(bytes) != ImageContainer::Tga))
     return false;
   const auto withinLimits = [&](u32 w, u32 h) {
     return w <= limits.maximumDimension && h <= limits.maximumDimension &&
            static_cast<u64>(w) * static_cast<u64>(h) <= limits.maximumPixels;
   };
+  if(detectImageContainer(bytes)==ImageContainer::Tga) {
+    TgaImageInfo info;
+    if(!readTgaInfo(bytes,info)||!withinLimits(info.width,info.height))return false;
+    width=info.width;height=info.height;return true;
+  }
   if (detectImageContainer(bytes) == ImageContainer::Ktx2) {
     if (!readKtx2Dimensions(bytes, width, height) || !withinLimits(width, height)) {
       width = height = 0;
@@ -107,15 +124,30 @@ bool decodeImageRgba8(std::span<const u8> bytes, const ImageDecodeLimits &limits
                       std::string &diagnostic) {
   out = {};
   diagnostic.clear();
+  if(isTiff(bytes)) {
+    std::vector<std::string> losses;
+    return decodeTiffRgba8(bytes,limits,{},out,losses,diagnostic);
+  }
   if (bytes.empty() || bytes.size() > limits.maximumEncodedBytes || bytes.size() > 0x7fffffffu) {
     diagnostic = "Imagem vazia ou maior que o limite de bytes da importação.";
     return false;
   }
   if (detectImageContainer(bytes) != ImageContainer::Png &&
       detectImageContainer(bytes) != ImageContainer::Jpeg &&
-      detectImageContainer(bytes) != ImageContainer::Ktx2) {
-    diagnostic = "Formato de imagem não suportado neste perfil (PNG, JPEG e KTX2/BasisU).";
+      detectImageContainer(bytes) != ImageContainer::Ktx2 &&
+      detectImageContainer(bytes) != ImageContainer::Tga) {
+    diagnostic = "Formato de imagem não suportado neste perfil (PNG, JPEG, KTX2/BasisU e TGA RGB/RGBA/cinza).";
     return false;
+  }
+  TgaImageInfo tga;
+  const bool isTga=detectImageContainer(bytes)==ImageContainer::Tga;
+  if(isTga) {
+    if(!readTgaInfo(bytes,tga)) {diagnostic="Cabeçalho TGA inválido.";return false;}
+    if(tga.width>limits.maximumDimension||tga.height>limits.maximumDimension||
+       static_cast<u64>(tga.width)*tga.height>limits.maximumPixels) {
+      diagnostic="TGA passa do limite de dimensões desta importação.";return false;
+    }
+    if(!validateTgaPixels(bytes,tga,diagnostic))return false;
   }
   if (detectImageContainer(bytes) == ImageContainer::Ktx2) {
     // Cabeçalho primeiro, como nos outros formatos: nada é transcodificado
@@ -165,6 +197,13 @@ bool decodeImageRgba8(std::span<const u8> bytes, const ImageDecodeLimits &limits
   out.height = static_cast<u32>(height);
   out.rgba.assign(pixels, pixels + count);
   stbi_image_free(pixels);
+  if(isTga) {
+    // stb normalizes the vertical origin, but leaves right-to-left storage.
+    if(tga.rightOrigin)for(u32 y=0;y<out.height;++y)for(u32 x=0;x<out.width/2;++x)
+      for(u32 c=0;c<4;++c)std::swap(out.rgba[(static_cast<usize>(y)*out.width+x)*4+c],
+          out.rgba[(static_cast<usize>(y)*out.width+out.width-1-x)*4+c]);
+    if(!tga.hasAlpha)for(usize i=3;i<out.rgba.size();i+=4)out.rgba[i]=255;
+  }
   return true;
 }
 

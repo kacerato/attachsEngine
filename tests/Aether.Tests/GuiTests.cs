@@ -21,7 +21,7 @@ public static class GuiTests
         public void Log(ulong id,string text){}
         public bool Active=true,Removed;
         public string Text="Volume",Name="volume";
-        public float Value=.5f;
+        public float Value=.5f,Opacity=1;
         public GuiLayout Layout=new(Vector2.Zero,Vector2.One,new(16,16,-16,-16));
         public GuiStyle Style=new(0xFF242830,0xFFEEF1F5,0xFF70ACF5,true,18,4);
         public bool GuiCommand(uint world,uint node,uint operation,string text,float value,GuiKind kind,out GuiSnapshot snapshot,out GuiEventKind eventKind)
@@ -32,10 +32,11 @@ public static class GuiTests
             if(operation==0&&text!=Name){LastStatus=WorldStatus.UnknownElement;return false;}
             if(operation==2)Text=text;
             if(operation==3)Value=value;
+            if(operation==16)Opacity=value;
             if(operation==8)Removed=true;
             if(operation==9)Name=text;
             if(operation==6)return false;
-            snapshot=new(WorldId,7,GuiKind.Slider,true,true,Value,0,1);return true;
+            snapshot=new(WorldId,7,GuiKind.Slider,true,true,operation is 15 or 16?Opacity:Value,0,1);return true;
         }
         public bool GuiProperties(uint world,uint node,bool write,ref GuiLayout layout,ref GuiStyle style)
         {
@@ -110,6 +111,9 @@ public static class GuiTests
         var motion=element.Animation;element.OnClick(GuiClickAction.PlayAnimation);
         Assert.True(element.Interaction.Clickable);Assert.Equal(motion,element.Animation);
         element.PlayAnimation();Assert.Equal(13u,host.LastOperation);element.StopAnimation();Assert.Equal(14u,host.LastOperation);
+        element.Opacity=.35f;Assert.Equal(.35f,element.Opacity);Assert.Equal(motion,element.Animation);
+        Assert.Throws<ArgumentOutOfRangeException>(()=>element.Opacity=float.NaN);
+        Assert.Throws<ArgumentOutOfRangeException>(()=>element.Opacity=1.1f);
         var foreign=new GuiAccess(new Host()).Find("volume");
         Assert.Throws<WorldException>(()=>element.OnClick(GuiClickAction.ToggleVisible,foreign));
     }

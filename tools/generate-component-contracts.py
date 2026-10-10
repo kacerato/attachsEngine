@@ -137,7 +137,7 @@ def render(root):
             keys(table, ('name', 'kind', 'template', 'constexpr', 'items', 'defaults'), ('name', 'kind', 'template', 'constexpr', 'items'))
             name = identifier(table['name']); require(name not in tables, f"duplicate table: {name}"); tables.add(name)
             kind = table['kind']; require(kind in ('Number', 'Boolean', 'Enum'), f"unsupported property kind: {kind}")
-            keys(table.get('defaults', {}), ('type', 'presentation', 'default') + (('min', 'max', 'step', 'tweenable') if kind == 'Number' else ()))
+            keys(table.get('defaults', {}), ('type', 'presentation', 'default') + (('min', 'max', 'step', 'tweenable') if kind == 'Number' else ('animation_safe',)))
             require(isinstance(table['template'], bool) and isinstance(table['constexpr'], bool), 'table flags must be boolean')
             require(isinstance(table['items'], list) and table['items'], f"empty property table: {name}")
             text = banner(path.relative_to(root).as_posix())
@@ -149,7 +149,7 @@ def render(root):
                 item = merged(table.get('defaults', {}), raw_item)
                 number = kind == 'Number'
                 required = ('id', 'label', 'type', 'member') + (('min', 'max', 'step') if number else ('options',) if kind == 'Enum' else ())
-                keys(item, required + ('presentation', 'default') + (('tweenable',) if number else ()), required)
+                keys(item, required + ('presentation', 'default') + (('tweenable',) if number else ('animation_safe',)), required)
                 require(isinstance(item['id'], str) and item['id'] and item['id'] not in ids, f"{name}: empty/duplicate property id")
                 ids.add(item['id'])
                 typ = identifier(item['type']); member = item['member']
@@ -178,6 +178,7 @@ def render(root):
                     text += '  {' + cpp(item['id']) + ', ' + cpp(item['label']) + ',\n'
                     text += f'   [](const ComponentValue &value)->bool{{return {read};}},\n'
                     text += f'   [](ComponentValue &value,bool next){{{write}=next;}},\n   {metadata}'
+                if not number and 'animation_safe' in item: text += ', ' + cpp(item['animation_safe'])
                 text += '},\n'
             text += '}};\n'
             output = f'{Path(source).stem}_{name}.inc'

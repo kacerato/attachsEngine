@@ -40,20 +40,50 @@ void EditorHistory::end() {
   if (!open_) return;
   commitOpenTransaction();
 }
-bool EditorHistory::recordResource(std::string_view label,std::function<bool(bool)> replay) {
-  if(open_||replaying_||!replay) return false;
+bool EditorHistory::recordResource(std::string_view label,std::function<bool(bool)> replay,u64 retainedBytes) {
+  if(open_||replaying_||!replay||retainedBytes>kMaximumRetainedResourceBytes)return false;
   Transaction transaction;assignLabel(transaction.label,label);transaction.resourceReplay=std::move(replay);
-  undoStack_.push_back(std::move(transaction));redoStack_.clear();
-  if(undoStack_.size()>kMaximumTransactions) undoStack_.erase(undoStack_.begin());
-  return true;
+  transaction.retainedResourceBytes=retainedBytes;
+  undoStack_.push_back(std::move(transaction));redoStack_.clear();trimHistoryBudget();return true;
+}
+bool EditorHistory::setPendingResourceReplay(std::function<bool(bool)> replay,u64 retainedBytes,std::function<void()> settled) {
+  if(!open_||replaying_||!replay||pending_.resourceReplay||retainedBytes>kMaximumRetainedResourceBytes)return false;
+  pending_.resourceReplay=std::move(replay);pending_.retainedResourceBytes=retainedBytes;pending_.resourceSettled=std::move(settled);return true;
+}
+u64 EditorHistory::retainedResourceBytes() const noexcept {
+  u64 bytes=0;for(const auto &entry:undoStack_)bytes+=entry.retainedResourceBytes;
+  for(const auto &entry:redoStack_)bytes+=entry.retainedResourceBytes;
+  return bytes;
+}
+void EditorHistory::trimHistoryBudget() {
+  while(!undoStack_.empty()&&(undoStack_.size()>kMaximumTransactions||retainedResourceBytes()>kMaximumRetainedResourceBytes))undoStack_.erase(undoStack_.begin());
+}
+bool EditorHistory::replayCompound(Transaction &transaction,EditorDocument &document,bool forward) {
+  if(transaction.commands.empty()) {
+    const bool ok=transaction.resourceReplay(forward);
+    if(transaction.resourceSettled)transaction.resourceSettled();
+    return ok;
+  }
+  auto candidate=document;
+  if(forward) {for(const auto &command:transaction.commands)if(!applyForward(candidate,command))return false;}
+  else {for(usize i=transaction.commands.size();i>0;--i)if(!applyBackward(candidate,transaction.commands[i-1]))return false;}
+  auto previous=std::move(document);document=std::move(candidate);
+  const bool ok=transaction.resourceReplay(forward);
+  if(!ok)document=std::move(previous);
+  if(transaction.resourceSettled)transaction.resourceSettled();
+  return ok;
 }
 
 bool EditorHistory::cancel(EditorDocument &document) {
   if(!open_) return false;
-  auto candidate=document;
-  for(usize i=pending_.commands.size();i>0;--i)
-    if(!applyBackward(candidate,pending_.commands[i-1])) return false;
-  document=std::move(candidate);
+  if(pending_.resourceReplay) {
+    replaying_=true;const bool ok=replayCompound(pending_,document,false);replaying_=false;
+    if(!ok)return false;
+  } else {
+    auto candidate=document;
+    for(usize i=pending_.commands.size();i>0;--i)if(!applyBackward(candidate,pending_.commands[i-1]))return false;
+    document=std::move(candidate);
+  }
   pending_=Transaction{};
   open_=false;
   return true;
@@ -61,7 +91,7 @@ bool EditorHistory::cancel(EditorDocument &document) {
 
 void EditorHistory::commitOpenTransaction() {
   open_ = false;
-  if (pending_.commands.empty()) {
+  if (pending_.commands.empty()&&!pending_.resourceReplay) {
     pending_ = Transaction{};
     return;
   }
@@ -71,8 +101,7 @@ void EditorHistory::commitOpenTransaction() {
   // sobre um documento diferente aplicaria comandos a objetos que já não são
   // os mesmos.
   redoStack_.clear();
-  if (undoStack_.size() > kMaximumTransactions)
-    undoStack_.erase(undoStack_.begin(), undoStack_.begin() + 1);
+  trimHistoryBudget();
 }
 
 bool EditorHistory::record(const EditorCommand &command) {
@@ -350,7 +379,7 @@ bool EditorHistory::undo(EditorDocument &document) {
   if (open_) commitOpenTransaction();
   if (undoStack_.empty()) return false;
   if(undoStack_.back().resourceReplay) {
-    replaying_=true;const bool ok=undoStack_.back().resourceReplay(false);replaying_=false;
+    replaying_=true;const bool ok=replayCompound(undoStack_.back(),document,false);replaying_=false;
     if(!ok) return false;
     redoStack_.push_back(std::move(undoStack_.back()));undoStack_.pop_back();return true;
   }
@@ -369,7 +398,7 @@ bool EditorHistory::redo(EditorDocument &document) {
   if (open_) commitOpenTransaction();
   if (redoStack_.empty()) return false;
   if(redoStack_.back().resourceReplay) {
-    replaying_=true;const bool ok=redoStack_.back().resourceReplay(true);replaying_=false;
+    replaying_=true;const bool ok=replayCompound(redoStack_.back(),document,true);replaying_=false;
     if(!ok) return false;
     undoStack_.push_back(std::move(redoStack_.back()));redoStack_.pop_back();return true;
   }

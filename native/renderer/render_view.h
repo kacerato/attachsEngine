@@ -1,7 +1,11 @@
 #pragma once
 #include "renderer/frustum_visibility.h"
+#include "renderer/material_preview_geometry.h"
+#include "renderer/material_override.h"
 #include <algorithm>
 #include <cmath>
+#include <memory>
+#include <vector>
 
 namespace ae::renderer {
 // An independent view owns its projection and output extent. This snapshot
@@ -12,6 +16,12 @@ struct RenderViewSnapshot {
   u64 sceneEpoch=0,sceneRevision=0,requestId=0;
   u32 cameraEntity=0;
   u32 environmentLayerMask=~0u;
+  // Null means the complete scene. Immutable sorted object IDs isolate a real
+  // authored subtree without hiding or modifying objects in the main view.
+  std::shared_ptr<const std::vector<u64>> isolatedObjects;
+  u32 resourceRevision=0;
+  std::shared_ptr<const MaterialPreviewGeometry> materialGeometry;
+  MaterialOverride previewMaterial{};
   bool valid() const {return frustum.valid && width>0 && height>0 && requestId!=0;}
 };
 struct PreviewViewBudget {

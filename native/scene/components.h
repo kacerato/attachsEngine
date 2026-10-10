@@ -96,6 +96,7 @@ struct ComponentBoolean {
   bool (*read)(const ComponentValue &);
   void (*write)(ComponentValue &,bool);
   PropertyPresentation presentation{};
+  bool animationSafe=false;
 };
 struct ComponentEnumOption { u32 value; const char *name; };
 struct ComponentEnum {
@@ -105,6 +106,7 @@ struct ComponentEnum {
   u32 (*read)(const ComponentValue &);
   void (*write)(ComponentValue &,u32);
   PropertyPresentation presentation{};
+  bool animationSafe=false;
 };
 // Descendant: um objeto ABAIXO deste na hierarquia, nunca ele mesmo — é o que
 // um LOD Group pede para cada nível (os renderers LOD0, LOD1... são filhos).

@@ -1,0 +1,13 @@
+#pragma once
+#include <string>
+namespace ae::test {
+inline std::string unityClip(float endpoint=2) {
+  return "%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!74 &7400000\nAnimationClip:\n  m_Name: Slide\n  m_Compressed: 0\n  m_PositionCurves:\n  - curve:\n      m_Curve:\n      - time: 0\n        value: {x: 0, y: 0, z: 0}\n        inSlope: {x: 0, y: 0, z: 0}\n        outSlope: {x: 0, y: 0, z: 0}\n      - time: 1\n        value: {x: "+std::to_string(endpoint)+", y: 0, z: 0}\n        inSlope: {x: 0, y: 0, z: 0}\n        outSlope: {x: 0, y: 0, z: 0}\n      m_PreInfinity: 2\n      m_PostInfinity: 2\n    path: ''\n  m_RotationCurves: []\n  m_ScaleCurves: []\n  m_FloatCurves: []\n  m_SampleRate: 30\n  m_WrapMode: 0\n  m_AnimationClipSettings:\n    m_StartTime: 0\n    m_StopTime: 1\n    m_LoopTime: 1\n";
+}
+inline std::string unityPrefab(const std::string &meshGuid,const std::string &materialGuid) {
+  return "%YAML 1.1\n--- !u!1 &9007199254740993\nGameObject:\n  m_Component:\n  - component: {fileID: 400000}\n  - component: {fileID: 3300000}\n  - component: {fileID: 2300000}\n  m_Name: Library Triangle\n  m_TagString: Untagged\n  m_Layer: 0\n  m_IsActive: 1\n--- !u!4 &400000\nTransform:\n  m_GameObject: {fileID: 9007199254740993}\n  m_LocalPosition: {x: 1, y: 2, z: 3}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}\n  m_LocalScale: {x: 1, y: 1, z: 1}\n  m_Father: {fileID: 0}\n  m_Children: []\n--- !u!33 &3300000\nMeshFilter:\n  m_GameObject: {fileID: 9007199254740993}\n  m_Mesh: {fileID: 4300000, guid: "+meshGuid+", type: 3}\n--- !u!23 &2300000\nMeshRenderer:\n  m_GameObject: {fileID: 9007199254740993}\n  m_Enabled: 1\n  m_CastShadows: 1\n  m_ReceiveShadows: 1\n  m_Materials:\n  - {fileID: 2100000, guid: "+materialGuid+", type: 2}\n";
+}
+inline std::string unityController(const std::string &clipGuid) {
+  return "%YAML 1.1\n--- !u!91 &9100000\nAnimatorController:\n  m_Name: Library Motion\n  m_AnimatorParameters:\n  - m_Name: Speed\n    m_Type: 1\n    m_DefaultFloat: 0\n    m_DefaultInt: 0\n    m_DefaultBool: 0\n  m_AnimatorLayers:\n  - m_Name: Base\n    m_StateMachine: {fileID: 110700000}\n    m_Mask: {fileID: 0}\n    m_BlendingMode: 0\n    m_SyncedLayerIndex: -1\n    m_DefaultWeight: 0\n--- !u!1107 &110700000\nAnimatorStateMachine:\n  m_ChildStates:\n  - m_State: {fileID: 110200000}\n    m_Position: {x: 100, y: 40, z: 0}\n  m_ChildStateMachines: []\n  m_AnyStateTransitions: []\n  m_EntryTransitions: []\n  m_StateMachineTransitions: []\n  m_DefaultState: {fileID: 110200000}\n--- !u!1102 &110200000\nAnimatorState:\n  m_Name: Slide\n  m_Speed: 1\n  m_Transitions: []\n  m_WriteDefaultValues: 1\n  m_Motion: {fileID: 7400000, guid: "+clipGuid+", type: 2}\n";
+}
+} // namespace ae::test

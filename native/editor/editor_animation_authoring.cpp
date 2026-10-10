@@ -2,6 +2,8 @@
 #include "editor/editor_session.h"
 #include "resources/animation_clip_clipboard.h"
 #include "resources/animation_clip_bake.h"
+#include "resources/animation_clip_timeline.h"
+#include "resources/animation_clip_arrange.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -24,7 +26,11 @@ u64 allocateAuthorHandle() {
   return 0;
 }
 usize keyCount(const Asset &asset) {
-  usize count=0;for(const auto &track:asset.tracks)for(const auto &curve:track.curves)count+=curve.keys.size();return count;
+  usize count=0;
+  for(const auto &track:asset.tracks)for(const auto &curve:track.curves)count+=curve.keys.size();
+  for(const auto &track:asset.properties){count+=track.data.keys.size();for(const auto &curve:track.data.curves)count+=curve.keys.size();}
+  for(const auto &node:asset.drivers.graph.nodes)count+=node.curve.keys.size();
+  return count;
 }
 int copyText(std::string_view text,u8 *buffer,int capacity) {
   if(capacity<0||text.size()>static_cast<usize>(std::numeric_limits<int>::max()))return -1;
@@ -44,15 +50,18 @@ struct AnimationAuthoringScope::Impl {
   struct Draft {
     u64 token;Asset asset;std::string snapshot;
     resources::AnimationClip compiled{};bool runtimeReady=false;
+    u64 propertyOwner=0,propertySceneRevision=0;
     void changed() {snapshot.clear();compiled={};runtimeReady=false;}
   };
   struct Clipboard {u64 token;resources::AnimationKeyClipboard value;};
+  struct CueClipboard {u64 token;resources::AnimationCueClipboard value;};
   EditorSession &session;
   std::string project,error;
   u64 epoch;
   std::thread::id thread;
   std::vector<Draft> drafts;
   std::vector<Clipboard> clipboards;
+  std::vector<CueClipboard> cueClipboards;
   std::vector<resources::AssetGuid> authoredCatalog,importedCatalog;
   bool authoredCatalogReady=false,importedCatalogReady=false;
   AnimationAuthorAccess api;
@@ -97,11 +106,19 @@ struct AnimationAuthoringScope::Impl {
     api.apply=[](void *c,u64 token,const AnimationAuthorCommand *command,const float *values,int count,const u8 *text,int length,u64 *result)->int {
       auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);
       if(!draft)return 0;
-      if(!command||command->reserved||command->operation>static_cast<u32>(AnimationAuthorOperation::RemoveCue)||
+      if(!command||command->reserved||command->operation>static_cast<u32>(AnimationAuthorOperation::RemoveRegion)||
          count<0||count>static_cast<int>(resources::MaximumMorphTargets)||(!values&&count)||!textArgument(text,length,256))return s.reject("Argumento de autoria inválido");
       auto candidate=draft->asset;u64 id=0;bool ok=false;
       const auto operation=static_cast<AnimationAuthorOperation>(command->operation);
       switch(operation) {
+        case AnimationAuthorOperation::PutRegion:ok=candidate.putRegion({command->track,textValue(text,length),static_cast<float>(command->first),static_cast<float>(command->second)},id,s.error);break;
+        case AnimationAuthorOperation::RemoveRegion:ok=candidate.removeRegion(command->track,s.error);break;
+        case AnimationAuthorOperation::CloseRange:ok=resources::closeAnimationRange(candidate,static_cast<float>(command->first),static_cast<float>(command->second),s.error);break;
+        case AnimationAuthorOperation::RepeatRange:ok=resources::repeatAnimationRange(candidate,static_cast<float>(command->first),static_cast<float>(command->second),command->mode,command->key.value,s.error);break;
+        case AnimationAuthorOperation::InsertTime:ok=resources::insertAnimationTime(candidate,static_cast<float>(command->first),static_cast<float>(command->second),s.error);break;
+        case AnimationAuthorOperation::RemoveTime:ok=resources::removeAnimationTime(candidate,static_cast<float>(command->first),static_cast<float>(command->second),s.error);break;
+        case AnimationAuthorOperation::DuplicateRange:ok=resources::duplicateAnimationRange(candidate,static_cast<float>(command->first),static_cast<float>(command->second),command->key.time,s.error);break;
+        case AnimationAuthorOperation::MoveRange:ok=resources::moveAnimationRange(candidate,static_cast<float>(command->first),static_cast<float>(command->second),command->key.time,s.error);break;
         case AnimationAuthorOperation::PutCue: {
           if(command->mode>1||(command->key.flags&~7u))return s.reject("Flags de evento invalidas");
           resources::AnimationCue cue;cue.id=command->track;cue.time=static_cast<float>(command->first);
@@ -148,6 +165,11 @@ struct AnimationAuthoringScope::Impl {
           ok=candidate.addLayerTrack(command->key.id,command->track,command->mode!=0,id,s.error,command->component?std::optional{static_cast<resources::AnimationRotationMode>(command->component-1)}:std::nullopt);break;
       }
       if(!ok||!s.budget(candidate,token))return 0;
+      if(draft->propertyOwner) {
+        if(!s.propertyContext(*draft,draft->propertyOwner))return 0;
+        const float time=operation==AnimationAuthorOperation::PutKey?command->key.time:0.f;
+        if(!s.session.validateAnimationPropertyClip(candidate,static_cast<EditorEntityId>(draft->propertyOwner),time,s.error))return 0;
+      }
       draft->asset=std::move(candidate);draft->changed();if(result)*result=id;return 1;
     };
     api.addTrack=[](void *c,u64 token,resources::AssetGuid sourceNode,const u8 *path,int pathLength,const u8 *name,int nameLength,u32 property,u32 mode,const float *values,int count,u64 *out)->int {
@@ -163,6 +185,12 @@ struct AnimationAuthoringScope::Impl {
     api.commit=[](void *c,u64 token)->int {
       auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft)return 0;
       const auto value=draft->asset;
+      if(draft->propertyOwner&&(draft->propertySceneRevision!=s.session.document().revision()||
+         !s.session.validateAnimationPropertyClip(value,static_cast<EditorEntityId>(draft->propertyOwner),0,s.error)||
+         !s.session.validateAnimationPropertyClip(value,static_cast<EditorEntityId>(draft->propertyOwner),value.duration,s.error))) {
+        if(s.error.empty())s.reject("Cena de propriedades mudou; reabra o rascunho");
+        return 0;
+      }
       if(!s.session.editAnimationClipAsset(value.guid,value.revision,[&](auto &candidate){candidate=value;return true;},s.error))return 0;
       std::erase_if(s.drafts,[&](const auto &entry){return entry.token==token;});return 1;
     };
@@ -229,10 +257,17 @@ struct AnimationAuthoringScope::Impl {
       }
       s.reject("Propriedade composta ausente");return -1;
     };
+    api.sampleRegion=[](void *c,u64 token,u64 regionId,u64 trackId,double elapsed,u32 wrap,float *values,int capacity)->int {
+      auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft)return -1;
+      const auto *region=draft->asset.region(regionId);float time=0;
+      if(!region||!resources::animationRegionTime(*region,elapsed,static_cast<resources::AnimationWrapMode>(wrap),time)) {s.reject("Região, relógio ou modo de reprodução inválido");return -1;}
+      return s.api.sampleComposed(c,token,trackId,time,values,capacity);
+    };
     api.sampleCurve=[](void *c,u64 token,u64 trackId,u32 component,double time,double *value,double *derivative)->int {
       auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft||!value||!derivative)return 0;
-      const auto *track=draft->asset.track(trackId);resources::AnimationCurveSample sample;
-      if(!track||component>=track->curves.size()||!resources::sampleValidatedAnimationCurve(track->curves[component],time,sample))return s.reject("Curva ou tempo inválidos");
+      const auto *track=draft->asset.track(trackId);const auto *property=draft->asset.propertyTrack(trackId);
+      const auto *curves=track?&track->curves:property?&property->data.curves:nullptr;resources::AnimationCurveSample sample;
+      if(!curves||component>=curves->size()||!resources::sampleValidatedAnimationCurve((*curves)[component],time,sample))return s.reject("Curva ou tempo inválidos");
       *value=sample.value;*derivative=sample.derivative;return 1;
     };
     api.diagnostic=[](void *c,u8 *buffer,int capacity)->int {
@@ -241,7 +276,8 @@ struct AnimationAuthoringScope::Impl {
     api.releaseClipboard=[](void *c,u64 token)->int {
       auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
       const auto old=s.clipboards.size();std::erase_if(s.clipboards,[&](const auto &entry){return entry.token==token;});
-      return s.clipboards.size()!=old?1:s.reject("Clipboard encerrado ou pertencente a outro comando");
+      const auto oldCues=s.cueClipboards.size();std::erase_if(s.cueClipboards,[&](const auto &entry){return entry.token==token;});
+      return s.clipboards.size()!=old||s.cueClipboards.size()!=oldCues?1:s.reject("Clipboard encerrado ou pertencente a outro comando");
     };
     api.bake=[](void *c,u64 token,u64 track,const AnimationAuthorBakeSettings *wire,AnimationAuthorBakeReport *out)->int {
       auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft)return 0;
@@ -285,6 +321,96 @@ struct AnimationAuthoringScope::Impl {
     api.recordPose=[](void *c)->int {auto &s=*static_cast<Impl*>(c);return s.ready()&&s.session.recordAnimationClipPose(s.error)?1:0;};
     api.cancelPose=[](void *c)->int {auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;s.session.cancelAnimationClipPose();return 1;};
     api.closePreview=[](void *c)->int {auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;s.session.closeAnimationClip();return 1;};
+    api.configurePoseRecording=[](void *c,u32 flags,float start,float end)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
+      if(flags&~7u)return s.reject("Flags de gravação de pose inválidas");
+      return s.session.configureAnimationPoseRecording({bool(flags&1),bool(flags&2),start,end},s.error,bool(flags&4))?1:0;
+    };
+    api.configurePoseLocks=[](void *c,u32 path,u64 mask)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
+      if(path>static_cast<u32>(resources::AnimationPath::Weights))return s.reject("Canal de pose inválido");
+      return s.session.configureAnimationPoseLocks(static_cast<resources::AnimationPath>(path),mask,s.error)?1:0;
+    };
+    api.poseTool=[](void *c,u32 operation)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
+      if(operation<2)return s.session.resetAnimationClipPose(operation==0,s.error)?1:0;
+      if(operation<4)return s.session.copyAnimationClipPose(operation==3,s.error)?1:0;
+      if(operation==4)return s.session.pasteAnimationClipPose(s.error)?1:0;
+      return s.reject("Operação de pose inválida");
+    };
+    api.poseSelection=[](void *c,u32 operation,const u64 *targets,int count,u64 primary)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
+      if(count<0||count>static_cast<int>(MaximumAnimationPoseSelection)||(count&&!targets)||operation>9||
+         (operation>1&&(count||primary))||(operation==1&&count!=1))return s.reject("Argumentos de seleção inválidos");
+      std::vector<EditorEntityId> selected;selected.reserve(static_cast<usize>(count));
+      if(primary>std::numeric_limits<EditorEntityId>::max())return s.reject("ID principal fora do contrato da cena");
+      for(int i=0;i<count;++i) {if(targets[i]>std::numeric_limits<EditorEntityId>::max())return s.reject("ID de alvo fora do contrato da cena");selected.push_back(static_cast<EditorEntityId>(targets[i]));}
+      if(!operation)return s.session.selectAnimationPoseTargets(selected,static_cast<EditorEntityId>(primary),s.error)?1:0;
+      if(operation==1)return s.session.toggleAnimationPoseTarget(selected.front(),s.error)?1:0;
+      if(operation<6)return s.session.selectAnimationPoseRelation(operation-2,s.error)?1:0;
+      if(operation==6)return s.session.selectAnimationPoseTargets({},0,s.error)?1:0;
+      if(operation==7)return s.session.focusAnimationPoseSelection(s.error)?1:0;
+      return s.session.isolateAnimationPoseSelection(operation==8,s.error)?1:0;
+    };
+    api.poseTargets=[](void *c,u64 *targets,int capacity)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return -1;
+      const auto &selected=s.session.screen().clipPoseSelection;
+      if(capacity<0||(targets&&capacity<static_cast<int>(selected.size()))) {s.reject("Buffer de seleção insuficiente");return -1;}
+      if(targets)std::copy(selected.begin(),selected.end(),targets);
+      return static_cast<int>(selected.size());
+    };
+    api.poseSet=[](void *c,u32 operation,const u8 *name,int length)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return 0;
+      if(operation>2||!textArgument(name,length,96)||!length)return s.reject("Nome ou operação do conjunto inválido");
+      const std::string_view label(reinterpret_cast<const char*>(name),static_cast<usize>(length));
+      return (operation==0?s.session.saveAnimationPoseSelection(label,s.error):operation==1?s.session.recallAnimationPoseSelection(label,s.error):s.session.removeAnimationPoseSelection(label,s.error))?1:0;
+    };
+    api.poseSetName=[](void *c,int index,u8 *name,int capacity)->int {
+      auto &s=*static_cast<Impl*>(c);if(!s.ready())return -1;
+      const auto &state=s.session.screen();if(!state.clipOpen||index< -1||capacity<0) {s.reject("Consulta de conjunto inválida");return -1;}
+      int count=0;const std::string *found=nullptr;
+      for(const auto &set:state.clipPoseSets)if(set.clip==state.clipGuid) {if(count==index)found=&set.name;++count;}
+      if(index== -1)return count;
+      if(!found||(name&&capacity<static_cast<int>(found->size()))) {s.reject("Conjunto ausente ou buffer insuficiente");return -1;}
+      if(name)std::copy(found->begin(),found->end(),name);
+      return static_cast<int>(found->size());
+    };
+    api.arrangeSelection=[](void *c,u64 token,const AnimationAuthorAddress *keys,int keyCount,const u64 *cues,int cueCount,u32 mode,float first,float last)->int {
+      auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);std::vector<Address> selection;
+      if(!draft||keyCount<0||cueCount<0||mode>3||(!keyCount&&!cueCount)||
+         (keyCount&&!s.addresses(keys,keyCount,selection))||(cueCount&&!s.cueArguments(cues,cueCount)))return s.reject("Seleção temporal inválida");
+      auto candidate=draft->asset;
+      if(!resources::arrangeAnimationSelection(candidate,selection,{cues,static_cast<usize>(cueCount)},static_cast<resources::AnimationArrange>(mode),first,last,s.error)||!s.budget(candidate,token))return 0;
+      draft->asset=std::move(candidate);draft->changed();return 1;
+    };
+    api.copyCues=[](void *c,u64 token,const u64 *ids,int count)->u64 {
+      auto &s=*static_cast<Impl*>(c);const auto *draft=s.find(token);
+      if(!draft||!s.cueArguments(ids,count))return 0;
+      if(s.cueClipboards.size()>=8) {s.reject("Limite de clipboards de cues atingido");return 0;}
+      resources::AnimationCueClipboard value;if(!value.copy(draft->asset,{ids,static_cast<usize>(count)},s.error))return 0;
+      const auto handle=allocateAuthorHandle();if(!handle) {s.reject("Identidades de autoria esgotadas");return 0;}
+      s.cueClipboards.push_back({handle,std::move(value)});return handle;
+    };
+    api.pasteCues=[](void *c,u64 token,u64 clipboard,float at)->int {
+      auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft)return 0;
+      const auto found=std::find_if(s.cueClipboards.begin(),s.cueClipboards.end(),[&](const auto &entry){return entry.token==clipboard;});
+      if(found==s.cueClipboards.end())return s.reject("Clipboard de cues encerrado ou de outro comando");
+      auto candidate=draft->asset;std::vector<u64> selection;
+      if(!found->value.paste(candidate,at,selection,s.error)||!s.budget(candidate,token))return 0;
+      draft->asset=std::move(candidate);draft->changed();return 1;
+    };
+    api.transformCues=[](void *c,u64 token,const u64 *ids,int count,double pivot,double scale,double offset)->int {
+      auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft||!s.cueArguments(ids,count))return 0;
+      auto candidate=draft->asset;
+      if(!resources::transformAnimationCueTimes(candidate,{ids,static_cast<usize>(count)},pivot,scale,offset,s.error))return 0;
+      draft->asset=std::move(candidate);draft->changed();return 1;
+    };
+    api.eraseCues=[](void *c,u64 token,const u64 *ids,int count)->int {
+      auto &s=*static_cast<Impl*>(c);auto *draft=s.find(token);if(!draft||!s.cueArguments(ids,count))return 0;
+      auto candidate=draft->asset;if(!resources::eraseAnimationCues(candidate,{ids,static_cast<usize>(count)},s.error))return 0;
+      draft->asset=std::move(candidate);draft->changed();return 1;
+    };
+#include "editor/editor_animation_property_api.inc"
   }
   bool ready() {
     // A foreign thread must not even write the diagnostic owned by the editor.
@@ -293,6 +419,12 @@ struct AnimationAuthoringScope::Impl {
     error.clear();return true;
   }
   int reject(const char *message) {error=message;return 0;}
+  bool propertyContext(const Draft &draft,u64 owner) {
+    if(!owner)return reject("Objeto proprietário inválido");
+    if(draft.propertyOwner&&(draft.propertyOwner!=owner||draft.propertySceneRevision!=session.document().revision()))
+      return reject("Cena ou proprietário mudou; reabra o rascunho de propriedades");
+    return true;
+  }
   Draft *find(u64 token) {
     if(!ready())return nullptr;
     for(auto &draft:drafts)if(draft.token==token)return &draft;
@@ -302,6 +434,9 @@ struct AnimationAuthoringScope::Impl {
     usize total=keyCount(candidate);for(const auto &draft:drafts)if(draft.token!=replaced)total+=keyCount(draft.asset);
     if(total>Asset::MaximumKeys)return reject("Limite conjunto de chaves nos rascunhos atingido");
     return true;
+  }
+  bool cueArguments(const u64 *ids,int count) {
+    return ids&&count>0&&count<=static_cast<int>(resources::MaximumAnimationCues)?true:reject("Seleção de cues inválida");
   }
   bool addresses(const AnimationAuthorAddress *input,int count,std::vector<Address> &out) {
     if(!input||count<=0||count>static_cast<int>(Asset::MaximumKeys))return reject("Seleção de autoria inválida");

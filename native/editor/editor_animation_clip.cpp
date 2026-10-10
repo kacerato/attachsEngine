@@ -1,6 +1,8 @@
 #include "editor/editor_session.h"
 #include "runtime/transform_math.h"
 #include "resources/animation_binding_path.h"
+#include "resources/animation_clip_arrange.h"
+#include "editor/editor_animation_curve_view.h"
 #include "scene/skinned_mesh.h"
 #include "scene/import_link.h"
 #include "renderer/normal_matrix.h"
@@ -31,16 +33,8 @@ void selectKeys(EditorScreenState &state,const Asset &asset,std::span<const reso
 }
 bool relativeBinding(const EditorDocument &document,EditorEntityId owner,EditorEntityId target,
                      resources::AnimationClipBinding &binding,std::string &error) {
-  const auto *object=document.find(target);
-  if(!object||!document.exists(owner)||(target!=owner&&!document.isDescendantOf(target,owner))) {error="Objeto deve pertencer à raiz do clipe";return false;}
-  binding.name=object->name;binding.path.clear();
-  for(auto current=target;current!=owner;) {
-    const auto *node=document.find(current);if(!node||!node->parent) {error="Caminho do objeto indisponível";return false;}
-    u32 matches=0;for(const auto sibling:document.childrenOf(node->parent))if(const auto *other=document.find(sibling);other&&std::string_view(other->name)==node->name)++matches;
-    if(matches!=1) {error="Nomes iguais entre irmãos tornam o binding ambíguo; renomeie o objeto";return false;}
-    const auto segment=resources::animationBindingSegment(node->name);binding.path=segment+(binding.path.empty()?"":"/"+binding.path);current=node->parent;
-  }
-  return true;
+  if(!animationPoseTargetPath(document,owner,target,binding.path,error))return false;
+  binding.name=document.find(target)->name;return true;
 }
 }
 bool EditorSession::createAnimationClip(EditorEntityId owner,float duration,resources::AssetGuid &guid,std::string &error,resources::AnimationRotationMode mode) {
@@ -148,15 +142,24 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   if(!clipPreview_.begin(document_,owner,*asset,previewDiagnostic)||!clipPreview_.seek(0,previewDiagnostic))clipPreview_.cancel();
   state_.clipLayer=0;state_.clipLayersShown=state_.clipLayerPicker=false;
   state_.clipOpen=true;state_.clipGuid=guid;state_.clipOwner=owner;state_.clipTime=0;
+  state_.clipCurveView=state_.clipCurveNormalized=state_.clipCurveIsolated=false;
+  state_.clipRegionsShown=state_.clipRegionDetails=false;state_.clipRegion=state_.clipPreviewRegion=0;state_.clipRegionPage=0;
+  state_.clipCurveViewTask=state_.clipCurveReferencePage=0;
+  state_.clipCurvePins.clear();state_.clipCurveRanges.clear();
   viewportPointers_.clear();pinchDistance_=0;
   state_.clipPlaying=false;state_.clipPicker=false;state_.clipNewPicker=false;state_.clipTangentPicker=false;state_.clipRow=0;state_.clipPage=0;
   state_.clipImportedPicker=false;state_.clipSourceEntries.clear();
   state_.clipModeSide=0;
   state_.clipAuthoringPicker=0;state_.clipTargetPage=0;state_.clipTargetBranch=owner;state_.clipTargetNode=owner;state_.clipPoseShown=false;
   state_.clipPreviewTarget=0;state_.clipPoseNumbers=false;state_.clipPoseJoints=true;state_.clipPreviewExpanded=false;
+  state_.clipPoseToolsShown=false;state_.clipPoseToolsPage=0;state_.clipPoseWorldSpace=false;
+  state_.clipPoseSelection={owner};state_.clipPoseSelectionAdd=state_.clipPoseSelectionEmpty=state_.clipPoseSelectionIsolated=false;state_.clipPoseSetPage=0;
+  state_.clipPoseRecording={true,false,0,asset->duration};std::fill_n(state_.clipPoseLocks,4,0);
   clipPreviewTopologyRevision_=~u64(0);
   state_.clipCues=state_.clipCueOptions=false;state_.clipCue=0;
-  state_.clipTrack=asset->tracks.front().id;state_.clipComponent=0;state_.clipKey=0;
+  state_.clipCueSelection.clear();state_.clipRangeShown=false;
+  state_.clipRangeStart=0;state_.clipRangeEnd=asset->duration;state_.clipRangeDestination=0;
+  state_.clipTrack=asset->tracks.empty()?0:asset->tracks.front().id;state_.clipComponent=0;state_.clipKey=0;
   state_.clipSelection.clear();state_.clipSelectionMode=state_.clipSelectionAdd=state_.clipSelecting=false;state_.clipEditPicker=false;
   state_.clipBakeShown=state_.clipBakeHasReport=false;
   state_.clipBakeConsolidate=state_.clipBakeReferenceShown=state_.clipBakeReportConsolidated=false;
@@ -167,6 +170,10 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   clipEpoch_=sceneEpoch_;state_.clipDiagnostic=previewDiagnostic;appearanceChanged_=true;refreshAnimationClip();frameAnimationClip();return true;
 }
 void EditorSession::closeAnimationClip() {
+  clipDriverDraft_.reset();state_.clipDriverDraft=nullptr;state_.clipDriversShown=false;
+  state_.clipPropertiesShown=state_.clipPropertyRemap=state_.clipPropertyCurves=false;
+  state_.clipPropertyTrack=state_.clipPropertyKey=0;state_.clipPropertyQuery.clear();
+  state_.clipAuthorReturn=0;
   clipPoseDraft_.reset();state_.clipPosePending=false;
   clipPoseGizmo_={};clipPoseBeforeDrag_.reset();state_.clipPoseGraph=nullptr;state_.clipPoseAxis=EditorGizmoHandle::None;
   clipPreview_.cancel();clipDrag_.reset();clipPointer_=0;
@@ -174,9 +181,14 @@ void EditorSession::closeAnimationClip() {
   viewportPointers_.clear();pinchDistance_=0;
   state_.clipLayersShown=state_.clipLayerPicker=false;
   state_.clipOpen=false;state_.clipPlaying=false;state_.clipAsset=nullptr;state_.clipPicker=false;state_.clipNewPicker=false;
+  state_.clipCurveView=false;state_.clipCurvePins.clear();state_.clipCurveRanges.clear();
+  state_.clipRegionsShown=state_.clipRegionDetails=false;state_.clipRegion=state_.clipPreviewRegion=0;
   state_.clipImportedPicker=false;state_.clipSourceEntries.clear();
   state_.clipAuthoringPicker=0;state_.clipPoseShown=false;
+  state_.clipPoseToolsShown=false;
+  state_.clipPoseSelection.clear();state_.clipPoseSelectionIsolated=state_.clipPoseSelectionAdd=state_.clipPoseSelectionEmpty=false;
   state_.clipSelection.clear();state_.clipSelecting=state_.clipEditPicker=false;clipPressSelection_.clear();clipNumberSelection_.clear();
+  state_.clipCueSelection.clear();clipPressCues_.clear();clipNumberCues_.clear();state_.clipRangeShown=false;
   state_.clipBakeShown=state_.clipBakeHasReport=false;
   state_.clipBakeConsolidate=state_.clipBakeReferenceShown=state_.clipBakeReportConsolidated=false;
   appearanceChanged_=true;
@@ -190,6 +202,14 @@ bool EditorSession::seekAnimationClip(float seconds,std::string &error) {
   if(!clipPreview_.seek(seconds,error))return false;
   state_.clipTime=seconds;appearanceChanged_=true;return true;
 }
+bool EditorSession::previewAnimationClipRegion(u64 region,std::string &error) {
+  error.clear();const auto *asset=animationClipAsset(state_.clipGuid);
+  if(!state_.clipOpen||!asset||!clipPreview_.active()||clipDrag_||history_.isOpen()) {error="Abra um clipe e conclua o gesto atual";return false;}
+  const auto *section=region?asset->region(region):nullptr;
+  if(region&&!section) {error="Região ausente";return false;}
+  if(section&&!seekAnimationClip(section->start,error))return false;
+  state_.clipPreviewRegion=region;state_.clipPlaying=false;appearanceChanged_=true;return true;
+}
 bool EditorSession::previewAnimationClipPose(u64 trackId,std::span<const float> values,std::string &error) {
   error.clear();const auto *live=animationClipAsset(state_.clipGuid);
   if(!state_.clipOpen||!live||isPlaying()||clipDrag_||history_.isOpen()||!clipPreview_.active()) {error="Abra um clipe e conclua o gesto atual";return false;}
@@ -198,9 +218,19 @@ bool EditorSession::previewAnimationClipPose(u64 trackId,std::span<const float> 
   const auto *track=live->track(trackId);
   if(!track) {error="Trilha da pose ausente";return false;}
   auto candidate=clipPoseDraft_?*clipPoseDraft_:*live;
-  if(!candidate.putPose(trackId,state_.clipTime,values,error))return false;
-  AnimationClipPreview checked;
-  if(!checked.begin(document_,state_.clipOwner,candidate,error)||!checked.seek(state_.clipTime,error))return false;
+  std::vector<float> locked;
+  if(!applyAnimationPoseLocks(*candidate.track(trackId),state_.clipTime,state_.clipPoseLocks[static_cast<u32>(track->path)],values,locked,error)||
+     !expandAnimationPoseDraft(candidate,trackId,locked,error)||
+     !candidate.putPose(trackId,state_.clipTime,locked,error))return false;
+  return stageAnimationClipPoseCandidate(std::move(candidate),trackId,error);
+}
+bool EditorSession::stageAnimationClipPoseCandidate(resources::AnimationClipAsset candidate,u64 trackId,std::string &error) {
+  const auto *live=animationClipAsset(state_.clipGuid);const auto *track=candidate.track(trackId);
+  if(!state_.clipOpen||!live||!track||isPlaying()||history_.isOpen()||clipDrag_||candidate.guid!=live->guid||candidate.revision!=live->revision||
+     (clipPoseDraft_&&(clipPoseSceneRevision_!=document_.revision()||clipPoseTime_!=state_.clipTime))) {
+    error="Contexto da pose mudou; tente novamente";return false;
+  }
+  if(!validateAnimationPropertyClip(candidate,state_.clipOwner,state_.clipTime,error))return false;
   if(!clipPreview_.begin(document_,state_.clipOwner,candidate,error)||!clipPreview_.seek(state_.clipTime,error))return false;
   state_.clipTrack=trackId;state_.clipLayer=track->layer;state_.clipPreviewTarget=0;
   clipPoseDraft_=std::move(candidate);clipPoseSceneRevision_=document_.revision();clipPoseTrack_=trackId;clipPoseTime_=state_.clipTime;
@@ -241,8 +271,20 @@ void EditorSession::refreshAnimationClip() {
   const auto *asset=clipDrag_?&*clipDrag_:clipPoseDraft_?&*clipPoseDraft_:live;
   if(!asset||clipEpoch_!=sceneEpoch_||!document_.exists(state_.clipOwner)||isPlaying()) {closeAnimationClip();return;}
   state_.clipAsset=asset;
+  if(state_.clipRegion&&!asset->region(state_.clipRegion)) {state_.clipRegion=0;state_.clipRegionDetails=false;}
+  if(state_.clipPreviewRegion&&!asset->region(state_.clipPreviewRegion)) {state_.clipPreviewRegion=0;state_.clipPlaying=false;}
+  state_.clipRegionPage=std::min(state_.clipRegionPage,static_cast<u32>(asset->regions.empty()?0:(asset->regions.size()-1)/3));
+  std::erase_if(state_.clipCurvePins,[&](const auto &pin){const auto *track=asset->track(pin.track);return !track||pin.component>=track->curves.size();});
+  state_.clipCurveReferencePage=std::min(state_.clipCurveReferencePage,static_cast<u32>(state_.clipCurvePins.empty()?0:(state_.clipCurvePins.size()-1)/3));
+  std::erase_if(state_.clipCueSelection,[&](u64 id){return !asset->cue(id);});
+  state_.clipRangeStart=std::min(state_.clipRangeStart,asset->duration);
+  state_.clipRangeEnd=std::clamp(state_.clipRangeEnd,state_.clipRangeStart,asset->duration);
+  state_.clipRangeDestination=std::min(state_.clipRangeDestination,asset->duration);
+  state_.clipPoseRecording.start=std::min(state_.clipPoseRecording.start,asset->duration);
+  state_.clipPoseRecording.end=std::clamp(state_.clipPoseRecording.end,state_.clipPoseRecording.start,asset->duration);
   if(state_.clipCue&&!asset->cue(state_.clipCue)) {state_.clipCue=0;state_.clipCueOptions=false;}
   if(clipPreview_.active())state_.clipPoseGraph=&clipPreview_.scene();
+  refreshAnimationPropertySurface();
   if(state_.clipBakeHasReport&&(state_.clipBakeRevision!=asset->revision||state_.clipBakeTrack!=state_.clipTrack))state_.clipBakeHasReport=false;
   // Published clip revisions are immutable. Reconcile retired IDs only when
   // the evaluated revision changes, not on every editor frame or drag sample.
@@ -274,11 +316,16 @@ void EditorSession::refreshAnimationClip() {
   }
   state_.clipTarget=0;state_.clipPoseCount=0;
   if(!document_.exists(state_.clipTargetBranch)||(state_.clipTargetBranch!=state_.clipOwner&&!document_.isDescendantOf(state_.clipTargetBranch,state_.clipOwner))) {state_.clipTargetBranch=state_.clipOwner;state_.clipTargetPage=0;state_.clipAuthoringPicker=state_.clipAuthoringPicker?1:0;}
+  refreshAnimationDrivers();
   if(!track)return;
+  if(track->path==resources::AnimationPath::Weights&&track->weightCount<64)
+    state_.clipPoseLocks[static_cast<u32>(track->path)]&=(u64(1)<<track->weightCount)-1;
   runtime::SourceAnimations bindings;bindings.source=asset->source.valid()?asset->source:asset->guid;
   for(const auto &binding:asset->bindings) {bindings.nodes.push_back(binding.sourceNode);bindings.nodeNames.push_back(binding.name);bindings.nodePaths.push_back(binding.path);}
   std::vector<runtime::ObjectId> targets;runtime::resolveAnimationTargets(document_,state_.clipOwner,bindings,targets);
   for(usize i=0;i<asset->bindings.size();++i)if(asset->bindings[i].id==track->binding&&i<targets.size())state_.clipTarget=targets[i];
+  if(state_.clipPoseSelectionEmpty)state_.clipTarget=0;
+  syncAnimationPoseSelection();
   // Fields edit the selected layer, never the already-composed viewport pose.
   if(state_.clipTarget) {
     state_.clipPoseCount=track->path==resources::AnimationPath::Weights?track->weightCount:3;
@@ -329,8 +376,9 @@ bool EditorSession::selectAnimationClipPreviewTarget(EditorEntityId target,resou
     }
   // Selecting, orbiting and focusing cannot create channels or history entries.
   // Only the explicit TRS action may allocate a missing channel.
-  cancelAnimationClipPose();state_.clipPlaying=false;
   u64 id=exact?exact:!create?fallback:0;
+  if(!id&&create&&!state_.clipPoseRecording.createChannels) {error="Auto-key: só canais existentes; adicione o canal explicitamente ou permita criação";return false;}
+  cancelAnimationClipPose();state_.clipPlaying=false;
   auto mode=resources::AnimationRotationMode::Quaternion;
   if(path==resources::AnimationPath::Rotation) {
     // New clips already have a root rotation channel carrying the user's
@@ -341,6 +389,8 @@ bool EditorSession::selectAnimationClipPreviewTarget(EditorEntityId target,resou
   if(!id&&create&&!addAnimationClipTrack(live->guid,live->revision,state_.clipOwner,target,path,
       mode,id,error))return false;
   state_.clipPreviewTarget=target;state_.clipTargetNode=target;state_.clipAuthoringPicker=0;
+  state_.clipPoseSelectionEmpty=false;
+  if(!selectingAnimationPose_)state_.clipPoseSelection={target};
   if(id) {state_.clipTrack=id;state_.clipComponent=0;state_.clipKey=0;state_.clipSelection.clear();}
   if(clipPreview_.active()&&!clipPreview_.seek(state_.clipTime,error))return false;
   refreshAnimationClip();
@@ -359,7 +409,7 @@ bool EditorSession::pickAnimationClipPreviewTarget(ui::UiPoint position) {
     bool visible=true;
     for(auto node=object;node;node=graph.find(node->parent))
       if(!node->visible||state_.sceneHiddenHas(node->id)||(node->layer<32&&(state_.hiddenLayers&(1u<<node->layer)))) {visible=false;break;}
-    if(!visible||state_.scenePickOffHas(bone)||(object->layer<32&&(state_.unpickableLayers&(1u<<object->layer))))continue;
+    if(!visible||!animationPoseSelectionVisible(bone)||state_.scenePickOffHas(bone)||(object->layer<32&&(state_.unpickableLayers&(1u<<object->layer))))continue;
     float world[16];if(!runtime::worldMatrix(graph,bone,world))continue;
     const auto point=projectWorldToScreen(view_,world+12);
     if(!point.valid||!layout_.viewport.contains(point.screen))continue;
@@ -370,11 +420,13 @@ bool EditorSession::pickAnimationClipPreviewTarget(ui::UiPoint position) {
     // Bound the expensive skin/BVH fallback before constructing candidates;
     // an empty tap on this rig must not deform every other model in the scene.
     buildPickCandidates(&graph,false,state_.clipOwner);
+    if(state_.clipPoseSelectionIsolated)std::erase_if(candidates_,[&](const auto &value){return !animationPoseSelectionVisible(value.id);});
     const auto hit=pickNearest(candidates_,screenPointToRay(view_,position));if(hit.hit)target=hit.id;
   }
   if(target) {
     std::string error;const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
-    selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
+    if(state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
+    else selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
     state_.clipDiagnostic=error;
   }
   return true;
@@ -392,6 +444,7 @@ bool EditorSession::handleAnimationPoseGizmo(const ui::UiPointerEvent &event,con
       track->path==resources::AnimationPath::Rotation?EditorGizmoMode::Rotate:EditorGizmoMode::Scale;
   if(!clipPoseGizmo_.active) {
     if(event.phase!=UiPointerPhase::Down||!clipPreview_.active())return true;
+    if(mode==EditorGizmoMode::Scale&&(state_.clipPoseLocks[static_cast<u32>(track->path)]&(u64(1)<<(code-w::PoseGizmo)))) {state_.clipDiagnostic="Eixo local travado";return true;}
     const auto &graph=clipPreview_.scene();const auto *object=graph.find(state_.clipTarget);if(!object)return true;
     if(!runtime::worldMatrix(graph,object->id,clipPoseWorld_)||!runtime::parentWorldMatrix(graph,object->id,clipPoseParent_)||
        !renderer::buildNormalMatrix(clipPoseParent_,clipPoseInverse_)) {state_.clipDiagnostic="Gizmo exige pai com transformação inversível";return true;}
@@ -444,7 +497,7 @@ bool EditorSession::handleAnimationPoseGizmo(const ui::UiPointerEvent &event,con
   }
   if(event.phase==UiPointerPhase::Up) {
     clipPoseGizmo_={};state_.clipPoseAxis=EditorGizmoHandle::None;clipPoseBeforeDrag_.reset();
-    if(clipPoseMoved_&&state_.clipPoseAutoKey) {std::string error;if(!recordAnimationClipPose(error))state_.clipDiagnostic=error;}
+    if(clipPoseMoved_&&state_.clipPoseAutoKey) {std::string error;if(!autoRecordAnimationClipPose(error))state_.clipDiagnostic=error;}
     clipPoseMoved_=false;
   }
   return true;
@@ -463,20 +516,37 @@ bool EditorSession::applyAnimationClipCueName(std::string_view value) {
   },error);
   state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
 }
+bool EditorSession::applyAnimationClipRegionName(std::string_view value) {
+  const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
+  if(!state_.clipOpen||!asset||asset->guid!=state_.clipGuid||asset->revision!=clipNumberRevision_||state_.clipRegion!=clipNumberKey_) {state_.clipDiagnostic="Região mudou; reabra o nome";return false;}
+  const bool ok=editAnimationClipAsset(asset->guid,asset->revision,[&](auto &candidate){
+    const auto *region=candidate.region(clipNumberKey_);if(!region)return false;auto edited=*region;edited.name=value;u64 id=0;return candidate.putRegion(edited,id,error);
+  },error);
+  state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
+}
 bool EditorSession::applyAnimationClipLayerName(std::string_view value) {
   const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
   if(!state_.clipOpen||!asset||asset->guid!=state_.clipGuid||asset->revision!=clipNumberRevision_||state_.clipLayer!=clipNumberLayer_) {state_.clipDiagnostic="Camada mudou; reabra o nome";return false;}
   const bool ok=editAnimationClipAsset(asset->guid,asset->revision,[&](auto &candidate){auto *l=candidate.layer(clipNumberLayer_);if(!l)return false;l->name=value;return true;},error);
   state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
 }
-void EditorSession::frameAnimationClip() {
+void EditorSession::frameAnimationClip(bool selectionOnly) {
   const auto *asset=state_.clipAsset;if(!asset)return;
   state_.clipStart=0;state_.clipEnd=std::max(asset->duration,1.f/asset->displayRate);
+  if(selectionOnly) {
+    double first=asset->duration,last=0;bool found=false;
+    for(const auto &address:state_.clipSelection)if(const auto *key=selectedKey(*asset,address.track,address.component,address.key)) {first=std::min(first,double(key->time));last=std::max(last,double(key->time));found=true;}
+    if(!found)if(const auto *key=selectedKey(*asset,state_.clipTrack,state_.clipComponent,state_.clipKey)) {first=last=key->time;found=true;}
+    if(found) {const double margin=std::max(1.0/asset->displayRate,(last-first)*.12);state_.clipStart=static_cast<float>(std::max(0.0,first-margin));state_.clipEnd=static_cast<float>(std::min(double(asset->duration),last+margin));}
+  }
   const auto *track=asset->track(state_.clipTrack);if(!track||state_.clipComponent>=track->curves.size())return;
-  const auto &curve=track->curves[state_.clipComponent];double minimum=curve.keys.front().value,maximum=minimum;
-  // Include the evaluated overshoot; fitting just key values hides free handles.
-  for(u32 i=0;i<=512;++i) {resources::AnimationCurveSample sample;
-    if(resources::sampleValidatedAnimationCurve(curve,state_.clipEnd*i/512,sample)) {minimum=std::min(minimum,sample.value);maximum=std::max(maximum,sample.value);}
+  const auto &curve=track->curves[state_.clipComponent];
+  state_.clipCurveRanges.clear();
+  state_.clipCurveRanges.push_back(animationCurveViewRange(*track,state_.clipComponent,state_.clipStart,state_.clipEnd));
+  double minimum=state_.clipCurveRanges.front().minimum,maximum=state_.clipCurveRanges.front().maximum;
+  for(const auto &pin:state_.clipCurvePins)if(pin.track!=state_.clipTrack||pin.component!=state_.clipComponent)if(const auto *pinned=asset->track(pin.track);pinned&&pin.component<pinned->curves.size()) {
+    const auto range=animationCurveViewRange(*pinned,pin.component,state_.clipStart,state_.clipEnd);state_.clipCurveRanges.push_back(range);
+    if(!state_.clipCurveIsolated) {minimum=std::min(minimum,range.minimum);maximum=std::max(maximum,range.maximum);}
   }
   if(state_.clipCurves)if(const auto *key=selectedKey(*asset,state_.clipTrack,state_.clipComponent,state_.clipKey)) {
     const usize index=static_cast<usize>(key-curve.keys.data());
@@ -485,9 +555,10 @@ void EditorSession::frameAnimationClip() {
       const double span=incoming?key->time-curve.keys[index-1].time:curve.keys[index+1].time-key->time;
       const double weight=(incoming?key->weightedIn:key->weightedOut)?(incoming?key->inWeight:key->outWeight):1.0/3;
       const double handle=key->value+(incoming?-1:1)*span*weight*resources::animationCurveSlope(curve,index,incoming);
-      if(std::isfinite(handle)) {minimum=std::min(minimum,handle);maximum=std::max(maximum,handle);}
+      if(std::isfinite(handle)) {minimum=std::min(minimum,handle);maximum=std::max(maximum,handle);auto &range=state_.clipCurveRanges.front();range.minimum=std::min(range.minimum,handle);range.maximum=std::max(range.maximum,handle);}
     }
   }
+  if(state_.clipCurveNormalized) {minimum=0;maximum=1;}
   const double margin=std::max(.1,(maximum-minimum)*.12);
   state_.clipMinimum=static_cast<float>(minimum-margin);state_.clipMaximum=static_cast<float>(maximum+margin);
   if(!std::isfinite(state_.clipMinimum)||!std::isfinite(state_.clipMaximum)||state_.clipMaximum<=state_.clipMinimum) {
@@ -499,8 +570,13 @@ void EditorSession::beginAnimationClipNumber(u32 code,double value) {
   state_.clipPlaying=false;clipNumberGuid_=asset->guid;clipNumberRevision_=asset->revision;
   clipNumberLayer_=state_.clipLayer;clipNumberTrack_=state_.clipTrack;clipNumberComponent_=state_.clipComponent;clipNumberKey_=state_.clipKey;
   if(code==w::CueTime||code==w::CueTag||code==w::CueValue)clipNumberKey_=state_.clipCue;
+  if(code==w::RegionStart||code==w::RegionEnd)clipNumberKey_=state_.clipRegion;
+  if(code==w::PropertyKeyTime||code==w::PropertyTime||(code>=w::PropertyCurveNumber&&code<w::PropertyCurveNumber+6)||(code>=w::PropertyValue&&code<w::PropertyValue+4)) {
+    clipNumberTrack_=state_.clipPropertyTrack;clipNumberKey_=state_.clipPropertyKey;clipNumberComponent_=state_.clipPropertyComponent;
+  }
   clipNumberSceneRevision_=document_.revision();clipNumberTime_=state_.clipTime;
   clipNumberSelection_=state_.clipSelection;
+  clipNumberCues_=state_.clipCueSelection;
   beginAnimatorNumber(code,value);
   if(code==w::CueTime||code==w::CueTag||code==w::CueValue)
     std::snprintf(state_.numericText,sizeof state_.numericText,"%.17g",value);
@@ -510,7 +586,34 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
   if(!std::isfinite(value)||(code!=w::CueValue&&std::abs(value)>std::numeric_limits<float>::max()))return false;
   const auto *asset=animationClipAsset(clipNumberGuid_);std::string error;
   if(!state_.clipOpen||state_.clipGuid!=clipNumberGuid_||!asset||asset->revision!=clipNumberRevision_) {state_.status="Clipe mudou; reabra o campo";return false;}
+  if((code>=w::DriverConstant&&code<w::DriverConstant+4)||(code>=w::DriverCurveValue&&code<w::DriverCurveValue+6))return applyAnimationDriverNumber(code,value);
+  if(code>=w::PropertyCurveNumber&&code<w::PropertyCurveNumber+6)return applyAnimationPropertyCurveNumber(code,value);
+  if(code==w::PropertyTime){const bool ok=seekAnimationClip(float(value),error);state_.clipDiagnostic=error;return ok;}
+  if(code==w::PropertyKeyTime||(code>=w::PropertyValue&&code<w::PropertyValue+4))return applyAnimationPropertyNumber(code,value);
   if(code==w::Time) {const bool ok=seekAnimationClip(static_cast<float>(value),error);state_.clipDiagnostic=error;return ok;}
+  if(code==w::RangeStart||code==w::RangeEnd||code==w::RangeDestination) {
+    if(value<0||value>asset->duration) {state_.clipDiagnostic="Tempo fora do clipe";return false;}
+    if((code==w::RangeStart&&value>=state_.clipRangeEnd)||(code==w::RangeEnd&&value<=state_.clipRangeStart)) {
+      state_.clipDiagnostic="O intervalo exige início menor que fim";return false;
+    }
+    (code==w::RangeStart?state_.clipRangeStart:code==w::RangeEnd?state_.clipRangeEnd:state_.clipRangeDestination)=static_cast<float>(value);
+    state_.clipDiagnostic.clear();return true;
+  }
+  if(code==w::RangeCopies||code==w::RangeTolerance) {
+    if(code==w::RangeCopies) {
+      if(value<1||value>64||std::floor(value)!=value) {state_.clipDiagnostic="Use 1 a 64 cópias inteiras";return false;}
+      state_.clipRangeCopies=static_cast<u32>(value);
+    } else {
+      if(value<0||value>1) {state_.clipDiagnostic="Tolerância exige valor de 0 a 1";return false;}
+      state_.clipRangeTolerance=static_cast<float>(value);
+    }
+    state_.clipDiagnostic.clear();return true;
+  }
+  if(code==w::PoseArmStart||code==w::PoseArmEnd) {
+    auto policy=state_.clipPoseRecording;
+    (code==w::PoseArmStart?policy.start:policy.end)=static_cast<float>(value);
+    const bool ok=configureAnimationPoseRecording(policy,error);state_.clipDiagnostic=error;return ok;
+  }
   if(code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets) {
     if(document_.revision()!=clipNumberSceneRevision_||state_.clipTime!=clipNumberTime_||state_.numericEntity!=state_.clipOwner||state_.clipTrack!=clipNumberTrack_) {state_.clipDiagnostic="Pose mudou; reabra o campo";return false;}
     const auto *track=asset->track(clipNumberTrack_);const u32 component=code-w::PoseValue;
@@ -521,7 +624,7 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
       runtime::Transform pose;std::copy_n(values.begin(),3,pose.rotationDegrees);float q[4];runtime::transformRotationQuaternion(pose,q);values.assign(q,q+4);
     }
     bool ok=previewAnimationClipPose(clipNumberTrack_,values,error);
-    if(ok&&state_.clipPoseAutoKey)ok=recordAnimationClipPose(error);
+    if(ok&&state_.clipPoseAutoKey)ok=autoRecordAnimationClipPose(error);
     state_.clipDiagnostic=error;return ok;
   }
   if(code==w::BakeRate||code==w::BakeTolerance||(code>=w::BakeSeedX&&code<=w::BakeSeedZ)) {
@@ -539,6 +642,12 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
     state_.clipBakeHasReport=false;state_.clipDiagnostic.clear();return true;
   }
   const bool ok=editAnimationClipAsset(asset->guid,asset->revision,[&](auto &candidate) {
+    if(code==w::RegionStart||code==w::RegionEnd) {
+      const auto *region=candidate.region(clipNumberKey_);
+      if(!region||state_.clipRegion!=clipNumberKey_) {error="Região mudou; reabra o campo";return false;}
+      auto edited=*region;if(code==w::RegionStart)edited.start=static_cast<float>(value);else edited.end=static_cast<float>(value);
+      u64 id=0;return candidate.putRegion(edited,id,error);
+    }
     if(code==w::CueTime||code==w::CueTag||code==w::CueValue) {
       const auto *cue=candidate.cue(clipNumberKey_);
       if(!cue||state_.clipCue!=clipNumberKey_) {error="Evento mudou; reabra o campo";return false;}
@@ -555,6 +664,10 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
       return true;
     }
     if(code==w::SelectionOffset||code==w::SelectionScale) {
+      if(state_.clipCues) {
+        if(state_.clipCueSelection!=clipNumberCues_||state_.clipTime!=clipNumberTime_) {error="Seleção de cues ou pivot mudou; reabra o campo";return false;}
+        return resources::transformAnimationCueTimes(candidate,clipNumberCues_,clipNumberTime_,code==w::SelectionScale?value:1,code==w::SelectionOffset?value:0,error);
+      }
       if(state_.clipSelection!=clipNumberSelection_||state_.clipTime!=clipNumberTime_) {error="Seleção ou pivot mudou; reabra o campo";return false;}
       return resources::transformAnimationKeyTimes(candidate,clipNumberSelection_,clipNumberTime_,code==w::SelectionScale?value:1,code==w::SelectionOffset?value:0,error);
     }
@@ -580,6 +693,9 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   if(clipPoseDraft_&&event.phase==UiPointerPhase::Down&&routing.target!=ui::UiPointerTarget::Viewport) {
     const auto code=animator_widget::code(routing.widgetId);
     const bool poseAction=w::owns(routing.widgetId)&&((code>=w::PoseAutoKey&&code<=w::PoseViewport)||
+      code==w::PosePrevious||code==w::PoseNext||
+      code==w::PoseToolsSelection||code==w::PoseSetSave||code==w::PoseSelectAdd||
+      (code>=w::PoseTools&&code<=w::PoseUnlock)||(code>=w::PoseLock&&code<w::PoseLock+resources::MaximumMorphTargets)||
         (code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets)||(code>=w::PoseGizmo&&code<w::PoseGizmo+3));
     if(!poseAction) {cancelAnimationClipPose();refreshAnimationClip();}
   }
@@ -590,25 +706,51 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   const auto timeAt=[&](float x){const float t=state_.clipStart+(x-canvas.x)/std::max(1.f,canvas.width)*(state_.clipEnd-state_.clipStart);
     return std::clamp(std::round(t*asset->displayRate)/asset->displayRate,0.f,asset->duration);};
   const auto xAt=[&](float t){return canvas.x+(t-state_.clipStart)/(state_.clipEnd-state_.clipStart)*canvas.width;};
-  const auto yAt=[&](float v){return canvas.bottom()-(v-state_.clipMinimum)/(state_.clipMaximum-state_.clipMinimum)*canvas.height;};
+  const auto yAt=[&](float v){return canvas.bottom()-static_cast<float>((animationCurveViewValue(state_,state_.clipTrack,state_.clipComponent,v)-state_.clipMinimum)/(double(state_.clipMaximum)-state_.clipMinimum)*canvas.height);};
   if(state_.clipCues&&(routing.widgetId==w::id(w::Canvas)||clipPointer_)) {
     if(clipPointer_&&event.pointerId+1!=clipPointer_)return true;
     if(event.phase==UiPointerPhase::Down) {
       clipPointer_=event.pointerId+1;clipPress_=event.position;state_.clipPlaying=false;state_.clipCueOptions=false;
+      clipPressCue_=state_.clipCue;
       float nearest=22;state_.clipCue=0;
       for(const auto &cue:asset->cues) {
         const float row=cue.kind==resources::AnimationCueKind::Event?canvas.y+canvas.height*.3f:canvas.y+canvas.height*.7f;
         const float distance=std::hypot(xAt(cue.time)-event.position.x,row-event.position.y);
         if(distance<nearest) {nearest=distance;state_.clipCue=cue.id;}
       }
+      clipPressCues_=state_.clipCueSelection;
+      state_.clipSelecting=state_.clipSelectionMode&&!state_.clipCue;
+      if(state_.clipCue) {
+        if(!state_.clipSelectionMode)state_.clipCueSelection={state_.clipCue};
+        else if(std::find(state_.clipCueSelection.begin(),state_.clipCueSelection.end(),state_.clipCue)==state_.clipCueSelection.end()) {
+          if(!state_.clipSelectionAdd)state_.clipCueSelection.clear();
+          state_.clipCueSelection.push_back(state_.clipCue);
+        }
+        clipPressCueTime_=asset->cue(state_.clipCue)->time;
+      } else if(!state_.clipSelectionAdd)state_.clipCueSelection.clear();
+      state_.clipSelectionBox={event.position.x,event.position.y,0,0};
       std::string error;
       seekAnimationClip(state_.clipCue?asset->cue(state_.clipCue)->time:timeAt(event.position.x),error);state_.clipDiagnostic=error;
+    } else if(event.phase==UiPointerPhase::Move&&routing.dragging&&state_.clipSelecting) {
+      const float x=std::min(clipPress_.x,event.position.x),y=std::min(clipPress_.y,event.position.y);
+      state_.clipSelectionBox={x,y,std::abs(event.position.x-clipPress_.x),std::abs(event.position.y-clipPress_.y)};
+      auto selected=state_.clipSelectionAdd?clipPressCues_:std::vector<u64>{};
+      for(const auto &cue:asset->cues) {
+        const ui::UiPoint point{xAt(cue.time),canvas.y+canvas.height*(cue.kind==resources::AnimationCueKind::Event?.3f:.7f)};
+        if(state_.clipSelectionBox.contains(point)&&std::find(selected.begin(),selected.end(),cue.id)==selected.end())selected.push_back(cue.id);
+      }
+      state_.clipCueSelection=std::move(selected);
     } else if(event.phase==UiPointerPhase::Move&&routing.dragging&&state_.clipCue) {
       const auto *live=animationClipAsset(state_.clipGuid);const auto *cue=live?live->cue(state_.clipCue):nullptr;
-      if(cue) {auto candidate=*live;auto moved=*cue;moved.time=timeAt(event.position.x);u64 id=0;std::string error;
-        if(candidate.putCue(moved,id,error)) {clipDrag_=std::move(candidate);state_.clipAsset=&*clipDrag_;}state_.clipDiagnostic=error;}
+      if(cue) {auto candidate=*live;std::string error;
+        if(resources::transformAnimationCueTimes(candidate,state_.clipCueSelection,0,1,double(timeAt(event.position.x))-clipPressCueTime_,error)) {
+          clipDrag_=std::move(candidate);state_.clipAsset=&*clipDrag_;
+        } else {clipDrag_.reset();state_.clipAsset=live;}
+        state_.clipDiagnostic=error;}
     } else if(event.phase==UiPointerPhase::Up||event.phase==UiPointerPhase::Cancel) {
-      clipPointer_=0;
+      clipPointer_=0;state_.clipSelecting=false;
+      if(event.phase==UiPointerPhase::Cancel) {state_.clipCueSelection=clipPressCues_;state_.clipCue=clipPressCue_;}
+      else if(!state_.clipCueSelection.empty()&&std::find(state_.clipCueSelection.begin(),state_.clipCueSelection.end(),state_.clipCue)==state_.clipCueSelection.end())state_.clipCue=state_.clipCueSelection.front();
       if(clipDrag_) {auto candidate=std::move(*clipDrag_);clipDrag_.reset();std::string error;
         if(event.phase==UiPointerPhase::Up)editAnimationClipAsset(candidate.guid,candidate.revision,[&](auto &value){value=candidate;return true;},error);
         state_.clipDiagnostic=error;refreshAnimationClip();}
@@ -684,7 +826,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
           const double handleTime=state_.clipStart+(event.position.x-canvas.x)/canvas.width*(state_.clipEnd-state_.clipStart);
           const double weight=std::clamp((incoming?key.time-handleTime:handleTime-key.time)/span,0.0,1.0);
           const double dx=(incoming?-1:1)*weight*span;
-          const double handleValue=state_.clipMaximum-(event.position.y-canvas.y)/canvas.height*(state_.clipMaximum-state_.clipMinimum);
+          const double handleValue=animationCurveAuthorValue(state_,state_.clipTrack,state_.clipComponent,state_.clipMaximum-(event.position.y-canvas.y)/canvas.height*(double(state_.clipMaximum)-state_.clipMinimum));
           if(std::abs(dx)<1e-12&&std::abs(handleValue-key.value)>1e-6) {state_.clipDiagnostic="Handle vertical não tem inclinação finita";return true;}
           const double slope=dx?(handleValue-key.value)/dx:0;
           if(!std::isfinite(slope)||std::abs(slope)>std::numeric_limits<float>::max())return true;
@@ -694,7 +836,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         } else key.time=timeAt(xAt(clipPressTime_)+event.position.x-clipPress_.x);
         const auto *track=candidate.track(state_.clipTrack);
         const bool derived=track&&track->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion&&state_.clipComponent==4;
-        if(state_.clipCurves&&!derived&&!clipHandle_)key.value=clipPressValue_-(event.position.y-clipPress_.y)/canvas.height*(state_.clipMaximum-state_.clipMinimum);
+        if(state_.clipCurves&&!derived&&!clipHandle_)key.value=static_cast<float>(clipPressValue_-(event.position.y-clipPress_.y)/canvas.height*animationCurveAuthorSpan(state_));
         u64 result=0;
         if(candidate.putKey(state_.clipTrack,state_.clipComponent,key,result,error)&&
            clipPreview_.begin(document_,state_.clipOwner,candidate,error)&&clipPreview_.seek(clipHandle_?state_.clipTime:key.time,error)) {
@@ -726,28 +868,128 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   if(!routing.tapped||!w::owns(routing.widgetId))return true;
   const u32 code=animator_widget::code(routing.widgetId);std::string error;
+  if(code==w::Targets)state_.clipAuthorReturn=state_.clipPropertiesShown?1:state_.clipDriversShown?2:0;
+  if(handleAnimationDriverWidget(code))return true;
+  if(handleAnimationPropertyWidget(code))return true;
+  if(code==w::Keys||code==w::Curves||code==w::Pose||code==w::Targets||code==w::Layers||code==w::BakeOpen||code==w::Range||code==w::Edits||code==w::Choose||code==w::New||code==w::Cues)state_.clipPropertiesShown=state_.clipDriversShown=false;
+  if(code==w::Keys||code==w::Curves)state_.clipRegionsShown=false;
+  if(code==w::Pose||code==w::PoseTools||code==w::Targets||code==w::Layers||code==w::BakeOpen||code==w::Range||code==w::Edits||code==w::Choose||code==w::New||code==w::Cues||code==w::Tangent||code==w::CurveView)state_.clipRegionsShown=false;
+  if(code==w::Regions) {
+    state_.clipRegionsShown=true;state_.clipRegionDetails=false;state_.clipPlaying=false;
+    state_.clipCurveView=state_.clipRangeShown=state_.clipEditPicker=state_.clipTangentPicker=false;
+    state_.clipLayersShown=state_.clipLayerPicker=state_.clipBakeShown=state_.clipPoseToolsShown=state_.clipPoseShown=false;
+    return true;
+  }
+  if(code==w::RegionClose) {state_.clipRegionsShown=false;return true;}
+  if(code==w::RegionList) {state_.clipRegionDetails=false;return true;}
+  if(code==w::RegionPrevious) {if(state_.clipRegionPage)--state_.clipRegionPage;return true;}
+  if(code==w::RegionNext) {if((state_.clipRegionPage+1)*3<asset->regions.size())++state_.clipRegionPage;return true;}
+  if(code>=w::RegionChoice&&code<w::RegionChoice+3) {
+    const usize index=state_.clipRegionPage*3+code-w::RegionChoice;
+    if(index<asset->regions.size()) {state_.clipRegion=asset->regions[index].id;state_.clipRegionDetails=true;}
+    return true;
+  }
+  if(code==w::RegionPreview) {previewAnimationClipRegion(state_.clipPreviewRegion==state_.clipRegion?0:state_.clipRegion,error);state_.clipDiagnostic=error;return true;}
+  if(code==w::RegionName) {
+    if(const auto *region=asset->region(state_.clipRegion)) {
+      state_.clipPlaying=false;clipNumberGuid_=asset->guid;clipNumberRevision_=asset->revision;clipNumberKey_=region->id;
+      beginAnimatorName(code,region->name);
+    }
+    return true;
+  }
+  if(code==w::RegionStart||code==w::RegionEnd) {if(const auto *region=asset->region(state_.clipRegion))beginAnimationClipNumber(code,code==w::RegionStart?region->start:region->end);return true;}
+  if(code==w::Pose||code==w::PoseTools||code==w::Targets||code==w::Layers||code==w::BakeOpen||code==w::Range||code==w::Edits||code==w::Choose||code==w::New||code==w::Cues||code==w::Tangent)state_.clipCurveView=false;
+  if(code==w::CurveView||code==w::CurveViewClose) {
+    state_.clipCurveView=code==w::CurveView&&!state_.clipCurveView;state_.clipRangeShown=state_.clipEditPicker=state_.clipTangentPicker=false;
+    if(state_.clipCurveView)state_.clipLayersShown=state_.clipLayerPicker=state_.clipBakeShown=state_.clipPoseToolsShown=state_.clipPoseShown=false;
+    return true;
+  }
+  if(code==w::CurveViewSettings||code==w::CurveViewReferences) {state_.clipCurveViewTask=code==w::CurveViewReferences?1:0;return true;}
+  if(code==w::CurveRefPrevious) {if(state_.clipCurveReferencePage)--state_.clipCurveReferencePage;return true;}
+  if(code==w::CurveRefNext) {if((state_.clipCurveReferencePage+1)*3<state_.clipCurvePins.size())++state_.clipCurveReferencePage;return true;}
+  if(code>=w::CurveRefChoice&&code<w::CurveRefChoice+3) {
+    const usize index=state_.clipCurveReferencePage*3+code-w::CurveRefChoice;
+    if(index<state_.clipCurvePins.size()) {const auto &pin=state_.clipCurvePins[index];if(const auto *track=asset->track(pin.track)) {state_.clipLayer=track->layer;state_.clipTrack=pin.track;state_.clipComponent=pin.component;state_.clipKey=0;frameAnimationClip();}}
+    return true;
+  }
+  if(code==w::CurvePin) {
+    const auto pin=std::find_if(state_.clipCurvePins.begin(),state_.clipCurvePins.end(),[&](const auto &entry){return entry.track==state_.clipTrack&&entry.component==state_.clipComponent;});
+    if(pin!=state_.clipCurvePins.end())state_.clipCurvePins.erase(pin);
+    else if(state_.clipCurvePins.size()<8)state_.clipCurvePins.push_back({state_.clipTrack,state_.clipComponent,0,1});
+    else {state_.clipDiagnostic="Comparação permite até oito canais fixados";return true;}
+    frameAnimationClip();return true;
+  }
+  if(code==w::CurveClearPins) {state_.clipCurvePins.clear();frameAnimationClip();return true;}
+  if(code==w::CurveNormalize||code==w::CurveIsolate) {auto &flag=code==w::CurveNormalize?state_.clipCurveNormalized:state_.clipCurveIsolated;flag=!flag;frameAnimationClip();return true;}
+  if(code==w::CurveFrameSelection) {frameAnimationClip(true);return true;}
+  if(code==w::CurveValueZoomIn||code==w::CurveValueZoomOut||code==w::CurveValueUp||code==w::CurveValueDown) {
+    const double center=(double(state_.clipMinimum)+state_.clipMaximum)*.5,span=double(state_.clipMaximum)-state_.clipMinimum;
+    const double scale=code==w::CurveValueZoomIn?.5:code==w::CurveValueZoomOut?2:1;
+    const double offset=code==w::CurveValueUp?span*.25:code==w::CurveValueDown?-span*.25:0;
+    const double low=center+offset-span*scale*.5,high=center+offset+span*scale*.5;
+    if(std::isfinite(low)&&std::isfinite(high)&&std::abs(low)<std::numeric_limits<float>::max()&&std::abs(high)<std::numeric_limits<float>::max()&&float(high)>float(low)) {state_.clipMinimum=static_cast<float>(low);state_.clipMaximum=static_cast<float>(high);}return true;
+  }
+  if(code==w::CurveTimeLeft||code==w::CurveTimeRight) {const float span=state_.clipEnd-state_.clipStart;state_.clipStart=std::clamp(state_.clipStart+(code==w::CurveTimeLeft?-.25f:.25f)*span,0.f,std::max(0.f,asset->duration-span));state_.clipEnd=state_.clipStart+span;return true;}
+  if(code==w::PoseTools||code==w::PoseToolsClose) {state_.clipPoseToolsShown=code==w::PoseTools&&!state_.clipPoseToolsShown;state_.clipRangeShown=state_.clipEditPicker=false;return true;}
+  if(code==w::PoseToolsRecord||code==w::PoseToolsReuse||code==w::PoseToolsSelection) {state_.clipPoseToolsPage=code==w::PoseToolsSelection?2:code==w::PoseToolsReuse?1:0;return true;}
+  if(code==w::PoseSelectAdd) {state_.clipPoseSelectionAdd=!state_.clipPoseSelectionAdd;return true;}
+  if(code==w::PoseSelectClear) {selectAnimationPoseTargets({},0,error);state_.clipDiagnostic=error;return true;}
+  if(code==w::PoseSelectAll||code==w::PoseSelectParent||code==w::PoseSelectChildren||code==w::PoseSelectSiblings) {
+    selectAnimationPoseRelation(code==w::PoseSelectAll?3:code==w::PoseSelectParent?0:code==w::PoseSelectChildren?1:2,error);state_.clipDiagnostic=error;return true;
+  }
+  if(code==w::PoseSetSave) {
+    clipNumberGuid_=state_.clipGuid;clipNumberSceneRevision_=document_.revision();clipPoseNameSelection_=state_.clipPoseSelection;
+    beginAnimatorName(code,"Conjunto "+std::to_string(state_.clipPoseSets.size()+1));return true;
+  }
+  if(code==w::PoseSetPrevious||code==w::PoseSetNext||code==w::PoseSetLoad||code==w::PoseSetDelete) {
+    std::vector<std::string> sets;for(const auto &set:state_.clipPoseSets)if(set.clip==state_.clipGuid)sets.push_back(set.name);
+    if(sets.empty()) {state_.clipDiagnostic="Este clipe ainda não possui conjuntos salvos";return true;}
+    state_.clipPoseSetPage=std::min(state_.clipPoseSetPage,static_cast<u32>(sets.size()-1));
+    if(code==w::PoseSetPrevious) {if(state_.clipPoseSetPage)--state_.clipPoseSetPage;}
+    else if(code==w::PoseSetNext) {if(state_.clipPoseSetPage+1<sets.size())++state_.clipPoseSetPage;}
+    else if(code==w::PoseSetLoad)recallAnimationPoseSelection(sets[state_.clipPoseSetPage],error);
+    else removeAnimationPoseSelection(sets[state_.clipPoseSetPage],error);
+    state_.clipDiagnostic=error;return true;
+  }
+  if(code==w::PosePolicy||code==w::PoseArm) {
+    auto policy=state_.clipPoseRecording;if(code==w::PosePolicy)policy.createChannels=!policy.createChannels;else policy.rangeArmed=!policy.rangeArmed;
+    configureAnimationPoseRecording(policy,error);state_.clipDiagnostic=error;return true;
+  }
+  if(code==w::PoseArmStart||code==w::PoseArmEnd) {beginAnimationClipNumber(code,code==w::PoseArmStart?state_.clipPoseRecording.start:state_.clipPoseRecording.end);return true;}
+  if(code==w::PoseSpace) {state_.clipPoseWorldSpace=!state_.clipPoseWorldSpace;return true;}
+  if(code==w::PoseCopy||code==w::PosePaste||code==w::PoseResetIdentity||code==w::PoseResetReference) {
+    if(code==w::PoseCopy)copyAnimationClipPose(state_.clipPoseWorldSpace,error);
+    else if(code==w::PosePaste)pasteAnimationClipPose(error);
+    else resetAnimationClipPose(code==w::PoseResetIdentity,error);
+    state_.clipDiagnostic=error;return true;
+  }
+  if(code==w::PoseUnlock||(code>=w::PoseLock&&code<w::PoseLock+resources::MaximumMorphTargets)) {
+    const auto *track=asset->track(state_.clipTrack);if(track) {
+      const auto mask=code==w::PoseUnlock?0:state_.clipPoseLocks[static_cast<u32>(track->path)]^(u64(1)<<(code-w::PoseLock));
+      configureAnimationPoseLocks(track->path,mask,error);state_.clipDiagnostic=error;
+    }
+    return true;
+  }
   if(code==w::PoseNumbers) {state_.clipPoseNumbers=!state_.clipPoseNumbers;return true;}
   if(code==w::PoseViewport) {state_.clipPreviewExpanded=!state_.clipPreviewExpanded;return true;}
   if(code==w::PoseJoints) {state_.clipPoseJoints=!state_.clipPoseJoints;return true;}
   if(code==w::PoseTranslate||code==w::PoseRotate||code==w::PoseScale) {
     const auto target=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
     const auto path=code==w::PoseTranslate?resources::AnimationPath::Translation:code==w::PoseRotate?resources::AnimationPath::Rotation:resources::AnimationPath::Scale;
+    selectingAnimationPose_=true;
     if(selectAnimationClipPreviewTarget(target,path,true,error))state_.clipPoseIsolated=true;
+    selectingAnimationPose_=false;
     state_.clipDiagnostic=error;refreshAnimationClip();return true;
   }
   if(code==w::PoseOrbit||code==w::PosePan||code==w::PoseZoom) {
     state_.navigation=code==w::PoseOrbit?EditorNavigationMode::Orbit:code==w::PosePan?EditorNavigationMode::Pan:EditorNavigationMode::Zoom;return true;
   }
-  if(code==w::Restart) {state_.clipPlaying=false;seekAnimationClip(0,error);state_.clipDiagnostic=error;return true;}
+  if(code==w::Restart) {state_.clipPlaying=false;const auto *region=asset->region(state_.clipPreviewRegion);seekAnimationClip(region?region->start:0,error);state_.clipDiagnostic=error;return true;}
   if(code==w::PoseFocus) {
-    const auto &graph=evaluatedEditorScene();const auto target=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
-    float world[16];if(runtime::worldMatrix(graph,target,world)) {
-      std::copy_n(world+12,3,camera_.target);
-      // Preserve distance: focusing a wrist should not zoom inside the mesh.
-      state_.cameraViewEntity=0;state_.cameraPiloting=false;appearanceChanged_=true;
-    }
+    focusAnimationPoseSelection(error);state_.clipDiagnostic=error;
     return true;
   }
+  if(code==w::PoseSelectionIsolate) {isolateAnimationPoseSelection(!state_.clipPoseSelectionIsolated,error);state_.clipDiagnostic=error;return true;}
   if(code==w::PoseAutoKey) {state_.clipPoseAutoKey=!state_.clipPoseAutoKey;return true;}
   if(code==w::PoseRecord) {recordAnimationClipPose(error);state_.clipDiagnostic=error;return true;}
   if(code==w::PoseCancel) {cancelAnimationClipPose();refreshAnimationClip();return true;}
@@ -761,6 +1003,51 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     const bool ok=live&&editAnimationClipAsset(live->guid,live->revision,operation,error);
     state_.clipDiagnostic=error;if(ok)refreshAnimationClip();return ok;
   };
+  if(code==w::RegionAdd) {
+    const float start=state_.clipRangeStart,end=state_.clipRangeEnd;u64 id=0;
+    if(change([&](auto &candidate){return candidate.putRegion({0,"Região "+std::to_string(candidate.regions.size()+1),start,end},id,error);})) {
+      state_.clipRegion=id;state_.clipRegionDetails=true;
+    }
+    return true;
+  }
+  if(code==w::RegionDelete) {const u64 id=state_.clipRegion;change([&](auto &candidate){return candidate.removeRegion(id,error);});return true;}
+  if(code==w::Range||code==w::RangeClose) {
+    state_.clipRangeShown=code==w::Range&&!state_.clipRangeShown;
+    state_.clipEditPicker=state_.clipCueOptions=false;state_.clipPlaying=false;return true;
+  }
+  if(code==w::RangeStart||code==w::RangeEnd||code==w::RangeDestination) {
+    beginAnimationClipNumber(code,code==w::RangeStart?state_.clipRangeStart:code==w::RangeEnd?state_.clipRangeEnd:state_.clipRangeDestination);return true;
+  }
+  if(code>=w::RangeTaskEdit&&code<=w::RangeTaskArrange) {state_.clipRangeTask=code-w::RangeTaskEdit;return true;}
+  if(code==w::RangeCopies||code==w::RangeTolerance) {beginAnimationClipNumber(code,code==w::RangeCopies?state_.clipRangeCopies:state_.clipRangeTolerance);return true;}
+  if(code==w::RangeCloseLoop||code==w::RangeRepeat) {
+    if(change([&](auto &candidate){return code==w::RangeCloseLoop?resources::closeAnimationRange(candidate,state_.clipRangeStart,state_.clipRangeEnd,error):
+        resources::repeatAnimationRange(candidate,state_.clipRangeStart,state_.clipRangeEnd,state_.clipRangeCopies,state_.clipRangeTolerance,error);}))frameAnimationClip();
+    return true;
+  }
+  if(code>=w::RangeAlignStart&&code<=w::RangeDistribute) {
+    auto keys=state_.clipCues?std::vector<resources::AnimationKeyAddress>{}:state_.clipSelection;
+    auto cues=state_.clipCues?state_.clipCueSelection:std::vector<u64>{};
+    if(state_.clipCues&&cues.empty()&&state_.clipCue)cues.push_back(state_.clipCue);
+    if(!state_.clipCues&&keys.empty()&&state_.clipKey)keys.push_back({state_.clipTrack,state_.clipComponent,state_.clipKey});
+    const auto mode=static_cast<resources::AnimationArrange>(code-w::RangeAlignStart);
+    if(change([&](auto &candidate){return resources::arrangeAnimationSelection(candidate,keys,cues,mode,
+        mode==resources::AnimationArrange::Distribute?state_.clipRangeStart:state_.clipRangeDestination,state_.clipRangeEnd,error);}))frameAnimationClip();
+    return true;
+  }
+  if(code==w::RangeInsert||code==w::RangeRemove||code==w::RangeDuplicate||code==w::RangeMove) {
+    const auto start=state_.clipRangeStart,end=state_.clipRangeEnd,at=state_.clipRangeDestination;
+    if(change([&](auto &candidate){return code==w::RangeInsert?resources::insertAnimationTime(candidate,at,end-start,error):
+      code==w::RangeRemove?resources::removeAnimationTime(candidate,start,end,error):code==w::RangeMove?resources::moveAnimationRange(candidate,start,end,at,error):resources::duplicateAnimationRange(candidate,start,end,at,error);})) {
+      state_.clipRangeShown=false;frameAnimationClip();
+    }
+    return true;
+  }
+  if(code==w::CueSelectAll) {
+    state_.clipCueSelection.clear();for(const auto &cue:asset->cues)state_.clipCueSelection.push_back(cue.id);
+    if(!state_.clipCueSelection.empty())state_.clipCue=state_.clipCueSelection.front();
+    state_.clipSelectionMode=true;state_.clipEditPicker=false;return true;
+  }
   if(code==w::Cues) {
     state_.clipCues=!state_.clipCues;state_.clipCueOptions=false;state_.clipPlaying=false;
     state_.clipBakeShown=state_.clipLayersShown=state_.clipTangentPicker=state_.clipEditPicker=state_.clipPicker=state_.clipNewPicker=false;
@@ -773,16 +1060,27 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         auto i=cue?static_cast<usize>(cue-asset->cues.data()):(code==w::CuePrevious?asset->cues.size()-1:0);
         if(cue)i=code==w::CuePrevious?(i?i-1:0):std::min(i+1,asset->cues.size()-1);
         state_.clipCue=asset->cues[i].id;seekAnimationClip(asset->cues[i].time,error);
+        state_.clipCueSelection={state_.clipCue};
       }
       return true;
     }
     if(code==w::CueOptions||code==w::CueOptionsClose) {state_.clipCueOptions=code==w::CueOptions&&!state_.clipCueOptions;return true;}
     if(code==w::CueAddEvent||code==w::CueAddMarker||code==w::CueDuplicate) {
       if(code==w::CueDuplicate&&!cue)return true;
+      if(code==w::CueDuplicate&&state_.clipCueSelection.size()>1) {
+        resources::AnimationCueClipboard clipboard;std::vector<u64> pasted;
+        if(clipboard.copy(*asset,state_.clipCueSelection,error)) {
+          float at=asset->duration;for(const auto id:state_.clipCueSelection)at=std::min(at,asset->cue(id)->time);
+          if(change([&](auto &candidate){return clipboard.paste(candidate,at,pasted,error);})) {
+            state_.clipCueSelection=std::move(pasted);state_.clipCue=state_.clipCueSelection.front();
+          }
+        }
+        state_.clipDiagnostic=error;state_.clipCueOptions=false;return true;
+      }
       resources::AnimationCue value=cue&&code==w::CueDuplicate?*cue:resources::AnimationCue{};value.id=0;
       if(code!=w::CueDuplicate)value.time=state_.clipTime;
       if(code!=w::CueDuplicate) {value.kind=code==w::CueAddEvent?resources::AnimationCueKind::Event:resources::AnimationCueKind::Marker;value.name=value.kind==resources::AnimationCueKind::Event?"Evento":"Marcador";}
-      u64 id=0;if(change([&](auto &candidate){return candidate.putCue(value,id,error);}))state_.clipCue=id;
+      u64 id=0;if(change([&](auto &candidate){return candidate.putCue(value,id,error);})) {state_.clipCue=id;state_.clipCueSelection={id};}
       state_.clipCueOptions=false;return true;
     }
     if(!cue)return true;
@@ -791,9 +1089,16 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     }
     if(code==w::CueTime||code==w::CueTag||code==w::CueValue) {beginAnimationClipNumber(code,code==w::CueTime?cue->time:code==w::CueTag?cue->tag:cue->value);return true;}
     const auto id=cue->id;auto edited=*cue;
-    if(code==w::CueDelete) {change([&](auto &candidate){return candidate.removeCue(id,error);});state_.clipCueOptions=false;return true;}
+    if(code==w::CueDelete) {const auto ids=state_.clipCueSelection.empty()?std::vector<u64>{id}:state_.clipCueSelection;
+      change([&](auto &candidate){return resources::eraseAnimationCues(candidate,ids,error);});state_.clipCueOptions=false;return true;}
     if(code==w::CueForward)edited.forward=!edited.forward;else if(code==w::CueReverse)edited.reverse=!edited.reverse;else if(code==w::CueEnabled)edited.enabled=!edited.enabled;else return true;
-    u64 result=0;change([&](auto &candidate){return candidate.putCue(edited,result,error);});return true;
+    const auto ids=state_.clipCueSelection.empty()?std::vector<u64>{id}:state_.clipCueSelection;
+    change([&](auto &candidate){
+      for(auto &item:candidate.cues)if(std::find(ids.begin(),ids.end(),item.id)!=ids.end()) {
+        if(code==w::CueForward)item.forward=edited.forward;else if(code==w::CueReverse)item.reverse=edited.reverse;else item.enabled=edited.enabled;
+      }
+      return candidate.valid(&error);
+    });return true;
   }
   if(code==w::Close) {closeAnimationClip();return true;}
   if(code==w::Layers) {
@@ -893,6 +1198,14 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   if(code==w::EditsClose) {state_.clipEditPicker=false;return true;}
   if(code==w::CopyKeys||code==w::CutKeys) {
+    if(state_.clipCues) {
+      auto clipboard=std::make_shared<resources::AnimationCueClipboard>();
+      const auto ids=state_.clipCueSelection.empty()&&state_.clipCue?std::vector<u64>{state_.clipCue}:state_.clipCueSelection;
+      if(clipboard->copy(*asset,ids,error)&&(code==w::CopyKeys||change([&](auto &candidate){return resources::eraseAnimationCues(candidate,ids,error);}))) {
+        state_.clipCueClipboard=std::move(clipboard);state_.clipEditPicker=false;
+      }
+      state_.clipDiagnostic=error;return true;
+    }
     auto copied=std::make_shared<resources::AnimationKeyClipboard>();
     auto selection=state_.clipSelection;
     if(selection.empty()&&state_.clipKey)selection.push_back({state_.clipTrack,state_.clipComponent,state_.clipKey});
@@ -905,6 +1218,13 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     state_.clipDiagnostic=error;return true;
   }
   if(code==w::PasteReplace||code==w::PasteInsertTracks||code==w::PasteInsertAll) {
+    if(state_.clipCues) {
+      const auto clipboard=state_.clipCueClipboard;std::vector<u64> selected;
+      if(clipboard&&change([&](auto &candidate){return clipboard->paste(candidate,state_.clipTime,selected,error);})) {
+        state_.clipCueSelection=std::move(selected);state_.clipCue=state_.clipCueSelection.front();state_.clipSelectionMode=true;state_.clipEditPicker=false;
+      }
+      return true;
+    }
     const auto clipboard=state_.clipClipboard;std::vector<resources::AnimationKeyAddress> selection;
     const auto mode=code==w::PasteReplace?resources::AnimationPasteMode::Replace:code==w::PasteInsertTracks?resources::AnimationPasteMode::InsertTracks:resources::AnimationPasteMode::InsertAllTracks;
     if(clipboard&&change([&](auto &candidate){return clipboard->paste(candidate,state_.clipTime,mode,selection,error);})) {
@@ -917,12 +1237,15 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   if(code==w::Selection) {state_.clipSelectionMode=!state_.clipSelectionMode;state_.clipTangentPicker=false;state_.clipModeSide=0;return true;}
   if(code==w::SelectionAdd) {state_.clipSelectionAdd=!state_.clipSelectionAdd;return true;}
-  if(code==w::SelectionClear) {state_.clipSelection.clear();state_.clipKey=0;return true;}
+  if(code==w::SelectionClear) {state_.clipSelection.clear();state_.clipKey=0;state_.clipCueSelection.clear();state_.clipCue=0;return true;}
   if(code==w::SelectionOffset||code==w::SelectionScale) {beginAnimationClipNumber(code,code==w::SelectionScale?1:0);return true;}
   if(code==w::Name) {
     state_.clipPlaying=false;clipNumberGuid_=asset->guid;clipNumberRevision_=asset->revision;beginAnimatorName(code,asset->name);return true;
   }
-  if(code==w::Play)state_.clipPlaying=!state_.clipPlaying&&clipPreview_.active();
+  if(code==w::Play) {
+    if(!state_.clipPlaying)if(const auto *region=asset->region(state_.clipPreviewRegion);region&&(state_.clipTime<region->start||state_.clipTime>=region->end))seekAnimationClip(region->start,error);
+    state_.clipPlaying=!state_.clipPlaying&&clipPreview_.active();state_.clipDiagnostic=error;
+  }
   else if(code==w::Loop)state_.clipLoop=!state_.clipLoop;
   else if(code==w::Choose) {
     state_.clipBakeShown=false;state_.clipLayerPicker=state_.clipLayersShown=false;
@@ -936,6 +1259,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     }
   } else if(code==w::OwnedCatalog||code==w::ImportedCatalog) {state_.clipImportedPicker=code==w::ImportedCatalog;state_.clipPage=0;}
   else if(code==w::Targets) {
+    state_.clipPoseToolsShown=false;
     state_.clipBakeShown=false;state_.clipLayerPicker=state_.clipLayersShown=false;
     state_.clipEditPicker=false;
     state_.clipAuthoringPicker=state_.clipAuthoringPicker?0:1;state_.clipTargetBranch=state_.clipOwner;state_.clipTargetPage=0;
@@ -948,10 +1272,16 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   } else if(code==w::TargetPrevious) {if(state_.clipTargetPage)--state_.clipTargetPage;}
   else if(code==w::TargetNext) {
     if((state_.clipTargetPage+1)*layout_.clipTargetRows<document_.childrenOf(state_.clipTargetBranch).size())++state_.clipTargetPage;
-  } else if(code==w::TargetUse) {state_.clipTargetNode=state_.clipTargetBranch;state_.clipAuthoringPicker=2;}
+  } else if(code==w::TargetUse) {
+    if(state_.clipPoseSelectionAdd) {toggleAnimationPoseTarget(state_.clipTargetBranch,error);state_.clipAuthoringPicker=1;state_.clipDiagnostic=error;}
+    else {state_.clipTargetNode=state_.clipTargetBranch;state_.clipAuthoringPicker=2;}
+  }
   else if(code>=w::TargetChoice&&code<w::TargetChoice+64) {
     const auto children=document_.childrenOf(state_.clipTargetBranch);const usize index=state_.clipTargetPage*layout_.clipTargetRows+code-w::TargetChoice;
-    if(index<children.size()) {state_.clipTargetNode=children[index];state_.clipAuthoringPicker=2;}
+    if(index<children.size()) {
+      if(state_.clipPoseSelectionAdd) {toggleAnimationPoseTarget(children[index],error);state_.clipAuthoringPicker=1;state_.clipDiagnostic=error;}
+      else {state_.clipTargetNode=children[index];state_.clipAuthoringPicker=2;}
+    }
   } else if(code>=w::TargetEnter&&code<w::TargetEnter+64) {
     const auto children=document_.childrenOf(state_.clipTargetBranch);const usize index=state_.clipTargetPage*layout_.clipTargetRows+code-w::TargetEnter;
     if(index<children.size()&&!document_.childrenOf(children[index]).empty()) {state_.clipTargetBranch=children[index];state_.clipTargetPage=0;}
@@ -989,7 +1319,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   else if(code==w::TangentClose) {state_.clipTangentPicker=false;state_.clipModeSide=0;}
   else if(code==w::ModeIn||code==w::ModeOut) {const u32 side=code==w::ModeIn?1:2;state_.clipModeSide=state_.clipModeSide==side?0:side;}
-  else if(code==w::Curves||code==w::Keys) {state_.clipCurves=code==w::Curves;state_.clipCues=state_.clipCueOptions=false;}
+  else if(code==w::Curves||code==w::Keys) {state_.clipCurves=code==w::Curves;state_.clipCurveView=false;state_.clipCues=state_.clipCueOptions=false;frameAnimationClip();}
   else if(code==w::Expand)state_.clipExpanded=!state_.clipExpanded;
   else if(code==w::Frame)frameAnimationClip();
   else if(code==w::ZoomIn||code==w::ZoomOut) {
@@ -1056,6 +1386,12 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
       }
       u64 id=0;return candidate.putKey(state_.clipTrack,state_.clipComponent,next,id,error);
     });
+  }
+  if(state_.clipAuthorReturn&&(code==w::TargetClose||((code==w::TargetUse||(code>=w::TargetChoice&&code<w::TargetChoice+64))&&state_.clipAuthoringPicker==2))) {
+    state_.clipAuthoringPicker=0;
+    if(state_.clipAuthorReturn==1){state_.clipPropertiesShown=true;state_.clipPropertyCatalog=true;clipPropertyResourceRevision_=0;refreshAnimationPropertySurface();}
+    else {state_.clipDriversShown=true;refreshAnimationDrivers();}
+    state_.clipAuthorReturn=0;appearanceChanged_=true;
   }
   return true;
 }

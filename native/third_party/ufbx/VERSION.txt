@@ -1,0 +1,8 @@
+ufbx v0.20.0
+commit a63ff0a47485328880b3300e7bcdf01413343a45
+origin https://github.com/ufbx/ufbx
+license MIT (alternative Unlicense retained)
+Not integrated into CMake yet.
+ufbx.h sha256 05362d987b3bf646932d89758c43d94458620c409b51b06948a32d33b37472f3
+ufbx.c sha256 2f7dbfa8f2c7f45fe2d468b13fb8954ef8f502feb43c264c70f29007cc68fa2a
+LICENSE sha256 0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391

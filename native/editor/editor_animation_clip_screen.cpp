@@ -1,4 +1,5 @@
 #include "editor/editor_screen.h"
+#include "editor/editor_animation_curve_view.h"
 #include "resources/animation_binding_path.h"
 #include "scene/skinned_mesh.h"
 #include "runtime/transform_math.h"
@@ -27,6 +28,16 @@ std::string fitTextMiddle(const UiDrawList &list,std::string_view value,float wi
   return "...";
 }
 std::string number(double value,const char *suffix="") {char s[64];std::snprintf(s,sizeof s,"%.4g%s",value,suffix);return s;}
+void regionBracket(UiDrawList &list,const UiTheme &theme,const UiRect &canvas,
+                   const resources::AnimationRegion *region,float first,float last) {
+  if(!region||canvas.isEmpty())return;
+  const auto xAt=[&](float t){return std::clamp(canvas.x+(t-first)/std::max(.0001f,last-first)*canvas.width,canvas.x,canvas.right());};
+  const float begin=xAt(region->start),end=xAt(region->end);
+  list.addRect({begin,canvas.y,std::max(0.f,end-begin),canvas.height},withAlpha(theme.color.accent,.08f));
+  list.addLine({begin,canvas.y},{end,canvas.y},theme.color.accent,3);
+  list.addLine({begin,canvas.y},{begin,canvas.y+10},theme.color.accent,2);
+  list.addLine({end,canvas.y},{end,canvas.y+10},theme.color.accent,2);
+}
 std::string bindingLabel(const resources::AnimationClipBinding &binding) {
   if(binding.path.empty())return binding.name;
   std::string label;
@@ -80,12 +91,13 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   auto header=layout.topBar;
   auto close=UiRect{header.right()-44,header.y,44,header.height};header.width-=44;button(close,"",w::Close,true,false,UiIcon::UiClose);
   button(left(header,header.width>620?110:42),header.width>620?"Objetos":"",w::Targets,true,state.clipAuthoringPicker!=0,UiIcon::AnimationBinding);
-  button(left(header,std::min(210.f,header.width*.29f)),asset->name,w::Choose,true,state.clipPicker,UiIcon::AssetsAnimation);
+  button(left(header,std::min(210.f,header.width*(state.clipCurves?.26f:.29f))),asset->name,w::Choose,true,state.clipPicker,UiIcon::AssetsAnimation);
   button(left(header,42),"",w::Undo,state.canUndo,false,UiIcon::EditorUndo);
   button(left(header,42),"",w::Redo,state.canRedo,false,UiIcon::EditorRedo);
   button(left(header,42),"",w::Frame,true,false,UiIcon::AnimationFrame);
   button(left(header,42),"",w::Expand,true,state.clipExpanded,UiIcon::EditorAuthorFrame);
-  if(header.width>=56)button(left(header,56),"Nome",w::Name);
+  if(header.width>=56)button(left(header,56),state.clipCurves?"Vista":"Nome",state.clipCurves?w::CurveView:w::Name,true,state.clipCurves&&state.clipCurveView);
+  if(state.clipCurves&&header.width>=56)button(left(header,56),"Nome",w::Name);
   if(header.width>=84)button(left(header,84),"Pose",w::Pose,state.clipTarget!=0&&!state.clipExpanded,state.clipPoseShown,UiIcon::AnimationReferencePose);
   if(header.width>=52)button(left(header,52),"Novo",w::New);
   const resources::AnimationClipTrack *selected=asset->track(state.clipTrack);
@@ -102,9 +114,18 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   const float editingHeight=previewFocus?42:state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers&&!cues?
       std::min(148.f,area.height*.4f):std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers||cue?42.f:0.f));
   layout.viewport={area.x,area.y,area.width,std::max(0.f,area.height-editingHeight)};
+  if(state.clipGuiPreviewDraw)state.clipGuiPreviewDraw(list,layout.viewport);
   UiRect editor{area.x,layout.viewport.bottom(),area.width,editingHeight};
   list.addRect(editor,theme.color.canvas);router.addBlocker(editor);
-  if(cue) {
+  if(cues&&state.clipCueSelection.size()>1) {
+    auto property=top(editor,42);list.addRect(property,theme.color.surface);
+    label(left(property,std::min(155.f,property.width*.28f)),std::to_string(state.clipCueSelection.size())+" cues",theme.color.text);
+    button(left(property,110),"Mover · s",w::SelectionOffset);
+    button(left(property,110),"Escala",w::SelectionScale);
+    button(left(property,84),"Somar",w::SelectionAdd,true,state.clipSelectionAdd);
+    button(left(property,74),"Limpar",w::SelectionClear);
+    if(cue)button(property,"Opções",w::CueOptions,true,state.clipCueOptions);
+  } else if(cue) {
     auto property=top(editor,42);list.addRect(property,theme.color.surface);const float width=property.width;
     button(left(property,width*.29f),cue->name,w::CueName,true,true,cue->kind==resources::AnimationCueKind::Event?UiIcon::AnimationEvent:UiIcon::AnimationMarker);
     button(left(property,width*.18f),number(cue->time," s"),w::CueTime);
@@ -178,7 +199,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   button(left(transport,44),"",w::Keys,true,!state.clipCurves&&!cues,UiIcon::AnimationKey);
   button(left(transport,44),"",w::Curves,true,state.clipCurves&&!cues,UiIcon::AnimationCurve);
   button(left(transport,44),"",w::Cues,true,cues,UiIcon::AnimationEvent);
-  if(!cues)button(left(transport,44),"",w::Selection,true,state.clipSelectionMode,UiIcon::EditorAuthorSelect);
+  button(left(transport,44),"",w::Selection,true,state.clipSelectionMode,cues?UiIcon::AnimationCueGroup:UiIcon::EditorAuthorSelect);
   button(left(transport,44),"Editar",w::Edits,true,state.clipEditPicker);
   button(left(transport,44),"|<",w::Restart);
   button(left(transport,40),"",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
@@ -186,7 +207,10 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   button(left(transport,40),"",w::NextFrame,true,false,UiIcon::UiChevronRight);
   button(left(transport,44),"Loop",w::Loop,true,state.clipLoop);
   button(left(transport,76),number(state.clipTime," s"),w::Time);
-  if(transport.width>=90)button(left(transport,90),number(asset->duration," s"),w::Duration);
+  if(transport.width>=90) {
+    if(asset->region(state.clipPreviewRegion))button(left(transport,90),"Região",w::Regions,true,true,UiIcon::AnimationRegion);
+    else button(left(transport,90),number(asset->duration," s"),w::Duration);
+  }
   if(transport.width>=88) {button(left(transport,40),"-",w::ZoomOut);button(left(transport,40),"+",w::ZoomIn);}
   }
   if(cues) {
@@ -212,15 +236,23 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       list.addLine({x,canvas.y},{x,canvas.bottom()},theme.color.lineSoft,1);
     }
     list.pushClip(canvas);
+    regionBracket(list,theme,canvas,asset->region(state.clipRegion),state.clipStart,state.clipEnd);
+    if(state.clipRangeShown) {
+      const float start=std::clamp(xAt(state.clipRangeStart),canvas.x,canvas.right()),end=std::clamp(xAt(state.clipRangeEnd),canvas.x,canvas.right());
+      list.addRect({start,canvas.y,std::max(0.f,end-start),canvas.height},withAlpha(theme.color.accent,.12f));
+      list.addLine({start,canvas.y},{start,canvas.bottom()},theme.color.accent,1.5f);
+      list.addLine({end,canvas.y},{end,canvas.bottom()},theme.color.accent,1.5f);
+    }
     for(u32 row=0;row<2;++row) {const float y=canvas.y+canvas.height*(row?.7f:.3f);list.addLine({canvas.x,y},{canvas.right(),y},theme.color.line,1);}
     for(const auto &c:asset->cues)if(c.time>=state.clipStart&&c.time<=state.clipEnd) {
       const float x=xAt(c.time),y=canvas.y+canvas.height*(c.kind==resources::AnimationCueKind::Event?.3f:.7f);
-      const bool active=c.id==state.clipCue;const auto color=active?theme.color.accent:c.enabled?theme.color.text:theme.color.textFaint;
+      const bool active=c.id==state.clipCue||std::find(state.clipCueSelection.begin(),state.clipCueSelection.end(),c.id)!=state.clipCueSelection.end();const auto color=active?theme.color.accent:c.enabled?theme.color.text:theme.color.textFaint;
       list.addImage({x-8,y-8,16,16},static_cast<UiImageId>(c.kind==resources::AnimationCueKind::Event?UiIcon::AnimationEvent:UiIcon::AnimationMarker),c.enabled?0xffffffff:withAlpha(0xffffffff,.35f));
-      if(active) {list.addBorder({x-11,y-11,22,22},color,1,0);label({x+14,y-13,std::min(160.f,canvas.right()-x-14),26},c.name,color);}
+      if(active) {list.addBorder({x-11,y-11,22,22},color,1,0);if(c.id==state.clipCue)label({x+14,y-13,std::max(0.f,std::min(160.f,canvas.right()-x-14)),26},c.name,color);}
     }
     const float playhead=xAt(state.clipTime);list.addLine({playhead,canvas.y},{playhead,canvas.bottom()},theme.color.accent,1.3f);
     if(asset->cues.empty())label({canvas.x+10,canvas.y+4,canvas.width-20,32},"+ Evento · + Marcador",theme.color.textDim);
+    if(state.clipSelecting) {list.addRect(state.clipSelectionBox,withAlpha(theme.color.accent,.12f));list.addBorder(state.clipSelectionBox,theme.color.accent,1,0);}
     list.popClip();
   }
   if(!previewFocus&&!cues) {
@@ -254,25 +286,67 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   if(!canvas.isEmpty()&&curve) {
     const float span=std::max(.0001f,state.clipEnd-state.clipStart);
     const auto xAt=[&](double t){return canvas.x+static_cast<float>((t-state.clipStart)/span*canvas.width);};
-    const auto yAt=[&](double v){return canvas.bottom()-static_cast<float>((v-state.clipMinimum)/(state.clipMaximum-state.clipMinimum)*canvas.height);};
+    const auto yView=[&](double v){return canvas.bottom()-static_cast<float>((v-state.clipMinimum)/(double(state.clipMaximum)-state.clipMinimum)*canvas.height);};
+    const auto yAt=[&](double v){return yView(animationCurveViewValue(state,state.clipTrack,state.clipComponent,v));};
     for(u32 i=0;i<=8;++i) {
       const float x=canvas.x+canvas.width*i/8;list.addLine({x,canvas.y},{x,canvas.bottom()},theme.color.lineSoft,1);
       label({x-25,ruler.y,58,ruler.height},number(state.clipStart+span*i/8,"s"),theme.color.textMuted,UiAlign::Center);
     }
     list.pushClip(canvas);
+    regionBracket(list,theme,canvas,asset->region(state.clipRegion),state.clipStart,state.clipEnd);
+    if(state.clipRangeShown) {
+      const float begin=std::clamp(xAt(state.clipRangeStart),canvas.x,canvas.right()),end=std::clamp(xAt(state.clipRangeEnd),canvas.x,canvas.right());
+      list.addRect({begin,canvas.y,std::max(0.f,end-begin),canvas.height},withAlpha(theme.color.accent,.12f));
+      list.addLine({begin,canvas.y},{begin,canvas.bottom()},theme.color.accent,1.5f);
+      list.addLine({end,canvas.y},{end,canvas.bottom()},theme.color.accent,1.5f);
+    }
     if(state.clipCurves) {
       for(u32 i=0;i<=4;++i) {const float y=canvas.y+canvas.height*i/4;list.addLine({canvas.x,y},{canvas.right(),y},theme.color.lineSoft,1);}
       const UiColor colors[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ,theme.color.textDim};
-      // Bounded sampling regardless of source key count and zoom. Render the
-      // selected component only; unrelated units cannot share one value axis.
-      UiPoint previous{};bool hasPrevious=false;
-      for(u32 i=0;i<=384;++i) {
-        const double t=state.clipStart+span*i/384;resources::AnimationCurveSample sample;
-        if(resources::sampleValidatedAnimationCurve(*curve,t,sample)) {const UiPoint point{xAt(t),yAt(sample.value)};
-          if(hasPrevious)list.addLine(previous,point,colors[state.clipComponent%4],1.8f);
-          previous=point;hasPrevious=true;
-        } else hasPrevious=false;
-      }
+      // References have no handles/hit targets. At most eight pinned channels
+      // plus the active one; fixed sampling bounds the cost independently of
+      // source key count. Normalization uses cached exact stationary bounds.
+      const auto drawCurve=[&](const resources::AnimationCurve &draw,u64 track,u32 component,bool active) {
+        UiPoint previous{};bool hasPrevious=false;double previousTime=0;
+        const auto y=[&](double value){return yView(animationCurveViewValue(state,track,component,value));};
+        for(u32 i=0;i<=384;++i) {
+          const double time=state.clipStart+span*i/384;resources::AnimationCurveSample sample;
+          if(resources::sampleValidatedAnimationCurve(draw,time,sample)) {
+            const UiPoint point{xAt(time),y(sample.value)};bool crossedStep=false;
+            if(hasPrevious) {
+              auto key=std::upper_bound(draw.keys.begin(),draw.keys.end(),previousTime,[](double t,const auto &k){return t<k.time;});
+              if(key!=draw.keys.end()&&key!=draw.keys.begin()) {
+                const auto &before=*(key-1);using Mode=resources::AnimationTangentMode;
+                if(previousTime==before.time&&(before.outgoing==Mode::NextConstant||key->incoming==Mode::NextConstant))crossedStep=true;
+              }
+              u32 examined=0;
+              for(;key!=draw.keys.end()&&key->time<=time;++key)if(key!=draw.keys.begin()) {
+                if(++examined>4) {crossedStep=true;break;}
+                const auto &before=*(key-1);using Mode=resources::AnimationTangentMode;
+                if(before.outgoing==Mode::Constant||key->incoming==Mode::Constant||before.outgoing==Mode::NextConstant||key->incoming==Mode::NextConstant) {crossedStep=true;break;}
+              }
+              if(!crossedStep&&(active||i%4<2))list.addLine(previous,point,active?colors[component%4]:withAlpha(colors[component%4],.48f),active?1.8f:1.f);
+            }
+            previous=point;previousTime=time;hasPrevious=true;
+          } else hasPrevious=false;
+        }
+        // Draw step discontinuities at their actual time, never as a diagonal
+        // approximation across a display sample. Dense sources use at most 512
+        // representatives; framing and numeric selection retain exact keys.
+        const usize stride=std::max<usize>(1,(draw.keys.size()+510)/512);
+        for(usize i=1;i<draw.keys.size();i+=stride) {
+          const auto &a=draw.keys[i-1],&b=draw.keys[i];using Mode=resources::AnimationTangentMode;
+          const bool next=a.outgoing==Mode::NextConstant||b.incoming==Mode::NextConstant;
+          const bool hold=a.outgoing==Mode::Constant||b.incoming==Mode::Constant;
+          if((!next&&!hold)||b.time<state.clipStart||a.time>state.clipEnd)continue;
+          const double jump=next?a.time:b.time;const auto color=active?colors[component%4]:withAlpha(colors[component%4],.48f);
+          list.addLine({xAt(a.time),y(next?b.value:a.value)},{xAt(b.time),y(next?b.value:a.value)},color,active?1.8f:1.f);
+          list.addLine({xAt(jump),y(a.value)},{xAt(jump),y(b.value)},color,active?1.8f:1.f);
+        }
+      };
+      if(!state.clipCurveIsolated)for(const auto &pin:state.clipCurvePins)if(pin.track!=state.clipTrack||pin.component!=state.clipComponent)
+        if(const auto *track=asset->track(pin.track);track&&pin.component<track->curves.size())drawCurve(track->curves[pin.component],pin.track,pin.component,false);
+      drawCurve(*curve,state.clipTrack,state.clipComponent,true);
     }
     std::unordered_set<u64> selectedIds;for(const auto &address:state.clipSelection)selectedIds.insert(address.key);
     const auto diamond=[&](const resources::AnimationCurveKey &k,float y,bool selectedCurve) {
@@ -315,7 +389,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     list.popClip();
     if(state.clipCurves)for(u32 i=0;i<3;++i) {
       const float value=state.clipMinimum+(state.clipMaximum-state.clipMinimum)*i/2;
-      const UiRect marker{canvas.x+4,yAt(value)-8,44,16};list.addRect(marker,theme.color.canvas);label(marker,number(value),theme.color.textMuted);
+      const UiRect marker{canvas.x+4,yView(value)-8,70,16};list.addRect(marker,theme.color.canvas);label(marker,number(value,state.clipCurveNormalized?" n":""),theme.color.textMuted);
     }
   }
   if(state.clipLayerPicker&&layers) {
@@ -344,10 +418,10 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       bool visible=true;
       for(auto parent=node;parent;parent=graph.find(parent->parent))
         if(!parent->visible||state.sceneHiddenHas(parent->id)||(parent->layer<32&&(state.hiddenLayers&(1u<<parent->layer)))) {visible=false;break;}
-      if(!visible)continue;
+      if(!visible||(state.clipPoseSelectionIsolated&&std::none_of(state.clipPoseSelection.begin(),state.clipPoseSelection.end(),[&](auto id){return bone==id||graph.isDescendantOf(bone,id);})))continue;
       float world[16];if(!runtime::worldMatrix(graph,bone,world))continue;
       const auto projected=projectWorldToScreen(*state.view,world+12);if(!projected.valid)continue;
-      const bool active=bone==previewTarget;
+      const bool active=bone==previewTarget||std::find(state.clipPoseSelection.begin(),state.clipPoseSelection.end(),bone)!=state.clipPoseSelection.end();
       if(std::binary_search(state.clipPreviewJoints.begin(),state.clipPreviewJoints.end(),node->parent)) {
         float parent[16];UiPoint a,b;
         if(runtime::worldMatrix(graph,node->parent,parent)&&projectSegmentToScreen(*state.view,parent+12,world+12,a,b))
@@ -418,6 +492,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     button(left(actions,94),"Gravar",w::PoseRecord,state.clipPosePending,false,UiIcon::AnimationRecordPose);
     button(left(actions,102),"Cancelar",w::PoseCancel,state.clipPosePending,false,UiIcon::UiClose);
     button(left(actions,94),"Camada",w::PoseIsolate,true,state.clipPoseIsolated,UiIcon::AnimationReferencePose);
+    button(left(actions,44),"",w::PoseTools,true,state.clipPoseToolsShown,UiIcon::AnimationPoseTools);
     const auto *poseLayer=asset->layer(state.clipLayer);
     label(actions,std::string(state.clipPosePending?"Sem gravar · ":"")+(poseLayer?poseLayer->name:"")+(state.clipPoseIsolated?" · isolada":" · resultado"),state.clipPosePending?theme.color.warning:theme.color.textDim);
     if(state.clipPoseNumbers) {
@@ -457,24 +532,27 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     if(branch) {
       layout.clipTargetRows=std::clamp(static_cast<u32>(std::max(40.f,area.height-128)/40),1u,6u);
       const auto children=state.document->childrenOf(state.clipTargetBranch);
-      const u32 count=state.clipAuthoringPicker==2?6:static_cast<u32>(std::min<usize>(children.size(),layout.clipTargetRows));
+      const u32 count=state.clipAuthoringPicker==2?7:static_cast<u32>(std::min<usize>(children.size(),layout.clipTargetRows));
       auto picker=UiRect{layout.topBar.x+8,layout.topBar.bottom()+4,std::min(380.f,area.width-16),std::min(area.height-4,84.f+40*count)};
       list.addRect(picker,theme.color.surface);router.addBlocker(picker);
       auto header=top(picker,40);button(left(header,40),"<",w::TargetUp,state.clipAuthoringPicker==2||state.clipTargetBranch!=state.clipOwner);
       auto close=UiRect{header.right()-40,header.y,40,header.height};header.width-=40;button(close,"",w::TargetClose,true,false,UiIcon::UiClose);
       label(header,branch->name,theme.color.text);
       if(state.clipAuthoringPicker==1) {
-        auto use=top(picker,44);button(left(use,std::max(0.f,use.width-88)),"Animar este objeto",w::TargetUse);
+        auto use=top(picker,44);button(left(use,std::max(0.f,use.width-132)),state.clipPoseSelectionAdd?"Selecionar este objeto":"Animar este objeto",w::TargetUse);
+        button(left(use,44),"+",w::PoseSelectAdd,true,state.clipPoseSelectionAdd);
         button(left(use,44),"<",w::TargetPrevious,state.clipTargetPage>0);button(use,">",w::TargetNext,(state.clipTargetPage+1)*layout.clipTargetRows<children.size());
         for(u32 i=0;i<layout.clipTargetRows&&state.clipTargetPage*layout.clipTargetRows+i<children.size();++i) {
           const auto child=children[state.clipTargetPage*layout.clipTargetRows+i];const auto *object=state.document->find(child);if(!object)continue;
-          auto row=top(picker,40);button(left(row,std::max(0.f,row.width-44)),object->name,w::TargetChoice+i,true,false,UiIcon::AnimationBinding);
+          const bool selectedTarget=std::find(state.clipPoseSelection.begin(),state.clipPoseSelection.end(),child)!=state.clipPoseSelection.end();
+          auto row=top(picker,40);button(left(row,std::max(0.f,row.width-44)),object->name,w::TargetChoice+i,true,selectedTarget,UiIcon::AnimationBinding);
           button(row,">",w::TargetEnter+i,!state.document->childrenOf(child).empty());
         }
       } else {
         const char *properties[]{"Posição","Escala","Rotação · Quaternion","Rotação · Euler","Rotação · Progressivo","Morphs"};
         const auto *skin=static_cast<const scene::SkinnedMesh*>(branch->components.find(scene::SkinnedMesh::descriptor));
         for(u32 i=0;i<6;++i)button(top(picker,40),properties[i],w::PropertyChoice+i,i!=5||(skin&&!skin->blendShapeWeights.empty()));
+        auto propertyActions=top(picker,42);button(left(propertyActions,propertyActions.width*.5f),"Propriedades",w::Properties,true,false,UiIcon::AnimationProperty);button(propertyActions,"Drivers",w::Drivers,true,false,UiIcon::AnimationDriver);
       }
     }
   }
@@ -509,28 +587,149 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     auto sheet=UiRect{area.right()-std::min(360.f,area.width-16)-8,layout.topBar.bottom()+4,std::min(360.f,area.width-16),std::min(172.f,area.height-4)};
     list.addRect(sheet,theme.color.surface);router.addBlocker(sheet);
     auto title=top(sheet,42);auto close=UiRect{title.right()-42,title.y,42,title.height};title.width-=42;
-    label(title,cue->name,theme.color.text);button(close,"",w::CueOptionsClose,true,false,UiIcon::UiClose);
+    label(title,state.clipCueSelection.size()>1?std::to_string(state.clipCueSelection.size())+" cues selecionados":cue->name,theme.color.text);button(close,"",w::CueOptionsClose,true,false,UiIcon::UiClose);
     auto directions=top(sheet,42);button(left(directions,directions.width*.5f),"Avançar",w::CueForward,cue->kind==resources::AnimationCueKind::Event,cue->forward);
     button(directions,"Reverter",w::CueReverse,cue->kind==resources::AnimationCueKind::Event,cue->reverse);
     button(top(sheet,42),"Ativo",w::CueEnabled,true,cue->enabled);
-    auto actions=top(sheet,42);button(left(actions,actions.width*.5f),"Duplicar",w::CueDuplicate,true,false,UiIcon::AnimationDuplicate);
+    auto actions=top(sheet,42);button(left(actions,actions.width*.5f),state.clipCueSelection.size()>1?"Duplicar grupo":"Duplicar",w::CueDuplicate,true,false,UiIcon::AnimationDuplicate);
     button(actions,"Excluir",w::CueDelete,true,false,UiIcon::UiRemove);
   }
   if(state.clipEditPicker) {
-    auto picker=UiRect{area.x+8,layout.topBar.bottom()+4,std::min(320.f,area.width-16),std::min(248.f,area.height-4)};
+    auto picker=UiRect{area.x+8,layout.topBar.bottom()+4,std::min(360.f,area.width-16),std::min(248.f,area.height-4)};
     list.addRect(picker,theme.color.surface);router.addBlocker(picker);
     auto title=top(picker,40);auto close=UiRect{title.right()-40,title.y,40,title.height};title.width-=40;
-    label(title,"Edição do clipe",theme.color.text);button(close,"",w::EditsClose,true,false,UiIcon::UiClose);
-    const bool hasKeys=!cues&&(!state.clipSelection.empty()||key);
-    const bool canPaste=!cues&&state.clipClipboard&&!state.clipClipboard->empty();
+    auto range=UiRect{title.right()-126,title.y,126,title.height};title.width-=126;
+    label(title,"Edição do clipe",theme.color.text);button(range,"Intervalo",w::Range,asset->duration>0,false,UiIcon::AnimationInterval);
+    button(close,"",w::EditsClose,true,false,UiIcon::UiClose);
+    const bool hasKeys=cues?(!state.clipCueSelection.empty()||cue):(!state.clipSelection.empty()||key);
+    const bool canPaste=cues?(state.clipCueClipboard&&!state.clipCueClipboard->empty()):(state.clipClipboard&&!state.clipClipboard->empty());
     auto copy=top(picker,40);button(left(copy,copy.width*.5f),"Copiar",w::CopyKeys,hasKeys,false,UiIcon::AssetsCopy);
     button(copy,"Recortar",w::CutKeys,hasKeys);
-    button(top(picker,40),"Colar · substituir",w::PasteReplace,canPaste);
-    auto insert=top(picker,40);button(left(insert,insert.width*.5f),"Inserir copiados",w::PasteInsertTracks,canPaste);
-    button(insert,"Inserir todos",w::PasteInsertAll,canPaste);
-    auto frames=top(picker,44);button(left(frames,frames.width*.5f),"Duração · "+number(asset->duration," s"),w::Duration);
-    button(left(frames,frames.width*.5f),"− quadro",w::PreviousFrame);button(frames,"+ quadro",w::NextFrame);
-    button(top(picker,44),"Bake e redução",w::BakeOpen,selected!=nullptr,false,UiIcon::AnimationBake);
+    button(top(picker,42),cues?"Colar cues no cursor":"Colar · substituir",w::PasteReplace,canPaste);
+    auto insert=top(picker,42);
+    if(cues)button(insert,"Selecionar todos os cues",w::CueSelectAll,!asset->cues.empty(),false,UiIcon::AnimationCueGroup);
+    else {button(left(insert,insert.width*.5f),"Inserir canais",w::PasteInsertTracks,canPaste);button(insert,"Inserir tudo + cues",w::PasteInsertAll,canPaste);}
+    auto last=top(picker,42);button(left(last,last.width*.32f),"Duração · "+number(asset->duration," s"),w::Duration);
+    button(left(last,std::max(44.f,last.width-88)),"Bake e redução",w::BakeOpen,selected!=nullptr&&!cues,false,UiIcon::AnimationBake);
+    button(left(last,44),"<",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
+    button(last,">",w::NextFrame,true,false,UiIcon::UiChevronRight);
+    auto propertyActions=top(picker,42);button(left(propertyActions,propertyActions.width*.5f),"Propriedades",w::Properties,true,false,UiIcon::AnimationProperty);button(propertyActions,"Drivers",w::Drivers,true,false,UiIcon::AnimationDriver);
+  } else if(state.clipDriversShown) {
+    buildAnimationDriverSurface(state,theme,list,router,area);
+  } else if(state.clipPropertiesShown&&state.clipPropertyCurves) {
+    buildAnimationPropertyCurveSurface(state,theme,list,router,area);
+  } else if(state.clipPropertiesShown) {
+    auto sheet=UiRect{area.x+8,area.y+4,std::min(460.f,area.width-16),std::min(244.f,area.height-8)};
+    list.addRect(sheet,theme.color.surface);router.addBlocker(sheet);
+    const auto *typed=asset->propertyTrack(state.clipPropertyTrack);
+    auto title=top(sheet,44);auto close=UiRect{title.right()-44,title.y,44,title.height};title.width-=44;
+    if(state.clipPropertyCatalog) {
+      auto target=left(title,44);button(target,"",w::Targets,true,false,UiIcon::AnimationBinding);
+      button(title,state.clipPropertyQuery.empty()?(state.clipPropertyRemap?"Buscar destino do mesmo tipo…":"Buscar propriedade…"):state.clipPropertyQuery,w::PropertySearch);
+    } else label(title,typed?state.clipPropertyLabel:"Propriedades · "+std::to_string(asset->properties.size())+" canais",theme.color.text);
+    button(close,"",w::PropertyClose,true,false,UiIcon::UiClose);
+    auto tabs=top(sheet,44);button(left(tabs,tabs.width*.5f),"Canais do clipe",w::PropertyTracks,true,!state.clipPropertyCatalog);
+    button(tabs,state.clipPropertyRemap?"Remapear no alvo":"+ No objeto selecionado",w::PropertyCatalog,true,state.clipPropertyCatalog);
+    if(!state.clipPropertyCatalog&&typed) {
+      auto values=top(sheet,44);
+      if(state.clipPropertyDimensions) {
+        const float width=values.width/state.clipPropertyDimensions;
+        for(u32 c=0;c<state.clipPropertyDimensions;++c)button(left(values,width),std::string(state.clipPropertyDimensions==1?"Valor":typed->address.kind==resources::AnimationPropertyKind::LinearColor?c==0?"R":c==1?"G":"B":c==0?"X":c==1?"Y":"Z")+" · "+number(state.clipPropertyValues[c]),w::PropertyValue+c);
+      } else if(typed->address.kind==resources::AnimationPropertyKind::Boolean)
+        button(values,state.clipPropertyBoolean?"Ligado · tocar para desligar":"Desligado · tocar para ligar",w::PropertyValue,true,state.clipPropertyBoolean);
+      else if(typed->address.kind==resources::AnimationPropertyKind::Enumeration) {
+        std::string option=std::to_string(state.clipPropertyEnum);
+        for(const auto &[value,name]:state.clipPropertyOptions)if(value==state.clipPropertyEnum)option=name;
+        button(values,option+" · próxima opção",w::PropertyValue,!state.clipPropertyOptions.empty());
+      }
+      auto record=top(sheet,44);const auto width=record.width/5;
+      button(left(record,width),number(state.clipTime," s"),w::PropertyTime);
+      button(left(record,width),"Gravar",w::PropertyRecord);
+      button(left(record,width),"Remapear",w::PropertyRemap);
+      button(left(record,width),"Curva",w::PropertyCurve,!typed->data.curves.empty());
+      button(record,"Excluir",w::PropertyRemove,asset->tracks.size()+asset->properties.size()>1,false,UiIcon::UiRemove);
+      auto keys=top(sheet,44);button(left(keys,44),"<",w::PropertyKeyPrevious,!state.clipPropertyKeys.empty());
+      button(left(keys,44),">",w::PropertyKeyNext,!state.clipPropertyKeys.empty());
+      const auto found=std::find_if(state.clipPropertyKeys.begin(),state.clipPropertyKeys.end(),[&](const auto &key){return key.id==state.clipPropertyKey;});
+      button(left(keys,std::max(44.f,keys.width*.6f)),found==state.clipPropertyKeys.end()?"Selecionar chave":number(found->time," s"),w::PropertyKeyTime,found!=state.clipPropertyKeys.end());
+      button(keys,"Apagar chave",w::PropertyKeyDelete,found!=state.clipPropertyKeys.end()&&state.clipPropertyKeys.size()>1);
+      label(sheet,"Scripts → clipe → drivers → física · "+state.clipPropertyInfo,theme.color.textMuted);
+    } else {
+      const usize count=state.clipPropertyCatalog?state.clipPropertyEntries.size():asset->properties.size();
+      for(u32 i=0;i<2;++i) {
+        const usize index=state.clipPropertyPage*2+i;auto row=top(sheet,44);
+        if(index<count) {
+          std::string name=state.clipPropertyCatalog?state.clipPropertyEntries[index].label:asset->properties[index].address.property;
+          if(!state.clipPropertyCatalog)for(const auto &binding:asset->bindings)if(binding.id==asset->properties[index].binding)name=binding.name+" · "+name;
+          button(row,name,w::PropertyEntry+i);
+        } else if(i==0)label(row,state.clipPropertyCatalog?"Nenhuma propriedade compatível com a busca":"Escolha + para adicionar uma propriedade",theme.color.textMuted);
+      }
+      auto pages=top(sheet,44);button(left(pages,44),"<",w::PropertyPrevious,state.clipPropertyPage>0);
+      button(left(pages,44),">",w::PropertyNext,(state.clipPropertyPage+1)*2<count);
+      label(pages,std::to_string(count)+" · página "+std::to_string(state.clipPropertyPage+1),theme.color.textMuted);
+      label(sheet,state.clipPropertyRemap?"Mesmo tipo · ID do canal preservado":"Somente propriedades com consumidor efetivo",theme.color.textMuted);
+    }
+  } else if(state.clipRegionsShown) {
+    auto sheet=UiRect{area.x+8,layout.topBar.bottom()+4,std::min(430.f,area.width-16),std::min(246.f,area.height-4)};
+    list.addRect(sheet,theme.color.surface);router.addBlocker(sheet);
+    auto title=top(sheet,36);auto close=UiRect{title.right()-42,title.y,42,title.height};title.width-=42;
+    if(state.clipRegionDetails)button(left(title,64),"Lista",w::RegionList);
+    label(title,"Regiões · preview",theme.color.text);button(close,"",w::RegionClose,true,false,UiIcon::UiClose);
+    const auto *region=asset->region(state.clipRegion);
+    if(state.clipRegionDetails&&region) {
+      button(top(sheet,42),region->name,w::RegionName,true,false,UiIcon::AnimationRegion);
+      auto bounds=top(sheet,42);button(left(bounds,bounds.width*.5f),"Início · "+number(region->start," s"),w::RegionStart);
+      button(bounds,"Fim · "+number(region->end," s"),w::RegionEnd);
+      button(top(sheet,42),state.clipPreviewRegion==region->id?"Voltar ao clipe inteiro":"Usar esta região no preview",w::RegionPreview,true,state.clipPreviewRegion==region->id,UiIcon::AnimationRegion);
+      auto actions=top(sheet,42);button(left(actions,actions.width*.5f),state.clipPlaying?"Pausar":"Reproduzir",w::Play,state.clipDiagnostic.empty(),state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
+      button(actions,"Excluir região",w::RegionDelete,true,false,UiIcon::UiRemove);
+      auto playback=top(sheet,42);button(left(playback,playback.width*.5f),"Reiniciar",w::Restart,true,false,UiIcon::RuntimeRestart);
+      button(playback,state.clipLoop?"Loop ligado":"Loop desligado",w::Loop,true,state.clipLoop,UiIcon::AnimationCycle);
+    } else {
+      button(top(sheet,42),"+ Região do intervalo atual",w::RegionAdd,state.clipRangeEnd>state.clipRangeStart&&asset->regions.size()<resources::MaximumAnimationRegions,false,UiIcon::AnimationRegion);
+      for(u32 i=0;i<3;++i) {
+        const usize index=state.clipRegionPage*3+i;auto row=top(sheet,42);
+        if(index<asset->regions.size()) {const auto &entry=asset->regions[index];button(row,entry.name+" · "+number(entry.start)+"–"+number(entry.end," s"),w::RegionChoice+i,true,entry.id==state.clipRegion,UiIcon::AnimationRegion);}
+        else if(!i&&asset->regions.empty())label(row,"Sem regiões · crie usando o intervalo",theme.color.textMuted);
+      }
+      auto pages=top(sheet,42);button(left(pages,48),"<",w::RegionPrevious,state.clipRegionPage>0);
+      button(left(pages,48),">",w::RegionNext,(state.clipRegionPage+1)*3<asset->regions.size());
+      label(pages,std::to_string(asset->regions.size())+" regiões · página "+std::to_string(state.clipRegionPage+1),theme.color.textMuted);
+    }
+  } else if(state.clipRangeShown) {
+    auto sheet=UiRect{area.x+8,layout.topBar.bottom()+4,std::min(420.f,area.width-16),std::min(254.f,area.height-4)};
+    list.addRect(sheet,theme.color.surface);router.addBlocker(sheet);
+    auto title=top(sheet,42);auto close=UiRect{title.right()-42,title.y,42,title.height};title.width-=42;
+    label(title,state.clipRangeTask==2?"Organizar seleção temporal":"Intervalo · todas as camadas + cues",theme.color.text);button(close,"",w::RangeClose,true,false,UiIcon::UiClose);
+    auto tasks=top(sheet,42);const float taskWidth=tasks.width/4;
+    button(left(tasks,taskWidth),"Trecho",w::RangeTaskEdit,true,state.clipRangeTask==0,UiIcon::AnimationInterval);
+    button(left(tasks,taskWidth),"Ciclo",w::RangeTaskCycle,true,state.clipRangeTask==1,UiIcon::AnimationCycle);
+    button(left(tasks,taskWidth),"Organizar",w::RangeTaskArrange,true,state.clipRangeTask==2,UiIcon::AnimationArrange);
+    button(tasks,"Regiões",w::Regions,true,false,UiIcon::AnimationRegion);
+    auto bounds=top(sheet,42);button(left(bounds,bounds.width*.5f),"Início · "+number(state.clipRangeStart," s"),w::RangeStart);
+    button(bounds,"Fim · "+number(state.clipRangeEnd," s"),w::RangeEnd);
+    const bool valid=state.clipRangeEnd>state.clipRangeStart;
+    if(state.clipRangeTask==1) {
+      auto fields=top(sheet,42);button(left(fields,fields.width*.5f),"Cópias · "+std::to_string(state.clipRangeCopies),w::RangeCopies);
+      button(fields,"Tolerância · "+number(state.clipRangeTolerance),w::RangeTolerance);
+      auto actions=top(sheet,42);button(left(actions,actions.width*.5f),"Início → fim",w::RangeCloseLoop,valid,false,UiIcon::AnimationReferencePose);
+      button(actions,"Repetir ciclo",w::RangeRepeat,valid,false,UiIcon::AnimationCycle);
+      label(top(sheet,42),"Pose fechada · cues [início, fim) · +"+std::to_string(state.clipRangeCopies)+" ciclos",theme.color.textMuted);
+    } else if(state.clipRangeTask==2) {
+      button(top(sheet,42),"Alinhar em · "+number(state.clipRangeDestination," s"),w::RangeDestination);
+      const bool hasSelection=cues?state.clipCue!=0||!state.clipCueSelection.empty():state.clipKey!=0||!state.clipSelection.empty();
+      auto align=top(sheet,42);const float width=align.width/3;
+      button(left(align,width),"Inícios",w::RangeAlignStart,hasSelection);
+      button(left(align,width),"Fins",w::RangeAlignEnd,hasSelection);
+      button(align,"Centros",w::RangeAlignCenter,hasSelection);
+      button(top(sheet,42),"Distribuir instantes entre início/fim",w::RangeDistribute,hasSelection&&valid,false,UiIcon::AnimationArrange);
+    } else {
+    button(top(sheet,42),"Destino · "+number(state.clipRangeDestination," s"),w::RangeDestination);
+    auto operations=top(sheet,42);button(left(operations,operations.width*.5f),"Duplicar trecho",w::RangeDuplicate,valid,false,UiIcon::AnimationDuplicate);
+    button(operations,"Inserir tempo",w::RangeInsert,valid,false,UiIcon::AnimationInterval);
+    auto cut=top(sheet,42);button(left(cut,cut.width*.5f),"Mover trecho",w::RangeMove,valid,false,UiIcon::EditorMove);
+    button(cut,"Remover [início, fim)",w::RangeRemove,valid,false,UiIcon::UiRemove);
+    }
   } else if(state.clipNewPicker) {
     auto picker=UiRect{layout.topBar.x+8,layout.topBar.bottom()+4,std::min(340.f,std::max(0.f,area.width-16)),std::min(area.height,120.f)};
     list.addRect(picker,theme.color.surface);router.addBlocker(picker);
@@ -555,6 +754,96 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       const auto &entry=(*state.clipAssets)[state.clipPage*layout.clipPickerRows+i];button(top(picker,40),entry.name,w::Choice+i,true,entry.guid==state.clipGuid);
     }
     if(!entries)label(top(picker,40),"Sem clipes nesta origem",theme.color.textMuted);
+  }
+  if(state.clipPoseShown&&state.clipPoseToolsShown&&selected) {
+    auto sheet=UiRect{area.right()-std::min(380.f,area.width-16)-8,layout.topBar.bottom()+4,std::min(380.f,area.width-16),std::min(254.f,area.height-4)};
+    list.addRect(sheet,theme.color.surface);router.addBlocker(sheet);
+    auto title=top(sheet,42);auto close=UiRect{title.right()-42,title.y,42,title.height};title.width-=42;
+    label(title,"Autoria de pose",theme.color.text);button(close,"",w::PoseToolsClose,true,false,UiIcon::UiClose);
+    auto tabs=top(sheet,42);const float tabWidth=tabs.width/3;
+    button(left(tabs,tabWidth),"Gravação",w::PoseToolsRecord,true,state.clipPoseToolsPage==0);
+    button(left(tabs,tabWidth),"Reutilizar",w::PoseToolsReuse,true,state.clipPoseToolsPage==1);
+    button(tabs,"Seleção",w::PoseToolsSelection,true,state.clipPoseToolsPage==2,UiIcon::AnimationSelectionSet);
+    if(!state.clipPoseToolsPage) {
+      auto policy=top(sheet,42);button(left(policy,102),"Auto-key",w::PoseAutoKey,true,state.clipPoseAutoKey,UiIcon::AnimationAutoKey);
+      button(policy,state.clipPoseRecording.createChannels?"Criar canais":"Só canais existentes",w::PosePolicy,true,state.clipPoseRecording.createChannels);
+      auto arm=top(sheet,42);button(left(arm,106),"Intervalo",w::PoseArm,true,state.clipPoseRecording.rangeArmed,UiIcon::AnimationInterval);
+      const auto half=arm.width*.5f;button(left(arm,half),number(state.clipPoseRecording.start," s"),w::PoseArmStart);
+      button(arm,number(state.clipPoseRecording.end," s"),w::PoseArmEnd);
+      auto locks=top(sheet,42);label(left(locks,62),"Travas",theme.color.textDim);
+      const auto count=selected->path==resources::AnimationPath::Weights?selected->weightCount:3u;
+      const u32 first=std::min(state.clipPosePage*3,(count-1)/3*3),visible=std::min(3u,count-first);
+      if(count>3) {
+        button(left(locks,42),"<",w::PosePrevious,state.clipPosePage>0);
+        button(left(locks,42),">",w::PoseNext,(state.clipPosePage+1)*3<count);
+      }
+      const auto width=(locks.width-56)/visible;
+      for(u32 i=0;i<visible;++i) {
+        const auto component=first+i;const auto name=selected->path==resources::AnimationPath::Weights?std::to_string(component):std::string(1,"XYZ"[component]);
+        const bool locked=state.clipPoseLocks[static_cast<u32>(selected->path)]&(u64(1)<<component);
+        button(left(locks,width),name,w::PoseLock+component,true,locked,locked?UiIcon::SceneLock:UiIcon::None);
+      }
+      button(locks,"Liberar",w::PoseUnlock);
+      label(top(sheet,40),state.clipPosePending?"Rascunho · Gravar publica; Cancelar descarta":"Travas XYZ locais · intervalo inclui as fronteiras",state.clipPosePending?theme.color.warning:theme.color.textDim);
+    } else if(state.clipPoseToolsPage==1) {
+      button(top(sheet,42),state.clipPoseWorldSpace?"Copiar mundial · TRS completo na Base":"Copiar local · canal atual",w::PoseSpace,true,state.clipPoseWorldSpace);
+      auto clipboard=top(sheet,42);button(left(clipboard,clipboard.width*.5f),"Copiar",w::PoseCopy,true,false,UiIcon::AssetsCopy);
+      button(clipboard,state.clipPoseClipboardWorld?"Colar mundial":"Colar canal",w::PosePaste,state.clipPoseClipboardAvailable,false,UiIcon::AnimationDuplicate);
+      auto reset=top(sheet,42);button(left(reset,reset.width*.5f),"Referência da cena",w::PoseResetReference);
+      button(reset,"Identidade local",w::PoseResetIdentity);
+      label(top(sheet,40),"Reset atua no canal · travas e Auto-key continuam ativos",theme.color.textDim);
+    } else {
+      auto mode=top(sheet,42);label(left(mode,112),std::to_string(state.clipPoseSelection.size())+" alvos",theme.color.text);
+      button(left(mode,88),"Somar",w::PoseSelectAdd,true,state.clipPoseSelectionAdd);
+      button(left(mode,84),"Limpar",w::PoseSelectClear,!state.clipPoseSelection.empty());button(mode,"Todos",w::PoseSelectAll);
+      auto relation=top(sheet,42);const auto width=relation.width/3;
+      button(left(relation,width),"Pais",w::PoseSelectParent,!state.clipPoseSelection.empty());
+      button(left(relation,width),"Filhos",w::PoseSelectChildren,!state.clipPoseSelection.empty());button(relation,"Irmãos",w::PoseSelectSiblings,!state.clipPoseSelection.empty());
+      std::vector<const AnimationPoseSelectionSet*> sets;for(const auto &set:state.clipPoseSets)if(set.clip==state.clipGuid)sets.push_back(&set);
+      const auto page=sets.empty()?0:std::min(state.clipPoseSetPage,static_cast<u32>(sets.size()-1));
+      auto saved=top(sheet,42);button(left(saved,88),"Salvar",w::PoseSetSave,!state.clipPoseSelection.empty(),false,UiIcon::AnimationSelectionSet);
+      button(left(saved,42),"<",w::PoseSetPrevious,page>0);button(left(saved,42),">",w::PoseSetNext,page+1<sets.size());
+      button(saved,sets.empty()?"Sem conjuntos":sets[page]->name,w::PoseSetLoad,!sets.empty());
+      auto final=top(sheet,42);button(left(final,88),"Excluir",w::PoseSetDelete,!sets.empty());
+      button(left(final,96),"Isolar",w::PoseSelectionIsolate,!state.clipPoseSelection.empty(),state.clipPoseSelectionIsolated,UiIcon::EditorAuthorSelect);
+      label(final,"Delta local · pais levam filhos",theme.color.textDim);
+    }
+  }
+  if(state.clipCurveView&&state.clipCurves&&!cues) {
+    UiRect sheet{area.x+8,area.y+4,std::min(430.f,area.width-16),246};
+    list.addRect(sheet,theme.color.surface);list.addBorder(sheet,theme.color.line,1,0);router.addBlocker(sheet);
+    auto title=top(sheet,36);auto close=UiRect{title.right()-42,title.y,42,36};title.width-=42;
+    button(left(title,title.width*.5f),"Vista",w::CurveViewSettings,true,state.clipCurveViewTask==0,UiIcon::AnimationCurve);
+    button(title,"Comparar",w::CurveViewReferences,true,state.clipCurveViewTask==1,UiIcon::AnimationCurveCompare);button(close,"",w::CurveViewClose,true,false,UiIcon::UiClose);
+    const bool pinned=std::any_of(state.clipCurvePins.begin(),state.clipCurvePins.end(),[&](const auto &pin){return pin.track==state.clipTrack&&pin.component==state.clipComponent;});
+    if(state.clipCurveViewTask==1) {
+      auto compare=top(sheet,42);button(left(compare,compare.width*.5f),pinned?"Desafixar ativo":"Fixar ativo",w::CurvePin,curve!=nullptr,pinned,UiIcon::AnimationCurve);
+      button(compare,"Limpar · "+std::to_string(state.clipCurvePins.size()),w::CurveClearPins,!state.clipCurvePins.empty());
+      const usize pages=std::max<usize>(1,(state.clipCurvePins.size()+2)/3),page=std::min<usize>(state.clipCurveReferencePage,pages-1);
+      for(usize i=0;i<3;++i) {
+        auto row=top(sheet,42);const usize index=page*3+i;
+        if(index>=state.clipCurvePins.size()) {if(i==0)label(row,"Fixe canais para comparar · até oito",theme.color.textDim);continue;}
+        const auto &pin=state.clipCurvePins[index];const auto *track=asset->track(pin.track);if(!track)continue;
+        const auto binding=std::find_if(asset->bindings.begin(),asset->bindings.end(),[&](const auto &entry){return entry.id==track->binding;});
+        const auto *layer=asset->layer(track->layer);
+        const std::string text=(layer?layer->name:"")+" · "+(binding==asset->bindings.end()?"?":bindingLabel(*binding))+" · "+pathName(*track)+" "+componentName(*track,pin.component);
+        button(row,text,w::CurveRefChoice+static_cast<u32>(i),true,pin.track==state.clipTrack&&pin.component==state.clipComponent);
+      }
+      auto nav=top(sheet,42);button(left(nav,42),"<",w::CurveRefPrevious,page>0);button(left(nav,42),">",w::CurveRefNext,page+1<pages);
+      label(nav,"Tracejados: referências · toque torna ativo",theme.color.textDim);
+    } else {
+    auto mode=top(sheet,42);button(left(mode,mode.width*.5f),"Normalizar visual",w::CurveNormalize,true,state.clipCurveNormalized,UiIcon::AnimationCurveNormalize);
+    button(mode,"Isolar ativo",w::CurveIsolate,true,state.clipCurveIsolated);
+    auto frame=top(sheet,42);button(left(frame,frame.width*.5f),"Enquadrar canais",w::Frame);
+    button(frame,"Enquadrar seleção",w::CurveFrameSelection,key||!state.clipSelection.empty());
+    auto values=top(sheet,42);const float quarter=values.width/4;
+    button(left(values,quarter),"Valor −",w::CurveValueZoomOut);button(left(values,quarter),"Valor +",w::CurveValueZoomIn);
+    button(left(values,quarter),"Valor ↓",w::CurveValueDown);button(values,"Valor ↑",w::CurveValueUp);
+    auto time=top(sheet,42);const float part=time.width/4;
+    button(left(time,part),"Tempo −",w::ZoomOut);button(left(time,part),"Tempo +",w::ZoomIn);
+    button(left(time,part),"Tempo ←",w::CurveTimeLeft);button(time,"Tempo →",w::CurveTimeRight);
+    auto note=top(sheet,42);label(note,state.clipCurveNormalized?"Eixo n normalizado · valores autorais preservados":"Valores autorais · referências tracejadas",theme.color.textDim);
+    }
   }
   return layout;
 }

@@ -23,6 +23,8 @@
 #include "resources/asset_registry.h"
 #include "resources/skeletal_animation.h"
 #include "runtime/scene_graph.h"
+#include "runtime/animation_property_binding.h"
+#include "runtime/animation_driver_binding.h"
 
 #include <functional>
 #include <memory>
@@ -92,7 +94,7 @@ public:
   };
   // Values are captured before upper-layer attenuation. Rotation sums retain
   // their magnitude: normalizing here would change a partially weighted pose.
-  struct LayerPose {std::vector<PoseChannel> channels;};
+  struct LayerPose {std::vector<PoseChannel> channels;std::vector<AnimationPropertyContribution> properties;};
   std::shared_ptr<const LayerPose> layerPose(ObjectId owner,u64 instance,u32 layer) const;
   // Amostra pronta vinda de outro avaliador (Animator): o clipe no tempo local
   // dado, com peso e camada; `mask` limita os alvos à subárvore daquele objeto.
@@ -112,6 +114,9 @@ public:
   // Valem para o próximo advance e são consumidas por ele.
   void setExternalSamples(std::vector<ExternalSample> samples) { external_ = std::move(samples); }
   const AnimationLibrary *library() const noexcept { return library_; }
+  void setPropertyGuiResolver(AnimationGuiResolver resolver){propertyMixer_.setGuiResolver(std::move(resolver));}
+  void setDriverResolvers(AnimationGuiResolver gui,AnimationDriverParameterResolver parameter={}){driverGui_=std::move(gui);driverParameter_=std::move(parameter);}
+  void setPropertyPublicationObserver(std::function<void(std::span<const AnimationPropertyContribution>)> observer){propertyPublication_=std::move(observer);}
   std::string_view compositionDiagnostic() const noexcept {return compositionDiagnostic_;}
   // Liga ao grafo do Play e à biblioteca. `reset` esquece tudo: o próximo Play
   // parte do zero.
@@ -187,6 +192,10 @@ private:
   std::unordered_map<ObjectId, Rest> rest_;
   std::vector<ExternalSample> external_;
   std::string compositionDiagnostic_;
+  AnimationPropertyMixer propertyMixer_;
+  AnimationGuiResolver driverGui_;
+  AnimationDriverParameterResolver driverParameter_;
+  std::function<void(std::span<const AnimationPropertyContribution>)> propertyPublication_;
   // Alvos resolvidos por (dono, clipe) das amostras externas.
   struct ExternalTargets { ObjectId owner; resources::AssetGuid clip; std::vector<ObjectId> targets; };
   std::vector<ExternalTargets> externalTargets_;

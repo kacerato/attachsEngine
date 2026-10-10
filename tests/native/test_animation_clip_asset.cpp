@@ -1,11 +1,117 @@
 #include "harness.h"
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_clip_bake.h"
+#include "resources/animation_clip_timeline.h"
+#include "resources/animation_clip_arrange.h"
 #include "core/rotation_math.h"
 #include <cmath>
 #include <limits>
 using namespace ae;
 using namespace ae::resources;
+namespace {
+AnimationClipAsset sectionFixture(std::string &error) {
+  AnimationClip input;input.name="Sections";input.duration=4;
+  AnimationChannel channel;channel.times={0,4};channel.values={0,0,0,0,0,0};input.channels={channel};
+  const AnimationClipBinding binding{0,{},"","Mechanism"};AnimationClipAsset asset;
+  authorAnimationClip(input,assetGuidFromSeed("section-fixture"),{},{},{},{&binding,1},asset,error);return asset;
+}
+}
+AE_TEST(animation_clip_regions_identity_migration_roundtrip_and_runtime_section_time) {
+  std::string error;auto asset=sectionFixture(error);AE_EXPECT_TRUE(asset.valid(&error),error.c_str());
+  u64 id=0;AE_EXPECT_TRUE(asset.putRegion({0,"Engate",1,2},id,error),error.c_str());
+  const auto before=asset.serialize();AnimationClipAsset reopened;
+  AE_EXPECT_TRUE(before.starts_with("AECLIP 7 ")&&AnimationClipAsset::deserialize(before,reopened,&error)&&reopened.serialize()==before,"current version persists stable section boundaries and identity");
+  AnimationClip runtime;AE_EXPECT_TRUE(reopened.compile(runtime,&error)&&runtime.regions.size()==1,"compiled runtime contains the same section");
+  float time=-1;
+  AE_EXPECT_TRUE(animationRegionTime(runtime.regions[0],1.25,AnimationWrapMode::Loop,time)&&time==1.25f,"loop uses section-relative clock");
+  AE_EXPECT_TRUE(animationRegionTime(runtime.regions[0],-.25,AnimationWrapMode::Loop,time)&&time==1.75f,"negative clock wraps inside the section");
+  AE_EXPECT_TRUE(animationRegionTime(runtime.regions[0],1.25,AnimationWrapMode::PingPong,time)&&time==1.75f,"return leg samples the real section");
+  AE_EXPECT_TRUE(animationRegionTime(runtime.regions[0],2,AnimationWrapMode::Once,time)&&time==2,"once exposes terminal pose");
+  time=12;AE_EXPECT_TRUE(!animationRegionTime(runtime.regions[0],std::numeric_limits<double>::infinity(),AnimationWrapMode::Loop,time)&&time==12,"invalid clock preserves output");
+  auto invalid=*asset.region(id);invalid.end=invalid.start;u64 result=99;
+  AE_EXPECT_TRUE(!asset.putRegion(invalid,result,error)&&asset.serialize()==before&&result==99,"zero-length section refuses atomically");
+  AE_EXPECT_TRUE(!asset.edit(asset.revision,[&](auto &candidate){candidate.regions[0].id=candidate.tracks[0].curves[0].keys[0].id;return true;},error)&&asset.serialize()==before,"region cannot borrow a key identity");
+  AE_EXPECT_TRUE(asset.removeRegion(id,error),error.c_str());
+  const auto frontier=asset.nextId;
+  AE_EXPECT_TRUE(!asset.edit(asset.revision,[&](auto &candidate){candidate.regions.push_back({id,"Retired",0,1});return true;},error)&&asset.nextId==frontier,"retired identity cannot return outside history");
+  auto legacy=asset.serialize();legacy.replace(0,8,"AECLIP 4");legacy.resize(legacy.size()-11);
+  AE_EXPECT_TRUE(AnimationClipAsset::deserialize(legacy,reopened,&error)&&reopened.regions.empty(),"version four migrates with no invented regions");
+}
+AE_TEST(animation_clip_typed_properties_roundtrip_discrete_identity_and_temporal_integrity) {
+  std::string error;auto clip=sectionFixture(error);std::vector<u64> authored;
+  for(u32 index=0;index<9;++index) {
+    const auto kind=static_cast<AnimationPropertyKind>(index);AnimationPropertyData data;data.kind=kind;
+    const auto dimensions=animationPropertyComponents(kind);
+    if(dimensions) {
+      data.curves.resize(dimensions);
+      for(u32 c=0;c<dimensions;++c) {
+        AnimationCurveKey first,last;first.incoming=first.outgoing=last.incoming=last.outgoing=AnimationTangentMode::Linear;
+        first.value=kind==AnimationPropertyKind::Quaternion?(c==3?1.f:0.f):float(c);
+        last.time=4;last.value=kind==AnimationPropertyKind::Quaternion?(c==1?.70710678f:c==3?.70710678f:0.f):float(c+4);
+        data.curves[c].keys={first,last};
+      }
+    } else {
+      AnimationPropertyValue first=false,last=true;
+      if(kind==AnimationPropertyKind::Enumeration){first=u32(0);last=u32(4294967295u);}
+      if(kind==AnimationPropertyKind::Object){first=AnimationPropertyObject{0};last=AnimationPropertyObject{18446744073709551487ull};}
+      if(kind==AnimationPropertyKind::Resource){first=AssetGuid{};last=AssetGuid{18446744073709551487ull,18446744073709551491ull};}
+      data.keys={{0,0,first},{0,1,last}};
+    }
+    AnimationPropertyAddress address;address.component=1;address.version=3;address.type="astra.render.light";
+    address.kind=kind;address.property="contract"+std::to_string(index);u64 id=0;
+    AE_EXPECT_TRUE(clip.addPropertyTrack(clip.bindings[0],address,data,id,error),error.c_str());authored.push_back(id);
+  }
+  const auto encoded=clip.serialize();AnimationClipAsset cold;AnimationClip compiled;
+  AE_EXPECT_TRUE(AnimationClipAsset::deserialize(encoded,cold,&error)&&cold.serialize()==encoded&&cold.compile(compiled,&error)&&compiled.properties.size()==9,error.c_str());
+  AnimationPropertyValue object,resource;
+  AE_EXPECT_TRUE(compiled.properties[7].data.sample(2,object)&&std::get<AnimationPropertyObject>(object).id==18446744073709551487ull,"64-bit object identity never passes through float");
+  AE_EXPECT_TRUE(compiled.properties[8].data.sample(2,resource)&&std::get<AssetGuid>(resource)==AssetGuid(18446744073709551487ull,18446744073709551491ull),"both resource identity words survive cold load");
+  auto reversed=cold;AE_EXPECT_TRUE(reversed.reverse(error)&&reversed.compile(compiled,&error),error.c_str());
+  CompiledAnimationProperty original;AE_EXPECT_TRUE(compileAnimationProperty(cold.properties[5].data,4,original,error),error.c_str());
+  for(const float time:{0.f,.25f,2.9f,3.f,3.1f,4.f}) {
+    AnimationPropertyValue a,b;AE_EXPECT_TRUE(original.sample(4-time,a)&&compiled.properties[5].data.sample(time,b)&&animationPropertyValuesNear(a,b,0),"reverse preserves the discrete boundary and both holding intervals");
+  }
+  AE_EXPECT_TRUE(reversed.reverse(error)&&reversed.compile(compiled,&error),error.c_str());
+  for(u32 index=0;index<9;++index) {
+    AE_EXPECT_TRUE(compileAnimationProperty(cold.properties[index].data,4,original,error),error.c_str());
+    AE_EXPECT_EQ(reversed.properties[index].id,cold.properties[index].id,"double reverse preserves typed track identity");
+    AE_EXPECT_EQ(reversed.properties[index].data.leftContinuous,cold.properties[index].data.leftContinuous,"double reverse recovers discrete continuity");
+    for(const float time:{0.f,.25f,1.f,2.75f,4.f}) {
+      AnimationPropertyValue a,b;AE_EXPECT_TRUE(original.sample(time,a)&&compiled.properties[index].data.sample(time,b)&&animationPropertyValuesNear(a,b,index==4?.05:1e-5),"double reverse recovers typed samples");
+    }
+  }
+  auto cropped=cold;AE_EXPECT_TRUE(cropped.crop(.75f,3.5f,error)&&cropped.compile(compiled,&error),error.c_str());
+  for(u32 index=0;index<9;++index) {
+    AE_EXPECT_TRUE(compileAnimationProperty(cold.properties[index].data,4,original,error),error.c_str());
+    for(const float time:{0.f,.1f,1.f,2.75f}) {
+      AnimationPropertyValue a,b;AE_EXPECT_TRUE(original.sample(time+.75f,a)&&compiled.properties[index].data.sample(time,b)&&animationPropertyValuesNear(a,b,index==4?.05:1e-5),"crop preserves continuous, quaternion and discrete samples");
+    }
+  }
+  auto timeline=cold;auto rippleExpected=cold;
+  // A temporal edit deliberately detaches imported TRS from its source.
+  for(auto &track:rippleExpected.tracks)track.sourceOverride=true;
+  AE_EXPECT_TRUE(insertAnimationTime(timeline,1,.5f,error)&&removeAnimationTime(timeline,1,1.5f,error)&&timeline.serialize()==rippleExpected.serialize(),"whole-clip ripple preserves every typed track and marks edited source overrides");
+  const auto before=timeline.serialize();
+  AE_EXPECT_TRUE(!timeline.putPropertyValue(authored[5],2,AssetGuid{1,2},error)&&timeline.serialize()==before,"type mismatch rejects the whole authoring transaction");
+  AE_EXPECT_TRUE(!timeline.edit(timeline.revision,[&](auto &value){value.properties[0].id=value.tracks[0].id;return true;},error)&&timeline.serialize()==before,"typed tracks share allocator identities with pose tracks");
+  AE_EXPECT_TRUE(timeline.removeTrack(timeline.tracks[0].id,error)&&timeline.tracks.empty()&&timeline.valid(&error),"a property-only clip needs no dummy transform channel");
+  AE_EXPECT_TRUE(AnimationClipAsset::deserialize(timeline.serialize(),cold,&error)&&cold.compile(compiled,&error)&&compiled.channels.empty()&&compiled.properties.size()==9,"property-only clip survives cold publication");
+}
+AE_TEST(animation_clip_regions_follow_ripple_crop_repeat_and_refuse_partial_moves) {
+  std::string error;auto base=sectionFixture(error);u64 id=0;
+  AE_EXPECT_TRUE(base.putRegion({0,"Ciclo",1,2},id,error),error.c_str());
+  auto clip=base;AE_EXPECT_TRUE(insertAnimationTime(clip,2,.5f,error)&&clip.region(id)->end==2,"insertion exactly at exclusive end leaves region intact");
+  clip=base;AE_EXPECT_TRUE(insertAnimationTime(clip,1.5f,.5f,error)&&clip.region(id)->start==1&&clip.region(id)->end==2.5f,"interior insertion extends section");
+  AE_EXPECT_TRUE(removeAnimationTime(clip,1.25f,2,error)&&clip.region(id)->start==1&&clip.region(id)->end==1.75f,"removal compresses intersected boundaries");
+  clip=base;AE_EXPECT_TRUE(clip.crop(1.5f,3,error)&&clip.region(id)->start==0&&clip.region(id)->end==.5f,"crop retains nonempty intersection with same identity");
+  clip=base;AE_EXPECT_TRUE(clip.retime(2,error)&&clip.region(id)->start==2&&clip.region(id)->end==4&&clip.reverse(error)&&clip.region(id)->start==4&&clip.region(id)->end==6,"retime and reverse transform both frontiers");
+  clip=base;const auto before=clip.serialize();
+  AE_EXPECT_TRUE(!moveAnimationRange(clip,1.25f,2.25f,2,error)&&clip.serialize()==before,"partial move cannot tear a section in half");
+  AE_EXPECT_TRUE(moveAnimationRange(clip,1,2,2,error)&&clip.region(id)->start==2&&clip.region(id)->end==3,"whole section moves with selected interval");
+  clip=base;AE_EXPECT_TRUE(duplicateAnimationRange(clip,1,2,3,error)&&clip.regions.size()==2&&clip.regions.back().start==3&&clip.regions.back().end==4&&clip.regions.back().id!=id,"duplicate assigns fresh section identity without copying the separation frame");
+  clip=base;AE_EXPECT_TRUE(repeatAnimationRange(clip,1,2,2,0,error)&&clip.regions.size()==3&&clip.region(id)->end==2&&clip.regions[1].start==2&&clip.regions[2].start==3,"repeat clones contiguous sections with original end unchanged");
+  clip=base;AE_EXPECT_TRUE(removeAnimationTime(clip,1,2,error)&&clip.regions.empty(),"fully removed region disappears instead of becoming zero-length");
+}
 AE_TEST(animation_euler_near_selects_equivalent_branches_and_gimbal_freedom) {
   const float poses[][3]{{20,89,35},{20,90,35},{20,91,35},{20,-90,35},{380,450,395},{170,135,-155}};
   for(const auto &angles:poses) {
@@ -421,7 +527,8 @@ AE_TEST(animation_clip_progressive_flat_and_tiny_rotations_do_not_gain_fictitiou
 }
 AE_TEST(animation_clip_mode_migration_and_group_subdivision_preserve_motion_and_key_ids) {
   auto quaternion=rotationFixture();std::string error;const auto &track=quaternion.tracks[0];
-  auto legacy=quaternion.serialize();legacy.resize(legacy.size()-2);legacy.replace(0,8,"AECLIP 1");
+  // AECLIP 1 has no cue, region or typed-property tail.
+  auto legacy=quaternion.serialize();legacy.resize(legacy.size()-13);legacy.replace(0,8,"AECLIP 1");
   const std::string prefix=std::to_string(track.id)+" "+std::to_string(track.binding)+" 1 0 0 ";
   const std::string layerSection="1\n0 \"Base\" 0 1 -1 0 0\n";
   const auto layersAt=legacy.find(layerSection);AE_EXPECT_TRUE(layersAt!=std::string::npos,"versioned layer fixture");legacy.erase(layersAt,layerSection.size());

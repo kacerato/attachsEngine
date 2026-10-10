@@ -82,6 +82,7 @@ public:
   bool advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,std::vector<SceneAnimator::ExternalSample> &samples);
 
   Status parameter(GameWorld &world,ObjectId owner,u64 instance,std::string_view name,ParameterOperation operation,float value,float &result);
+  Status parameterById(GameWorld &world,ObjectId owner,u64 instance,u64 id,resources::AssetGuid controller,float &result);
   Status play(GameWorld &world,ObjectId owner,u64 instance,u32 layer,std::string_view state,float crossFade);
   Status info(const GameWorld &world,ObjectId owner,u64 instance,u32 layer,Info &out) const;
   const Instance *find(ObjectId owner,u64 instance) const;

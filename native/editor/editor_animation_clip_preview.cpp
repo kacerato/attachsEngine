@@ -2,11 +2,46 @@
 #include "scene/animation.h"
 #include "scene/skinned_mesh.h"
 #include "core/rotation_math.h"
+#include "runtime/scene_gui.h"
+#include "ui/gui_world.h"
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
 
 namespace ae::editor {
+bool AnimationClipPreview::readProperty(runtime::ObjectId object,const resources::AnimationPropertyAddress &address,
+    resources::AnimationPropertyValue &out,std::string &error) {
+  if(!active()){error="Preview de propriedades inativo";return false;}
+  if(address.domain==resources::AnimationPropertyDomain::GuiNode&&!gui_.contains({object,address.component})) {
+    ui::GuiDocument document;
+    if(!guiLoader_||!guiLoader_(address.resource,document,error))return false;
+    auto instance=std::make_unique<ui::GuiRuntime>();instance->load(document,false);
+    gui_.emplace(std::pair{object,address.component},std::move(instance));
+  }
+  const runtime::AnimationGuiResolver resolver=[this](auto id,auto component,auto)->ui::GuiRuntime* {
+    const auto found=gui_.find({id,component});return found==gui_.end()?nullptr:found->second.get();
+  };
+  return runtime::readAnimationPropertyTarget(scene_,object,address,resolver,out,error);
+}
+void AnimationClipPreview::drawGui(ui::UiDrawList &out,const ui::UiFontMetrics &metrics,
+    const renderer::PerspectiveFrustum &camera,const ui::UiRect &viewport,const ui::UiRect &surface) {
+  for(auto &[key,instance]:gui_) {
+    const auto *object=scene_.find(key.first);
+    const auto *value=object?object->components.findInstance(key.second):nullptr;
+    if(!value||&value->type()!=&scene::UiCanvas::descriptor||!scene_.activeInHierarchy(key.first))continue;
+    const auto &component=static_cast<const scene::UiCanvas&>(*value);if(!component.enabled)continue;
+    const auto canvas=runtime::uiCanvasPresentation(component);
+    if(canvas.mode==ui::GuiCanvasMode::Screen) {
+      instance->layout(viewport);out.pushClip(viewport);instance->draw(out);out.popClip();
+    } else {
+      float host[16];ui::GuiWorldFrame frame;
+      if(!runtime::worldMatrix(scene_,key.first,host)||!frame.configure(canvas,camera,viewport,surface,host))continue;
+      instance->layout({0,0,canvas.resolution.x,canvas.resolution.y});
+      ui::UiDrawList projected;projected.begin({0,0,canvas.resolution.x,canvas.resolution.y},metrics);
+      instance->draw(projected);projected.projectRange(0,frame.projection(),canvas.occlusion,viewport);out.append(projected);
+    }
+  }
+}
 std::vector<runtime::ObjectId> animationPreviewJoints(const runtime::SceneGraph &scene,runtime::ObjectId owner) {
   std::vector<runtime::ObjectId> nodes,result;scene.collectSubtree(owner,nodes);
   std::unordered_set<runtime::ObjectId> seen;
@@ -34,6 +69,30 @@ bool AnimationClipPreview::begin(const runtime::SceneGraph &scene,runtime::Objec
   source.clips.push_back(std::move(evaluated));source.clipIds.push_back(clip.guid);
   for(const auto &b:clip.bindings) {source.nodes.push_back(b.sourceNode);source.nodeNames.push_back(b.name);source.nodePaths.push_back(b.path);}
   std::vector<runtime::ObjectId> targets;runtime::resolveAnimationTargets(scene,owner,source,targets);
+  std::map<std::pair<runtime::ObjectId,u64>,std::unique_ptr<ui::GuiRuntime>> preparedGui;
+  std::vector<resources::CompiledAnimationDriverTarget> propertyTargets;
+  for(const auto &property:source.clips.front().properties)propertyTargets.push_back({property.node,property.address});
+  if(source.clips.front().drivers) {
+    for(const auto &input:source.clips.front().drivers->inputs)if(input.kind==resources::AnimationDriverInputKind::Property)propertyTargets.push_back({input.node,input.address});
+    for(const auto &output:source.clips.front().drivers->targets)propertyTargets.push_back(output);
+  }
+  for(const auto &channel:propertyTargets) {
+    if(channel.node>=targets.size()||!targets[channel.node]) {error="Binding de propriedade ausente no preview: "+channel.address.property;return false;}
+    const auto target=targets[channel.node];const auto &address=channel.address;
+    if(address.domain==resources::AnimationPropertyDomain::GuiNode) {
+      const auto key=std::pair{target,address.component};
+      if(!preparedGui.contains(key)) {
+        ui::GuiDocument document;
+        if(!guiLoader_||!guiLoader_(address.resource,document,error)) {if(error.empty())error="Documento UI indisponível no preview";return false;}
+        auto runtime=std::make_unique<ui::GuiRuntime>();runtime->load(document,false);preparedGui.emplace(key,std::move(runtime));
+      }
+    }
+    resources::AnimationPropertyValue value;
+    const runtime::AnimationGuiResolver resolver=[&](runtime::ObjectId id,u64 component,resources::AssetGuid)->ui::GuiRuntime* {
+      const auto found=preparedGui.find({id,component});return found==preparedGui.end()?nullptr:found->second.get();
+    };
+    if(!runtime::readAnimationPropertyTarget(scene,target,address,resolver,value,error))return false;
+  }
   for(const auto &channel:source.clips.front().channels) {
     if(channel.node>=targets.size()||!targets[channel.node]) {
       error="Binding ausente ou ambíguo no preview: "+(channel.node<source.nodePaths.size()?source.nodePaths[channel.node]:std::to_string(channel.node));return false;
@@ -51,6 +110,13 @@ bool AnimationClipPreview::begin(const runtime::SceneGraph &scene,runtime::Objec
       static_cast<scene::Animation*>(components->editInstance(value->instanceId()))->playAutomatically=false;
   sampler_.reset();scene_=std::move(posed);source_=std::move(source);owner_=owner;
   sceneRevision_=scene.revision();clipRevision_=clip.revision;time_=0;sampler_.begin(scene_,*this);
+  gui_=std::move(preparedGui);
+  sampler_.setPropertyGuiResolver([this](runtime::ObjectId object,u64 component,resources::AssetGuid)->ui::GuiRuntime* {
+    const auto found=gui_.find({object,component});return found==gui_.end()?nullptr:found->second.get();
+  });
+  sampler_.setDriverResolvers([this](runtime::ObjectId object,u64 component,resources::AssetGuid)->ui::GuiRuntime* {
+    const auto found=gui_.find({object,component});return found==gui_.end()?nullptr:found->second.get();
+  },driverParameter_);
   return true;
 }
 bool AnimationClipPreview::seek(float seconds,std::string &error) {
@@ -92,6 +158,9 @@ bool AnimationClipPreview::overridePose(runtime::ObjectId target,resources::Anim
   return true;
 }
 void AnimationClipPreview::cancel() {
-  sampler_.reset();scene_.reset();source_={};owner_=runtime::kInvalidObject;time_=0;sceneRevision_=0;clipRevision_=0;
+  sampler_.reset();scene_.reset();source_={};gui_.clear();owner_=runtime::kInvalidObject;time_=0;sceneRevision_=0;clipRevision_=0;
+}
+const ui::GuiDocument *AnimationClipPreview::guiDocument(runtime::ObjectId object,u64 component) const {
+  const auto found=gui_.find({object,component});return found==gui_.end()?nullptr:&found->second->document();
 }
 } // namespace ae::editor

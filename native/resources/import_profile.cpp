@@ -47,6 +47,8 @@ bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept 
          a.textureCompression == b.textureCompression && a.textureStreaming == b.textureStreaming &&
          a.textureStreamingPriority == b.textureStreamingPriority && a.generateLods == b.generateLods &&
          a.maximumLodLevels == b.maximumLodLevels && a.optimizePolygonOrder == b.optimizePolygonOrder &&
+         a.fbxDeformation==b.fbxDeformation&&a.fbxReduceWeights==b.fbxReduceWeights&&
+         a.fbxApproximateSteps==b.fbxApproximateSteps&&a.fbxBakeRate==b.fbxBakeRate&&
          sameExcludedNodes(a, b) && sameCollisionMeshes(a, b);
 }
 
@@ -76,6 +78,7 @@ bool validImportProfile(const ImportProfile &profile) noexcept {
          profile.tangents <= GltfTangentsCalculate && validTextureCompression(profile.textureCompression) &&
          profile.textureStreamingPriority >= -128 && profile.textureStreamingPriority <= 127 &&
          profile.maximumLodLevels >= 2 && profile.maximumLodLevels <= 4 &&
+         (profile.fbxBakeRate==30||profile.fbxBakeRate==60)&&
          profile.excludedNodes.size() <= 65536 &&
          profile.collisionMeshes.size() <= 65536 && collisionRecipesValid;
 }
@@ -96,7 +99,11 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"textureStreamingPriority\":" + std::to_string(profile.textureStreamingPriority) +
          ",\"generateLods\":" + (profile.generateLods ? "true" : "false") +
          ",\"maximumLodLevels\":" + std::to_string(profile.maximumLodLevels) +
-         ",\"optimizePolygonOrder\":" + (profile.optimizePolygonOrder ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
+         ",\"optimizePolygonOrder\":" + (profile.optimizePolygonOrder ? "true" : "false") +
+         ",\"fbxDeformation\":"+(profile.fbxDeformation?"true":"false")+
+         ",\"fbxReduceWeights\":"+(profile.fbxReduceWeights?"true":"false")+
+         ",\"fbxApproximateSteps\":"+(profile.fbxApproximateSteps?"true":"false")+
+         ",\"fbxBakeRate\":"+std::to_string(profile.fbxBakeRate)+",\"excludedNodes\":[" + [&] {
            std::string list;
            for (const auto &node : profile.excludedNodes) {
              if (!list.empty()) list += ',';
@@ -134,6 +141,7 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
   const auto dimension = document.index(root, "maximumTextureDimension");
   if (!scale || scale->kind != JsonDocument::Kind::Number || dimension < 0) return false;
   ImportProfile parsed;
+  parsed.fbxDeformation=false;
   parsed.scale = static_cast<float>(scale->number);
   parsed.maximumTextureDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
   // Dentro do schema DECLARADO, campo ausente é recusa, não padrão silencioso:
@@ -187,6 +195,15 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     parsed.generateLods = lods->boolean;
     parsed.optimizePolygonOrder = order->boolean;
     parsed.maximumLodLevels = static_cast<u8>(levels);
+  }
+  if(schema>=12) {
+    const auto *deformation=document.member(root,"fbxDeformation"),*weights=document.member(root,"fbxReduceWeights"),
+        *steps=document.member(root,"fbxApproximateSteps");
+    const auto rate=document.index(root,"fbxBakeRate");
+    if(!deformation||!weights||!steps||deformation->kind!=JsonDocument::Kind::Boolean||
+        weights->kind!=JsonDocument::Kind::Boolean||steps->kind!=JsonDocument::Kind::Boolean||(rate!=30&&rate!=60))return false;
+    parsed.fbxDeformation=deformation->boolean;parsed.fbxReduceWeights=weights->boolean;
+    parsed.fbxApproximateSteps=steps->boolean;parsed.fbxBakeRate=static_cast<u8>(rate);
   }
   if (schema >= 4) {
     const auto *excluded = document.member(root, "excludedNodes");
@@ -243,6 +260,8 @@ GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile
   limits.generateLods = profile.generateLods;
   limits.optimizePolygonOrder = profile.optimizePolygonOrder;
   limits.maximumLodLevels = profile.maximumLodLevels;
+  limits.fbxDeformation=profile.fbxDeformation;limits.fbxReduceWeights=profile.fbxReduceWeights;
+  limits.fbxApproximateSteps=profile.fbxApproximateSteps;limits.fbxBakeRate=profile.fbxBakeRate;
   limits.normals = profile.normals;
   limits.normalWeighting = profile.normalWeighting;
   limits.smoothingAngle = static_cast<float>(profile.smoothingAngle);

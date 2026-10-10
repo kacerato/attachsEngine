@@ -1934,6 +1934,125 @@
       "dark_ui_ready": true,
       "generation": "animation-cues-v1",
       "source": "tools/generate-animation-cue-icons.py; Astra mark primitives"
+    },
+    "animation/interval": {
+      "category": "animation",
+      "name": "interval",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "animation/cue-group": {
+      "category": "animation",
+      "name": "cue-group",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "materials/object-preview": {
+      "category": "materials",
+      "name": "object-preview",
+      "dark_ui_ready": true,
+      "generation": "material-preview-v1",
+      "source": "tools/generate-material-preview-icon.py; Astra mark primitives"
+    },
+    "animation/pose-tools": {
+      "category": "animation",
+      "name": "pose-tools",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "animation/selection-set": {
+      "category": "animation",
+      "name": "selection-set",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "assets/source-package": {
+      "category": "assets",
+      "name": "source-package",
+      "dark_ui_ready": true,
+      "generation": "source-package-v1",
+      "source": "tools/generate-source-package-icon.py; Astra mark primitives"
+    },
+    "animation/cycle": {
+      "category": "animation",
+      "name": "cycle",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "animation/arrange": {
+      "category": "animation",
+      "name": "arrange",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "animation/curve-compare": {
+      "category": "animation",
+      "name": "curve-compare",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "animation/curve-normalize": {
+      "category": "animation",
+      "name": "curve-normalize",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "animation/region": {
+      "category": "animation",
+      "name": "region",
+      "dark_ui_ready": true,
+      "generation": "animation-timeline-v1",
+      "source": "tools/generate-animation-timeline-icons.py; Astra mark primitives"
+    },
+    "ui/opacity": {
+      "category": "ui",
+      "name": "opacity",
+      "dark_ui_ready": true,
+      "generation": "gui-behavior-v1",
+      "source": "tools/generate-gui-behavior-icons.py; existing solid mark primitives"
+    },
+    "textures/source-policy": {
+      "category": "textures",
+      "name": "source-policy",
+      "dark_ui_ready": true,
+      "generation": "texture-source-policy-v1",
+      "source": "tools/generate-texture-source-policy-icon.py; Astra mark primitives"
+    },
+    "assets/rig-binding": {
+      "category": "assets",
+      "name": "rig-binding",
+      "dark_ui_ready": true,
+      "generation": "rig-binding-v1",
+      "source": "tools/generate-rig-binding-icon.py; Astra mark primitives"
+    },
+    "animation/property": {
+      "category": "animation",
+      "name": "property",
+      "dark_ui_ready": true,
+      "generation": "typed-properties-drivers-v1",
+      "source": "tools/generate-animation-property-icons.py; Astra mark primitives"
+    },
+    "animation/driver": {
+      "category": "animation",
+      "name": "driver",
+      "dark_ui_ready": true,
+      "generation": "typed-properties-drivers-v1",
+      "source": "tools/generate-animation-property-icons.py; Astra mark primitives"
+    },
+    "assets/source-conflict": {
+      "category": "assets",
+      "name": "source-conflict",
+      "dark_ui_ready": true,
+      "generation": "source-conflict-v1",
+      "source": "tools/generate-source-conflict-icon.py; Astra mark primitives"
     }
   },
   "unmapped": []

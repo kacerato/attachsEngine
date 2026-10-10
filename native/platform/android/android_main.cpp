@@ -4,8 +4,10 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cctype>
+#include <set>
 #include "resources/gltf_package.h"
 #include "resources/gltf_folder_source.h"
+#include "resources/model_import.h"
 #include "resources/import_cache.h"
 #include "resources/environment_map_asset.h"
 #include "resources/texture_asset.h"
@@ -223,6 +225,12 @@ struct AndroidShell final {
   // The cancellation token outlives its worker, including shell teardown.
   std::shared_ptr<std::atomic<bool>> importCancellation;
   std::future<PreparedModel> importWork;
+  struct PreparedPackage {
+    ae::editor::PreparedLibraryPackage value;
+    ae::u64 epoch=0;
+    std::shared_ptr<PreparedModel::Staging> staging;
+  };
+  std::future<PreparedPackage> packageWork;
   std::optional<PreparedModel> importPreview;
   struct PreparedEnvironment {
     bool batch=false;std::vector<ae::editor::EditorSession::PreparedEnvironmentEdit> edits;
@@ -988,7 +996,7 @@ bool startProjectReopen(AndroidShell &shell) {
         const auto folder=Transaction::fromUtf8(root+"/"+source).parent_path();
         if(folderSource ? !ae::resources::importGltfFolder(bytes,folder,ae::resources::GltfFolderMaximumFileBytes,limits,watch,
                                                             reopened.model,packed)
-                        : !ae::resources::importGlb(bytes,limits,watch,reopened.model)) {
+                        : !ae::resources::importModelSource(bytes,limits,watch,reopened.model)) {
           result.refused.emplace_back(source,reopened.model.diagnostic);
           std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
           continue;
@@ -2915,7 +2923,7 @@ void android_main(android_app *app) {
           session.setImportStatus("Importação cancelada; projeto preservado.");
         }
         const auto launchImport=[&](ae::platform::android::ModelPickerResult picked,std::string path) {
-          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
+          if(shell.packageWork.valid()||shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
             {session.setImportStatus("Finalize a importação em andamento.");return;}
           if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
           session.beginImportPreparation(path);
@@ -2975,7 +2983,7 @@ void android_main(android_app *app) {
               ae::resources::GltfImportProgress progress{};
               progress.context=cancel.get();
               progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
-              result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
+              result.accepted=ae::resources::importModelSource(result.bytes,limits,progress,result.model);
               result.measure();
               // Hash no worker: a revisão compara com o mapa publicado sem
               // percorrer dezenas de MiB na thread do editor.
@@ -2990,8 +2998,59 @@ void android_main(android_app *app) {
         // referencia são copiados do seletor para o preparo do projeto (só eles),
         // e o importador lê do preparo: buffers para o GLB de trabalho, imagens
         // uma a uma. A publicação move o preparo para `Fontes/<pasta>/`.
+        const auto launchPackageImport=[&](ae::platform::android::ModelPickerResult picked) {
+          session.beginImportPreparation("Pacote de biblioteca");
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          shell.folderCopyToken=std::make_shared<std::atomic<ae::u64>>(0);
+          const auto cancel=shell.importCancellation;const auto copyToken=shell.folderCopyToken;
+          const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
+          shell.packageWork=std::async(std::launch::async,[picked=std::move(picked),root,epoch,cancel,copyToken]() mutable {
+            using Transaction=ae::editor::EditorImportTransaction;AndroidShell::PreparedPackage result;result.epoch=epoch;
+            result.value.project=root;
+            const auto fail=[&](std::string message){result.value.diagnostic=std::move(message);return std::move(result);};
+            if(picked.folderFiles.empty()||picked.folderFiles.size()>Transaction::MaximumCompanions)return fail("Escolha uma pasta com até 4096 arquivos.");
+            const std::string relative=".astra/import-staging/library-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            std::filesystem::path staging;std::error_code error;
+            if(!Transaction::safePath(Transaction::fromUtf8(root),relative,staging))return fail("Preparo fora do projeto.");
+            std::filesystem::create_directories(staging,error);if(error)return fail("Não foi possível criar o preparo do pacote.");
+            result.staging=std::make_shared<AndroidShell::PreparedModel::Staging>();result.staging->directory=staging;
+            ae::platform::android::FolderCopyRequest copy;copy.destination=staging.string();
+            std::set<std::string> unique;
+            for(const auto &file:picked.folderFiles) {
+              std::filesystem::path path;
+              if(!Transaction::safePath(staging,file.relative,path)||file.relative.find_first_of("\\:\r\n\t")!=file.relative.npos||
+                 file.relative.starts_with(".astra/")||!unique.insert(file.relative).second)return fail("Caminho inválido ou duplicado no pacote.");
+              copy.sources.push_back(file.relative);copy.targets.push_back(file.relative);
+              if(file.bytes>0)copy.totalBytes+=static_cast<ae::u64>(file.bytes);
+            }
+            const auto token=ae::platform::android::requestFolderCopy(copy,result.staging);copyToken->store(token);
+            if(!token)return fail("A cópia anterior ainda está fechando os arquivos; tente novamente.");
+            ae::platform::android::FolderCopyState state;
+            for(;;) {
+              if(cancel->load()) {
+                ae::platform::android::cancelFolderCopy(token);copyToken->store(0);
+                return fail("Importação do pacote cancelada.");
+              }
+              if(!ae::platform::android::folderCopyState(token,state))return fail("Cópia do pacote substituída.");
+              if(state.finished)break;
+              std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            copyToken->store(0);
+            if(cancel->load()||state.cancelled)return fail("Importação do pacote cancelada.");
+            if(!state.diagnostic.empty())return fail(state.diagnostic);
+            if(state.sha256.size()!=picked.folderFiles.size())return fail("Cópia terminou sem todos os hashes de origem.");
+            std::vector<ae::editor::LibrarySourceFile> files;
+            for(ae::usize i=0;i<picked.folderFiles.size();++i) {
+              std::filesystem::path path;if(!Transaction::safePath(staging,picked.folderFiles[i].relative,path))return fail("Fonte fora do preparo.");
+              const auto size=std::filesystem::file_size(path,error);if(error)return fail("Fonte copiada ausente.");
+              files.push_back({picked.folderFiles[i].relative,state.sha256[i],size});
+            }
+            result.value=ae::editor::prepareLibraryPackage(root,relative,picked.folderName,std::move(files),[cancel](){return cancel->load();});
+            return result;
+          });
+        };
         const auto launchFolderImport=[&](ae::platform::android::ModelPickerResult picked) {
-          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
+          if(shell.packageWork.valid()||shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
             {session.setImportStatus("Finalize a importação em andamento.");return;}
           if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
           session.beginImportPreparation();
@@ -3091,7 +3150,7 @@ void android_main(android_app *app) {
         };
         const auto launchEnvironmentImport=[&](ae::platform::android::ModelPickerResult picked,std::string path,
                                                ae::resources::EnvironmentMapImportSettings settings) {
-          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview) {
+          if(shell.packageWork.valid()||shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview) {
             session.setImportStatus("Finalize a importação em andamento.");return;
           }
           if(shell.projectReopening){session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
@@ -3121,7 +3180,7 @@ void android_main(android_app *app) {
         };
         const auto launchTextureImport=[&](ae::platform::android::ModelPickerResult picked,std::string path,
                                            ae::resources::TextureProfile settings) {
-          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||
+          if(shell.packageWork.valid()||shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||
              shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview) {
             session.setImportStatus("Finalize a importação em andamento.");return;
           }
@@ -3158,11 +3217,16 @@ void android_main(android_app *app) {
         const bool pickerResultReady=ae::platform::android::takeModelPickResult(picked);
         const auto importSlotAvailable=[&] {
           return !pickerResultReady&&!shell.projectReopening&&!ae::platform::android::modelPickPending()&&
-                 !shell.importWork.valid()&&!shell.environmentImportWork.valid()&&!shell.textureImportWork.valid()&&
+                 !shell.packageWork.valid()&&!shell.importWork.valid()&&!shell.environmentImportWork.valid()&&!shell.textureImportWork.valid()&&
                  !shell.importPreview&&!shell.environmentImportPreview&&!shell.textureImportPreview;
         };
         if(auto link=session.consumeExternalLink();!link.empty()) ae::platform::android::requestExternalLink(std::move(link));
         bool importRequestTaken=false;
+        if(importSlotAvailable()&&session.consumeLibraryImportRequest()) {
+          importRequestTaken=true;shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+          shell.environmentImportPicker=false;shell.textureImportPicker=false;shell.waveImportPicker=false;
+          session.beginImportPreparation("Pacote de biblioteca");ae::platform::android::requestFolderPick(true);
+        }
         if(importSlotAvailable()&&session.consumeWaveImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
@@ -3199,9 +3263,9 @@ void android_main(android_app *app) {
         if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeTextureReimportPath();!path.empty()) {
           importRequestTaken=true;
           const auto *record=session.assets().findByPath(path);
-          if(!record||record->type!=ae::resources::AssetType::Texture)
-            session.showImportFailure("A textura não está registrada no projeto.");
-          else launchTextureImport({},std::move(path),session.textureProfileFor(record->guid));
+          if(record&&record->type!=ae::resources::AssetType::Texture)
+            session.showImportFailure("O destino pertence a outro tipo de recurso.");
+          else launchTextureImport({},std::move(path),record?session.textureProfileFor(record->guid):ae::resources::TextureProfile{});
         }
         if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeReimportPath();!path.empty()) {
           importRequestTaken=true;
@@ -3272,6 +3336,8 @@ void android_main(android_app *app) {
                   } else {session.closeImportPreview();session.setImportStatus("WAV importado · "+relative);}
                 }
               }
+            } else if(picked.package) {
+              launchPackageImport(std::move(picked));
             } else if(picked.folder) {
               launchFolderImport(std::move(picked));
             } else if(shell.textureImportPicker) {
@@ -3282,17 +3348,28 @@ void android_main(android_app *app) {
             } else {
               // Um .gltf é guardado empacotado: o projeto recebe cena.glb, não cena.gltf.
               if(name.size()>5 && name.ends_with(".gltf")) name.replace(name.size()-5,5,".glb");
-              if(!name.ends_with(".glb")) name+=".glb";
+              std::string lowerName=name;
+              std::transform(lowerName.begin(),lowerName.end(),lowerName.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+              if(!lowerName.ends_with(".glb")&&!lowerName.ends_with(".fbx"))
+                name+=ae::resources::isFbxSource(picked.bytes)?".fbx":".glb";
               launchImport(std::move(picked),"Fontes/"+name);
             }
           }
         }
-        // S0: cópia da pasta do modelo na barra de estado (arquivos e MB reais).
+        if(shell.packageWork.valid()&&shell.packageWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+          auto prepared=shell.packageWork.get();std::string error;session.closeImportPreview();
+          if(shell.importCancellation->load()||prepared.value.project!=session.codeProjectRoot()||prepared.epoch!=session.sceneVersion().epoch)
+            session.setImportStatus("Pacote descartado: cancelado ou projeto alterado.");
+          else if(!prepared.value.accepted||!session.importLibraryPackage(prepared.value,error))
+            session.showImportFailure(error.empty()?prepared.value.diagnostic:error);
+          else session.setImportStatus(prepared.value.diagnostic);
+        }
+        // S0: cópia da pasta na barra de estado (arquivos e MB reais).
         if(shell.folderCopyToken) if(const auto token=shell.folderCopyToken->load()) {
           ae::platform::android::FolderCopyState copy;
           if(ae::platform::android::folderCopyState(token,copy) && !copy.finished) {
             char text[160];
-            std::snprintf(text,sizeof text,"Copiando a pasta do modelo · %u arquivo(s) · %.0f de %.0f MB",copy.files,
+            std::snprintf(text,sizeof text,"Copiando pasta · %u arquivo(s) · %.0f de %.0f MB",copy.files,
                           static_cast<double>(copy.doneBytes)/1048576.0,static_cast<double>(copy.totalBytes)/1048576.0);
             session.setWorkStatus(text);
           }
@@ -3328,6 +3405,7 @@ void android_main(android_app *app) {
             return future.valid() && future.wait_for(std::chrono::seconds(0))!=std::future_status::ready;
           };
           if(running(shell.importWork)) tasks.push_back({Task::Kind::ModelImport,"Importando modelo","Lendo e preparando a fonte",-1,true});
+          if(running(shell.packageWork)) tasks.push_back({Task::Kind::ModelImport,"Importando pacote","Preservando fontes e construindo o catálogo",-1,true});
           if(running(shell.environmentImportWork))
             tasks.push_back({Task::Kind::EnvironmentImport,"Importando HDRI","Céu, irradiância e reflexos",-1,true});
           if(running(shell.textureImportWork))
@@ -3347,7 +3425,7 @@ void android_main(android_app *app) {
               char detail[96];
               std::snprintf(detail,sizeof detail,"%u arquivo(s) · %.0f de %.0f MB",copy.files,
                             static_cast<double>(copy.doneBytes)/1048576.0,static_cast<double>(copy.totalBytes)/1048576.0);
-              tasks.push_back({Task::Kind::FolderCopy,"Copiando pasta do modelo",detail,
+              tasks.push_back({Task::Kind::FolderCopy,"Copiando pasta",detail,
                                copy.totalBytes?static_cast<float>(copy.doneBytes)/static_cast<float>(copy.totalBytes):-1.f,false});
             }
           }
@@ -3387,7 +3465,7 @@ void android_main(android_app *app) {
                 result.accepted=ae::resources::importGltfFolder(result.bytes,result.folderDirectory,
                     ae::resources::GltfFolderMaximumFileBytes,limits,progress,result.model,packed);
               } else
-              result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
+              result.accepted=ae::resources::importModelSource(result.bytes,limits,progress,result.model);
               result.sourceReportReady=false;result.sourceReport={};
               result.measure();
               result.storeDerived(limits,partialImportTextures.load());
@@ -3429,7 +3507,8 @@ void android_main(android_app *app) {
           if(shell.importCancellation->load() || prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch) {
             session.closeImportPreview();session.setImportStatus("Preparação descartada; projeto preservado.");
           } else if(!prepared.accepted) {
-            session.showImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este arquivo.":prepared.diagnostic);
+            session.showModelImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este arquivo.":prepared.diagnostic);
+            shell.importPreview=std::move(prepared);
           } else {
             session.showImportPreview(prepared.path,prepared.model,prepared.contentHash,prepared.profile,
                                       prepared.sourceReportReady?&prepared.sourceReport:nullptr);
@@ -3558,7 +3637,7 @@ void android_main(android_app *app) {
             session.setImportStatus("Publicação descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
           else if(!session.commitModelImport(prepared.bytes,prepared.model,prepared.path,prepared.expectedHash,report,
                                              session.importAmbiguityPolicy(),prepared.profile.excludedNodes,
-                                             prepared.companions,prepared.folderSource?std::string_view(prepared.contentHash):std::string_view{}))
+                                             prepared.companions,prepared.folderSource?std::string_view(prepared.contentHash):std::string_view{}, {},&prepared.profile))
             session.showImportFailure(report.diagnostic);
           else {
             // Manifesto ao lado da fonte, só depois da fonte gravada: descreve de
@@ -3571,9 +3650,7 @@ void android_main(android_app *app) {
               else
                 __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] manifesto de dependências: %s.deps (%u arquivos)",prepared.path.c_str(),prepared.dependencies);
             }
-            // R3: o perfil publicado fica com a fonte; reimportar e reabrir usam este.
-            if(!session.saveImportProfile(report.source,prepared.profile))
-              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] perfil da fonte não gravado: %s",prepared.path.c_str());
+            // Source recipe is part of the model publication journal.
             std::string message=report.reimported?"Recurso reimportado; instâncias locais preservadas.":"Recurso registrado. Use Instanciar em Arquivos para adicioná-lo à cena.";
             bool instanceFailed=false;
             if(intoScene) {
@@ -3729,12 +3806,15 @@ void android_main(android_app *app) {
       shell.instancedRenderer.setAutoExposurePaused(editorPlaying&&shell.editorSession.screen().playPaused);
       ae::renderer::RenderViewSnapshot previewRequest;
       auto &preview=shell.editorSession.cameraPreview();
+      const auto *previewMaterial=shell.editorSession.findMaterialAsset(preview.material());
+      const ae::u32 previewMaterialRevision=previewMaterial?previewMaterial->revision:0;
       const bool previewVisible=editorActive && !editorPlaying &&
           shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene;
       if(preview.request(shell.editorSession.document(),shell.editorSession.sceneVersion(),
-                         currentMonotonicNanoseconds()*1e-9,previewVisible,false,previewRequest))
+                         currentMonotonicNanoseconds()*1e-9,previewVisible,false,previewRequest,
+                         shell.editorSession.screen().resources,previewMaterialRevision))
         shell.instancedRenderer.requestCameraPreview(previewRequest);
-      if(!preview.camera() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
+      if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
       const auto &autoExposureDiagnostic=shell.instancedRenderer.autoExposureDiagnostic();
@@ -3747,7 +3827,7 @@ void android_main(android_app *app) {
       ae::renderer::RenderViewSnapshot previewCompleted;bool previewSuccess=false;
       if(shell.instancedRenderer.takeCameraPreviewCompletion(previewCompleted,previewSuccess))
         preview.complete(previewCompleted,shell.editorSession.sceneVersion(),previewSuccess,
-                         shell.instancedRenderer.cameraPreviewDiagnostic());
+                         shell.instancedRenderer.cameraPreviewDiagnostic(),previewMaterialRevision);
       if(frameStatus!=ae::rhi::SwapchainStatus::Ok) preview.invalidateTarget();
       const ae::u64 frameThreadCpuFinished = currentThreadCpuNanoseconds();
       const ae::u64 frameMonotonicFinished = currentMonotonicNanoseconds();
@@ -3947,6 +4027,7 @@ void android_main(android_app *app) {
     if(shell.importCancellation)shell.importCancellation->store(true);
     if(shell.reopenCancellation)shell.reopenCancellation->store(true);
     if(shell.importWork.valid())shell.importWork.wait();
+    if(shell.packageWork.valid())shell.packageWork.wait();
     if(shell.environmentImportWork.valid())shell.environmentImportWork.wait();
     if(shell.textureImportWork.valid())shell.textureImportWork.wait();
     if(shell.reopenWork.valid())shell.reopenWork.wait();

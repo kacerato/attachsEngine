@@ -43,6 +43,7 @@
 #include "renderer/shadow_atlas.h"
 #include "renderer/water_surface.h"
 #include "platform/android/material_preview_resources.h"
+#include "platform/android/material_standalone_preview_resources.h"
 #include "renderer/render_view.h"
 #include "platform/android/dirt_road_resources.h"
 #include "platform/free_camera_controller.h"
@@ -791,6 +792,9 @@ private:
   rhi::VulkanBuffer previewUniform_;
   VkDescriptorPool previewPool_=VK_NULL_HANDLE;
   VkDescriptorSet previewSet_=VK_NULL_HANDLE;
+  MaterialStandalonePreviewResources standalonePreview_;
+  VkDescriptorPool standalonePreviewPool_=VK_NULL_HANDLE;
+  VkDescriptorSet standalonePreviewSet_=VK_NULL_HANDLE;
   VkDescriptorPool previewPostPool_=VK_NULL_HANDLE;
   VkDescriptorSet previewPostSet_=VK_NULL_HANDLE;
   renderer::RenderViewSnapshot pendingPreview_{},submittedPreview_{},completedPreview_{};

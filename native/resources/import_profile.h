@@ -25,7 +25,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 11; // 11: LOD na própria malha e ordem de polígonos (S3)
+inline constexpr u32 ImportProfileSchema = 12; // 12: native FBX deformation/bake choices
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -71,6 +71,8 @@ struct ImportProfile {
   bool generateLods = false;
   u8 maximumLodLevels = 4;
   bool optimizePolygonOrder = false;
+  bool fbxDeformation=true,fbxReduceWeights=false,fbxApproximateSteps=false;
+  u8 fbxBakeRate=30;
   // Nós da fonte que NÃO vêm para a cena, por identidade do mapa de nós. A
   // exclusão vale para a subárvore. Identidade, e não nome nem caminho: o nó
   // renomeado no editor 3D continua excluído, porque o mapa o reconhece como o

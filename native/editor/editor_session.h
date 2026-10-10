@@ -24,6 +24,7 @@
 #include "editor/editor_play_edit.h"
 #include "editor/editor_numeric_expression.h"
 #include "editor/editor_value_library.h"
+#include "editor/editor_library.h"
 #include "editor/editor_curve_view.h"
 #include "resources/curve3d.h"
 #include "resources/convex_bake.h"
@@ -43,6 +44,7 @@
 #include "resources/texture_asset.h"
 #include "resources/audio_clip.h"
 #include "resources/animation_clip_asset.h"
+#include "resources/unity_animation_merge.h"
 #include "editor/editor_animation_clip_preview.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
@@ -87,7 +89,7 @@ namespace ae::editor {
 // ou colisor; falso para outro tipo de componente.
 bool applyPhysicsMaterialCopy(scene::ComponentValue &component,const resources::PhysicsMaterialAsset &material);
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName, Gui, AnimatorName };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, GlobalSearch, LayoutName, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch, PhysicsLayerName, InputActionName, InputContext, InputNumber, ColorText, TagName, TagSearch, GroupName, Gui, AnimatorName, LibrarySearch };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -105,6 +107,7 @@ struct EditorAssetInstantiation {
 };
 
 class EditorSession final {
+  friend class UnityPackageImporter;
 public:
   bool importWaveClip(const std::string &relative,resources::AssetGuid &asset,std::string &error);
   std::shared_ptr<const resources::AudioClip> loadAudioClip(resources::AssetGuid asset,std::string &error);
@@ -155,10 +158,26 @@ public:
   // nodes are resolved against this owner before publication; source bytes and
   // imported interpolation remain intact. The same journal owns its history.
   bool extractAnimationClip(resources::AssetGuid sourceClip,EditorEntityId owner,resources::AssetGuid &guid,std::string &error);
+  bool openModelTakes(resources::AssetGuid source,std::string &diagnostic);
+  bool extractModelTake(resources::AssetGuid source,u32 take,u32 sourceRoot,EditorEntityId owner,
+                        resources::AssetGuid &guid,std::string &diagnostic);
   bool openAnimationClip(resources::AssetGuid guid,EditorEntityId owner,std::string &error);
   bool addAnimationClipTrack(resources::AssetGuid guid,u32 expectedRevision,EditorEntityId owner,EditorEntityId target,
                              resources::AnimationPath path,resources::AnimationRotationMode mode,u64 &trackId,std::string &error);
   bool seekAnimationClip(float seconds,std::string &error);
+  std::vector<EditorScreenState::ClipPropertyEntry> animationPropertyCatalog(EditorEntityId target,std::string &error) const;
+  bool addAnimationPropertyTrack(resources::AssetGuid,u32 revision,EditorEntityId owner,EditorEntityId target,
+       const resources::AnimationPropertyAddress &,u64 &created,std::string &error);
+  bool recordAnimationProperty(resources::AssetGuid,u32 revision,EditorEntityId owner,u64 track,float time,
+       const resources::AnimationPropertyValue &,std::string &error);
+  std::vector<EditorScreenState::ClipDriverEntry> animationDriverParameters(EditorEntityId,std::string &error) const;
+  bool animationDriverParameter(runtime::ObjectId,u64 component,u64 parameter,resources::AssetGuid,double &,std::string &) const;
+  bool validateAnimationPropertyClip(const resources::AnimationClipAsset &,EditorEntityId,float,std::string &) const;
+  bool animationPropertyBinding(resources::AnimationClipAsset &,EditorEntityId,EditorEntityId,u64 &,std::string &) const;
+  bool prepareAnimationProperty(resources::AnimationClipAsset &,EditorEntityId,EditorEntityId,const resources::AnimationPropertyAddress &,u64 &,std::string &) const;
+  bool remapAnimationProperty(resources::AnimationClipAsset &,EditorEntityId,EditorEntityId,u64,const resources::AnimationPropertyAddress &,std::string &) const;
+  bool configureAnimationDrivers(resources::AnimationClipAsset &,EditorEntityId,const resources::AnimationClipDrivers &,std::string &) const;
+  bool previewAnimationClipRegion(u64 region,std::string &error);
   // Selecting a preview target never publishes a resource. Creating a missing
   // channel is an explicit property action and uses the regular asset journal.
   bool selectAnimationClipPreviewTarget(EditorEntityId target,resources::AnimationPath path,bool create,std::string &error);
@@ -167,6 +186,23 @@ public:
   // native units (quaternion XYZW, Euler degrees, morph 0..1).
   bool previewAnimationClipPose(u64 track,std::span<const float> values,std::string &error);
   bool recordAnimationClipPose(std::string &error);
+  bool configureAnimationPoseRecording(AnimationPoseRecordingPolicy,std::string &error,std::optional<bool> autoKey=std::nullopt);
+  bool configureAnimationPoseLocks(resources::AnimationPath,u64 mask,std::string &error);
+  bool resetAnimationClipPose(bool identity,std::string &error);
+  bool copyAnimationClipPose(bool world,std::string &error);
+  bool pasteAnimationClipPose(std::string &error);
+  bool selectAnimationPoseTargets(std::span<const EditorEntityId>,EditorEntityId primary,std::string &error);
+  bool focusAnimationPoseSelection(std::string &error);
+  bool isolateAnimationPoseSelection(bool enabled,std::string &error);
+  bool animationPoseSelectionVisible(EditorEntityId id) const;
+  bool toggleAnimationPoseTarget(EditorEntityId,std::string &error);
+  // 0 parents, 1 immediate children, 2 siblings, 3 complete owner subtree.
+  bool selectAnimationPoseRelation(u32 relation,std::string &error);
+  bool saveAnimationPoseSelection(std::string_view name,std::string &error);
+  bool recallAnimationPoseSelection(std::string_view name,std::string &error);
+  bool removeAnimationPoseSelection(std::string_view name,std::string &error);
+  void loadAnimationPoseSelections();
+  bool applyAnimationPoseSelectionName(std::string_view name);
   void cancelAnimationClipPose();
   void closeAnimationClip();
   const runtime::SceneGraph &evaluatedEditorScene() const {
@@ -758,7 +794,8 @@ public:
                          resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse,
                          std::span<const resources::AssetGuid> excludedNodes={},
                          std::span<const FolderCompanion> companions={}, std::string_view contentHash={},
-                         std::span<const resources::AssetGuid> sourceDependencies={});
+                         std::span<const resources::AssetGuid> sourceDependencies={},
+                         const resources::ImportProfile *preparedProfile=nullptr);
   // `prepared` é o perfil com que o worker preparou `model`.
   // `sourceReport`: a medição malha a malha (G6-A) já feita no trabalhador. Numa
   // cena grande ela custa segundos (Sponza: 2,7 s no host) e, feita aqui na
@@ -839,6 +876,8 @@ public:
     draft.textureStreaming=state_.importTextureStreaming;
     draft.generateLods=state_.importGenerateLods;draft.maximumLodLevels=state_.importLodLevels;
     draft.optimizePolygonOrder=state_.importOptimizeOrder;
+    draft.fbxDeformation=state_.importFbxDeformation;draft.fbxReduceWeights=state_.importFbxReduceWeights;
+    draft.fbxApproximateSteps=state_.importFbxApproximateSteps;draft.fbxBakeRate=state_.importFbxBakeRate;
     draft.textureStreamingPriority=state_.importTextureStreamingPriority;
     draft.excludedNodes=state_.importExcludedNodes;
     return draft;
@@ -855,6 +894,8 @@ public:
     prepared.textureCompression=state_.importPreparedTextureCompression;
     prepared.generateLods=state_.importPreparedGenerateLods;prepared.maximumLodLevels=state_.importPreparedLodLevels;
     prepared.optimizePolygonOrder=state_.importPreparedOptimizeOrder;
+    prepared.fbxDeformation=state_.importPreparedFbxDeformation;prepared.fbxReduceWeights=state_.importPreparedFbxReduceWeights;
+    prepared.fbxApproximateSteps=state_.importPreparedFbxApproximateSteps;prepared.fbxBakeRate=state_.importPreparedFbxBakeRate;
     return prepared;
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
@@ -886,6 +927,11 @@ public:
   // Cria `Materiais/<nome>.material` com os valores efetivos do slot e liga o
   // slot a ele. Devolve a identidade, ou inválida com `diagnostic`.
   resources::AssetGuid createMaterialFromSlot(EditorEntityId id,u32 slot,std::string &diagnostic);
+  // N07: Unity textual Standard metallic -> the same native shared material.
+  // Source .mat/.meta stay intact; unsupported shaders/dependencies fail closed.
+  resources::AssetGuid importUnityMaterial(const std::string &path,std::string &diagnostic);
+  resources::AssetGuid importUnityAsset(const std::string &path,EditorEntityId owner,
+      resources::UnityReimportPolicy policy,std::string &diagnostic);
   const std::vector<resources::EnvironmentProfile> &environmentProfiles() const {return environmentProfiles_;}
   const resources::EnvironmentProfile *findEnvironmentProfile(const resources::AssetGuid &guid) const {
     for(const auto &profile:environmentProfiles_) if(profile.guid==guid) return &profile;
@@ -1008,6 +1054,9 @@ public:
     setImportStatus(message,EditorConsoleSeverity::Error);state_.importPanel=true;state_.importReady=false;
     state_.importError=true;state_.importPage=0;state_.importStatus="Importação não concluída";state_.importSummary=std::move(message);
   }
+  void showModelImportFailure(std::string message) {
+    showImportFailure(std::move(message));state_.importRetryable=true;state_.importTab=EditorScreenState::ImportTab::Profile;
+  }
   void closeImportPreview() {state_.importPanel=false;state_.importReady=false;}
   bool takeImportAccept() {return std::exchange(state_.importAccept,false);}
   bool takeImportIntoScene() {return std::exchange(state_.importIntoScene,false);}
@@ -1050,6 +1099,17 @@ public:
     return buildEditorGridPlan(view_);
   }
   const resources::AssetRegistry &assets() const { return assets_; }
+  const resources::LibraryIndex &library() const {return library_;}
+  bool importLibraryPackage(const PreparedLibraryPackage &prepared,std::string &diagnostic);
+  bool loadLibraryIndex(std::string &diagnostic);
+  bool prepareLibraryIndex(const resources::AssetRegistry &registry,std::string &encoded,std::string &diagnostic) const;
+  bool consumeLibraryImportRequest() {
+    const bool requested=std::exchange(state_.libraryImportRequested,false);
+    if(requested) {state_.importEnvironment=false;state_.importTexture=false;}
+    return requested;
+  }
+  void refreshLibraryRows();
+  bool openLibraryItem(resources::AssetGuid item,std::string &diagnostic);
   // Pedido de importação levantado pela interface, consumido pelo shell. O
   // editor não abre o seletor: ele não conhece Android.
   // Link externo pedido pela interface (ajuda do componente), só https.
@@ -1098,12 +1158,15 @@ public:
     loadAnimatorControllers();
     loadNavMeshes();
     loadAnimationClipAssets();
+    refreshLibraryRows();
     return true;
   }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
     const auto &graph=evaluatedEditorScene();
     if(!mapScene_.extract(graph, out)) return false;
     applyLodGroups(graph, out);
+    if(state_.clipOpen&&state_.clipPoseSelectionIsolated&&!isPlaying())for(auto &draw:out)
+      if(!animationPoseSelectionVisible(draw.objectId))draw.visible=false;
     // Camadas e objetos escondidos na vista da cena (só o editor; o Play
     // extrai do mundo).
     if(state_.hiddenLayers || !state_.sceneHidden.empty()) for(auto &draw:out)
@@ -1306,6 +1369,8 @@ public:
     beginImportPreparation(path);state_.importTexture=true;state_.importEnvironment=false;
     state_.textureImportSettings=state_.textureImportPreparedSettings=settings;
     state_.textureImportReprepare=false;
+    state_.textureImportTiff=false;state_.textureImportTiffBits=0;
+    state_.textureImportTiffUndefinedExtra=state_.textureImportTiffHasIcc=state_.textureImportTiffMatrixSrgb=false;
   }
   bool takeTextureImportReprepare(resources::TextureProfile &out) {
     if(!std::exchange(state_.textureImportReprepare,false)) return false;
@@ -1520,6 +1585,19 @@ private:
     usize sourceIndexCount = 0;
     usize sourceDrawCount = 0;
   };
+  // Immutable, affected-source snapshots only; no captured history/document.
+  struct ModelResourceState {
+    std::optional<resources::AssetRecord> record;
+    std::shared_ptr<const ImportedSource> source;
+    std::optional<std::string> nodeMap,profile;
+    std::optional<resources::LibraryItem> libraryItem;
+    std::string encodedHash;
+  };
+  std::optional<std::pair<resources::AssetGuid,resources::ImportProfile>> publishingImportProfile_;
+  static u64 retainedModelBytes(const ImportedSource &source);
+  bool replayModelResource(const ModelResourceState &expected,const ModelResourceState &target,
+                           const std::string &path,std::string &diagnostic);
+  void settleModelPublication();
   struct ImportedLibrary {
     std::vector<u8> vertices;
     std::vector<u32> indices;
@@ -1561,11 +1639,14 @@ private:
     bool reimported = false;
     bool hasPrevious = false;
     resources::ImportNodeMap previousNodeMap;
+    std::map<resources::AssetGuid,std::vector<resources::AssetGuid>> previousSkinJoints;
+    struct MorphBaseline {std::vector<std::string> names;std::vector<float> weights;};
+    std::map<resources::AssetGuid,MorphBaseline> previousMorphs;
   };
   bool stageSource(const resources::GltfImport &model, std::string_view hash, std::string_view sourceName,
                    resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
                    resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged,
-                   std::span<const resources::AssetGuid> excludedNodes);
+                   std::span<const resources::AssetGuid> excludedNodes,const resources::ImportProfile *preparedProfile=nullptr);
   bool applyCollisionMeshRecipes(ImportedSource &source, const resources::ImportProfile &profile,
                                  std::string &diagnostic) const;
   void refreshMotorDecomposition();
@@ -1617,7 +1698,7 @@ private:
   // `roots` os objetos que recebem a Animação. Componente novo é criado;
   // existente é religado só onde a fonte mudou.
   bool bindImportedDeformation(const ImportedSource &tree,const std::vector<EditorEntityId> &objectOfNode,
-                               std::span<const EditorEntityId> roots,u32 &meshes,u32 &animations);
+                               std::span<const EditorEntityId> roots,u32 &meshes,u32 &animations,const StagedSource *previous=nullptr);
   std::vector<ImportedSource> importedSources_;
   resources::GltfImportLimits importLimits_{};
   u64 importTextureBudget_ = u64{1} << 30;
@@ -1722,6 +1803,9 @@ private:
   void synchronizePhysicsMaterial(const resources::PhysicsMaterialAsset &material);
   bool commitPhysicsMaterial(const resources::PhysicsMaterialAsset &candidate,std::string &diagnostic,bool recordHistory);
   void loadTextureAssets();
+  bool publishTextureImportCandidate(const std::optional<resources::AssetRecord> &expected,
+      const std::optional<resources::AssetRecord> &target,std::span<const u8> source,
+      const std::string &expectedDiskHash,std::string &diagnostic);
   // Textura do projeto decodificada com mips para um espaço de cor, em cache
   // enquanto o conteúdo registrado não muda. Nula quando o arquivo não abre.
   renderer::SharedAuthoringTexture decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,
@@ -1744,6 +1828,7 @@ private:
   // que deriva a identidade das primitivas internas em toda adoção posterior.
   u64 packageFingerprint_ = 0;
   resources::AssetRegistry assets_;
+  resources::LibraryIndex library_;
   GeometryPublisher publishGeometry_;
   SkinningPublication skinningPublication_{};
   static u64 nextSceneEpoch() noexcept;
@@ -2000,12 +2085,23 @@ private:
   AnimationClipPreview clipPreview_;
   std::optional<resources::AnimationClipAsset> clipDrag_;
   std::optional<resources::AnimationClipAsset> clipPoseDraft_;
+  std::optional<AnimationPoseClipboard> clipPoseClipboard_;
+  bool stageAnimationClipPoseCandidate(resources::AnimationClipAsset,u64 track,std::string &error);
+  bool expandAnimationPoseDraft(resources::AnimationClipAsset &,u64 track,std::span<const float> values,std::string &error,std::optional<bool> resetIdentity={});
+  bool publishAnimationPoseSelections(std::vector<AnimationPoseSelectionSet>,std::string &error,bool recordHistory=true);
+  void syncAnimationPoseSelection();
+  bool selectingAnimationPose_=false;
+  std::vector<EditorEntityId> clipPoseNameSelection_;
+  bool autoRecordAnimationClipPose(std::string &error);
   u64 clipPoseSceneRevision_=0,clipPoseTrack_=0;
   float clipPoseTime_=0;
   EditorGizmoDrag clipPoseGizmo_;
   EditorViewport clipPoseView_;
   std::optional<resources::AnimationClipAsset> clipPoseBeforeDrag_;
   u32 clipPosePointer_=0,clipPoseAxis_=0;
+  std::vector<u64> clipPressCues_,clipNumberCues_;
+  float clipPressCueTime_=0;
+  u64 clipPressCue_=0;
   bool clipPoseMoved_=false;
   float clipPoseParent_[16]{},clipPoseWorld_[16]{},clipPoseInverse_[16]{},clipPoseAngle_=0,clipPoseTotalAngle_=0;
   bool handleAnimationPoseGizmo(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
@@ -2013,18 +2109,34 @@ private:
   bool pickAnimationClipPreviewTarget(ui::UiPoint position);
   u64 clipEpoch_=0;u32 clipPointer_=0,clipNumberRevision_=0,clipHandle_=0;
   resources::AssetGuid clipNumberGuid_;
+  std::optional<resources::AnimationClipAsset> clipDriverDraft_;
+  u64 clipDriverNumberNode_=0,clipDriverNumberKey_=0;
+  u32 clipDriverNumberRevision_=0;
+  void refreshAnimationDrivers();
+  bool handleAnimationDriverWidget(u32);
+  bool applyAnimationDriverNumber(u32,double);
+  bool applyAnimationPropertySearch(std::string_view);
+  bool handleAnimationPropertyCurveWidget(u32);
+  bool applyAnimationPropertyCurveNumber(u32,double);
+  void refreshAnimationPropertySurface();
+  bool handleAnimationPropertyWidget(u32 code);
+  bool applyAnimationPropertyNumber(u32 code,double value);
+  u64 clipPropertySceneRevision_=~u64{0};u32 clipPropertyResourceRevision_=0;
+  float clipPropertySampleTime_=-1;u64 clipPropertySampleTrack_=0;
+  EditorEntityId clipPropertyCatalogTarget_=0;
   u64 clipNumberLayer_=0;
   u64 clipNumberTrack_=0,clipNumberKey_=0;u32 clipNumberComponent_=0;
   u64 clipNumberSceneRevision_=0;float clipNumberTime_=0;
   std::vector<resources::AnimationKeyAddress> clipNumberSelection_,clipPressSelection_;
   ui::UiPoint clipPress_{};float clipPressTime_=0,clipPressValue_=0;
   void refreshAnimationClip();
-  void frameAnimationClip();
+  void frameAnimationClip(bool selectionOnly=false);
   void beginAnimationClipNumber(u32 code,double value);
   bool applyAnimationClipNumber(u32 code,double value);
   bool applyAnimationClipName(std::string_view value);
   bool applyAnimationClipLayerName(std::string_view value);
   bool applyAnimationClipCueName(std::string_view value);
+  bool applyAnimationClipRegionName(std::string_view value);
   bool handleAnimationClip(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   void openAnimatorEditor();
   void frameAnimator();

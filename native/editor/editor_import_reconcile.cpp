@@ -542,14 +542,26 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
         else if (newName != values.name) conflict(values, "o nome");
       }
       if (trs) {
+        const auto axes = [&](float local[3], const float base[3], const float incoming[3], const char *field) {
+          bool hasConflict=false;
+          for(u32 axis=0;axis<3;++axis) {
+            if(incoming[axis]==base[axis])continue;
+            if(local[axis]==base[axis]) {local[axis]=incoming[axis];touched=true;}
+            else if(local[axis]!=incoming[axis])hasConflict=true;
+          }
+          if(hasConflict)conflict(values,field);
+        };
         const auto three = [&](float local[3], const float base[3], const float incoming[3], const char *field) {
           if (sameVector(incoming, base)) return;
           if (sameVector(local, base)) { copyVector(local, incoming); touched = true; }
           else if (!sameVector(local, incoming)) conflict(values, field);
         };
-        three(values.transform.position, previous.basePosition, fresh.position, "a posição");
+        // Translation and scale axes are independent authored values. A local
+        // X override cannot prevent an untouched Y/Z receiving source changes.
+        // Euler orientation remains one coupled field, avoiding mixed rotations.
+        axes(values.transform.position, previous.basePosition, fresh.position, "a posição");
         three(values.transform.rotationDegrees, previous.baseRotation, fresh.rotationDegrees, "a rotação");
-        three(values.transform.scale, previous.baseScale, fresh.scale, "a escala");
+        axes(values.transform.scale, previous.baseScale, fresh.scale, "a escala");
       } else {
         conflict(values, "a matriz (fora de TRS)");
         copyVector(fresh.position, previous.basePosition);

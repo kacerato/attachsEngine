@@ -103,6 +103,9 @@ void InstancedRenderer::destroyCameraPreview() {
   previewPool_=VK_NULL_HANDLE;previewSet_=VK_NULL_HANDLE;
   previewUniform_.reset();previewSceneColor_.reset();previewColor_.reset();previewDepth_.reset();previewResolved_.reset();
   previewReactive_.reset();previewComposition_.reset();
+  standalonePreview_.reset();
+  if(standalonePreviewPool_) vkDestroyDescriptorPool(device_,standalonePreviewPool_,nullptr);
+  standalonePreviewPool_=VK_NULL_HANDLE;standalonePreviewSet_=VK_NULL_HANDLE;
   releaseCameraPreviewEnvironment();
   autoExposureViews_[1].initialized=false;
   autoExposureViews_[1].enabled=false;
@@ -202,6 +205,33 @@ bool InstancedRenderer::prepareCameraPreview() {
     copies.push_back(copy);
   }
   vkUpdateDescriptorSets(device_,0,nullptr,static_cast<u32>(copies.size()),copies.data());
+  if(pendingPreview_.materialGeometry) {
+    if(!standalonePreview_.prepare(*memoryAllocator_,pendingPreview_.materialGeometry,pendingPreview_.previewMaterial,
+         dirtRoadResources_.packageTextureCount(),dirtRoadResources_.textureCount(),dirtTextureSlots_,useBindless_,previewDiagnostic_)) return false;
+    VkDescriptorBufferInfo extension{standalonePreview_.extension(),0,renderer::MaterialExtensionFloats*sizeof(float)};
+    VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=previewSet_;
+    write.dstBinding=16;write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;write.descriptorCount=1;write.pBufferInfo=&extension;
+    vkUpdateDescriptorSets(device_,1,&write,0,nullptr);
+    if(!useBindless_) {
+      if(!standalonePreviewPool_) {
+        VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,4};
+        VkDescriptorPoolCreateInfo pool{};pool.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pool.maxSets=1;pool.poolSizeCount=1;pool.pPoolSizes=&size;
+        if(vkCreateDescriptorPool(device_,&pool,nullptr,&standalonePreviewPool_)!=VK_SUCCESS) return false;
+        VkDescriptorSetAllocateInfo allocate{};allocate.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocate.descriptorPool=standalonePreviewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&textureSetLayout_;
+        if(vkAllocateDescriptorSets(device_,&allocate,&standalonePreviewSet_)!=VK_SUCCESS) return false;
+      }
+      VkDescriptorImageInfo images[4]{};VkWriteDescriptorSet writes[4]{};
+      for(u32 binding=0;binding<4;++binding) {
+        const auto texture=standalonePreview_.material().textureIndices[binding];const bool valid=texture!=renderer::InvalidMapTexture;
+        images[binding]={valid?dirtRoadResources_.sampler(texture):baseSampler_.handle(),valid?dirtRoadResources_.view(texture):baseTexture_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        auto &write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=standalonePreviewSet_;
+        write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&images[binding];
+      }
+      vkUpdateDescriptorSets(device_,4,writes,0,nullptr);
+    }
+  }
   VkDescriptorBufferInfo buffer{previewUniform_.handle(),0,sizeof(DirtRoadFrameUniform)};
   VkWriteDescriptorSet writes[2]{};writes[0].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet=previewSet_;writes[0].dstBinding=0;writes[0].descriptorCount=1;
@@ -282,11 +312,11 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   if(useBindless_) vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout_,0,1,&textureSet_,0,nullptr);
   const VkDeviceSize zero=0;const auto instances=instanceBuffer_.handle();
   vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&zero);
-    auto pushMapMaterial = [&](u32 materialIndex, u32 drawIndex=0xffffffffu) {
-      auto material = dirtRoadResources_.materials()[materialIndex];
+    auto pushMapMaterial = [&](u32 materialIndex, u32 drawIndex=0xffffffffu,bool standalone=false) {
+      auto material = standalone?standalonePreview_.material():dirtRoadResources_.materials()[materialIndex];
       // R4: texturas trocadas indexam a biblioteca importada, que começa depois
       // das texturas do pacote -- o mesmo deslocamento dos materiais importados.
-      if(drawIndex<authoredMaterials_.size())
+      if(!standalone&&drawIndex<authoredMaterials_.size())
         material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],static_cast<u32>(dirtRoadResources_.packageTextureCount()));
       // R4: dupla face real. Só material que provou ordem de vértices (glTF de
       // uma face ou "Uma face" escolhida) descarta a face de trás.
@@ -295,7 +325,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
             (material.flags & renderer::MapMaterialCullBackFaces)!=0 && (material.flags & renderer::MapMaterialDoubleSided)==0
                 ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
       if (!useBindless_) {
-        const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
+        const VkDescriptorSet set = standalone?standalonePreviewSet_:dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &set, 0, nullptr);
       }
@@ -330,7 +360,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
                             ((material.reserved & 0xffffu) << 16u);
       // Bit 0: saída sRGB. Bits 1..31: entrada da transformação de UV do desenho (0 = nenhuma).
       push.materialFlags[2]=(encodeSrgb?1u:0u) |
-          ((drawIndex<authoredUvTransformEntries_.size()?authoredUvTransformEntries_[drawIndex]:0u)<<1u);
+          ((standalone?1u:drawIndex<authoredUvTransformEntries_.size()?authoredUvTransformEntries_[drawIndex]:0u)<<1u);
       push.materialFlags[3]=std::bit_cast<u32>(view.frustum.farPlane);
       push.materialFactors[0]=material.roughness;push.materialFactors[1]=material.metallic;
       push.materialFactors[2]=material.normalScale;push.materialFactors[3]=material.specular;
@@ -352,7 +382,22 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
     vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexed(commandBuffer_,record.indexCount,1,record.firstIndex,geometry.vertexOffset,index);
   };
+  const bool standaloneBlend=view.materialGeometry&&(standalonePreview_.material().flags&renderer::MapMaterialBlend);
+  const auto drawStandalone=[&](bool blend) {
+    const auto variant=renderer::materialFeatureVariant(standalonePreview_.material().flags);
+    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
+    const auto pipeline=variants[variant]?variants[variant]:(blend?transparentPipeline_:pipeline_);
+    vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);pushMapMaterial(0,0xffffffffu,true);
+    const auto vertex=standalonePreview_.vertices(),instance=standalonePreview_.instance();
+    vkCmdBindVertexBuffers(commandBuffer_,0,1,&vertex,&zero);vkCmdBindVertexBuffers(commandBuffer_,1,1,&instance,&zero);
+    vkCmdBindIndexBuffer(commandBuffer_,standalonePreview_.indices(),0,VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(commandBuffer_,standalonePreview_.indexCount(),1,0,0,0);
+  };
+  if(view.materialGeometry&&!standaloneBlend) drawStandalone(false);
   for(u32 i=0;i<dirtRoadResources_.draws().size();++i) {
+    if(view.materialGeometry) break;
+    if(view.isolatedObjects && (i>=authoredDrawIdentities_.size() ||
+       !std::binary_search(view.isolatedObjects->begin(),view.isolatedObjects->end(),authoredDrawIdentities_[i].objectId))) continue;
     if(!authoredVisibility_.empty()&&!authoredVisibility_[i]) continue;
     const auto &record=dirtRoadResources_.draws()[i];
     auto material=dirtRoadResources_.materials()[record.materialIndex];
@@ -386,6 +431,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
     for(u32 k=0;k<3;++k) {const float d=r.boundsCenter[k]-camera.position[k];result+=d*d;}return result;};
   std::sort(transparent.begin(),transparent.end(),[&](u32 a,u32 b){return distance(a)>distance(b);});
   for(auto index:transparent) draw(index,true);
+  if(standaloneBlend) drawStandalone(true);
   vkCmdEndRenderPass(commandBuffer_);
   VkMemoryBarrier after{};after.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER;
   after.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;

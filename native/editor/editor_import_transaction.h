@@ -1,4 +1,6 @@
 #pragma once
+#include "core/base.h"
+#include <optional>
 #include "platform/atomic_asset_file.h"
 #include "core/sha256.h"
 #include <filesystem>
@@ -26,6 +28,11 @@ namespace ae::editor {
 // novo: o que existia no destino vai para o backup da transação e volta se a
 // publicação não terminar.
 class EditorImportTransaction {
+public:
+  enum class MetadataKind : u8 {LibraryIndex=1,SourceProfile=2,NodeMap=3};
+  struct Metadata {MetadataKind kind;std::string path,expectedHash;};
+  static constexpr usize MaximumMetadata=8;
+private:
 public:
   struct Companion {
     std::string staged;   // relativo ao projeto, sob `.astra/import-staging/`
@@ -78,7 +85,8 @@ public:
   // Publicação de recursos autorais pequenos (materiais/perfis). O journal
   // existente continua sendo o único dono do rollback e da recuperação.
   static bool publishTextBatch(const std::string &project,const std::vector<TextEdit> &edits,
-                               const std::string &registry,std::string &diagnostic) {
+                               const std::string &registry,std::string &diagnostic,
+                               const std::string &extra={},const std::string &extraText={}) {
     if(edits.empty()) return true;
     const auto root=fromUtf8(project);
     for(usize i=0;i<edits.size();++i) {
@@ -104,13 +112,13 @@ public:
       }
     }
     EditorImportTransaction transaction(project);
-    if(!transaction.begin(edits.front().path,edits.front().expectedHash,diagnostic,{},companions)) {
+    if(!transaction.begin(edits.front().path,edits.front().expectedHash,diagnostic,extra,companions)) {
       if(!staging.empty() && !std::filesystem::exists(root/".astra/import-transaction/journal",error) && !error)
         std::filesystem::remove_all(staging,error);
       return false;
     }
     const auto &text=edits.front().text;
-    if(!transaction.commit({reinterpret_cast<const u8*>(text.data()),text.size()},registry,{},&diagnostic)) {
+    if(!transaction.commit({reinterpret_cast<const u8*>(text.data()),text.size()},registry,extraText,&diagnostic)) {
       const auto reason=diagnostic;
       const bool restored=transaction.rollback();
       diagnostic=reason+(restored?"; recursos e registro restaurados.":"; recuperação pendente, backups preservados no journal.");
@@ -130,7 +138,7 @@ public:
     std::istringstream stream(std::string(bytes.begin(),bytes.end()));
     std::string magic,state,relative;
     bool parsed=static_cast<bool>(stream>>magic>>state>>std::quoted(relative)>>transaction.hadSource_>>transaction.hadRegistry_);
-    if(parsed && (magic=="ASTRA_IMPORT_2" || magic=="ASTRA_IMPORT_3")) {
+    if(parsed && (magic=="ASTRA_IMPORT_2" || magic=="ASTRA_IMPORT_3" || magic=="ASTRA_IMPORT_4")) {
       std::string extra;
       parsed=static_cast<bool>(stream>>std::quoted(extra)>>transaction.hadExtra_);
       if(parsed && extra!="-") {
@@ -138,14 +146,27 @@ public:
         transaction.extraRelative_=extra;
       }
       usize count=0;
-      if(parsed && magic=="ASTRA_IMPORT_3") parsed=static_cast<bool>(stream>>count) && count<=MaximumCompanions;
+      if(parsed && (magic=="ASTRA_IMPORT_3"||magic=="ASTRA_IMPORT_4")) parsed=static_cast<bool>(stream>>count) && count<=MaximumCompanions;
       for(usize i=0;parsed && i<count;++i) {
         Companion companion;bool had=false;
         parsed=static_cast<bool>(stream>>std::quoted(companion.staged)>>std::quoted(companion.relative)>>had) &&
                transaction.validCompanion(companion);
         transaction.companions_.push_back(std::move(companion));transaction.hadCompanion_.push_back(had);
       }
+      if(parsed&&magic=="ASTRA_IMPORT_4") {
+        usize entries=0;parsed=static_cast<bool>(stream>>entries)&&entries>0&&entries<=MaximumMetadata;
+        for(usize i=0;parsed&&i<entries;++i) {
+          u32 kind=0;Metadata metadata{};bool had=false;
+          parsed=static_cast<bool>(stream>>kind>>std::quoted(metadata.path)>>had)&&kind>=1&&kind<=3;
+          metadata.kind=static_cast<MetadataKind>(kind);
+          std::filesystem::path target;
+          parsed=parsed&&transaction.validMetadata(metadata)&&safePath(transaction.root_,metadata.path,target)&&metadata.path!=transaction.extraRelative_;
+          for(const auto &previous:transaction.metadata_)if(previous.path==metadata.path)parsed=false;
+          transaction.metadata_.push_back(std::move(metadata));transaction.hadMetadata_.push_back(had);
+        }
+      }
     } else if(magic!="ASTRA_IMPORT_1") parsed=false;
+    stream>>std::ws;if(!stream.eof())parsed=false;
     if(!parsed || (state!="prepared" && state!="committed") ||
        !safePath(transaction.root_,relative,transaction.source_) || relative.starts_with(".astra/")) {
       diagnostic="Transação de importação inválida; backups preservados.";return false;
@@ -172,7 +193,7 @@ public:
   // quando a publicação não grava mapa.
   static constexpr usize MaximumCompanions=4096;
   bool begin(const std::string &relative,const std::string &expectedHash,std::string &diagnostic,const std::string &extra={},
-             std::span<const Companion> companions={}) {
+             std::span<const Companion> companions={},std::span<const Metadata> metadata={}) {
     if(!paths() || relative.starts_with(".astra/") || !safePath(root_,relative,source_)) {
       diagnostic="Destino de importação inválido.";return false;
     }
@@ -187,12 +208,14 @@ public:
     if((hadSource_?Sha256::hex(current):std::string())!=expectedHash) {
       diagnostic="A fonte mudou desde a preparação. Reabra a importação.";return false;
     }
+    sourceExpectedHash_=expectedHash;registryExpectedHash_.clear();extraExpectedHash_.clear();
     hadRegistry_=std::filesystem::exists(registry_,error);if(error) return false;
     std::filesystem::create_directories(directory_,error);if(error) return false;
     std::filesystem::create_directories(source_.parent_path(),error);if(error) return false;
     if(hadSource_ && !write(directory_/"source.backup",current,&diagnostic)) return false;
     if(hadRegistry_) {
       if(!read(registry_,current,32u*1024u*1024u)) {diagnostic="Registro anterior indisponível.";return false;}
+      registryExpectedHash_=Sha256::hex(current);
       if(!write(directory_/"registry.backup",current,&diagnostic)) return false;
     }
     extraRelative_=extra;hadExtra_=false;
@@ -201,6 +224,7 @@ public:
       std::filesystem::create_directories(extra_.parent_path(),error);if(error) return false;
       if(hadExtra_) {
         if(!read(extra_,current,64u*1024u*1024u)) {diagnostic="Mapa anterior indisponível.";return false;}
+        extraExpectedHash_=Sha256::hex(current);
         if(!write(directory_/"extra.backup",current,&diagnostic))return false;
       }
     }
@@ -218,12 +242,47 @@ public:
     if(!companions_.empty()) {
       std::filesystem::create_directories(directory_/"companions",error);if(error) return false;
     }
+    metadata_.clear();hadMetadata_.clear();
+    if(metadata.size()>MaximumMetadata) {diagnostic="Metadados demais na transacao.";return false;}
+    if(!metadata.empty()) {std::filesystem::create_directories(directory_/"metadata",error);if(error)return false;}
+    for(const auto &entry:metadata) {
+      std::filesystem::path target;
+      if(!validMetadata(entry)||entry.path==extraRelative_||!safePath(root_,entry.path,target)) {diagnostic="Destino tipado de metadados invalido.";return false;}
+      for(const auto &previous:metadata_)if(previous.path==entry.path) {diagnostic="Metadado duplicado.";return false;}
+      const bool existed=std::filesystem::exists(target,error);if(error)return false;
+      current.clear();if(existed&&!read(target,current,metadataLimit(entry.kind))) {diagnostic="Metadado anterior indisponivel.";return false;}
+      if((existed?Sha256::hex(current):std::string())!=entry.expectedHash) {diagnostic="Metadado mudou desde o preparo: "+entry.path;return false;}
+      std::filesystem::create_directories(target.parent_path(),error);if(error)return false;
+      if(existed&&!write(metadataBackup(metadata_.size()),current,&diagnostic))return false;
+      metadata_.push_back(entry);hadMetadata_.push_back(existed);
+    }
     relative_=relative;
     if(!mark("prepared",&diagnostic)) return false;
     active_=true;return true;
   }
-  bool commit(std::span<const u8> bytes,const std::string &registry,const std::string &extra={},std::string *diagnostic=nullptr) {
-    if(!active_) return false;
+  bool commit(std::span<const u8> bytes,const std::string &registry,const std::string &extra={},std::string *diagnostic=nullptr,
+              std::span<const std::optional<std::string>> metadataText={}) {
+    if(!active_)return false;
+    // No commit write has happened yet. A conflicting external edit must survive
+    // both this refusal and a caller's customary rollback().
+    if(!unchanged(source_,sourceExpectedHash_,1ull<<30)||!unchanged(registry_,registryExpectedHash_,32u<<20)||
+       (!extraRelative_.empty()&&!unchanged(extra_,extraExpectedHash_,64u<<20))) {
+      if(diagnostic)*diagnostic="Fonte ou registro mudou durante o preparo; publicação recusada.";
+      active_=false;cleanup();return false;
+    }
+    for(const auto &metadata:metadata_) {
+      std::filesystem::path target;std::vector<u8> current;std::error_code error;
+      bool valid=safePath(root_,metadata.path,target);
+      const bool exists=valid&&std::filesystem::exists(target,error);
+      valid=valid&&!error&&(!exists||read(target,current,metadataLimit(metadata.kind)))&&
+          (exists?Sha256::hex(current):std::string())==metadata.expectedHash;
+      if(!valid) {
+        if(diagnostic)*diagnostic="Metadado mudou durante o preparo: "+metadata.path;
+        active_=false;cleanup();return false;
+      }
+    }
+    if(metadataText.size()!=metadata_.size()) {active_=false;cleanup();return false;}
+    for(usize i=0;i<metadataText.size();++i)if(metadataText[i]&&metadataText[i]->size()>metadataLimit(metadata_[i].kind)) {active_=false;cleanup();return false;}
     // Companheiros primeiro: o principal só aponta para arquivos que já estão lá.
     for(usize i=0;i<companions_.size();++i) {
       std::filesystem::path staged,target;std::error_code error;
@@ -234,15 +293,22 @@ public:
     }
     if(!write(source_,bytes,diagnostic) || !writeText(registry_,registry,diagnostic)) return false;
     if(!extraRelative_.empty() && !writeText(extra_,extra,diagnostic)) return false;
+    for(usize i=0;i<metadata_.size();++i) {
+      std::filesystem::path target;if(!safePath(root_,metadata_[i].path,target))return false;
+      if(metadataText[i]) {if(!writeText(target,*metadataText[i],diagnostic))return false;}
+      else {std::error_code error;std::filesystem::remove(target,error);if(error)return false;}
+    }
     if(!mark("committed",diagnostic)) return false;
     active_=false;cleanup();return true;
   }
   // The same prepared journal owns resource removal. A crash before the
   // committed marker restores both the original file and its registry.
-  bool commitRemoval(const std::string &registry) {
-    if(!active_||!hadSource_||!companions_.empty()||!extraRelative_.empty())return false;
+  bool commitRemoval(const std::string &registry,const std::string &extra={}) {
+    if(!active_||!hadSource_||!companions_.empty()||!metadata_.empty())return false;
+    if(!unchanged(source_,sourceExpectedHash_,1ull<<30)||!unchanged(registry_,registryExpectedHash_,32u<<20)||
+       (!extraRelative_.empty()&&!unchanged(extra_,extraExpectedHash_,64u<<20))) {active_=false;cleanup();return false;}
     std::error_code error;if(!std::filesystem::remove(source_,error)||error)return false;
-    if(!writeText(registry_,registry)||!mark("committed"))return false;
+    if(!writeText(registry_,registry)||(!extraRelative_.empty()&&!writeText(extra_,extra))||!mark("committed"))return false;
     active_=false;cleanup();return true;
   }
   bool rollback() {
@@ -261,16 +327,31 @@ private:
   }
   bool mark(const char *state,std::string *diagnostic=nullptr) {
     std::ostringstream out;
-    out<<(companions_.empty()?"ASTRA_IMPORT_2 ":"ASTRA_IMPORT_3 ")<<state<<' '<<std::quoted(relative_)<<' '<<hadSource_<<' '<<hadRegistry_<<' '
+    out<<(!metadata_.empty()?"ASTRA_IMPORT_4 ":companions_.empty()?"ASTRA_IMPORT_2 ":"ASTRA_IMPORT_3 ")<<state<<' '<<std::quoted(relative_)<<' '<<hadSource_<<' '<<hadRegistry_<<' '
        <<std::quoted(extraRelative_.empty()?std::string("-"):extraRelative_)<<' '<<hadExtra_;
-    if(!companions_.empty()) {
+    if(!companions_.empty()||!metadata_.empty()) {
       out<<' '<<companions_.size();
       for(usize i=0;i<companions_.size();++i)
         out<<' '<<std::quoted(companions_[i].staged)<<' '<<std::quoted(companions_[i].relative)<<' '<<hadCompanion_[i];
     }
+    if(!metadata_.empty()) {
+      out<<' '<<metadata_.size();
+      for(usize i=0;i<metadata_.size();++i)out<<' '<<static_cast<u32>(metadata_[i].kind)<<' '<<std::quoted(metadata_[i].path)<<' '<<hadMetadata_[i];
+    }
     out<<'\n';
     return writeText(journal_,out.str(),diagnostic);
   }
+  static usize metadataLimit(MetadataKind kind) {return kind==MetadataKind::LibraryIndex?16u<<20:kind==MetadataKind::NodeMap?64u<<20:64u<<10;}
+  bool validMetadata(const Metadata &entry) const {
+    if(entry.kind==MetadataKind::LibraryIndex)return entry.path==".astra/imports/library-index.astra";
+    constexpr std::string_view prefix=".astra/imports/";
+    const std::string_view suffix=entry.kind==MetadataKind::SourceProfile?".profile":".nodes";
+    if((entry.kind!=MetadataKind::SourceProfile&&entry.kind!=MetadataKind::NodeMap)||!entry.path.starts_with(prefix)||!entry.path.ends_with(suffix)||entry.path.size()!=prefix.size()+32+suffix.size())return false;
+    const auto id=std::string_view(entry.path).substr(prefix.size(),32);bool nonzero=false;
+    for(const char c:id) {if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return false;nonzero=nonzero||c!='0';}
+    return nonzero;
+  }
+  std::filesystem::path metadataBackup(usize index) const {return directory_/"metadata"/std::to_string(index);}
   bool validCompanion(const Companion &companion) const {
     return companion.staged.starts_with(".astra/import-staging/") && !companion.relative.empty() &&
            !companion.relative.starts_with(".astra/");
@@ -299,7 +380,15 @@ private:
     const bool source=restoreOne(source_,"source.backup",hadSource_);
     const bool registry=restoreOne(registry_,"registry.backup",hadRegistry_);
     const bool extra=extraRelative_.empty() || extraRelative_=="-" || restoreOne(extra_,"extra.backup",hadExtra_);
-    return source && registry && extra && companions;
+    bool metadata=true;
+    for(usize i=0;i<metadata_.size();++i) {
+      std::filesystem::path target;std::vector<u8> bytes;std::error_code error;
+      bool restored=safePath(root_,metadata_[i].path,target);
+      if(restored&&hadMetadata_[i])restored=read(metadataBackup(i),bytes,metadataLimit(metadata_[i].kind))&&write(target,bytes);
+      else if(restored) {std::filesystem::remove(target,error);restored=!error;}
+      metadata=restored&&metadata;
+    }
+    return source && registry && extra && companions && metadata;
   }
   void cleanup() {
     // Fixed internal leaf paths only; no recursive deletion.
@@ -310,9 +399,19 @@ private:
     std::filesystem::remove(directory_/"extra.backup",error);
     for(usize i=0;i<companions_.size();++i) std::filesystem::remove(companionBackup(i),error);
     std::filesystem::remove(directory_/"companions",error); // só se vazia
+    for(usize i=0;i<metadata_.size();++i)std::filesystem::remove(metadataBackup(i),error);
+    std::filesystem::remove(directory_/"metadata",error);
+
   }
+  static bool unchanged(const std::filesystem::path &path,const std::string &hash,usize maximum) {
+    std::error_code error;std::vector<u8> bytes;const bool exists=std::filesystem::exists(path,error);
+    return !error&&(!exists||read(path,bytes,maximum))&&(exists?Sha256::hex(bytes):std::string())==hash;
+  }
+  std::string sourceExpectedHash_,registryExpectedHash_,extraExpectedHash_;
   std::filesystem::path root_,directory_,journal_,source_,registry_,extra_;
   std::string relative_,extraRelative_;
+  std::vector<Metadata> metadata_;
+  std::vector<bool> hadMetadata_;
   std::vector<Companion> companions_;
   std::vector<bool> hadCompanion_;
   bool hadSource_=false,hadRegistry_=false,hadExtra_=false,active_=false;

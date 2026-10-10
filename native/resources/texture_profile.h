@@ -20,7 +20,8 @@ namespace ae::resources {
 // Texturas embutidas nas fontes seguem o perfil de importação da fonte (R3); para
 // escolher por textura, extraia a imagem para o projeto.
 // 4 (S2): streaming de mipmaps e prioridade, do Texture Importer da Unity.
-inline constexpr u32 TextureProfileSchema = 4;
+// 5: decisões explícitas de fonte TIFF. Leitores1–4 migram com recusa estrita.
+inline constexpr u32 TextureProfileSchema = 5;
 // Faixa da prioridade de streaming da Unity (Texture Importer > Priority).
 inline constexpr i32 TextureStreamingPriorityMinimum = -128, TextureStreamingPriorityMaximum = 127;
 // Interpretação: pelo uso (cor base e emissão em sRGB, os demais lineares), cor
@@ -50,6 +51,11 @@ struct TextureProfile {
   // valem na próxima publicação, sem repreparar a imagem.
   bool streamingMipmaps = true;
   i32 streamingPriority = 0;
+  // TIFF source interpretation. Zero refuses an undefined fourth channel;
+  // one ignores it, two treats it as straight alpha. These choices cook bytes.
+  u8 tiffUndefinedExtra = 0;
+  bool tiffQuantize16 = false;
+  bool tiffIgnoreColorProfile = false;
 };
 // Igualdade só do que muda os bytes preparados (o streaming fica de fora).
 bool sameTexturePreparation(const TextureProfile &a, const TextureProfile &b) noexcept;

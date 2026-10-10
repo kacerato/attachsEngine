@@ -28,6 +28,8 @@
 #include "core/base.h"
 #include "resources/asset_registry.h"
 #include "resources/animation_curve.h"
+#include "resources/animation_property.h"
+#include "resources/animation_driver_bindings.h"
 
 #include <span>
 #include <functional>
@@ -89,11 +91,25 @@ struct AnimationCue {
 };
 inline constexpr usize MaximumAnimationCues=4096;
 bool validAnimationCues(std::span<const AnimationCue> cues,float duration);
+// Named playback sections are metadata, never gameplay events. Their end is
+// the visible terminal pose; periodic playback wraps in [start,end).
+struct AnimationRegion {
+  u64 id=0;
+  std::string name;
+  float start=0,end=0;
+};
+inline constexpr usize MaximumAnimationRegions=1024;
+bool validAnimationRegions(std::span<const AnimationRegion> regions,float duration);
 struct AnimationClip {
   std::string name;
   float duration = 0;
   std::vector<AnimationChannel> channels;
   std::vector<AnimationCue> cues;
+  std::vector<AnimationRegion> regions;
+  // Kept separate from the compact TRS/morph path. AnimationPath is a two-bit
+  // contract in the compositor and imported glTF caches; property IDs are not.
+  std::vector<CompiledAnimationPropertyTrack> properties;
+  std::shared_ptr<const CompiledAnimationDriverBindings> drivers;
 };
 
 // Blend shapes de um desenho. `deltas` tem `vertexCount * targetCount *
@@ -121,6 +137,8 @@ struct SkinDefinition {
 
 // Como o tempo do clipe corre depois do fim (WrapMode da Unity, Animation legado).
 enum class AnimationWrapMode : u32 { Once = 0, Loop = 1, PingPong = 2, ClampForever = 3 };
+// Elapsed time is relative to the section. No callbacks, allocation or mutation.
+bool animationRegionTime(const AnimationRegion &,double elapsed,AnimationWrapMode,float &time);
 // Half-open traversal: (from,to] forward, [to,from) backward. Seeking is not
 // traversal. Bounded merge of periodic occurrences; returns suppressed count.
 u64 visitAnimationCues(const AnimationClip &clip,double from,double to,AnimationWrapMode mode,

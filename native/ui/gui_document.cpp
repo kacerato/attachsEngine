@@ -64,6 +64,7 @@ bool GuiDocument::validate(std::string &error) const {
   for(float v:c.position) if(!std::isfinite(v) || std::abs(v)>1000000) {error="Invalid canvas position";return false;}
   for(float v:c.rotation) if(!std::isfinite(v) || std::abs(v)>36000) {error="Invalid canvas rotation";return false;}
   for (const auto &n : nodes_) {
+    if(!std::isfinite(n.opacity) || n.opacity<0 || n.opacity>1) {error="Invalid UI opacity in "+n.name;return false;}
     if(!validGuiControl(n.control,error))return false;
     const auto &m=n.motion;
     if(static_cast<u32>(n.interaction.action)>5 || !std::isfinite(n.interaction.value) || static_cast<u32>(m.easing)>3 ||
@@ -110,6 +111,12 @@ bool GuiDocument::update(const GuiNode &node, std::string &error) {
   }
   error = "UI node missing"; return false;
 }
+bool GuiDocument::setOpacity(GuiId id,float opacity) {
+  const auto index=indexOf(id);
+  if(index>=nodes_.size() || !std::isfinite(opacity) || opacity<0 || opacity>1)return false;
+  if(nodes_[index].opacity!=opacity){nodes_[index].opacity=opacity;revision_=nextRevision();}
+  return true;
+}
 bool GuiDocument::remove(GuiId id) {
   if (!find(id)) return false;
   std::unordered_set<GuiId> removed{id};
@@ -153,7 +160,7 @@ bool GuiDocument::reorder(GuiId id,int direction) {
   nodes_=std::move(ordered);rebuildIndex();revision_=nextRevision();return true;
 }
 void GuiDocument::write(std::ostream &s) const {
-  s << "AEUI 5 " << nodes_.size() << ' ' << nextId_ << '\n' << std::setprecision(9);
+  s << "AEUI 6 " << nodes_.size() << ' ' << nextId_ << '\n' << std::setprecision(9);
   const auto &c=canvas_;
   s<<static_cast<u32>(c.mode)<<' '<<c.resolution.x<<' '<<c.resolution.y;
   for(float v:c.position)s<<' '<<v;
@@ -177,13 +184,13 @@ void GuiDocument::write(std::ostream &s) const {
     for(const auto &a:n.actions)s<<' '<<static_cast<u32>(a.event)<<' '<<static_cast<u32>(a.action)<<' '<<a.target<<' '<<a.value;
     const auto &t=n.transitions;s<<' '<<t.enabled<<' '<<t.duration<<' '<<static_cast<u32>(t.easing);
     for(const auto &v:{t.normal,t.pressed,t.disabled})s<<' '<<v.pose.x<<' '<<v.pose.y<<' '<<v.pose.scale<<' '<<v.pose.opacity<<' '<<v.tint;
-    s<<' ';writeGuiControl(s,n.control);s<<'\n';
+    s<<' ';writeGuiControl(s,n.control);s<<' '<<n.opacity<<'\n';
   }
 }
 bool GuiDocument::read(std::istream &s, std::string &error) {
   GuiDocument candidate;
   std::string magic; u32 version = 0, count = 0;
-  if (!(s >> magic >> version >> count >> candidate.nextId_) || magic != "AEUI" || version<1 || version>5 || count > kMaximumNodes) {
+  if (!(s >> magic >> version >> count >> candidate.nextId_) || magic != "AEUI" || version<1 || version>6 || count > kMaximumNodes) {
     error = "Unsupported/corrupt AEUI header"; return false;
   }
   if(version>=2) {
@@ -219,6 +226,7 @@ bool GuiDocument::read(std::istream &s, std::string &error) {
       for(auto *v:{&t.normal,&t.pressed,&t.disabled})if(!(s>>v->pose.x>>v->pose.y>>v->pose.scale>>v->pose.opacity>>v->tint)){error="Corrupt UI state style";return false;}
     }
     if(version>=5&&!readGuiControl(s,n.control)){error="Corrupt UI control";return false;}
+    if(version>=6&&!(s>>n.opacity)){error="Corrupt UI opacity";return false;}
     n.kind = static_cast<GuiKind>(kind); candidate.nodes_.push_back(std::move(n));
   }
   s >> std::ws;
@@ -418,7 +426,7 @@ void GuiRuntime::layout(const UiRect &canvas) {
     const auto index=document_.indexOf(p.node);const auto &n=nodes[index];const auto original=p.bounds;
     const auto parent=n.parent?transforms_[document_.indexOf(n.parent)]:PoseTransform{};
     syncState(n,p.enabled);const auto visual=stateStyle(n.id);auto local=pose(n.id);
-    local.x+=visual.pose.x;local.y+=visual.pose.y;local.scale*=visual.pose.scale;local.opacity*=visual.pose.opacity;
+    local.x+=visual.pose.x;local.y+=visual.pose.y;local.scale*=visual.pose.scale;local.opacity*=visual.pose.opacity*n.opacity;
     p.tint=visual.tint;
     auto &a=transforms_[index];a.scale=parent.scale*local.scale;
     a.x=parent.x+parent.scale*((original.x+original.width*.5f)*(1-local.scale)+local.x);
@@ -584,5 +592,17 @@ bool GuiRuntime::setText(GuiId id, std::string text) { const auto *n=document_.f
 bool GuiRuntime::setValue(GuiId id, float value) { const auto *n=document_.find(id); if (!n || !std::isfinite(value) || (n->kind!=GuiKind::Toggle && n->kind!=GuiKind::Slider && n->kind!=GuiKind::Progress)) return false; changeValue(id,value,false); return true; }
 bool GuiRuntime::setVisible(GuiId id, bool v) { const auto *n=document_.find(id); if (!n) return false; auto copy=*n; copy.visible=v; std::string error; const bool ok=document_.update(copy,error); if(ok) layout(canvas_); return ok; }
 bool GuiRuntime::setEnabled(GuiId id, bool v) { const auto *n=document_.find(id); if (!n) return false; auto copy=*n; copy.enabled=v; std::string error; const bool ok=document_.update(copy,error); if(ok) layout(canvas_); return ok; }
+bool GuiRuntime::setOpacity(GuiId id,float value) {
+  const auto *node=document_.find(id);
+  if(!node || !std::isfinite(value) || value<0 || value>1)return false;
+  if(node->opacity==value)return true;
+  const auto previous=document_.revision();
+  if(!document_.setOpacity(id,value))return false;
+  // Only opacity changed. Keep measured geometry, then refresh the visual
+  // composition. Pending geometry edits cannot take this shortcut.
+  if(layoutRevision_==previous)layoutRevision_=document_.revision();
+  motionDirty_=true;
+  layout(canvas_);return true;
+}
 bool GuiRuntime::poll(GuiEvent &e) { while(!events_.empty()){e=events_.front();events_.erase(events_.begin());if(document_.find(e.node))return true;}return false; }
 } // namespace ae::ui

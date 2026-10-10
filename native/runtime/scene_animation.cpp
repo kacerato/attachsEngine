@@ -98,6 +98,8 @@ void SceneAnimator::begin(SceneGraph &graph, const AnimationLibrary &library) {
 void SceneAnimator::reset() {
   eventWorld_=nullptr;events_=nullptr;suppressedCues_=0;
   layerPoses_.clear();
+  propertyMixer_.reset();
+  driverGui_={};driverParameter_={};propertyPublication_={};
   graph_ = nullptr;
   library_ = nullptr;
   players_.clear();
@@ -409,7 +411,48 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     std::vector<Contribution> list;
   };
   std::vector<Property> properties;
+  std::vector<AnimationPropertyContribution> typedProperties;bool typedValid=true;
+  std::vector<AnimationDriverRequest> driverRequests;
   const ExternalSample *contributionSource=nullptr;
+  const auto contributeTyped=[&](const resources::AnimationClip &clip,std::span<const ObjectId> targets,float time,float weight,u32 layer,bool additive,ObjectId mask) {
+    if(clip.drivers&&weight>0) {
+      AnimationDriverRequest request;request.binding=clip.drivers;request.targets.assign(targets.begin(),targets.end());request.time=time;request.weight=weight;request.layer=layer;request.mask=mask;
+      if(contributionSource){request.sourceOwner=contributionSource->controllerOwner;request.sourceInstance=contributionSource->instance;request.coverage=contributionSource->layerWeight>0?weight/contributionSource->layerWeight:0;}
+      for(const auto &target:clip.drivers->targets) {
+        if(target.node>=targets.size()||!graph.exists(targets[target.node])) {compositionDiagnostic_="Binding de saída de driver ausente";typedValid=false;return;}
+        AnimationPropertyContribution baseline;baseline.object=targets[target.node];baseline.address=target.address;baseline.weight=0;baseline.coverage=0;
+        typedProperties.push_back(std::move(baseline));
+      }
+      driverRequests.push_back(std::move(request));
+    }
+    for(const auto &channel:clip.properties) {
+      if(channel.node>=targets.size()||!graph.exists(targets[channel.node])) {compositionDiagnostic_="Binding de propriedade ausente: "+channel.address.property;typedValid=false;return;}
+      const auto target=targets[channel.node];if(mask&&target!=mask&&!graph.isDescendantOf(target,mask))continue;
+      AnimationPropertyContribution contribution;contribution.object=target;contribution.address=channel.address;
+      contribution.weight=weight;contribution.layer=layer;contribution.additive=additive;
+      if(!channel.data.sample(time,contribution.value)) {compositionDiagnostic_="Propriedade não produz valor válido: "+channel.address.property;typedValid=false;return;}
+      if(contributionSource) {
+        contribution.sourceOwner=contributionSource->controllerOwner;contribution.sourceInstance=contributionSource->instance;
+        contribution.coverage=contributionSource->layerWeight>0?weight/contributionSource->layerWeight:0;
+        if(additive&&contributionSource->referenceClip.valid()) {
+          AnimationClipView reference;
+          if(!library_->findClip(contributionSource->referenceClip,reference)||!reference.clip||!reference.source) {
+            compositionDiagnostic_="Referência aditiva tipada ausente";typedValid=false;return;
+          }
+          std::vector<ObjectId> referenceTargets;resolveAnimationTargets(graph,contributionSource->owner,*reference.source,referenceTargets);
+          const auto found=std::find_if(reference.clip->properties.begin(),reference.clip->properties.end(),[&](const auto &candidate) {
+            return candidate.node<referenceTargets.size()&&referenceTargets[candidate.node]==target&&candidate.address==channel.address;
+          });
+          resources::AnimationPropertyValue value;
+          if(found==reference.clip->properties.end()||!found->data.sample(std::clamp(contributionSource->referenceTime,0.f,reference.clip->duration),value)) {
+            compositionDiagnostic_="Propriedade ausente na referência aditiva: "+channel.address.property;typedValid=false;return;
+          }
+          contribution.reference=std::move(value);
+        }
+      }
+      typedProperties.push_back(std::move(contribution));
+    }
+  };
   std::unordered_map<u64, usize> propertyIndex;
   const auto contribute = [&](ObjectId object, AnimationPath path, u32 layer, float weight, std::vector<float> value,
                               bool additive=false,std::vector<float> reference=std::vector<float>{},bool relative=false) {
@@ -478,6 +521,7 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       bool stale = targets.size() != view.source->nodes.size();
       for (const auto target : targets) stale = stale || (target != kInvalidObject && !graph.exists(target));
       if (stale) resolveAnimationTargets(graph, owner, *view.source, targets);
+      contributeTyped(*view.clip,targets,local,state.weight,state.layer,false,kInvalidObject);
       for (const auto &channel : view.clip->channels) {
         if (channel.node >= targets.size() || targets[channel.node] == kInvalidObject) continue;
         const ObjectId target = targets[channel.node];
@@ -509,6 +553,12 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     if (sample.weight < 0 || !std::isfinite(sample.weight) || !graph.exists(sample.owner)) continue;
     contributionSource=&sample;
     if(sample.frozen) {
+      for(const auto &property:sample.frozen->properties) {
+        if(!graph.exists(property.object)||(sample.mask&&property.object!=sample.mask&&!graph.isDescendantOf(property.object,sample.mask)))continue;
+        auto contribution=property;contribution.weight=sample.weight*property.coverage;contribution.layer=sample.layer;
+        contribution.sourceOwner=sample.controllerOwner;contribution.sourceInstance=sample.instance;
+        typedProperties.push_back(std::move(contribution));
+      }
       for(const auto &channel:sample.frozen->channels) {
         if(!graph.exists(channel.target)||(channel.path!=AnimationPath::Weights&&writable&&!writable(channel.target))) continue;
         bool allowed=sample.mask==kInvalidObject;
@@ -549,6 +599,7 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     bool stale = targets.size() != view.source->nodes.size();
     for (const auto target : targets) stale = stale || (target != kInvalidObject && !graph.exists(target));
     if (stale) resolveAnimationTargets(graph, sample.owner, *view.source, targets);
+    contributeTyped(*view.clip,targets,sample.time,sample.weight*sample.layerWeight,sample.layer,sample.additive,sample.mask);
     const auto masked = [&](ObjectId object) {
       if (sample.mask == kInvalidObject) return true;
       for (ObjectId o = object; o != kInvalidObject; ) {
@@ -595,6 +646,22 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   }
   external_.clear();
   externalBindings_=std::move(nextBindings);
+  if(!typedValid)return false;
+  std::vector<AnimationPropertyContribution> driven;
+  if(!propertyMixer_.apply(graph,typedProperties,compositionDiagnostic_,[&](auto &writes,const auto &baselines,std::string &error) {
+    return evaluateAnimationDriverRequests(graph,driverRequests,driverGui_,driverParameter_,writes,baselines,driven,error);
+  }))return false;
+  for(const auto &driver:driven)std::erase_if(typedProperties,[&](const auto &property) {
+    return property.sourceOwner==driver.sourceOwner&&property.sourceInstance==driver.sourceInstance&&property.layer==driver.layer&&
+      property.object==driver.object&&property.address==driver.address;
+  });
+  typedProperties.insert(typedProperties.end(),driven.begin(),driven.end());
+  if(propertyPublication_&&!typedProperties.empty())propertyPublication_(typedProperties);
+  for(const auto &property:typedProperties)if(property.sourceOwner!=kInvalidObject&&property.coverage>0) {
+    auto found=std::find_if(layerPoses_.begin(),layerPoses_.end(),[&](const auto &entry){return entry.owner==property.sourceOwner&&entry.instance==property.sourceInstance&&entry.layer==property.layer;});
+    if(found==layerPoses_.end()){layerPoses_.push_back({property.sourceOwner,property.sourceInstance,property.layer,std::make_shared<LayerPose>()});found=std::prev(layerPoses_.end());}
+    found->pose->properties.push_back(property);
+  }
 
   // Repouso: a pose (e os pesos) do nó quando a animação o tocou primeiro.
   const auto restOf = [&](ObjectId object) -> Rest & {

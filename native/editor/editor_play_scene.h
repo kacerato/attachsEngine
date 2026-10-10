@@ -472,6 +472,23 @@ private:
     if(animator_.library()&&!animatorGraphs_.advance(world_,*animator_.library(),elapsed,unscaled,samples)) return false;
     animator_.setExternalSamples(std::move(samples));
     if(!drainCommands()) return false;
+    animator_.setPropertyGuiResolver([this](runtime::ObjectId object,u64 component,resources::AssetGuid asset)->ui::GuiRuntime* {
+      const auto lease=sceneGui_.instanceFor(world_,object,component);auto *instance=sceneGui_.find(world_,lease);
+      return instance&&instance->asset==asset?&instance->runtime:nullptr;
+    });
+    animator_.setPropertyPublicationObserver([this](std::span<const runtime::AnimationPropertyContribution> properties) {
+      std::vector<std::string_view> types;types.reserve(properties.size());
+      for(const auto &property:properties)types.push_back(property.address.type);
+      world_.animatedPropertiesChanged(types);
+    });
+    animator_.setDriverResolvers([this](runtime::ObjectId object,u64 component,resources::AssetGuid asset)->ui::GuiRuntime* {
+      const auto lease=sceneGui_.instanceFor(world_,object,component);auto *instance=sceneGui_.find(world_,lease);
+      return instance&&instance->asset==asset?&instance->runtime:nullptr;
+    },[this](runtime::ObjectId object,u64 component,u64 parameter,resources::AssetGuid controller,double &value,std::string &error) {
+      float result=0;const auto status=animatorGraphs_.parameterById(world_,object,component,parameter,controller,result);
+      if(status!=runtime::SceneAnimatorGraphs::Status::Ok){error="Parâmetro de driver ausente, substituído ou incompatível · "+std::to_string(static_cast<u32>(status));return false;}
+      value=result;return true;
+    });
     return animator_.advance(elapsed,[this](runtime::ObjectId id) {
       return world_.authorityOf(world_.handle(id))==runtime::TransformAuthority::Free;
     });

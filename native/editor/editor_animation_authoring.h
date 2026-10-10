@@ -1,4 +1,5 @@
 #pragma once
+#include "editor/editor_animation_property_wire.h"
 #include "resources/animation_clip_asset.h"
 #include <memory>
 
@@ -14,7 +15,8 @@ struct AnimationAuthorKey {
 static_assert(sizeof(AnimationAuthorKey)==48);
 enum class AnimationAuthorOperation : u32 {
   PutKey,SplitKey,EraseKey,PutPose,Retime,Reverse,Crop,RotationMode,
-  RemoveTrack,Name,DisplayRate,LayerAdd,LayerConfigure,LayerMove,LayerDuplicate,LayerRemove,LayerAddTrack,LayerCopyBase,PutCue,RemoveCue
+  RemoveTrack,Name,DisplayRate,LayerAdd,LayerConfigure,LayerMove,LayerDuplicate,LayerRemove,LayerAddTrack,LayerCopyBase,PutCue,RemoveCue,
+  InsertTime,RemoveTime,DuplicateRange,MoveRange,CloseRange,RepeatRange,PutRegion,RemoveRegion
 };
 struct AnimationAuthorCommand {
   u32 operation=0,component=0;
@@ -38,7 +40,7 @@ struct AnimationAuthorBakeRequest {
 };
 static_assert(sizeof(AnimationAuthorBakeRequest)==56);
 struct AnimationAuthorAccess {
-  u32 version=6,size=sizeof(AnimationAuthorAccess);
+  u32 version=12,size=sizeof(AnimationAuthorAccess);
   void *context=nullptr;
   u64 (*selected)(void *)=nullptr;
   int (*count)(void *,u32 imported)=nullptr;
@@ -77,6 +79,39 @@ struct AnimationAuthorAccess {
   int (*recordPose)(void *)=nullptr;
   int (*cancelPose)(void *)=nullptr;
   int (*closePreview)(void *)=nullptr;
+  // ABI 7 retains the ABI 1-6 prefix. Cue clipboards belong to this scope.
+  u64 (*copyCues)(void *,u64 draft,const u64 *ids,int count)=nullptr;
+  int (*pasteCues)(void *,u64 draft,u64 clipboard,float time)=nullptr;
+  int (*transformCues)(void *,u64 draft,const u64 *ids,int count,double pivot,double scale,double offset)=nullptr;
+  int (*eraseCues)(void *,u64 draft,const u64 *ids,int count)=nullptr;
+  // ABI 8: same isolated pose tools as touch; flags create-channels=1, armed=2, auto-key=4.
+  int (*configurePoseRecording)(void *,u32 flags,float start,float end)=nullptr;
+  int (*configurePoseLocks)(void *,u32 path,u64 mask)=nullptr;
+  // 0 identity, 1 scene reference, 2 copy local channel, 3 copy world TRS, 4 paste.
+  int (*poseTool)(void *,u32 operation)=nullptr;
+  // ABI 9: transient object selection + persistent clip-relative named sets.
+  // 0 set, 1 toggle, 2 parents, 3 children, 4 siblings, 5 all, 6 clear,
+  // 7 focus, 8 isolate, 9 leave isolation. Set/toggle alone accept targets.
+  int (*poseSelection)(void *,u32 operation,const u64 *targets,int count,u64 primary)=nullptr;
+  int (*poseTargets)(void *,u64 *targets,int capacity)=nullptr;
+  // 0 save, 1 recall, 2 remove. UTF-8 name is copied synchronously.
+  int (*poseSet)(void *,u32 operation,const u8 *name,int length)=nullptr;
+  // index=-1 queries count; other indices query/copy UTF-8 byte length.
+  int (*poseSetName)(void *,int index,u8 *name,int capacity)=nullptr;
+  // ABI 10: arrangement shares the atomic resource operation used by touch.
+  int (*arrangeSelection)(void *,u64 draft,const AnimationAuthorAddress *keys,int keyCount,
+      const u64 *cues,int cueCount,u32 mode,float first,float last)=nullptr;
+  // ABI 11: section clock and final composition share the runtime sampler.
+  int (*sampleRegion)(void *,u64 draft,u64 region,u64 track,double elapsed,u32 wrap,float *values,int capacity)=nullptr;
+  // ABI 12: same catalog, guarded bindings and atomic authoring as touch.
+  int (*propertyCatalog)(void *,u64,int,AnimationAuthorProperty *,u8 *,int)=nullptr;
+  int (*addProperty)(void *,u64,u64,u64,const AnimationAuthorProperty *,u64 *)=nullptr;
+  int (*putProperty)(void *,u64,u64,u64,float,const AnimationAuthorPropertyValue *)=nullptr;
+  int (*sampleProperty)(void *,u64,u64,float,AnimationAuthorPropertyValue *)=nullptr;
+  int (*remapProperty)(void *,u64,u64,u64,u64,const AnimationAuthorProperty *)=nullptr;
+  int (*configureDrivers)(void *,u64,u64,const u8 *,int)=nullptr;
+  int (*bindPropertyObject)(void *,u64,u64,u64,u64 *)=nullptr;
+  int (*driverParameters)(void *,u64,int,AnimationAuthorDriverParameter *,u8 *,int)=nullptr;
 };
 class AnimationAuthoringScope final {
 public:

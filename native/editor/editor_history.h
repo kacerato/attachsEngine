@@ -61,6 +61,7 @@ public:
   // Teto de passos guardados. O mais antigo cai quando estoura: um editor móvel
   // não pode trocar memória por um histórico infinito que ninguém percorre.
   static constexpr u32 kMaximumTransactions = 256;
+  static constexpr u64 kMaximumRetainedResourceBytes=64ull<<20;
   static constexpr u32 kLabelCapacity = 48;
 
   // Abre uma transação. Chamadas aninhadas são recusadas — aninhamento exigiria
@@ -74,7 +75,11 @@ public:
   bool isOpen() const noexcept { return open_; }
   // Standalone resource transaction, already committed. Replay must be atomic:
   // false leaves the history cursor in place. Never mixes with scene commands.
-  bool recordResource(std::string_view label,std::function<bool(bool)> replay);
+  bool recordResource(std::string_view label,std::function<bool(bool)> replay,u64 retainedBytes=0);
+  // Attach an already-adopted resource to this group's scene commands. Replay
+  // preflights commands, then gives the resource publisher the target scene.
+  bool setPendingResourceReplay(std::function<bool(bool)> replay,u64 retainedBytes=0,std::function<void()> settled={});
+  u64 retainedResourceBytes() const noexcept;
 
   EditorEntityId createEntity(EditorDocument &document, EditorEntityId parent,
                               EditorEntityKind kind, std::string_view name);
@@ -124,9 +129,13 @@ private:
     char label[kLabelCapacity]{};
     std::vector<EditorCommand> commands;
     std::function<bool(bool)> resourceReplay;
+    u64 retainedResourceBytes=0;
+    std::function<void()> resourceSettled;
   };
 
   bool record(const EditorCommand &command);
+  bool replayCompound(Transaction &transaction,EditorDocument &document,bool forward);
+  void trimHistoryBudget();
   bool applyForward(EditorDocument &document, const EditorCommand &command) const;
   bool applyBackward(EditorDocument &document, const EditorCommand &command) const;
   // Fecha a transação aberta e a empilha, descartando-a se ficou vazia: um

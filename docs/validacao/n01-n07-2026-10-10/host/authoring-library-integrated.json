@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "platform": "Windows host",
+  "androidAccepted": false,
+  "scope": "Focused authoring/library acceptance; captures are CPU controls, not Android/Vulkan proof",
+  "sdkBridgeSha256": "A3C96B93577F56A03E65466782303911D0B05F353AF89638D375B22D3C54EAB6",
+  "results": [
+    {
+      "name": "editor",
+      "exitCode": 1,
+      "startedUtc": "2026-10-10T22:05:22.3687542Z",
+      "endedUtc": "2026-10-10T22:05:36.2261140Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\editor-integrated.log",
+      "binarySha256": "7FD3F1F66D52EC09D8D095A0DA89259FF5E9B59ECB80A2AD8E0D93278B000B62"
+    },
+    {
+      "name": "library",
+      "exitCode": 0,
+      "startedUtc": "2026-10-10T22:05:38.0908008Z",
+      "endedUtc": "2026-10-10T22:06:22.0907837Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\library-integrated.log",
+      "binarySha256": "A3F0B92B12BF40F085CB67BF95A69558BB8B112245DD5129BA04C2C9D75E325F"
+    },
+    {
+      "name": "gui",
+      "exitCode": 0,
+      "startedUtc": "2026-10-10T22:06:24.3704214Z",
+      "endedUtc": "2026-10-10T22:06:27.1680840Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\gui-integrated.log",
+      "binarySha256": "FE2CA0C82DA5E1116773A21EEA58023B2CAE8C91420194BC02E7330AEAE922F7"
+    },
+    {
+      "name": "sdk",
+      "exitCode": 0,
+      "startedUtc": "2026-10-10T22:06:29.5578949Z",
+      "endedUtc": "2026-10-10T22:06:39.6731060Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\sdk-integrated.log",
+      "binarySha256": null
+    }
+  ]
+}

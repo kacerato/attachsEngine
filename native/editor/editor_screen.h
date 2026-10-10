@@ -19,13 +19,18 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
+#include <functional>
 
 #include "resources/physics_material.h"
+#include "resources/library_index.h"
 #include "resources/animator_controller.h"
 #include "navigation/navigation_mesh.h"
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_clip_selection.h"
 #include "resources/animation_clip_clipboard.h"
+#include "resources/animation_clip_timeline.h"
+#include "editor/editor_animation_pose_tools.h"
+#include "editor/editor_animation_pose_selection.h"
 #include "resources/animation_clip_bake.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
@@ -73,6 +78,12 @@ struct EditorPresetField {
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
 // no próprio identificador.
 enum class EditorWidget : u32 {
+  LibraryOpen=0xCD100000u,LibraryImport,LibraryClose,LibraryPrevious,LibraryNext,LibraryKinds,LibraryPackages,LibrarySearch,LibraryDetailsClose,
+  LibraryReimport,LibraryKeepLocal,LibraryReceiveSource,LibraryInstantiate,LibraryControllerAssign,
+  LibraryItemBase=0xCD110000u,
+  LibraryItemDetailsBase=0xCD120000u,
+  ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
+  ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
   ColliderGeometryFace,ColliderGeometryHidden,ColliderGeometryAdditive,ColliderGeometryUndo,ColliderGeometryRedo,
   ColliderGeometryCoordinateX,ColliderGeometryCoordinateY,ColliderGeometryCoordinateZ,
@@ -338,6 +349,7 @@ enum class EditorWidget : u32 {
   TextureProfilePrevious, TextureProfileNext,
   TextureManagerClose, TextureSearch, TextureManagerPrevious, TextureManagerNext,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
+  TextureTiffExtra=0x09f00100u, TextureTiffPrecision, TextureTiffColor, TextureTiffLosses,
   DiagnosticDockToggle=0x09000000u, DiagnosticOlder, DiagnosticNewer,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
@@ -363,6 +375,7 @@ enum class EditorWidget : u32 {
   ComponentHandleBase=0x5E000060u,
   ColliderHandleBase=0x5E000080u,
   CameraPreviewPin=0x5E000030u, CameraPreviewClose, CameraPreviewResolution, CameraPreviewFrequency, CameraPreviewRetry,
+  MaterialPreviewShape, MaterialPreviewLeft, MaterialPreviewRight, MaterialPreviewUp, MaterialPreviewDown, MaterialPreviewNear, MaterialPreviewFar,
   PresetOpen=0x5E000040u, PresetClose, PresetSave, PresetApply, PresetAdd, PresetRename, PresetDelete, PresetPrevious, PresetNext,
   // Escolha por campo do preset: marcar tudo, desmarcar tudo e paginar o diff.
   PresetSelectAll, PresetSelectNone, PresetFieldsPrevious, PresetFieldsNext, PresetSaveRecipe,
@@ -484,7 +497,7 @@ enum class EditorWidget : u32 {
   StatusConsole=0xCB000000u, StatusTasks, StatusTasksClose, StatusTaskCancelBase=0xCB000100u,
   // Inspector de material do projeto (Unity 6000.0 Material Inspector):
   // voltar e localizar os usos na cena.
-  MaterialInspectorClose=0xCC000000u, MaterialInspectorUses,
+  MaterialInspectorClose=0xCC000000u, MaterialInspectorUses, MaterialInspectorApply, MaterialInspectorPreview, MaterialInspectorStandalone,
   // Mapa HDRI do projeto em Propriedades: voltar, usos, exposição da prévia,
   // receita (menos/mais por linha), reverter e aplicar com reimportação.
   EnvironmentInspectorClose=0xCC000100u, EnvironmentInspectorUses, EnvironmentExposureDown, EnvironmentExposureUp,
@@ -692,10 +705,33 @@ enum : u32 {
     BakeTarget,BakeReference,BakeSeedUse,BakeSeedX,BakeSeedY,BakeSeedZ,
     Cues,CueAddEvent,CueAddMarker,CueName,CueTime,CueTag,CueValue,CueOptions,CueForward,CueReverse,CueEnabled,CueDuplicate,CueDelete,CuePrevious,CueNext,CueOptionsClose,
     SelectMode=0xb080,Row=0xb100,Choice=0xb200,TargetChoice=0xb300,TargetEnter=0xb340,PropertyChoice=0xb380,LayerChoice=0xb3c0,PoseValue=0xb400,
-    PoseAutoKey=0xb480,PoseRecord,PoseCancel,PoseIsolate,PoseNumbers,PoseJoints,PoseTranslate,PoseRotate,PoseScale,PoseFocus,Restart,PoseOrbit,PosePan,PoseZoom,PoseViewport,PoseGizmo=0xb500
+    PoseAutoKey=0xb480,PoseRecord,PoseCancel,PoseIsolate,PoseNumbers,PoseJoints,PoseTranslate,PoseRotate,PoseScale,PoseFocus,Restart,PoseOrbit,PosePan,PoseZoom,PoseViewport,
+    Range=0xb4a0,RangeClose,RangeStart,RangeEnd,RangeDestination,RangeInsert,RangeRemove,RangeDuplicate,CueSelectAll,RangeMove,
+    RangeTaskEdit,RangeTaskCycle,RangeTaskArrange,RangeCopies,RangeTolerance,RangeCloseLoop,RangeRepeat,
+    RangeAlignStart,RangeAlignEnd,RangeAlignCenter,RangeDistribute,
+    PoseTools=0xb4c0,PoseToolsClose,PoseToolsRecord,PoseToolsReuse,PosePolicy,PoseArm,PoseArmStart,PoseArmEnd,
+    PoseSpace,PoseCopy,PosePaste,PoseResetIdentity,PoseResetReference,PoseUnlock,
+    PoseToolsSelection,PoseSelectAdd,PoseSelectClear,PoseSelectAll,PoseSelectParent,PoseSelectChildren,PoseSelectSiblings,
+    PoseSetSave,PoseSetPrevious,PoseSetNext,PoseSetLoad,PoseSetDelete,PoseSelectionIsolate,
+    CurveView=0xb4e0,CurveViewClose,CurvePin,CurveClearPins,CurveNormalize,CurveIsolate,
+    CurveFrameSelection,CurveValueZoomIn,CurveValueZoomOut,CurveValueUp,CurveValueDown,CurveTimeLeft,CurveTimeRight,
+    CurveViewSettings,CurveViewReferences,CurveRefPrevious,CurveRefNext,CurveRefChoice=0xb4f4,
+    Regions=0xb510,RegionClose,RegionPrevious,RegionNext,RegionName,RegionStart,RegionEnd,RegionAdd,RegionDelete,RegionPreview,RegionList,
+    RegionChoice=0xb520,
+    Properties=0xb580,PropertyClose,PropertyCatalog,PropertyTracks,PropertyPrevious,PropertyNext,
+    PropertyRecord,PropertyRemove,PropertyKeyPrevious,PropertyKeyNext,PropertyKeyDelete,PropertyKeyTime,
+    PropertySearch,PropertyRemap,PropertyTime,PropertyCurve,PropertyComponent,PropertyCurveFields,PropertyTangent,PropertyWeighted,
+    PropertyValue=0xb5a0,PropertyEntry=0xb5b0,PropertyCurveNumber=0xb5b8,PropertyCurveKey=0xb5c0,
+    Drivers=0xb600,DriverCancel,DriverApply,DriverBack,DriverAdd,DriverPrevious,DriverNext,
+    DriverInput,DriverOutput,DriverCurve,DriverFields,DriverDelete,DriverClearOutput,
+    DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
+    DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
+    DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
+    PoseLock=0xb540,
+    PoseGizmo=0xb500
 };
 inline constexpr u32 id(u32 code) {return animator_widget::id(code);}
-inline constexpr bool owns(u32 widget) {return animator_widget::owns(widget)&&animator_widget::code(widget)>=Open&&animator_widget::code(widget)<0xb503;}
+inline constexpr bool owns(u32 widget) {return animator_widget::owns(widget)&&animator_widget::code(widget)>=Open&&animator_widget::code(widget)<0xb700;}
 }
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
@@ -721,7 +757,7 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 // Seis contextos fixos. Configuração de projeto (camadas, entrada, água) é UMA
 // workspace com seções; um tipo de componente ou uma lista de ajustes nunca
 // vira workspace própria — ver docs/planos/EXPANSAO-OBJETOS-COMPONENTES-API.
-enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code, Gui };
+enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Project, Code, Gui, Library };
 enum class EditorProjectSection : u8 { Layers, Input, Water, Tags };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
@@ -795,6 +831,23 @@ struct EditorNavigationView {
   std::vector<u8> areas;
 };
 struct EditorScreenState final {
+  struct LibraryRow {
+    resources::AssetGuid id{};std::string name,context,diagnostic;
+    resources::LibraryResolutionState state=resources::LibraryResolutionState::Pending;
+    resources::LibraryItemKind kind=resources::LibraryItemKind::Other;
+  };
+  struct LibraryPackageRow {resources::AssetGuid id{};std::string name;};
+  std::vector<LibraryRow> libraryRows;
+  std::vector<LibraryPackageRow> libraryPackages;
+  resources::AssetGuid libraryPackage{};
+  resources::AssetGuid libraryDetailItem{};
+  bool libraryConflict=false,libraryCanInstantiate=false,libraryCanAssignController=false,libraryCanReimport=false;
+  std::string libraryQuery;
+  std::string libraryDiagnostic;
+  std::string libraryDetailName;
+  u32 libraryDiagnosticPage=0;
+  u32 libraryPage=0,libraryKind=0;
+  bool libraryImportRequested=false,searchingLibrary=false;
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
   // recorte da câmera. As áreas seguras entram por `safeArea`.
   ui::UiRect surface{};
@@ -923,11 +976,51 @@ struct EditorScreenState final {
   // One clip surface: shared stable selection for keys/curves and isolated pose.
   // None of this UI state is stored as runtime animation data.
   bool clipOpen=false,clipCurves=false,clipPlaying=false,clipLoop=true,clipExpanded=false,clipPicker=false,clipNewPicker=false,clipTangentPicker=false;
+  bool clipCurveView=false,clipCurveNormalized=false,clipCurveIsolated=false;
+  bool clipRegionsShown=false,clipRegionDetails=false;
+  bool clipPropertiesShown=false,clipPropertyCatalog=false,clipPropertyRemap=false,clipPropertyCurves=false;
+  std::string clipPropertyQuery;
+  u32 clipPropertyComponent=0,clipPropertyCurveMode=0;
+  bool clipDriversShown=false,clipDriverFields=false;
+  u32 clipDriverRoute=0,clipDriverPage=0,clipDriverCurveKey=0,clipDriverCurveMode=0;
+  u64 clipDriverNode=0;
+  const resources::AnimationClipAsset *clipDriverDraft=nullptr;
+  struct ClipDriverEntry {EditorEntityId target=0;resources::AnimationDriverInput input;std::string label;};
+  std::vector<ClipDriverEntry> clipDriverEntries;
+  std::string clipDriverInspection;
+  std::function<void(ui::UiDrawList &,const ui::UiRect &)> clipGuiPreviewDraw;
+  u64 clipPropertyTrack=0,clipPropertyKey=0;
+  u32 clipPropertyPage=0,clipPropertyDimensions=0;
+  float clipPropertyValues[4]{};
+  bool clipPropertyBoolean=false;
+  u32 clipPropertyEnum=0;
+  struct ClipPropertyEntry {
+    resources::AnimationPropertyAddress address;std::string label;
+    std::string unit{},help{};float minimum=0,maximum=0;
+  };
+  std::vector<ClipPropertyEntry> clipPropertyEntries;
+  std::vector<std::pair<u32,std::string>> clipPropertyOptions;
+  struct ClipPropertyKey {u64 id=0;float time=0;};
+  std::vector<ClipPropertyKey> clipPropertyKeys;
+  std::string clipPropertyLabel,clipPropertyError,clipPropertyUnit,clipPropertyInfo;
+  u64 clipRegion=0,clipPreviewRegion=0;
+  u32 clipRegionPage=0;
+  u32 clipCurveViewTask=0,clipCurveReferencePage=0;
+  struct ClipCurveRange {u64 track=0;u32 component=0;double minimum=0,maximum=1;};
+  std::vector<ClipCurveRange> clipCurvePins,clipCurveRanges;
   u32 clipModeSide=0;
-  u32 clipAuthoringPicker=0,clipTargetPage=0;
+  u32 clipAuthoringPicker=0,clipTargetPage=0,clipAuthorReturn=0;
   EditorEntityId clipTargetBranch=0,clipTargetNode=0,clipTarget=0;
   bool clipPoseShown=false;u32 clipPosePage=0;
   bool clipPoseAutoKey=true,clipPosePending=false;
+  AnimationPoseRecordingPolicy clipPoseRecording;
+  u64 clipPoseLocks[4]{};
+  bool clipPoseToolsShown=false,clipPoseWorldSpace=false,clipPoseClipboardAvailable=false,clipPoseClipboardWorld=false;
+  u32 clipPoseToolsPage=0;
+  bool clipPoseSelectionAdd=false,clipPoseSelectionEmpty=false,clipPoseSelectionIsolated=false;
+  u32 clipPoseSetPage=0;
+  std::vector<EditorEntityId> clipPoseSelection;
+  std::vector<AnimationPoseSelectionSet> clipPoseSets;
   bool clipPoseIsolated=false;
   bool clipPoseNumbers=false,clipPoseJoints=true,clipPreviewExpanded=false;
   EditorEntityId clipPreviewTarget=0;
@@ -948,6 +1041,12 @@ struct EditorScreenState final {
     ui::UiRect clipSelectionBox{};
     bool clipEditPicker=false;
     bool clipCues=false,clipCueOptions=false;u64 clipCue=0;
+    std::vector<u64> clipCueSelection;
+    std::shared_ptr<const resources::AnimationCueClipboard> clipCueClipboard;
+    bool clipRangeShown=false;
+    float clipRangeStart=0,clipRangeEnd=0,clipRangeDestination=0;
+    u32 clipRangeTask=0,clipRangeCopies=1;
+    float clipRangeTolerance=.001f;
     u64 clipLayer=0;bool clipLayersShown=false,clipLayerPicker=false;u32 clipLayerPage=0;
     bool clipBakeShown=false,clipBakeHasReport=false;
     bool clipBakeConsolidate=false,clipBakeReferenceShown=false,clipBakeReportConsolidated=false;
@@ -1269,6 +1368,9 @@ struct EditorScreenState final {
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;
+  bool cameraPreviewMaterial=false;
+  bool cameraPreviewActive=false,cameraPreviewStandalone=false;
+  u8 materialPreviewShape=0;
   std::string cameraPreviewDiagnostic;
   u32 cameraPreviewWidth=640,cameraPreviewHeight=360;
   float cameraPreviewFrequency=15;
@@ -1418,6 +1520,8 @@ struct EditorScreenState final {
   bool textureImportReprepare=false;
   u32 textureImportSourceWidth=0,textureImportSourceHeight=0,textureImportDroppedMips=0;
   bool textureImportSourceHasAlpha=false;
+  bool textureImportTiff=false,textureImportTiffUndefinedExtra=false,textureImportTiffHasIcc=false,textureImportTiffMatrixSrgb=false;
+  u16 textureImportTiffBits=0;
   ui::UiRect textureImportImage{};
   std::string importSummary,importPath;
   u32 importPage=0;
@@ -1430,7 +1534,7 @@ struct EditorScreenState final {
   u32 importAmbiguityChoice=0;
   // R3: o importador vive em Propriedades, com dados estruturados por aba em vez
   // de um texto paginado numa janela que bloqueava o editor inteiro.
-  enum class ImportTab : u8 { Summary, Structure, Meshes, Textures, Profile };
+  enum class ImportTab : u8 { Summary, Structure, Meshes, Textures, Profile, Rig };
   ImportTab importTab=ImportTab::Summary;
   // Uma linha da aba Estrutura. `node` é a identidade que o nó terá no mapa —
   // a MESMA que a publicação vai gravar —, e é por ela que a exclusão é pedida.
@@ -1476,6 +1580,16 @@ struct EditorScreenState final {
   bool importGenerateLods=false,importPreparedGenerateLods=false;
   bool importOptimizeOrder=false,importPreparedOptimizeOrder=false;
   u8 importLodLevels=4,importPreparedLodLevels=4;
+  bool importFbxDeformation=true,importPreparedFbxDeformation=true;
+  bool importFbxReduceWeights=false,importPreparedFbxReduceWeights=false;
+  bool importFbxApproximateSteps=false,importPreparedFbxApproximateSteps=false;
+  u8 importFbxBakeRate=30,importPreparedFbxBakeRate=30;
+  bool importRetryable=false,importPublishedView=false;
+  struct ImportTakeRow {std::string name;float duration=0;u32 channels=0,morphChannels=0;};
+  std::vector<ImportTakeRow> importTakes;
+  u32 importTake=0,importTakeRoot=0,importRigJoints=0,importRigMorphs=0;
+  resources::AssetGuid importTakeSource{};
+  std::string importRigDiagnostic;
   // S2: streaming das texturas desta fonte; não pede nova preparação.
   bool importTextureStreaming=true;
   i32 importTextureStreamingPriority=0;
@@ -1679,6 +1793,7 @@ struct EditorScreenState final {
 };
 
 struct EditorScreenLayout final {
+  u32 libraryPages=1,libraryDiagnosticPages=1;
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};
   ui::UiRect colorSliders[5]{};
@@ -1738,6 +1853,9 @@ struct EditorScreenLayout final {
 // responde onde não está.
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const ui::UiTheme &theme,
                                      ui::UiDrawList &list, ui::UiInputRouter &router);
+bool animationPropertySearchMatches(const EditorScreenState::ClipPropertyEntry &,std::string_view);
+void buildAnimationDriverSurface(const EditorScreenState &,const ui::UiTheme &,ui::UiDrawList &,ui::UiInputRouter &,const ui::UiRect &);
+void buildAnimationPropertyCurveSurface(const EditorScreenState &,const ui::UiTheme &,ui::UiDrawList &,ui::UiInputRouter &,const ui::UiRect &);
 EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const ui::UiTheme &theme,
                                            ui::UiDrawList &list,ui::UiInputRouter &router);
 

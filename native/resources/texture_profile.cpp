@@ -9,7 +9,9 @@ bool sameTexturePreparation(const TextureProfile &a, const TextureProfile &b) no
   return a.interpretation == b.interpretation && a.maximumDimension == b.maximumDimension && a.mipmaps == b.mipmaps &&
          a.dilateEdges == b.dilateEdges && a.anisotropy == b.anisotropy &&
          a.invertNormalGreen == b.invertNormalGreen && a.preserveAlphaCoverage == b.preserveAlphaCoverage &&
-         std::fabs(a.alphaCoverageCutoff-b.alphaCoverageCutoff)<.0005f;
+         std::fabs(a.alphaCoverageCutoff-b.alphaCoverageCutoff)<.0005f &&
+         a.tiffUndefinedExtra==b.tiffUndefinedExtra && a.tiffQuantize16==b.tiffQuantize16 &&
+         a.tiffIgnoreColorProfile==b.tiffIgnoreColorProfile;
 }
 
 bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexcept {
@@ -18,7 +20,7 @@ bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexce
 }
 
 bool validTextureProfile(const TextureProfile &profile) noexcept {
-  return profile.interpretation <= TextureInterpretationNormal &&
+  return profile.interpretation <= TextureInterpretationNormal && profile.tiffUndefinedExtra<=2 &&
          profile.streamingPriority >= TextureStreamingPriorityMinimum &&
          profile.streamingPriority <= TextureStreamingPriorityMaximum &&
          std::isfinite(profile.alphaCoverageCutoff) && profile.alphaCoverageCutoff >= 0 && profile.alphaCoverageCutoff <= 1 &&
@@ -33,7 +35,10 @@ std::string serializeTextureProfile(const TextureProfile &profile) {
          ",\"preserveAlphaCoverage\":" + (profile.preserveAlphaCoverage ? "1" : "0") +
          ",\"alphaCoverageCutoff\":" + std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*1000.0f))) +
          ",\"streamingMipmaps\":" + (profile.streamingMipmaps ? "1" : "0") +
-         ",\"streamingPriority\":" + std::to_string(profile.streamingPriority) + "}\n";
+         ",\"streamingPriority\":" + std::to_string(profile.streamingPriority) +
+         ",\"tiffUndefinedExtra\":" + std::to_string(profile.tiffUndefinedExtra) +
+         ",\"tiffQuantize16\":" + (profile.tiffQuantize16?"1":"0") +
+         ",\"tiffIgnoreColorProfile\":" + (profile.tiffIgnoreColorProfile?"1":"0") + "}\n";
 }
 
 bool parseTextureProfile(std::string_view text, TextureProfile &out) {
@@ -59,6 +64,9 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
   const double priorityValue = schema >= 4 ? document.number(root, "streamingPriority", 1e9) : 0.0;
   const auto streamingPriority = std::floor(priorityValue) == priorityValue ? static_cast<i64>(priorityValue) : i64{1} << 40;
   const auto flag = [](i64 value) { return value == 0 || value == 1; };
+  const auto extra=schema>=5?document.index(root,"tiffUndefinedExtra"):0;
+  const auto precision=schema>=5?document.index(root,"tiffQuantize16"):0;
+  const auto icc=schema>=5?document.index(root,"tiffIgnoreColorProfile"):0;
   // O valor 3 só passou a significar mapa normal no schema 2. Aceitá-lo em um
   // perfil v1 mudaria o sentido de dados antigos/corrompidos durante a migração.
   if (interpretation < 0 || interpretation > 255 ||
@@ -66,7 +74,8 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
       !flag(mipmaps) || !flag(edges) ||
       !flag(anisotropy) || !flag(invertNormalGreen) || !flag(preserveAlphaCoverage) ||
       alphaCoverageCutoff < 0 || alphaCoverageCutoff > 1000 || !flag(streamingMipmaps) ||
-      streamingPriority < TextureStreamingPriorityMinimum || streamingPriority > TextureStreamingPriorityMaximum) return false;
+      streamingPriority < TextureStreamingPriorityMinimum || streamingPriority > TextureStreamingPriorityMaximum ||
+      extra<0 || extra>2 || !flag(precision) || !flag(icc)) return false;
   TextureProfile parsed;
   parsed.interpretation = static_cast<u8>(interpretation);
   parsed.maximumDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
@@ -78,6 +87,7 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
   parsed.alphaCoverageCutoff = static_cast<float>(alphaCoverageCutoff)/1000.0f;
   parsed.streamingMipmaps = streamingMipmaps == 1;
   parsed.streamingPriority = static_cast<i32>(streamingPriority);
+  parsed.tiffUndefinedExtra=static_cast<u8>(extra);parsed.tiffQuantize16=precision==1;parsed.tiffIgnoreColorProfile=icc==1;
   if (!validTextureProfile(parsed)) return false;
   out = parsed;
   return true;

@@ -130,7 +130,7 @@ inline constexpr std::array<ComponentEnum, 4> lightEnums{{
   {"kind", "Modalidade", lightKindOptions,
     [](const ComponentValue &v) { return static_cast<u32>(static_cast<const Light &>(v).kind); },
     [](ComponentValue &v, u32 value) { static_cast<Light &>(v).kind = static_cast<LightKind>(value); },
-    {"Geral","","Tipo de emissão da luz"}},
+    {"Geral","","Tipo de emissão da luz"},true},
   {"unit", "Unidade", lightUnitOptions,
     [](const ComponentValue &v) { return static_cast<u32>(static_cast<const Light &>(v).unit); },
     [](ComponentValue &v, u32 value) { static_cast<Light &>(v).unit = static_cast<LightUnit>(value); },

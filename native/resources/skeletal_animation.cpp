@@ -445,6 +445,34 @@ bool skinnedLocalBounds(const SkinDefinition &skin, const std::vector<float> &pa
 } // namespace ae::resources
 
 namespace ae::resources {
+bool validAnimationRegions(std::span<const AnimationRegion> regions,float duration) {
+  if(regions.size()>MaximumAnimationRegions||!std::isfinite(duration)||duration<0)return false;
+  std::unordered_set<u64> ids;
+  float previous=-1;u64 previousId=0;
+  for(const auto &region:regions) {
+    if(!region.id||region.id>static_cast<u64>(std::numeric_limits<i64>::max())||!ids.insert(region.id).second||
+       region.name.empty()||region.name.size()>256||!std::isfinite(region.start)||!std::isfinite(region.end)||
+       region.start<0||region.end<=region.start||region.end>duration||region.start<previous||
+       (region.start==previous&&region.id<=previousId))return false;
+    for(unsigned char c:region.name)if(c<32||c==127)return false;
+    previous=region.start;previousId=region.id;
+  }
+  return true;
+}
+bool animationRegionTime(const AnimationRegion &region,double elapsed,AnimationWrapMode mode,float &time) {
+  if(!std::isfinite(elapsed)||!std::isfinite(region.start)||!std::isfinite(region.end)||
+     region.start<0||region.end<=region.start||static_cast<u32>(mode)>3)return false;
+  const double length=double(region.end)-region.start;
+  double value=std::clamp(elapsed,0.0,length);
+  if(mode==AnimationWrapMode::Loop||mode==AnimationWrapMode::PingPong) {
+    const double period=mode==AnimationWrapMode::Loop?length:2*length;
+    value=std::fmod(elapsed,period);if(value<0)value+=period;
+    if(value>length)value=period-value;
+  }
+  const float candidate=static_cast<float>(double(region.start)+value);
+  if(!std::isfinite(candidate))return false;
+  time=candidate;return true;
+}
 bool validAnimationCues(std::span<const AnimationCue> cues,float duration) {
   if(cues.size()>MaximumAnimationCues||!std::isfinite(duration)||duration<0)return false;
   std::unordered_set<u64> ids;float previous=-1;u64 previousId=0;

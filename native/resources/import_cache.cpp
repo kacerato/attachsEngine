@@ -127,6 +127,8 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                      "|tangents=" + number(limits.tangents) +
                      "|cameras=" + number(limits.importCameras ? 1 : 0) +
                      "|lights=" + number(limits.importLights ? 1 : 0) +
+                     "|fbx-ufbx-0.20.0-family2="+number(limits.fbxDeformation?1:0)+","+number(limits.fbxReduceWeights?1:0)+","+
+                         number(limits.fbxApproximateSteps?1:0)+","+number(limits.fbxBakeRate)+
                      "|imageDimension=" + number(limits.image.maximumDimension) +
                      "|imagePixels=" + number(limits.image.maximumPixels) +
                      "|imageEncoded=" + number(limits.image.maximumEncodedBytes) +
@@ -146,10 +148,13 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
                       std::vector<u64> *textureOffsets) {
   if (textureOffsets) textureOffsets->clear();
   out.clear();
-  if (key.empty() || model.draws.empty() || model.nodes.empty()) return false;
+  if (key.empty() || model.nodes.empty() || (model.draws.empty()&&model.animations.empty())) return false;
   // This is a derived glTF cache, not the editable clip resource format.
   // Refuse authoring curves rather than discarding keys, IDs and handles.
-  for(const auto &clip:model.animations)for(const auto &channel:clip.channels)if(!channel.curves.empty()||!channel.layerSources.empty())return false;
+  for(const auto &clip:model.animations) {
+    if(!clip.properties.empty()||clip.drivers)return false;
+    for(const auto &channel:clip.channels)if(!channel.curves.empty()||!channel.layerSources.empty())return false;
+  }
   Writer writer{out};
   writer.raw(kMagic, sizeof kMagic);
   writer.u32v(ImportCacheSchema);
@@ -468,7 +473,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
       reader.at != bytes.size())
     return refuse();
   // Coerência mínima que quem publica pressupõe.
-  if (model.draws.empty() || model.nodes.empty() || model.drawNodes.size() != model.draws.size() ||
+  if (model.nodes.empty() || (model.draws.empty()&&model.animations.empty()) || model.drawNodes.size() != model.draws.size() ||
       model.vertices.size() % renderer::MapVertexStride != 0)
     return refuse();
   for (const auto node : model.drawNodes)

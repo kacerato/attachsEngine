@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "platform": "Windows host",
+  "androidAccepted": false,
+  "scope": "Windows host: editor authoring 55/55, library 20/20, GUI 30/30 and native ABI12 SDK1/1. Library/GUI/SDK retain their independently recorded binaries; only editor was rebuilt after ownership/UI repairs. No Android acceptance.",
+  "sdkBridgeSha256": "A3C96B93577F56A03E65466782303911D0B05F353AF89638D375B22D3C54EAB6",
+  "results": [
+    {
+      "name": "editor",
+      "exitCode": 0,
+      "endedUtc": "2026-10-10T22:31:03.650436+00:00",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\editor-accepted-final.log",
+      "binarySha256": "6CC373F4BBD121DF07A67B8A6EADD46397858B1F53822362E16552A20E553E1C"
+    },
+    {
+      "name": "library",
+      "exitCode": 0,
+      "startedUtc": "2026-10-10T22:05:38.0908008Z",
+      "endedUtc": "2026-10-10T22:06:22.0907837Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\library-integrated.log",
+      "binarySha256": "A3F0B92B12BF40F085CB67BF95A69558BB8B112245DD5129BA04C2C9D75E325F"
+    },
+    {
+      "name": "gui",
+      "exitCode": 0,
+      "startedUtc": "2026-10-10T22:06:24.3704214Z",
+      "endedUtc": "2026-10-10T22:06:27.1680840Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\gui-integrated.log",
+      "binarySha256": "FE2CA0C82DA5E1116773A21EEA58023B2CAE8C91420194BC02E7330AEAE922F7"
+    },
+    {
+      "name": "sdk",
+      "exitCode": 0,
+      "startedUtc": "2026-10-10T22:06:29.5578949Z",
+      "endedUtc": "2026-10-10T22:06:39.6731060Z",
+      "log": "C:\\Users\\donod\\Downloads\\atchengine\\docs\\validacao\\n01-n07-2026-10-10\\host\\sdk-integrated.log",
+      "binarySha256": null
+    }
+  ],
+  "supersedes": "authoring-library-integrated.json (53/55 editor before two focused repairs)"
+}

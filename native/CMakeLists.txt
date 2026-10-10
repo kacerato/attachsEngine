@@ -4,6 +4,12 @@ project(AetherNative C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+if(CMAKE_GENERATOR MATCHES "Ninja")
+  # Editor integration links can each retain multiple GB of template/debug
+  # metadata. Serialize links while retaining parallel source compilation.
+  set_property(GLOBAL APPEND PROPERTY JOB_POOLS astra_link=1)
+  set(CMAKE_JOB_POOL_LINK astra_link)
+endif()
 
 # Host-side generation only. Generated C++ is checked in and has no Python
 # dependency at runtime. Checking as a dependency also protects explicit targets.
@@ -443,20 +449,50 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 # de arquivos -- quem le e escreve o arquivo e quem tem o projeto na mao. Fica
 # fora de aether_core porque core e o nucleo que TODO alvo arrasta, incluindo os
 # benchmarks, e um registro de projeto nao pertence a esse conjunto.
+add_library(aether_ufbx STATIC third_party/ufbx/ufbx.c)
+set_target_properties(aether_ufbx PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(aether_ufbx PRIVATE -O2)
+endif()
+
 add_library(aether_assets STATIC
   resources/asset_registry.cpp
   resources/json_reader.cpp
   resources/gltf_import.cpp
+  resources/fbx_import.cpp
+  resources/fbx_scene_import.cpp
+  resources/rig_asset.cpp
+  resources/rig_math.cpp
+  resources/rig_evaluation.cpp
+  resources/fbx_deformation.cpp
+  resources/fbx_morph.cpp
+  resources/model_import.cpp
   resources/texture_compression.cpp
   resources/skeletal_animation.cpp
   resources/animation_curve.cpp
+  resources/animation_property.cpp
+  resources/animation_driver.cpp
+  resources/animation_driver_bindings.cpp
+  resources/animation_clip_property.cpp
+  resources/animation_property_curve_edit.cpp
   resources/animation_clip_asset.cpp
   resources/animation_clip_edit.cpp
   resources/animation_clip_selection.cpp
   resources/animation_clip_clipboard.cpp
+  resources/animation_clip_timeline.cpp
+  resources/animation_clip_arrange.cpp
   resources/animation_clip_bake.cpp
   resources/import_node_map.cpp
   resources/material_asset.cpp
+  resources/unity_material_import.cpp
+  resources/unity_yaml.cpp
+  resources/unity_subassets.cpp
+  resources/unity_animation_import.cpp
+  resources/unity_animation_merge.cpp
+  resources/unity_controller_import.cpp
+  resources/unity_prefab_import.cpp
+  resources/unity_import_recipe.cpp
+  resources/library_index.cpp
   resources/environment_profile.cpp
   resources/physics_material.cpp
   resources/environment_map_asset.cpp
@@ -472,11 +508,12 @@ add_library(aether_assets STATIC
   resources/mesh_lod_build.cpp
   resources/texture_profile.cpp
   resources/texture_asset.cpp
+  resources/tiff_decode.cpp
   resources/audio_clip.cpp
   resources/glb_images.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc PUBLIC aether_audio_backend)
+target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc aether_ufbx PUBLIC aether_audio_backend)
 # aether_renderer pelo formato do pacote de mapa: a importacao produz
 # exatamente os mesmos registros de desenho e material que o cozinhador offline,
 # para que geometria importada no aparelho e geometria cozida no computador
@@ -505,8 +542,10 @@ add_library(aether_runtime STATIC
   scene/collision_recipe.cpp
   runtime/scene_graph.cpp
   runtime/prefab.cpp
+  runtime/unity_prefab.cpp
   runtime/input_actions.cpp
   runtime/transform_math.cpp
+  runtime/rig_instance.cpp
   runtime/game_world.cpp
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
@@ -522,6 +561,8 @@ add_library(aether_runtime STATIC
   runtime/scene_event_connections.cpp
   runtime/runtime_rendering_state.cpp
   runtime/scene_animation.cpp
+  runtime/animation_property_binding.cpp
+  runtime/animation_driver_binding.cpp
   runtime/scene_animator_graph.cpp
   runtime/scene_gui.cpp
   runtime/scene_gui_input.cpp
@@ -562,6 +603,14 @@ add_library(aether_editor STATIC
   editor/editor_environment_assets.cpp
   editor/editor_physics_materials.cpp
   editor/editor_texture_assets.cpp
+  editor/editor_texture_publication.cpp
+  editor/editor_model_publication.cpp
+  editor/editor_fbx_rig_binding.cpp
+  editor/editor_model_takes.cpp
+  editor/editor_texture_import_screen.cpp
+  editor/editor_unity_materials.cpp
+  editor/editor_library.cpp
+  editor/editor_unity_import.cpp
   editor/editor_audio_assets.cpp
   editor/editor_animator.cpp
   editor/editor_animator_resources.cpp
@@ -569,8 +618,18 @@ add_library(aether_editor STATIC
   editor/editor_animation_clip_resources.cpp
   editor/editor_animation_clip_preview.cpp
   editor/editor_animation_clip.cpp
+  editor/editor_animation_pose_tools.cpp
+  editor/editor_animation_pose_selection.cpp
+  editor/editor_animation_pose_multi.cpp
   editor/editor_animation_authoring.cpp
   editor/editor_animation_clip_screen.cpp
+  editor/editor_animation_properties.cpp
+  editor/editor_animation_property_commands.cpp
+  editor/editor_animation_property_search.cpp
+  editor/editor_animation_property_curves.cpp
+  editor/editor_animation_property_curve_screen.cpp
+  editor/editor_animation_drivers.cpp
+  editor/editor_animation_driver_screen.cpp
   editor/editor_path.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
@@ -582,7 +641,7 @@ target_link_libraries(aether_editor PUBLIC aether_core aether_assets aether_runt
 # A sessao do editor passa do limite de secoes do COFF no build de depuracao do
 # MinGW ("file too big"); o formato estendido so muda o objeto, nao o codigo.
 if(MINGW)
-  target_compile_options(aether_editor PRIVATE -Wa,-mbig-obj)
+  target_compile_options(aether_editor PRIVATE -Wa,-mbig-obj -g1)
   # The bridge instantiates the same component schemas as the editor. Their
   # typed accessors can exceed COFF's 32767-section limit in host Debug builds.
   set_source_files_properties(runtime/script_bridge.cpp PROPERTIES COMPILE_OPTIONS "-Wa,-mbig-obj")
@@ -843,6 +902,7 @@ if(NOT ANDROID)
     ../tests/native/test_animation_clip_asset.cpp
     ../tests/native/test_animation_clip_events.cpp
     ../tests/native/test_animation_clip_selection.cpp
+    ../tests/native/test_animation_clip_arrange.cpp
     ../tests/native/test_animation_clip_clipboard.cpp
     ../tests/native/test_animation_clip_editor.cpp
     ../tests/native/test_skinned_scene.cpp
@@ -996,6 +1056,13 @@ if(NOT ANDROID)
   target_include_directories(aether_gui_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_gui_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
   target_link_libraries(aether_gui_tests PRIVATE aether_editor aether_ui aether_renderer)
+  # Direct UI/Canvas acceptance without compiling unrelated physical-authoring
+  # suites bundled in the historical aether_gui_tests target.
+  add_executable(aether_gui_core_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_gui.cpp ../tests/native/test_gui_expansion.cpp ../tests/native/test_scene_gui.cpp)
+  target_include_directories(aether_gui_core_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_gui_core_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_gui_core_tests PRIVATE aether_editor aether_ui aether_renderer)
   add_executable(aether_scene_gui_host ../tests/native/scene_gui_host.cpp)
   target_link_libraries(aether_scene_gui_host PRIVATE aether_runtime aether_ui aether_renderer)
   add_executable(aether_gui_preview ../tests/native/gui_preview_main.cpp)
@@ -1004,6 +1071,7 @@ if(NOT ANDROID)
   target_link_libraries(aether_gui_preview PRIVATE aether_editor aether_ui aether_renderer)
   if(MINGW)
     target_compile_options(aether_gui_tests PRIVATE -Wa,-mbig-obj)
+    target_compile_options(aether_gui_core_tests PRIVATE -Wa,-mbig-obj -g1)
     target_compile_options(aether_gui_preview PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(aether_input_family_tests ../tests/native/input_family_main.cpp ../tests/native/test_runtime_input.cpp ../tests/native/test_input_interactions.cpp ../tests/native/test_editor_session.cpp)
@@ -1024,12 +1092,12 @@ if(NOT ANDROID)
   # Curve/resource invariants do not need Vulkan, physics or a full editor link.
   # The same cases are also part of aether_tests for integration builds.
   add_executable(aether_animation_clip_resource_tests ../tests/native/family_base_main.cpp
-    ../tests/native/test_animation_clip_asset.cpp resources/animation_curve.cpp
-    resources/animation_clip_asset.cpp resources/animation_clip_edit.cpp resources/animation_clip_selection.cpp resources/animation_clip_clipboard.cpp resources/animation_clip_bake.cpp
-    ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp resources/skeletal_animation.cpp resources/asset_registry.cpp)
+    ../tests/native/test_animation_clip_asset.cpp resources/animation_curve.cpp resources/animation_property.cpp resources/animation_clip_property.cpp resources/animation_property_curve_edit.cpp resources/animation_driver.cpp resources/animation_driver_bindings.cpp
+    resources/animation_clip_asset.cpp resources/animation_clip_edit.cpp resources/animation_clip_selection.cpp resources/animation_clip_clipboard.cpp resources/animation_clip_timeline.cpp resources/animation_clip_arrange.cpp resources/animation_clip_bake.cpp
+    ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_arrange.cpp ../tests/native/test_animation_clip_clipboard.cpp resources/skeletal_animation.cpp resources/asset_registry.cpp)
   target_include_directories(aether_animation_clip_resource_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/../tests/native)
   add_executable(aether_animation_clip_editor_tests ../tests/native/family_base_main.cpp
-    ../tests/native/test_animation_clip_events.cpp ../tests/native/test_animation_clip_editor.cpp ../tests/native/test_animation_clip_asset.cpp ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_clipboard.cpp)
+    ../tests/native/test_animation_clip_events.cpp ../tests/native/test_animation_clip_editor.cpp ../tests/native/test_animation_clip_asset.cpp ../tests/native/test_animation_clip_selection.cpp ../tests/native/test_animation_clip_arrange.cpp ../tests/native/test_animation_clip_clipboard.cpp)
   target_include_directories(aether_animation_clip_editor_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_clip_editor_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
@@ -1048,8 +1116,24 @@ if(NOT ANDROID)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp)
+  add_executable(aether_rig_authoring_tests ../tests/native/family_base_main.cpp ../tests/native/test_rig_authoring.cpp)
+  target_include_directories(aether_rig_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_rig_authoring_tests PRIVATE aether_core aether_assets aether_runtime)
+  if(MINGW)
+    target_compile_options(aether_rig_authoring_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
+  target_include_directories(aether_unity_material_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_unity_material_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_unity_material_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   if(MINGW)
     target_compile_options(aether_animation_clip_editor_tests PRIVATE -Wa,-mbig-obj -g1)
+    # This integration TU instantiates the complete editor. Keep assertions and
+    # source-line diagnostics while avoiding enormous MinGW debug sections.
+    set_source_files_properties(../tests/native/test_animation_clip_editor.cpp
+      PROPERTIES COMPILE_OPTIONS "-g0")
+    target_compile_options(aether_unity_material_tests PRIVATE -Wa,-mbig-obj -g1)
     target_compile_options(aether_animation_runtime_tests PRIVATE -Wa,-mbig-obj -g1)
     target_compile_options(aether_environment_authoring_tests PRIVATE -Wa,-mbig-obj -g1)
   endif()

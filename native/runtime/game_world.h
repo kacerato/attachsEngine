@@ -142,6 +142,11 @@ public:
   // que o contrato do componente declara (corpo e forma física, por exemplo).
   u32 pendingInvalidation() const noexcept { return invalidated_; }
   u32 consumeInvalidation() noexcept { const u32 value = invalidated_; invalidated_ = 0; return value; }
+  // Called only after the animation batch has committed. Property publication
+  // uses the same renderer/audio invalidation contract as script setters.
+  void animatedPropertiesChanged(std::span<const std::string_view> types) {
+    for(const auto type:types)invalidateType(type);
+  }
 
   const SceneGraph &graph() const noexcept { return graph_; }
   // Acesso direto para o adaptador de física publicar poses. Não é a API de

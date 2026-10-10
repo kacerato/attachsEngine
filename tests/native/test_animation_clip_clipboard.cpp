@@ -1,8 +1,51 @@
 #include "harness.h"
 #include "resources/animation_clip_clipboard.h"
+#include "resources/animation_clip_timeline.h"
 #include <algorithm>
 #include <cmath>
 using namespace ae;using namespace ae::resources;
+AE_TEST(animation_clip_timeline_ripple_preserves_cues_layers_identity_and_atomic_conflicts) {
+  AnimationClip runtime;runtime.name="Clock";runtime.duration=4;
+  AnimationChannel p;p.times={0,1,2,4};p.values={0,0,0,1,0,0,2,0,0,4,0,0};runtime.channels={p};
+  AnimationClipAsset asset;std::string error;const AnimationClipBinding binding{0,{},"","Object"};
+  AE_EXPECT_TRUE(authorAnimationClip(runtime,assetGuidFromSeed("timeline"),{},{},{},{&binding,1},asset,error),error.c_str());
+  u64 cue=0,marker=0,layer=0,track=0;
+  AE_EXPECT_TRUE(asset.putCue({0,1,AnimationCueKind::Event,"Event",7,.12345678901234567},cue,error)&&
+    asset.putCue({0,2,AnimationCueKind::Marker,"End"},marker,error)&&asset.addLayer("Offset",AnimationAuthorBlend::Additive,layer,error)&&
+    asset.addLayerTrack(layer,asset.tracks[0].id,true,track,error),error.c_str());
+  asset.layer(layer)->referenceTime=2;
+  asset.layer(layer)->muted=true;for(auto &channel:asset.tracks)channel.sourceOverride=true;
+  const auto original=asset.serialize(); const auto frontier=asset.nextId;
+  AE_EXPECT_TRUE(insertAnimationTime(asset,1,.5f,error)&&asset.duration==4.5f&&asset.cue(cue)->time==1.5f&&
+    asset.cue(marker)->time==2.5f&&asset.layer(layer)->referenceTime==2.5f&&asset.nextId==frontier,"whole clock shifts with stable identities");
+  AE_EXPECT_TRUE(removeAnimationTime(asset,1,1.5f,error)&&asset.serialize()==original,"half-open empty-time removal restores complete resource");
+  const auto before=asset.serialize();
+  AE_EXPECT_TRUE(moveAnimationRange(asset,.5f,1.5f,.75f,error)&&asset.cue(cue)->time==1.25f&&asset.layer(layer)->referenceTime==2,"move range shares authored and cue clock without shifting outside reference");
+  AE_EXPECT_TRUE(moveAnimationRange(asset,.75f,1.75f,.5f,error)&&asset.serialize()==before,"inverse interval move restores complete resource");
+  AE_EXPECT_TRUE(!moveAnimationRange(asset,.5f,1.5f,1.5f,error)&&asset.serialize()==before,"key collision refuses the complete interval including cues");
+  AE_EXPECT_TRUE(!removeAnimationTime(asset,1.5f,2.5f,error)&&asset.serialize()==before,"removing additive reference refuses atomically");
+  AE_EXPECT_TRUE(duplicateAnimationRange(asset,.5f,1.5f,2,error),error.c_str());
+  AE_EXPECT_TRUE(asset.cues.size()==3&&asset.cue(cue)->time==1&&asset.cue(marker)->time>3&&asset.layer(layer)->referenceTime>3,"duplicate copies included cue and ripples original boundary and reference");
+  AnimationClip compiled;AE_EXPECT_TRUE(asset.compile(compiled,&error),error.c_str());float pose[3];
+  AE_EXPECT_TRUE(sampleAnimationChannel(compiled.channels[0],2.25f,pose)&&std::abs(pose[0]-.75f)<1e-5,"cropped boundary samples drive runtime");
+  AnimationClipAsset reopened;AE_EXPECT_TRUE(AnimationClipAsset::deserialize(asset.serialize(),reopened,&error)&&reopened.serialize()==asset.serialize(),"all ripple edits round trip");
+  const auto valid=asset.serialize();AE_EXPECT_TRUE(!duplicateAnimationRange(asset,1,1,0,error)&&asset.serialize()==valid,"empty range refuses before mutation");
+}
+AE_TEST(animation_clip_cue_group_clipboard_exact_payload_and_failed_batch_preservation) {
+  AnimationClip runtime;runtime.name="Cues";runtime.duration=4;AnimationChannel p;p.times={0,4};p.values={0,0,0,4,0,0};runtime.channels={p};
+  AnimationClipAsset asset;std::string error;const AnimationClipBinding binding{0,{},"","Object"};u64 first=0,second=0;
+  AE_EXPECT_TRUE(authorAnimationClip(runtime,assetGuidFromSeed("cue-group"),{},{},{},{&binding,1},asset,error)&&
+    asset.putCue({0,1,AnimationCueKind::Event,"A",9,1e100,false,true},first,error)&&
+    asset.putCue({0,1.5f,AnimationCueKind::Marker,"B"},second,error),error.c_str());
+  const u64 ids[]{first,second};AnimationCueClipboard clipboard;
+  AE_EXPECT_TRUE(clipboard.copy(asset,ids,error),error.c_str());std::vector<u64> pasted;
+  AE_EXPECT_TRUE(clipboard.paste(asset,2,pasted,error)&&pasted.size()==2&&pasted[0]!=first&&asset.cue(pasted[0])->value==1e100&&!asset.cue(pasted[0])->forward,"paste preserves exact metadata and allocates identities");
+  const auto before=asset.serialize();const auto selection=pasted;
+  AE_EXPECT_TRUE(!clipboard.paste(asset,3.75f,pasted,error)&&asset.serialize()==before&&pasted==selection,"failed paste preserves resource allocator and selection");
+  AE_EXPECT_TRUE(!transformAnimationCueTimes(asset,ids,0,1,3,error)&&asset.serialize()==before,"failed group shift is atomic");
+  AE_EXPECT_TRUE(transformAnimationCueTimes(asset,ids,1,2,0,error)&&asset.cue(second)->time==2,"group scale retains relative timing");
+  AE_EXPECT_TRUE(eraseAnimationCues(asset,pasted,error)&&asset.cues.size()==2,"group erase retires only copied IDs");
+}
 AE_TEST(animation_clip_clipboard_preserves_typed_poses_handles_and_insertion_context) {
   AnimationClip source;source.name="Clipboard universal";source.duration=4;
   AnimationChannel q;q.path=AnimationPath::Rotation;q.times={0,1,2,4};q.values={0,0,0,1,0,.5f,0,.8660254f,0,.8660254f,0,.5f,0,1,0,0};
