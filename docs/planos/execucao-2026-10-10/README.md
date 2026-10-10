@@ -26,7 +26,7 @@ encerramento dos 16 blocos nem paridade com engines de referência.
 |---|---|---|
 | N01 | Poses, auto-key, curvas, camadas, intervalos e cues | Parcial; autoria integrada 55/55 host aceita, incluindo poses, curvas, regiões e cues. SDK ABI 12 aceito contra nativo. Cenário Kyle completo e aceite Android pendentes |
 | N02 | Propriedades tipadas e drivers; depende de bindings e preview restaurável | Parcial; GUI 30/30 e SDK ABI 12 contra DLL nativa 1/1, sem pulos. AECLIP 7, catálogo/bindings, compositor e preview compilados; busca, remapeamento, curvas e DAG possuem UI executável. Aceite vertical de propriedades/drivers passou com toque, prefab, reabertura, falhas atômicas e Play; capturas CPU inspecionadas. Aceite Android pendente; ver contrato N02 |
-| N03 | Rig genérico, poses, espelho e retargeting com repousos distintos | Em implementação paralela; recurso, matemática, consumer e dois cenários passaram sintaxe estrita; execução e autoria/editor pendentes |
+| N03 | Rig genérico, poses, espelho e retargeting com repousos distintos | Preparação pausada; recurso, matemática, consumer e dois cenários passaram sintaxe estrita; execução e autoria/editor pendentes |
 | N04 | Constraints, IK, full body, grounding e interação; depende de N03 | Pendente |
 | N05 | Locomoção, apoio, root motion, aparência e câmera; depende de N03/N04 | Pendente |
 | N06 | Bake e exportação com relatório de perdas; depende de N01–N05 | Pendente; preservar bake existente |
@@ -39,7 +39,7 @@ encerramento dos 16 blocos nem paridade com engines de referência.
 | N13 | Save, replay e rede autoritativa nas duas topologias | Decisão de produto registrada; implementação pendente |
 | N14 | Render, atmosfera e todas as famílias do anexo | Pendente; capacidade condicional exige consumer externo real |
 | N15 | Custo, escala, budgets e desempenho sustentado | Transversal; medições finais Release/dispositivo pendentes |
-| N16 | Aceite integrado, docs e distribuição | Parcial; docs de desenvolvimento publicadas no commit d6eaec0, deploy READY e navegação responsiva verificados. Distribuição e aceite final pendentes |
+| N16 | Aceite integrado, docs e distribuição | Parcial; docs de desenvolvimento publicadas no commit aff741b, deploy READY. Distribuição e aceite final pendentes |
 
 O universo original está preservado em
 `output/pdf/Astra-proximos-blocos-2026-10-10.md`: páginas 1–34, índice UMotion
@@ -57,3 +57,24 @@ não provas de implementação. Não se deve eliminar itens para encerrar um blo
 
 Uma linha em uma tabela, API exposta ou teste aprovado isoladamente não fecha
 um bloco. O fechamento exige o cenário completo descrito no plano.
+
+## Pausa solicitada pelo proprietário
+
+Em 10/10/2026, após o commit `d7d8a331`, o proprietário pediu atualizar as docs e parar. Meta pausada e subagente interrompido. A baseline validada permanece em Git; alterações posteriores N03/N08 foram preservadas no working tree, sem nova validação integrada nem anúncio de disponibilidade.
+
+Preparação N03: AERPOSE2 e revisão própria, tipos de recursos 16–18, guardas de ID, placement/reparent e autoridade de escrita; ainda faltam integração completa, autoria e aceite. N08: worker de bake e envelope tipado de lote preparados, sem publicação multirrecurso/SDK 13 ligados. Esses arquivos não pertencem à evidência 55/20/30/1 do commit validado. Antes de retomar builds, concluir a integração compartilhada e conferir os arquivos preservados. ADB continua não autorizado.
+
+Docs públicas revisadas no commit AstraDocs `aff741b`: 1.396 HTML, 1.395 Markdown/JSON e 328.937 links sem erros. Revisão local em 390/655/1440 px sem overflow, imagens quebradas ou erros JavaScript. Nota nova em Atualizações conserva distribuição code28/Dev33 e distingue fonte, host e aceite Android. Push main concluído; deploy de produção READY e domínio associado confirmados pela Vercel.
+
+O push não iniciou deploy automático observado; a publicação foi solicitada à
+Vercel diretamente pelo commit exato `aff741bd1343bbe8dc7f3c22ea5319471dcd3061`,
+sem enviar arquivos privados ou alterar configurações do projeto. Deploy
+`dpl_G7PGuKVmb6hXShJxefhcGhseRXZ7` READY, associado a
+`https://astraengine.com.br` e ao SHA exato acima.
+
+Revisão pública concluída nas rotas de autoria e Atualizações em 390×900,
+655×300 e 1440×900: seis respostas HTTP 200, sem overflow horizontal, imagens
+quebradas ou erros JavaScript. Menu mobile abriu e fechou; contagens 55/55 e
+20/20 e a nova nota no feed público foram verificadas. Relatório e capturas em
+`docs/validacao/n01-n07-2026-10-10/host/docs-browser/`. O plano permanece
+pausado e incompleto; essa publicação não constitui novo APK nem aceite Android.

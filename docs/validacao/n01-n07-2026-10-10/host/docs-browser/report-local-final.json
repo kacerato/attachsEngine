@@ -1,0 +1,76 @@
+{
+  "origin": "http://127.0.0.1:4321",
+  "results": [
+    {
+      "name": "authoring",
+      "width": 390,
+      "status": 200,
+      "h1": "Desenvolvimento: animação, propriedades e biblioteca",
+      "scroll": 390,
+      "images": []
+    },
+    {
+      "name": "updates",
+      "width": 390,
+      "status": 200,
+      "h1": "Atualizações",
+      "scroll": 390,
+      "images": []
+    },
+    {
+      "name": "authoring",
+      "width": 655,
+      "status": 200,
+      "h1": "Desenvolvimento: animação, propriedades e biblioteca",
+      "scroll": 655,
+      "images": []
+    },
+    {
+      "name": "updates",
+      "width": 655,
+      "status": 200,
+      "h1": "Atualizações",
+      "scroll": 655,
+      "images": []
+    },
+    {
+      "name": "authoring",
+      "width": 1440,
+      "status": 200,
+      "h1": "Desenvolvimento: animação, propriedades e biblioteca",
+      "scroll": 1440,
+      "images": []
+    },
+    {
+      "name": "updates",
+      "width": 1440,
+      "status": 200,
+      "h1": "Atualizações",
+      "scroll": 1440,
+      "images": []
+    }
+  ],
+  "navigation": true,
+  "headings": [
+    "O que esta revisão permite",
+    "Selecionar e editar vários eventos",
+    "Mover e duplicar um trecho, inserir e remover tempo",
+    "Fechar e repetir ciclos",
+    "Alinhar e distribuir uma seleção",
+    "Comparar curvas e editar na unidade original",
+    "Gravação, travas e reutilização de pose",
+    "Seleção de poses e conjuntos",
+    "Propriedades: criar, gravar e reparar um canal",
+    "Drivers: do parâmetro ao resultado",
+    "SDK C#: o mesmo backend",
+    "Diagnóstico e recuperação",
+    "Biblioteca local de pacotes",
+    "Material Unity: converter, vincular e reimportar",
+    "FBX, TIFF e recursos Unity",
+    "Aceite desta revisão",
+    "Plano, rede e limites de aceite",
+    "Referências da decisão",
+    ""
+  ],
+  "errors": []
+}

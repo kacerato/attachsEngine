@@ -1,0 +1,10 @@
+
+> astra-docs@0.1.0 check:links
+> node tools/check-output.mjs
+
+{
+  "pages": 1395,
+  "links": 328937,
+  "errors": [],
+  "totalErrors": 0
+}

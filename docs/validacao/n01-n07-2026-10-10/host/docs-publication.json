@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-10",
+  "repository": "kacerato/AstraDocs",
+  "commit": "aff741bd1343bbe8dc7f3c22ea5319471dcd3061",
+  "deployment": "dpl_G7PGuKVmb6hXShJxefhcGhseRXZ7",
+  "state": "READY",
+  "target": "production",
+  "domain": "https://astraengine.com.br",
+  "htmlPages": 1396,
+  "markdownPages": 1395,
+  "checkedLinks": 328937,
+  "linkErrors": 0,
+  "liveReport": "docs-browser/report.json",
+  "localReport": "docs-browser/report-local-final.json",
+  "updateId": "2026-10-10-properties-drivers-unity-development",
+  "validatedEngineCommit": "d7d8a331",
+  "goal": "paused at owner request",
+  "subagent": "interrupted",
+  "androidValidation": false,
+  "newApkDistributed": false,
+  "unvalidatedN03N08": "preserved in working tree; excluded from accepted baseline"
+}
