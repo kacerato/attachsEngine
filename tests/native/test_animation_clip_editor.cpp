@@ -1686,3 +1686,52 @@ AE_TEST(animation_studio_mirror_pose_uses_published_rig_pairs_and_records_keys) 
   AE_EXPECT_TRUE(session.screen().clipGhost&&!session.screen().clipGhostAfter.empty(),"next-frame ghost sampled");
   captureClipSurface(session,font,icons,"studio-ghost-filter-1386.ppm");
 }
+
+AE_TEST(animation_studio_transfers_clip_to_another_character_with_different_rest) {
+  using namespace editor;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto &fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf");
+  const auto &iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production font and icon atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,1386,640},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto fox=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Raposa");
+  const auto hip=doc.createEntity(fox,EditorEntityKind::Folder,"Quadril_01"),leg=doc.createEntity(hip,EditorEntityKind::Folder,"Perna_02");
+  runtime::Transform t;t.position[1]=1;doc.setTransform(hip,t);t.position[1]=-.5f;doc.setTransform(leg,t);
+  const auto wolf=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Lobo");
+  const auto whip=doc.createEntity(wolf,EditorEntityKind::Folder,"Quadril_07"),wleg=doc.createEntity(whip,EditorEntityKind::Folder,"Perna_08");
+  runtime::Transform w;w.position[0]=4;w.position[1]=2;w.rotationDegrees[2]=30;doc.setTransform(whip,w);runtime::Transform wl;wl.position[1]=-1;doc.setTransform(wleg,wl);
+  resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(fox,1,guid,error)&&session.openAnimationClip(guid,fox,error),error.c_str());
+  session.update();
+  const auto find=[&](u32 id) {
+    UiDrawList list;list.begin(session.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+    buildEditorScreen(session.screen(),editorTheme(),list,router);UiPoint point{-1,-1};
+    const auto s=session.screen().surface;
+    for(float y=2;y<s.height&&point.x<0;y+=3)for(float x=2;x<s.width;x+=3) {
+      const auto hit=router.hitTest({x,y});if(hit.target==UiPointerTarget::Widget&&hit.widgetId==id) {point={x,y};break;}
+    }
+    return point;
+  };
+  const auto tap=[&](u32 id,const char *what) {
+    const auto point=find(id);AE_EXPECT_TRUE(point.x>=0,what);if(point.x<0)return;
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();
+  };
+  tap(clip_widget::id(clip_widget::StudioTabRig),"rig tab");
+  tap(static_cast<u32>(RigToolAction::CaptureRig),"capture source rig");
+  tap(static_cast<u32>(RigToolAction::Confirm),"publish source rig");
+  tap(clip_widget::id(clip_widget::StudioTabPose),"pose tab");
+  tap(clip_widget::id(clip_widget::Pose),"pose mode");
+  tap(clip_widget::id(clip_widget::BoneRow+2),"select leg");
+  tap(clip_widget::id(clip_widget::PoseRotate),"rotate tool");
+  const float q[4]{.3826834f,0,0,.9238795f};
+  AE_EXPECT_TRUE(session.previewAnimationClipPose(session.screen().clipTrack,q,error),error.c_str());
+  tap(clip_widget::id(clip_widget::PoseRecord),"record leg key");
+  tap(clip_widget::id(clip_widget::StudioTabRig),"rig tab again");
+  tap(static_cast<u32>(RigToolAction::RouteRetarget),"transfer route");
+  captureClipSurface(session,font,icons,"studio-transfer-1386.ppm");
+  tap(static_cast<u32>(RigToolAction::RetargetBake),"transfer clip");
+  AE_EXPECT_TRUE(session.screen().rigTool.status.rfind("Transferido",0)==0,session.screen().rigTool.status.c_str());
+  usize clips=0;for(const auto &record:session.assets().records())if(record.type==resources::AssetType::AnimationClip)++clips;
+  AE_EXPECT_EQ(clips,usize(2),"independent clip created for the wolf");
+}

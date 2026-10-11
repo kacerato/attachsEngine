@@ -395,6 +395,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     router.addRegion(row,w::id(w::Row+visible));visibleRows.push_back({&t,c});++visible;
   }
   layout.clipVisibleRows=std::max(1u,visible);
+  if(!visible&&state.clipFilterSelected)label({canvas.x+8,canvas.y+8,std::max(0.f,canvas.width-16),32},"Este osso ainda não tem chaves · gire, mova ou use IK para criar",theme.color.textDim);
   if(!selected) {
     label({canvas.x+8,canvas.y+8,std::max(0.f,canvas.width-16),32},"Camada vazia · Objetos → escolher propriedade",theme.color.textDim);
     button({canvas.x+8,canvas.y+42,156,42},"Adicionar canal",w::Targets,true,false,UiIcon::AnimationBinding);

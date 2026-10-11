@@ -2043,6 +2043,10 @@ private:
   bool applyAnimationPoseIk(EditorEntityId end,const float target[3],std::string &error);
   bool loadRigForRoot(EditorEntityId root);
   bool saveRigPoseFromScene(std::string &error);
+  std::vector<EditorEntityId> retargetCandidates() const;
+  bool readRigForRoot(EditorEntityId root,resources::RigAsset &out,bool &published,std::string &error) const;
+  bool transferAnimationClipTo(EditorEntityId target,std::string &summary,std::string &error);
+  u32 rigRetargetIndex_=0;
   void refreshAnimationGhost();
   void refreshClipRowFilter();
   bool stageRigLocalPose(std::span<const resources::RigTransform> local,std::string &error);

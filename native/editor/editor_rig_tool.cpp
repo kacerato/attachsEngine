@@ -198,6 +198,107 @@ bool EditorSession::saveRigPoseFromScene(std::string &error) {
   return true;
 }
 
+std::vector<EditorEntityId> EditorSession::retargetCandidates() const {
+  // Hierarquias articuladas de topo na cena, exceto a do clipe aberto.
+  std::vector<EditorEntityId> out;
+  std::vector<std::pair<EditorEntityId,u32>> sub;
+  for(const auto id:document_.childrenOf(document_.root())) {
+    if(id==rigRoot_)continue;
+    animationStudioBones(document_,id,sub);
+    if(sub.size()>=3)out.push_back(id);
+  }
+  return out;
+}
+
+bool EditorSession::readRigForRoot(EditorEntityId root,resources::RigAsset &out,bool &published,std::string &error) const {
+  published=false;const auto *entity=document_.find(root);if(!entity) {error="Destino ausente";return false;}
+  const std::string path="Rigs/"+safeStem(entity->name,"Rig")+".aerig";
+  if(const auto *record=assets_.findByPath(path); record&&record->type==resources::AssetType::Rig) {
+    std::filesystem::path absolute;std::vector<u8> bytes;
+    if(EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),path,absolute)&&
+       EditorImportTransaction::read(absolute,bytes,RigAsset::MaximumBytes)&&RigAsset::deserialize(std::string(bytes.begin(),bytes.end()),out,&error)) {published=true;return true;}
+  }
+  // Sem rig publicado: captura transitoria da hierarquia real (referencia = pose atual).
+  return prepareRigCapture(document_,root,resources::assetGuidFromSeed(std::string("rig-transitorio:")+entity->name),entity->name,out,error);
+}
+
+bool EditorSession::transferAnimationClipTo(EditorEntityId target,std::string &summary,std::string &error) {
+  summary.clear();error.clear();
+  const auto *live=animationClipAsset(state_.clipGuid);
+  if(!live||!clipPreview_.active()||clipPoseDraft_||isPlaying()||history_.isOpen()) {error="Abra o clipe de origem e grave a pose pendente";return false;}
+  if(!rigCaptured_||rigRoot_!=state_.clipOwner) {error="Publique o rig da origem na aba Rig";return false;}
+  RigAsset destination;bool published=false;
+  if(!readRigForRoot(target,destination,published,error))return false;
+  const auto stem=[](std::string name) {
+    while(!name.empty()&&std::isdigit(static_cast<unsigned char>(name.back())))name.pop_back();
+    while(!name.empty()&&(name.back()=='_'||name.back()=='.'))name.pop_back();
+    return name;
+  };
+  // Correspondencia por nome exato, depois por nome sem sufixo numerico.
+  resources::RetargetProfile profile;profile.guid=resources::assetGuidFromSeed("retarget:"+rigDraft_.name+":"+destination.name);
+  profile.name=rigDraft_.name+" → "+destination.name;profile.source=rigDraft_.guid;profile.target=destination.guid;
+  profile.sourceRevision=rigDraft_.revision;profile.targetRevision=destination.revision;profile.allowUnmappedSource=true;
+  std::vector<u8> used(rigDraft_.joints.size(),0);
+  for(const auto &t:destination.joints) {
+    i32 match=-1;
+    for(usize s=0;s<rigDraft_.joints.size()&&match<0;++s)if(!used[s]&&rigDraft_.joints[s].name==t.name)match=static_cast<i32>(s);
+    for(usize s=0;s<rigDraft_.joints.size()&&match<0;++s)if(!used[s]&&stem(rigDraft_.joints[s].name)==stem(t.name))match=static_cast<i32>(s);
+    if(match<0)continue;
+    used[match]=1;
+    resources::RetargetJoint joint;joint.source=rigDraft_.joints[match].id;joint.target=t.id;profile.mapping.push_back(joint);
+  }
+  if(profile.mapping.size()<2) {error="Menos de duas juntas correspondem pelo nome entre os rigs";return false;}
+  resources::CompiledRetarget program;
+  if(!resources::compileRetarget(rigDraft_,destination,profile,program,error))return false;
+  resources::RetargetWorkspace scratch;scratch.prepare(program);
+  runtime::RigBindings sourceBindings,targetBindings;
+  runtime::bindRigToScene(rigDraft_,program.source,clipPreview_.scene(),rigRoot_,sourceBindings);
+  runtime::bindRigToScene(destination,program.target,document_,target,targetBindings);
+  if(targetBindings.objects.size()!=program.target.joints.size()) {error="Hierarquia do destino não corresponde ao rig";return false;}
+  // Amostra o clipe da origem pelo mesmo avaliador de transferencia, a 30 Hz.
+  const float duration=live->duration;const u32 samples=std::max(2u,static_cast<u32>(std::ceil(duration*30))+1);
+  std::vector<std::vector<resources::RigTransform>> frames(samples,std::vector<resources::RigTransform>(program.target.joints.size()));
+  std::vector<resources::RigTransform> sourceLocal(program.source.joints.size());
+  const float now=state_.clipTime;std::string seekError;
+  for(u32 i=0;i<samples;++i) {
+    const float time=std::min(duration,duration*i/float(samples-1));
+    if(!clipPreview_.seek(time,seekError)||!runtime::readRigScenePose(program.source,sourceBindings,clipPreview_.scene(),sourceLocal,error)||
+       !resources::evaluateRetarget(program,sourceLocal,frames[i],scratch)) {clipPreview_.seek(now,seekError);if(error.empty())error="Falha ao avaliar a transferência";return false;}
+  }
+  clipPreview_.seek(now,seekError);
+  // createAnimationClip pode realocar o armazenamento: nada de "live" daqui em diante.
+  const std::string sourceName=live->name;live=nullptr;
+  resources::AssetGuid created;
+  const bool made=createAnimationClip(target,duration,created,error);
+  refreshAnimationClip(); // reaponta state_.clipAsset apos a realocacao
+  if(!made)return false;
+  const auto *fresh=animationClipAsset(created);if(!fresh) {error="Clipe novo ausente";return false;}
+  u32 channels=0;
+  const bool ok=editAnimationClipAsset(created,fresh->revision,[&](auto &clip) {
+    clip.name=sourceName+" → "+(document_.find(target)?document_.find(target)->name:std::string("destino"));
+    for(usize j=0;j<program.target.joints.size();++j) {
+      const auto object=targetBindings.objects[j];if(!object||object==target)continue;
+      const bool mapped=std::any_of(program.mapping.begin(),program.mapping.end(),[&](const auto &m){return m.target==j;});
+      if(!mapped)continue;
+      resources::AnimationClipBinding binding;std::string ignored;
+      if(!animationPoseTargetPath(document_,target,object,binding.path,ignored))continue;
+      binding.name=document_.find(object)->name;
+      u64 track=0;const auto &q0=frames[0][j].rotation;const float first[4]{q0[0],q0[1],q0[2],q0[3]};
+      if(!clip.addTrack(binding,resources::AnimationPath::Rotation,resources::AnimationRotationMode::Quaternion,first,track,ignored))continue;
+      for(u32 i=0;i<samples;++i) {
+        const auto &q=frames[i][j].rotation;const float value[4]{q[0],q[1],q[2],q[3]};
+        if(!clip.putPose(track,std::min(duration,duration*i/float(samples-1)),value,ignored))return false;
+      }
+      ++channels;
+    }
+    return channels>0;
+  },error);
+  refreshAnimationClip();
+  if(!ok) {if(error.empty())error="Nenhuma junta do destino recebeu movimento";return false;}
+  summary=std::to_string(profile.mapping.size())+" juntas correspondidas · "+std::to_string(channels)+" canais · "+std::to_string(samples)+" amostras"+(published?"":" · rig do destino capturado na hora");
+  return true;
+}
+
 bool EditorSession::publishRigDraft(std::string &error) {
   error.clear();
   if(!rigCaptured_) {error="Capture a hierarquia antes de publicar.";return false;}
@@ -308,9 +409,17 @@ void EditorSession::refreshRigTool() {
     } else if(!rigDirty_) ui.status="Nenhuma pose salva para este rig.";
     break;
   }
-  case RigToolRoute::Retarget:
-    ui.status="Transferência exige dois rigs publicados; seleção do destino ainda não ligada à interface.";
+  case RigToolRoute::Retarget: {
+    const auto candidates=retargetCandidates();
+    if(candidates.empty()) {ui.status="Coloque outro personagem articulado na cena para receber o movimento.";break;}
+    const auto target=candidates[rigRetargetIndex_%candidates.size()];
+    const auto *entity=document_.find(target);
+    add(RigToolAction::RetargetTarget,"Destino ("+std::to_string(rigRetargetIndex_%candidates.size()+1)+" de "+std::to_string(candidates.size())+")",entity?entity->name:"?",true,ui::UiIcon::AnimationRetarget);
+    add(RigToolAction::RetargetSource,"Origem",state_.clipOpen?std::string("Clipe aberto: ")+(state_.clipAsset?state_.clipAsset->name:""):"Abra um clipe no estúdio",false,ui::UiIcon::AnimationBinding);
+    add(RigToolAction::RetargetBake,"Transferir clipe","Cria um clipe novo no destino, 30 Hz",state_.clipOpen&&!rigDirty_,ui::UiIcon::AnimationBake);
+    if(rigDirty_)ui.status="Publique o rig da origem antes de transferir.";
     break;
+  }
   case RigToolRoute::Diagnostics: {
     resources::CompiledRig compiled;std::string error;
     if(!resources::compileRig(rigDraft_,compiled,error)) {ui.status=error;ui.error=true;break;}
@@ -420,6 +529,13 @@ bool EditorSession::handleRigTool(const ui::UiPointerRouting &routing) {
     if(rigDraft_.controls.empty()) break;
     RigAsset next;const auto left=rigDraft_.controls[rigMirrorLeft_%rigDraft_.controls.size()].id,right=rigDraft_.controls[rigMirrorRight_%rigDraft_.controls.size()].id;
     if(prepareRigMirrorPair(rigDraft_,rigDraft_.revision,left,right,next,error)) {rigDraft_=std::move(next);rigDirty_=true;}
+    break;
+  }
+  case RigToolAction::RetargetTarget: ++rigRetargetIndex_;break;
+  case RigToolAction::RetargetBake: {
+    const auto candidates=retargetCandidates();if(candidates.empty())break;
+    std::string summary;
+    if(transferAnimationClipTo(candidates[rigRetargetIndex_%candidates.size()],summary,error))ui.status="Transferido · "+summary;
     break;
   }
   case RigToolAction::MirrorSuggest: {
