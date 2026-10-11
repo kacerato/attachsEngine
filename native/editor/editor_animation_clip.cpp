@@ -18,8 +18,15 @@ namespace {
 namespace w=clip_widget;
 using Asset=resources::AnimationClipAsset;
 struct Row {u64 track;u32 component;};
+// Filtro opcional por binding: a timeline do estudio pode mostrar so o osso selecionado.
+const std::vector<u64> *rowFilter=nullptr;
 std::vector<Row> rows(const Asset &asset,u64 layer) {
-  std::vector<Row> result;for(const auto &t:asset.tracks)if(t.layer==layer)for(u32 c=0;c<t.components();++c)result.push_back({t.id,c});return result;
+  std::vector<Row> result;
+  for(const auto &t:asset.tracks)if(t.layer==layer) {
+    if(rowFilter&&!rowFilter->empty()&&std::find(rowFilter->begin(),rowFilter->end(),t.binding)==rowFilter->end())continue;
+    for(u32 c=0;c<t.components();++c)result.push_back({t.id,c});
+  }
+  return result;
 }
 const resources::AnimationCurveKey *selectedKey(const Asset &asset,u64 track,u32 component,u64 key) {
   const auto *t=asset.track(track);if(!t||component>=t->curves.size())return nullptr;
@@ -36,6 +43,38 @@ bool relativeBinding(const EditorDocument &document,EditorEntityId owner,EditorE
   if(!animationPoseTargetPath(document,owner,target,binding.path,error))return false;
   binding.name=document.find(target)->name;return true;
 }
+}
+void EditorSession::refreshClipRowFilter() {
+  state_.clipFilterBindings.clear();rowFilter=&state_.clipFilterBindings;
+  if(!state_.clipFilterSelected||!state_.clipAsset)return;
+  const auto target=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+  for(const auto &binding:state_.clipAsset->bindings) {
+    runtime::ObjectId resolved=0;std::string ignored;
+    if(resolveAnimationPoseTargetPath(document_,state_.clipOwner,binding.path,resolved,ignored)&&resolved==target)state_.clipFilterBindings.push_back(binding.id);
+  }
+  // Osso sem canal ainda: um binding impossivel deixa a lista vazia, nao "todos".
+  if(state_.clipFilterBindings.empty())state_.clipFilterBindings.push_back(~u64(0));
+  state_.clipRow=0;
+}
+void EditorSession::refreshAnimationGhost() {
+  state_.clipGhostBefore.clear();state_.clipGhostAfter.clear();
+  const auto *live=animationClipAsset(state_.clipGuid);
+  if(!state_.clipGhost||!live||!clipPreview_.active()||clipPoseDraft_||state_.clipPlaying)return;
+  // Um quadro de referencia de cada lado (0,1 s ou o limite do clipe).
+  const float now=state_.clipTime,step=std::max(.1f,1.f/std::max(1.f,static_cast<float>(live->displayRate)));
+  const auto sample=[&](float time,std::vector<float> &out) {
+    std::string ignored;if(!clipPreview_.seek(std::clamp(time,0.f,live->duration),ignored))return;
+    for(const auto bone:state_.clipGhostIds) {
+      float world[16];if(!runtime::worldMatrix(clipPreview_.scene(),bone,world)) {out.insert(out.end(),{0,0,0});continue;}
+      out.insert(out.end(),{world[12],world[13],world[14]});
+    }
+  };
+  // Hierarquia inteira do objeto animado: personagens e mecanismos.
+  std::vector<std::pair<EditorEntityId,u32>> bones;animationStudioBones(clipPreview_.scene(),state_.clipOwner,bones);
+  state_.clipGhostIds.clear();for(const auto &[id,depth]:bones)state_.clipGhostIds.push_back(id);
+  if(now>0)sample(now-step,state_.clipGhostBefore);
+  if(now<live->duration)sample(now+step,state_.clipGhostAfter);
+  std::string ignored;clipPreview_.seek(now,ignored);
 }
 void EditorSession::revealAnimationClipTrack() {
   // Rola o dopesheet ate o canal ativo, para a chave gravada ficar visivel.
@@ -154,6 +193,7 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   state_.clipOpen=true;state_.clipGuid=guid;state_.clipOwner=owner;state_.clipTime=0;
   // Rig publicado desta raiz entra junto: limites, espelho e poses ficam ativos.
   state_.clipIkMode=false;state_.clipIkPoleSet=false;loadRigForRoot(owner);publishClipRigState();
+  state_.clipGhost=false;state_.clipFilterSelected=false;state_.clipFilterBindings.clear();state_.clipGhostBefore.clear();state_.clipGhostAfter.clear();
   state_.clipCurveView=state_.clipCurveNormalized=state_.clipCurveIsolated=false;
   state_.clipRegionsShown=state_.clipRegionDetails=false;state_.clipRegion=state_.clipPreviewRegion=0;state_.clipRegionPage=0;
   state_.clipCurveViewTask=state_.clipCurveReferencePage=0;
@@ -212,7 +252,7 @@ bool EditorSession::seekAnimationClip(float seconds,std::string &error) {
   if(!live||!std::isfinite(seconds)||seconds<0||seconds>live->duration) {error="Tempo de preview fora do clipe";return false;}
   cancelAnimationClipPose();
   if(!clipPreview_.seek(seconds,error))return false;
-  state_.clipTime=seconds;appearanceChanged_=true;return true;
+  state_.clipTime=seconds;appearanceChanged_=true;refreshAnimationGhost();return true;
 }
 bool EditorSession::previewAnimationClipRegion(u64 region,std::string &error) {
   error.clear();const auto *asset=animationClipAsset(state_.clipGuid);
@@ -439,7 +479,7 @@ bool EditorSession::pickAnimationClipPreviewTarget(ui::UiPoint position) {
     std::string error;const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
     if(state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
     else selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
-    state_.clipDiagnostic=error;revealAnimationClipTrack();
+    state_.clipDiagnostic=error;refreshClipRowFilter();revealAnimationClipTrack();
   }
   return true;
 }
@@ -713,6 +753,9 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         if(state_.clipStudioTab==1&&(!state_.rigToolOpen||rigRoot_!=state_.clipOwner))openRigTool(state_.clipOwner);
         return true;
       }
+      if(code==w::PoseGhost) {state_.clipGhost=!state_.clipGhost;refreshAnimationGhost();return true;}
+      if(code==w::TrackFilter) {state_.clipFilterSelected=!state_.clipFilterSelected;refreshClipRowFilter();return true;}
+      if(code==w::PoseLibrarySave) {std::string error;if(saveRigPoseFromScene(error))state_.clipDiagnostic="Pose salva na biblioteca";else state_.clipDiagnostic=error;publishClipRigState();return true;}
       if(code==w::PoseMirrorRig) {std::string error;if(mirrorAnimationPoseWithRig(error))state_.clipDiagnostic="Pose espelhada · chave no tempo atual";else state_.clipDiagnostic=error;return true;}
       if(code==w::PoseIkPoleReset) {state_.clipIkPoleSet=false;state_.clipDiagnostic="Direção da dobra volta a seguir a pose";return true;}
       if(code>=w::PoseLibrary&&code<w::PoseLibrary+16) {std::string error;if(applyRigPoseToClip(code-w::PoseLibrary,error))state_.clipDiagnostic="Pose aplicada como chave";else state_.clipDiagnostic=error;return true;}
@@ -730,7 +773,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
           const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
           if(state_.clipPoseShown&&state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
           else selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
-          state_.clipDiagnostic=error;refreshAnimationClip();revealAnimationClipTrack();if(state_.rigToolOpen)refreshRigTool();
+          state_.clipDiagnostic=error;refreshClipRowFilter();refreshAnimationClip();revealAnimationClipTrack();if(state_.rigToolOpen)refreshRigTool();
         }
         return true;
       }
@@ -739,7 +782,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   if(clipPoseDraft_&&event.phase==UiPointerPhase::Down&&routing.target!=ui::UiPointerTarget::Viewport) {
     const auto code=animator_widget::code(routing.widgetId);
     const bool poseAction=w::owns(routing.widgetId)&&((code>=w::PoseAutoKey&&code<=w::PoseViewport)||
-      code==w::PosePrevious||code==w::PoseNext||code==w::PoseMirrorRig||code==w::PoseIk||code==w::PoseIkPoleReset||
+      code==w::PosePrevious||code==w::PoseNext||code==w::PoseMirrorRig||code==w::PoseIk||code==w::PoseIkPoleReset||code==w::PoseLibrarySave||code==w::TrackFilter||
       (code>=w::PoseLibrary&&code<w::PoseLibrary+16)||(code>=w::StudioTabKey&&code<=w::StudioTabPose)||
       code==w::PoseToolsSelection||code==w::PoseSetSave||code==w::PoseSelectAdd||
       (code>=w::PoseTools&&code<=w::PoseUnlock)||(code>=w::PoseLock&&code<w::PoseLock+resources::MaximumMorphTargets)||

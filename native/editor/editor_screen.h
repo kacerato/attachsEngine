@@ -728,7 +728,7 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
-    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,
     BoneRow=0xb680,PoseLibrary=0xb6e0,
     PoseLock=0xb540,
     PoseGizmo=0xb500
@@ -1021,6 +1021,10 @@ struct EditorScreenState final {
   bool clipIkMode=false,clipIkDragging=false,clipIkPoleSet=false;ui::UiPoint clipIkHandle{-1,-1};
   // Biblioteca de poses do rig carregado com o clipe e pares de espelho.
   std::vector<std::string> clipPoseLibrary;u32 clipRigMirrorPairs=0;bool clipRigLoaded=false;
+  // Fantasma: posicoes mundiais das juntas antes/depois do tempo atual (xyz por junta).
+  bool clipGhost=false;std::vector<float> clipGhostBefore,clipGhostAfter;std::vector<EditorEntityId> clipGhostIds;
+  // Timeline filtrada pelo osso selecionado: bindings permitidos (vazio = todos).
+  bool clipFilterSelected=false;std::vector<u64> clipFilterBindings;
   bool clipPoseShown=false;u32 clipPosePage=0;
   bool clipPoseAutoKey=true,clipPosePending=false;
   AnimationPoseRecordingPolicy clipPoseRecording;

@@ -1678,4 +1678,11 @@ AE_TEST(animation_studio_mirror_pose_uses_published_rig_pairs_and_records_keys) 
   float rq[4];runtime::transformRotationQuaternion(session.evaluatedEditorScene().find(right)->transform,rq);
   AE_EXPECT_TRUE(std::abs(rq[2])>.3f,session.screen().clipDiagnostic.c_str());
   captureClipSurface(session,font,icons,"studio-mirror-after-1386.ppm");
+  tap(clip_widget::id(clip_widget::PoseLibrarySave),"save pose from the studio");
+  AE_EXPECT_EQ(session.screen().clipPoseLibrary.size(),usize(1),session.screen().clipDiagnostic.c_str());
+  tap(clip_widget::id(clip_widget::TrackFilter),"filter timeline by selection");
+  AE_EXPECT_TRUE(!session.screen().clipFilterBindings.empty(),"filter keeps only the selected bone channels");
+  tap(clip_widget::id(clip_widget::PoseGhost),"ghost on");
+  AE_EXPECT_TRUE(session.screen().clipGhost&&!session.screen().clipGhostAfter.empty(),"next-frame ghost sampled");
+  captureClipSurface(session,font,icons,"studio-ghost-filter-1386.ppm");
 }

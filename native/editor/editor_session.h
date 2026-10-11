@@ -2042,6 +2042,9 @@ private:
   void revealAnimationClipTrack();
   bool applyAnimationPoseIk(EditorEntityId end,const float target[3],std::string &error);
   bool loadRigForRoot(EditorEntityId root);
+  bool saveRigPoseFromScene(std::string &error);
+  void refreshAnimationGhost();
+  void refreshClipRowFilter();
   bool stageRigLocalPose(std::span<const resources::RigTransform> local,std::string &error);
   bool mirrorAnimationPoseWithRig(std::string &error);
   bool applyRigPoseToClip(u32 index,std::string &error);

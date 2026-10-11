@@ -97,12 +97,15 @@ bool EditorSession::handleAnimationPoseIk(const ui::UiPointerEvent &event,const 
     if(routing.target!=ui::UiPointerTarget::Viewport)return false;
     const auto end=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
     float world[16];if(!end||!runtime::worldMatrix(evaluatedEditorScene(),end,world))return false;
+    // A ponta tem prioridade: so um toque longe dela (e perto do joelho) move a direcao.
+    const auto tipPoint=projectWorldToScreen(view_,world+12);
+    const bool nearTip=tipPoint.valid&&std::hypot(tipPoint.screen.x-event.position.x,tipPoint.screen.y-event.position.y)<=36;
     // Toque perto do joelho/cotovelo arrasta o alvo de direcao (pole).
-    if(const auto *endNode=evaluatedEditorScene().find(end)) {
+    if(const auto *endNode=nearTip?nullptr:evaluatedEditorScene().find(end)) {
       float mid[16];
       if(runtime::worldMatrix(evaluatedEditorScene(),endNode->parent,mid)) {
         const auto knee=projectWorldToScreen(view_,mid+12);
-        if(knee.valid&&std::hypot(knee.screen.x-event.position.x,knee.screen.y-event.position.y)<=30) {
+        if(knee.valid&&std::hypot(knee.screen.x-event.position.x,knee.screen.y-event.position.y)<=26) {
           const auto ray=screenPointToRay(view_,knee.screen);if(!ray.valid)return false;
           for(u32 c=0;c<3;++c) {clipIkPlane_[c]=mid[12+c];clipIkPlane_[3+c]=-ray.direction[c];clipIkPole_[c]=mid[12+c];}
           clipIkPointer_=event.pointerId+1;clipIkEnd_=end;clipIkPoleDrag_=true;state_.clipIkDragging=true;state_.clipPlaying=false;

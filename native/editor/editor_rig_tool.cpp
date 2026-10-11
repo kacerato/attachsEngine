@@ -169,6 +169,35 @@ bool EditorSession::applyRigPoseToClip(u32 index,std::string &error) {
   return stageRigLocalPose(blended,error);
 }
 
+bool EditorSession::saveRigPoseFromScene(std::string &error) {
+  error.clear();
+  if(!rigCaptured_) {error="Publique o rig antes de salvar poses.";return false;}
+  if(rigDirty_) {error="Publique o rig antes de salvar poses.";return false;}
+  // No estudio a pose vem do clipe avaliado no tempo atual; fora dele, da cena.
+  const runtime::SceneGraph &scene=state_.clipOpen?evaluatedEditorScene():static_cast<const runtime::SceneGraph&>(document_);
+  resources::CompiledRig compiled;if(!resources::compileRig(rigDraft_,compiled,error))return false;
+  runtime::RigBindings bindings;runtime::bindRigToScene(rigDraft_,compiled,scene,rigRoot_,bindings);
+  std::vector<resources::RigTransform> local(compiled.joints.size());
+  if(!runtime::readRigScenePose(compiled,bindings,scene,local,error))return false;
+  std::vector<u8> channels(local.size(),resources::RigAll);
+  std::string name="Pose "+std::to_string(rigPoses_.size()+1);
+  std::string path="Rigs/Poses/"+safeStem(rigDraft_.name,"Rig")+" - "+name+".aerpose";
+  for(u32 n=2;assets_.findByPath(path);++n) {name="Pose "+std::to_string(rigPoses_.size()+n);path="Rigs/Poses/"+safeStem(rigDraft_.name,"Rig")+" - "+name+".aerpose";}
+  const auto guid=resources::assetGuidFromSeed("rig-pose:"+path+":"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count()));
+  resources::RigPose pose;
+  if(!prepareRigPose(compiled,guid,name,local,channels,pose,error))return false;
+  const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());std::filesystem::path absolute;
+  if(files_.rootPath().empty()||!EditorImportTransaction::safePath(root,path,absolute)) {error="Caminho da pose indisponível.";return false;}
+  const auto text=pose.serialize();resources::AssetRecord record;record.guid=pose.guid;record.type=resources::AssetType::RigPose;record.path=path;
+  record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(text.data()),text.size()));
+  auto next=assets_;if(!next.add(record)) {error="O registro recusou a pose.";return false;}
+  std::error_code fs;std::filesystem::create_directories(absolute.parent_path(),fs);
+  if(fs||!EditorImportTransaction::writeText(absolute,text)) {error="Não foi possível gravar "+path+".";return false;}
+  assets_=std::move(next);assetRegistryDirty_=true;files_.rebuildTree();
+  rigPoses_.push_back(std::move(pose));rigPose_=static_cast<u32>(rigPoses_.size()-1);
+  return true;
+}
+
 bool EditorSession::publishRigDraft(std::string &error) {
   error.clear();
   if(!rigCaptured_) {error="Capture a hierarquia antes de publicar.";return false;}
@@ -438,29 +467,9 @@ bool EditorSession::handleRigTool(const ui::UiPointerRouting &routing) {
     if(applyRigPoseToScene(mirrored,channels,"Espelhar pose do rig",error)) ui.status="Pose espelhada · Desfazer restaura";
     break;
   }
-  case RigToolAction::PoseCapture: {
-    if(rigDirty_) {error="Publique o rig antes de salvar poses.";break;}
-    resources::CompiledRig compiled;if(!resources::compileRig(rigDraft_,compiled,error)) break;
-    runtime::RigBindings bindings;runtime::bindRigToScene(rigDraft_,compiled,document_,rigRoot_,bindings);
-    std::vector<resources::RigTransform> local(compiled.joints.size());
-    if(!runtime::readRigScenePose(compiled,bindings,document_,local,error)) break;
-    std::vector<u8> channels(local.size(),resources::RigAll);
-    const std::string name="Pose "+std::to_string(rigPoses_.size()+1);
-    const std::string path="Rigs/Poses/"+safeStem(rigDraft_.name,"Rig")+" - "+name+".aerpose";
-    const auto guid=resources::assetGuidFromSeed("rig-pose:"+path+":"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count()));
-    resources::RigPose pose;
-    if(!prepareRigPose(compiled,guid,name,local,channels,pose,error)) break;
-    const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());std::filesystem::path absolute;
-    if(files_.rootPath().empty()||!EditorImportTransaction::safePath(root,path,absolute)||assets_.findByPath(path)) {error="Caminho da pose indisponível.";break;}
-    const auto text=pose.serialize();resources::AssetRecord record;record.guid=pose.guid;record.type=resources::AssetType::RigPose;record.path=path;
-    record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(text.data()),text.size()));
-    auto next=assets_;if(!next.add(record)) {error="O registro recusou a pose.";break;}
-    std::error_code fs;std::filesystem::create_directories(absolute.parent_path(),fs);
-    if(fs||!EditorImportTransaction::writeText(absolute,text)) {error="Não foi possível gravar "+path+".";break;}
-    assets_=std::move(next);assetRegistryDirty_=true;files_.rebuildTree();
-    rigPoses_.push_back(std::move(pose));rigPose_=static_cast<u32>(rigPoses_.size()-1);ui.status=name+" salva em "+path;
+  case RigToolAction::PoseCapture:
+    if(saveRigPoseFromScene(error))ui.status="Pose salva na biblioteca";
     break;
-  }
   case RigToolAction::PoseNext: if(!rigPoses_.empty()) rigPose_=(rigPose_+1)%rigPoses_.size();break;
   case RigToolAction::PoseWeight: rigPoseWeight_=rigPoseWeight_>=100?25:rigPoseWeight_+25;break;
   case RigToolAction::PoseApply: {

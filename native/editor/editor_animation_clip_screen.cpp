@@ -173,6 +173,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
       card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
+      card(side,"Salvar pose atual","Entra na biblioteca deste rig",w::PoseLibrarySave,state.clipPoseShown&&state.clipRigLoaded,UiIcon::AnimationRecordPose);
+      card(side,"Fantasma",state.clipGhost?"Quadro anterior (azul) e seguinte (âmbar)":"Desligado",w::PoseGhost,state.clipPoseShown,UiIcon::AnimationFrame,state.clipGhost);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);
       card(side,"Edição",state.clipPoseIsolated?"Camada isolada":"Resultado combinado",w::PoseIsolate,state.clipPoseShown,UiIcon::AnimationLayers,state.clipPoseIsolated);
       card(side,"Seleção, espelho e cópia","Ferramentas de pose",w::PoseTools,state.clipPoseShown,UiIcon::AnimationPoseTools,state.clipPoseToolsShown);
@@ -359,13 +361,15 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   auto body=editor;const float rowsWidth=std::min(185.f,body.width*.27f);
   auto names=left(body,rowsWidth);layout.clipRows=names;
   auto navigation=top(names,34);button(left(navigation,36),"<",w::RowsPrevious,state.clipRow>0);button(left(navigation,36),">",w::RowsNext);
+  if(studio)button(left(navigation,42),"",w::TrackFilter,true,state.clipFilterSelected,UiIcon::AnimationSelectionSet);
   button(left(navigation,42),"",w::AddKey,selected!=nullptr,false,UiIcon::AnimationKey);button(left(navigation,42),"",w::DeleteKey,multi||(key&&curve->keys.size()>1),false,UiIcon::UiRemove);
   const auto ruler=top(body,34);layout.clipCanvas=deflate(body,{2,2,8,3});
   const auto &canvas=layout.clipCanvas;router.addRegion(canvas,w::id(w::Canvas));
   layout.clipVisibleRows=std::min(64u,std::max(1u,static_cast<u32>(names.height/30)));
   u32 index=0,visible=0;
   struct VisibleRow {const resources::AnimationClipTrack *track;u32 component;};std::vector<VisibleRow> visibleRows;
-  for(const auto &t:asset->tracks)if(t.layer==state.clipLayer)for(u32 c=0;c<t.components();++c,++index) {
+  const auto filtered=[&](const resources::AnimationClipTrack &t){return !state.clipFilterBindings.empty()&&std::find(state.clipFilterBindings.begin(),state.clipFilterBindings.end(),t.binding)==state.clipFilterBindings.end();};
+  for(const auto &t:asset->tracks)if(t.layer==state.clipLayer&&!filtered(t))for(u32 c=0;c<t.components();++c,++index) {
     if(index<state.clipRow||visible>=layout.clipVisibleRows)continue;
     const auto binding=std::find_if(asset->bindings.begin(),asset->bindings.end(),[&](const auto &b){return b.id==t.binding;});
     const std::string path=binding==asset->bindings.end()?"?":bindingLabel(*binding);
@@ -632,7 +636,25 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     const auto *object=state.document?state.document->find(previewTarget):nullptr;
     const UiRect name{column.right()+8,layout.viewport.y+8,std::min(320.f,layout.viewport.width-72),28};
     list.addRect(name,withAlpha(theme.color.surface,.85f),4);
-    label(name,object?std::string(object->name)+(targetChannel?"":" · escolha o canal"):"Toque um osso",object?theme.color.accent:theme.color.textDim);
+    const bool warn=!state.clipDiagnostic.empty();
+    label(name,warn?state.clipDiagnostic:object?std::string(object->name)+(targetChannel?"":" · escolha o canal"):"Toque um osso",warn?theme.color.warning:object?theme.color.accent:theme.color.textDim);
+    if(state.clipGhost&&state.clipPoseGraph&&state.view) {
+      // Fantasma: esqueleto no quadro anterior (azul) e seguinte (ambar).
+      list.pushClip(layout.viewport);
+      const auto ghost=[&](const std::vector<float> &points,UiColor color) {
+        const auto &ids=state.clipGhostIds;if(points.size()!=ids.size()*3)return;
+        for(usize i=1;i<ids.size();++i) {
+          const auto *node=state.clipPoseGraph->find(ids[i]);if(!node)continue;
+          const auto parent=std::find(ids.begin(),ids.end(),node->parent);
+          if(parent==ids.end()||parent==ids.begin())continue;
+          const usize p=static_cast<usize>(parent-ids.begin());UiPoint a,b;
+          if(projectSegmentToScreen(*state.view,&points[p*3],&points[i*3],a,b))list.addLine(a,b,color,2);
+        }
+      };
+      ghost(state.clipGhostBefore,withAlpha(theme.color.axisZ,.75f));
+      ghost(state.clipGhostAfter,withAlpha(theme.color.warning,.75f));
+      list.popClip();
+    }
   } else if(state.clipPoseShown&&!state.clipExpanded&&!layout.viewport.isEmpty()) {
     auto tools=deflate(UiRect{layout.viewport.x,layout.viewport.y+4,layout.viewport.width,44},{8,0,8,0});
     list.addRect(tools,theme.color.surface);router.addBlocker(tools);
@@ -700,7 +722,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     // Estudio: o aviso fica a direita da coluna de ferramentas, sem cobri-la.
     const float noteX=studio&&state.clipPoseShown?area.x+64:area.x+8;
     const UiRect note{noteX,room?y:std::max(layout.viewport.bottom()+42,area.bottom()-32),std::max(0.f,area.right()-noteX-8),32};
-    list.addRect(note,theme.color.surface);label(note,state.clipDiagnostic,theme.color.warning);
+    // No estudio em pose o aviso ja aparece na linha do osso.
+    if(!(studio&&state.clipPoseShown)) {list.addRect(note,theme.color.surface);label(note,state.clipDiagnostic,theme.color.warning);}
   }
   if(state.clipAuthoringPicker&&state.document) {
     const auto *branch=state.document->find(state.clipAuthoringPicker==2?state.clipTargetNode:state.clipTargetBranch);
