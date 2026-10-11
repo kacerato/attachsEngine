@@ -95,7 +95,10 @@ bool EditorSession::handleAnimationPoseIk(const ui::UiPointerEvent &event,const 
     std::string error;
     if(event.phase==UiPointerPhase::Cancel)cancelAnimationClipPose();
     else if(clipPoseMoved_&&state_.clipPoseAutoKey&&!autoRecordAnimationClipPose(error))state_.clipDiagnostic=error;
-    clipPoseMoved_=false;refreshAnimationClip();
+    clipPoseMoved_=false;
+    // O rascunho seleciona o canal da raiz; a ponta continua sendo o alvo do IK.
+    if(clipIkEnd_&&!state_.clipPosePending) {std::string ignored;selectAnimationClipPreviewTarget(clipIkEnd_,resources::AnimationPath::Rotation,false,ignored);}
+    refreshAnimationClip();revealAnimationClipTrack();
     return true;
   }
   return true;

@@ -2039,6 +2039,7 @@ private:
   void refreshPathEditorState();
   bool handlePathEditorInput(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   bool handleRigTool(const ui::UiPointerRouting &routing);
+  void revealAnimationClipTrack();
   bool applyAnimationPoseIk(EditorEntityId end,const float target[3],std::string &error);
   bool handleAnimationPoseIk(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   u32 clipIkPointer_=0;float clipIkPlane_[6]{};EditorEntityId clipIkEnd_=0;

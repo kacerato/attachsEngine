@@ -37,6 +37,16 @@ bool relativeBinding(const EditorDocument &document,EditorEntityId owner,EditorE
   binding.name=document.find(target)->name;return true;
 }
 }
+void EditorSession::revealAnimationClipTrack() {
+  // Rola o dopesheet ate o canal ativo, para a chave gravada ficar visivel.
+  if(!state_.clipAsset)return;
+  const auto all=rows(*state_.clipAsset,state_.clipLayer);
+  for(usize i=0;i<all.size();++i)if(all[i].track==state_.clipTrack) {
+    const u32 visible=std::max(1u,layout_.clipVisibleRows);
+    if(i<state_.clipRow||i>=state_.clipRow+visible)state_.clipRow=static_cast<u32>(i);
+    break;
+  }
+}
 bool EditorSession::createAnimationClip(EditorEntityId owner,float duration,resources::AssetGuid &guid,std::string &error,resources::AnimationRotationMode mode) {
   const auto *object=document_.find(owner);
   if(!object||!std::isfinite(duration)||duration<0||duration>86400||static_cast<u8>(mode)>2) {error="Objeto, modo ou duração inválidos";return false;}
@@ -427,7 +437,7 @@ bool EditorSession::pickAnimationClipPreviewTarget(ui::UiPoint position) {
     std::string error;const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
     if(state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
     else selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
-    state_.clipDiagnostic=error;
+    state_.clipDiagnostic=error;revealAnimationClipTrack();
   }
   return true;
 }
@@ -715,7 +725,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
           const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
           if(state_.clipPoseShown&&state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
           else selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
-          state_.clipDiagnostic=error;refreshAnimationClip();if(state_.rigToolOpen)refreshRigTool();
+          state_.clipDiagnostic=error;refreshAnimationClip();revealAnimationClipTrack();if(state_.rigToolOpen)refreshRigTool();
         }
         return true;
       }
