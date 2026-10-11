@@ -152,6 +152,8 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   if(!clipPreview_.begin(document_,owner,*asset,previewDiagnostic)||!clipPreview_.seek(0,previewDiagnostic))clipPreview_.cancel();
   state_.clipLayer=0;state_.clipLayersShown=state_.clipLayerPicker=false;
   state_.clipOpen=true;state_.clipGuid=guid;state_.clipOwner=owner;state_.clipTime=0;
+  // Rig publicado desta raiz entra junto: limites, espelho e poses ficam ativos.
+  state_.clipIkMode=false;state_.clipIkPoleSet=false;loadRigForRoot(owner);publishClipRigState();
   state_.clipCurveView=state_.clipCurveNormalized=state_.clipCurveIsolated=false;
   state_.clipRegionsShown=state_.clipRegionDetails=false;state_.clipRegion=state_.clipPreviewRegion=0;state_.clipRegionPage=0;
   state_.clipCurveViewTask=state_.clipCurveReferencePage=0;
@@ -711,10 +713,13 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         if(state_.clipStudioTab==1&&(!state_.rigToolOpen||rigRoot_!=state_.clipOwner))openRigTool(state_.clipOwner);
         return true;
       }
+      if(code==w::PoseMirrorRig) {std::string error;if(mirrorAnimationPoseWithRig(error))state_.clipDiagnostic="Pose espelhada · chave no tempo atual";else state_.clipDiagnostic=error;return true;}
+      if(code==w::PoseIkPoleReset) {state_.clipIkPoleSet=false;state_.clipDiagnostic="Direção da dobra volta a seguir a pose";return true;}
+      if(code>=w::PoseLibrary&&code<w::PoseLibrary+16) {std::string error;if(applyRigPoseToClip(code-w::PoseLibrary,error))state_.clipDiagnostic="Pose aplicada como chave";else state_.clipDiagnostic=error;return true;}
       if(code==w::PoseIk) {state_.clipIkMode=!state_.clipIkMode;state_.clipDiagnostic=state_.clipIkMode?"IK: arraste o alvo na ponta selecionada":"";return true;}
       if(code==w::BoneTreeUp) {state_.clipBoneScroll=state_.clipBoneScroll>6?state_.clipBoneScroll-6:0;return true;}
       if(code==w::BoneTreeDown) {state_.clipBoneScroll+=6;return true;}
-      if(code>=w::BoneRow&&code<w::BoneRow+0x7f) {
+      if(code>=w::BoneRow&&code<w::BoneRow+0x60) {
         const runtime::SceneGraph &graph=clipPreview_.active()?clipPreview_.scene():document_;
         std::vector<std::pair<EditorEntityId,u32>> bones;animationStudioBones(graph,state_.clipOwner,bones);
         const u32 rows=static_cast<u32>(std::max(0.f,layout_.clipBoneRows));
@@ -734,7 +739,8 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   if(clipPoseDraft_&&event.phase==UiPointerPhase::Down&&routing.target!=ui::UiPointerTarget::Viewport) {
     const auto code=animator_widget::code(routing.widgetId);
     const bool poseAction=w::owns(routing.widgetId)&&((code>=w::PoseAutoKey&&code<=w::PoseViewport)||
-      code==w::PosePrevious||code==w::PoseNext||
+      code==w::PosePrevious||code==w::PoseNext||code==w::PoseMirrorRig||code==w::PoseIk||code==w::PoseIkPoleReset||
+      (code>=w::PoseLibrary&&code<w::PoseLibrary+16)||(code>=w::StudioTabKey&&code<=w::StudioTabPose)||
       code==w::PoseToolsSelection||code==w::PoseSetSave||code==w::PoseSelectAdd||
       (code>=w::PoseTools&&code<=w::PoseUnlock)||(code>=w::PoseLock&&code<w::PoseLock+resources::MaximumMorphTargets)||
         (code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets)||(code>=w::PoseGizmo&&code<w::PoseGizmo+3));

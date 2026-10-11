@@ -1631,3 +1631,51 @@ AE_TEST(two_bone_ik_reaches_target_keeps_lengths_and_bend_side) {
   const float cross=target[0]*knee[1]-target[1]*knee[0];AE_EXPECT_TRUE(cross<0,"bend side preserved");
   const float far[3]{10,0,0};AE_EXPECT_TRUE(editor::solveTwoBoneIk(root,mid,tip,far,solved)&&solved.clamped,"unreachable target reports stretch");
 }
+
+AE_TEST(animation_studio_mirror_pose_uses_published_rig_pairs_and_records_keys) {
+  using namespace editor;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto &fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf");
+  const auto &iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production font and icon atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,1386,640},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto owner=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Bicho");
+  const auto left=doc.createEntity(owner,EditorEntityKind::Folder,"Ombro.L"),right=doc.createEntity(owner,EditorEntityKind::Folder,"Ombro.R");
+  runtime::Transform l;l.position[0]=-1;doc.setTransform(left,l);runtime::Transform r;r.position[0]=1;doc.setTransform(right,r);
+  resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error)&&session.openAnimationClip(guid,owner,error),error.c_str());
+  session.update();
+  const auto find=[&](u32 id) {
+    UiDrawList list;list.begin(session.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+    buildEditorScreen(session.screen(),editorTheme(),list,router);UiPoint point{-1,-1};
+    const auto s=session.screen().surface;
+    for(float y=2;y<s.height&&point.x<0;y+=3)for(float x=2;x<s.width;x+=3) {
+      const auto hit=router.hitTest({x,y});if(hit.target==UiPointerTarget::Widget&&hit.widgetId==id) {point={x,y};break;}
+    }
+    return point;
+  };
+  const auto tap=[&](u32 id,const char *what) {
+    const auto point=find(id);AE_EXPECT_TRUE(point.x>=0,what);if(point.x<0)return;
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();
+  };
+  tap(clip_widget::id(clip_widget::StudioTabRig),"rig tab");
+  tap(static_cast<u32>(RigToolAction::CaptureRig),"capture rig");
+  tap(static_cast<u32>(RigToolAction::RouteMirror),"mirror route");
+  tap(static_cast<u32>(RigToolAction::MirrorSuggest),"suggest pairs by name");
+  AE_EXPECT_TRUE(session.screen().rigTool.status.find("1 pares")!=std::string::npos,session.screen().rigTool.status.c_str());
+  tap(static_cast<u32>(RigToolAction::Confirm),"publish rig");
+  AE_EXPECT_EQ(session.screen().clipRigMirrorPairs,1u,"studio sees the published mirror pair");
+  tap(clip_widget::id(clip_widget::StudioTabPose),"pose tab");
+  tap(clip_widget::id(clip_widget::Pose),"pose mode");
+  tap(clip_widget::id(clip_widget::BoneRow+1),"select Ombro.L");
+  tap(clip_widget::id(clip_widget::PoseRotate),"rotate tool");
+  const float q[4]{0,0,.3826834f,.9238795f};
+  AE_EXPECT_TRUE(session.previewAnimationClipPose(session.screen().clipTrack,q,error),error.c_str());
+  tap(clip_widget::id(clip_widget::PoseRecord),"record left pose");
+  captureClipSurface(session,font,icons,"studio-mirror-before-1386.ppm");
+  tap(clip_widget::id(clip_widget::PoseMirrorRig),"mirror pose");
+  float rq[4];runtime::transformRotationQuaternion(session.evaluatedEditorScene().find(right)->transform,rq);
+  AE_EXPECT_TRUE(std::abs(rq[2])>.3f,session.screen().clipDiagnostic.c_str());
+  captureClipSurface(session,font,icons,"studio-mirror-after-1386.ppm");
+}

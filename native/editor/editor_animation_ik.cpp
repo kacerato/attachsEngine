@@ -41,7 +41,7 @@ void rotated(const float in[16],const float r[9],V origin,float out[16]) {
 } // namespace
 
 bool solveTwoBoneIk(const float rootWorld[16],const float midWorld[16],const float endWorld[16],
-                    const float targetValue[3],TwoBoneIkResult &out) {
+                    const float targetValue[3],TwoBoneIkResult &out,const float *pole) {
   const V a=position(rootWorld),b=position(midWorld),c=position(endWorld),t{targetValue[0],targetValue[1],targetValue[2]};
   for(float v:{a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z,t.x,t.y,t.z})if(!std::isfinite(v))return false;
   const float upper=length(b-a),lower=length(c-b);
@@ -54,7 +54,8 @@ bool solveTwoBoneIk(const float rootWorld[16],const float midWorld[16],const flo
   V u=toTarget;normalize(u);
   // Bend direction: the current knee offset projected off the root->target
   // axis. Falls back to the bend plane normal when the chain is straight.
-  V bend=(b-a)-u*dot(b-a,u);
+  // Alvo de direcao (pole): quando presente, define para onde a dobra aponta.
+  V bend=pole?(V{pole[0],pole[1],pole[2]}-a)-u*dot(V{pole[0],pole[1],pole[2]}-a,u):(b-a)-u*dot(b-a,u);
   if(!normalize(bend)) {
     V normal=cross(b-a,c-b);
     if(!normalize(normal))normal=std::abs(u.y)<.9f?cross(u,V{0,1,0}):cross(u,V{1,0,0});

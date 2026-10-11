@@ -7,6 +7,10 @@
 #include "editor/editor_rig_authoring_candidate.h"
 #include "resources/rig_evaluation.h"
 #include "core/sha256.h"
+#include "core/rotation_math.h"
+#include "editor/editor_animation_pose_selection.h"
+#include "editor/editor_animation_pose_tools.h"
+#include "runtime/transform_math.h"
 #include <chrono>
 #include <cstdio>
 
@@ -40,6 +44,13 @@ template<class T,usize N>T nextIn(const T (&values)[N],T current) {
 
 bool EditorSession::openRigTool(EditorEntityId root) {
   if(!document_.exists(root)||document_.childrenOf(root).empty()) {state_.status="Selecione a raiz de uma hierarquia articulada.";return false;}
+  loadRigForRoot(root);
+  state_.rigToolOpen=true;state_.rigTool={};state_.inspectorMenu=false;state_.prefabOverridesOpen=false;
+  refreshRigTool();return true;
+}
+
+bool EditorSession::loadRigForRoot(EditorEntityId root) {
+  if(!document_.exists(root))return false;
   rigRoot_=root;rigDraft_={};rigPoses_.clear();rigControl_=rigJoint_=rigPose_=rigMirrorLeft_=rigMirrorRight_=0;rigPoseWeight_=100;
   rigCaptured_=rigDirty_=false;rigSyncedTarget_=0;
   const auto *entity=document_.find(root);
@@ -58,8 +69,82 @@ bool EditorSession::openRigTool(EditorEntityId root) {
     if(EditorImportTransaction::safePath(absoluteRoot,record.path,absolute)&&EditorImportTransaction::read(absolute,bytes,RigAsset::MaximumBytes)&&
        resources::RigPose::deserialize(std::string(bytes.begin(),bytes.end()),pose)&&pose.rig==rigDraft_.guid) rigPoses_.push_back(std::move(pose));
   }
-  state_.rigToolOpen=true;state_.rigTool={};state_.inspectorMenu=false;state_.prefabOverridesOpen=false;
-  refreshRigTool();return true;
+  return rigCaptured_;
+}
+
+void EditorSession::publishClipRigState() {
+  state_.clipRigLoaded=rigCaptured_&&rigRoot_==state_.clipOwner;
+  state_.clipRigMirrorPairs=state_.clipRigLoaded?static_cast<u32>(rigDraft_.mirror.size()):0;
+  state_.clipPoseLibrary.clear();
+  if(state_.clipRigLoaded)for(const auto &pose:rigPoses_)state_.clipPoseLibrary.push_back(pose.name);
+}
+
+// Escreve a pose local do rig como rotacoes no rascunho de pose do clipe, so
+// nas juntas que mudaram. Gravar/Cancelar/auto-key/Desfazer seguem o gizmo.
+bool EditorSession::stageRigLocalPose(std::span<const resources::RigTransform> local,std::string &error) {
+  error.clear();
+  const auto *live=animationClipAsset(state_.clipGuid);
+  if(!live||!clipPreview_.active()||isPlaying()||history_.isOpen()) {error="Abra o clipe em modo pose";return false;}
+  if(state_.clipLayer) {error="Pose do rig grava na camada Base";return false;}
+  resources::CompiledRig compiled;if(!resources::compileRig(rigDraft_,compiled,error))return false;
+  const auto &graph=evaluatedEditorScene();runtime::RigBindings bindings;
+  runtime::bindRigToScene(rigDraft_,compiled,graph,rigRoot_,bindings);
+  if(local.size()!=compiled.joints.size()||bindings.objects.size()!=compiled.joints.size()) {error="Rig não corresponde à hierarquia do clipe";return false;}
+  auto candidate=clipPoseDraft_?*clipPoseDraft_:*live;u64 primary=0;u32 written=0;
+  for(usize j=0;j<compiled.joints.size();++j) {
+    const auto *object=graph.find(bindings.objects[j]);if(!object||object->id==state_.clipOwner)continue;
+    float current[4];runtime::transformRotationQuaternion(object->transform,current);
+    const auto &q=local[j].rotation;
+    const float similarity=std::abs(current[0]*q[0]+current[1]*q[1]+current[2]*q[2]+current[3]*q[3]);
+    if(similarity>.999999f)continue;
+    resources::AnimationClipBinding binding;
+    if(!animationPoseTargetPath(document_,state_.clipOwner,object->id,binding.path,error))return false;
+    binding.name=object->name;u64 bindingId=0,id=0;
+    for(const auto &item:candidate.bindings)if(item.path==binding.path) {binding=item;bindingId=item.id;break;}
+    for(const auto &track:candidate.tracks)if(!track.layer&&bindingId&&track.binding==bindingId&&track.path==resources::AnimationPath::Rotation)id=track.id;
+    const auto mode=id?candidate.track(id)->rotationMode:resources::AnimationRotationMode::Quaternion;
+    std::vector<float> values;float value[4]{q[0],q[1],q[2],q[3]};
+    if(mode==resources::AnimationRotationMode::Euler) {
+      std::vector<float> sampled;float euler[3];
+      if(!sampleAnimationPoseChannel(*candidate.track(id),state_.clipTime,sampled)||sampled.size()<3||!rotationEulerXYZNear(value,sampled.data(),euler)) {error="Rotação Euler fora do ramo";return false;}
+      values.assign(euler,euler+3);
+    } else values.assign(value,value+4);
+    if(!id) {
+      if(!state_.clipPoseRecording.createChannels) {error="Política de gravação proíbe criar canais";return false;}
+      const std::vector<float> initial(current,current+4);
+      if(!candidate.addTrack(binding,resources::AnimationPath::Rotation,mode,initial,id,error))return false;
+    }
+    if(!candidate.putPose(id,state_.clipTime,values,error))return false;
+    if(!primary)primary=id;
+    ++written;
+  }
+  if(!written) {error="A pose já está aplicada neste tempo";return false;}
+  if(!stageAnimationClipPoseCandidate(std::move(candidate),primary,error))return false;
+  if(state_.clipPoseAutoKey&&!autoRecordAnimationClipPose(error))return false;
+  refreshAnimationClip();
+  return true;
+}
+
+bool EditorSession::mirrorAnimationPoseWithRig(std::string &error) {
+  if(!rigCaptured_||rigRoot_!=state_.clipOwner) {error="Publique um rig para este objeto (aba Rig)";return false;}
+  if(rigDraft_.mirror.empty()) {error="Defina pares de espelho na aba Rig · Espelho";return false;}
+  resources::CompiledRig compiled;if(!resources::compileRig(rigDraft_,compiled,error))return false;
+  runtime::RigBindings bindings;runtime::bindRigToScene(rigDraft_,compiled,evaluatedEditorScene(),rigRoot_,bindings);
+  std::vector<resources::RigTransform> local(compiled.joints.size()),mirrored(compiled.joints.size());
+  if(!runtime::readRigScenePose(compiled,bindings,evaluatedEditorScene(),local,error))return false;
+  if(!resources::mirrorRigPose(rigDraft_,compiled,local,mirrored,resources::RigRotation,true,error))return false;
+  return stageRigLocalPose(mirrored,error);
+}
+
+bool EditorSession::applyRigPoseToClip(u32 index,std::string &error) {
+  if(!rigCaptured_||rigRoot_!=state_.clipOwner||index>=rigPoses_.size()) {error="Pose indisponível";return false;}
+  resources::CompiledRig compiled;if(!resources::compileRig(rigDraft_,compiled,error))return false;
+  if(rigPoses_[index].rigRevision!=rigDraft_.revision) {error="Pose de outra revisão do rig; salve de novo";return false;}
+  runtime::RigBindings bindings;runtime::bindRigToScene(rigDraft_,compiled,evaluatedEditorScene(),rigRoot_,bindings);
+  std::vector<resources::RigTransform> local(compiled.joints.size()),blended(compiled.joints.size());
+  if(!runtime::readRigScenePose(compiled,bindings,evaluatedEditorScene(),local,error))return false;
+  if(!resources::blendRigPose(compiled,rigPoses_[index],1,local,blended,error))return false;
+  return stageRigLocalPose(blended,error);
 }
 
 bool EditorSession::publishRigDraft(std::string &error) {
@@ -155,6 +240,7 @@ void EditorSession::refreshRigTool() {
     add(RigToolAction::MirrorLeft,"Lado A",name(rigMirrorLeft_));
     add(RigToolAction::MirrorRight,"Lado B",name(rigMirrorRight_));
     add(RigToolAction::MirrorPair,"Formar par",std::to_string(rigDraft_.mirror.size())+(rigDraft_.mirror.size()==1?" par no rig":" pares no rig"),true,ui::UiIcon::AnimationRigMirror);
+    add(RigToolAction::MirrorSuggest,"Sugerir pares por nome","Left/Right, _L/_R, .L/.R",true,ui::UiIcon::AnimationRigMirror);
     add(RigToolAction::MirrorPlane,"Plano",std::string("Normal ")+axisName(rigDraft_.mirrorNormal));
     add(RigToolAction::MirrorPreview,"Espelhar pose atual",rigDraft_.mirror.empty()?"Forme um par primeiro":"A → B e B → A, com Desfazer",!rigDraft_.mirror.empty(),ui::UiIcon::AnimationRigMirror);
     break;
@@ -285,6 +371,30 @@ bool EditorSession::handleRigTool(const ui::UiPointerRouting &routing) {
     if(prepareRigMirrorPair(rigDraft_,rigDraft_.revision,left,right,next,error)) {rigDraft_=std::move(next);rigDirty_=true;}
     break;
   }
+  case RigToolAction::MirrorSuggest: {
+    // Sugestao por nome; pares existentes e centrais ficam como estao.
+    const auto swap=[](std::string name) {
+      const std::pair<const char*,const char*> pairs[]{{"Left","Right"},{"left","right"},{"_L","_R"},{".L",".R"},{"_l","_r"},{".l",".r"}};
+      for(const auto &[a,b]:pairs) {
+        if(const auto at=name.find(a);at!=std::string::npos) return name.replace(at,std::string_view(a).size(),b);
+        if(const auto at=name.find(b);at!=std::string::npos) return name.replace(at,std::string_view(b).size(),a);
+      }
+      return std::string();
+    };
+    u32 added=0;
+    for(const auto &left:rigDraft_.controls) {
+      const auto *joint=rigDraft_.joint(left.joint);if(!joint)continue;
+      const auto other=swap(joint->name);if(other.empty())continue;
+      for(const auto &right:rigDraft_.controls) {
+        const auto *rj=rigDraft_.joint(right.joint);if(!rj||rj->name!=other||left.id>=right.id)continue;
+        bool exists=false;for(const auto &p:rigDraft_.mirror)exists=exists||(p.left==left.id&&p.right==right.id)||(p.left==right.id&&p.right==left.id);
+        RigAsset next;std::string ignored;
+        if(!exists&&prepareRigMirrorPair(rigDraft_,rigDraft_.revision,left.id,right.id,next,ignored)) {rigDraft_=std::move(next);rigDirty_=true;++added;}
+      }
+    }
+    ui.status=added?std::to_string(added)+" pares sugeridos · publique o rig":"Nenhum par novo encontrado pelos nomes";
+    break;
+  }
   case RigToolAction::MirrorPlane: {
     const auto n=rigDraft_.mirrorNormal;const std::array<float,3> next=n[0]>.5f?std::array<float,3>{0,1,0}:n[1]>.5f?std::array<float,3>{0,0,1}:std::array<float,3>{1,0,0};
     RigAsset candidate;if(prepareRigMirrorPlane(rigDraft_,rigDraft_.revision,next,rigDraft_.mirrorOffset,candidate,error)) {rigDraft_=std::move(candidate);rigDirty_=true;}
@@ -341,7 +451,7 @@ bool EditorSession::handleRigTool(const ui::UiPointerRouting &routing) {
     break;
   default: return true;
   }
-  refreshRigTool();
+  refreshRigTool();if(state_.clipOpen)publishClipRigState();
   if(!error.empty()) {ui.status=error;ui.error=true;}
   return true;
 }

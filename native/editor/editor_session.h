@@ -2041,6 +2041,12 @@ private:
   bool handleRigTool(const ui::UiPointerRouting &routing);
   void revealAnimationClipTrack();
   bool applyAnimationPoseIk(EditorEntityId end,const float target[3],std::string &error);
+  bool loadRigForRoot(EditorEntityId root);
+  bool stageRigLocalPose(std::span<const resources::RigTransform> local,std::string &error);
+  bool mirrorAnimationPoseWithRig(std::string &error);
+  bool applyRigPoseToClip(u32 index,std::string &error);
+  void publishClipRigState();
+  float clipIkPole_[3]{};bool clipIkPoleDrag_=false;
   bool handleAnimationPoseIk(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   u32 clipIkPointer_=0;float clipIkPlane_[6]{};EditorEntityId clipIkEnd_=0;
   void refreshRigTool();

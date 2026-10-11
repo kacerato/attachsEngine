@@ -131,7 +131,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     button(left(scroll,42),"",w::BoneTreeUp,first>0,false,UiIcon::UiChevronUp);
     button(scroll,"",w::BoneTreeDown,first+rowsVisible<bones.size(),false,UiIcon::UiChevronDown);
     const auto treeTarget=state.clipPreviewTarget?state.clipPreviewTarget:state.clipTarget;
-    for(u32 n=0;n<rowsVisible&&first+n<bones.size()&&n<0x7f;++n) {
+    for(u32 n=0;n<rowsVisible&&first+n<bones.size()&&n<0x60;++n) {
       const auto [id,depth]=bones[first+n];const auto *object=graph->find(id);if(!object)continue;
       const UiRect row{tree.x,tree.y+float(n)*40,tree.width,40};
       const bool active=id==treeTarget||std::find(state.clipPoseSelection.begin(),state.clipPoseSelection.end(),id)!=state.clipPoseSelection.end();
@@ -169,14 +169,18 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       else label({side.x+12,side.y+8,side.width-24,40},"Selecione um objeto com hierarquia para o rig.",theme.color.textDim);
     } else if(state.clipStudioTab==2) {
       card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
-      card(side,"Ferramenta","Mover",w::PoseTranslate,state.clipPoseShown,UiIcon::AnimationBinding);
-      card(side,"Ferramenta","Girar",w::PoseRotate,state.clipPoseShown,UiIcon::AnimationRotationBranch);
-      card(side,"Ferramenta","Escala",w::PoseScale,state.clipPoseShown,UiIcon::AnimationReduce);
+      if(state.clipIkMode&&state.clipIkPoleSet)card(side,"Direção da dobra","Fixada · toque para seguir a pose",w::PoseIkPoleReset,true,UiIcon::AnimationRotationBranch,true);
+      card(side,"Espelhar pose",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
       card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);
       card(side,"Edição",state.clipPoseIsolated?"Camada isolada":"Resultado combinado",w::PoseIsolate,state.clipPoseShown,UiIcon::AnimationLayers,state.clipPoseIsolated);
       card(side,"Seleção, espelho e cópia","Ferramentas de pose",w::PoseTools,state.clipPoseShown,UiIcon::AnimationPoseTools,state.clipPoseToolsShown);
+      if(!state.clipPoseLibrary.empty()) {
+        auto heading=top(side,28);label({heading.x+12,heading.y,heading.width-24,heading.height},"Biblioteca de poses · toque aplica como chave",theme.color.textMuted);
+        for(u32 i=0;i<state.clipPoseLibrary.size()&&i<16&&side.height>=52;++i)
+          card(side,"Pose "+std::to_string(i+1),state.clipPoseLibrary[i],w::PoseLibrary+i,state.clipPoseShown,UiIcon::AnimationReferencePose);
+      }
     } else {
       const resources::AnimationClipTrack *track=asset->track(state.clipTrack);
       const auto *trackCurve=track&&state.clipComponent<track->curves.size()?&track->curves[state.clipComponent]:nullptr;
@@ -184,6 +188,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       card(side,"Canal",track?std::string(pathName(*track))+" · "+componentName(*track,state.clipComponent):"Nenhum canal",w::Targets,true,UiIcon::AnimationBinding);
       card(side,"Auto-key",state.clipPoseAutoKey?"Grava ao soltar o gizmo":"Manual",w::PoseAutoKey,state.clipPoseShown,UiIcon::AnimationAutoKey,state.clipPoseAutoKey);
       if(state.clipPosePending)card(side,"Pose pendente","Gravar chave no tempo atual",w::PoseRecord,true,UiIcon::AnimationRecordPose,true);
+      card(side,"Copiar pose do osso",state.clipPoseClipboardAvailable?"Copiada · cole em outro quadro":"Rotação/posição no tempo atual",w::PoseCopy,state.clipPoseShown&&track,UiIcon::AssetsCopy);
+      card(side,"Colar pose","No tempo atual · grava com auto-key",w::PosePaste,state.clipPoseShown&&state.clipPoseClipboardAvailable,UiIcon::AnimationKey);
       if(selectedKey) {
         const bool progressive=track->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion;
         card(side,"Tempo da chave",number(selectedKey->time," s"),w::KeyTime,true,UiIcon::AnimationFrame);
@@ -203,8 +209,10 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   const bool cues=state.clipCues&&!bake&&!layers;
   const auto *cue=cues?asset->cue(state.clipCue):nullptr;
   const bool previewFocus=!cues&&state.clipPoseShown&&state.clipPreviewExpanded&&!bake&&!layers&&!state.clipExpanded;
-  const float editingHeight=previewFocus?42:state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers&&!cues?
+  float editingHeight=previewFocus?42:state.clipExpanded?area.height:state.clipPoseShown&&!bake&&!layers&&!cues?
       std::min(148.f,area.height*.4f):std::min(std::max(0.f,area.height-std::min(110.f,area.height*.25f)),std::max(172.f,area.height*.46f)+(key||multi||bake||layers||cue?42.f:0.f));
+  // Estudio: a timeline mostra ao menos os eixos de dois canais do osso.
+  if(studio&&!previewFocus&&!state.clipExpanded)editingHeight=std::max(editingHeight,std::min(area.height*.4f,260.f));
   layout.viewport={area.x,area.y,area.width,std::max(0.f,area.height-editingHeight)};
   if(state.clipGuiPreviewDraw)state.clipGuiPreviewDraw(list,layout.viewport);
   UiRect editor{area.x,layout.viewport.bottom(),area.width,editingHeight};
@@ -370,8 +378,9 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     const bool groupStart=c==0||visible==0;
     if(groupStart) {
       if(index>0||visible>0)list.addRect({row.x,row.y,row.width,1},theme.color.line);
-      const auto slash=path.find_last_of(">/");
-      const std::string bone=slash==std::string::npos?path:path.substr(slash+1+(slash+1<path.size()&&path[slash+1]==' '?1:0));
+      // Ultimo segmento do caminho (" › " em UTF-8): so o nome do osso.
+      const auto separator=path.rfind("› ");
+      const std::string bone=separator==std::string::npos?path:path.substr(separator+4);
       label({row.x+2,row.y,row.width-30,15},bone,active?theme.color.accent:theme.color.text);
       label({row.x+2,row.y+15,row.width-30,15},progress?"Progresso °":pathName(t),theme.color.textMuted);
     } else {
@@ -598,6 +607,17 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
           if(projectSegmentToScreen(*state.view,a+12,b+12,p0,p1))list.addLine(p0,p1,theme.color.warning,3);
           if(projectSegmentToScreen(*state.view,b+12,world+12,p2,p3))list.addLine(p2,p3,theme.color.warning,3);
         }
+        if(midNode&&runtime::worldMatrix(*state.clipPoseGraph,midNode->id,b)) {
+          // Alvo de direcao da dobra: losango no joelho/cotovelo, arrastavel.
+          const auto knee=projectWorldToScreen(*state.view,b+12);
+          if(knee.valid) {
+            const float k=11;const UiColor pole=state.clipIkPoleSet?theme.color.accent:theme.color.warning;
+            list.addLine({knee.screen.x,knee.screen.y-k},{knee.screen.x+k,knee.screen.y},pole,2.5f);
+            list.addLine({knee.screen.x+k,knee.screen.y},{knee.screen.x,knee.screen.y+k},pole,2.5f);
+            list.addLine({knee.screen.x,knee.screen.y+k},{knee.screen.x-k,knee.screen.y},pole,2.5f);
+            list.addLine({knee.screen.x-k,knee.screen.y},{knee.screen.x,knee.screen.y-k},pole,2.5f);
+          }
+        }
         if(tip.valid) {
           const float r=state.clipIkDragging?18:15;
           list.addBorder({tip.screen.x-r,tip.screen.y-r,2*r,2*r},theme.color.warning,3,r);
@@ -677,7 +697,9 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     // viewport, lend the key area to the diagnostic instead of hiding fields.
     const float y=layout.viewport.y+(state.clipPoseShown?state.clipPoseNumbers?92.f:48.f:8.f);
     const bool room=y+32<=layout.viewport.bottom()-(state.clipPoseShown?44.f:0.f);
-    const UiRect note{area.x+8,room?y:std::max(layout.viewport.bottom()+42,area.bottom()-32),std::max(0.f,area.width-16),32};
+    // Estudio: o aviso fica a direita da coluna de ferramentas, sem cobri-la.
+    const float noteX=studio&&state.clipPoseShown?area.x+64:area.x+8;
+    const UiRect note{noteX,room?y:std::max(layout.viewport.bottom()+42,area.bottom()-32),std::max(0.f,area.right()-noteX-8),32};
     list.addRect(note,theme.color.surface);label(note,state.clipDiagnostic,theme.color.warning);
   }
   if(state.clipAuthoringPicker&&state.document) {

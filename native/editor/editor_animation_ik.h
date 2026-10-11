@@ -14,5 +14,5 @@ struct TwoBoneIkResult {
   bool clamped=false;
 };
 bool solveTwoBoneIk(const float rootWorld[16],const float midWorld[16],const float endWorld[16],
-                    const float target[3],TwoBoneIkResult &out);
+                    const float target[3],TwoBoneIkResult &out,const float *pole=nullptr);
 } // namespace ae::editor
