@@ -2045,7 +2045,7 @@ private:
   bool applyRigPoseToScene(std::span<const resources::RigTransform> local,std::span<const u8> channels,std::string_view label,std::string &error);
   resources::RigAsset rigDraft_;
   std::vector<resources::RigPose> rigPoses_;
-  EditorEntityId rigRoot_=0;
+  EditorEntityId rigRoot_=0; EditorEntityId rigSyncedTarget_=0;
   u32 rigControl_=0,rigJoint_=0,rigPose_=0,rigMirrorLeft_=0,rigMirrorRight_=0,rigPoseWeight_=100;
   bool rigCaptured_=false,rigDirty_=false;
   runtime::ObjectId pathEditorEntity_=0,pathStatsTarget_=0;

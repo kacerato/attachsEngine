@@ -68,6 +68,16 @@ const char *tangentName(resources::AnimationTangentMode mode) {
 UiRect top(UiRect &r,float h) {const float height=std::min(h,r.height);UiRect result{r.x,r.y,r.width,height};r.y+=height;r.height-=height;return result;}
 UiRect left(UiRect &r,float w) {const float width=std::min(w,r.width);UiRect result{r.x,r.y,width,r.height};r.x+=width;r.width-=width;return result;}
 }
+void animationStudioBones(const runtime::SceneGraph &graph,EditorEntityId owner,std::vector<std::pair<EditorEntityId,u32>> &out) {
+  out.clear();if(!graph.exists(owner))return;
+  // Ordem da hierarquia real (pai antes dos filhos), igual a arvore da cena.
+  std::vector<std::pair<EditorEntityId,u32>> stack{{owner,0}};
+  while(!stack.empty()&&out.size()<512) {
+    const auto [id,depth]=stack.back();stack.pop_back();out.push_back({id,depth});
+    const auto children=graph.childrenOf(id);
+    for(auto it=children.rbegin();it!=children.rend();++it)stack.push_back({*it,depth+1});
+  }
+}
 EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const UiTheme &theme,UiDrawList &list,UiInputRouter &router) {
   EditorScreenLayout layout;const auto *asset=state.clipAsset;if(!asset)return layout;
   auto area=deflate(state.surface,state.safeArea);
@@ -100,6 +110,86 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   if(state.clipCurves&&header.width>=56)button(left(header,56),"Nome",w::Name);
   if(header.width>=84)button(left(header,84),"Pose",w::Pose,state.clipTarget!=0&&!state.clipExpanded,state.clipPoseShown,UiIcon::AnimationReferencePose);
   if(header.width>=52)button(left(header,52),"Novo",w::New);
+  // Estudio de animacao: com largura, a arvore de ossos fica a esquerda e o
+  // inspector (chave, rig, pose) a direita. Viewport e timeline ficam no centro;
+  // nada cobre a tela inteira, e tudo opera sobre o mesmo alvo selecionado.
+  const bool studio=area.width>=900&&!state.clipExpanded;
+  if(studio) {
+    const float treeWidth=std::clamp(area.width*.17f,210.f,300.f),sideWidth=std::clamp(area.width*.24f,280.f,380.f);
+    UiRect tree{area.x,area.y,treeWidth,area.height},side{area.right()-sideWidth,area.y,sideWidth,area.height};
+    area.x+=treeWidth+1;area.width-=treeWidth+sideWidth+2;
+    list.addRect(tree,theme.color.surface);router.addBlocker(tree);list.addRect(side,theme.color.surface);router.addBlocker(side);
+    list.addRect({tree.right(),tree.y,1,tree.height},theme.color.lineSoft);list.addRect({side.x-1,side.y,1,side.height},theme.color.lineSoft);
+    const runtime::SceneGraph *graph=state.clipPoseGraph?state.clipPoseGraph:state.document;
+    std::vector<std::pair<EditorEntityId,u32>> bones;if(graph)animationStudioBones(*graph,state.clipOwner,bones);
+    auto treeHeader=top(tree,44);list.addRect(treeHeader,theme.color.silhouette);
+    {auto icon=left(treeHeader,36);list.addImage({icon.x+9,icon.y+13,18,18},static_cast<UiImageId>(UiIcon::AnimationSkeleton),0xffffffff);}
+    auto scroll=UiRect{treeHeader.right()-84,treeHeader.y,84,treeHeader.height};treeHeader.width-=84;
+    label(treeHeader,"Hierarquia · "+std::to_string(bones.size()),theme.color.text);
+    const u32 rowsVisible=static_cast<u32>(std::max(0.f,tree.height)/40); layout.clipBoneRows=float(rowsVisible);
+    const u32 first=std::min<u32>(state.clipBoneScroll,bones.size()>rowsVisible?static_cast<u32>(bones.size())-rowsVisible:0);
+    button(left(scroll,42),"",w::BoneTreeUp,first>0,false,UiIcon::UiChevronUp);
+    button(scroll,"",w::BoneTreeDown,first+rowsVisible<bones.size(),false,UiIcon::UiChevronDown);
+    const auto treeTarget=state.clipPreviewTarget?state.clipPreviewTarget:state.clipTarget;
+    for(u32 n=0;n<rowsVisible&&first+n<bones.size()&&n<0x7f;++n) {
+      const auto [id,depth]=bones[first+n];const auto *object=graph->find(id);if(!object)continue;
+      const UiRect row{tree.x,tree.y+float(n)*40,tree.width,40};
+      const bool active=id==treeTarget||std::find(state.clipPoseSelection.begin(),state.clipPoseSelection.end(),id)!=state.clipPoseSelection.end();
+      const bool bone=std::find(state.clipPreviewJoints.begin(),state.clipPreviewJoints.end(),id)!=state.clipPreviewJoints.end();
+      if(active) {list.addRect(deflate(row,{4,2,4,2}),withAlpha(theme.color.accent,.18f),4);list.addRect({row.x+4,row.y+8,3,row.height-16},theme.color.accent,1.5f);}
+      const float indent=12.f+std::min<u32>(depth,10)*12.f;
+      list.addImage({row.x+indent,row.y+11,18,18},static_cast<UiImageId>(bone?UiIcon::AnimationSkeleton:UiIcon::AnimationBinding),bone?0xffffffff:withAlpha(0xffffffff,.55f));
+      label({row.x+indent+24,row.y,std::max(0.f,row.width-indent-28),row.height},object->name,active?theme.color.accent:bone?theme.color.text:theme.color.textDim);
+      router.addRegion(row,w::id(w::BoneRow+n));
+    }
+    auto tabs=top(side,44);list.addRect(tabs,theme.color.silhouette);
+    const char *tabNames[]{"Chave","Rig","Pose"};const UiIcon tabIcons[]{UiIcon::AnimationKey,UiIcon::AnimationSkeleton,UiIcon::AnimationPoseTools};
+    const float tabWidth=tabs.width/3;
+    for(u32 t=0;t<3;++t) {
+      const UiRect tab{tabs.x+tabWidth*t,tabs.y,tabWidth,tabs.height};const bool active=state.clipStudioTab==t;
+      if(active)list.addRect({tab.x+10,tab.bottom()-3,tab.width-20,3},theme.color.accent,1.5f);
+      list.addImage({tab.x+10,tab.y+13,18,18},static_cast<UiImageId>(tabIcons[t]),active?0xffffffff:withAlpha(0xffffffff,.6f));
+      label({tab.x+32,tab.y,tab.width-34,tab.height},tabNames[t],active?theme.color.accent:theme.color.textDim);
+      router.addRegion(tab,w::id(w::StudioTabKey+t));
+    }
+    const auto card=[&](UiRect &column,std::string_view name,std::string value,u32 code,bool enabled,UiIcon icon=UiIcon::None,bool active=false) {
+      auto row=deflate(top(column,52),{8,4,8,4});
+      list.addRect(row,active?withAlpha(theme.color.accent,.16f):enabled?theme.color.raised:theme.color.silhouette,4);
+      if(active)list.addRect({row.x,row.y+6,3,row.height-12},theme.color.accent,1.5f);
+      auto inner=deflate(row,{10,2,10,2});
+      if(icon!=UiIcon::None){list.addImage({inner.x,inner.y+(inner.height-20)*.5f,20,20},static_cast<UiImageId>(icon),enabled?0xffffffff:withAlpha(0xffffffff,.4f));inner.x+=28;inner.width-=28;}
+      list.pushClip(inner);
+      list.addText({inner.x,inner.y,inner.width,inner.height*.45f},name,theme.color.textMuted,theme.type.caption);
+      list.addText({inner.x,inner.y+inner.height*.45f,inner.width,inner.height*.55f},fitTextMiddle(list,value,inner.width,theme.type.body),enabled?theme.color.text:theme.color.textFaint,theme.type.body);
+      list.popClip();
+      if(enabled)router.addRegion(row,w::id(code));
+    };
+    if(state.clipStudioTab==1) {
+      if(state.rigToolOpen)buildEditorRigScreen(state.rigTool,theme,list,router,side);
+      else label({side.x+12,side.y+8,side.width-24,40},"Selecione um objeto com hierarquia para o rig.",theme.color.textDim);
+    } else if(state.clipStudioTab==2) {
+      card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
+      card(side,"Ferramenta","Mover",w::PoseTranslate,state.clipPoseShown,UiIcon::AnimationBinding);
+      card(side,"Ferramenta","Girar",w::PoseRotate,state.clipPoseShown,UiIcon::AnimationRotationBranch);
+      card(side,"Ferramenta","Escala",w::PoseScale,state.clipPoseShown,UiIcon::AnimationReduce);
+      card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
+      card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);
+      card(side,"Seleção, espelho e cópia","Ferramentas de pose",w::PoseTools,state.clipPoseShown,UiIcon::AnimationPoseTools,state.clipPoseToolsShown);
+    } else {
+      const resources::AnimationClipTrack *track=asset->track(state.clipTrack);
+      const auto *trackCurve=track&&state.clipComponent<track->curves.size()?&track->curves[state.clipComponent]:nullptr;
+      const resources::AnimationCurveKey *selectedKey=nullptr;if(trackCurve)for(const auto &k:trackCurve->keys)if(k.id==state.clipKey)selectedKey=&k;
+      card(side,"Canal",track?std::string(pathName(*track))+" · "+componentName(*track,state.clipComponent):"Nenhum canal",w::Targets,true,UiIcon::AnimationBinding);
+      card(side,"Auto-key",state.clipPoseAutoKey?"Grava ao soltar o gizmo":"Manual",w::PoseAutoKey,state.clipPoseShown,UiIcon::AnimationAutoKey,state.clipPoseAutoKey);
+      if(state.clipPosePending)card(side,"Pose pendente","Gravar chave no tempo atual",w::PoseRecord,true,UiIcon::AnimationRecordPose,true);
+      if(selectedKey) {
+        const bool progressive=track->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion;
+        card(side,"Tempo da chave",number(selectedKey->time," s"),w::KeyTime,true,UiIcon::AnimationFrame);
+        card(side,"Valor",number(selectedKey->value),w::KeyValue,!progressive||state.clipComponent!=4,UiIcon::AnimationKey);
+        card(side,"Tangente de saída",tangentName(selectedKey->outgoing),w::Tangent,!progressive||state.clipComponent==4,UiIcon::AnimationTangent);
+      } else label({side.x+16,side.y+8,side.width-32,40},"Toque uma chave na timeline para editar tempo, valor e tangente.",theme.color.textMuted);
+    }
+  }
   const resources::AnimationClipTrack *selected=asset->track(state.clipTrack);
   const resources::AnimationCurve *curve=selected&&state.clipComponent<selected->curves.size()?&selected->curves[state.clipComponent]:nullptr;
   const resources::AnimationCurveKey *key=nullptr;if(curve)for(const auto &k:curve->keys)if(k.id==state.clipKey)key=&k;
@@ -139,7 +229,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     button(left(property,110),"Escala",w::SelectionScale);
     button(left(property,84),"Somar",w::SelectionAdd,true,state.clipSelectionAdd);
     button(left(property,74),"Limpar",w::SelectionClear);
-  } else if(key&&!bake&&!layers&&!previewFocus&&!cues) {
+  } else if(key&&!studio&&!bake&&!layers&&!previewFocus&&!cues) {
     auto property=top(editor,42);list.addRect(property,theme.color.surface);
     const float nameWidth=std::min(160.f,property.width*.22f);
     const bool progressive=selected&&selected->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion;

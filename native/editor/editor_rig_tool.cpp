@@ -41,7 +41,7 @@ template<class T,usize N>T nextIn(const T (&values)[N],T current) {
 bool EditorSession::openRigTool(EditorEntityId root) {
   if(!document_.exists(root)||document_.childrenOf(root).empty()) {state_.status="Selecione a raiz de uma hierarquia articulada.";return false;}
   rigRoot_=root;rigDraft_={};rigPoses_.clear();rigControl_=rigJoint_=rigPose_=rigMirrorLeft_=rigMirrorRight_=0;rigPoseWeight_=100;
-  rigCaptured_=rigDirty_=false;
+  rigCaptured_=rigDirty_=false;rigSyncedTarget_=0;
   const auto *entity=document_.find(root);
   const std::string path="Rigs/"+safeStem(entity?entity->name:"","Rig")+".aerig";
   const auto absoluteRoot=EditorImportTransaction::fromUtf8(files_.rootPath());
@@ -104,6 +104,20 @@ bool EditorSession::applyRigPoseToScene(std::span<const resources::RigTransform>
 }
 
 void EditorSession::refreshRigTool() {
+  // No estudio de animacao, a junta do rig segue a selecao da arvore/viewport.
+  if(state_.clipOpen&&rigCaptured_) {
+    const auto target=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+    if(target&&target!=rigSyncedTarget_) {
+      resources::CompiledRig compiled;std::string ignored;runtime::RigBindings bindings;
+      if(resources::compileRig(rigDraft_,compiled,ignored)) {
+        runtime::bindRigToScene(rigDraft_,compiled,document_,rigRoot_,bindings);
+        for(usize i=0;i<bindings.objects.size()&&i<compiled.joints.size();++i) if(bindings.objects[i]==target) {
+          for(usize j=0;j<rigDraft_.joints.size();++j) if(rigDraft_.joints[j].id==compiled.joints[i].id) rigJoint_=static_cast<u32>(j);
+        }
+      }
+      rigSyncedTarget_=target;
+    }
+  }
   auto &ui=state_.rigTool;const auto page=ui.page;const auto route=ui.route;const bool routes=ui.routesOpen;
   ui.fields.clear();ui.error=false;ui.hasPreview=false;ui.canConfirm=false;ui.confirmLabel.clear();
   ui.route=route;ui.page=page;ui.routesOpen=routes;

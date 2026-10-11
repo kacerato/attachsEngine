@@ -728,12 +728,15 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,BoneTreeUp,BoneTreeDown,
+    BoneRow=0xb680,
     PoseLock=0xb540,
     PoseGizmo=0xb500
 };
 inline constexpr u32 id(u32 code) {return animator_widget::id(code);}
 inline constexpr bool owns(u32 widget) {return animator_widget::owns(widget)&&animator_widget::code(widget)>=Open&&animator_widget::code(widget)<0xb700;}
 }
+void animationStudioBones(const runtime::SceneGraph &,EditorEntityId owner,std::vector<std::pair<EditorEntityId,u32>> &);
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
 }
@@ -1012,6 +1015,8 @@ struct EditorScreenState final {
   u32 clipModeSide=0;
   u32 clipAuthoringPicker=0,clipTargetPage=0,clipAuthorReturn=0;
   EditorEntityId clipTargetBranch=0,clipTargetNode=0,clipTarget=0;
+  // Estúdio: coluna de inspector (0 chave, 1 rig, 2 pose) e rolagem da árvore de ossos.
+  u8 clipStudioTab=0;u32 clipBoneScroll=0;
   bool clipPoseShown=false;u32 clipPosePage=0;
   bool clipPoseAutoKey=true,clipPosePending=false;
   AnimationPoseRecordingPolicy clipPoseRecording;
@@ -1797,6 +1802,7 @@ struct EditorScreenState final {
 };
 
 struct EditorScreenLayout final {
+  float clipBoneRows=0; // linhas visiveis da arvore de ossos do estudio
   u32 libraryPages=1,libraryDiagnosticPages=1;
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};

@@ -28,7 +28,8 @@ std::string_view trim(std::string_view text) {
 }
 bool number(std::string_view text,float &value) {
   text=trim(text);double parsed=0;
-  if(!parseDecimal(text,parsed)||!std::isfinite(parsed))return false;value=static_cast<float>(parsed);return std::isfinite(value);
+  if(!parseDecimal(text,parsed)||!std::isfinite(parsed))return false;
+  value=static_cast<float>(parsed);return std::isfinite(value);
 }
 std::string_view member(std::string_view text,std::string_view key) {
   const auto at=text.find(std::string(key)+":");if(at==text.npos) return {};

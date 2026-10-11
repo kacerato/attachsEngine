@@ -690,6 +690,36 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
 }
 bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
   using ui::UiPointerPhase;
+  // Estudio: abas do inspector, arvore de ossos e folha de rig vivem ao lado
+  // do viewport; tratadas antes do fluxo da timeline, sem cancelar a pose.
+  if(routing.tapped&&routing.target==ui::UiPointerTarget::Widget) {
+    if(state_.clipStudioTab==1&&handleRigTool(routing))return true;
+    if(w::owns(routing.widgetId)) {
+      const auto code=animator_widget::code(routing.widgetId);
+      if(code>=w::StudioTabKey&&code<=w::StudioTabPose) {
+        state_.clipStudioTab=static_cast<u8>(code-w::StudioTabKey);
+        if(state_.clipStudioTab==1&&(!state_.rigToolOpen||rigRoot_!=state_.clipOwner))openRigTool(state_.clipOwner);
+        return true;
+      }
+      if(code==w::BoneTreeUp) {state_.clipBoneScroll=state_.clipBoneScroll>6?state_.clipBoneScroll-6:0;return true;}
+      if(code==w::BoneTreeDown) {state_.clipBoneScroll+=6;return true;}
+      if(code>=w::BoneRow&&code<w::BoneRow+0x7f) {
+        const runtime::SceneGraph &graph=clipPreview_.active()?clipPreview_.scene():document_;
+        std::vector<std::pair<EditorEntityId,u32>> bones;animationStudioBones(graph,state_.clipOwner,bones);
+        const u32 rows=static_cast<u32>(std::max(0.f,layout_.clipBoneRows));
+        const u32 first=std::min<u32>(state_.clipBoneScroll,bones.size()>rows?static_cast<u32>(bones.size())-rows:0);
+        const u32 index=first+(code-w::BoneRow);
+        if(index<bones.size()) {
+          std::string error;const auto target=bones[index].first;
+          const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
+          if(state_.clipPoseShown&&state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
+          else selectAnimationClipPreviewTarget(target,bone?resources::AnimationPath::Rotation:resources::AnimationPath::Translation,false,error);
+          state_.clipDiagnostic=error;refreshAnimationClip();if(state_.rigToolOpen)refreshRigTool();
+        }
+        return true;
+      }
+    }
+  }
   if(clipPoseDraft_&&event.phase==UiPointerPhase::Down&&routing.target!=ui::UiPointerTarget::Viewport) {
     const auto code=animator_widget::code(routing.widgetId);
     const bool poseAction=w::owns(routing.widgetId)&&((code>=w::PoseAutoKey&&code<=w::PoseViewport)||

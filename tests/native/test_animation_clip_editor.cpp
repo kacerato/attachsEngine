@@ -1572,3 +1572,45 @@ AE_TEST(rig_tool_lives_in_properties_captures_controls_mirror_and_reusable_poses
   tap(RigToolAction::Close,"close rig tool");
   AE_EXPECT_TRUE(!session.screen().rigToolOpen,"close returns to Properties");
 }
+
+AE_TEST(animation_studio_docks_bone_tree_and_inspector_beside_viewport) {
+  using namespace editor;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto &fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf");
+  const auto &iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production font and icon atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,1386,640},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto owner=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Raposa");
+  const auto hip=doc.createEntity(owner,EditorEntityKind::Folder,"Quadril");
+  const auto spine=doc.createEntity(hip,EditorEntityKind::Folder,"Coluna");
+  doc.createEntity(spine,EditorEntityKind::Folder,"Pescoço");
+  resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error)&&session.openAnimationClip(guid,owner,error),error.c_str());
+  session.update();
+  const auto find=[&](u32 id) {
+    UiDrawList list;list.begin(session.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+    buildEditorScreen(session.screen(),editorTheme(),list,router);UiPoint point{-1,-1};
+    const auto s=session.screen().surface;
+    for(float y=2;y<s.height&&point.x<0;y+=3)for(float x=2;x<s.width;x+=3) {
+      const auto hit=router.hitTest({x,y});if(hit.target==UiPointerTarget::Widget&&hit.widgetId==id) {point={x,y};break;}
+    }
+    return point;
+  };
+  const auto tap=[&](u32 id,const char *what) {
+    const auto point=find(id);AE_EXPECT_TRUE(point.x>=0,what);if(point.x<0)return;
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();
+  };
+  const auto viewport=session.layout().viewport;
+  AE_EXPECT_TRUE(viewport.x>200&&viewport.right()<1386-270,"viewport sits between bone tree and inspector");
+  captureClipSurface(session,font,icons,"studio-1386.ppm");
+  tap(clip_widget::id(clip_widget::BoneRow+2),"tap Coluna in bone tree");
+  AE_EXPECT_EQ(session.screen().clipPreviewTarget?session.screen().clipPreviewTarget:session.screen().clipTarget,spine,"tree selects the same target as viewport picking");
+  tap(clip_widget::id(clip_widget::StudioTabPose),"pose tab");
+  captureClipSurface(session,font,icons,"studio-pose-1386.ppm");
+  tap(clip_widget::id(clip_widget::StudioTabRig),"rig tab");
+  AE_EXPECT_TRUE(session.screen().rigToolOpen,"rig sheet docks in the animation inspector");
+  tap(static_cast<u32>(RigToolAction::CaptureRig),"capture rig from studio");
+  AE_EXPECT_TRUE(session.screen().rigTool.fields.size()&&session.screen().rigTool.fields[0].value=="Coluna","rig joint follows the studio selection");
+  captureClipSurface(session,font,icons,"studio-rig-1386.ppm");
+}
