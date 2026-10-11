@@ -10,7 +10,7 @@
 namespace ae::editor {
 namespace {
 using namespace resources;namespace w=clip_widget;
-constexpr const char *operations[]={"Entrada","Constante","Somar","Multiplicar","Escala + offset","Clamp","Remapear","Curva"};
+[[maybe_unused]] constexpr const char *operations[]={"Entrada","Constante","Somar","Multiplicar","Escala + offset","Clamp","Remapear","Curva"};
 AnimationDriverNode *node(AnimationClipAsset &draft,u64 id) {
   for(auto &n:draft.drivers.graph.nodes)if(n.id==id)return &n;
   return nullptr;

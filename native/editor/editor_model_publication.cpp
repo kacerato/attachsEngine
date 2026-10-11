@@ -45,11 +45,20 @@ bool applyLibraryItem(std::string &encoded,const std::string &path,const std::op
   if(!found)return false;
   encoded=index.serialize();return !encoded.empty();
 }
-bool persistedRegistry(const std::filesystem::path &root,const resources::AssetRegistry &expected) {
+// Registros pendentes (textura extraida, material criado) ainda nao foram
+// gravados: o disco pode estar atras da memoria, mas nunca divergir dela.
+bool persistedRegistry(const std::filesystem::path &root,const resources::AssetRegistry &expected,bool pending=false) {
   std::error_code error;const auto path=root/".astra/assets.astra";std::vector<u8> bytes;resources::AssetRegistry actual;
-  if(!std::filesystem::exists(path,error))return !error&&expected.size()==0;
-  return !error&&EditorImportTransaction::read(path,bytes,32u<<20)&&
-      resources::AssetRegistry::deserialize(std::string(bytes.begin(),bytes.end()),actual)&&actual.serialize()==expected.serialize();
+  if(!std::filesystem::exists(path,error))return !error&&(pending||expected.size()==0);
+  if(error||!EditorImportTransaction::read(path,bytes,32u<<20)||
+     !resources::AssetRegistry::deserialize(std::string(bytes.begin(),bytes.end()),actual))return false;
+  if(actual.serialize()==expected.serialize())return true;
+  if(!pending)return false;
+  for(const auto &record:actual.records()) {
+    const auto *mine=expected.find(record.guid);
+    if(!mine||mine->type!=record.type||mine->path!=record.path)return false;
+  }
+  return true;
 }
 template<class T>u64 storage(const std::vector<T> &values) {return static_cast<u64>(values.capacity())*sizeof(T);}
 }
@@ -164,7 +173,7 @@ bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources:
   const auto *known=assets_.findByPath(path);
   const auto source=known?known->guid:resources::assetGuidFromSeed("fonte:"+path);
   if(known&&known->type!=resources::AssetType::Mesh) {report.diagnostic="Destino pertence a outro tipo de recurso.";return false;}
-  if(!texture_history::persisted(root,known,path)||!persistedRegistry(root,assets_)) {report.diagnostic="Registro do modelo mudou no disco; reabra o projeto.";return false;}
+  if(!texture_history::persisted(root,known,path)||!persistedRegistry(root,assets_,assetRegistryDirty_)) {report.diagnostic="Registro do modelo mudou no disco; reabra o projeto.";return false;}
   auto profile=preparedProfile?*preparedProfile:importProfileFor(source);
   profile.excludedNodes.assign(excludedNodes.begin(),excludedNodes.end());
   if(!resources::validImportProfile(profile)) {report.diagnostic="Receita do modelo inválida.";return false;}

@@ -129,7 +129,7 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
   bool reducedWeights=false,recalculateTangents=false,droppedTangents=false;
   for(const auto *material:scene->materials) {
     const auto &p=material->pbr;const auto &f=material->fbx;
-    const auto color=p.base_color.has_value?p.base_color.value_vec3:(f.diffuse_color.has_value?f.diffuse_color.value_vec3:ufbx_vec3{1,1,1});
+    const auto color=p.base_color.has_value?p.base_color.value_vec3:(f.diffuse_color.has_value?f.diffuse_color.value_vec3:ufbx_vec3{{{1,1,1}}});
     const double factor=p.base_factor.has_value?p.base_factor.value_real:(f.diffuse_factor.has_value?f.diffuse_factor.value_real:1);
     const double alpha=p.opacity.has_value?p.opacity.value_real:1;
     const double roughness=p.roughness.has_value?p.roughness.value_real:1;

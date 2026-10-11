@@ -1508,3 +1508,67 @@ AE_TEST(animation_properties_catalog_touch_consumers_atomicity_and_cold_reopen) 
     "actual Play composes typed channels and Animator-driven output");
   AE_EXPECT_EQ(serializeEditorDocument(graph,0),authored,"Play preserves authored scene values");
 }
+
+AE_TEST(rig_tool_lives_in_properties_captures_controls_mirror_and_reusable_poses) {
+  using namespace editor;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto &fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf");
+  const auto &iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production font and icon atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,853,394},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto base=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Braço");
+  const auto left=doc.createEntity(base,EditorEntityKind::Folder,"Garra A"),right=doc.createEntity(base,EditorEntityKind::Folder,"Garra B");
+  runtime::Transform a;a.position[0]=-1;doc.setTransform(left,a);runtime::Transform b;b.position[0]=1;doc.setTransform(right,b);
+  session.setSelection(base);session.update();
+  const auto find=[&](u32 id) {
+    UiDrawList list;list.begin(session.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+    buildEditorScreen(session.screen(),editorTheme(),list,router);UiPoint point{-1,-1};
+    const auto s=session.screen().surface;
+    for(float y=2;y<s.height&&point.x<0;y+=3)for(float x=2;x<s.width;x+=3) {
+      const auto hit=router.hitTest({x,y});if(hit.target==UiPointerTarget::Widget&&hit.widgetId==id) {point={x,y};break;}
+    }
+    return point;
+  };
+  const auto tap=[&](RigToolAction action,const char *what) {
+    const auto point=find(static_cast<u32>(action));AE_EXPECT_TRUE(point.x>=0,what);
+    if(point.x<0)return;
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();
+  };
+  const auto inspector=session.layout().inspectorPanel;
+  const auto entry=find(static_cast<u32>(RigToolAction::Open));
+  AE_EXPECT_TRUE(entry.x>=inspector.x,"rig entry lives in Properties of an articulated object");
+  tap(RigToolAction::Open,"open rig tool");
+  AE_EXPECT_TRUE(session.screen().rigToolOpen,"rig sheet replaces Properties");
+  captureClipSurface(session,font,icons,"rig-empty-853.ppm");
+  tap(RigToolAction::CaptureRig,"capture real hierarchy");
+  AE_EXPECT_TRUE(session.screen().rigTool.title.find("3 juntas")!=std::string::npos,session.screen().rigTool.title.c_str());
+  const auto viewport=session.layout().viewport;
+  AE_EXPECT_TRUE(viewport.width>300&&find(static_cast<u32>(RigToolAction::CaptureRig)).x<0,"viewport stays visible beside the sheet");
+  tap(RigToolAction::NextControl,"next joint");
+  tap(RigToolAction::LimitKind,"hinge limit");
+  captureClipSurface(session,font,icons,"rig-controls-853.ppm");
+  tap(RigToolAction::NextControl,"next joint");
+  tap(RigToolAction::Confirm,"publish rig");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.path/"Rigs"/"Braço.aerig"),session.screen().rigTool.status.c_str());
+  const auto *record=session.assets().findByPath("Rigs/Braço.aerig");
+  AE_EXPECT_TRUE(record&&record->type==resources::AssetType::Rig,"rig registered in project assets");
+  tap(RigToolAction::RouteMirror,"mirror route");
+  tap(RigToolAction::MirrorRight,"choose other side");tap(RigToolAction::MirrorPair,"form mirror pair");
+  captureClipSurface(session,font,icons,"rig-mirror-853.ppm");
+  tap(RigToolAction::Confirm,"publish mirror pair");
+  tap(RigToolAction::RoutePoses,"poses route");
+  tap(RigToolAction::PoseCapture,"save current pose");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.path/"Rigs"/"Poses"),session.screen().rigTool.status.c_str());
+  runtime::Transform moved=doc.find(left)->transform;moved.position[1]=2;session.history().setTransform(doc,left,moved);
+  tap(RigToolAction::PoseApply,"apply saved pose");
+  AE_EXPECT_TRUE(std::abs(doc.find(left)->transform.position[1])<1e-4f,session.screen().rigTool.status.c_str());
+  captureClipSurface(session,font,icons,"rig-poses-853.ppm");
+  AE_EXPECT_TRUE(session.history().undo(doc)&&std::abs(doc.find(left)->transform.position[1]-2)<1e-4f,"Undo restores the pose application");
+  session.setSurface({0,0,655,300},{});session.update();
+  captureClipSurface(session,font,icons,"rig-poses-655.ppm");
+  AE_EXPECT_TRUE(find(static_cast<u32>(RigToolAction::Close)).x>=0,"sheet reachable at 655x300");
+  tap(RigToolAction::Close,"close rig tool");
+  AE_EXPECT_TRUE(!session.screen().rigToolOpen,"close returns to Properties");
+}

@@ -29,7 +29,7 @@ AE_TEST(fields2d50_creation_vector2_keyboard_archive_undo_and_visuals){
   AE_EXPECT_TRUE(scene::setComponentTriple(v.components,type.id,"half_extents",{0,4,0},instance)!=scene::ComponentPropertyStatus::Applied,"zero width rejected atomically");g.applyEntityValues(last,v);
   editor::EditorDocument reopened;AE_EXPECT_TRUE(editor::deserializeEditorDocument(editor::serializeEditorDocument(g,789),789,reopened),"archive reopen");
   const auto *saved=static_cast<const scene::PhysicsFieldProperties*>(reopened.find(last)->components.find(type));AE_EXPECT_TRUE(saved&&near(saved->offset[1],2)&&near(saved->halfExtents[0],3),"exact authored state");
-  const auto visuals=editor::collectComponentVisuals(reopened,last,1);AE_EXPECT_TRUE(!visuals.empty()&&visuals.back().segments.size()>=4&&visuals.back().icon!=ui::UiIcon::None,"real XY outline and atlas icon");
+  const auto visuals=editor::collectComponentVisuals(reopened,last,1);const auto field=std::find_if(visuals.begin(),visuals.end(),[&](const auto &v){return v.entity==last&&!v.segments.empty();});const auto *fieldVisual=field==visuals.end()?nullptr:&*field;AE_EXPECT_TRUE(fieldVisual&&fieldVisual->segments.size()>=4&&fieldVisual->icon!=ui::UiIcon::None,"real XY outline and atlas icon");
  }
  AE_EXPECT_TRUE(session.history().undo(g)&&!g.exists(last)&&session.history().redo(g)&&g.exists(last),"recipe undo/redo");
  session.setSelection(last);auto &state=const_cast<editor::EditorScreenState&>(session.screen());const auto *c=g.find(last)->components.at(0);

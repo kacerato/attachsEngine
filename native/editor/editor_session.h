@@ -14,6 +14,7 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
+#include "resources/rig_asset.h"
 #include "scene/animator.h"
 #include <optional>
 #include <functional>
@@ -2037,6 +2038,16 @@ private:
   u32 settleCurveSelection(u32 selected);
   void refreshPathEditorState();
   bool handlePathEditorInput(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  bool handleRigTool(const ui::UiPointerRouting &routing);
+  void refreshRigTool();
+  bool openRigTool(EditorEntityId root);
+  bool publishRigDraft(std::string &error);
+  bool applyRigPoseToScene(std::span<const resources::RigTransform> local,std::span<const u8> channels,std::string_view label,std::string &error);
+  resources::RigAsset rigDraft_;
+  std::vector<resources::RigPose> rigPoses_;
+  EditorEntityId rigRoot_=0;
+  u32 rigControl_=0,rigJoint_=0,rigPose_=0,rigMirrorLeft_=0,rigMirrorRight_=0,rigPoseWeight_=100;
+  bool rigCaptured_=false,rigDirty_=false;
   runtime::ObjectId pathEditorEntity_=0,pathStatsTarget_=0;
   u64 pathStatsInstance_=0;
   resources::Curve3D pathStatsCurve_;

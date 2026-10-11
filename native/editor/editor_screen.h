@@ -56,6 +56,7 @@
 #include <array>
 #include "ui/ui_input.h"
 #include "ui/ui_theme.h"
+#include "editor/editor_rig_screen.h"
 #include <string>
 
 namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;}
@@ -81,7 +82,7 @@ enum class EditorWidget : u32 {
   LibraryOpen=0xCD100000u,LibraryImport,LibraryClose,LibraryPrevious,LibraryNext,LibraryKinds,LibraryPackages,LibrarySearch,LibraryDetailsClose,
   LibraryReimport,LibraryKeepLocal,LibraryReceiveSource,LibraryInstantiate,LibraryControllerAssign,
   LibraryItemBase=0xCD110000u,
-  LibraryItemDetailsBase=0xCD120000u,
+  LibraryItemDetailsBase=0xCD140000u,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
@@ -1747,6 +1748,9 @@ struct EditorScreenState final {
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
   bool prefabOverridesOpen=false;
+  // Rig articulado: folha que substitui Propriedades, viewport sempre livre.
+  bool rigToolOpen=false;
+  EditorRigScreenState rigTool;
   std::string prefabOperationStatus;
   std::string constraintStatus;
   bool constraintStatusWarning=false;

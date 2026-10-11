@@ -1,6 +1,8 @@
 #include "runtime/rig_instance.h"
 #include "resources/animation_binding_path.h"
 #include "scene/import_link.h"
+#include "scene/rig_instance.h"
+#include "runtime/rig_placement.h"
 #include "core/rotation_math.h"
 #include <algorithm>
 #include <set>
@@ -29,13 +31,21 @@ ObjectId resolvePath(const SceneGraph &scene,ObjectId root,std::string_view path
   return at;
 }
 bool bindingsMatch(const resources::CompiledRig &rig,const RigBindings &bindings) {
-  return bindings.rig==rig.guid&&bindings.revision==rig.revision&&bindings.objects.size()==rig.joints.size();
+  return bindings.rig==rig.guid&&bindings.revision==rig.revision&&!rig.joints.empty()&&
+      bindings.root&&bindings.objects.size()==rig.joints.size()&&resources::validRigTransform(bindings.placement);
 }
 bool bindingLive(const resources::CompiledRig &rig,const RigBindings &bindings,const SceneGraph &scene,usize index) {
   if(index>=bindings.objects.size())return false;
   const auto *object=scene.find(bindings.objects[index]);if(!object)return false;
   const auto parent=rig.joints[index].parent;
-  return parent<0?object->id==bindings.root:object->parent==bindings.objects[parent];
+  if(parent>=0)return object->parent==bindings.objects[parent];
+  if(object->id!=bindings.root||object->parent!=bindings.rootParent)return false;
+  if(!bindings.persistent)return true;
+  const auto *instance=scene::rigInstance(object->components);
+  return instance&&instance->ready()&&instance->rig==rig.guid&&instance->rigRevision==rig.revision&&
+      instance->rootJoint==rig.joints[index].id&&instance->placementParent==bindings.rootParent&&
+      instance->placement.position==bindings.placement.position&&instance->placement.rotation==bindings.placement.rotation&&
+      instance->placement.scale==bindings.placement.scale;
 }
 }
 bool rigTransformFromScene(const Transform &scene,resources::RigTransform &out) {
@@ -66,12 +76,30 @@ bool captureRig(const SceneGraph &scene,ObjectId root,resources::AssetGuid guid,
   if(!value.valid(&error))return false;
   out=std::move(value);return true;
 }
-bool bindRigToScene(const resources::RigAsset &asset,const resources::CompiledRig &rig,const SceneGraph &scene,ObjectId root,RigBindings &out) {
+bool bindRigToScene(const resources::RigAsset &asset,const resources::CompiledRig &rig,const SceneGraph &scene,ObjectId root,RigBindings &out,RigBindingMode mode) {
   RigBindings value;value.rig=rig.guid;value.revision=rig.revision;value.root=root;value.objects.resize(rig.joints.size());
-  if(asset.guid!=rig.guid||asset.revision!=rig.revision||!scene.exists(root))return false;
+  const auto *rootObject=scene.find(root);
+  if(asset.guid!=rig.guid||asset.revision!=rig.revision||!rootObject||rig.joints.empty())return false;
+  value.rootParent=rootObject->parent;
+  const auto *instance=mode==RigBindingMode::PersistedOrTransient?scene::rigInstance(rootObject->components):nullptr;
+  if(instance) {
+    if(!instance->ready()||instance->rig!=rig.guid||instance->rigRevision!=rig.revision||
+       instance->rootJoint!=rig.joints.front().id||instance->placementParent!=value.rootParent) {
+      value.issues.push_back({rig.joints.front().id,"Vínculo persistido exige revalidação explícita da raiz/revisão."});
+      out=std::move(value);return false;
+    }
+    value.placement=instance->placement;value.persistent=true;
+  } else {
+    resources::RigTransform rootTransform;
+    if(!rigTransformFromScene(rootObject->transform,rootTransform)||
+       !makeRigPlacement(rootTransform,rig.joints.front().reference,value.placement)) {
+      value.issues.push_back({rig.joints.front().id,"Placement da raiz não é representável."});out=std::move(value);return false;
+    }
+  }
   std::vector<ObjectId> objects;scene.collectSubtree(root,objects);std::set<ObjectId> assigned;
   for(usize i=0;i<rig.joints.size();++i) {
     const auto *joint=asset.joint(rig.joints[i].id);ObjectId found=0;bool ambiguous=false;
+    if(!joint){value.issues.push_back({rig.joints[i].id,"Recurso não contém a junta compilada."});continue;}
     if(joint->sourceNode.valid())for(auto objectId:objects) {
       const auto *object=scene.find(objectId);const auto *link=scene::importLink(object->components);
       if(link&&!link->orphan&&!link->unlinked&&link->primitive<0&&link->node==joint->sourceNode){if(found)ambiguous=true;found=objectId;}
@@ -86,13 +114,18 @@ bool bindRigToScene(const resources::RigAsset &asset,const resources::CompiledRi
   const bool complete=value.issues.empty();out=std::move(value);return complete;
 }
 bool readRigScenePose(const resources::CompiledRig &rig,const RigBindings &bindings,const SceneGraph &scene,std::span<resources::RigTransform> local,std::string &error) {
-  error.clear();if(!bindingsMatch(rig,bindings)||local.size()!=rig.joints.size())return fail(error,"Binding do rig exige revalidação.");
-  for(usize i=0;i<local.size();++i)if(!bindingLive(rig,bindings,scene,i)||!rigTransformFromScene(scene.find(bindings.objects[i])->transform,local[i]))return fail(error,"Junta ausente ou escala incompatível: "+std::to_string(rig.joints[i].id));
+  error.clear();if(!bindingsMatch(rig,bindings)||local.size()!=rig.joints.size()||!bindingLive(rig,bindings,scene,0))return fail(error,"Binding do rig exige revalidação.");
+  std::vector<resources::RigTransform> candidate(local.size());
+  for(usize i=0;i<local.size();++i) {
+    if(!bindingLive(rig,bindings,scene,i)||!rigTransformFromScene(scene.find(bindings.objects[i])->transform,candidate[i]))return fail(error,"Junta ausente ou escala incompatível: "+std::to_string(rig.joints[i].id));
+    if(rig.joints[i].parent<0&&!rigRootToResource(candidate[i],bindings.placement,candidate[i]))return fail(error,"Placement da raiz não é representável.");
+  }
+  std::copy(candidate.begin(),candidate.end(),local.begin());
   return true;
 }
 bool planRigScenePose(const resources::CompiledRig &rig,const RigBindings &bindings,const SceneGraph &scene,std::span<const resources::RigTransform> local,
     std::span<const u8> channels,std::vector<RigSceneChange> &out,std::string &error) {
-  error.clear();if(!bindingsMatch(rig,bindings)||local.size()!=rig.joints.size()||channels.size()!=local.size())return fail(error,"Binding ou máscara de pose inválidos.");
+  error.clear();if(!bindingsMatch(rig,bindings)||local.size()!=rig.joints.size()||channels.size()!=local.size()||!bindingLive(rig,bindings,scene,0))return fail(error,"Binding ou máscara de pose inválidos.");
   std::vector<RigSceneChange> candidate;
   for(usize i=0;i<local.size();++i) {
     if(channels[i]>resources::RigAll)return fail(error,"Máscara de canais inválida.");
@@ -100,9 +133,11 @@ bool planRigScenePose(const resources::CompiledRig &rig,const RigBindings &bindi
     if(!bindingLive(rig,bindings,scene,i))return fail(error,"Junta afetada ausente ou reparentada: "+std::to_string(rig.joints[i].id));
     const auto *object=scene.find(bindings.objects[i]);resources::RigTransform before;
     if(!rigTransformFromScene(object->transform,before))return fail(error,"Escala da junta não representável.");
+    if(rig.joints[i].parent<0&&!rigRootToResource(before,bindings.placement,before))return fail(error,"Placement da raiz não é representável.");
     auto after=before;if(channels[i]&resources::RigPosition)after.position=local[i].position;
     if(channels[i]&resources::RigRotation)after.rotation=local[i].rotation;
     if(channels[i]&resources::RigScale)after.scale=local[i].scale;
+    if(rig.joints[i].parent<0&&!rigRootToScene(after,bindings.placement,after))return fail(error,"Pose excede o placement representável.");
     RigSceneChange change{object->id,object->transform,{}};
     if(!rigTransformToScene(after,change.before,change.after))return fail(error,"Pose não representável na cena.");
     candidate.push_back(change);
@@ -121,18 +156,21 @@ bool applyRigSceneChanges(SceneGraph &scene,std::span<const RigSceneChange> chan
   for(const auto &change:changes)scene.setTransform(change.object,change.after);
   return true;
 }
-bool RetargetInstance::configure(resources::CompiledRetarget program,resources::CompiledRigAnimation clip,RigBindings target,std::string &error) {
+bool RetargetInstance::configure(resources::CompiledRetarget program,resources::CompiledRigAnimation clip,RigBindings target,std::string &error,WritePermission canWrite) {
   error.clear();if(!resources::validateRetargetAnimation(program,clip,error)||!bindingsMatch(program.target,target))return fail(error,"Retargeting exige clipe e bindings das revisões compiladas.");
   for(auto id:target.objects)if(!id)return fail(error,"Destino tem junta ausente; nenhuma transferência foi ativada.");
   program_=std::move(program);clip_=std::move(clip);targetBindings_=std::move(target);
-  scratch_.prepare(program_);sourceLocal_.resize(program_.source.joints.size());targetLocal_.resize(program_.target.joints.size());targetValues_.resize(targetLocal_.size());ready_=true;return true;
+  scratch_.prepare(program_);sourceLocal_.resize(program_.source.joints.size());targetLocal_.resize(program_.target.joints.size());targetValues_.resize(targetLocal_.size());canWrite_=std::move(canWrite);ready_=true;return true;
 }
 bool RetargetInstance::evaluate(SceneGraph &target,float time,std::string &error) {
   error.clear();if(!ready_)return fail(error,"Instância de retargeting não está configurada.");
   if(!resources::sampleRigAnimation(program_.source,clip_,time,sourceLocal_)||!resources::evaluateRetarget(program_,sourceLocal_,targetLocal_,scratch_))return fail(error,"Pose da transferência não representável.");
   for(usize i=0;i<targetLocal_.size();++i) {
     if(!bindingLive(program_.target,targetBindings_,target,i))return fail(error,"Junta destino removida ou reparentada; revalide o rig.");
-    if(!rigTransformToScene(targetLocal_[i],target.find(targetBindings_.objects[i])->transform,targetValues_[i]))return fail(error,"Pose não pode ser representada pela cena.");
+    if(canWrite_&&!canWrite_(targetBindings_.objects[i]))return fail(error,"Transform da junta pertence a outro consumidor; transferência recusada sem escrita parcial.");
+    auto local=targetLocal_[i];
+    if(program_.target.joints[i].parent<0&&!rigRootToScene(local,targetBindings_.placement,local))return fail(error,"Placement do destino não é representável.");
+    if(!rigTransformToScene(local,target.find(targetBindings_.objects[i])->transform,targetValues_[i]))return fail(error,"Pose não pode ser representada pela cena.");
   }
   for(usize i=0;i<targetValues_.size();++i)target.setTransform(targetBindings_.objects[i],targetValues_[i]);
   return true;

@@ -86,8 +86,10 @@ AE_TEST(library_fbx_static_authoring_reimport_compound_history_failure_and_cold_
   AE_EXPECT_TRUE(tap(session,font,widgetId(EditorWidget::ImportTabProfile))&&tap(session,font,widgetId(EditorWidget::ImportScaleUp)),"profile and actual scale editor reachable by touch");
   AE_EXPECT_TRUE(session.importProfileDraft().scale!=profile.scale,"scale control changes the worker recipe");
   AE_EXPECT_TRUE(tap(session,font,widgetId(EditorWidget::ImportScaleDown)),"restore scale with engine control");
-  for(u32 page=0;page<3;++page)AE_EXPECT_TRUE(tap(session,font,widgetId(EditorWidget::ImportNextPage)),"profile pagination reaches normal generation");
-  AE_EXPECT_TRUE(tap(session,font,widgetId(EditorWidget::ImportNormalsCycle)),"normal policy changed through engine UI");
+  bool normals=false;
+  // A folha lateral pagina o perfil; avança até a linha de normais existir.
+  for(u32 page=0;page<10&&!normals;++page)normals=tap(session,font,widgetId(EditorWidget::ImportNormalsCycle))||!tap(session,font,widgetId(EditorWidget::ImportNextPage))&&false;
+  AE_EXPECT_TRUE(normals,"normal policy changed through engine UI");
   profile=session.importProfileDraft();AE_EXPECT_EQ(profile.normals,resources::GltfNormalsCalculate,"actual recipe carries authored normals policy");
   capture(session,font,icons,".profile.ppm");AE_EXPECT_TRUE(!test::currentTestFailed(),"profile capture accepted");
   AE_EXPECT_TRUE(tap(session,font,widgetId(EditorWidget::ImportApplyProfile))&&session.takeImportReprepare(),"UI requests real worker preparation; cannot publish old derived geometry");

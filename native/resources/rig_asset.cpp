@@ -117,14 +117,14 @@ bool RigAsset::edit(u32 expected,const std::function<bool(RigAsset &,std::string
   error.clear();if(expected!=revision||revision==std::numeric_limits<u32>::max())return fail(&error,"Rig foi alterado; revalide a revisão antes de editar.");
   auto candidate=*this;if(!change(candidate,error))return false;
   if(candidate.guid!=guid||candidate.nextId<nextId)return fail(&error,"Edição tentou reutilizar identidade do rig.");
-  std::unordered_set<u64> previous;
-  for(const auto &j:joints)previous.insert(j.id);
-  for(const auto &c:controls)previous.insert(c.id);
-  for(const auto &chain:chains)previous.insert(chain.id);
-  const auto freshId=[&](u64 id){return previous.contains(id)||id>=nextId;};
-  for(const auto &j:candidate.joints)if(!freshId(j.id))return fail(&error,"Edição reutilizou ID de junta removida.");
-  for(const auto &c:candidate.controls)if(!freshId(c.id))return fail(&error,"Edição reutilizou ID de controle removido.");
-  for(const auto &chain:candidate.chains)if(!freshId(chain.id))return fail(&error,"Edição reutilizou ID de cadeia removida.");
+  std::unordered_set<u64> previousJoints,previousControls,previousChains;
+  for(const auto &j:joints)previousJoints.insert(j.id);
+  for(const auto &c:controls)previousControls.insert(c.id);
+  for(const auto &chain:chains)previousChains.insert(chain.id);
+  const auto freshId=[&](u64 id,const auto &kind){return kind.contains(id)||id>=nextId;};
+  for(const auto &j:candidate.joints)if(!freshId(j.id,previousJoints))return fail(&error,"Edição reutilizou ID de junta removida ou de outro tipo.");
+  for(const auto &c:candidate.controls)if(!freshId(c.id,previousControls))return fail(&error,"Edição reutilizou ID de controle removido ou de outro tipo.");
+  for(const auto &chain:candidate.chains)if(!freshId(chain.id,previousChains))return fail(&error,"Edição reutilizou ID de cadeia removida ou de outro tipo.");
   candidate.revision=revision+1;if(!candidate.valid(&error))return false;
   *this=std::move(candidate);return true;
 }
@@ -174,7 +174,7 @@ bool RigAsset::deserialize(std::string_view text,RigAsset &out,std::string *erro
 }
 bool RigPose::valid(std::string *error) const {
   if(error)error->clear();
-  if(!guid.valid()||!rig.valid()||!rigRevision||!textValid(name,256)||entries.empty()||entries.size()>RigAsset::MaximumJoints)
+  if(!guid.valid()||!revision||!rig.valid()||!rigRevision||!textValid(name,256)||entries.empty()||entries.size()>RigAsset::MaximumJoints)
     return fail(error,"Identidade, nome ou quantidade da pose inválidos.");
   std::unordered_set<u64> used;
   for(const auto &entry:entries)if(!entry.joint||!entry.channels||entry.channels>RigAll||!used.insert(entry.joint).second||!validRigTransform(entry.local))return fail(error,"Pose possui junta duplicada ou transformação inválida.");
@@ -182,13 +182,15 @@ bool RigPose::valid(std::string *error) const {
 }
 std::string RigPose::serialize() const {
   if(!valid())return {};
-  auto out=writer();out<<"AERPOSE 1\n"<<guid.text()<<' '<<rig.text()<<' '<<rigRevision<<' '<<guidText(thumbnail)<<' '<<std::quoted(name)<<' '<<entries.size()<<'\n';
+  auto out=writer();out<<"AERPOSE 2\n"<<guid.text()<<' '<<revision<<' '<<rig.text()<<' '<<rigRevision<<' '<<guidText(thumbnail)<<' '<<std::quoted(name)<<' '<<entries.size()<<'\n';
   for(const auto &e:entries){out<<e.joint<<' '<<u32(e.channels);writeTransform(out,e.local);out<<'\n';}return out.str();
 }
 bool RigPose::deserialize(std::string_view text,RigPose &out,std::string *error) {
   if(text.size()>RigAsset::MaximumBytes)return fail(error,"Pose excede orçamento.");
   RigPose value;std::istringstream in{std::string(text)};in.imbue(std::locale::classic());std::string magic;u32 format=0;usize count=0;
-  if(!(in>>magic>>format)||magic!="AERPOSE"||format!=1||!readGuid(in,value.guid)||!readGuid(in,value.rig)||!(in>>value.rigRevision)||!readGuid(in,value.thumbnail,true)||!(in>>std::quoted(value.name)>>count)||count>RigAsset::MaximumJoints)return fail(error,"Cabeçalho de pose inválido.");
+  if(!(in>>magic>>format)||magic!="AERPOSE"||(format!=1&&format!=2)||!readGuid(in,value.guid))return fail(error,"Cabeçalho de pose inválido.");
+  if(format==2&&!(in>>value.revision))return fail(error,"Revisão da pose truncada.");
+  if(!readGuid(in,value.rig)||!(in>>value.rigRevision)||!readGuid(in,value.thumbnail,true)||!(in>>std::quoted(value.name)>>count)||count>RigAsset::MaximumJoints)return fail(error,"Cabeçalho de pose inválido.");
   value.entries.resize(count);for(auto &e:value.entries){u32 channels=0;if(!(in>>e.joint>>channels)||channels>7||!readTransform(in,e.local))return fail(error,"Pose truncada.");e.channels=static_cast<u8>(channels);}
   return finishRead(in,value,out,error);
 }

@@ -2053,6 +2053,20 @@
       "dark_ui_ready": true,
       "generation": "source-conflict-v1",
       "source": "tools/generate-source-conflict-icon.py; Astra mark primitives"
+    },
+    "animation/rig-mirror": {
+      "category": "animation",
+      "name": "rig-mirror",
+      "dark_ui_ready": true,
+      "generation": "rig-authoring-v1",
+      "source": "tools/generate-rig-authoring-icons.py; Astra mark primitives"
+    },
+    "animation/retarget": {
+      "category": "animation",
+      "name": "retarget",
+      "dark_ui_ready": true,
+      "generation": "rig-authoring-v1",
+      "source": "tools/generate-rig-authoring-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

@@ -37,6 +37,7 @@ struct RigMirrorPair {u64 left=0,right=0;}; // same ID denotes a central control
 struct RigPoseEntry {u64 joint=0;u8 channels=RigAll;RigTransform local;};
 struct RigPose {
   AssetGuid guid,rig;
+  u32 revision=1;
   u32 rigRevision=0;
   std::string name;
   // Optional project resource, never an embedded bitmap or external path.

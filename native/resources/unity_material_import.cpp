@@ -7,6 +7,19 @@
 #include <set>
 #include <tuple>
 
+#include <cstdlib>
+#include <cstring>
+#include <string_view>
+namespace {
+// NDK libc++ nao implementa from_chars de ponto flutuante: strtod sobre
+// copia terminada, recusando hex/inf/nan para manter o contrato decimal.
+inline bool parseDecimal(std::string_view text,double &value) {
+  if(text.empty()||text.size()>64||text.find_first_of("xXnNiI")!=text.npos)return false;
+  char buffer[65];std::memcpy(buffer,text.data(),text.size());buffer[text.size()]=0;
+  char *end=nullptr;value=std::strtod(buffer,&end);
+  return end==buffer+text.size();
+}
+}
 namespace ae::resources {
 namespace {
 std::string_view trim(std::string_view text) {
@@ -14,8 +27,8 @@ std::string_view trim(std::string_view text) {
   return begin==text.npos?std::string_view():text.substr(begin,text.find_last_not_of(" \t\r")-begin+1);
 }
 bool number(std::string_view text,float &value) {
-  text=trim(text);const auto result=std::from_chars(text.data(),text.data()+text.size(),value);
-  return result.ec==std::errc() && result.ptr==text.data()+text.size() && std::isfinite(value);
+  text=trim(text);double parsed=0;
+  if(!parseDecimal(text,parsed)||!std::isfinite(parsed))return false;value=static_cast<float>(parsed);return std::isfinite(value);
 }
 std::string_view member(std::string_view text,std::string_view key) {
   const auto at=text.find(std::string(key)+":");if(at==text.npos) return {};

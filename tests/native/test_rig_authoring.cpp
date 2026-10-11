@@ -78,7 +78,7 @@ AE_TEST(rig_mirror_asymmetric_pose_masks_control_spaces_limits_and_missing_bindi
   AE_EXPECT_TRUE(near(mirrored[2].position[0],2)&&near(mirrored[2].position[1],.5f)&&rotationDistanceDegrees(mirrored[2].rotation.data(),orientation(0,0,10).data())<.001,"reference mirror preserves asymmetric length and compensates side rest rotation");
   std::vector<RigTransform> twice(3);AE_EXPECT_TRUE(mirrorRigPose(rig,compiled,mirrored,twice,RigAll,true,error),error.c_str());
   for(u32 i=0;i<3;++i)AE_EXPECT_TRUE(near(twice[i].position[0],pose[i].position[0])&&near(twice[i].position[1],pose[i].position[1])&&rotationDistanceDegrees(twice[i].rotation.data(),pose[i].rotation.data())<.001,"bidirectional reference mirror is involutive without active limits");
-  rig.mirrorOffset=1;AE_EXPECT_TRUE(compileRig(rig,compiled,error)&&mirrorRigPose(rig,compiled,pose,mirrored,RigPosition,false,error)&&near(mirrored[2].position[0],3),"absolute mirror respects plane offset and selected channels");
+  rig.mirrorOffset=1;AE_EXPECT_TRUE(compileRig(rig,compiled,error)&&mirrorRigPose(rig,compiled,pose,mirrored,RigPosition,false,error)&&near(mirrored[0].position[0],2)&&near(mirrored[0].position[0]+mirrored[2].position[0],3),"absolute mirror respects plane offset and selected channels; self-paired centre reflects too");
   rig.controls[1].limit.kind=RigLimitKind::Hinge;rig.controls[1].limit.axis={0,0,1};rig.controls[1].limit.minimum=-25;rig.controls[1].limit.maximum=25;
   AE_EXPECT_TRUE(compileRig(rig,compiled,error),error.c_str());RigTransform value;value.rotation=orientation(40,0,80);
   AE_EXPECT_TRUE(applyRigControl(rig,compiled,5,value,pose,mirrored,error),error.c_str());

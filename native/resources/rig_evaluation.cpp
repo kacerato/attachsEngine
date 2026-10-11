@@ -158,8 +158,9 @@ bool compileRetarget(const RigAsset &source,const RigAsset &target,const Retarge
   }
   std::sort(value.mapping.begin(),value.mapping.end(),[](const auto &a,const auto &b){return a.target<b.target;});
   for(usize i=0;i<value.mapping.size();++i)value.targetMapping[value.mapping[i].target]=static_cast<i32>(i);
-  for(const auto &a:value.mapping)for(const auto &b:value.mapping)if(a.source!=b.source&&ancestor(value.source,b.source,a.source)&&!ancestor(value.target,b.target,a.target))
-    return fail(error,"Mapa inverte parentesco das cadeias de origem e destino.");
+  for(const auto &a:value.mapping)for(const auto &b:value.mapping)if(a.source!=b.source&&
+      ancestor(value.source,b.source,a.source)!=ancestor(value.target,b.target,a.target))
+    return fail(error,"Mapa altera parentesco: cadeias e ramos independentes precisam corresponder nos dois rigs.");
   out=std::move(value);return true;
 }
 bool evaluateRetarget(const CompiledRetarget &r,std::span<const RigTransform> sourceLocal,std::span<RigTransform> targetLocal,RetargetWorkspace &scratch) {
@@ -223,17 +224,32 @@ bool evaluateRetarget(const CompiledRetarget &r,std::span<const RigTransform> so
 bool compileRigAnimation(const CompiledRig &rig,const AnimationClip &clip,std::span<const u64> nodes,bool allowUnmapped,CompiledRigAnimation &out,std::string &error) {
   error.clear();if(!std::isfinite(clip.duration)||clip.duration<0||clip.duration>86400||clip.channels.empty()||!clip.properties.empty()||clip.drivers)return fail(error,"Retargeting exige clipe TRS com duração válida; propriedades e drivers possuem outro consumidor.");
   if(clip.channels.size()>RigAsset::MaximumJoints*3)return fail(error,"Clipe excede orçamento de canais TRS do rig.");
-  usize retained=0;
-  const auto countChannel=[&](auto &&self,const AnimationChannel &channel)->bool {
-    constexpr usize maximum=64*1024*1024;
-    const auto add=[&](usize count,usize stride){if(count>(maximum-retained)/stride)return false;retained+=count*stride;return true;};
-    if(!add(channel.times.size(),sizeof(float))||!add(channel.values.size(),sizeof(float)))return false;
-    for(const auto &curve:channel.curves)if(!add(curve.keys.size(),sizeof(AnimationCurveKey)))return false;
-    for(const auto &layer:channel.layerSources)if(!self(self,layer))return false;
+  if(!validAnimationCues(clip.cues,clip.duration)||!validAnimationRegions(clip.regions,clip.duration))return fail(error,"Cues/regiões do clipe são inválidos.");
+  constexpr usize maximum=64*1024*1024;usize retained=0;
+  const auto add=[&](usize count,usize stride){if(count>(maximum-retained)/stride)return false;retained+=count*stride;return true;};
+  const auto countLeaf=[&](const AnimationChannel &channel)->bool {
+    if(!add(channel.times.capacity(),sizeof(float))||!add(channel.values.capacity(),sizeof(float))||
+       !add(channel.curves.capacity(),sizeof(AnimationCurve)))return false;
+    for(const auto &curve:channel.curves)if(!add(curve.keys.capacity(),sizeof(AnimationCurveKey)))return false;
     return true;
   };
-  for(const auto &channel:clip.channels)if(!countChannel(countChannel,channel))return fail(error,"Clipe excede 64 MiB de samplers retidos.");
-  CompiledRigAnimation value;value.rig=rig.guid;value.revision=rig.revision;value.clip=clip;std::set<std::pair<u32,AnimationPath>> used;
+  if(!add(1,sizeof(CompiledRigAnimation))||!add(clip.name.capacity()+1,1)||
+     !add(clip.channels.capacity(),sizeof(AnimationChannel))||!add(clip.channels.size(),sizeof(RigAnimationChannel))||
+     !add(clip.cues.capacity(),sizeof(AnimationCue))||!add(clip.regions.capacity(),sizeof(AnimationRegion)))
+    return fail(error,"Clipe excede 64 MiB de dados retidos.");
+  for(const auto &cue:clip.cues)if(!add(cue.name.capacity()+1,1))return fail(error,"Cues excedem orçamento retido.");
+  for(const auto &region:clip.regions)if(!add(region.name.capacity()+1,1))return fail(error,"Regiões excedem orçamento retido.");
+  for(const auto &channel:clip.channels) {
+    // Flat compiled composition is bounded to32 leaves. Check this before any
+    // traversal; hostile nested input cannot recurse through the budget pass.
+    if(channel.layerSources.size()>32)return fail(error,"Composição do clipe excede32 fontes planas.");
+    if(!countLeaf(channel)||!add(channel.layerSources.capacity(),sizeof(AnimationChannel)))return fail(error,"Clipe excede 64 MiB de samplers retidos.");
+    for(const auto &layer:channel.layerSources) {
+      if(!layer.layerSources.empty())return fail(error,"Composição aninhada não é suportada pelo rig.");
+      if(!countLeaf(layer))return fail(error,"Clipe excede 64 MiB de samplers retidos.");
+    }
+  }
+  CompiledRigAnimation value;value.rig=rig.guid;value.revision=rig.revision;value.clip=clip;value.channels.reserve(clip.channels.size());std::set<std::pair<u32,AnimationPath>> used;
   for(u32 i=0;i<clip.channels.size();++i) {
     const auto &channel=clip.channels[i];
     if(channel.path==AnimationPath::Weights||!validAnimationChannel(channel))return fail(error,"Canal inválido ou morph sem correspondência explícita na transferência.");

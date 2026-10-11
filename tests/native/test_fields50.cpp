@@ -28,7 +28,7 @@ AE_TEST(fields50_creation_archive_undo_and_real_visuals){
   AE_EXPECT_TRUE(scene::setComponentTriple(v.components,type.id,"half_extents",{0,4,5},instance)!=scene::ComponentPropertyStatus::Applied,"singular volume rejected atomically");
   AE_EXPECT_TRUE(g.applyEntityValues(last,v),"authoring mutation");const auto payload=editor::serializeEditorDocument(g,456);editor::EditorDocument copy;AE_EXPECT_TRUE(editor::deserializeEditorDocument(payload,456,copy),"four types persist and reopen");
   const auto *saved=static_cast<const scene::PhysicsFieldProperties*>(copy.find(last)->components.find(type));AE_EXPECT_TRUE(saved&&near(saved->offset[2],3)&&near(saved->halfExtents[0],3),"no partial vector write");
-  const auto visuals=editor::collectComponentVisuals(copy,last,1);AE_EXPECT_TRUE(!visuals.empty()&&visuals.back().segments.size()>=12,"volume gizmo and actual atlas icon");
+  const auto visuals=editor::collectComponentVisuals(copy,last,1);const auto field=std::find_if(visuals.begin(),visuals.end(),[&](const auto &v){return v.entity==last&&!v.segments.empty();});const auto *fieldVisual=field==visuals.end()?nullptr:&*field;AE_EXPECT_TRUE(fieldVisual&&fieldVisual->segments.size()>=12,"volume gizmo and actual atlas icon");
  }
  AE_EXPECT_TRUE(session.history().undo(g)&&!g.exists(last),"undo creation");AE_EXPECT_TRUE(session.history().redo(g)&&g.exists(last),"redo creation");
 }

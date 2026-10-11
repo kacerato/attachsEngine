@@ -8084,8 +8084,9 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
         "A raiz selecionada na cena precisa corresponder à hierarquia, pose de referência e alvos morph. O clipe extraído abre no editor e mantém a fonte intacta.":
         "Publique o recurso e selecione uma raiz na cena. Abrir o arquivo registrado oferece extração editável com validação do rig.";
     const auto lines=wrapText(list,message,content.width,theme.type.caption);const auto [first,last]=paginate(lines.size(),22);
-    list.pushClip(content);for(usize index=first;index<last;++index)builder.label(takeTop(content,22),lines[index],
-        state.importRigDiagnostic.empty()?theme.color.textDim:theme.color.accent,theme.type.caption);list.popClip();
+    list.pushClip(content);for(usize index=first;index<last;++index){builder.label(takeTop(content,22),lines[index],
+        state.importRigDiagnostic.empty()?theme.color.textDim:theme.color.accent,theme.type.caption);}
+    list.popClip();
     break;
   }
   case Tab::Summary: {
@@ -8719,6 +8720,9 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   if(builder.state.guiInspector) {
     builder.list.addRect(panel,builder.theme.color.surface);builder.router.addBlocker(panel);return;
   }
+  if(builder.state.rigToolOpen&&builder.state.workspace==EditorWorkspace::Scene) {
+    buildEditorRigScreen(builder.state.rigTool,builder.theme,builder.list,builder.router,panel);return;
+  }
   if (builder.state.importPanel) {
     builder.list.addRect(panel, builder.theme.color.surface);
     builder.router.addBlocker(panel);
@@ -8950,6 +8954,13 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.label(takeRight(row,20),">",theme.color.accent,theme.type.caption,UiAlign::Center);
     builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(UiIcon::ScenePrefab),theme.color.accent);
     builder.label(row,record?record->path:"Fonte de prefab ausente",record?theme.color.textDim:theme.color.warning,theme.type.caption);
+  }
+  if(!builder.multiEdit&&builder.state.workspace==EditorWorkspace::Scene&&!builder.focusedWindow&&!builder.state.document->childrenOf(target).empty()) {
+    // Hierarquia articulada: entrada contextual do rig, mesma altura das linhas.
+    auto row=takeTop(content,44);builder.router.addRegion(row,static_cast<u32>(RigToolAction::Open));
+    builder.label(takeRight(row,20),">",theme.color.accent,theme.type.caption,UiAlign::Center);
+    builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(UiIcon::AnimationSkeleton),theme.color.accent);
+    builder.label(row,"Rig articulado · controles, espelho, poses",theme.color.textDim,theme.type.caption);
   }
   buildImportLinkCard(builder,content);
   buildComponents(builder,content,*entity,addInHeader);
@@ -10560,11 +10571,19 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     buildPlatformTextField(builder);return layout;
   }
   if(state.workspace==EditorWorkspace::Library) {
-    if(state.importPanel) {remaining=deflate(state.surface,state.safeArea);layout.topBar={};}
-    else {buildTopBar(builder,layout.topBar);layout.statusBar=takeBottom(remaining,kStatusBarHeight);buildStatusBar(builder,layout.statusBar);}
+    buildTopBar(builder,layout.topBar);layout.statusBar=takeBottom(remaining,kStatusBarHeight);buildStatusBar(builder,layout.statusBar);
+    if(state.importPanel) {
+      // O importador e uma folha lateral do tamanho de Propriedades: a
+      // biblioteca continua visivel e navegavel ao lado, sem tomar a tela.
+      const float dockWidth=std::min(remaining.width,std::clamp(remaining.width*.36f,300.f,440.f));
+      UiRect dock=takeRight(remaining,dockWidth);
+      layout.inspectorPanel=dock;
+      router.addBlocker(dock);list.addRect(dock,theme.color.surface);
+      list.addRect({dock.x,dock.y,1,dock.height},theme.color.silhouette);
+      buildImportDock(builder,deflate(dock,UiInsets::all(8)));
+    }
     layout.viewport=remaining;
-    if(state.importPanel) {router.addBlocker(remaining);list.addRect(remaining,theme.color.surface);buildImportDock(builder,deflate(remaining,UiInsets::all(8)));}
-    else buildLibraryWorkspace(builder,remaining);
+    buildLibraryWorkspace(builder,remaining);
     if(state.backgroundPanel)buildBackgroundTasks(builder,layout);
     buildWorkspaceMenu(builder);buildPlatformTextField(builder);return layout;
   }
@@ -10613,8 +10632,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     hierarchyWidth = panelsAllowed &&
         (state.compactPanel == EditorScreenState::CompactPanel::Hierarchy || state.compactPanel == EditorScreenState::CompactPanel::Files)
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
+    // A folha de rig substitui Propriedades também no modo compacto; a
+    // hierarquia cede lugar e o viewport fica com o restante.
+    if(state.rigToolOpen&&state.workspace==EditorWorkspace::Scene) hierarchyWidth=0;
     inspectorWidth = panelsAllowed &&
-        state.compactPanel == EditorScreenState::CompactPanel::Inspector
+        (state.compactPanel == EditorScreenState::CompactPanel::Inspector||(state.rigToolOpen&&state.workspace==EditorWorkspace::Scene))
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
   }
   const float splitters = (hierarchyWidth > 0.0f ? kSplitterWidth : 0.0f) +

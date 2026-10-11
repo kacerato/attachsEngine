@@ -648,9 +648,12 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   externalBindings_=std::move(nextBindings);
   if(!typedValid)return false;
   std::vector<AnimationPropertyContribution> driven;
-  if(!propertyMixer_.apply(graph,typedProperties,compositionDiagnostic_,[&](auto &writes,const auto &baselines,std::string &error) {
+  // O misturador limpa seu erro; diagnosticos TRS ja reportados neste quadro
+  // (referencia aditiva parcial, canal invalido) nao podem ser apagados.
+  std::string typedError;
+  if(!propertyMixer_.apply(graph,typedProperties,typedError,[&](auto &writes,const auto &baselines,std::string &error) {
     return evaluateAnimationDriverRequests(graph,driverRequests,driverGui_,driverParameter_,writes,baselines,driven,error);
-  }))return false;
+  })) {compositionDiagnostic_=typedError;return false;}
   for(const auto &driver:driven)std::erase_if(typedProperties,[&](const auto &property) {
     return property.sourceOwner==driver.sourceOwner&&property.sourceInstance==driver.sourceInstance&&property.layer==driver.layer&&
       property.object==driver.object&&property.address==driver.address;

@@ -3634,6 +3634,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   }
   if(cameraGestureOpen_ && routing.target==UiPointerTarget::Widget) finishCameraGesture(false);
   if(!state_.numericField && handlePathEditorInput(event,routing)) return true;
+  if(handleRigTool(routing)) return true;
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
@@ -11921,7 +11922,8 @@ bool EditorSession::saveProjectImportProfile(const resources::ImportProfile &pro
 }
 
 void EditorSession::beginImportPreparation(std::string_view path,bool batch) {
-  if(!batch&&!isPlaying()) {cameraPreview_.close();state_.workspace=EditorWorkspace::Library;}
+  // O importador vive em Propriedades: a cena e o viewport seguem utilizaveis.
+  if(!batch&&!isPlaying()) cameraPreview_.close();
   state_.importBatch=batch;
   state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;
   state_.importSummary.clear();state_.importPath=std::string(path);state_.importAmbiguities=0;state_.importAmbiguityChoice=0;

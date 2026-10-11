@@ -6,6 +6,19 @@
 #include <set>
 #include <tuple>
 
+#include <cstdlib>
+#include <cstring>
+#include <string_view>
+namespace {
+// NDK libc++ nao implementa from_chars de ponto flutuante: strtod sobre
+// copia terminada, recusando hex/inf/nan para manter o contrato decimal.
+inline bool parseDecimal(std::string_view text,double &value) {
+  if(text.empty()||text.size()>64||text.find_first_of("xXnNiI")!=text.npos)return false;
+  char buffer[65];std::memcpy(buffer,text.data(),text.size());buffer[text.size()]=0;
+  char *end=nullptr;value=std::strtod(buffer,&end);
+  return end==buffer+text.size();
+}
+}
 namespace ae::resources {
 const UnityYamlNode *UnityYamlNode::get(std::string_view name) const {
   if(kind!=Kind::Map)return nullptr;
@@ -23,8 +36,7 @@ bool UnityYamlNode::number(double &out,bool allowInfinity) const {
   double value=0;
   if(allowInfinity&&(scalar==".inf"||scalar=="Infinity"||scalar=="+.inf"))value=std::numeric_limits<double>::infinity();
   else if(allowInfinity&&(scalar=="-.inf"||scalar=="-Infinity"))value=-std::numeric_limits<double>::infinity();
-  else {const auto parsed=std::from_chars(scalar.data(),scalar.data()+scalar.size(),value);
-    if(parsed.ec!=std::errc{}||parsed.ptr!=scalar.data()+scalar.size()||!std::isfinite(value))return false;}
+  else if(!parseDecimal(scalar,value)||!std::isfinite(value))return false;
   out=value;return true;
 }
 bool UnityYamlNode::boolean(bool &out) const {i64 value=0;if(!integer(value)||(value!=0&&value!=1))return false;out=value!=0;return true;}
