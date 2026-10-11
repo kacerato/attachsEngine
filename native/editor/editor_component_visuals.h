@@ -1,4 +1,5 @@
 #pragma once
+#include "scene/ik_constraints.h"
 #include "scene/navigation.h"
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_collider_geometry.h"
@@ -236,6 +237,16 @@ inline void constantForce(const scene::ComponentValue &value,const EditorEntity 
     std::copy(origin,origin+3,identity+12);ring(out,identity,.15f,0,1);
   }
 }
+// Apoio do pe: o raio vertical de sondagem em espaco do mundo, do inicio ao alcance.
+inline void footGrounding(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                          float,bool detail,ComponentVisual &out) {
+  const auto &g=static_cast<const scene::FootGrounding&>(value);out.enabled=g.enabled;
+  if(!detail) return;
+  float pose[16]{1,0,0,0,0,1,0,0,0,0,1,0,world[12],world[13],world[14],1};
+  const float top[3]{0,g.rayHeight,0},bottom[3]{0,-g.rayDistance,0};
+  segment(out,pose,top,bottom);out.segments.back().emphasis=1;
+  ring(out,pose,.08f,0,1);
+}
 inline void constraint(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
                        float,bool detail,ComponentVisual &out) {
   for(const auto &p:value.type().booleans) if(p.id=="enabled") out.enabled=p.read(value);
@@ -412,7 +423,7 @@ inline void navSurfaceVisual(const scene::ComponentValue &value,const EditorEnti
   constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
   for(const auto &e:edges) visual_detail::segment(out,world,c[e[0]],c[e[1]]);
 }
-inline const std::array<ComponentVisualProvider,45> componentVisualProviders{{
+inline const std::array<ComponentVisualProvider,48> componentVisualProviders{{
   {&scene::NavSurface::descriptor,ui::UiIcon::NavigationSurface,true,navSurfaceVisual},
   {&scene::NavAgent::descriptor,ui::UiIcon::NavigationAgent,true,navAgentVisual},
   {&scene::NavObstacle::descriptor,ui::UiIcon::NavigationObstacle,true,navObstacleVisual},
@@ -433,6 +444,9 @@ inline const std::array<ComponentVisualProvider,45> componentVisualProviders{{
   {&scene::PathFollow::descriptor,ui::UiIcon::ComponentPathFollow,true,visual_detail::constraint},
   {&scene::ParentConstraint::descriptor,ui::UiIcon::ComponentParentConstraint,true,visual_detail::constraint},
   {&scene::LookAtConstraint::descriptor,ui::UiIcon::ComponentLookAtConstraint,true,visual_detail::constraint},
+  {&scene::TwoBoneIk::descriptor,ui::UiIcon::ComponentIkTwoBone,true,visual_detail::constraint},
+  {&scene::ChainIk::descriptor,ui::UiIcon::ComponentIkChain,true,visual_detail::constraint},
+  {&scene::FootGrounding::descriptor,ui::UiIcon::ComponentFootGrounding,true,visual_detail::footGrounding},
   {&scene::TransformTween::descriptor,ui::UiIcon::ComponentTweenTransform,true,visual_detail::constraint},
   {&scene::TweenSequence::descriptor,ui::UiIcon::ComponentTweenSequence,true,visual_detail::constraint},
   {&scene::PropertyTween::descriptor,ui::UiIcon::ComponentTweenProperty,true,visual_detail::constraint},

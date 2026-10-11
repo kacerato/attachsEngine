@@ -186,6 +186,8 @@ public:
   // project bytes or history until explicitly recorded. Values use the track's
   // native units (quaternion XYZW, Euler degrees, morph 0..1).
   bool previewAnimationClipPose(u64 track,std::span<const float> values,std::string &error);
+  // IK permanente: componente na ponta, alvo e direcao como objetos reais (Undo unico).
+  bool createTwoBoneIkForTip(EditorEntityId tip,std::string &error);
   bool recordAnimationClipPose(std::string &error);
   bool configureAnimationPoseRecording(AnimationPoseRecordingPolicy,std::string &error,std::optional<bool> autoKey=std::nullopt);
   bool configureAnimationPoseLocks(resources::AnimationPath,u64 mask,std::string &error);

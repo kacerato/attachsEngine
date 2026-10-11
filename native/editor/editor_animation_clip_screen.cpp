@@ -173,6 +173,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
       card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
+      card(side,"IK permanente nesta ponta","Cria alvo e direção na cena; resolve em Play",w::PoseIkCreate,state.clipPreviewTarget!=0||state.clipTarget!=0,UiIcon::ComponentIkTwoBone);
       card(side,"Salvar pose atual","Entra na biblioteca deste rig",w::PoseLibrarySave,state.clipPoseShown&&state.clipRigLoaded,UiIcon::AnimationRecordPose);
       card(side,"Fantasma",state.clipGhost?"Quadro anterior (azul) e seguinte (âmbar)":"Desligado",w::PoseGhost,state.clipPoseShown,UiIcon::AnimationFrame,state.clipGhost);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);

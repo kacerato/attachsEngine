@@ -88,7 +88,7 @@ AE_TEST(library_fbx_static_authoring_reimport_compound_history_failure_and_cold_
   AE_EXPECT_TRUE(tap(session,font,widgetId(EditorWidget::ImportScaleDown)),"restore scale with engine control");
   bool normals=false;
   // A folha lateral pagina o perfil; avança até a linha de normais existir.
-  for(u32 page=0;page<10&&!normals;++page)normals=tap(session,font,widgetId(EditorWidget::ImportNormalsCycle))||!tap(session,font,widgetId(EditorWidget::ImportNextPage))&&false;
+  for(u32 page=0;page<10&&!normals;++page){normals=tap(session,font,widgetId(EditorWidget::ImportNormalsCycle));if(!normals)tap(session,font,widgetId(EditorWidget::ImportNextPage));}
   AE_EXPECT_TRUE(normals,"normal policy changed through engine UI");
   profile=session.importProfileDraft();AE_EXPECT_EQ(profile.normals,resources::GltfNormalsCalculate,"actual recipe carries authored normals policy");
   capture(session,font,icons,".profile.ppm");AE_EXPECT_TRUE(!test::currentTestFailed(),"profile capture accepted");

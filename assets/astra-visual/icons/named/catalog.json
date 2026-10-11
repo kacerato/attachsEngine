@@ -2067,6 +2067,27 @@
       "dark_ui_ready": true,
       "generation": "rig-authoring-v1",
       "source": "tools/generate-rig-authoring-icons.py; Astra mark primitives"
+    },
+    "component/ik-two-bone": {
+      "category": "component",
+      "name": "ik-two-bone",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/ik-chain": {
+      "category": "component",
+      "name": "ik-chain",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/foot-grounding": {
+      "category": "component",
+      "name": "foot-grounding",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

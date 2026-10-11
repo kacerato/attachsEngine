@@ -752,6 +752,8 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         if(state_.clipStudioTab==1&&(!state_.rigToolOpen||rigRoot_!=state_.clipOwner))openRigTool(state_.clipOwner);
         return true;
       }
+      if(code==w::PoseIkCreate) {std::string error;const auto tip=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+        if(createTwoBoneIkForTip(tip,error))state_.clipDiagnostic="IK permanente criado · alvo e direção na cena, ativo em Play";else state_.clipDiagnostic=error;return true;}
       if(code==w::PoseGhost) {state_.clipGhost=!state_.clipGhost;refreshAnimationGhost();return true;}
       if(code==w::TrackFilter) {state_.clipFilterSelected=!state_.clipFilterSelected;refreshClipRowFilter();return true;}
       if(code==w::PoseLibrarySave) {std::string error;if(saveRigPoseFromScene(error))state_.clipDiagnostic="Pose salva na biblioteca";else state_.clipDiagnostic=error;publishClipRigState();return true;}

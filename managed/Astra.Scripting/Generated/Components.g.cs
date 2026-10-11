@@ -1398,6 +1398,192 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
     }
 }
 
+/// <summary>IK de dois ossos: Raiz e meio da cadeia levam a ponta ao alvo, com direção da dobra. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
+public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
+{
+    public static string TypeId => "astra.ik.two_bone";
+    public static TwoBoneIk Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public TwoBoneIk(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ponta segue rotação do alvo</summary>
+    public bool MatchTargetRotation
+    {
+        get => Component.GetBool("match_target_rotation");
+        set => Component.SetBool("match_target_rotation", value);
+    }
+    /// <summary>Alvo</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+    /// <summary>Direção da dobra</summary>
+    public ObjectReference Pole
+    {
+        get => Component.GetReference("pole");
+        set => Component.SetReference("pole", value);
+    }
+}
+
+/// <summary>IK de cadeia: CCD ou FABRIK em N ossos, com iterações e tolerância. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/ChainIKConstraint.html</remarks>
+public readonly struct ChainIk : IComponentFacade<ChainIk>
+{
+    public static string TypeId => "astra.ik.chain";
+    public static ChainIk Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ChainIk(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ossos na cadeia (ossos)</summary>
+    /// <remarks>Faixa válida: 2 a 32.</remarks>
+    public float ChainLength
+    {
+        get => Component.GetFloat("chain_length");
+        set => Component.SetFloat("chain_length", value);
+    }
+    /// <summary>Iterações máximas</summary>
+    /// <remarks>Faixa válida: 1 a 128.</remarks>
+    public float Iterations
+    {
+        get => Component.GetFloat("iterations");
+        set => Component.SetFloat("iterations", value);
+    }
+    /// <summary>Tolerância (m)</summary>
+    /// <remarks>Faixa válida: 0.00001 a 1.</remarks>
+    public float Tolerance
+    {
+        get => Component.GetFloat("tolerance");
+        set => Component.SetFloat("tolerance", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum SolverOption : uint
+    {
+        CCD = 0,
+        FABRIK = 1,
+    }
+    /// <summary>Solver</summary>
+    public SolverOption Solver
+    {
+        get => (SolverOption)Component.GetEnum("solver");
+        set => Component.SetEnum("solver", (uint)value);
+    }
+    /// <summary>Alvo</summary>
+    public ObjectReference Target
+    {
+        get => Component.GetReference("target");
+        set => Component.SetReference("target", value);
+    }
+}
+
+/// <summary>Apoio do pé: Raio pela física apoia o pé na superfície e resolve a perna. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
+public readonly struct FootGrounding : IComponentFacade<FootGrounding>
+{
+    public static string TypeId => "astra.ik.foot_grounding";
+    public static FootGrounding Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public FootGrounding(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Início do raio acima do pé (m)</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float RayHeight
+    {
+        get => Component.GetFloat("ray_height");
+        set => Component.SetFloat("ray_height", value);
+    }
+    /// <summary>Alcance abaixo do pé (m)</summary>
+    /// <remarks>Faixa válida: 0.01 a 20.</remarks>
+    public float RayDistance
+    {
+        get => Component.GetFloat("ray_distance");
+        set => Component.SetFloat("ray_distance", value);
+    }
+    /// <summary>Altura do pé sobre a superfície (m)</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float FootOffset
+    {
+        get => Component.GetFloat("foot_offset");
+        set => Component.SetFloat("foot_offset", value);
+    }
+    /// <summary>Correção máxima (m)</summary>
+    /// <remarks>Faixa válida: 0 a 5.</remarks>
+    public float MaxCorrection
+    {
+        get => Component.GetFloat("max_correction");
+        set => Component.SetFloat("max_correction", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Alinhar à superfície</summary>
+    public bool AlignToSurface
+    {
+        get => Component.GetBool("align_to_surface");
+        set => Component.SetBool("align_to_surface", value);
+    }
+}
+
 /// <summary>Canvas UI: Instância independente de documento de UI, na tela ou no objeto. Família Renderização · Interface.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/class-Canvas.html</remarks>
 public readonly struct UiCanvas : IComponentFacade<UiCanvas>

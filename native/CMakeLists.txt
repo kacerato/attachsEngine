@@ -546,6 +546,7 @@ add_library(aether_runtime STATIC
   runtime/input_actions.cpp
   runtime/transform_math.cpp
   runtime/rig_instance.cpp
+  runtime/ik_solvers.cpp
   runtime/game_world.cpp
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
@@ -601,8 +602,8 @@ add_library(aether_editor STATIC
   editor/editor_rig_screen.cpp
   editor/editor_rig_authoring_candidate.cpp
   editor/editor_rig_tool.cpp
-  editor/editor_animation_ik.cpp
   editor/editor_animation_ik_tool.cpp
+  editor/editor_ik_authoring.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
@@ -1110,7 +1111,8 @@ if(NOT ANDROID)
   # Reuse real cases rather than copying tests or requiring unrelated families.
   add_executable(aether_animation_runtime_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_animator.cpp ../tests/native/test_skeletal_animation.cpp
-    ../tests/native/test_atomic_asset_file.cpp ../tests/native/test_physics2d_bridge.cpp)
+    ../tests/native/test_atomic_asset_file.cpp ../tests/native/test_physics2d_bridge.cpp
+    ../tests/native/test_ik_constraints.cpp)
   target_include_directories(aether_animation_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_runtime_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
@@ -1242,4 +1244,9 @@ if(WIN32)
   target_link_libraries(benchmark_physics2d PRIVATE psapi)
   target_link_libraries(benchmark_physics2d_jolt PRIVATE psapi)
   target_link_libraries(benchmark_physics2d_box2d PRIVATE psapi)
+endif()
+
+# Cabecalhos pesados do editor processados uma vez por alvo (build mais curto).
+if(TARGET aether_editor)
+  target_precompile_headers(aether_editor PRIVATE editor/editor_session.h)
 endif()

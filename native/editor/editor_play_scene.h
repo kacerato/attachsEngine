@@ -21,6 +21,7 @@
 #include "runtime/scene_tweens.h"
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
+#include "runtime/scene_ik.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_animator_graph.h"
@@ -199,7 +200,7 @@ public:
     animator_.begin(world_.poseGraph(),resources);
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
-    constraints_.reset();
+    constraints_.reset();ik_.reset();
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     navigation_.reset();
     paths_.reset();
@@ -301,7 +302,7 @@ public:
     animator_.reset();
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
-    constraints_.reset();
+    constraints_.reset();ik_.reset();
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     resources_=nullptr;
     active_=false;
@@ -424,7 +425,7 @@ private:
            stage(navigation_.advance(world_,static_cast<float>(frameElapsed)),"navegação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
-           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
+           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.
@@ -438,6 +439,16 @@ private:
     return true;
   }
   // A órbita lê a mesma ação Olhar do mapa de entrada que Olhar e scripts leem.
+  // IK depois das constraints; o apoio do pe consulta a fisica real do Play.
+  bool advanceIk() {
+    return ik_.advance(world_,[this](const float origin[3],const float direction[3],runtime::ObjectId ignore,float point[3],float normal[3]) {
+      runtime::QueryFilter filter;filter.includeDynamic=false;filter.ignore=ignore;runtime::QueryHit hit;
+      if(!runtime::validPhysicsQueryRay(origin,direction)||!physics_.rayCast(origin,direction,filter,hit))return false;
+      for(u32 i=0;i<3;++i) {point[i]=hit.point[i];normal[i]=hit.normal[i];}
+      return true;
+    });
+  }
+  const runtime::SceneIk &ik() const noexcept {return ik_;}
   bool advanceVirtualCameras() {
     float look[2]{0,0};input_.axis2(input_.map().lookAction(),look);
     // Scoped Canvas look belongs to its real Camera/Cérebro, not the global
@@ -573,6 +584,7 @@ private:
   runtime::ScenePhysicsConnections physicsConnections_;
   runtime::SceneCameraFollow cameraFollow_;
   runtime::SceneConstraints constraints_;
+  runtime::SceneIk ik_;
   runtime::SceneTweens tweens_;
   runtime::SceneTweenSequences sequences_;
   runtime::ScenePhysicsQueries queries_;

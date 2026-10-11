@@ -1,8 +1,9 @@
-#include "editor/editor_animation_ik.h"
+#include "runtime/ik_solvers.h"
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
-namespace ae::editor {
+namespace ae::runtime {
 namespace {
 struct V {float x=0,y=0,z=0;};
 V operator-(V a,V b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
@@ -76,4 +77,55 @@ bool solveTwoBoneIk(const float rootWorld[16],const float midWorld[16],const flo
   for(float v:out.mid)if(!std::isfinite(v))return false;
   return true;
 }
-} // namespace ae::editor
+
+bool solveChainIk(ChainIkSolver solver,std::span<const std::array<float,16>> worlds,const float targetValue[3],
+                  u32 maximumIterations,float tolerance,std::vector<std::array<float,16>> &out,ChainIkResult &result) {
+  result={};const usize n=worlds.size();
+  if(n<2||n>64||maximumIterations==0||maximumIterations>256||!(tolerance>0)||!std::isfinite(tolerance))return false;
+  const V target{targetValue[0],targetValue[1],targetValue[2]};
+  if(!std::isfinite(target.x)||!std::isfinite(target.y)||!std::isfinite(target.z))return false;
+  std::vector<V> p(n);std::vector<float> lengths(n-1);float total=0;
+  for(usize i=0;i<n;++i)p[i]=position(worlds[i].data());
+  for(usize i=0;i+1<n;++i) {lengths[i]=length(p[i+1]-p[i]);if(!(lengths[i]>1e-6f))return false;total+=lengths[i];}
+  const V root=p[0];
+  if(length(target-root)>=total*.9999f) {
+    // Inalcancavel: cadeia reta na direcao do alvo, comprimentos intactos.
+    V dir=target-root;if(!normalize(dir))return false;
+    for(usize i=1;i<n;++i)p[i]=p[i-1]+dir*lengths[i-1];
+    result.clamped=true;result.iterations=1;
+  } else if(solver==ChainIkSolver::Fabrik) {
+    for(u32 it=0;it<maximumIterations;++it) {
+      result.iterations=it+1;
+      p[n-1]=target;
+      for(usize i=n-1;i-->0;) {V d=p[i]-p[i+1];if(!normalize(d))d=V{0,1,0};p[i]=p[i+1]+d*lengths[i];}
+      p[0]=root;
+      for(usize i=0;i+1<n;++i) {V d=p[i+1]-p[i];if(!normalize(d))d=V{0,1,0};p[i+1]=p[i]+d*lengths[i];}
+      if(length(p[n-1]-target)<=tolerance)break;
+    }
+  } else {
+    for(u32 it=0;it<maximumIterations;++it) {
+      result.iterations=it+1;
+      for(usize i=n-1;i-->0;) {
+        float r[9];fromTo(p[n-1]-p[i],target-p[i],r);
+        for(usize k=i+1;k<n;++k)p[k]=p[i]+apply(r,p[k]-p[i]);
+      }
+      if(length(p[n-1]-target)<=tolerance)break;
+    }
+  }
+  result.residual=length(p[n-1]-target);result.converged=result.residual<=tolerance;
+  // Converte posicoes em mundos: cada junta gira o proprio eixo do filho; a
+  // rotacao acumula para os descendentes, como no solver de dois ossos.
+  out.assign(worlds.begin(),worlds.end());
+  float accumulated[9]{1,0,0,0,1,0,0,0,1};
+  for(usize i=0;i+1<n;++i) {
+    const V original=position(worlds[i+1].data())-position(worlds[i].data());
+    const V carried=apply(accumulated,original);
+    float step[9];fromTo(carried,p[i+1]-p[i],step);
+    float next[9];multiply(step,accumulated,next);std::copy(next,next+9,accumulated);
+    rotated(worlds[i].data(),accumulated,p[i],out[i].data());
+  }
+  {float tipWorld[16];rotated(worlds[n-1].data(),accumulated,p[n-1],tipWorld);std::copy(tipWorld,tipWorld+16,out[n-1].data());}
+  for(const auto &m:out)for(float v:m)if(!std::isfinite(v))return false;
+  return true;
+}
+} // namespace ae::runtime
