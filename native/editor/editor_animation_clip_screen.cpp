@@ -174,6 +174,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       card(side,"Ferramenta","Escala",w::PoseScale,state.clipPoseShown,UiIcon::AnimationReduce);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);
+      card(side,"Edição",state.clipPoseIsolated?"Camada isolada":"Resultado combinado",w::PoseIsolate,state.clipPoseShown,UiIcon::AnimationLayers,state.clipPoseIsolated);
       card(side,"Seleção, espelho e cópia","Ferramentas de pose",w::PoseTools,state.clipPoseShown,UiIcon::AnimationPoseTools,state.clipPoseToolsShown);
     } else {
       const resources::AnimationClipTrack *track=asset->track(state.clipTrack);
@@ -362,9 +363,20 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     const auto row=top(names,30);const bool active=t.id==state.clipTrack&&c==state.clipComponent;
     const bool progress=t.rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion&&c==4;
     if(active) {list.addRect(row,withAlpha(theme.color.accent,.12f));list.addRect({row.x,row.y,2,row.height},theme.color.accent);}
-    label({row.x+2,row.y,row.width-30,15},path,theme.color.textDim);
-    label({row.x+2,row.y+15,row.width-30,15},progress?"Progresso °":pathName(t),active?theme.color.text:theme.color.textMuted);
+    // Dopesheet agrupado: o primeiro eixo de cada canal mostra osso e canal;
+    // os demais eixos ficam recuados sob ele, sem repetir nome e caminho.
     const UiColor axes[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ,theme.color.textDim};
+    const bool groupStart=c==0||visible==0;
+    if(groupStart) {
+      if(index>0||visible>0)list.addRect({row.x,row.y,row.width,1},theme.color.line);
+      const auto slash=path.find_last_of(">/");
+      const std::string bone=slash==std::string::npos?path:path.substr(slash+1+(slash+1<path.size()&&path[slash+1]==' '?1:0));
+      label({row.x+2,row.y,row.width-30,15},bone,active?theme.color.accent:theme.color.text);
+      label({row.x+2,row.y+15,row.width-30,15},progress?"Progresso °":pathName(t),theme.color.textMuted);
+    } else {
+      list.addRect({row.x+10,row.y,1,row.height},theme.color.lineSoft);
+      label({row.x+18,row.y,row.width-48,row.height},progress?"Progresso °":pathName(t),active?theme.color.text:theme.color.textFaint);
+    }
     label({row.right()-30,row.y,30,row.height},progress?"°":componentName(t,c),axes[c%4],UiAlign::Center);
     router.addRegion(row,w::id(w::Row+visible));visibleRows.push_back({&t,c});++visible;
   }
@@ -558,7 +570,23 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       list.addRect({frame.originScreen.x-3,frame.originScreen.y-3,6,6},theme.color.text,3);list.popClip();
     }
   }
-  if(state.clipPoseShown&&!state.clipExpanded&&!layout.viewport.isEmpty()) {
+  if(studio&&state.clipPoseShown&&!state.clipExpanded&&!layout.viewport.isEmpty()) {
+    // Estudio: ferramentas como coluna compacta na borda do viewport, igual ao
+    // editor de cena; visibilidade, numeros e conjuntos ficam na aba Pose.
+    const auto path=targetChannel&&selected?selected->path:resources::AnimationPath::Weights;
+    UiRect column{layout.viewport.x+8,layout.viewport.y+8,48,5*48+8};
+    list.addRect(column,withAlpha(theme.color.surface,.92f),6);router.addBlocker(column);
+    auto slot=deflate(column,{2,4,2,4});
+    button(top(slot,48),"",w::PoseTranslate,previewTarget!=0,path==resources::AnimationPath::Translation,UiIcon::EditorMove);
+    button(top(slot,48),"",w::PoseRotate,previewTarget!=0,path==resources::AnimationPath::Rotation,UiIcon::EditorRotate);
+    button(top(slot,48),"",w::PoseScale,previewTarget!=0,path==resources::AnimationPath::Scale,UiIcon::EditorScale);
+    button(top(slot,48),"",w::PoseFocus,previewTarget!=0,false,UiIcon::EditorFrameObject);
+    button(top(slot,48),"",w::PoseOrbit,true,state.navigation==EditorNavigationMode::Orbit,UiIcon::EditorOrbit);
+    const auto *object=state.document?state.document->find(previewTarget):nullptr;
+    const UiRect name{column.right()+8,layout.viewport.y+8,std::min(320.f,layout.viewport.width-72),28};
+    list.addRect(name,withAlpha(theme.color.surface,.85f),4);
+    label(name,object?std::string(object->name)+(targetChannel?"":" · escolha o canal"):"Toque um osso",object?theme.color.accent:theme.color.textDim);
+  } else if(state.clipPoseShown&&!state.clipExpanded&&!layout.viewport.isEmpty()) {
     auto tools=deflate(UiRect{layout.viewport.x,layout.viewport.y+4,layout.viewport.width,44},{8,0,8,0});
     list.addRect(tools,theme.color.surface);router.addBlocker(tools);
     button(left(tools,100),"Juntas",w::PoseJoints,!state.clipPreviewJoints.empty(),state.clipPoseJoints&&!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton);
@@ -575,7 +603,15 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     const auto *object=state.document?state.document->find(previewTarget):nullptr;
     label(tools,object?std::string(object->name)+(targetChannel?"":" · escolher canal"):"Toque uma junta ou objeto",theme.color.textDim);
   }
-  if(state.clipPoseShown&&targetChannel&&selected&&state.clipPoseCount&&!layout.viewport.isEmpty()) {
+  if(studio&&state.clipPoseShown&&targetChannel&&selected&&state.clipPoseCount&&!state.clipPoseNumbers&&!layout.viewport.isEmpty()) {
+    // Estudio: so a decisao pendente aparece sobre o viewport.
+    if(state.clipPosePending) {
+      const UiRect bar{layout.viewport.x+(layout.viewport.width-300)*.5f,layout.viewport.bottom()-56,300,48};
+      list.addRect(bar,withAlpha(theme.color.surface,.95f),6);router.addBlocker(bar);auto inner=deflate(bar,{4,4,4,4});
+      button(left(inner,146),"Gravar chave",w::PoseRecord,true,true,UiIcon::AnimationRecordPose);
+      button(inner,"Cancelar",w::PoseCancel,true,false,UiIcon::UiClose);
+    }
+  } else if(state.clipPoseShown&&targetChannel&&selected&&state.clipPoseCount&&!layout.viewport.isEmpty()) {
     auto actions=deflate(UiRect{layout.viewport.x,layout.viewport.bottom()-44,layout.viewport.width,44},{8,0,8,0});
     list.addRect(actions,theme.color.surface);router.addBlocker(actions);
     button(left(actions,98),"Auto-key",w::PoseAutoKey,true,state.clipPoseAutoKey,UiIcon::AnimationAutoKey);
