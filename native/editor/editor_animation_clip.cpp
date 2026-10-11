@@ -701,6 +701,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         if(state_.clipStudioTab==1&&(!state_.rigToolOpen||rigRoot_!=state_.clipOwner))openRigTool(state_.clipOwner);
         return true;
       }
+      if(code==w::PoseIk) {state_.clipIkMode=!state_.clipIkMode;state_.clipDiagnostic=state_.clipIkMode?"IK: arraste o alvo na ponta selecionada":"";return true;}
       if(code==w::BoneTreeUp) {state_.clipBoneScroll=state_.clipBoneScroll>6?state_.clipBoneScroll-6:0;return true;}
       if(code==w::BoneTreeDown) {state_.clipBoneScroll+=6;return true;}
       if(code>=w::BoneRow&&code<w::BoneRow+0x7f) {
@@ -731,6 +732,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   }
   const auto *asset=state_.clipAsset;
   if(!asset)return true;
+  if(handleAnimationPoseIk(event,routing))return true;
   if(handleAnimationPoseGizmo(event,routing))return true;
   const auto &canvas=layout_.clipCanvas;
   const auto timeAt=[&](float x){const float t=state_.clipStart+(x-canvas.x)/std::max(1.f,canvas.width)*(state_.clipEnd-state_.clipStart);

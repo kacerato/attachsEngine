@@ -172,6 +172,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       card(side,"Ferramenta","Mover",w::PoseTranslate,state.clipPoseShown,UiIcon::AnimationBinding);
       card(side,"Ferramenta","Girar",w::PoseRotate,state.clipPoseShown,UiIcon::AnimationRotationBranch);
       card(side,"Ferramenta","Escala",w::PoseScale,state.clipPoseShown,UiIcon::AnimationReduce);
+      card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);
       card(side,"Edição",state.clipPoseIsolated?"Camada isolada":"Resultado combinado",w::PoseIsolate,state.clipPoseShown,UiIcon::AnimationLayers,state.clipPoseIsolated);
@@ -574,7 +575,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     // Estudio: ferramentas como coluna compacta na borda do viewport, igual ao
     // editor de cena; visibilidade, numeros e conjuntos ficam na aba Pose.
     const auto path=targetChannel&&selected?selected->path:resources::AnimationPath::Weights;
-    UiRect column{layout.viewport.x+8,layout.viewport.y+8,48,5*48+8};
+    UiRect column{layout.viewport.x+8,layout.viewport.y+8,48,6*48+8};
     list.addRect(column,withAlpha(theme.color.surface,.92f),6);router.addBlocker(column);
     auto slot=deflate(column,{2,4,2,4});
     button(top(slot,48),"",w::PoseTranslate,previewTarget!=0,path==resources::AnimationPath::Translation,UiIcon::EditorMove);
@@ -582,6 +583,32 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     button(top(slot,48),"",w::PoseScale,previewTarget!=0,path==resources::AnimationPath::Scale,UiIcon::EditorScale);
     button(top(slot,48),"",w::PoseFocus,previewTarget!=0,false,UiIcon::EditorFrameObject);
     button(top(slot,48),"",w::PoseOrbit,true,state.navigation==EditorNavigationMode::Orbit,UiIcon::EditorOrbit);
+    button(top(slot,48),"",w::PoseIk,previewTarget!=0,state.clipIkMode,UiIcon::AnimationRetarget);
+    if(state.clipIkMode&&state.clipPoseGraph&&state.view&&previewTarget) {
+      // Alvo de IK: anel na ponta selecionada e linha ate a raiz da cadeia.
+      float world[16];
+      if(runtime::worldMatrix(*state.clipPoseGraph,previewTarget,world)) {
+        const auto tip=projectWorldToScreen(*state.view,world+12);
+        const auto *endNode=state.clipPoseGraph->find(previewTarget);const auto *midNode=endNode?state.clipPoseGraph->find(endNode->parent):nullptr;
+        const auto *rootNode=midNode?state.clipPoseGraph->find(midNode->parent):nullptr;
+        list.pushClip(layout.viewport);
+        float a[16],b[16];
+        if(rootNode&&runtime::worldMatrix(*state.clipPoseGraph,rootNode->id,a)&&runtime::worldMatrix(*state.clipPoseGraph,midNode->id,b)) {
+          UiPoint p0,p1,p2,p3;
+          if(projectSegmentToScreen(*state.view,a+12,b+12,p0,p1))list.addLine(p0,p1,theme.color.warning,3);
+          if(projectSegmentToScreen(*state.view,b+12,world+12,p2,p3))list.addLine(p2,p3,theme.color.warning,3);
+        }
+        if(tip.valid) {
+          const float r=state.clipIkDragging?18:15;
+          list.addBorder({tip.screen.x-r,tip.screen.y-r,2*r,2*r},theme.color.warning,3,r);
+          list.addLine({tip.screen.x-r-6,tip.screen.y},{tip.screen.x-r+4,tip.screen.y},theme.color.warning,2);
+          list.addLine({tip.screen.x+r-4,tip.screen.y},{tip.screen.x+r+6,tip.screen.y},theme.color.warning,2);
+          list.addLine({tip.screen.x,tip.screen.y-r-6},{tip.screen.x,tip.screen.y-r+4},theme.color.warning,2);
+          list.addLine({tip.screen.x,tip.screen.y+r-4},{tip.screen.x,tip.screen.y+r+6},theme.color.warning,2);
+        }
+        list.popClip();
+      }
+    }
     const auto *object=state.document?state.document->find(previewTarget):nullptr;
     const UiRect name{column.right()+8,layout.viewport.y+8,std::min(320.f,layout.viewport.width-72),28};
     list.addRect(name,withAlpha(theme.color.surface,.85f),4);

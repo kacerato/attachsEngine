@@ -601,6 +601,8 @@ add_library(aether_editor STATIC
   editor/editor_rig_screen.cpp
   editor/editor_rig_authoring_candidate.cpp
   editor/editor_rig_tool.cpp
+  editor/editor_animation_ik.cpp
+  editor/editor_animation_ik_tool.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp

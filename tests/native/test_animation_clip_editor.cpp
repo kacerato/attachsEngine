@@ -1,4 +1,5 @@
 #include "harness.h"
+#include "editor/editor_animation_ik.h"
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_animation_clip_preview.h"
@@ -1613,4 +1614,20 @@ AE_TEST(animation_studio_docks_bone_tree_and_inspector_beside_viewport) {
   tap(static_cast<u32>(RigToolAction::CaptureRig),"capture rig from studio");
   AE_EXPECT_TRUE(session.screen().rigTool.fields.size()&&session.screen().rigTool.fields[0].value=="Coluna","rig joint follows the studio selection");
   captureClipSurface(session,font,icons,"studio-rig-1386.ppm");
+}
+
+AE_TEST(two_bone_ik_reaches_target_keeps_lengths_and_bend_side) {
+  const auto identity=[](float x,float y,float z,float *m){for(int i=0;i<16;++i)m[i]=(i%5==0)?1.f:0.f;m[12]=x;m[13]=y;m[14]=z;};
+  float root[16],mid[16],tip[16];identity(0,0,0,root);identity(1,.2f,0,mid);identity(2,0,0,tip);
+  const float target[3]{1.2f,1.f,0};editor::TwoBoneIkResult solved;
+  AE_EXPECT_TRUE(editor::solveTwoBoneIk(root,mid,tip,target,solved)&&!solved.clamped,"reachable target solves");
+  const float knee[3]{solved.mid[12],solved.mid[13],solved.mid[14]};
+  const auto distance=[](const float *a,const float *b){return std::sqrt((a[0]-b[0])*(a[0]-b[0])+(a[1]-b[1])*(a[1]-b[1])+(a[2]-b[2])*(a[2]-b[2]));};
+  const float origin[3]{0,0,0},oldKnee[3]{1,.2f,0},oldTip[3]{2,0,0};
+  AE_EXPECT_TRUE(std::abs(distance(origin,knee)-distance(origin,oldKnee))<1e-4f,"upper length preserved");
+  AE_EXPECT_TRUE(std::abs(distance(knee,solved.reached)-distance(oldKnee,oldTip))<1e-4f,"lower length preserved");
+  AE_EXPECT_TRUE(distance(solved.reached,target)<1e-4f,"tip reaches target");
+  // Joelho do mesmo lado da linha raiz->alvo que antes (sem inverter a dobra).
+  const float cross=target[0]*knee[1]-target[1]*knee[0];AE_EXPECT_TRUE(cross<0,"bend side preserved");
+  const float far[3]{10,0,0};AE_EXPECT_TRUE(editor::solveTwoBoneIk(root,mid,tip,far,solved)&&solved.clamped,"unreachable target reports stretch");
 }

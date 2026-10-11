@@ -728,7 +728,7 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
-    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,BoneTreeUp,BoneTreeDown,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,BoneTreeUp,BoneTreeDown,PoseIk,
     BoneRow=0xb680,
     PoseLock=0xb540,
     PoseGizmo=0xb500
@@ -1017,6 +1017,8 @@ struct EditorScreenState final {
   EditorEntityId clipTargetBranch=0,clipTargetNode=0,clipTarget=0;
   // Estúdio: coluna de inspector (0 chave, 1 rig, 2 pose) e rolagem da árvore de ossos.
   u8 clipStudioTab=0;u32 clipBoneScroll=0;
+  // IK de dois ossos: arrastar o alvo da ponta no viewport gira raiz e meio.
+  bool clipIkMode=false,clipIkDragging=false;ui::UiPoint clipIkHandle{-1,-1};
   bool clipPoseShown=false;u32 clipPosePage=0;
   bool clipPoseAutoKey=true,clipPosePending=false;
   AnimationPoseRecordingPolicy clipPoseRecording;
