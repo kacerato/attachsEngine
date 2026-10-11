@@ -170,7 +170,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     } else if(state.clipStudioTab==2) {
       card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
       if(state.clipIkMode&&state.clipIkPoleSet)card(side,"Direção da dobra","Fixada · toque para seguir a pose",w::PoseIkPoleReset,true,UiIcon::AnimationRotationBranch,true);
-      card(side,"Espelhar pose",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
+      card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
       card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);

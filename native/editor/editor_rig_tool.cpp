@@ -13,6 +13,7 @@
 #include "runtime/transform_math.h"
 #include <chrono>
 #include <cstdio>
+#include <cctype>
 
 namespace ae::editor {
 namespace {
@@ -133,7 +134,28 @@ bool EditorSession::mirrorAnimationPoseWithRig(std::string &error) {
   std::vector<resources::RigTransform> local(compiled.joints.size()),mirrored(compiled.joints.size());
   if(!runtime::readRigScenePose(compiled,bindings,evaluatedEditorScene(),local,error))return false;
   if(!resources::mirrorRigPose(rigDraft_,compiled,local,mirrored,resources::RigRotation,true,error))return false;
-  return stageRigLocalPose(mirrored,error);
+  // Copia o membro selecionado para o lado oposto: so o par correspondente e
+  // seus filhos recebem a pose espelhada; o lado de origem fica como esta.
+  const auto selected=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+  i32 source=-1;
+  for(usize j=0;j<bindings.objects.size();++j)if(bindings.objects[j]==selected)source=static_cast<i32>(j);
+  u64 destinationJoint=0;
+  // Sobe ate o ancestral pareado mais alto: o membro inteiro (ombro→pata).
+  for(i32 at=source;at>=0;at=compiled.joints[at].parent) {
+    for(const auto &pair:rigDraft_.mirror) {
+      const auto *a=rigDraft_.control(pair.left),*b=rigDraft_.control(pair.right);if(!a||!b||pair.left==pair.right)continue;
+      if(a->joint==compiled.joints[at].id)destinationJoint=b->joint;
+      else if(b->joint==compiled.joints[at].id)destinationJoint=a->joint;
+    }
+  }
+  if(!destinationJoint) {error="Selecione um osso de um membro com par de espelho";return false;}
+  const auto found=compiled.index.find(destinationJoint);if(found==compiled.index.end()) {error="Par de espelho fora do rig";return false;}
+  std::vector<u8> copy(compiled.joints.size(),0);copy[found->second]=1;
+  for(usize j=0;j<compiled.joints.size();++j)if(compiled.joints[j].parent>=0&&copy[compiled.joints[j].parent])copy[j]=1;
+  for(usize j=0;j<compiled.joints.size();++j)if(!copy[j])mirrored[j]=local[j];
+  if(!stageRigLocalPose(mirrored,error))return false;
+  std::string ignored;selectAnimationClipPreviewTarget(selected,resources::AnimationPath::Rotation,false,ignored);
+  return true;
 }
 
 bool EditorSession::applyRigPoseToClip(u32 index,std::string &error) {
@@ -384,9 +406,15 @@ bool EditorSession::handleRigTool(const ui::UiPointerRouting &routing) {
     u32 added=0;
     for(const auto &left:rigDraft_.controls) {
       const auto *joint=rigDraft_.joint(left.joint);if(!joint)continue;
-      const auto other=swap(joint->name);if(other.empty())continue;
+      // Sufixo numerico de exportadores (b_LeftArm_09 / b_RightArm_06) nao entra na comparacao.
+      const auto stem=[](std::string name) {
+        while(!name.empty()&&std::isdigit(static_cast<unsigned char>(name.back())))name.pop_back();
+        while(!name.empty()&&(name.back()=='_'||name.back()=='.'))name.pop_back();
+        return name;
+      };
+      const auto other=stem(swap(joint->name));if(other.empty())continue;
       for(const auto &right:rigDraft_.controls) {
-        const auto *rj=rigDraft_.joint(right.joint);if(!rj||rj->name!=other||left.id>=right.id)continue;
+        const auto *rj=rigDraft_.joint(right.joint);if(!rj||stem(rj->name)!=other||left.id>=right.id)continue;
         bool exists=false;for(const auto &p:rigDraft_.mirror)exists=exists||(p.left==left.id&&p.right==right.id)||(p.left==right.id&&p.right==left.id);
         RigAsset next;std::string ignored;
         if(!exists&&prepareRigMirrorPair(rigDraft_,rigDraft_.revision,left.id,right.id,next,ignored)) {rigDraft_=std::move(next);rigDirty_=true;++added;}

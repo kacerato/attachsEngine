@@ -39,6 +39,15 @@ bool EditorSession::focusAnimationPoseSelection(std::string &error) {
   float extent=0;for(usize axis=0;axis<3;++axis) {camera_.target[axis]=(low[axis]+high[axis])*.5f;extent+=(high[axis]-low[axis])*(high[axis]-low[axis]);}
   // Single-joint focus retains the current distance; a group can only enlarge it.
   if(state_.clipPoseSelection.size()>1)camera_.distance=std::max(camera_.distance,std::sqrt(extent)*1.5f);
+  // Foco num osso so: a distancia mostra o personagem inteiro em volta dele,
+  // em vez de colar a camera numa pata ou dedo.
+  float skeletonLow[3]{},skeletonHigh[3]{};bool any=false;
+  for(const auto bone:state_.clipPreviewJoints) {
+    float world[16];if(!runtime::worldMatrix(evaluatedEditorScene(),bone,world))continue;
+    for(usize axis=0;axis<3;++axis) {skeletonLow[axis]=any?std::min(skeletonLow[axis],world[12+axis]):world[12+axis];skeletonHigh[axis]=any?std::max(skeletonHigh[axis],world[12+axis]):world[12+axis];}any=true;
+  }
+  if(any) {float size=0;for(usize axis=0;axis<3;++axis)size+=(skeletonHigh[axis]-skeletonLow[axis])*(skeletonHigh[axis]-skeletonLow[axis]);
+    camera_.distance=std::max(std::sqrt(size)*1.4f,std::sqrt(extent)*1.5f);}
   state_.cameraViewEntity=0;state_.cameraPiloting=false;appearanceChanged_=true;return true;
 }
 bool EditorSession::isolateAnimationPoseSelection(bool enabled,std::string &error) {
