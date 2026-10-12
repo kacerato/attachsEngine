@@ -4,6 +4,7 @@
 #include "harness.h"
 #include "runtime/scene_ik.h"
 #include "scene/ik_effects.h"
+#include "scene/physics_body.h"
 #include "runtime/ik_solvers.h"
 #include "runtime/transform_math.h"
 #include "runtime/game_world.h"
@@ -86,7 +87,7 @@ AE_TEST(ik_removed_target_is_diagnosed_and_component_round_trips) {
   Leg leg;leg.ik(1);
   std::ostringstream out;leg.g.find(leg.foot)->components.find(scene::TwoBoneIk::descriptor)->write(out);
   scene::TwoBoneIk copy;std::istringstream in(out.str());
-  AE_EXPECT_TRUE(copy.read(in,1)&&copy.target==leg.target&&copy.pole==leg.pole&&copy.weight==1,"serialization round trip");
+  AE_EXPECT_TRUE(copy.read(in,2)&&copy.target==leg.target&&copy.pole==leg.pole&&copy.weight==1,"serialization round trip");
   leg.g.destroyEntity(leg.target);
   GameWorld world;world.load(leg.g);SceneIk ik;world.beginFrame(1/60.);ik.advance(world);
   bool missing=false;for(const auto &d:ik.diagnostics())missing=missing||d.issue==SceneIk::Issue::MissingTarget;
@@ -333,7 +334,8 @@ AE_TEST(ik_interaction_reaches_picks_up_and_releases_with_events) {
   AE_EXPECT_TRUE(!events.empty()&&std::string(events.front().id)=="reached"&&events.front().object==prop,"reached event with hand and object");
   AE_EXPECT_TRUE(world.graph().find(prop)->parent==leg.foot,"object picked up into the hand");
   float propWorld[16];worldMatrix(world.graph(),prop,propWorld);
-  AE_EXPECT_TRUE(std::abs(propWorld[12]-.6f)<1e-2f&&std::abs(propWorld[13]-.6f)<1e-2f,"pick up keeps the world pose");
+  float handWorld[16];worldMatrix(world.graph(),leg.foot,handWorld);
+  AE_EXPECT_TRUE(std::abs(propWorld[12]-handWorld[12])<1e-2f&&std::abs(propWorld[13]-handWorld[13])<1e-2f,"picked object is carried exactly at the hand");
   AE_EXPECT_TRUE(ik.interactionStop(world,leg.owner,leg.foot)==WorldStatus::Ok,"stop");
   for(u32 i=0;i<12;++i) {step(world,ik);for(auto &e:ik.takeEvents())events.push_back(e);}
   AE_EXPECT_TRUE(world.graph().find(prop)->parent==world.graph().root(),"stop drops the object back");
@@ -363,4 +365,135 @@ AE_TEST(ik_pack_c_components_round_trip) {
     const auto copy=type->create();std::istringstream in(out.str());
     AE_EXPECT_TRUE(value->valid()&&copy->read(in,type->version)&&copy->valid(),"component persists");
   }
+}
+
+// ---- Sem pendencias: prioridade, FABRIK em arvore, corpo por alvos, membros longos ----
+namespace {
+struct Fork {
+  SceneGraph g;ObjectId owner=0,root=0,a1=0,a2=0,b1=0,b2=0,ta=0,tb=0;
+  Fork() {
+    owner=g.createEntity(g.root(),ObjectKind::Folder,"Garra");root=g.createEntity(owner,ObjectKind::Folder,"Raiz");
+    a1=g.createEntity(root,ObjectKind::Folder,"A1");a2=g.createEntity(a1,ObjectKind::Folder,"A2");
+    b1=g.createEntity(root,ObjectKind::Folder,"B1");b2=g.createEntity(b1,ObjectKind::Folder,"B2");
+    Transform r;r.position[1]=1;g.setTransform(root,r);
+    Transform px;px.position[0]=1;g.setTransform(a1,px);g.setTransform(a2,px);
+    Transform nx;nx.position[0]=-1;g.setTransform(b1,nx);g.setTransform(b2,nx);
+    ta=g.createEntity(g.root(),ObjectKind::Folder,"AlvoA");tb=g.createEntity(g.root(),ObjectKind::Folder,"AlvoB");
+  }
+  void place(ObjectId id,float x,float y) {Transform t;t.position[0]=x;t.position[1]=y;g.setTransform(id,t);}
+};
+float gap(const GameWorld &w,ObjectId a,ObjectId b) {float m[16],n[16];worldMatrix(w.graph(),a,m);worldMatrix(w.graph(),b,n);return distance(m+12,n+12);}
+}
+
+AE_TEST(ik_priority_orders_solvers_that_share_bones) {
+  for(const bool aFirst:{true,false}) {
+    Fork f;f.place(f.ta,1.4f,2.2f);f.place(f.tb,-1.2f,.2f);
+    auto *a=addComponent<scene::ChainIk>(f.g,f.a2);a->target=f.ta;a->chainLength=2;a->priority=aFirst?10:0;
+    auto *b=addComponent<scene::ChainIk>(f.g,f.b2);b->target=f.tb;b->chainLength=2;b->priority=aFirst?0:10;
+    GameWorld world;world.load(f.g);SceneIk ik;step(world,ik);
+    // Quem resolve por ultimo tem a palavra final no osso comum (Raiz).
+    const float last=aFirst?gap(world,f.b2,f.tb):gap(world,f.a2,f.ta);
+    AE_EXPECT_TRUE(last<2e-3f,"lower priority solves last and reaches");
+  }
+  std::istringstream old("7 0 1 0 1");scene::TwoBoneIk legacy;
+  AE_EXPECT_TRUE(legacy.read(old,1)&&legacy.priority==0&&legacy.target==7,"version 1 scenes open with priority zero");
+}
+
+AE_TEST(ik_fabrik_root_moves_the_shared_root_so_all_chains_reach) {
+  Fork f;f.place(f.ta,2,1.6f);f.place(f.tb,-2,1.6f);
+  auto *c=addComponent<scene::FabrikRoot>(f.g,f.root);c->tips[0]=f.a2;c->targets[0]=f.ta;c->tips[1]=f.b2;c->targets[1]=f.tb;c->rootPin=0;c->iterations=16;
+  GameWorld world;world.load(f.g);SceneIk ik;step(world,ik);
+  AE_EXPECT_TRUE(gap(world,f.a2,f.ta)<1e-2f&&gap(world,f.b2,f.tb)<1e-2f,"both chains reach after the root moves");
+  AE_EXPECT_TRUE(worldX(world,f.root,1)>1.4f,"shared root rose toward the targets");
+  Fork pinned;pinned.place(pinned.ta,2,1.6f);pinned.place(pinned.tb,-2,1.6f);
+  auto *p=addComponent<scene::FabrikRoot>(pinned.g,pinned.root);p->tips[0]=pinned.a2;p->targets[0]=pinned.ta;p->tips[1]=pinned.b2;p->targets[1]=pinned.tb;p->rootPin=1;
+  GameWorld w2;w2.load(pinned.g);SceneIk ik2;step(w2,ik2);
+  AE_EXPECT_TRUE(std::abs(worldX(w2,pinned.root,1)-1)<1e-4f,"pinned root stays");
+  step(world,ik,5);
+  AE_EXPECT_TRUE(gap(world,f.a2,f.ta)<1e-2f,"stable across frames");
+}
+
+AE_TEST(ik_body_by_targets_drives_pelvis_spine_head_and_hands) {
+  SceneGraph g;const auto owner=g.createEntity(g.root(),ObjectKind::Folder,"Avatar");
+  const auto hips=g.createEntity(owner,ObjectKind::Folder,"Quadril");const auto chest=g.createEntity(hips,ObjectKind::Folder,"Peito");
+  const auto head=g.createEntity(chest,ObjectKind::Folder,"Cabeca");
+  const auto arm=g.createEntity(chest,ObjectKind::Folder,"Braco");const auto fore=g.createEntity(arm,ObjectKind::Folder,"Antebraco");const auto hand=g.createEntity(fore,ObjectKind::Folder,"Mao");
+  Transform t;t.position[1]=1;g.setTransform(hips,t);Transform up;up.position[1]=.5f;g.setTransform(chest,up);g.setTransform(head,up);
+  Transform side;side.position[0]=.2f;g.setTransform(arm,side);Transform down;down.position[1]=-.3f;down.position[2]=.05f;g.setTransform(fore,down);g.setTransform(hand,down);
+  const auto headTarget=g.createEntity(g.root(),ObjectKind::Folder,"AlvoCabeca");Transform ht;ht.position[0]=.3f;ht.position[1]=2;ht.rotationDegrees[1]=30;g.setTransform(headTarget,ht);
+  const auto handTarget=g.createEntity(g.root(),ObjectKind::Folder,"AlvoMao");Transform hd;hd.position[0]=.7f;hd.position[1]=1.3f;hd.position[2]=.2f;g.setTransform(handTarget,hd);
+  auto *c=addComponent<scene::BodyByTargets>(g,owner);c->pelvis=hips;c->chest=chest;c->head=head;c->headTarget=headTarget;c->rightHand=hand;c->rightTarget=handTarget;
+  GameWorld world;world.load(g);SceneIk ik;step(world,ik);
+  AE_EXPECT_TRUE(std::abs(worldX(world,hips)-.3f)<1e-2f,"pelvis follows the head target");
+  AE_EXPECT_TRUE(gap(world,head,headTarget)<2e-2f,"head reaches its target");
+  float hm[16];worldMatrix(world.graph(),head,hm);
+  AE_EXPECT_TRUE(std::abs(hm[8]-std::sin(30*3.14159265f/180))<2e-2f,"head copies the target rotation");
+  AE_EXPECT_TRUE(gap(world,hand,handTarget)<2e-3f,"hand reaches its target");
+  step(world,ik,5);
+  AE_EXPECT_TRUE(std::abs(worldX(world,hips)-.3f)<1e-2f,"no accumulation");
+}
+
+AE_TEST(ik_long_limbs_in_full_body_and_interaction_and_hit_front) {
+  // Membro de tres ossos no corpo inteiro, com tronco.
+  SceneGraph g;const auto owner=g.createEntity(g.root(),ObjectKind::Folder,"Robo");
+  const auto pelvis=g.createEntity(owner,ObjectKind::Folder,"Base");const auto chest=g.createEntity(pelvis,ObjectKind::Folder,"Torre");
+  const auto s1=g.createEntity(chest,ObjectKind::Folder,"S1");const auto s2=g.createEntity(s1,ObjectKind::Folder,"S2");
+  const auto s3=g.createEntity(s2,ObjectKind::Folder,"S3");const auto tip=g.createEntity(s3,ObjectKind::Folder,"Pinca");
+  Transform b;b.position[1]=1;g.setTransform(pelvis,b);g.setTransform(chest,b);
+  Transform seg;seg.position[0]=.5f;g.setTransform(s1,seg);g.setTransform(s2,seg);g.setTransform(s3,seg);g.setTransform(tip,seg);
+  const auto far=g.createEntity(g.root(),ObjectKind::Folder,"Longe");Transform ft;ft.position[0]=2.2f;ft.position[1]=1.5f;g.setTransform(far,ft);
+  auto *fb=addComponent<scene::FullBodyIk>(g,owner);fb->pelvis=pelvis;fb->chest=chest;fb->tips[0]=tip;fb->targets[0]=far;fb->limbBones=3;fb->bodyPull=1;fb->maxBodyOffset=1;
+  GameWorld world;world.load(g);SceneIk ik;step(world,ik);
+  AE_EXPECT_TRUE(gap(world,tip,far)<1e-2f,"three-bone member reaches after body pull and spine bend");
+  // Interacao com braco de tres ossos e golpe de frente por conexao.
+  SceneGraph h;const auto actor=h.createEntity(h.root(),ObjectKind::Folder,"Ator");
+  const auto base=h.createEntity(actor,ObjectKind::Folder,"Ombro");const auto u1=h.createEntity(base,ObjectKind::Folder,"U1");
+  const auto u2=h.createEntity(u1,ObjectKind::Folder,"U2");const auto u3=h.createEntity(u2,ObjectKind::Folder,"U3");const auto grip=h.createEntity(u3,ObjectKind::Folder,"Mao");
+  Transform sb;sb.position[1]=1;h.setTransform(base,sb);Transform sg;sg.position[0]=.4f;h.setTransform(u1,sg);h.setTransform(u2,sg);h.setTransform(u3,sg);h.setTransform(grip,sg);
+  addComponent<scene::InteractionSystem>(h,actor)->limbBones=3;
+  const auto box=h.createEntity(h.root(),ObjectKind::Folder,"Caixa");Transform bx;bx.position[0]=.9f;bx.position[1]=1.6f;h.setTransform(box,bx);
+  addComponent<scene::InteractionObject>(h,box)->reachTime=.1f;
+  auto *hr=addComponent<scene::HitReaction>(h,u2);hr->axis=0;hr->chainLength=1;hr->reactToCollisions=false;
+  GameWorld w2;w2.load(h);SceneIk ik2;step(w2,ik2);
+  bool started=false;AE_EXPECT_TRUE(ik2.interactionStart(w2,actor,grip,box,started)==WorldStatus::Ok&&started,"three-bone arm accepted");
+  step(w2,ik2,10);
+  AE_EXPECT_TRUE(gap(w2,grip,box)<1e-2f,"three-bone hand reaches the object");
+  AE_EXPECT_TRUE(ik2.interactionStop(w2,actor,grip)==WorldStatus::Ok,"release");step(w2,ik2,30);
+  const float before=worldX(w2,u3);
+  AE_EXPECT_TRUE(ik2.hitFront(w2,u2,1)==WorldStatus::Ok,"hit from the front accepted");
+  step(w2,ik2,6);
+  AE_EXPECT_TRUE(std::abs(worldX(w2,u3,1)-1)>.02f||std::abs(worldX(w2,u3)-before)>.02f,"front hit bends the chain");
+}
+
+AE_TEST(ik_versioned_components_read_previous_versions) {
+  std::istringstream fb1("1 2 0 3 0 0 0 0 0 1 1 .6 .5");scene::FullBodyIk fb;
+  AE_EXPECT_TRUE(fb.read(fb1,1)&&fb.limbBones==2&&fb.chest==0,"full body v1");
+  std::istringstream hr1("1 1 1 25 .4 3");scene::HitReaction hr;AE_EXPECT_TRUE(hr.read(hr1,1)&&hr.axis==2,"hit reaction v1");
+  std::istringstream is1("1 1");scene::InteractionSystem is;AE_EXPECT_TRUE(is.read(is1,1)&&is.limbBones==2,"interaction system v1");
+  const scene::ComponentType *types[]{&scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor};
+  for(const auto *type:types) {
+    const auto value=type->create();std::ostringstream out;value->write(out);
+    const auto copy=type->create();std::istringstream in(out.str());
+    AE_EXPECT_TRUE(copy->read(in,type->version)&&copy->valid(),"new component persists");
+  }
+}
+
+AE_TEST(ik_interaction_carries_a_physics_body_as_kinematic_and_restores_it) {
+  Leg leg;addComponent<scene::InteractionSystem>(leg.g,leg.owner);
+  const auto crate=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Caixa");
+  Transform at;at.position[0]=.6f;at.position[1]=.6f;leg.g.setTransform(crate,at);
+  auto *object=addComponent<scene::InteractionObject>(leg.g,crate);object->reachTime=.1f;object->releaseTime=.1f;object->pickUp=true;
+  addComponent<scene::PhysicsBody>(leg.g,crate)->motion=scene::BodyMotion::Dynamic;
+  GameWorld world;world.load(leg.g);world.setAuthority(crate,TransformAuthority::PhysicsBody);
+  SceneIk ik;u32 moves=0;float last[7]{};
+  ik.setBodyMover([&](ObjectId body,const float pose[7]){if(body!=crate)return false;++moves;std::copy(pose,pose+7,last);return true;});
+  step(world,ik);bool started=false;
+  AE_EXPECT_TRUE(ik.interactionStart(world,leg.owner,leg.foot,crate,started)==WorldStatus::Ok&&started,"start");
+  step(world,ik,12);
+  scene::ComponentPropertyValue motion;const auto body=world.findComponent(world.handle(crate),"astra.physics.body");
+  AE_EXPECT_TRUE(world.getProperty(body,"motion",motion)==WorldStatus::Ok&&std::get<u32>(motion)==1,"held physics body becomes kinematic");
+  float footNow[16];worldMatrix(world.graph(),leg.foot,footNow);
+  AE_EXPECT_TRUE(moves>0&&std::abs(last[0]-footNow[12])<2e-2f&&std::abs(last[1]-footNow[13])<2e-2f,"body is moved with the hand");
+  AE_EXPECT_TRUE(ik.interactionStop(world,leg.owner,leg.foot)==WorldStatus::Ok,"stop");step(world,ik);
+  AE_EXPECT_TRUE(world.getProperty(body,"motion",motion)==WorldStatus::Ok&&std::get<u32>(motion)==2,"release restores dynamic motion");
 }

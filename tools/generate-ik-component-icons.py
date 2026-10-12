@@ -59,6 +59,11 @@ interaction_system = chain([(4, 28), (10, 18), (16, 14)]) + arrow((16, 14), (22,
 full_body = [("circle", ((16, 5), 3.0))] + chain([(16, 9), (16, 17)]) + chain([(16, 11), (8, 15), (4, 10)], 2.0, 1.8) + chain([(16, 11), (24, 15), (28, 10)], 2.0, 1.8)
 full_body += chain([(16, 17), (11, 23), (10, 29)], 2.0, 1.8) + chain([(16, 17), (21, 23), (24, 29)], 2.0, 1.8)
 
+fabrik_root = [("circle", ((16, 22), 3.4))] + chain([(16, 22), (9, 14), (5, 6)], 2.0, 1.8) + chain([(16, 22), (16, 12), (17, 4)], 2.0, 1.8)
+fabrik_root += chain([(16, 22), (23, 14), (28, 7)], 2.0, 1.8) + [("poly", mark.bar((10, 29), (22, 29), 1.6))]
+body_by_targets = [("circle", ((16, 6), 3.2))] + chain([(16, 10), (16, 20)]) + chain([(16, 13), (9, 17)], 2.0, 1.8) + chain([(16, 13), (23, 17)], 2.0, 1.8)
+body_by_targets += target((5, 22), 3.2) + target((27, 22), 3.2) + chain([(16, 20), (12, 29)], 2.0, 1.8) + chain([(16, 20), (20, 29)], 2.0, 1.8)
+
 named = root / "assets/astra-visual/icons/named"
 catalog = named / "catalog.json"
 data = json.loads(catalog.read_text(encoding="utf-8"))
@@ -68,7 +73,7 @@ for name, geometry in (("ik-two-bone", two_bone), ("ik-chain", ik_chain), ("foot
                        ("hit-reaction", hit_reaction), ("recoil", recoil), ("inertia", inertia), ("amplifier", amplifier),
                        ("body-tilt", body_tilt), ("hand-poser", hand_poser), ("penetration-avoidance", penetration),
                        ("interaction-object", interaction_object), ("interaction-system", interaction_system),
-                       ("full-body-ik", full_body)):
+                       ("full-body-ik", full_body), ("fabrik-root", fabrik_root), ("body-by-targets", body_by_targets)):
     mark.render(geometry).save(named / f"component/{name}.png")
     data["icons"][f"component/{name}"] = dict(category="component", name=name, dark_ui_ready=True,
                                                generation="ik-components-v1",

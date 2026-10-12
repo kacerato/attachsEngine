@@ -76,7 +76,7 @@ inline constexpr std::array<ComponentEnumOption,36> eventConnectionEvents{{
   {32,"Animator: evento do clipe"},{33,"Animator: limite de eventos"},
   {34,"Interação: mão alcançou"},{35,"Interação: mão soltou"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,32> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,33> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -109,8 +109,9 @@ inline constexpr std::array<EventConnectionMethodKey,32> eventConnectionMethodKe
   {30,"astra.navigation.agent","stop"},
   {31,"astra.navigation.agent","resume"},
   {32,"astra.ik.recoil","fire"},
+  {33,"astra.ik.hit_reaction","hit_front"},
 }};
-inline constexpr std::array<ComponentEnumOption,33> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,34> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -122,7 +123,7 @@ inline constexpr std::array<ComponentEnumOption,33> eventConnectionMethods{{
   {26,"Câmera virtual: priorizar"},{27,"Câmera virtual: encaixar"},
   {28,"Snapshot: transicionar"},{29,"Snapshot: aplicar"},
   {30,"Agente: parar"},{31,"Agente: retomar"},
-  {32,"Recuo: disparar"},
+  {32,"Recuo: disparar"},{33,"Impacto: golpear de frente"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
@@ -145,8 +146,8 @@ inline const EventConnectionMethodKey *findEventConnectionMethod(u32 value) {
 inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || (event>=15 && event<=21) || event==34 || event==35;}
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
 // audio.seek (segundos), snapshot.transition_to (duração; negativo usa a autorada)
-// e recoil.fire (intensidade; 1 usa os valores autorados).
-inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32;}
+// recoil.fire (intensidade; 1 usa os valores autorados) e hit_reaction.hit_front (força).
+inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32 || method==33;}
 
 class EventConnection final : public ComponentValue {
 public:

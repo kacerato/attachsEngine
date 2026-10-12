@@ -14,6 +14,8 @@ struct SceneIkTypes {
   struct Event {ObjectId system=0;const char *id="";ObjectId effector=0,object=0;};
   // Raio de apoio: origem, direcao com comprimento; devolve ponto e normal.
   using GroundQuery=std::function<bool(const float origin[3],const float direction[3],ObjectId ignore,float point[3],float normal[3])>;
+  // Move um corpo fisico cinematico para a pose (posicao + quaternion xyzw).
+  using BodyMover=std::function<bool(ObjectId body,const float pose[7])>;
   static const char *issueText(Issue issue) {
     switch(issue) {
     case Issue::MissingTarget:return "Alvo do IK ausente ou inativo";
@@ -40,11 +42,14 @@ public:
   // Pacote C: golpe, recuo, interacao e colisao. Recusam objeto sem o
   // componente ativo; o efeito aparece no proximo advance.
   WorldStatus hit(GameWorld &world,ObjectId object,const float direction[3],float force);
+  WorldStatus hitFront(GameWorld &world,ObjectId object,float force);
   WorldStatus fire(GameWorld &world,ObjectId object,float magnitude);
   WorldStatus interactionStart(GameWorld &world,ObjectId system,ObjectId effector,ObjectId object,bool &started);
   WorldStatus interactionStop(GameWorld &world,ObjectId system,ObjectId effector);
   void collision(GameWorld &world,ObjectId object,const float normal[3]);
   std::vector<Event> takeEvents();
+  // Sem mover, objetos com corpo fisico nao podem ser carregados (diagnostico).
+  void setBodyMover(BodyMover mover);
 private:
   std::unique_ptr<SceneIkSolver> solver_;
 };

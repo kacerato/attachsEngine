@@ -424,7 +424,7 @@ inline void navSurfaceVisual(const scene::ComponentValue &value,const EditorEnti
   constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
   for(const auto &e:edges) visual_detail::segment(out,world,c[e[0]],c[e[1]]);
 }
-inline const std::array<ComponentVisualProvider,65> componentVisualProviders{{
+inline const std::array<ComponentVisualProvider,67> componentVisualProviders{{
   {&scene::NavSurface::descriptor,ui::UiIcon::NavigationSurface,true,navSurfaceVisual},
   {&scene::NavAgent::descriptor,ui::UiIcon::NavigationAgent,true,navAgentVisual},
   {&scene::NavObstacle::descriptor,ui::UiIcon::NavigationObstacle,true,navObstacleVisual},
@@ -465,6 +465,8 @@ inline const std::array<ComponentVisualProvider,65> componentVisualProviders{{
   {&scene::InteractionObject::descriptor,ui::UiIcon::ComponentInteractionObject,true,visual_detail::constraint},
   {&scene::InteractionSystem::descriptor,ui::UiIcon::ComponentInteractionSystem,true,visual_detail::constraint},
   {&scene::FullBodyIk::descriptor,ui::UiIcon::ComponentFullBodyIk,true,visual_detail::constraint},
+  {&scene::FabrikRoot::descriptor,ui::UiIcon::ComponentFabrikRoot,true,visual_detail::constraint},
+  {&scene::BodyByTargets::descriptor,ui::UiIcon::ComponentBodyByTargets,true,visual_detail::constraint},
   {&scene::TransformTween::descriptor,ui::UiIcon::ComponentTweenTransform,true,visual_detail::constraint},
   {&scene::TweenSequence::descriptor,ui::UiIcon::ComponentTweenSequence,true,visual_detail::constraint},
   {&scene::PropertyTween::descriptor,ui::UiIcon::ComponentTweenProperty,true,visual_detail::constraint},

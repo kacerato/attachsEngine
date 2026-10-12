@@ -2207,6 +2207,20 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/fabrik-root": {
+      "category": "component",
+      "name": "fabrik-root",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/body-by-targets": {
+      "category": "component",
+      "name": "body-by-targets",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

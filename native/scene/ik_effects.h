@@ -29,11 +29,14 @@ inline bool ikReference(u64 v) {return v<=std::numeric_limits<u32>::max();}
 // solida deste objeto (normal do contato).
 class HitReaction final : public ComponentValue {
 public:
-  bool enabled=true,reactToCollisions=true;float weight=1,strength=25,duration=.4f,chainLength=3;
+  bool enabled=true,reactToCollisions=true;float weight=1,strength=25,duration=.4f,chainLength=3;u32 axis=2;
   AE_FX_VALUE(HitReaction)
-  bool valid() const override {return ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<enabled<<' '<<reactToCollisions<<' '<<weight<<' '<<strength<<' '<<duration<<' '<<chainLength;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>enabled>>reactToCollisions>>weight>>strength>>duration>>chainLength)&&valid();}
+  bool valid() const override {return axis<=5&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<enabled<<' '<<reactToCollisions<<' '<<weight<<' '<<strength<<' '<<duration<<' '<<chainLength<<' '<<axis;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>enabled>>reactToCollisions>>weight>>strength>>duration>>chainLength))return false;
+    axis=2;return (version==1||static_cast<bool>(in>>axis))&&valid();
+  }
 };
 // Recuo: `fire` levanta a cadeia (arma, mao, braco) no eixo frontal e recua a
 // base; volta ao pose do quadro no tempo de recuperacao. Disparos se somam.
@@ -109,32 +112,75 @@ public:
 // objeto com IK de dois ossos; `stop(mao)` solta (e larga o objeto pego).
 class InteractionSystem final : public ComponentValue {
 public:
-  bool enabled=true;float speed=1;
+  bool enabled=true;float speed=1,limbBones=2;
   AE_FX_VALUE(InteractionSystem)
   bool valid() const override {return ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<enabled<<' '<<speed;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>enabled>>speed)&&valid();}
+  void write(std::ostream &out) const override {out<<enabled<<' '<<speed<<' '<<limbBones;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>enabled>>speed))return false;
+    limbBones=2;return (version==1||static_cast<bool>(in>>limbBones))&&valid();
+  }
 };
 // Corpo inteiro: ate quatro pontas com alvo; quando um alvo esta alem do
 // alcance do membro, a pelve e puxada na direcao dele (limitada) e os membros
 // sao resolvidos depois. Bipede, quadrupede ou mecanismo com pelve.
 class FullBodyIk final : public ComponentValue {
 public:
-  u64 pelvis=0,tips[4]{},targets[4]{};bool enabled=true;float weight=1,bodyPull=.6f,maxBodyOffset=.5f;
+  u64 pelvis=0,tips[4]{},targets[4]{},chest=0;bool enabled=true;float weight=1,bodyPull=.6f,maxBodyOffset=.5f,spineBend=.5f,limbBones=2;
   AE_FX_VALUE(FullBodyIk)
   bool valid() const override {
-    if(!ikReference(pelvis))return false;
+    if(!ikReference(pelvis)||!ikReference(chest))return false;
     for(u32 i=0;i<4;++i)if(!ikReference(tips[i])||!ikReference(targets[i]))return false;
     return ikNumbersValid(*this);
   }
   void write(std::ostream &out) const override {
     out<<pelvis;for(u32 i=0;i<4;++i)out<<' '<<tips[i]<<' '<<targets[i];
-    out<<' '<<enabled<<' '<<weight<<' '<<bodyPull<<' '<<maxBodyOffset;
+    out<<' '<<enabled<<' '<<weight<<' '<<bodyPull<<' '<<maxBodyOffset<<' '<<chest<<' '<<spineBend<<' '<<limbBones;
   }
   bool read(std::istream &in,u32 version) override {
-    if(version!=1||!(in>>pelvis))return false;
+    if(version<1||version>2||!(in>>pelvis))return false;
     for(u32 i=0;i<4;++i)if(!(in>>tips[i]>>targets[i]))return false;
-    return (in>>enabled>>weight>>bodyPull>>maxBodyOffset)&&valid();
+    if(!(in>>enabled>>weight>>bodyPull>>maxBodyOffset))return false;
+    chest=0;spineBend=.5f;limbBones=2;
+    return (version==1||static_cast<bool>(in>>chest>>spineBend>>limbBones))&&valid();
+  }
+};
+
+// FABRIK em arvore (FinalIK FABRIKRoot): este objeto e a raiz comum de ate
+// quatro cadeias (tentaculos, dedos de uma garra, pernas de aranha). Cada passe
+// estima onde a raiz ficaria para cada ponta alcancar o alvo; a raiz vai para a
+// media (contida por Fixar raiz) e as cadeias sao resolvidas a partir dela.
+class FabrikRoot final : public ComponentValue {
+public:
+  u64 tips[4]{},targets[4]{};bool enabled=true;float weight=1,rootPin=.5f,iterations=8;
+  AE_FX_VALUE(FabrikRoot)
+  bool valid() const override {for(u32 i=0;i<4;++i)if(!ikReference(tips[i])||!ikReference(targets[i]))return false;return ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {for(u32 i=0;i<4;++i)out<<tips[i]<<' '<<targets[i]<<' ';out<<enabled<<' '<<weight<<' '<<rootPin<<' '<<iterations;}
+  bool read(std::istream &in,u32 version) override {
+    if(version!=1)return false;
+    for(u32 i=0;i<4;++i)if(!(in>>tips[i]>>targets[i]))return false;
+    return (in>>enabled>>weight>>rootPin>>iterations)&&valid();
+  }
+};
+// Corpo por alvos (estudo do FinalIK VRIK, sem exigir XR): cabeca e maos
+// seguem alvos que podem ser quaisquer objetos (controles, ancoras, outro
+// personagem). A pelve acompanha a cabeca, o peito se curva, a cabeca copia a
+// rotacao do alvo e os bracos sao resolvidos com dois ossos.
+class BodyByTargets final : public ComponentValue {
+public:
+  u64 pelvis=0,chest=0,head=0,leftHand=0,rightHand=0,headTarget=0,leftTarget=0,rightTarget=0;
+  bool enabled=true,headRotation=true;float weight=1,bodyFollow=1,spineBend=.6f,maxBodyOffset=1;
+  AE_FX_VALUE(BodyByTargets)
+  bool valid() const override {
+    for(const u64 v:{pelvis,chest,head,leftHand,rightHand,headTarget,leftTarget,rightTarget})if(!ikReference(v))return false;
+    return ikNumbersValid(*this);
+  }
+  void write(std::ostream &out) const override {
+    out<<pelvis<<' '<<chest<<' '<<head<<' '<<leftHand<<' '<<rightHand<<' '<<headTarget<<' '<<leftTarget<<' '<<rightTarget<<' '
+       <<enabled<<' '<<headRotation<<' '<<weight<<' '<<bodyFollow<<' '<<spineBend<<' '<<maxBodyOffset;
+  }
+  bool read(std::istream &in,u32 version) override {
+    return version==1&&(in>>pelvis>>chest>>head>>leftHand>>rightHand>>headTarget>>leftTarget>>rightTarget>>enabled>>headRotation>>weight>>bodyFollow>>spineBend>>maxBodyOffset)&&valid();
   }
 };
 
@@ -143,9 +189,13 @@ inline constexpr std::array<ComponentNumber,4> hitReactionNumbers{{AE_FX_NUM(Hit
   AE_FX_NUM(HitReaction,"chain_length","Ossos que reagem",chainLength,1,8,1,"Golpe","ossos")}};
 inline constexpr std::array<ComponentBoolean,2> hitReactionBooleans{{AE_FX_BOOL(HitReaction,"enabled","Ativo",enabled,"Influência"),
   AE_FX_BOOL(HitReaction,"react_to_collisions","Reagir a colisões",reactToCollisions,"Golpe")}};
+inline constexpr std::array<ComponentEnum,1> hitReactionEnums{{AE_FX_ENUM(HitReaction,"axis","Frente do osso",ikAxisOptions,axis,"Golpe")}};
 inline constexpr std::array<ComponentParameter,2> hitReactionHitParameters{{{"direction","Direção do golpe",ComponentValueKind::Vector3},{"force","Força",ComponentValueKind::Number}}};
-inline constexpr std::array<ComponentMethod,1> hitReactionMethods{{{"hit","Golpear","Gira a cadeia para longe da direção; força 1 usa a força autorada",hitReactionHitParameters}}};
-inline const ComponentType HitReaction::descriptor{"astra.ik.hit_reaction",1,AE_FX_MAKE(HitReaction),hitReactionNumbers,hitReactionBooleans,{},nullptr,false,{},{},{},{},{},{},hitReactionMethods};
+inline constexpr std::array<ComponentParameter,1> hitReactionFrontParameters{{{"force","Força",ComponentValueKind::Number}}};
+inline constexpr std::array<ComponentMethod,2> hitReactionMethods{{
+  {"hit","Golpear","Gira a cadeia para longe da direção; força 1 usa a força autorada",hitReactionHitParameters},
+  {"hit_front","Golpear de frente","Golpe contra a Frente do osso (empurra para trás); usado pelas Conexões de evento",hitReactionFrontParameters}}};
+inline const ComponentType HitReaction::descriptor{"astra.ik.hit_reaction",2,AE_FX_MAKE(HitReaction),hitReactionNumbers,hitReactionBooleans,hitReactionEnums,nullptr,false,{},{},{},{},{},{},hitReactionMethods};
 
 inline constexpr std::array<ComponentNumber,5> recoilNumbers{{AE_FX_NUM(Recoil,"weight","Peso",weight,0,1,.01f,"Influência",""),
   AE_FX_NUM(Recoil,"kick_angle","Levantar",kickAngle,0,60,.5f,"Recuo","graus"),AE_FX_NUM(Recoil,"kick_back","Recuar",kickBack,0,1,.005f,"Recuo","m"),
@@ -192,7 +242,8 @@ inline constexpr std::array<ComponentObjectReference,2> interactionObjectReferen
   AE_FX_REF(InteractionObject,"hand_pose","Pose da mão",handPose,Descendant,"Sem pose","Pegada")}};
 inline const ComponentType InteractionObject::descriptor{"astra.ik.interaction_object",1,AE_FX_MAKE(InteractionObject),interactionObjectNumbers,interactionObjectBooleans,{},nullptr,false,interactionObjectReferences};
 
-inline constexpr std::array<ComponentNumber,1> interactionSystemNumbers{{AE_FX_NUM(InteractionSystem,"speed","Velocidade",speed,.1f,5,.05f,"Interação","")}};
+inline constexpr std::array<ComponentNumber,2> interactionSystemNumbers{{AE_FX_NUM(InteractionSystem,"speed","Velocidade",speed,.1f,5,.05f,"Interação",""),
+  AE_FX_NUM(InteractionSystem,"limb_bones","Ossos do braço",limbBones,2,8,1,"Interação","ossos")}};
 inline constexpr std::array<ComponentBoolean,1> interactionSystemBooleans{{AE_FX_BOOL(InteractionSystem,"enabled","Ativo",enabled,"Interação")}};
 inline constexpr std::array<ComponentParameter,2> interactionStartParameters{{{"effector","Mão",ComponentValueKind::Object},{"object","Objeto",ComponentValueKind::Object}}};
 inline constexpr std::array<ComponentParameter,1> interactionStopParameters{{{"effector","Mão",ComponentValueKind::Object}}};
@@ -203,18 +254,41 @@ inline constexpr std::array<ComponentParameter,2> interactionEventPayload{{{"eff
 inline constexpr std::array<ComponentEvent,2> interactionSystemEvents{{
   {"reached","Alcançou","A mão chegou ao ponto de pegada",interactionEventPayload},
   {"released","Soltou","A mão voltou à animação",interactionEventPayload}}};
-inline const ComponentType InteractionSystem::descriptor{"astra.ik.interaction_system",1,AE_FX_MAKE(InteractionSystem),interactionSystemNumbers,interactionSystemBooleans,{},nullptr,false,{},{},{},{},{},{},interactionSystemMethods,interactionSystemEvents};
+inline const ComponentType InteractionSystem::descriptor{"astra.ik.interaction_system",2,AE_FX_MAKE(InteractionSystem),interactionSystemNumbers,interactionSystemBooleans,{},nullptr,false,{},{},{},{},{},{},interactionSystemMethods,interactionSystemEvents};
 
-inline constexpr std::array<ComponentNumber,3> fullBodyNumbers{{AE_FX_NUM(FullBodyIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
-  AE_FX_NUM(FullBodyIk,"body_pull","Puxar o corpo",bodyPull,0,1,.01f,"Corpo",""),AE_FX_NUM(FullBodyIk,"max_body_offset","Deslocamento máximo da pelve",maxBodyOffset,0,3,.01f,"Corpo","m")}};
+inline constexpr std::array<ComponentNumber,5> fullBodyNumbers{{AE_FX_NUM(FullBodyIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_FX_NUM(FullBodyIk,"body_pull","Puxar o corpo",bodyPull,0,1,.01f,"Corpo",""),AE_FX_NUM(FullBodyIk,"max_body_offset","Deslocamento máximo da pelve",maxBodyOffset,0,3,.01f,"Corpo","m"),
+  AE_FX_NUM(FullBodyIk,"spine_bend","Curvar o tronco",spineBend,0,1,.01f,"Corpo",""),AE_FX_NUM(FullBodyIk,"limb_bones","Ossos por membro",limbBones,2,8,1,"Corpo","ossos")}};
 inline constexpr std::array<ComponentBoolean,1> fullBodyBooleans{{AE_FX_BOOL(FullBodyIk,"enabled","Ativo",enabled,"Influência")}};
-inline constexpr std::array<ComponentObjectReference,9> fullBodyReferences{{
+inline constexpr std::array<ComponentObjectReference,10> fullBodyReferences{{
   AE_FX_REF(FullBodyIk,"pelvis","Pelve",pelvis,Descendant,"Escolher pelve","Corpo"),
+  AE_FX_REF(FullBodyIk,"chest","Peito",chest,Descendant,"Sem tronco","Corpo"),
   AE_FX_REF(FullBodyIk,"tip_1","Ponta 1 (mão esq.)",tips[0],Descendant,"Sem ponta","Ponta 1"),AE_FX_REF(FullBodyIk,"target_1","Alvo 1",targets[0],OtherNonDescendant,"Sem alvo","Ponta 1"),
   AE_FX_REF(FullBodyIk,"tip_2","Ponta 2 (mão dir.)",tips[1],Descendant,"Sem ponta","Ponta 2"),AE_FX_REF(FullBodyIk,"target_2","Alvo 2",targets[1],OtherNonDescendant,"Sem alvo","Ponta 2"),
   AE_FX_REF(FullBodyIk,"tip_3","Ponta 3 (pé esq.)",tips[2],Descendant,"Sem ponta","Ponta 3"),AE_FX_REF(FullBodyIk,"target_3","Alvo 3",targets[2],OtherNonDescendant,"Sem alvo","Ponta 3"),
   AE_FX_REF(FullBodyIk,"tip_4","Ponta 4 (pé dir.)",tips[3],Descendant,"Sem ponta","Ponta 4"),AE_FX_REF(FullBodyIk,"target_4","Alvo 4",targets[3],OtherNonDescendant,"Sem alvo","Ponta 4")}};
-inline const ComponentType FullBodyIk::descriptor{"astra.ik.full_body",1,AE_FX_MAKE(FullBodyIk),fullBodyNumbers,fullBodyBooleans,{},nullptr,false,fullBodyReferences};
+inline const ComponentType FullBodyIk::descriptor{"astra.ik.full_body",2,AE_FX_MAKE(FullBodyIk),fullBodyNumbers,fullBodyBooleans,{},nullptr,false,fullBodyReferences};
+inline constexpr std::array<ComponentNumber,3> fabrikRootNumbers{{AE_FX_NUM(FabrikRoot,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_FX_NUM(FabrikRoot,"root_pin","Fixar raiz",rootPin,0,1,.01f,"Raiz",""),AE_FX_NUM(FabrikRoot,"iterations","Iterações",iterations,1,64,1,"Raiz","")}};
+inline constexpr std::array<ComponentBoolean,1> fabrikRootBooleans{{AE_FX_BOOL(FabrikRoot,"enabled","Ativo",enabled,"Influência")}};
+inline constexpr std::array<ComponentObjectReference,8> fabrikRootReferences{{
+  AE_FX_REF(FabrikRoot,"tip_1","Ponta 1",tips[0],Descendant,"Sem ponta","Cadeia 1"),AE_FX_REF(FabrikRoot,"target_1","Alvo 1",targets[0],OtherNonDescendant,"Sem alvo","Cadeia 1"),
+  AE_FX_REF(FabrikRoot,"tip_2","Ponta 2",tips[1],Descendant,"Sem ponta","Cadeia 2"),AE_FX_REF(FabrikRoot,"target_2","Alvo 2",targets[1],OtherNonDescendant,"Sem alvo","Cadeia 2"),
+  AE_FX_REF(FabrikRoot,"tip_3","Ponta 3",tips[2],Descendant,"Sem ponta","Cadeia 3"),AE_FX_REF(FabrikRoot,"target_3","Alvo 3",targets[2],OtherNonDescendant,"Sem alvo","Cadeia 3"),
+  AE_FX_REF(FabrikRoot,"tip_4","Ponta 4",tips[3],Descendant,"Sem ponta","Cadeia 4"),AE_FX_REF(FabrikRoot,"target_4","Alvo 4",targets[3],OtherNonDescendant,"Sem alvo","Cadeia 4")}};
+inline const ComponentType FabrikRoot::descriptor{"astra.ik.fabrik_root",1,AE_FX_MAKE(FabrikRoot),fabrikRootNumbers,fabrikRootBooleans,{},nullptr,false,fabrikRootReferences};
+
+inline constexpr std::array<ComponentNumber,4> bodyByTargetsNumbers{{AE_FX_NUM(BodyByTargets,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_FX_NUM(BodyByTargets,"body_follow","Corpo segue a cabeça",bodyFollow,0,1,.01f,"Corpo",""),AE_FX_NUM(BodyByTargets,"spine_bend","Curvar o tronco",spineBend,0,1,.01f,"Corpo",""),
+  AE_FX_NUM(BodyByTargets,"max_body_offset","Deslocamento máximo da pelve",maxBodyOffset,0,5,.01f,"Corpo","m")}};
+inline constexpr std::array<ComponentBoolean,2> bodyByTargetsBooleans{{AE_FX_BOOL(BodyByTargets,"enabled","Ativo",enabled,"Influência"),
+  AE_FX_BOOL(BodyByTargets,"head_rotation","Cabeça copia a rotação do alvo",headRotation,"Cabeça")}};
+inline constexpr std::array<ComponentObjectReference,8> bodyByTargetsReferences{{
+  AE_FX_REF(BodyByTargets,"pelvis","Pelve",pelvis,Descendant,"Escolher pelve","Corpo"),AE_FX_REF(BodyByTargets,"chest","Peito",chest,Descendant,"Sem tronco","Corpo"),
+  AE_FX_REF(BodyByTargets,"head","Cabeça",head,Descendant,"Escolher cabeça","Cabeça"),AE_FX_REF(BodyByTargets,"head_target","Alvo da cabeça",headTarget,OtherNonDescendant,"Sem alvo","Cabeça"),
+  AE_FX_REF(BodyByTargets,"left_hand","Mão esquerda",leftHand,Descendant,"Sem mão","Mãos"),AE_FX_REF(BodyByTargets,"left_target","Alvo esquerdo",leftTarget,OtherNonDescendant,"Sem alvo","Mãos"),
+  AE_FX_REF(BodyByTargets,"right_hand","Mão direita",rightHand,Descendant,"Sem mão","Mãos"),AE_FX_REF(BodyByTargets,"right_target","Alvo direito",rightTarget,OtherNonDescendant,"Sem alvo","Mãos")}};
+inline const ComponentType BodyByTargets::descriptor{"astra.ik.body_by_targets",1,AE_FX_MAKE(BodyByTargets),bodyByTargetsNumbers,bodyByTargetsBooleans,{},nullptr,false,bodyByTargetsReferences};
 #undef AE_FX_NUM
 #undef AE_FX_BOOL
 #undef AE_FX_ENUM

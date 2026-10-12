@@ -232,6 +232,7 @@ public:
     scripts_.setAnimatorGraphs(&animatorGraphs_);
     scripts_.setNavigation(&navigation_);
     scripts_.setIk(&ik_);
+    ik_.setBodyMover([this](runtime::ObjectId body,const float pose[7]) {return physics_.moveKinematic(body,pose);});
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);

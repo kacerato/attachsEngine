@@ -597,6 +597,40 @@
    "searchTerms": "Full Body Biped IK FABRIK Root Corpo Inteiro",
    "reference": "https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html",
    "apiName": "FullBodyIk"
+  },
+  {
+   "type": "FabrikRoot",
+   "name": "FABRIK em árvore",
+   "description": "Várias cadeias com raiz comum resolvidas juntas",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/fabrik-root",
+   "searchTerms": "FABRIK Root Árvore Tentáculo Garra Aranha Multi Chain",
+   "reference": "https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html",
+   "apiName": "FabrikRoot"
+  },
+  {
+   "type": "BodyByTargets",
+   "name": "Corpo por alvos (VRIK)",
+   "description": "Cabeça e mãos seguem alvos; pelve e tronco acompanham",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/body-by-targets",
+   "searchTerms": "VRIK VR IK Corpo Alvos Cabeça Mãos Avatar Tracking",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html",
+   "apiName": "BodyByTargets"
   }
  ],
  "defaults": {

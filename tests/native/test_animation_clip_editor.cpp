@@ -1741,6 +1741,26 @@ AE_TEST(animation_studio_transfers_clip_to_another_character_with_different_rest
 }
 
 
+AE_TEST(animation_studio_ik_wizard_reads_unnamed_skeletons_by_structure) {
+  using namespace editor;
+  TemporaryProject project;EditorSession session;std::string error,summary;
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto bot=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Bot");
+  const auto core=doc.createEntity(bot,EditorEntityKind::Folder,"J0");
+  const auto up1=doc.createEntity(core,EditorEntityKind::Folder,"J1");const auto top=doc.createEntity(up1,EditorEntityKind::Folder,"J2");
+  const auto a1=doc.createEntity(up1,EditorEntityKind::Folder,"J3");const auto a2=doc.createEntity(a1,EditorEntityKind::Folder,"J4");const auto a3=doc.createEntity(a2,EditorEntityKind::Folder,"J5");
+  const auto l1=doc.createEntity(core,EditorEntityKind::Folder,"J6");const auto l2=doc.createEntity(l1,EditorEntityKind::Folder,"J7");const auto l3=doc.createEntity(l2,EditorEntityKind::Folder,"J8");
+  runtime::Transform t;t.position[1]=1;doc.setTransform(core,t);
+  runtime::Transform u;u.position[1]=.5f;doc.setTransform(up1,u);doc.setTransform(top,u);
+  runtime::Transform s;s.position[0]=.3f;doc.setTransform(a1,s);runtime::Transform d;d.position[1]=-.25f;d.position[2]=.05f;doc.setTransform(a2,d);doc.setTransform(a3,d);
+  runtime::Transform ld;ld.position[1]=-.5f;ld.position[2]=.02f;doc.setTransform(l1,ld);doc.setTransform(l2,ld);doc.setTransform(l3,ld);
+  AE_EXPECT_TRUE(EditorStudio::setupIk(session,bot,summary,error),error.c_str());
+  AE_EXPECT_TRUE(summary.find("Pela estrutura")!=std::string::npos,summary.c_str());
+  AE_EXPECT_TRUE(doc.find(a3)->components.find(scene::TwoBoneIk::descriptor)&&doc.find(l3)->components.find(scene::FootGrounding::descriptor)&&
+                 doc.find(top)->components.find(scene::LookAtIk::descriptor)&&doc.find(bot)->components.find(scene::GrounderBody::descriptor),summary.c_str());
+}
+
 AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   using namespace editor;
   TemporaryProject project;EditorSession session;std::string error,summary;
@@ -1760,7 +1780,9 @@ AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   runtime::Transform t;t.position[1]=2;doc.setTransform(hip,t);
   runtime::Transform up;up.position[1]=.6f;doc.setTransform(spine,up);doc.setTransform(head,up);
   runtime::Transform side;side.position[0]=.3f;doc.setTransform(upper,side);
-  runtime::Transform down;down.position[1]=-.45f;down.position[2]=.2f;doc.setTransform(fore,down);doc.setTransform(hand,down);
+  // Cotovelo dobrado: a ponta fixa precisa ficar alcancavel enquanto o quadril anda.
+  runtime::Transform down;down.position[1]=-.45f;down.position[2]=.2f;doc.setTransform(fore,down);
+  runtime::Transform back;back.position[1]=-.45f;back.position[2]=-.2f;doc.setTransform(hand,back);
   runtime::Transform legDown;legDown.position[1]=-.7f;legDown.position[2]=.05f;doc.setTransform(leg1,legDown);doc.setTransform(leg2,legDown);doc.setTransform(foot,legDown);
   runtime::Transform p;p.position[0]=1;doc.setTransform(prop,p);
   // Assistente: tudo numa operacao, desfeita de uma vez.
@@ -1782,7 +1804,7 @@ AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   AE_EXPECT_TRUE(session.seekAnimationClip(1,error),error.c_str());session.update();
   float after[16];runtime::worldMatrix(session.evaluatedEditorScene(),hand,after);
   {char pinMessage[200];std::snprintf(pinMessage,sizeof pinMessage,"pinned tip stays fixed while the hip moves: before %.3f %.3f %.3f after %.3f %.3f %.3f",before[12],before[13],before[14],after[12],after[13],after[14]);
-  AE_EXPECT_TRUE(std::abs(after[12]-before[12])<2e-2f&&std::abs(after[13]-before[13])<2e-2f&&std::abs(after[14]-before[14])<2e-2f,pinMessage);}
+  AE_EXPECT_TRUE(std::abs(after[12]-before[12])<2e-3f&&std::abs(after[13]-before[13])<2e-3f&&std::abs(after[14]-before[14])<2e-3f,(std::string(pinMessage)+" "+summary).c_str());}
   // Seguir: o graveto acompanha a mao mantendo a distancia.
   AE_EXPECT_TRUE(session.seekAnimationClip(0,error),error.c_str());
   float hand0[16],prop0[16];runtime::worldMatrix(session.evaluatedEditorScene(),hip,hand0);runtime::worldMatrix(session.evaluatedEditorScene(),prop,prop0);

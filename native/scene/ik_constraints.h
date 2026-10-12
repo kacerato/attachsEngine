@@ -20,25 +20,31 @@ template<class T> inline bool ikNumbersValid(const T &v) {
 
 class TwoBoneIk final : public ComponentValue {
 public:
-  u64 target=0,pole=0;bool enabled=true,matchTargetRotation=false;float weight=1;
+  u64 target=0,pole=0;bool enabled=true,matchTargetRotation=false;float weight=1,priority=0;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<TwoBoneIk>(*this);}
   bool valid() const override {return target<=std::numeric_limits<u32>::max()&&pole<=std::numeric_limits<u32>::max()&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<target<<' '<<pole<<' '<<enabled<<' '<<matchTargetRotation<<' '<<weight;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>target>>pole>>enabled>>matchTargetRotation>>weight)&&valid();}
+  void write(std::ostream &out) const override {out<<target<<' '<<pole<<' '<<enabled<<' '<<matchTargetRotation<<' '<<weight<<' '<<priority;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>target>>pole>>enabled>>matchTargetRotation>>weight))return false;
+    priority=0;return (version==1||static_cast<bool>(in>>priority))&&valid();
+  }
 };
 
 enum class ChainIkSolverKind : u32 { Ccd=0, Fabrik=1 };
 class ChainIk final : public ComponentValue {
 public:
-  u64 target=0;bool enabled=true;float weight=1,chainLength=3,iterations=12,tolerance=.001f;u32 solver=1;
+  u64 target=0;bool enabled=true;float weight=1,chainLength=3,iterations=12,tolerance=.001f,priority=0;u32 solver=1;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<ChainIk>(*this);}
   bool valid() const override {return target<=std::numeric_limits<u32>::max()&&solver<=1&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<chainLength<<' '<<iterations<<' '<<tolerance<<' '<<solver;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>target>>enabled>>weight>>chainLength>>iterations>>tolerance>>solver)&&valid();}
+  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<chainLength<<' '<<iterations<<' '<<tolerance<<' '<<solver<<' '<<priority;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>target>>enabled>>weight>>chainLength>>iterations>>tolerance>>solver))return false;
+    priority=0;return (version==1||static_cast<bool>(in>>priority))&&valid();
+  }
 };
 
 // Apoio do pe no chao: raio para baixo a partir do pe, pela fisica real.
@@ -58,16 +64,18 @@ public:
 #define AE_IK_NUM(T,id,label,member,lo,hi,step,group,unit) ComponentNumber{label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).member;},[](ComponentValue&v){return &static_cast<T&>(v).member;},id,{group,unit}}
 #define AE_IK_BOOL(T,id,label,member,group) ComponentBoolean{id,label,[](const ComponentValue&v){return static_cast<const T&>(v).member;},[](ComponentValue&v,bool n){static_cast<T&>(v).member=n;},{group}}
 
-inline constexpr std::array<ComponentNumber,1> twoBoneIkNumbers{{AE_IK_NUM(TwoBoneIk,"weight","Peso",weight,0,1,.01f,"Influência","")}};
+inline constexpr std::array<ComponentNumber,2> twoBoneIkNumbers{{AE_IK_NUM(TwoBoneIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_IK_NUM(TwoBoneIk,"priority","Prioridade",priority,-100,100,1,"Influência","")}};
 inline constexpr std::array<ComponentBoolean,2> twoBoneIkBooleans{{AE_IK_BOOL(TwoBoneIk,"enabled","Ativo",enabled,"Influência"),
   AE_IK_BOOL(TwoBoneIk,"match_target_rotation","Ponta segue rotação do alvo",matchTargetRotation,"Alvo")}};
 inline constexpr std::array<ComponentObjectReference,2> twoBoneIkReferences{{
   {"target","Alvo","",ObjectReferenceScope::OtherNonDescendant,"Escolher alvo",[](const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).target;},[](ComponentValue &v,u64 n){static_cast<TwoBoneIk&>(v).target=n;},{"Alvo"}},
   {"pole","Direção da dobra","",ObjectReferenceScope::OtherNonDescendant,"Seguir a pose",[](const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).pole;},[](ComponentValue &v,u64 n){static_cast<TwoBoneIk&>(v).pole=n;},{"Alvo"}}}};
-inline const ComponentType TwoBoneIk::descriptor{"astra.ik.two_bone",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TwoBoneIk>();},twoBoneIkNumbers,twoBoneIkBooleans,{},nullptr,false,twoBoneIkReferences};
+inline const ComponentType TwoBoneIk::descriptor{"astra.ik.two_bone",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TwoBoneIk>();},twoBoneIkNumbers,twoBoneIkBooleans,{},nullptr,false,twoBoneIkReferences};
 
-inline constexpr std::array<ComponentNumber,4> chainIkNumbers{{
+inline constexpr std::array<ComponentNumber,5> chainIkNumbers{{
   AE_IK_NUM(ChainIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_IK_NUM(ChainIk,"priority","Prioridade",priority,-100,100,1,"Influência",""),
   AE_IK_NUM(ChainIk,"chain_length","Ossos na cadeia",chainLength,2,32,1,"Cadeia","ossos"),
   AE_IK_NUM(ChainIk,"iterations","Iterações máximas",iterations,1,128,1,"Solver",""),
   AE_IK_NUM(ChainIk,"tolerance","Tolerância",tolerance,.00001f,1,.0005f,"Solver","m")}};
@@ -76,7 +84,7 @@ inline constexpr std::array<ComponentEnumOption,2> chainIkSolverOptions{{{0,"CCD
 inline constexpr std::array<ComponentEnum,1> chainIkEnums{{{"solver","Solver",chainIkSolverOptions,[](const ComponentValue &v){return static_cast<const ChainIk&>(v).solver;},[](ComponentValue &v,u32 n){static_cast<ChainIk&>(v).solver=n;},{"Solver"}}}};
 inline constexpr std::array<ComponentObjectReference,1> chainIkReferences{{
   {"target","Alvo","",ObjectReferenceScope::OtherNonDescendant,"Escolher alvo",[](const ComponentValue &v){return static_cast<const ChainIk&>(v).target;},[](ComponentValue &v,u64 n){static_cast<ChainIk&>(v).target=n;},{"Alvo"}}}};
-inline const ComponentType ChainIk::descriptor{"astra.ik.chain",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ChainIk>();},chainIkNumbers,chainIkBooleans,chainIkEnums,nullptr,false,chainIkReferences};
+inline const ComponentType ChainIk::descriptor{"astra.ik.chain",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ChainIk>();},chainIkNumbers,chainIkBooleans,chainIkEnums,nullptr,false,chainIkReferences};
 
 inline constexpr std::array<ComponentNumber,5> footGroundingNumbers{{
   AE_IK_NUM(FootGrounding,"weight","Peso",weight,0,1,.01f,"Influência",""),
@@ -97,25 +105,31 @@ inline constexpr std::array<ComponentEnumOption,6> ikAxisOptions{{{0,"+X"},{1,"+
 // corpo distribuido pela coluna e peso proprio da cabeca; limite de angulo.
 class LookAtIk final : public ComponentValue {
 public:
-  u64 target=0;bool enabled=true;float weight=1,bodyWeight=.4f,headWeight=1,chainLength=3,clampAngle=90;u32 axis=2;
+  u64 target=0;bool enabled=true;float weight=1,bodyWeight=.4f,headWeight=1,chainLength=3,clampAngle=90,priority=0;u32 axis=2;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<LookAtIk>(*this);}
   bool valid() const override {return target<=std::numeric_limits<u32>::max()&&axis<=5&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<bodyWeight<<' '<<headWeight<<' '<<chainLength<<' '<<clampAngle<<' '<<axis;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>target>>enabled>>weight>>bodyWeight>>headWeight>>chainLength>>clampAngle>>axis)&&valid();}
+  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<bodyWeight<<' '<<headWeight<<' '<<chainLength<<' '<<clampAngle<<' '<<axis<<' '<<priority;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>target>>enabled>>weight>>bodyWeight>>headWeight>>chainLength>>clampAngle>>axis))return false;
+    priority=0;return (version==1||static_cast<bool>(in>>priority))&&valid();
+  }
 };
 // Aim: este objeto (cano, mao, ferramenta) aponta o eixo para o alvo girando
 // os N ossos acima, com iteracoes; o peso cai do topo para a base.
 class AimIk final : public ComponentValue {
 public:
-  u64 target=0;bool enabled=true;float weight=1,chainLength=2,iterations=4,falloff=.5f;u32 axis=2;
+  u64 target=0;bool enabled=true;float weight=1,chainLength=2,iterations=4,falloff=.5f,priority=0;u32 axis=2;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<AimIk>(*this);}
   bool valid() const override {return target<=std::numeric_limits<u32>::max()&&axis<=5&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<chainLength<<' '<<iterations<<' '<<falloff<<' '<<axis;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>target>>enabled>>weight>>chainLength>>iterations>>falloff>>axis)&&valid();}
+  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<chainLength<<' '<<iterations<<' '<<falloff<<' '<<axis<<' '<<priority;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>target>>enabled>>weight>>chainLength>>iterations>>falloff>>axis))return false;
+    priority=0;return (version==1||static_cast<bool>(in>>priority))&&valid();
+  }
 };
 // Limite de rotacao do osso, aplicado depois dos solvers aos ossos escritos.
 // Referencia = rotacao local do osso ao entrar em Play.
@@ -180,21 +194,23 @@ public:
 #define AE_IK_ENUM(T,id,label,options,member,group) ComponentEnum{id,label,options,[](const ComponentValue &v){return static_cast<const T&>(v).member;},[](ComponentValue &v,u32 n){static_cast<T&>(v).member=n;},{group}}
 #define AE_IK_REF(T,id,label,member,none,group) ComponentObjectReference{id,label,"",ObjectReferenceScope::OtherNonDescendant,none,[](const ComponentValue &v){return static_cast<const T&>(v).member;},[](ComponentValue &v,u64 n){static_cast<T&>(v).member=n;},{group}}
 
-inline constexpr std::array<ComponentNumber,5> lookAtIkNumbers{{AE_IK_NUM(LookAtIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+inline constexpr std::array<ComponentNumber,6> lookAtIkNumbers{{AE_IK_NUM(LookAtIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_IK_NUM(LookAtIk,"priority","Prioridade",priority,-100,100,1,"Influência",""),
   AE_IK_NUM(LookAtIk,"body_weight","Peso do corpo",bodyWeight,0,1,.01f,"Distribuição",""),AE_IK_NUM(LookAtIk,"head_weight","Peso da cabeça",headWeight,0,1,.01f,"Distribuição",""),
   AE_IK_NUM(LookAtIk,"chain_length","Ossos na cadeia",chainLength,1,16,1,"Distribuição","ossos"),AE_IK_NUM(LookAtIk,"clamp_angle","Ângulo máximo",clampAngle,0,180,1,"Limite","graus")}};
 inline constexpr std::array<ComponentBoolean,1> lookAtIkBooleans{{AE_IK_BOOL(LookAtIk,"enabled","Ativo",enabled,"Influência")}};
 inline constexpr std::array<ComponentEnum,1> lookAtIkEnums{{AE_IK_ENUM(LookAtIk,"axis","Eixo frontal",ikAxisOptions,axis,"Distribuição")}};
 inline constexpr std::array<ComponentObjectReference,1> lookAtIkReferences{{AE_IK_REF(LookAtIk,"target","Alvo",target,"Escolher alvo","Alvo")}};
-inline const ComponentType LookAtIk::descriptor{"astra.ik.look_at",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<LookAtIk>();},lookAtIkNumbers,lookAtIkBooleans,lookAtIkEnums,nullptr,false,lookAtIkReferences};
+inline const ComponentType LookAtIk::descriptor{"astra.ik.look_at",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<LookAtIk>();},lookAtIkNumbers,lookAtIkBooleans,lookAtIkEnums,nullptr,false,lookAtIkReferences};
 
-inline constexpr std::array<ComponentNumber,4> aimIkNumbers{{AE_IK_NUM(AimIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+inline constexpr std::array<ComponentNumber,5> aimIkNumbers{{AE_IK_NUM(AimIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_IK_NUM(AimIk,"priority","Prioridade",priority,-100,100,1,"Influência",""),
   AE_IK_NUM(AimIk,"chain_length","Ossos na cadeia",chainLength,1,16,1,"Cadeia","ossos"),AE_IK_NUM(AimIk,"iterations","Iterações",iterations,1,32,1,"Cadeia",""),
   AE_IK_NUM(AimIk,"falloff","Queda do peso para a base",falloff,0,1,.01f,"Cadeia","")}};
 inline constexpr std::array<ComponentBoolean,1> aimIkBooleans{{AE_IK_BOOL(AimIk,"enabled","Ativo",enabled,"Influência")}};
 inline constexpr std::array<ComponentEnum,1> aimIkEnums{{AE_IK_ENUM(AimIk,"axis","Eixo de mira",ikAxisOptions,axis,"Cadeia")}};
 inline constexpr std::array<ComponentObjectReference,1> aimIkReferences{{AE_IK_REF(AimIk,"target","Alvo",target,"Escolher alvo","Alvo")}};
-inline const ComponentType AimIk::descriptor{"astra.ik.aim",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<AimIk>();},aimIkNumbers,aimIkBooleans,aimIkEnums,nullptr,false,aimIkReferences};
+inline const ComponentType AimIk::descriptor{"astra.ik.aim",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<AimIk>();},aimIkNumbers,aimIkBooleans,aimIkEnums,nullptr,false,aimIkReferences};
 
 inline constexpr std::array<ComponentEnumOption,3> rotationLimitKinds{{{0,"Livre"},{1,"Dobradiça"},{2,"Cone e torção"}}};
 inline constexpr std::array<ComponentEnumOption,3> rotationLimitAxes{{{0,"X"},{1,"Y"},{2,"Z"}}};

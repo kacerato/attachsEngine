@@ -38,21 +38,37 @@ public:
     const double now=world.elapsedSeconds();
     dt_=lastTime_<0?1.f/60:static_cast<float>(std::clamp(now-lastTime_,0.0,.1));lastTime_=now;
     ground_=&ground;
-    // Ordem fixa e documentada: amplificador -> corpo/pelve -> corpo inteiro ->
-    // membros e pes -> interacao -> poser -> mira -> olhar -> inclinacao ->
+    // Ordem por etapas, documentada: amplificador -> corpo por alvos (VRIK) ->
+    // grounder -> corpo inteiro -> FABRIK em arvore -> membros e pes -> interacao -> poser -> mira -> olhar -> inclinacao ->
     // inercia -> golpes e recuos -> dedos -> torcao -> limites.
     // Cada etapa parte do resultado da anterior.
+    // Dentro de cada etapa, Prioridade maior resolve primeiro (empate: ordem
+    // da hierarquia); quem resolve depois tem a palavra final nos ossos comuns.
     const auto each=[&](const scene::ComponentType &type,const auto &run) {
+      std::vector<std::pair<float,ObjectId>> ordered;
       for(const auto id:candidates_) {
         const auto *o=world.graph().find(id);if(!o||!world.graph().activeInHierarchy(id))continue;
-        if(const auto *c=o->components.find(type))run(id,*c);
+        if(const auto *c=o->components.find(type))ordered.push_back({priorityOf(*c),id});
       }
+      std::stable_sort(ordered.begin(),ordered.end(),[](const auto &x,const auto &y){return x.first>y.first;});
+      for(const auto &[priority,id]:ordered) {(void)priority;run(id,*world.graph().find(id)->components.find(type));}
     };
     each(scene::Amplifier::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::Amplifier&>(v);if(c.enabled&&c.weight>0)amplify(world,id,c,touched);});
+    each(scene::BodyByTargets::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::BodyByTargets&>(v);if(c.enabled&&c.weight>0)bodyByTargets(world,id,c,touched);});
     grounderBodies(world,ground,touched);
     each(scene::FullBodyIk::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::FullBodyIk&>(v);if(c.enabled&&c.weight>0)fullBody(world,id,c,touched);});
+    each(scene::FabrikRoot::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::FabrikRoot&>(v);if(c.enabled&&c.weight>0)fabrikRoot(world,id,c,touched);});
+    std::vector<std::pair<float,ObjectId>> limbs;
     for(const auto id:candidates_) {
       const auto *o=world.graph().find(id);if(!o||!world.graph().activeInHierarchy(id))continue;
+      float priority=0;
+      if(const auto *c=o->components.find(scene::TwoBoneIk::descriptor))priority=std::max(priority,priorityOf(*c));
+      if(const auto *c=o->components.find(scene::ChainIk::descriptor))priority=std::max(priority,priorityOf(*c));
+      limbs.push_back({priority,id});
+    }
+    std::stable_sort(limbs.begin(),limbs.end(),[](const auto &x,const auto &y){return x.first>y.first;});
+    for(const auto &[limbPriority,id]:limbs) {
+      (void)limbPriority;const auto *o=world.graph().find(id);
       if(const auto *c=static_cast<const scene::TwoBoneIk*>(o->components.find(scene::TwoBoneIk::descriptor));c&&c->enabled&&c->weight>0)
         twoBone(world,id,*c,touched);
       if(const auto *c=static_cast<const scene::ChainIk*>(o->components.find(scene::ChainIk::descriptor));c&&c->enabled&&c->weight>0)
@@ -82,12 +98,17 @@ public:
   }
 
 private:
-  static std::array<const scene::ComponentType*,19> types() {
+  static float priorityOf(const scene::ComponentValue &value) {
+    for(const auto &n:value.type().numbers)if(n.id=="priority")return n.read(value);
+    return 0;
+  }
+  static std::array<const scene::ComponentType*,21> types() {
     return {&scene::TwoBoneIk::descriptor,&scene::ChainIk::descriptor,&scene::FootGrounding::descriptor,&scene::LookAtIk::descriptor,
             &scene::AimIk::descriptor,&scene::RotationLimit::descriptor,&scene::GrounderBody::descriptor,&scene::FingerCurl::descriptor,
             &scene::IkOffset::descriptor,&scene::TwistRelaxer::descriptor,&scene::HitReaction::descriptor,&scene::Recoil::descriptor,
             &scene::Inertia::descriptor,&scene::Amplifier::descriptor,&scene::BodyTilt::descriptor,&scene::HandPoser::descriptor,
-            &scene::PenetrationAvoidance::descriptor,&scene::InteractionSystem::descriptor,&scene::FullBodyIk::descriptor};
+            &scene::PenetrationAvoidance::descriptor,&scene::InteractionSystem::descriptor,&scene::FullBodyIk::descriptor,
+            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor};
   }
   struct Cache {Transform input{},output{};};
   std::map<ObjectId,Cache> cache_;
@@ -161,22 +182,31 @@ private:
     float target[3];if(!targetPosition(world,c.target,target)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
     applyOffset(world.graph(),id,target);
     avoidPenetration(world,id,static_cast<u32>(c.chainLength),target);
-    const u32 bones=static_cast<u32>(c.chainLength);
+    solveChainTo(world,id,static_cast<u32>(c.chainLength),target,c.weight,touched,c.solver==1?ChainIkSolver::Fabrik:ChainIkSolver::Ccd,static_cast<u32>(c.iterations),c.tolerance);
+  }
+  // Cadeia de N ossos acima da ponta ate o alvo (peso interpola o alvo).
+  bool solveChainTo(GameWorld &world,ObjectId id,u32 bones,const float target[3],float weight,std::map<ObjectId,bool> &touched,
+                    ChainIkSolver solver=ChainIkSolver::Fabrik,u32 iterations=16,float tolerance=.001f) {
     std::vector<ObjectId> joints{id};
     for(u32 i=0;i<bones;++i) {
       const auto *o=world.graph().find(joints.back());
-      if(!o||o->parent==world.graph().root()||!world.graph().find(o->parent)) {diagnostics_.push_back({id,Issue::ShortChain});return;}
+      if(!o||o->parent==world.graph().root()||!world.graph().find(o->parent)) {diagnostics_.push_back({id,Issue::ShortChain});return false;}
       joints.push_back(o->parent);
     }
     std::reverse(joints.begin(),joints.end());
     for(usize i=0;i+1<joints.size();++i)beginBone(world,joints[i],touched);
     std::vector<std::array<float,16>> worlds(joints.size()),solved;
-    for(usize i=0;i<joints.size();++i)if(!worldMatrix(world.graph(),joints[i],worlds[i].data())) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
-    const float goal[3]{worlds.back()[12]+(target[0]-worlds.back()[12])*c.weight,worlds.back()[13]+(target[1]-worlds.back()[13])*c.weight,worlds.back()[14]+(target[2]-worlds.back()[14])*c.weight};
+    for(usize i=0;i<joints.size();++i)if(!worldMatrix(world.graph(),joints[i],worlds[i].data())) {diagnostics_.push_back({id,Issue::InvalidPose});return false;}
+    const float goal[3]{worlds.back()[12]+(target[0]-worlds.back()[12])*weight,worlds.back()[13]+(target[1]-worlds.back()[13])*weight,worlds.back()[14]+(target[2]-worlds.back()[14])*weight};
     ChainIkResult result;
-    if(!solveChainIk(c.solver==1?ChainIkSolver::Fabrik:ChainIkSolver::Ccd,worlds,goal,static_cast<u32>(c.iterations),c.tolerance,solved,result)) {diagnostics_.push_back({id,Issue::Degenerate});return;}
-    for(usize i=0;i+1<joints.size();++i)if(!writeBone(world,joints[i],solved[i].data(),1)) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
+    if(!solveChainIk(solver,worlds,goal,iterations,tolerance,solved,result)) {diagnostics_.push_back({id,Issue::Degenerate});return false;}
+    for(usize i=0;i+1<joints.size();++i)if(!writeBone(world,joints[i],solved[i].data(),1)) {diagnostics_.push_back({id,Issue::InvalidPose});return false;}
     if(!result.converged)diagnostics_.push_back({id,Issue::NotConverged,result.residual});
+    return true;
+  }
+  // Membro de N ossos: dois ossos usa o solver analitico; mais usa FABRIK.
+  bool solveMember(GameWorld &world,ObjectId tip,u32 bones,const float target[3],float weight,std::map<ObjectId,bool> &touched) {
+    return bones<=2?solveLimb(world,tip,target,nullptr,weight,touched):solveChainTo(world,tip,bones,target,weight,touched);
   }
   void grounding(GameWorld &world,ObjectId id,const scene::FootGrounding &c,const GroundQuery &ground,std::map<ObjectId,bool> &touched) {
     if(!ground) {diagnostics_.push_back({id,Issue::NoGround});return;}
@@ -388,6 +418,14 @@ public:
     Impulse impulse;impulse.id=id;impulse.recoil=true;impulse.magnitude=magnitude;impulse.duration=c->duration;
     impulses_.push_back(impulse);return WorldStatus::Ok;
   }
+  WorldStatus hitFront(GameWorld &world,ObjectId id,float force) {
+    if(!world.running())return WorldStatus::NotRunning;
+    const auto *c=component<scene::HitReaction>(world,id);if(!c)return WorldStatus::ComponentMissing;
+    float m[16];if(!worldMatrix(world.graph(),id,m))return WorldStatus::Rejected;
+    float front[3];ikAxisWorld(m,c->axis,front);
+    const float direction[3]{-front[0],-front[1],-front[2]};
+    return hit(world,id,direction,force);
+  }
   void collision(GameWorld &world,ObjectId id,const float normal[3]) {
     const auto *c=component<scene::HitReaction>(world,id);
     if(!c||!c->enabled||!c->reactToCollisions||!finite3(normal)||length3(normal)<1e-6f)return;
@@ -401,8 +439,8 @@ public:
     const auto *s=component<scene::InteractionSystem>(world,system);if(!s)return WorldStatus::ComponentMissing;
     if(!s->enabled)return WorldStatus::Ok;
     const auto &g=world.graph();
-    const auto *e=g.find(effector);const auto *m=e?g.find(e->parent):nullptr;const auto *r=m?g.find(m->parent):nullptr;
-    const bool limb=r&&m->id!=g.root()&&r->id!=g.root()&&g.isDescendantOf(effector,system);
+    std::vector<ObjectId> member;
+    const bool limb=g.find(effector)&&g.isDescendantOf(effector,system)&&ancestors(g,effector,static_cast<u32>(s->limbBones),member);
     if(!limb||!component<scene::InteractionObject>(world,object)) {diagnostics_.push_back({system,Issue::NotInteractable});return WorldStatus::Ok;}
     for(auto it=interactions_.begin();it!=interactions_.end();++it)
       if(it->system==system&&it->effector==effector) {dropHeld(world,*it);interactions_.erase(it);break;}
@@ -422,12 +460,17 @@ public:
     return WorldStatus::Ok;
   }
   std::vector<Event> takeEvents() {std::vector<Event> out;out.swap(events_);return out;}
+  void setBodyMover(BodyMover mover) {mover_=std::move(mover);}
 private:
   struct Impulse {ObjectId id=0;bool recoil=false;float direction[3]{},magnitude=1,time=0,duration=.3f;};
   struct Spring {float position[3]{},velocity[3]{};};
   struct Tilt {float yaw=0,angle=0;};
   // phase: 0 alcancando, 1 segurando, 2 soltando, 3 carregando (pego, IK solto).
-  struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0;float time=0,weight=0,releaseFrom=1;bool held=false;};
+  // Objeto com corpo fisico: em vez de mudar de pai, vira cinematico e segue a
+  // mao pela pose relativa capturada na pegada (physical); volta ao movimento
+  // original ao soltar.
+  struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0,originalMotion=2;float time=0,weight=0,releaseFrom=1;bool held=false,physical=false;float offset[16]{};};
+  BodyMover mover_;
   std::vector<Impulse> impulses_;
   std::map<ObjectId,Spring> springs_;
   std::map<ObjectId,Tilt> tilts_;
@@ -493,12 +536,16 @@ private:
       const ObjectId tip=static_cast<ObjectId>(c.tips[i]);if(!tip||!c.targets[i])continue;
       float target[3];if(!targetPosition(world,c.targets[i],target)) {diagnostics_.push_back({tip,Issue::MissingTarget});continue;}
       applyOffset(world.graph(),tip,target);
-      const auto *e=world.graph().find(tip);const auto *m=e?world.graph().find(e->parent):nullptr;const auto *r=m?world.graph().find(m->parent):nullptr;
-      if(!r||m->id==world.graph().root()||r->id==world.graph().root()) {diagnostics_.push_back({tip,Issue::ShortChain});continue;}
-      float rw[16],mw[16],tw[16];
-      if(!worldMatrix(world.graph(),r->id,rw)||!worldMatrix(world.graph(),m->id,mw)||!worldMatrix(world.graph(),tip,tw))continue;
-      const float upper[3]{mw[12]-rw[12],mw[13]-rw[13],mw[14]-rw[14]},lower[3]{tw[12]-mw[12],tw[13]-mw[13],tw[14]-mw[14]};
-      const float reach=(length3(upper)+length3(lower))*.999f;
+      std::vector<ObjectId> member;
+      if(!ancestors(world.graph(),tip,static_cast<u32>(c.limbBones),member)) {diagnostics_.push_back({tip,Issue::ShortChain});continue;}
+      member.push_back(tip);
+      float rw[16];if(!worldMatrix(world.graph(),member.front(),rw))continue;
+      float reach=0;
+      for(usize k=0;k+1<member.size();++k) {
+        float a[16],b[16];if(!worldMatrix(world.graph(),member[k],a)||!worldMatrix(world.graph(),member[k+1],b))continue;
+        const float d[3]{b[12]-a[12],b[13]-a[13],b[14]-a[14]};reach+=length3(d);
+      }
+      reach*=.999f;
       const float toTarget[3]{target[0]-rw[12],target[1]-rw[13],target[2]-rw[14]};const float d=length3(toTarget);
       if(d>reach&&d>1e-6f) {for(u32 k=0;k<3;++k)pull[k]+=toTarget[k]/d*(d-reach);++count;}
       effectors.push_back({tip,{target[0],target[1],target[2]}});
@@ -512,7 +559,131 @@ private:
         if(!writeWorld(world,pelvis,m))diagnostics_.push_back({id,Issue::InvalidPose});
       }
     }
-    for(const auto &e:effectors)solveLimb(world,e.tip,e.target,nullptr,c.weight,touched);
+    // 3) Tronco: o peito gira para levar o centro das pontas ao centro dos alvos.
+    const ObjectId chestId=static_cast<ObjectId>(c.chest);
+    if(chestId&&world.graph().find(chestId)&&c.spineBend>0&&!effectors.empty()) {
+      beginBone(world,chestId,touched);
+      float chestWorld[16];
+      if(worldMatrix(world.graph(),chestId,chestWorld)) {
+        float tips[3]{},goals[3]{};
+        for(const auto &e:effectors) {float t[16];worldMatrix(world.graph(),e.tip,t);for(u32 k=0;k<3;++k){tips[k]+=t[12+k];goals[k]+=e.target[k];}}
+        const float n=float(effectors.size());
+        const float from[3]{tips[0]/n-chestWorld[12],tips[1]/n-chestWorld[13],tips[2]/n-chestWorld[14]};
+        const float to[3]{goals[0]/n-chestWorld[12],goals[1]/n-chestWorld[13],goals[2]/n-chestWorld[14]};
+        float r[9];ikWeightedFromTo(from,to,c.spineBend*c.weight,60,r);
+        if(!rotateBone(world,chestId,r))diagnostics_.push_back({id,Issue::InvalidPose});
+      }
+    }
+    for(const auto &e:effectors)solveMember(world,e.tip,static_cast<u32>(c.limbBones),e.target,c.weight,touched);
+  }
+  // A raiz se desloca (nao gira): cada cadeia comeca no filho da raiz, com o
+  // deslocamento desse filho preservado; so os ossos abaixo dele giram.
+  void fabrikRoot(GameWorld &world,ObjectId id,const scene::FabrikRoot &c,std::map<ObjectId,bool> &touched) {
+    const auto &g=world.graph();
+    struct P {float v[3];};
+    struct Chain {std::vector<ObjectId> joints;std::vector<float> lengths;std::vector<P> points;float target[3],offset[3];float reach=0;};
+    std::vector<Chain> chains;
+    float rootWorld[16];if(!worldMatrix(g,id,rootWorld))return;
+    const P rest{{rootWorld[12],rootWorld[13],rootWorld[14]}};
+    for(u32 i=0;i<4;++i) {
+      const ObjectId tip=static_cast<ObjectId>(c.tips[i]);if(!tip||!c.targets[i])continue;
+      Chain chain;if(!targetPosition(world,c.targets[i],chain.target)) {diagnostics_.push_back({tip,Issue::MissingTarget});continue;}
+      // Caminho do filho da raiz ate a ponta.
+      bool found=false;
+      for(ObjectId at=tip;at;) {
+        const auto *o=g.find(at);if(!o)break;
+        if(o->parent==id) {chain.joints.push_back(at);found=true;break;}
+        chain.joints.push_back(at);at=o->parent!=g.root()?o->parent:0;
+      }
+      if(!found||chain.joints.size()<2) {diagnostics_.push_back({tip,Issue::ShortChain});continue;}
+      std::reverse(chain.joints.begin(),chain.joints.end());
+      for(const auto j:chain.joints) {float m[16];worldMatrix(g,j,m);chain.points.push_back({{m[12],m[13],m[14]}});}
+      for(u32 k=0;k<3;++k)chain.offset[k]=chain.points[0].v[k]-rest.v[k];
+      for(usize n=0;n+1<chain.points.size();++n) {
+        const float d[3]{chain.points[n+1].v[0]-chain.points[n].v[0],chain.points[n+1].v[1]-chain.points[n].v[1],chain.points[n+1].v[2]-chain.points[n].v[2]};
+        chain.lengths.push_back(length3(d));chain.reach+=chain.lengths.back();
+      }
+      chains.push_back(std::move(chain));
+    }
+    if(chains.empty()) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
+    beginBone(world,id,touched);
+    for(const auto &chain:chains)for(usize k=0;k+1<chain.joints.size();++k)beginBone(world,chain.joints[k],touched);
+    const auto place=[](P &moved,const P &anchor,float length) {
+      float d[3]{moved.v[0]-anchor.v[0],moved.v[1]-anchor.v[1],moved.v[2]-anchor.v[2]};const float n=length3(d);
+      if(n<1e-7f){d[0]=0;d[1]=1;d[2]=0;}else for(float &x:d)x/=n;
+      for(u32 i=0;i<3;++i)moved.v[i]=anchor.v[i]+d[i]*length;
+    };
+    P root=rest;
+    for(u32 it=0;it<static_cast<u32>(c.iterations);++it) {
+      // Passe ponta->base em cada cadeia: onde a raiz ficaria para ela.
+      P average{{0,0,0}};
+      for(auto &chain:chains) {
+        auto &p=chain.points;for(u32 i=0;i<3;++i)p.back().v[i]=chain.target[i];
+        for(usize n=p.size()-1;n-->0;)place(p[n],p[n+1],chain.lengths[n]);
+        for(u32 i=0;i<3;++i)average.v[i]+=(p[0].v[i]-chain.offset[i])/float(chains.size());
+      }
+      for(u32 i=0;i<3;++i)root.v[i]=average.v[i]+(rest.v[i]-average.v[i])*c.rootPin;
+      // Passe base->ponta a partir da raiz comum.
+      for(auto &chain:chains) {auto &p=chain.points;for(u32 i=0;i<3;++i)p[0].v[i]=root.v[i]+chain.offset[i];for(usize n=0;n+1<p.size();++n)place(p[n+1],p[n],chain.lengths[n]);}
+    }
+    // Correcao de alcance: o que ainda ficou alem do comprimento de alguma
+    // cadeia puxa a raiz (media dos excessos), contida por Fixar raiz.
+    for(u32 round=0;round<32&&c.rootPin<1;++round) {
+      float pull[3]{};u32 count=0;
+      for(const auto &chain:chains) {
+        const float d[3]{chain.target[0]-root.v[0]-chain.offset[0],chain.target[1]-root.v[1]-chain.offset[1],chain.target[2]-root.v[2]-chain.offset[2]};const float n=length3(d);
+        if(n>chain.reach*.9995f&&n>1e-6f) {for(u32 i=0;i<3;++i)pull[i]+=d[i]/n*(n-chain.reach*.9995f);++count;}
+      }
+      if(!count)break;
+      for(u32 i=0;i<3;++i)root.v[i]+=pull[i]/float(count)*(1-c.rootPin);
+    }
+    for(u32 i=0;i<3;++i)rootWorld[12+i]+=(root.v[i]-rest.v[i])*c.weight;
+    if(!writeWorld(world,id,rootWorld)) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
+    for(const auto &chain:chains)
+      solveChainTo(world,chain.joints.back(),static_cast<u32>(chain.joints.size()-1),chain.target,c.weight,touched,ChainIkSolver::Fabrik,static_cast<u32>(c.iterations)*2,.0005f);
+  }
+  void bodyByTargets(GameWorld &world,ObjectId id,const scene::BodyByTargets &c,std::map<ObjectId,bool> &touched) {
+    const auto &g=world.graph();
+    const ObjectId pelvis=static_cast<ObjectId>(c.pelvis),head=static_cast<ObjectId>(c.head),chest=static_cast<ObjectId>(c.chest);
+    if(!pelvis||!head||!g.find(pelvis)||!g.find(head)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
+    float headGoal[3];const bool hasHead=c.headTarget&&targetPosition(world,c.headTarget,headGoal);
+    // 1) Pelve acompanha a cabeca mantendo o vetor pelve->cabeca da pose.
+    if(hasHead&&c.bodyFollow>0) {
+      beginBone(world,pelvis,touched);
+      float p[16],h[16];
+      if(worldMatrix(g,pelvis,p)&&worldMatrix(g,head,h)) {
+        float shift[3]{(headGoal[0]-h[12])*c.bodyFollow*c.weight,(headGoal[1]-h[13])*c.bodyFollow*c.weight,(headGoal[2]-h[14])*c.bodyFollow*c.weight};
+        const float n=length3(shift);if(n>c.maxBodyOffset&&n>0)for(float &v:shift)v*=c.maxBodyOffset/n;
+        for(u32 i=0;i<3;++i)p[12+i]+=shift[i];
+        if(!writeWorld(world,pelvis,p))diagnostics_.push_back({id,Issue::InvalidPose});
+      }
+    }
+    // 2) Peito curva para a cabeca alcancar o alvo.
+    if(hasHead&&chest&&g.find(chest)&&c.spineBend>0) {
+      beginBone(world,chest,touched);
+      float ch[16],h[16];
+      if(worldMatrix(g,chest,ch)&&worldMatrix(g,head,h)) {
+        const float from[3]{h[12]-ch[12],h[13]-ch[13],h[14]-ch[14]},to[3]{headGoal[0]-ch[12],headGoal[1]-ch[13],headGoal[2]-ch[14]};
+        float r[9];ikWeightedFromTo(from,to,c.spineBend*c.weight,75,r);
+        if(!rotateBone(world,chest,r))diagnostics_.push_back({id,Issue::InvalidPose});
+      }
+    }
+    // 3) Cabeca copia a rotacao do alvo.
+    if(hasHead&&c.headRotation) {
+      beginBone(world,head,touched);
+      float t[16],h[16];
+      if(worldMatrix(g,static_cast<ObjectId>(c.headTarget),t)&&worldMatrix(g,head,h)) {
+        for(u32 i=12;i<15;++i)t[i]=h[i];
+        if(!writeBone(world,head,t,c.weight))diagnostics_.push_back({head,Issue::InvalidPose});
+      }
+    }
+    // 4) Bracos ate os alvos das maos.
+    const std::pair<u64,u64> hands[2]{{c.leftHand,c.leftTarget},{c.rightHand,c.rightTarget}};
+    for(const auto &[hand,target]:hands) {
+      if(!hand||!target)continue;
+      float goal[3];if(!targetPosition(world,target,goal)) {diagnostics_.push_back({static_cast<ObjectId>(hand),Issue::MissingTarget});continue;}
+      solveLimb(world,static_cast<ObjectId>(hand),goal,nullptr,c.weight,touched);
+    }
   }
   void avoidPenetration(GameWorld &world,ObjectId tip,u32 bones,float target[3]) {
     const auto *c=component<scene::PenetrationAvoidance>(world,tip);
@@ -528,9 +699,34 @@ private:
   void dropHeld(GameWorld &world,Interaction &entry) {
     if(!entry.held)return;
     entry.held=false;
+    if(entry.physical) {
+      entry.physical=false;
+      const auto body=world.findComponent(world.handle(entry.object),"astra.physics.body");
+      if(world.setProperty(body,"motion",scene::ComponentPropertyValue{entry.originalMotion})!=WorldStatus::Ok)diagnostics_.push_back({entry.object,Issue::InvalidPose});
+      return;
+    }
     const auto parent=world.graph().find(entry.originalParent)?entry.originalParent:world.graph().root();
     if(world.setParent(world.handle(entry.object),world.handle(parent),std::numeric_limits<u32>::max(),ReparentPosePolicy::KeepWorld)!=WorldStatus::Ok)
       diagnostics_.push_back({entry.object,Issue::InvalidPose});
+  }
+  bool carryPhysical(GameWorld &world,Interaction &e) {
+    const auto body=world.findComponent(world.handle(e.object),"astra.physics.body");
+    scene::ComponentPropertyValue motion;
+    if(world.getProperty(body,"motion",motion)!=WorldStatus::Ok||!std::holds_alternative<u32>(motion))return false;
+    float hand[16],object[16],offset[16];Transform local;
+    if(!worldMatrix(world.graph(),e.effector,hand)||!worldMatrix(world.graph(),e.object,object)||!localTransformForWorld(object,hand,local))return false;
+    transformMatrix(local,offset);
+    if(world.setProperty(body,"motion",scene::ComponentPropertyValue{u32{1}})!=WorldStatus::Ok)return false;
+    e.originalMotion=std::get<u32>(motion);e.physical=true;std::copy(offset,offset+16,e.offset);return true;
+  }
+  void followHand(GameWorld &world,const Interaction &e) {
+    float hand[16],desired[16];if(!worldMatrix(world.graph(),e.effector,hand))return;
+    multiplyMatrix(hand,e.offset,desired);
+    Transform pose;const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    if(!localTransformForWorld(desired,identity,pose))return;
+    float q[4];transformRotationQuaternion(pose,q);
+    const float values[7]{pose.position[0],pose.position[1],pose.position[2],q[0],q[1],q[2],q[3]};
+    if(!mover_(e.object,values))diagnostics_.push_back({e.object,Issue::InvalidPose});
   }
   void interactions(GameWorld &world,std::map<ObjectId,bool> &touched) {
     for(auto it=interactions_.begin();it!=interactions_.end();) {
@@ -539,16 +735,10 @@ private:
       const auto *object=component<scene::InteractionObject>(world,e.object);
       if(!system||!object||!world.graph().find(e.effector)) {it=interactions_.erase(it);continue;}
       const float step=dt_*system->speed;
+      bool reachedNow=false;
       if(e.phase==0) {
         e.time+=step;e.weight=smooth(e.time/object->reachTime);
-        if(e.time>=object->reachTime) {
-          e.weight=1;events_.push_back({e.system,"reached",e.effector,e.object});
-          if(object->pickUp) {
-            const auto status=world.setParent(world.handle(e.object),world.handle(e.effector),std::numeric_limits<u32>::max(),ReparentPosePolicy::KeepWorld);
-            if(status==WorldStatus::Ok) {e.held=true;e.phase=2;e.time=0;e.releaseFrom=1;}
-            else {diagnostics_.push_back({e.object,Issue::NotInteractable});e.phase=1;}
-          } else e.phase=1;
-        }
+        if(e.time>=object->reachTime) {e.weight=1;reachedNow=true;}
       } else if(e.phase==2) {
         e.time+=step;e.weight=e.releaseFrom*(1-smooth(e.time/object->releaseTime));
         if(e.time>=object->releaseTime) {
@@ -557,15 +747,27 @@ private:
           else {events_.push_back({e.system,"released",e.effector,e.object});it=interactions_.erase(it);continue;}
         }
       }
+      if(e.held&&e.physical)followHand(world,e);
       if(e.weight>0&&!e.held) {
         const ObjectId gripId=object->grip&&world.graph().find(static_cast<ObjectId>(object->grip))?static_cast<ObjectId>(object->grip):e.object;
         float grip[16];
         if(worldMatrix(world.graph(),gripId,grip)) {
           const float target[3]{grip[12],grip[13],grip[14]};
-          solveLimb(world,e.effector,target,nullptr,e.weight,touched);
+          solveMember(world,e.effector,static_cast<u32>(system->limbBones),target,e.weight,touched);
         }
       }
       if(object->handPose&&e.weight>0)poseHierarchy(world,e.effector,static_cast<ObjectId>(object->handPose),e.weight,false,touched);
+      // A pegada acontece depois da mao chegar neste quadro: o objeto e
+      // capturado na pose final da mao, sem deslocamento residual.
+      if(reachedNow) {
+        events_.push_back({e.system,"reached",e.effector,e.object});
+        if(object->pickUp) {
+          const auto status=world.setParent(world.handle(e.object),world.handle(e.effector),std::numeric_limits<u32>::max(),ReparentPosePolicy::KeepWorld);
+          if(status==WorldStatus::Ok) {e.held=true;e.phase=2;e.time=0;e.releaseFrom=1;}
+          else if(status==WorldStatus::TransformOwnedByPhysics&&mover_&&carryPhysical(world,e)) {e.held=true;e.phase=2;e.time=0;e.releaseFrom=1;}
+          else {diagnostics_.push_back({e.object,Issue::NotInteractable});e.phase=1;}
+        } else e.phase=1;
+      }
       ++it;
     }
   }

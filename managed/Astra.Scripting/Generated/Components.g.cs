@@ -1380,6 +1380,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         AgenteParar = 30,
         AgenteRetomar = 31,
         RecuoDisparar = 32,
+        ImpactoGolpearDeFrente = 33,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -1424,6 +1425,13 @@ public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
     {
         get => Component.GetFloat("weight");
         set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Prioridade</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
     }
     /// <summary>Ativo</summary>
     public bool Enabled
@@ -1474,6 +1482,13 @@ public readonly struct ChainIk : IComponentFacade<ChainIk>
     {
         get => Component.GetFloat("weight");
         set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Prioridade</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
     }
     /// <summary>Ossos na cadeia (ossos)</summary>
     /// <remarks>Faixa válida: 2 a 32.</remarks>
@@ -1611,6 +1626,13 @@ public readonly struct LookAtIk : IComponentFacade<LookAtIk>
         get => Component.GetFloat("weight");
         set => Component.SetFloat("weight", value);
     }
+    /// <summary>Prioridade</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
+    }
     /// <summary>Peso do corpo</summary>
     /// <remarks>Faixa válida: 0 a 1.</remarks>
     public float BodyWeight
@@ -1691,6 +1713,13 @@ public readonly struct AimIk : IComponentFacade<AimIk>
     {
         get => Component.GetFloat("weight");
         set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Prioridade</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float Priority
+    {
+        get => Component.GetFloat("priority");
+        set => Component.SetFloat("priority", value);
     }
     /// <summary>Ossos na cadeia (ossos)</summary>
     /// <remarks>Faixa válida: 1 a 16.</remarks>
@@ -2045,9 +2074,27 @@ public readonly struct HitReaction : IComponentFacade<HitReaction>
         get => Component.GetBool("react_to_collisions");
         set => Component.SetBool("react_to_collisions", value);
     }
+    public enum AxisOption : uint
+    {
+        X = 0,
+        Y = 1,
+        Z = 2,
+        X3 = 3,
+        Y4 = 4,
+        Z5 = 5,
+    }
+    /// <summary>Frente do osso</summary>
+    public AxisOption Axis
+    {
+        get => (AxisOption)Component.GetEnum("axis");
+        set => Component.SetEnum("axis", (uint)value);
+    }
     /// <summary>Golpear. Gira a cadeia para longe da direção; força 1 usa a força autorada</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public void Hit(Vector3 direction, double force) => Component.Invoke("hit", ComponentValue.Vector(direction), ComponentValue.Number(force));
+    /// <summary>Golpear de frente. Golpe contra a Frente do osso (empurra para trás); usado pelas Conexões de evento</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void HitFront(double force) => Component.Invoke("hit_front", ComponentValue.Number(force));
 }
 
 /// <summary>Recuo: Levanta e recua a cadeia a cada disparo. Família Lógica · IK.</summary>
@@ -2439,6 +2486,13 @@ public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
         get => Component.GetFloat("speed");
         set => Component.SetFloat("speed", value);
     }
+    /// <summary>Ossos do braço (ossos)</summary>
+    /// <remarks>Faixa válida: 2 a 8.</remarks>
+    public float LimbBones
+    {
+        get => Component.GetFloat("limb_bones");
+        set => Component.SetFloat("limb_bones", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -2495,6 +2549,20 @@ public readonly struct FullBodyIk : IComponentFacade<FullBodyIk>
         get => Component.GetFloat("max_body_offset");
         set => Component.SetFloat("max_body_offset", value);
     }
+    /// <summary>Curvar o tronco</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SpineBend
+    {
+        get => Component.GetFloat("spine_bend");
+        set => Component.SetFloat("spine_bend", value);
+    }
+    /// <summary>Ossos por membro (ossos)</summary>
+    /// <remarks>Faixa válida: 2 a 8.</remarks>
+    public float LimbBones
+    {
+        get => Component.GetFloat("limb_bones");
+        set => Component.SetFloat("limb_bones", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -2506,6 +2574,12 @@ public readonly struct FullBodyIk : IComponentFacade<FullBodyIk>
     {
         get => Component.GetReference("pelvis");
         set => Component.SetReference("pelvis", value);
+    }
+    /// <summary>Peito</summary>
+    public ObjectReference Chest
+    {
+        get => Component.GetReference("chest");
+        set => Component.SetReference("chest", value);
     }
     /// <summary>Ponta 1 (mão esq.)</summary>
     public ObjectReference Tip1
@@ -2554,6 +2628,207 @@ public readonly struct FullBodyIk : IComponentFacade<FullBodyIk>
     {
         get => Component.GetReference("target_4");
         set => Component.SetReference("target_4", value);
+    }
+}
+
+/// <summary>FABRIK em árvore: Várias cadeias com raiz comum resolvidas juntas. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
+public readonly struct FabrikRoot : IComponentFacade<FabrikRoot>
+{
+    public static string TypeId => "astra.ik.fabrik_root";
+    public static FabrikRoot Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public FabrikRoot(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Fixar raiz</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float RootPin
+    {
+        get => Component.GetFloat("root_pin");
+        set => Component.SetFloat("root_pin", value);
+    }
+    /// <summary>Iterações</summary>
+    /// <remarks>Faixa válida: 1 a 64.</remarks>
+    public float Iterations
+    {
+        get => Component.GetFloat("iterations");
+        set => Component.SetFloat("iterations", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Ponta 1</summary>
+    public ObjectReference Tip1
+    {
+        get => Component.GetReference("tip_1");
+        set => Component.SetReference("tip_1", value);
+    }
+    /// <summary>Alvo 1</summary>
+    public ObjectReference Target1
+    {
+        get => Component.GetReference("target_1");
+        set => Component.SetReference("target_1", value);
+    }
+    /// <summary>Ponta 2</summary>
+    public ObjectReference Tip2
+    {
+        get => Component.GetReference("tip_2");
+        set => Component.SetReference("tip_2", value);
+    }
+    /// <summary>Alvo 2</summary>
+    public ObjectReference Target2
+    {
+        get => Component.GetReference("target_2");
+        set => Component.SetReference("target_2", value);
+    }
+    /// <summary>Ponta 3</summary>
+    public ObjectReference Tip3
+    {
+        get => Component.GetReference("tip_3");
+        set => Component.SetReference("tip_3", value);
+    }
+    /// <summary>Alvo 3</summary>
+    public ObjectReference Target3
+    {
+        get => Component.GetReference("target_3");
+        set => Component.SetReference("target_3", value);
+    }
+    /// <summary>Ponta 4</summary>
+    public ObjectReference Tip4
+    {
+        get => Component.GetReference("tip_4");
+        set => Component.SetReference("tip_4", value);
+    }
+    /// <summary>Alvo 4</summary>
+    public ObjectReference Target4
+    {
+        get => Component.GetReference("target_4");
+        set => Component.SetReference("target_4", value);
+    }
+}
+
+/// <summary>Corpo por alvos (VRIK): Cabeça e mãos seguem alvos; pelve e tronco acompanham. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
+public readonly struct BodyByTargets : IComponentFacade<BodyByTargets>
+{
+    public static string TypeId => "astra.ik.body_by_targets";
+    public static BodyByTargets Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public BodyByTargets(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Corpo segue a cabeça</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float BodyFollow
+    {
+        get => Component.GetFloat("body_follow");
+        set => Component.SetFloat("body_follow", value);
+    }
+    /// <summary>Curvar o tronco</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SpineBend
+    {
+        get => Component.GetFloat("spine_bend");
+        set => Component.SetFloat("spine_bend", value);
+    }
+    /// <summary>Deslocamento máximo da pelve (m)</summary>
+    /// <remarks>Faixa válida: 0 a 5.</remarks>
+    public float MaxBodyOffset
+    {
+        get => Component.GetFloat("max_body_offset");
+        set => Component.SetFloat("max_body_offset", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Cabeça copia a rotação do alvo</summary>
+    public bool HeadRotation
+    {
+        get => Component.GetBool("head_rotation");
+        set => Component.SetBool("head_rotation", value);
+    }
+    /// <summary>Pelve</summary>
+    public ObjectReference Pelvis
+    {
+        get => Component.GetReference("pelvis");
+        set => Component.SetReference("pelvis", value);
+    }
+    /// <summary>Peito</summary>
+    public ObjectReference Chest
+    {
+        get => Component.GetReference("chest");
+        set => Component.SetReference("chest", value);
+    }
+    /// <summary>Cabeça</summary>
+    public ObjectReference Head
+    {
+        get => Component.GetReference("head");
+        set => Component.SetReference("head", value);
+    }
+    /// <summary>Alvo da cabeça</summary>
+    public ObjectReference HeadTarget
+    {
+        get => Component.GetReference("head_target");
+        set => Component.SetReference("head_target", value);
+    }
+    /// <summary>Mão esquerda</summary>
+    public ObjectReference LeftHand
+    {
+        get => Component.GetReference("left_hand");
+        set => Component.SetReference("left_hand", value);
+    }
+    /// <summary>Alvo esquerdo</summary>
+    public ObjectReference LeftTarget
+    {
+        get => Component.GetReference("left_target");
+        set => Component.SetReference("left_target", value);
+    }
+    /// <summary>Mão direita</summary>
+    public ObjectReference RightHand
+    {
+        get => Component.GetReference("right_hand");
+        set => Component.SetReference("right_hand", value);
+    }
+    /// <summary>Alvo direito</summary>
+    public ObjectReference RightTarget
+    {
+        get => Component.GetReference("right_target");
+        set => Component.SetReference("right_target", value);
     }
 }
 

@@ -104,7 +104,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,80> bindings{{
+const std::array<ComponentMethodBinding,81> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -199,6 +199,9 @@ const std::array<ComponentMethodBinding,80> bindings{{
   {&scene::HitReaction::descriptor,"hit",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.ik||!s.world) return WorldStatus::NotRunning;
     return s.ik->hit(*s.world,h.object.id,a[0].vector,static_cast<float>(a[1].number));}},
+  {&scene::HitReaction::descriptor,"hit_front",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!s.ik||!s.world) return WorldStatus::NotRunning;
+    return s.ik->hitFront(*s.world,h.object.id,static_cast<float>(a[0].number));}},
   {&scene::Recoil::descriptor,"fire",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.ik||!s.world) return WorldStatus::NotRunning;
     return s.ik->fire(*s.world,h.object.id,static_cast<float>(a[0].number));}},

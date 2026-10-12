@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 
 namespace ae::editor {
 namespace {
@@ -78,7 +79,36 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
       else ++it;
     }
   }
-  if(hands.empty()&&feet.empty()&&!head) {error="Nenhuma mão, pé ou cabeça reconhecida pelos nomes da hierarquia";return false;}
+  // Sem nomes reconheciveis: le a estrutura. Pelve = primeira bifurcacao;
+  // folhas mais baixas = pes; folha mais alta acima da pelve = cabeca; as
+  // demais folhas com tres ossos ou mais = maos. Vale para robos e criaturas.
+  bool structural=false;
+  if(hands.empty()&&feet.empty()&&!head) {
+    structural=true;
+    std::vector<EditorEntityId> leaves;std::vector<EditorEntityId> queue{owner};
+    for(usize at=0;at<queue.size();++at) {
+      const auto children=doc.childrenOf(queue[at]);
+      if(!pelvis&&queue[at]!=owner&&children.size()>=2)pelvis=queue[at];
+      if(children.empty()&&queue[at]!=owner)leaves.push_back(queue[at]);
+      for(const auto c:children)queue.push_back(c);
+    }
+    const auto depth=[&](EditorEntityId id){u32 d=0;for(const auto *o=doc.find(id);o&&o->id!=owner;o=doc.find(o->parent))++d;return d;};
+    float lowest=1e30f,highest=-1e30f;
+    for(const auto l:leaves){float m[16];if(runtime::worldMatrix(doc,l,m)){lowest=std::min(lowest,m[13]);highest=std::max(highest,m[13]);}}
+    float pelvisY=lowest;if(pelvis){float m[16];if(runtime::worldMatrix(doc,pelvis,m))pelvisY=m[13];}
+    EditorEntityId top=0;float topY=-1e30f;
+    for(const auto l:leaves) {
+      float m[16];if(!runtime::worldMatrix(doc,l,m)||depth(l)<3)continue;
+      if(m[13]<=lowest+(pelvisY-lowest)*.25f)feet.push_back(l);
+      else if(m[13]>pelvisY&&m[13]>topY){topY=m[13];top=l;}
+    }
+    for(const auto l:leaves) {
+      float m[16];if(l==top||depth(l)<3||!runtime::worldMatrix(doc,l,m))continue;
+      if(std::find(feet.begin(),feet.end(),l)==feet.end())hands.push_back(l);
+    }
+    head=top;(void)highest;
+  }
+  if(hands.empty()&&feet.empty()&&!head) {error="Nenhuma mão, pé ou cabeça encontrada pelos nomes nem pela estrutura do esqueleto";return false;}
   if(!s.history_.begin("Assistente de IK")) {error="Conclua a edição em andamento";return false;}
   bool ok=true;u32 limbs=0,grounded=0,looks=0;
   const auto place=[&](EditorEntityId id,const float world[16]) {
@@ -120,7 +150,7 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
   }
   s.history_.end();
   if(!ok) {s.history_.undo(doc);error="O assistente não conseguiu criar todos os componentes; nada foi alterado";return false;}
-  summary=std::to_string(limbs)+" membros com IK · "+std::to_string(grounded)+" pés no chão"+(grounded&&pelvis?" + pelve":"")+(looks?" · cabeça olha um alvo":"");
+  summary=std::string(structural?"Pela estrutura · ":"")+std::to_string(limbs)+" membros com IK · "+std::to_string(grounded)+" pés no chão"+(grounded&&pelvis?" + pelve":"")+(looks?" · cabeça olha um alvo":"");
   return true;
 }
 
@@ -152,13 +182,40 @@ bool EditorStudio::pinTip(EditorSession &s,EditorEntityId tip,float start,float 
   }
   s.clipPreview_.seek(now,seekError);
   const auto owner=s.state_.clipOwner;const auto guid=s.state_.clipGuid;
-  const bool ok=s.editAnimationClipAsset(guid,live->revision,[&](resources::AnimationClipAsset &clip) {
+  bool ok=s.editAnimationClipAsset(guid,live->revision,[&](resources::AnimationClipAsset &clip) {
     return writeTrack(clip,s.document_,owner,root,resources::AnimationPath::Rotation,times,rootValues,error)&&
            writeTrack(clip,s.document_,owner,mid,resources::AnimationPath::Rotation,times,midValues,error);
   },error);
   s.refreshAnimationClip();
   if(!ok)return false;
-  summary="Ponta fixa de "+std::to_string(start).substr(0,4)+" s a "+std::to_string(end).substr(0,4)+" s · "+std::to_string(frames)+" quadros em 2 ossos";
+  // Verificacao no clipe gravado: cada quadro e reavaliado; o que ficou fora
+  // da ponta fixa e resolvido de novo a partir da pose gravada (ate 3 passes).
+  float worst=0;
+  for(u32 pass=0;pass<3;++pass) {
+    worst=0;bool changed=false;
+    for(u32 i=0;i<frames;++i) {
+      float rw[16],mw[16],tw[16],parent[16];runtime::TwoBoneIkResult solved;runtime::Transform rl,ml;
+      if(!s.clipPreview_.seek(times[i],seekError)||!runtime::worldMatrix(s.clipPreview_.scene(),root,rw)||!runtime::worldMatrix(s.clipPreview_.scene(),mid,mw)||
+         !runtime::worldMatrix(s.clipPreview_.scene(),tip,tw))break;
+      const float miss=std::sqrt((tw[12]-pinned[12])*(tw[12]-pinned[12])+(tw[13]-pinned[13])*(tw[13]-pinned[13])+(tw[14]-pinned[14])*(tw[14]-pinned[14]));
+      worst=std::max(worst,miss);
+      if(miss<5e-4f)continue;
+      if(!runtime::solveTwoBoneIk(rw,mw,tw,pinned+12,solved)||!runtime::parentWorldMatrix(s.clipPreview_.scene(),root,parent)||
+         !runtime::localTransformForWorld(solved.root,parent,rl)||!runtime::localTransformForWorld(solved.mid,solved.root,ml))continue;
+      rootValues[i]=quaternionOf(rl);midValues[i]=quaternionOf(ml);changed=true;
+    }
+    s.clipPreview_.seek(now,seekError);
+    if(!changed)break;
+    const auto *current=s.animationClipAsset(guid);if(!current)break;
+    ok=s.editAnimationClipAsset(guid,current->revision,[&](resources::AnimationClipAsset &clip) {
+      return writeTrack(clip,s.document_,owner,root,resources::AnimationPath::Rotation,times,rootValues,error)&&
+             writeTrack(clip,s.document_,owner,mid,resources::AnimationPath::Rotation,times,midValues,error);
+    },error);
+    s.refreshAnimationClip();
+    if(!ok)return false;
+  }
+  char residual[48];std::snprintf(residual,sizeof residual," · desvio máx. %.1f mm",worst*1000);
+  summary="Ponta fixa de "+std::to_string(start).substr(0,4)+" s a "+std::to_string(end).substr(0,4)+" s · "+std::to_string(frames)+" quadros em 2 ossos"+residual;
   return true;
 }
 
