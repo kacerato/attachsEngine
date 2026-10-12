@@ -63,12 +63,14 @@ vec2 clampSourceUv(vec2 uv) {
   return clamp(uv,lower,max(lower,upper));
 }
 
-float viewDistance(vec2 uv) {
-  float depth=texture(sceneDepth,clampSourceUv(uv)).r;
+float viewDistanceFromDepth(float depth) {
   float nearPlane=post.currentPositionNear.w;
   float farPlane=post.previousPositionFar.w;
   if(post.sourceTransform.z<0.0) return mix(nearPlane,farPlane,depth);
   return nearPlane*farPlane/max(farPlane-depth*(farPlane-nearPlane),1.0e-6);
+}
+float viewDistance(vec2 uv) {
+  return viewDistanceFromDepth(texture(sceneDepth,clampSourceUv(uv)).r);
 }
 
 bool postFlag(float bit) { return mod(floor(post.texelFlags.z/bit),2.0)>0.5; }
@@ -191,7 +193,7 @@ vec3 aoViewPosition(vec2 uv,float depth) {
 float screenSpaceAmbientOcclusion(vec2 uv) {
   if(environment.sceneAo.x<0.5 || postFlag(128.0)) return 1.0;
   float rawDepth=texture(sceneDepth,clampSourceUv(uv)).r;
-  float center=viewDistance(uv);
+  float center=viewDistanceFromDepth(rawDepth);
   vec3 position=aoViewPosition(uv,center);
   // Compare samples against the local tangent plane. Comparing only their
   // depth incorrectly occluded every sloping floor and changed its brightness
@@ -217,9 +219,10 @@ float screenSpaceAmbientOcclusion(vec2 uv) {
     float ring=.35+.65*float((index%3)+1)/3.0;
     vec2 offset=rotation*directions[index]*post.texelFlags.xy*radiusPixels*ring;
     vec2 sampleUv=uv+offset;
-    if(any(notEqual(sampleUv,clampSourceUv(sampleUv))) ||
-       texture(sceneDepth,sampleUv).r>=0.999999) continue;
-    vec3 delta=aoViewPosition(sampleUv,viewDistance(sampleUv))-position;
+    if(any(notEqual(sampleUv,clampSourceUv(sampleUv)))) continue;
+    float sampleDepth=texture(sceneDepth,sampleUv).r;
+    if(sampleDepth>=0.999999)continue;
+    vec3 delta=aoViewPosition(sampleUv,viewDistanceFromDepth(sampleDepth))-position;
     float distance=length(delta);
     float height=dot(normal,delta);
     float range=max(0.0,1.0-distance/radius);

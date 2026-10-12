@@ -9,9 +9,10 @@ bool shown(const SceneGraph &graph,ObjectId object) {
   return true;
 }
 }
-ui::GuiCanvas uiCanvasPresentation(const scene::UiCanvas &c) {
-  ui::GuiCanvas out;out.mode=static_cast<ui::GuiCanvasMode>(c.mode);
-  out.resolution={c.resolution[0],c.resolution[1]};out.unitsPerPixel=c.unitsPerPixel;out.occlusion=c.occlusion;
+ui::GuiCanvas uiCanvasPresentation(const scene::UiCanvas &c,const ui::GuiCanvas &authored) {
+  ui::GuiCanvas out=authored;out.mode=static_cast<ui::GuiCanvasMode>(c.mode);
+  if(out.mode==ui::GuiCanvasMode::World)out.resolution={c.resolution[0],c.resolution[1]};
+  out.unitsPerPixel=c.unitsPerPixel;out.occlusion=c.occlusion;
   std::copy_n(c.offset,3,out.position);std::copy_n(c.rotation,3,out.rotation);return out;
 }
 namespace {
@@ -62,12 +63,12 @@ bool SceneGui::reconcile(GameWorld &world) {
         asset=documents_.emplace(c.document,std::make_shared<const ui::GuiDocument>(std::move(document))).first;
       }
       auto entry=std::make_unique<Instance>();entry->id=nextId_++;entry->owner=owner;entry->asset=c.document;entry->config=c;
-      entry->runtime.load(*asset->second);std::string error;entry->runtime.document().setCanvas(uiCanvasPresentation(c),error);entry->runtime.setImages(images_);
+      entry->runtime.load(*asset->second);std::string error;entry->runtime.document().setCanvas(uiCanvasPresentation(c,asset->second->canvas()),error);entry->runtime.setImages(images_);
       instances_.push_back(std::move(entry));at=std::prev(instances_.end());++revision_;
     }
     auto &i=**at;
     if(i.config.inputReceiver!=c.inputReceiver||i.config.inputCamera!=c.inputCamera||i.config.movementSpace!=c.movementSpace)i.runtime.cancelPointers();
-    if(!samePresentation(i.config,c)){i.runtime.cancelPointers();std::string error;i.runtime.document().setCanvas(uiCanvasPresentation(c),error);i.prepared=false;}
+    if(!samePresentation(i.config,c)){i.runtime.cancelPointers();std::string error;i.runtime.document().setCanvas(uiCanvasPresentation(c,documents_.at(i.asset)->canvas()),error);i.prepared=false;}
     i.config=c;i.enabled=c.enabled&&shown(graph,object);
     if(!i.enabled){i.runtime.cancelPointers();i.prepared=false;}
   }}

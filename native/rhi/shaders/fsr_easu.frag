@@ -84,6 +84,12 @@ void main() {
                            max(ivec2(fsr.sourceSize.zw + vec2(0.5)), ivec2(1)));
   astraSourceAllocated = max(ivec2(fsr.sourceSize.zw + vec2(0.5)), activeSize);
   ivec2 pixel = clamp(ivec2(gl_FragCoord.xy), ivec2(0), nativeSize - ivec2(1));
+  // At native resolution there is no reconstruction to perform. Keep the
+  // perceptual intermediate and RCAS/grain pass, but avoid the EASU footprint.
+  if (all(equal(activeSize, nativeSize))) {
+    outColor = vec4(astraUnscaledPixel(pixel, nativeSize, activeSize), 1.0);
+    return;
+  }
   vec4 region = vec4(clamp(fsr.viewport.xy, vec2(0.0), vec2(1.0)),
                      clamp(fsr.viewport.zw, vec2(0.0), vec2(1.0)));
   region.zw = min(region.zw, vec2(1.0) - region.xy);

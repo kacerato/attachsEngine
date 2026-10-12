@@ -2,6 +2,7 @@
 // resultado vira pose pendente da raiz e do meio pelo mesmo rascunho de pose
 // do gizmo, entao Gravar, Cancelar, auto-key e Desfazer funcionam iguais.
 #include "editor/editor_session.h"
+#include "editor/editor_studio_state.h"
 #include "editor/editor_animation_ik.h"
 #include "editor/editor_animation_pose_selection.h"
 #include "editor/editor_animation_pose_tools.h"
@@ -24,7 +25,7 @@ bool EditorSession::applyAnimationPoseIk(EditorEntityId end,const float target[3
   float root[16],mid[16],tip[16];
   if(!runtime::worldMatrix(graph,rootObject->id,root)||!runtime::worldMatrix(graph,midObject->id,mid)||!runtime::worldMatrix(graph,end,tip)) {error="Matrizes da cadeia indisponíveis";return false;}
   TwoBoneIkResult solved;
-  if(!solveTwoBoneIk(root,mid,tip,target,solved,state_.clipIkPoleSet?clipIkPole_:nullptr)) {error="Cadeia degenerada: ossos sem comprimento";return false;}
+  if(!solveTwoBoneIk(root,mid,tip,target,solved,state_.clipIkPoleSet?studio_->clipIkPole:nullptr)) {error="Cadeia degenerada: ossos sem comprimento";return false;}
   float rootParent[16];runtime::Transform rootLocal,midLocal;
   if(!runtime::parentWorldMatrix(graph,rootObject->id,rootParent)||!runtime::localTransformForWorld(solved.root,rootParent,rootLocal)||
      !runtime::localTransformForWorld(solved.mid,solved.root,midLocal)) {error="IK exige TRS local sem shear";return false;}
@@ -41,10 +42,10 @@ bool EditorSession::applyAnimationPoseIk(EditorEntityId end,const float target[3
     std::vector<float> values;
     float q[4];runtime::transformRotationQuaternion(*local,q);
     // Limites do rig publicado para esta hierarquia (dobradica/cone) valem no IK.
-    if(rigCaptured_) {
+    if(studio_->rigCaptured) {
       resources::CompiledRig compiled;std::string ignored;runtime::RigBindings bindings;
-      if(resources::compileRig(rigDraft_,compiled,ignored)) {
-        runtime::bindRigToScene(rigDraft_,compiled,document_,rigRoot_,bindings);
+      if(resources::compileRig(studio_->rigDraft,compiled,ignored)) {
+        runtime::bindRigToScene(studio_->rigDraft,compiled,document_,studio_->rigRoot,bindings);
         for(usize j=0;j<bindings.objects.size()&&j<compiled.joints.size();++j)if(bindings.objects[j]==object->id) {
           const auto &joint=compiled.joints[j];
           if(joint.limit.kind!=resources::RigLimitKind::Free) {
@@ -82,10 +83,10 @@ bool EditorSession::applyAnimationPoseIk(EditorEntityId end,const float target[3
 bool EditorSession::handleAnimationPoseIk(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
   using ui::UiPointerPhase;
   if(!state_.clipIkMode||!state_.clipPoseShown||!clipPreview_.active())return false;
-  if(clipIkPointer_&&event.pointerId+1!=clipIkPointer_)return true;
+  if(studio_->clipIkPointer&&event.pointerId+1!=studio_->clipIkPointer)return true;
   const auto rayPlane=[&](ui::UiPoint point,float out[3]) {
     const auto ray=screenPointToRay(view_,point);if(!ray.valid)return false;
-    const float *p=clipIkPlane_,*n=clipIkPlane_+3;
+    const float *p=studio_->clipIkPlane,*n=studio_->clipIkPlane+3;
     const float denom=ray.direction[0]*n[0]+ray.direction[1]*n[1]+ray.direction[2]*n[2];
     if(std::abs(denom)<1e-5f)return false;
     const float t=((p[0]-ray.origin[0])*n[0]+(p[1]-ray.origin[1])*n[1]+(p[2]-ray.origin[2])*n[2])/denom;
@@ -107,8 +108,8 @@ bool EditorSession::handleAnimationPoseIk(const ui::UiPointerEvent &event,const 
         const auto knee=projectWorldToScreen(view_,mid+12);
         if(knee.valid&&std::hypot(knee.screen.x-event.position.x,knee.screen.y-event.position.y)<=26) {
           const auto ray=screenPointToRay(view_,knee.screen);if(!ray.valid)return false;
-          for(u32 c=0;c<3;++c) {clipIkPlane_[c]=mid[12+c];clipIkPlane_[3+c]=-ray.direction[c];clipIkPole_[c]=mid[12+c];}
-          clipIkPointer_=event.pointerId+1;clipIkEnd_=end;clipIkPoleDrag_=true;state_.clipIkDragging=true;state_.clipPlaying=false;
+          for(u32 c=0;c<3;++c) {studio_->clipIkPlane[c]=mid[12+c];studio_->clipIkPlane[3+c]=-ray.direction[c];studio_->clipIkPole[c]=mid[12+c];}
+          studio_->clipIkPointer=event.pointerId+1;studio_->clipIkEnd=end;studio_->clipIkPoleDrag=true;state_.clipIkDragging=true;state_.clipPlaying=false;
           return true;
         }
       }
@@ -117,33 +118,33 @@ bool EditorSession::handleAnimationPoseIk(const ui::UiPointerEvent &event,const 
     // So o toque perto do alvo inicia IK; o resto do viewport continua orbitando.
     if(!projected.valid||std::hypot(projected.screen.x-event.position.x,projected.screen.y-event.position.y)>36)return false;
     const auto ray=screenPointToRay(view_,projected.screen);if(!ray.valid)return false;
-    for(u32 c=0;c<3;++c) {clipIkPlane_[c]=world[12+c];clipIkPlane_[3+c]=-ray.direction[c];}
-    clipIkPointer_=event.pointerId+1;clipIkEnd_=end;state_.clipIkDragging=true;state_.clipPlaying=false;
+    for(u32 c=0;c<3;++c) {studio_->clipIkPlane[c]=world[12+c];studio_->clipIkPlane[3+c]=-ray.direction[c];}
+    studio_->clipIkPointer=event.pointerId+1;studio_->clipIkEnd=end;state_.clipIkDragging=true;state_.clipPlaying=false;
     return true;
   }
-  if(!clipIkPointer_)return false;
+  if(!studio_->clipIkPointer)return false;
   if(event.phase==UiPointerPhase::Move) {
     float target[3];std::string error;
     if(!rayPlane(event.position,target))return true;
-    if(clipIkPoleDrag_) {
+    if(studio_->clipIkPoleDrag) {
       // A ponta fica onde esta; so a direcao da dobra muda.
-      float tip[16];if(!runtime::worldMatrix(evaluatedEditorScene(),clipIkEnd_,tip))return true;
-      for(u32 c=0;c<3;++c)clipIkPole_[c]=target[c];
+      float tip[16];if(!runtime::worldMatrix(evaluatedEditorScene(),studio_->clipIkEnd,tip))return true;
+      for(u32 c=0;c<3;++c)studio_->clipIkPole[c]=target[c];
       state_.clipIkPoleSet=true;
-      if(!applyAnimationPoseIk(clipIkEnd_,tip+12,error))state_.clipDiagnostic=error;
+      if(!applyAnimationPoseIk(studio_->clipIkEnd,tip+12,error))state_.clipDiagnostic=error;
       return true;
     }
-    if(!applyAnimationPoseIk(clipIkEnd_,target,error))state_.clipDiagnostic=error;
+    if(!applyAnimationPoseIk(studio_->clipIkEnd,target,error))state_.clipDiagnostic=error;
     return true;
   }
   if(event.phase==UiPointerPhase::Up||event.phase==UiPointerPhase::Cancel) {
-    clipIkPointer_=0;state_.clipIkDragging=false;clipIkPoleDrag_=false;
+    studio_->clipIkPointer=0;state_.clipIkDragging=false;studio_->clipIkPoleDrag=false;
     std::string error;
     if(event.phase==UiPointerPhase::Cancel)cancelAnimationClipPose();
     else if(clipPoseMoved_&&state_.clipPoseAutoKey&&!autoRecordAnimationClipPose(error))state_.clipDiagnostic=error;
     clipPoseMoved_=false;
     // O rascunho seleciona o canal da raiz; a ponta continua sendo o alvo do IK.
-    if(clipIkEnd_&&!state_.clipPosePending) {std::string ignored;selectAnimationClipPreviewTarget(clipIkEnd_,resources::AnimationPath::Rotation,false,ignored);}
+    if(studio_->clipIkEnd&&!state_.clipPosePending) {std::string ignored;selectAnimationClipPreviewTarget(studio_->clipIkEnd,resources::AnimationPath::Rotation,false,ignored);}
     refreshAnimationClip();revealAnimationClipTrack();
     return true;
   }

@@ -18,7 +18,23 @@ const char *guiKindName(GuiKind kind) noexcept {
   return index < kGuiKindCount ? names[index] : "Invalid";
 }
 bool guiContainer(GuiKind k) noexcept {return k==GuiKind::HBox || k==GuiKind::VBox || k==GuiKind::Grid;}
-bool GuiDocument::setCanvas(const GuiCanvas &canvas,std::string &error) {auto old=canvas_;canvas_=canvas;if(!validate(error)){canvas_=old;return false;}revision_=nextRevision();return true;}
+float guiCanvasScale(const GuiCanvas &c,const UiRect &viewport) noexcept {
+  if(c.mode!=GuiCanvasMode::Screen || c.scaleMode==GuiScaleMode::Pixels || viewport.isEmpty())return 1;
+  const float width=viewport.width/c.resolution.x,height=viewport.height/c.resolution.y;
+  const float scale=c.scaleMode==GuiScaleMode::Fit?std::min(width,height):
+      std::exp2(std::log2(width)*(1-c.match)+std::log2(height)*c.match);
+  return std::isfinite(scale)&&scale>0?scale:1;
+}
+bool GuiDocument::setCanvas(const GuiCanvas &canvas,std::string &error) {
+  const auto &c=canvas_;
+  if(c.mode==canvas.mode&&c.resolution.x==canvas.resolution.x&&c.resolution.y==canvas.resolution.y&&
+      std::equal(std::begin(c.position),std::end(c.position),std::begin(canvas.position))&&
+      std::equal(std::begin(c.rotation),std::end(c.rotation),std::begin(canvas.rotation))&&
+      c.unitsPerPixel==canvas.unitsPerPixel&&c.occlusion==canvas.occlusion&&c.scaleMode==canvas.scaleMode&&c.match==canvas.match) {
+    error.clear();return true;
+  }
+  auto old=canvas_;canvas_=canvas;if(!validate(error)){canvas_=old;return false;}revision_=nextRevision();return true;
+}
 const GuiNode *GuiDocument::find(GuiId id) const noexcept {
   const auto i=indexOf(id);return i<nodes_.size()?&nodes_[i]:nullptr;
 }
@@ -60,6 +76,7 @@ bool GuiDocument::validate(std::string &error) const {
   std::unordered_set<GuiId> seen;
   if (nodes_.size() > kMaximumNodes) { error = "UI exceeds 1024 nodes"; return false; }
   const auto &c=canvas_;
+  if(static_cast<u32>(c.scaleMode)>2 || !std::isfinite(c.match) || c.match<0 || c.match>1) {error="Invalid canvas scaling";return false;}
   if(static_cast<u32>(c.mode)>1 || !std::isfinite(c.resolution.x) || !std::isfinite(c.resolution.y) || c.resolution.x<32 || c.resolution.y<32 || c.resolution.x>8192 || c.resolution.y>8192 || !std::isfinite(c.unitsPerPixel) || c.unitsPerPixel<.00001f || c.unitsPerPixel>10) {error="Invalid canvas geometry";return false;}
   for(float v:c.position) if(!std::isfinite(v) || std::abs(v)>1000000) {error="Invalid canvas position";return false;}
   for(float v:c.rotation) if(!std::isfinite(v) || std::abs(v)>36000) {error="Invalid canvas rotation";return false;}
@@ -117,6 +134,62 @@ bool GuiDocument::setOpacity(GuiId id,float opacity) {
   if(nodes_[index].opacity!=opacity){nodes_[index].opacity=opacity;revision_=nextRevision();}
   return true;
 }
+bool GuiDocument::setText(GuiId id,std::string text) {
+  const auto index=indexOf(id);
+  if(index>=nodes_.size() || text.size()>4096)return false;
+  auto &node=nodes_[index];
+  if(node.text!=text){node.text=std::move(text);revision_=nextRevision();}
+  return true;
+}
+GuiId appendGuiComposition(GuiDocument &document,GuiComposition kind,std::string &error) {
+  if(static_cast<u32>(kind)>2){error="Unknown UI composition";return 0;}
+  GuiDocument candidate=document;
+  const auto root=candidate.create(GuiKind::Panel);
+  if(!root){error="UI node limit reached";return 0;}
+  const auto edit=[&](GuiId id,const auto &change) {
+    if(!id){error="UI node limit reached";return false;}
+    auto node=*candidate.find(id);change(node);return candidate.update(node,error);
+  };
+  if(!edit(root,[&](auto &n){n.name=(kind==GuiComposition::Hud?"HUD_":kind==GuiComposition::Menu?"Menu_":"Inventory_")+std::to_string(root);n.anchorMax={1,1};n.offsets={0,0,0,0};n.background=0;n.clipChildren=true;}))return 0;
+  const auto add=[&](GuiKind type,GuiId parent,const auto &change){const auto id=candidate.create(type,parent);return edit(id,change)?id:GuiId{0};};
+  if(kind==GuiComposition::Hud) {
+    if(!add(GuiKind::Progress,root,[](auto &n){n.text="Vida";n.offsets={24,24,284,88};n.value=.75f;n.accent=0xFFE45353;}))return 0;
+    if(!add(GuiKind::Text,root,[](auto &n){n.text="Pontos: 0";n.anchorMin=n.anchorMax={1,0};n.offsets={-224,24,-24,72};}))return 0;
+    if(!add(GuiKind::Joystick,root,[](auto &n){n.anchorMin=n.anchorMax={0,1};n.offsets={24,-224,224,-24};}))return 0;
+    if(!add(GuiKind::ActionButton,root,[](auto &n){n.text="Saltar";n.anchorMin=n.anchorMax={1,1};n.offsets={-144,-144,-24,-24};n.radius=60;}))return 0;
+  } else if(kind==GuiComposition::Menu) {
+    const auto column=add(GuiKind::VBox,root,[](auto &n){n.anchorMin=n.anchorMax={.5f,.5f};n.offsets={-180,-164,180,164};n.sizing.padding=UiInsets::all(20);n.sizing.spacing={12,12};});
+    if(!column)return 0;
+    if(!add(GuiKind::Text,column,[](auto &n){n.text="Menu";n.fontSize=28;n.sizing.preferred={0,56};}))return 0;
+    if(!add(GuiKind::Button,column,[](auto &n){n.text="Continuar";n.sizing.preferred={0,60};}))return 0;
+    if(!add(GuiKind::Slider,column,[](auto &n){n.text="Volume";n.sizing.preferred={0,64};n.value=.8f;}))return 0;
+    if(!add(GuiKind::Toggle,column,[](auto &n){n.text="Musica";n.sizing.preferred={0,48};n.value=1;}))return 0;
+  } else {
+    const auto grid=add(GuiKind::Grid,root,[](auto &n){n.anchorMin=n.anchorMax={.5f,.5f};n.offsets={-240,-160,240,160};n.sizing.columns=4;n.sizing.padding=UiInsets::all(16);n.sizing.spacing={12,12};});
+    if(!grid)return 0;
+    for(u32 index=0;index<12;++index)if(!add(GuiKind::Button,grid,[&](auto &n){n.text=std::to_string(index+1);n.sizing.minimum={48,48};}))return 0;
+  }
+  if(!candidate.validate(error))return 0;
+  document=std::move(candidate);error.clear();return root;
+}
+bool GuiDocument::setValue(GuiId id,float value) {
+  const auto index=indexOf(id);
+  if(index>=nodes_.size() || !std::isfinite(value))return false;
+  auto &node=nodes_[index];
+  if(value<node.minimum || value>node.maximum)return false;
+  if(node.value!=value){node.value=value;revision_=nextRevision();}
+  return true;
+}
+bool GuiDocument::setVisible(GuiId id,bool visible) {
+  const auto index=indexOf(id);if(index>=nodes_.size())return false;
+  if(nodes_[index].visible!=visible){nodes_[index].visible=visible;revision_=nextRevision();}
+  return true;
+}
+bool GuiDocument::setEnabled(GuiId id,bool enabled) {
+  const auto index=indexOf(id);if(index>=nodes_.size())return false;
+  if(nodes_[index].enabled!=enabled){nodes_[index].enabled=enabled;revision_=nextRevision();}
+  return true;
+}
 bool GuiDocument::remove(GuiId id) {
   if (!find(id)) return false;
   std::unordered_set<GuiId> removed{id};
@@ -160,12 +233,12 @@ bool GuiDocument::reorder(GuiId id,int direction) {
   nodes_=std::move(ordered);rebuildIndex();revision_=nextRevision();return true;
 }
 void GuiDocument::write(std::ostream &s) const {
-  s << "AEUI 6 " << nodes_.size() << ' ' << nextId_ << '\n' << std::setprecision(9);
+  s << "AEUI 7 " << nodes_.size() << ' ' << nextId_ << '\n' << std::setprecision(9);
   const auto &c=canvas_;
   s<<static_cast<u32>(c.mode)<<' '<<c.resolution.x<<' '<<c.resolution.y;
   for(float v:c.position)s<<' '<<v;
   for(float v:c.rotation)s<<' '<<v;
-  s<<' '<<c.unitsPerPixel<<' '<<c.occlusion<<'\n';
+  s<<' '<<c.unitsPerPixel<<' '<<c.occlusion<<' '<<static_cast<u32>(c.scaleMode)<<' '<<c.match<<'\n';
   for (const auto &n : nodes_) {
     s << n.id << ' ' << n.parent << ' ' << static_cast<u32>(n.kind) << ' ' << std::quoted(n.name) << ' ' << std::quoted(n.text)
       << ' ' << n.anchorMin.x << ' ' << n.anchorMin.y << ' ' << n.anchorMax.x << ' ' << n.anchorMax.y
@@ -190,12 +263,17 @@ void GuiDocument::write(std::ostream &s) const {
 bool GuiDocument::read(std::istream &s, std::string &error) {
   GuiDocument candidate;
   std::string magic; u32 version = 0, count = 0;
-  if (!(s >> magic >> version >> count >> candidate.nextId_) || magic != "AEUI" || version<1 || version>6 || count > kMaximumNodes) {
+  if (!(s >> magic >> version >> count >> candidate.nextId_) || magic != "AEUI" || version<1 || version>7 || count > kMaximumNodes) {
     error = "Unsupported/corrupt AEUI header"; return false;
   }
   if(version>=2) {
     auto &c=candidate.canvas_;u32 mode;
     if(!(s>>mode>>c.resolution.x>>c.resolution.y>>c.position[0]>>c.position[1]>>c.position[2]>>c.rotation[0]>>c.rotation[1]>>c.rotation[2]>>c.unitsPerPixel>>c.occlusion) || mode>1) {error="Corrupt canvas";return false;}c.mode=static_cast<GuiCanvasMode>(mode);
+  }
+  if(version>=7) {
+    u32 scale=0;
+    if(!(s>>scale>>candidate.canvas_.match) || scale>2){error="Corrupt canvas scaling";return false;}
+    candidate.canvas_.scaleMode=static_cast<GuiScaleMode>(scale);
   }
   for (u32 i = 0; i < count; ++i) {
     GuiNode n; u32 kind = 0;
@@ -353,10 +431,14 @@ namespace {
 float alignSlack(GuiAlignment a,float slack) {return a==GuiAlignment::Center?slack*.5f:a==GuiAlignment::End?slack:0;}
 }
 void GuiRuntime::layout(const UiRect &canvas) {
+  setImages(images_);
   syncMotions();
   const bool rebuild=layoutRevision_!=document_.revision() || canvas.x!=canvas_.x || canvas.y!=canvas_.y || canvas.width!=canvas_.width || canvas.height!=canvas_.height;
   if(!rebuild && !motionDirty_)return;
   const auto nodes=document_.nodes();const usize count=nodes.size();
+  const float screenScale=guiCanvasScale(document_.canvas(),canvas);
+  const bool scaled=document_.canvas().mode==GuiCanvasMode::Screen && document_.canvas().scaleMode!=GuiScaleMode::Pixels;
+  const UiRect layoutCanvas=scaled?UiRect{0,0,canvas.width/screenScale,canvas.height/screenScale}:canvas;
   if(rebuild) {
   canvas_=canvas;layoutRevision_=document_.revision();placements_.clear();
   placementByNode_.assign(count,std::numeric_limits<usize>::max());
@@ -388,7 +470,7 @@ void GuiRuntime::layout(const UiRect &canvas) {
   std::vector<UiRect> assigned(count);std::vector<bool> managed(count,false);
   for(usize i=0;i<count;++i) {
     const auto &n=nodes[i];if(!n.visible)continue;
-    UiRect parent=canvas,clip=canvas;bool enabled=n.enabled;
+    UiRect parent=layoutCanvas,clip=layoutCanvas;bool enabled=n.enabled;
     if(n.parent) {const auto *p=placement(n.parent);const auto *pn=document_.find(n.parent);if(!p)continue;parent=p->bounds;clip=pn->clipChildren?intersect(p->clip,parent):p->clip;enabled&=p->enabled;}
     const float left=parent.x+parent.width*n.anchorMin.x+n.offsets.x,top=parent.y+parent.height*n.anchorMin.y+n.offsets.y;
     UiRect r=managed[i]?assigned[i]:UiRect{left,top,std::max(0.f,parent.width*n.anchorMax.x+n.offsets.width+parent.x-left),std::max(0.f,parent.height*n.anchorMax.y+n.offsets.height+parent.y-top)};
@@ -424,7 +506,8 @@ void GuiRuntime::layout(const UiRect &canvas) {
   transforms_.assign(count,PoseTransform{});
   for(auto &p:placements_) {
     const auto index=document_.indexOf(p.node);const auto &n=nodes[index];const auto original=p.bounds;
-    const auto parent=n.parent?transforms_[document_.indexOf(n.parent)]:PoseTransform{};
+    const auto parent=n.parent?transforms_[document_.indexOf(n.parent)]:
+        scaled?PoseTransform{screenScale,canvas.x,canvas.y,1}:PoseTransform{};
     syncState(n,p.enabled);const auto visual=stateStyle(n.id);auto local=pose(n.id);
     local.x+=visual.pose.x;local.y+=visual.pose.y;local.scale*=visual.pose.scale;local.opacity*=visual.pose.opacity*n.opacity;
     p.tint=visual.tint;
@@ -445,6 +528,12 @@ void GuiRuntime::layout(const UiRect &canvas) {
     return !p || !p->enabled || !n || (!n->interaction.clickable && n->kind!=GuiKind::Button && n->kind!=GuiKind::Toggle && n->kind!=GuiKind::Slider && !guiInputKind(n->kind));
   }))motionDirty_=true;
   reconcileControls();
+}
+void GuiRuntime::setImages(const GuiImageAtlas *images) {
+  const auto revision=images?images->revision():0;
+  if(images_!=images || imageRevision_!=revision) {
+    images_=images;imageRevision_=revision;layoutRevision_=~u64{0};
+  }
 }
 void GuiRuntime::draw(UiDrawList &list) const {
   for (const auto &p : placements_) {
@@ -504,11 +593,15 @@ void GuiRuntime::emit(GuiEvent e) { if (events_.size() == 256) { ++droppedEvents
 void GuiRuntime::changeValue(GuiId id, float value, bool send) {
   const auto *n = document_.find(id);
   if (!n || !std::isfinite(value)) return;
-  GuiNode edited = *n; edited.value = std::clamp(value, n->minimum, n->maximum);
-  if (n->kind == GuiKind::Toggle) edited.value = edited.value >= (n->minimum+n->maximum)*0.5f ? n->maximum : n->minimum;
-  if (edited.value == n->value) return;
-  std::string error;
-  if (document_.update(edited, error) && send) dispatch({id,GuiEventKind::ValueChanged,edited.value});
+  float next=std::clamp(value,n->minimum,n->maximum);
+  if(n->kind==GuiKind::Toggle)next=next>=(n->minimum+n->maximum)*.5f?n->maximum:n->minimum;
+  if(next==n->value)return;
+  const auto previous=document_.revision();
+  if(!document_.setValue(id,next))return;
+  // Values affect paint, never measured geometry. Preserve pending layout edits.
+  if(layoutRevision_==previous)layoutRevision_=document_.revision();
+  if(motionRevision_==previous)motionRevision_=document_.revision();
+  if(send)dispatch({id,GuiEventKind::ValueChanged,next});
 }
 void GuiRuntime::execute(GuiId id,const GuiActionBinding &action) {
   if(action.action==GuiClickAction::Notify)return;
@@ -588,10 +681,10 @@ bool GuiRuntime::pointer(const UiPointerEvent &e) {
   }
   layout(canvas_);return true;
 }
-bool GuiRuntime::setText(GuiId id, std::string text) { const auto *n=document_.find(id); if (!n) return false; auto copy=*n; copy.text=std::move(text); std::string error; return document_.update(copy,error); }
+bool GuiRuntime::setText(GuiId id, std::string text) { return document_.setText(id,std::move(text)); }
 bool GuiRuntime::setValue(GuiId id, float value) { const auto *n=document_.find(id); if (!n || !std::isfinite(value) || (n->kind!=GuiKind::Toggle && n->kind!=GuiKind::Slider && n->kind!=GuiKind::Progress)) return false; changeValue(id,value,false); return true; }
-bool GuiRuntime::setVisible(GuiId id, bool v) { const auto *n=document_.find(id); if (!n) return false; auto copy=*n; copy.visible=v; std::string error; const bool ok=document_.update(copy,error); if(ok) layout(canvas_); return ok; }
-bool GuiRuntime::setEnabled(GuiId id, bool v) { const auto *n=document_.find(id); if (!n) return false; auto copy=*n; copy.enabled=v; std::string error; const bool ok=document_.update(copy,error); if(ok) layout(canvas_); return ok; }
+bool GuiRuntime::setVisible(GuiId id, bool v) { const bool ok=document_.setVisible(id,v); if(ok) layout(canvas_); return ok; }
+bool GuiRuntime::setEnabled(GuiId id, bool v) { const bool ok=document_.setEnabled(id,v); if(ok) layout(canvas_); return ok; }
 bool GuiRuntime::setOpacity(GuiId id,float value) {
   const auto *node=document_.find(id);
   if(!node || !std::isfinite(value) || value<0 || value>1)return false;

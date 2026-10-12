@@ -1,3 +1,4 @@
+#include "editor/editor_widgets.h"
 #include "editor/editor_session.h"
 #include "core/sha256.h"
 #include "editor/editor_creation_catalog.h"

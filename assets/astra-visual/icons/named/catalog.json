@@ -2088,6 +2088,55 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/ik-look-at": {
+      "category": "component",
+      "name": "ik-look-at",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/ik-aim": {
+      "category": "component",
+      "name": "ik-aim",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/rotation-limit": {
+      "category": "component",
+      "name": "rotation-limit",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/grounder": {
+      "category": "component",
+      "name": "grounder",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/finger-curl": {
+      "category": "component",
+      "name": "finger-curl",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/ik-offset": {
+      "category": "component",
+      "name": "ik-offset",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/twist-relaxer": {
+      "category": "component",
+      "name": "twist-relaxer",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

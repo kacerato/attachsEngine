@@ -2194,6 +2194,7 @@ void android_main(android_app *app) {
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
   shell.lockCamera = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lock_camera");
   shell.startPlayOnOpen = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.start_play");
+  shell.editorSession.setStandalonePlayer(ae::platform::android::readBooleanLaunchOption(app->activity,"astra.player"));
   ae::u32 requestedCameraRouteMode = 0;
   ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.camera_route_mode",
                                                    requestedCameraRouteMode);

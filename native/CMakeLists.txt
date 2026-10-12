@@ -9,6 +9,16 @@ if(CMAKE_GENERATOR MATCHES "Ninja")
   # metadata. Serialize links while retaining parallel source compilation.
   set_property(GLOBAL APPEND PROPERTY JOB_POOLS astra_link=1)
   set(CMAKE_JOB_POOL_LINK astra_link)
+  if(ANDROID)
+    # AGP invokes Ninja directly, so CMAKE_BUILD_PARALLEL_LEVEL does not cap its
+    # compiler processes. Avoid paging/OOM on the 16 GB authoring host.
+    set(AETHER_ANDROID_COMPILE_JOBS 3 CACHE STRING "Maximum concurrent Android C++ compiles")
+    if(NOT AETHER_ANDROID_COMPILE_JOBS MATCHES "^[1-9][0-9]*$")
+      message(FATAL_ERROR "AETHER_ANDROID_COMPILE_JOBS must be a positive integer")
+    endif()
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS astra_android_compile=${AETHER_ANDROID_COMPILE_JOBS})
+    set(CMAKE_JOB_POOL_COMPILE astra_android_compile)
+  endif()
 endif()
 
 # Host-side generation only. Generated C++ is checked in and has no Python
@@ -547,6 +557,7 @@ add_library(aether_runtime STATIC
   runtime/transform_math.cpp
   runtime/rig_instance.cpp
   runtime/ik_solvers.cpp
+  runtime/scene_ik.cpp
   runtime/game_world.cpp
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
@@ -592,8 +603,16 @@ add_library(aether_editor STATIC
   editor/editor_document.cpp
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
+  editor/editor_screen_input.cpp
+  editor/editor_widgets.cpp
   editor/editor_gui_tree.cpp
   editor/editor_session.cpp
+  editor/editor_session_actions.cpp
+  editor/editor_session_internal.cpp
+  editor/editor_session_code.cpp
+  editor/editor_session_render.cpp
+  editor/editor_session_import_settings.cpp
+  editor/editor_session_input.cpp
   editor/editor_character_authoring.cpp
   editor/editor_dynamic_motor_authoring.cpp
   editor/editor_collision_regeneration.cpp
@@ -604,6 +623,7 @@ add_library(aether_editor STATIC
   editor/editor_rig_tool.cpp
   editor/editor_animation_ik_tool.cpp
   editor/editor_ik_authoring.cpp
+  editor/editor_studio_tools.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
@@ -644,6 +664,14 @@ add_library(aether_editor STATIC
 )
 target_include_directories(aether_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_editor PUBLIC aether_core aether_assets aether_runtime aether_renderer aether_ui aether_platform)
+option(AETHER_EDITOR_PCH "Precompile stable standard-library headers for the editor" ON)
+if(AETHER_EDITOR_PCH)
+  # No engine headers here: editing a screen, schema or session must not
+  # invalidate the PCH and force every editor source to be rebuilt.
+  target_precompile_headers(aether_editor PRIVATE
+    <algorithm> <array> <cmath> <cstdint> <functional> <memory>
+    <optional> <span> <string> <string_view> <utility> <vector>)
+endif()
 # A sessao do editor passa do limite de secoes do COFF no build de depuracao do
 # MinGW ("file too big"); o formato estendido so muda o objeto, nao o codigo.
 if(MINGW)
@@ -1246,7 +1274,6 @@ if(WIN32)
   target_link_libraries(benchmark_physics2d_box2d PRIVATE psapi)
 endif()
 
-# Cabecalhos pesados do editor processados uma vez por alvo (build mais curto).
-if(TARGET aether_editor)
-  target_precompile_headers(aether_editor PRIVATE editor/editor_session.h)
+if(NOT ANDROID)
+  include(cmake/host_iteration.cmake)
 endif()

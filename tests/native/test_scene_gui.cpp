@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "harness.h"
 #include "runtime/scene_gui.h"
 #include "editor/editor_archive.h"
@@ -13,6 +14,17 @@
 #include <sstream>
 #include <fstream>
 using namespace ae;using namespace ae::ui;
+AE_TEST(gui_player_presentation_keeps_gameplay_input_without_authoring_chrome) {
+  editor::EditorDocument document;editor::EditorScreenState state;
+  state.document=&document;state.surface={0,0,1280,720};state.standalonePlayer=true;
+  state.workspace=editor::EditorWorkspace::Play;state.playHasCharacter=true;state.playSecondaryActionLabel="Interagir";
+  UiDrawList list;UiInputRouter router;list.begin(state.surface,fallbackFontMetrics());
+  const auto layout=editor::buildEditorScreen(state,editor::editorTheme(),list,router);
+  AE_EXPECT_TRUE(layout.viewport.width==1280&&layout.viewport.height==720&&layout.topBar.isEmpty()&&layout.inspectorPanel.isEmpty(),"game owns surface without editor panels");
+  AE_EXPECT_EQ(router.hitTest({1100,670}).widgetId,editor::widgetId(editor::EditorWidget::JumpCharacter),"legacy touch jump remains connected");
+  AE_EXPECT_EQ(router.hitTest({1200,670}).widgetId,editor::widgetId(editor::EditorWidget::PlaySecondaryAction),"secondary gameplay action remains connected");
+  AE_EXPECT_EQ(router.hitTest({250,25}).target,UiPointerTarget::Viewport,"editor toolbar cannot intercept game input");
+}
 namespace {
 GuiDocument inputControls() {
   GuiDocument d;std::string error;

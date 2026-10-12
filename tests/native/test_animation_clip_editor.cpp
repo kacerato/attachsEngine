@@ -1,5 +1,9 @@
+#include "editor/editor_screen.h"
 #include "harness.h"
 #include "editor/editor_animation_ik.h"
+#include "editor/editor_studio_tools.h"
+#include "editor/editor_animation_pose_selection.h"
+#include "scene/ik_constraints.h"
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_animation_clip_preview.h"
@@ -1734,4 +1738,57 @@ AE_TEST(animation_studio_transfers_clip_to_another_character_with_different_rest
   AE_EXPECT_TRUE(session.screen().rigTool.status.rfind("Transferido",0)==0,session.screen().rigTool.status.c_str());
   usize clips=0;for(const auto &record:session.assets().records())if(record.type==resources::AssetType::AnimationClip)++clips;
   AE_EXPECT_EQ(clips,usize(2),"independent clip created for the wolf");
+}
+
+
+AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
+  using namespace editor;
+  TemporaryProject project;EditorSession session;std::string error,summary;
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto fox=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Raposa");
+  const auto hip=doc.createEntity(fox,EditorEntityKind::Folder,"b_Hip_01");
+  const auto spine=doc.createEntity(hip,EditorEntityKind::Folder,"b_Spine01_02");
+  const auto head=doc.createEntity(spine,EditorEntityKind::Folder,"b_Head_05");
+  const auto upper=doc.createEntity(spine,EditorEntityKind::Folder,"b_RightUpperArm_06");
+  const auto fore=doc.createEntity(upper,EditorEntityKind::Folder,"b_RightForeArm_07");
+  const auto hand=doc.createEntity(fore,EditorEntityKind::Folder,"b_RightHand_08");
+  const auto leg1=doc.createEntity(hip,EditorEntityKind::Folder,"b_LeftLeg01_015");
+  const auto leg2=doc.createEntity(leg1,EditorEntityKind::Folder,"b_LeftLeg02_016");
+  const auto foot=doc.createEntity(leg2,EditorEntityKind::Folder,"b_LeftFoot01_017");
+  const auto prop=doc.createEntity(fox,EditorEntityKind::Folder,"Graveto");
+  runtime::Transform t;t.position[1]=2;doc.setTransform(hip,t);
+  runtime::Transform up;up.position[1]=.6f;doc.setTransform(spine,up);doc.setTransform(head,up);
+  runtime::Transform side;side.position[0]=.3f;doc.setTransform(upper,side);
+  runtime::Transform down;down.position[1]=-.45f;down.position[2]=.2f;doc.setTransform(fore,down);doc.setTransform(hand,down);
+  runtime::Transform legDown;legDown.position[1]=-.7f;legDown.position[2]=.05f;doc.setTransform(leg1,legDown);doc.setTransform(leg2,legDown);doc.setTransform(foot,legDown);
+  runtime::Transform p;p.position[0]=1;doc.setTransform(prop,p);
+  // Assistente: tudo numa operacao, desfeita de uma vez.
+  AE_EXPECT_TRUE(EditorStudio::setupIk(session,fox,summary,error),error.c_str());
+  AE_EXPECT_TRUE(doc.find(hand)->components.find(scene::TwoBoneIk::descriptor)&&doc.find(foot)->components.find(scene::FootGrounding::descriptor)&&
+                 doc.find(fox)->components.find(scene::GrounderBody::descriptor)&&doc.find(head)->components.find(scene::LookAtIk::descriptor),summary.c_str());
+  AE_EXPECT_TRUE(session.history().undo(doc)&&!doc.find(hand)->components.find(scene::TwoBoneIk::descriptor)&&!doc.find(fox)->components.find(scene::GrounderBody::descriptor),"one undo removes the whole setup");
+  // Clipe com o quadril andando: fixar a mao mantem a ponta parada no mundo.
+  resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(fox,1,guid,error)&&session.openAnimationClip(guid,fox,error),error.c_str());
+  const auto *asset=session.animationClipAsset(guid);
+  AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,asset->revision,[&](resources::AnimationClipAsset &clip) {
+    resources::AnimationClipBinding binding;std::string e;if(!animationPoseTargetPath(doc,fox,hip,binding.path,e))return false;binding.name="b_Hip_01";
+    u64 track=0;const float a[3]{0,2,0},b[3]{.15f,2,0};
+    return clip.addTrack(binding,resources::AnimationPath::Translation,resources::AnimationRotationMode::Quaternion,a,track,e)&&clip.putPose(track,0,a,e)&&clip.putPose(track,1,b,e);
+  },error),error.c_str());
+  AE_EXPECT_TRUE(session.seekAnimationClip(0,error),error.c_str());
+  float before[16];runtime::worldMatrix(session.evaluatedEditorScene(),hand,before);
+  AE_EXPECT_TRUE(EditorStudio::pinTip(session,hand,0,1,summary,error),error.c_str());
+  AE_EXPECT_TRUE(session.seekAnimationClip(1,error),error.c_str());session.update();
+  float after[16];runtime::worldMatrix(session.evaluatedEditorScene(),hand,after);
+  {char pinMessage[200];std::snprintf(pinMessage,sizeof pinMessage,"pinned tip stays fixed while the hip moves: before %.3f %.3f %.3f after %.3f %.3f %.3f",before[12],before[13],before[14],after[12],after[13],after[14]);
+  AE_EXPECT_TRUE(std::abs(after[12]-before[12])<2e-2f&&std::abs(after[13]-before[13])<2e-2f&&std::abs(after[14]-before[14])<2e-2f,pinMessage);}
+  // Seguir: o graveto acompanha a mao mantendo a distancia.
+  AE_EXPECT_TRUE(session.seekAnimationClip(0,error),error.c_str());
+  float hand0[16],prop0[16];runtime::worldMatrix(session.evaluatedEditorScene(),hip,hand0);runtime::worldMatrix(session.evaluatedEditorScene(),prop,prop0);
+  AE_EXPECT_TRUE(EditorStudio::followObject(session,prop,hip,0,1,summary,error),error.c_str());
+  AE_EXPECT_TRUE(session.seekAnimationClip(1,error),error.c_str());
+  float hand1[16],prop1[16];runtime::worldMatrix(session.evaluatedEditorScene(),hip,hand1);runtime::worldMatrix(session.evaluatedEditorScene(),prop,prop1);
+  AE_EXPECT_TRUE(std::abs((prop1[12]-hand1[12])-(prop0[12]-hand0[12]))<5e-3f,"follower keeps its offset from the parent");
+  AE_EXPECT_TRUE(session.history().undo(doc),"follow is one undoable edit");
 }

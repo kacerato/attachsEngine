@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #pragma once
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"

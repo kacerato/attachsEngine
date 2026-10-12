@@ -70,7 +70,9 @@ bool editString(const char *label,std::string &value,usize capacity,ImmediateGui
 }
 bool editColor(const char *label,UiColor &packed) {
   float c[]{float((packed>>16)&255)/255,float((packed>>8)&255)/255,float(packed&255)/255,float(packed>>24)/255};
-  if (!ImGui::ColorEdit4(label,c,ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf | ImGuiColorEditFlags_DisplayHex)) return false;
+  ImGui::TextUnformatted(label);ImGui::SetNextItemWidth(-1);
+  const std::string id=std::string("##color-")+label;
+  if (!ImGui::ColorEdit4(id.c_str(),c,ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf | ImGuiColorEditFlags_DisplayHex)) return false;
   auto channel=[](float v){return static_cast<u32>(std::clamp(v,0.0f,1.0f)*255+0.5f);};
   packed=(channel(c[3])<<24)|(channel(c[0])<<16)|(channel(c[1])<<8)|channel(c[2]); return true;
 }
@@ -78,6 +80,15 @@ bool editColor(const char *label,UiColor &packed) {
 void GuiWorkbench::setPreview(bool enabled) {
   history_.commit(document_); previewing_=enabled;
   if (enabled) { preview_.load(document_);preview_.setImages(images_); preview_.layout(canvas_); lastEvent_.clear(); }
+}
+GuiId GuiWorkbench::createComposition(GuiComposition kind) {
+  if(previewing_)return 0;
+  history_.commit(document_);history_.begin(document_);
+  const auto root=appendGuiComposition(document_,kind,diagnostic_);
+  history_.commit(document_);
+  if(root){selection_=root;canvasSettings_=false;contextRoute_=0;
+    diagnostic_="Composicao editavel criada. Vincule eventos e valores ao gameplay; controles touch usam as acoes do projeto.";}
+  return root;
 }
 GuiId GuiWorkbench::create(GuiKind kind) {
   if(previewing_)return 0;
@@ -506,6 +517,17 @@ void GuiWorkbench::canvasProperties() {
   insertPropertyIcon(immediate_,propertyIconDrawing_,area_,canvas.mode==GuiCanvasMode::World?UiIcon::UiWorldCanvas:UiIcon::UiInterfaceCanvas,iconAt,24);ImGui::Dummy({24,24});ImGui::SameLine();
   ImGui::TextUnformatted("Canvas / apresentacao");
   int mode=static_cast<int>(canvas.mode);if(ImGui::Combo("Destino",&mode,"Tela\0Mundo 3D\0")){canvas.mode=static_cast<GuiCanvasMode>(mode);changed=true;}
+  if(canvas.mode==GuiCanvasMode::Screen) {
+    int scale=static_cast<int>(canvas.scaleMode);
+    if(ImGui::Combo("Escala",&scale,"Pixels (legado)\0Ajustar ao menor eixo\0Combinar largura / altura\0")){canvas.scaleMode=static_cast<GuiScaleMode>(scale);changed=true;}
+    if(canvas.scaleMode!=GuiScaleMode::Pixels) {
+      float reference[]{canvas.resolution.x,canvas.resolution.y};
+      changed=ImGui::DragFloat2("Resolucao de referencia",reference,1,32,8192)||changed;
+      canvas.resolution={reference[0],reference[1]};keepActiveFieldVisible();
+      if(canvas.scaleMode==GuiScaleMode::Match)changed=ImGui::SliderFloat("Largura / altura",&canvas.match,0,1)||changed;
+      ImGui::TextWrapped("Geometria, texto e toque usam a mesma escala. Anchors acompanham a area disponivel.");
+    }
+  }
   if(canvas.mode==GuiCanvasMode::World) {
     float resolution[]{canvas.resolution.x,canvas.resolution.y};ImGui::TextUnformatted("Resolucao de autoria");ImGui::SetNextItemWidth(-1);
     changed=ImGui::DragFloat2("##Resolucao",resolution,1,32,8192)||changed;keepActiveFieldVisible();canvas.resolution={resolution[0],resolution[1]};
@@ -527,7 +549,16 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
   toolbarDrawing_.addImage({mark.x,mark.y,24,24},static_cast<UiImageId>(UiIcon::UiInterfaceCanvas));
   immediate_.insert(toolbarDrawing_);ImGui::Dummy({24,24});ImGui::SameLine();
   ImGui::TextUnformatted("INTERFACE"); ImGui::SameLine();
-  if(ImGui::Button("Canvas")){canvasSettings_=true;compactRoute_=2;}ImGui::SameLine();
+  ImGui::BeginDisabled(previewing_);
+  if(ImGui::Button("Composicoes"))ImGui::OpenPopup("compositions");
+  if(ImGui::BeginPopup("compositions")) {
+    if(ImGui::MenuItem("HUD / controles touch"))createComposition(GuiComposition::Hud);
+    if(ImGui::MenuItem("Menu / preferencias"))createComposition(GuiComposition::Menu);
+    if(ImGui::MenuItem("Inventario / grade"))createComposition(GuiComposition::Inventory);
+    ImGui::EndPopup();
+  }
+  ImGui::EndDisabled();ImGui::SameLine();
+  if(ImGui::Button("Canvas")){canvasSettings_=true;compactRoute_=2;contextRoute_=1;}ImGui::SameLine();
   bool preview=previewing_;
   if (ImGui::Checkbox("Interagir",&preview)) setPreview(preview);
   ImGui::SameLine();
@@ -545,7 +576,7 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
       ImGui::EndPopup();
     }
   }
-  if(area.width<950) ImGui::NewLine(); else ImGui::SameLine();
+  if(ImGui::GetContentRegionAvail().x<360 || area.width<1100) ImGui::NewLine(); else ImGui::SameLine();
   ImGui::SetNextItemWidth(std::max(100.0f,std::min(220.0f,area.width*0.4f)));
   ImGui::InputText("##resource",resource_,sizeof(resource_),ImGuiInputTextFlags_CallbackAlways,ImmediateGui::inputCallback,&immediate_);
   ImGui::SameLine();
@@ -565,14 +596,13 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
     ImGui::SameLine(); if(ImGui::RadioButton("Propriedades",compactRoute_==2)) compactRoute_=2;
   }
   ImVec2 available=ImGui::GetContentRegionAvail(); available.y=std::max(32.0f,available.y-28);
-  const float left=(!compact && !previewing_)?190.0f:0, right=(!compact && !previewing_)?300.0f:0;
-  if (left>0) { ImGui::BeginChild("tree",{left,available.y}); tree(); ImGui::EndChild(); ImGui::SameLine(); }
+  const float right=(!compact && !previewing_)?300.0f:0;
   if (compact && compactRoute_ && !previewing_) {
     ImGui::BeginChild("context",{available.x,available.y});
     if(compactRoute_==1) tree();else properties();
     ImGui::EndChild(); canvas_={};
   } else {
-    const float width=std::max(32.0f,available.x-left-right-(left?16:0));
+    const float width=std::max(32.0f,available.x-right-(right?ImGui::GetStyle().ItemSpacing.x:0));
     ImGui::BeginChild("canvas",{width,available.y},ImGuiChildFlags_Borders,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
     const auto origin=ImGui::GetCursorScreenPos(), space=ImGui::GetContentRegionAvail();
     canvas_={origin.x,origin.y,space.x,space.y};
@@ -598,7 +628,13 @@ void GuiWorkbench::draw(const UiRect &area,const UiRect &surface,UiDrawList &lis
     immediate_.insert(canvasDrawing_);
     ImGui::EndChild();
   }
-  if(right>0) { ImGui::SameLine();ImGui::BeginChild("properties",{right,available.y}); properties();ImGui::EndChild(); }
+  if(right>0) {
+    ImGui::SameLine();ImGui::BeginChild("context",{right,available.y});
+    if(ImGui::Selectable("Elementos",contextRoute_==0,0,{130,32}))contextRoute_=0;
+    ImGui::SameLine();
+    if(ImGui::Selectable("Propriedades",contextRoute_==1,0,{140,32}))contextRoute_=1;
+    ImGui::Separator();if(contextRoute_==0)tree();else properties();ImGui::EndChild();
+  }
   GuiEvent event;
   while(preview_.poll(event)) {
     const auto *n=preview_.document().find(event.node);
@@ -631,6 +667,7 @@ bool GuiWorkbench::pointer(const UiPointerEvent &e) {
     canvasPointer_=canvas_.contains(e.position) && !immediate_.overlayAt(e.position,"Interface##attachs");
     if(canvasPointer_ && !previewing_) {
       selection_=authorView_.hit(e.position);canvasSettings_=false;dragEditable_=false;dragStart_=e.position;
+      if(selection_)contextRoute_=1;
       if(const auto *node=document_.find(selection_)) {const auto *parent=document_.find(node->parent);dragEditable_=!parent || !guiContainer(parent->kind) || node->sizing.ignore; dragNode_=*node;dragBefore_=document_;history_.begin(document_); }
     }
   }
@@ -638,7 +675,8 @@ bool GuiWorkbench::pointer(const UiPointerEvent &e) {
   if(canvasPointer_) {
     if(previewing_) preview_.pointer(e);
     else if(selection_ && dragEditable_ && e.phase==UiPointerPhase::Move) {
-      auto node=dragNode_; const float x=e.position.x-dragStart_.x,y=e.position.y-dragStart_.y;
+      auto node=dragNode_; const float scale=authorView_.canvasScale();
+      const float x=(e.position.x-dragStart_.x)/scale,y=(e.position.y-dragStart_.y)/scale;
       node.offsets.x+=x;node.offsets.width+=x;node.offsets.y+=y;node.offsets.height+=y;
       document_.update(node,diagnostic_);
     }

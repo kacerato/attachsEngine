@@ -119,7 +119,7 @@ jobs:
       - name: Configurar CMake (Ninja)
         run: cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
       - name: Compilar
-        run: cmake --build build/native --config Release
+        run: cmake --build build/native --config Release --target aether_tests
       - name: Rodar aether_tests
         working-directory: build/native
         run: |
@@ -312,7 +312,7 @@ jobs:
         run: ./tools/prepare-vulkan-headers.ps1 -NdkRoot "$env:ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" -OutputDirectory build/vulkan-headers
       - name: Build nativo limpo (diretório novo, sem build/ reaproveitado)
         run: |
-          cmake -S native -B build/native-clean -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
+          cmake -S native -B build/native-clean -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers" -DAETHER_HOST_TOOLS_IN_ALL=ON
           cmake --build build/native-clean --config Release
       - name: Disponibilizar a DLL limpa no caminho de integração
         run: |

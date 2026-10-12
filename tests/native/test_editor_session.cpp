@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "script_publication_fixture.h"
 #include "renderer/primitive_geometry.h"
 #include "scene/path_follow.h"

@@ -423,7 +423,7 @@ inline void navSurfaceVisual(const scene::ComponentValue &value,const EditorEnti
   constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
   for(const auto &e:edges) visual_detail::segment(out,world,c[e[0]],c[e[1]]);
 }
-inline const std::array<ComponentVisualProvider,48> componentVisualProviders{{
+inline const std::array<ComponentVisualProvider,55> componentVisualProviders{{
   {&scene::NavSurface::descriptor,ui::UiIcon::NavigationSurface,true,navSurfaceVisual},
   {&scene::NavAgent::descriptor,ui::UiIcon::NavigationAgent,true,navAgentVisual},
   {&scene::NavObstacle::descriptor,ui::UiIcon::NavigationObstacle,true,navObstacleVisual},
@@ -447,6 +447,13 @@ inline const std::array<ComponentVisualProvider,48> componentVisualProviders{{
   {&scene::TwoBoneIk::descriptor,ui::UiIcon::ComponentIkTwoBone,true,visual_detail::constraint},
   {&scene::ChainIk::descriptor,ui::UiIcon::ComponentIkChain,true,visual_detail::constraint},
   {&scene::FootGrounding::descriptor,ui::UiIcon::ComponentFootGrounding,true,visual_detail::footGrounding},
+  {&scene::LookAtIk::descriptor,ui::UiIcon::ComponentIkLookAt,true,visual_detail::constraint},
+  {&scene::AimIk::descriptor,ui::UiIcon::ComponentIkAim,true,visual_detail::constraint},
+  {&scene::RotationLimit::descriptor,ui::UiIcon::ComponentRotationLimit,true,visual_detail::constraint},
+  {&scene::GrounderBody::descriptor,ui::UiIcon::ComponentGrounder,true,visual_detail::constraint},
+  {&scene::FingerCurl::descriptor,ui::UiIcon::ComponentFingerCurl,true,visual_detail::constraint},
+  {&scene::IkOffset::descriptor,ui::UiIcon::ComponentIkOffset,true,visual_detail::constraint},
+  {&scene::TwistRelaxer::descriptor,ui::UiIcon::ComponentTwistRelaxer,true,visual_detail::constraint},
   {&scene::TransformTween::descriptor,ui::UiIcon::ComponentTweenTransform,true,visual_detail::constraint},
   {&scene::TweenSequence::descriptor,ui::UiIcon::ComponentTweenSequence,true,visual_detail::constraint},
   {&scene::PropertyTween::descriptor,ui::UiIcon::ComponentTweenProperty,true,visual_detail::constraint},

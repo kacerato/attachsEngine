@@ -1,5 +1,6 @@
 #pragma once
-#include "editor/editor_screen.h"
+#include "editor/editor_screen_state.h"
+#include "ui/ui_input.h"
 namespace ae::editor {
 inline constexpr u32 TextureImportPageCount=5;
 inline u32 textureImportPageCount(const EditorScreenState &state) {return state.textureImportTiff?8:TextureImportPageCount;}

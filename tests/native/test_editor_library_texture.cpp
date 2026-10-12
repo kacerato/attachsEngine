@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "harness.h"
 #include "editor/editor_session.h"
 #include "renderer/authoring_geometry.h"

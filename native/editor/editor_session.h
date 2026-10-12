@@ -69,7 +69,8 @@
 #include "editor/editor_document.h"
 #include "editor/editor_history.h"
 #include "editor/editor_component_presets.h"
-#include "editor/editor_screen.h"
+#include "editor/editor_screen_state.h"
+#include "editor/editor_screen_layout.h"
 #include "ui/ui_font.h"
 #include "ui/ui_icon_atlas.h"
 #include "ui/ui_instance_builder.h"
@@ -107,6 +108,10 @@ struct EditorAssetInstantiation {
   bool rigidBody=false;
 };
 
+struct EditorStudioState;
+EditorStudioState *createStudioState();
+void destroyStudioState(EditorStudioState *);
+struct EditorStudio;
 class EditorSession final {
   friend class UnityPackageImporter;
 public:
@@ -142,6 +147,7 @@ public:
   // certo — foi exatamente o que aconteceu na primeira execução no aparelho, e
   // a grade saiu atravessando a tela na diagonal.
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
+  void setStandalonePlayer(bool value) noexcept {state_.standalonePlayer=value;}
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
   // Clip authoring operations are independent of the animation panel. They
@@ -236,17 +242,7 @@ public:
   void configureScriptRendering(const renderer::ProjectRenderingSettings &authored,
                                 const renderer::RenderingCapabilities &capabilities,
                                 renderer::ThermalPressure thermal,
-                                const renderer::ResolvedRenderingPolicy &effective) {
-    playScene_.configureScriptRendering(authored,capabilities,thermal,effective,
-      [this](u64 id,const renderer::ProjectRenderingSettings &settings,bool restoringAuthoring) {
-        // Pedidos normais são serializados pelo estado runtime. A restauração
-        // autoral de Stop é a única chamada que pode chegar com uma entrada na
-        // fila; ela substitui o pedido não consumido para a configuração de
-        // gameplay não escapar para o modo de edição.
-        if(scriptRenderingRequestPending_&&!restoringAuthoring) return false;
-        scriptRenderingRequestPending_=true;scriptRenderingRequestId_=id;scriptRenderingRequest_=settings;return true;
-      },&assets_,&environmentProfiles_);
-  }
+                                const renderer::ResolvedRenderingPolicy &effective);
   bool takeScriptRenderingRequest(u64 &id,renderer::ProjectRenderingSettings &settings) {
     if(!scriptRenderingRequestPending_) return false;
     scriptRenderingRequestPending_=false;id=scriptRenderingRequestId_;settings=scriptRenderingRequest_;return true;
@@ -259,19 +255,7 @@ public:
   // hospedeiro mandar. No aparelho o destino do hospedeiro e o `logcat`, que
   // nao existe para quem esta usando o editor: sem esta captura, um script que
   // fala nao tem onde ser ouvido.
-  void setScriptLogSink(runtime::ScriptBridge::LogSink sink) {
-    playScene_.setScriptLogSink([this,forward=std::move(sink)](u64 object,std::string_view text) {
-      EditorConsoleEntry entry;
-      entry.origin=EditorConsoleOrigin::Script;
-      entry.message=std::string(text);
-      if(isPlaying()) state_.playHudMessage=entry.message;
-      entry.object=object;
-      entry.project=files_.rootPath();entry.playSession=playScene_.world().worldId();
-      entry.buildGeneration=runtimeCodeGeneration_;
-      console_.add(std::move(entry));
-      if(forward) forward(object,text);
-    });
-  }
+  void setScriptLogSink(runtime::ScriptBridge::LogSink sink);
   const EditorConsole &console() const noexcept { return console_; }
   EditorConsole &console() noexcept { return console_; }
   // Explicit copy command, consumed once by the platform clipboard bridge.
@@ -315,62 +299,12 @@ public:
     codeAutoBuildDelay_ = seconds > 0.0f ? seconds : 0.0f;
   }
   float codeAutoBuildDelay() const noexcept { return codeAutoBuildDelay_; }
-  void pumpCodeAutoBuild(double seconds) {
-    if(state_.codeRecoveryPending) return;
-    // A bounded draft journal also works when the compiler is unavailable or
-    // a build is running. It never publishes recovered code implicitly.
-    if(seconds-codeCheckpointAt_>=1.0 && !state_.codeComposing && !files_.rootPath().empty()) {
-      codeCheckpointAt_=seconds;
-      if(!code_.checkpoint(files_)) reportProblem(EditorConsoleSeverity::Warning,code_.error());
-    }
-    if(state_.codeComposing) {codeQuietSince_=seconds;return;}
-    if(codeAutoBuildDelay_<=0.0f || !state_.codeCompilerAvailable || state_.codeBuildBusy) return;
-    if(files_.rootPath().empty()) return;
-    const auto generation=code_.generation();
-    if(generation!=codeSeenGeneration_) {
-      codeSeenGeneration_=generation;codeQuietSince_=seconds;return;
-    }
-    if(generation==codeBuiltGeneration_ || codeQuietSince_<0.0) return;
-    if(seconds-codeQuietSince_<static_cast<double>(codeAutoBuildDelay_)) return;
-    if(!codeBuildRequest_.empty()) return;
-    // Salvar ANTES de pedir: o compilador le o disco, e um build de um texto
-    // que so existe na memoria compilaria a versao anterior e culparia o
-    // usuario por um erro que ele acabou de corrigir.
-    if(!code_.saveAll(files_)) { state_.status=code_.error(); codeQuietSince_=-1.0; return; }
-    codeBuiltGeneration_=generation;
-    codeBuildGeneration_=generation;
-    codeBuildRequest_=files_.rootPath();
-    state_.codeBuildBusy=true;
-    state_.status="Compilando código do projeto";
-    reportProblem(EditorConsoleSeverity::Info,"Compilação automática iniciada · revisão "+std::to_string(generation));
-  }
+  void pumpCodeAutoBuild(double seconds);
   std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
   bool requestEditorTools(std::string_view id={});
   EditorToolRequest takeEditorToolRequest() {auto request=std::move(editorToolRequest_);editorToolRequest_={};return request;}
   void completeEditorToolRequest(const EditorToolRequest &request,bool accepted,std::string_view report);
-  bool completeCodeBuild(std::string_view report) {
-    if(codeBuildGeneration_!=code_.generation()) {
-      state_.codeBuildBusy=false;
-      state_.status="Fonte mais recente; aguardando nova compilação";
-      reportProblem(EditorConsoleSeverity::Info,"Resultado de build antigo descartado · revisão "+std::to_string(codeBuildGeneration_));
-      return false;
-    }
-    state_.codeBuildBusy=false;const bool ok=code_.applyBuildReport(report,codeBuildGeneration_);
-    // O bloco do compilador troca inteiro: um diagnostico de um arquivo que
-    // agora compila e mentira, e mentira que o usuario persegue.
-    console_.replaceCompiler(code_.diagnostics(),files_.rootPath());
-    // A linha do editor so entra quando NAO ha diagnostico. Com o build
-    // automatico, "compilacao com erros" a cada pausa de digitacao seria uma
-    // linha nova por pausa dizendo o que as linhas do compilador logo acima ja
-    // dizem melhor -- e com o lugar.
-    if(!ok && code_.diagnostics().empty()) reportProblem(EditorConsoleSeverity::Error,code_.error());
-    if(!ok && !code_.diagnostics().empty()) {
-      state_.consoleCollapsed=false;state_.consoleProblems=true;state_.consoleOrigin=-1;
-    }
-    reportProblem(EditorConsoleSeverity::Info,ok?"Compilação concluída; aguardando publicação":
-        "Compilação recusada; publicação anterior preservada");
-    state_.status=ok?"Código compilado; publicando":code_.error();return ok;
-  }
+  bool completeCodeBuild(std::string_view report);
   // O que o catálogo publicado diz sobre si mesmo, em texto de interface. É a
   // resposta honesta para "o componente sumiu": ele não some, o catálogo é que
   // pode estar atrás do texto.
@@ -383,20 +317,7 @@ public:
     }
     return "";
   }
-  void reportCodeCommit(bool accepted) {
-    // Fronteira atômica: os tipos compilados só passam a existir para o inspetor
-    // quando o hospedeiro confirma que carregou o assembly. Recusar não apaga o
-    // catálogo anterior — o assembly anterior continua sendo o que executa.
-    if(accepted) code_.publishBuild();
-    else code_.discardBuild();
-    state_.status=accepted?"Código aplicado ao projeto":"Não foi possível publicar a compilação";
-    reportProblem(accepted?EditorConsoleSeverity::Info:EditorConsoleSeverity::Error,
-        accepted?"Código publicado · revisão "+std::to_string(code_.publishedGeneration()):"Publicação recusada; versão anterior preservada");
-    if(accepted) {
-      reportScriptSchemaChanges();state_.codeToolCatalog.clear();editorToolCatalogRoot_.clear();
-      if(state_.codeTools) requestEditorTools();
-    }
-  }
+  void reportCodeCommit(bool accepted);
   void reportScriptSchemaChanges();
   const std::string &requestedScenePath() const { return requestedScenePath_; }
   void clearSceneOpenRequest() { requestedScenePath_.clear(); }
@@ -423,25 +344,7 @@ public:
   }
   // A vista de jogo deste quadro: o retângulo da cena e a câmera que o renderer
   // usa no Play (a autorada quando existe; senão a do editor).
-  runtime::GameView gameView() const {
-    runtime::GameView view;
-    const auto rect=layout_.viewport;
-    if(rect.isEmpty()) return view;
-    view.width=rect.width*pixelsPerUnit_;view.height=rect.height*pixelsPerUnit_;
-    view.dpi=dpi_;view.platform=platform_;
-    view.frustum=view_.frustum;
-    const auto pose=sceneCameraPose();
-    if(pose.entity) {
-      auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;
-      projection.verticalFieldOfViewRadians=pose.verticalFov*.017453292519943295f;projection.roll=pose.roll;
-      projection.projection=pose.projection==scene::CameraProjection::Orthographic?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;
-      projection.orthographicHalfHeight=pose.orthographicHalfHeight;
-      view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,rect.width/rect.height,projection);
-      view.camera=pose.entity;
-    }
-    view.valid=view.frustum.valid&&view.width>0&&view.height>0;
-    return view;
-  }
+  runtime::GameView gameView() const;
 
   // Seleção inicial vinda de fora, para uma cena recém-carregada já abrir com
   // algo no Inspector em vez de "nada selecionado".
@@ -507,37 +410,14 @@ public:
   // Vistas salvas (G6-A): comparar duas versões de um cenário exige repetir o
   // MESMO enquadramento. A vista guarda a câmera de órbita e a lente, entra no
   // documento e tem Desfazer como qualquer edição autoral.
-  runtime::SceneView currentSceneView(std::string_view name) const {
-    runtime::SceneView view;
-    view.name = std::string(name);
-    std::copy(camera_.target, camera_.target + 3, view.target);
-    view.distance = camera_.distance;
-    view.yaw = camera_.yaw;
-    view.pitch = camera_.pitch;
-    view.verticalFov = projection_.verticalFieldOfViewRadians;
-    return view;
-  }
+  runtime::SceneView currentSceneView(std::string_view name) const;
   bool saveSceneView(std::string_view name) {
     if (isPlaying() || history_.isOpen()) return false;
     auto views = document_.views();
     if (!views.replace(currentSceneView(name))) return false;
     return history_.setViews(document_, views);
   }
-  bool applySceneView(u32 index) {
-    const auto *view = document_.views().at(index);
-    if (!view) return false;
-    finishCameraGesture(false);
-    std::copy(view->target, view->target + 3, camera_.target);
-    camera_.distance = view->distance;
-    camera_.yaw = view->yaw;
-    camera_.pitch = view->pitch;
-    // Lente zero é "a do editor": uma vista antiga não impõe um campo de visão
-    // que ela nunca guardou.
-    if (view->verticalFov > 0) projection_.verticalFieldOfViewRadians = view->verticalFov;
-    state_.viewSelected = index;
-    state_.status = "Vista \"" + view->name + "\"";
-    return true;
-  }
+  bool applySceneView(u32 index);
   bool renameSceneView(u32 index, std::string_view name) {
     if (isPlaying() || history_.isOpen()) return false;
     auto views = document_.views();
@@ -869,38 +749,11 @@ public:
   bool saveImportProfile(const resources::AssetGuid &source, const resources::ImportProfile &profile);
   bool saveProjectImportProfile(const resources::ImportProfile &profile);
   // Rascunho do painel e os limites que ele produz neste aparelho.
-  resources::ImportProfile importProfileDraft() const {
-    resources::ImportProfile draft;
-    draft.scale=state_.importScale;draft.maximumTextureDimension=state_.importTextureDimension;
-    draft.normals=state_.importNormals;draft.normalWeighting=state_.importNormalWeighting;
-    draft.smoothingAngle=state_.importSmoothingAngle;draft.tangents=state_.importTangents;
-    draft.importCameras=state_.importCameras;draft.importLights=state_.importLights;
-    draft.textureCompression=state_.importTextureCompression;
-    draft.textureStreaming=state_.importTextureStreaming;
-    draft.generateLods=state_.importGenerateLods;draft.maximumLodLevels=state_.importLodLevels;
-    draft.optimizePolygonOrder=state_.importOptimizeOrder;
-    draft.fbxDeformation=state_.importFbxDeformation;draft.fbxReduceWeights=state_.importFbxReduceWeights;
-    draft.fbxApproximateSteps=state_.importFbxApproximateSteps;draft.fbxBakeRate=state_.importFbxBakeRate;
-    draft.textureStreamingPriority=state_.importTextureStreamingPriority;
-    draft.excludedNodes=state_.importExcludedNodes;
-    return draft;
-  }
+  resources::ImportProfile importProfileDraft() const;
   // O perfil com que a prévia na tela FOI preparada, no mesmo formato do
   // rascunho. Uma única função: campo novo esquecido aqui fazia a tela liberar
   // "Só recurso" enquanto a sessão recusava o toque (achado no aparelho, S1).
-  resources::ImportProfile importProfilePrepared() const {
-    resources::ImportProfile prepared;
-    prepared.scale=state_.importPreparedScale;prepared.maximumTextureDimension=state_.importPreparedTextureDimension;
-    prepared.normals=state_.importPreparedNormals;prepared.normalWeighting=state_.importPreparedNormalWeighting;
-    prepared.smoothingAngle=state_.importPreparedSmoothingAngle;prepared.tangents=state_.importPreparedTangents;
-    prepared.importCameras=state_.importPreparedCameras;prepared.importLights=state_.importPreparedLights;
-    prepared.textureCompression=state_.importPreparedTextureCompression;
-    prepared.generateLods=state_.importPreparedGenerateLods;prepared.maximumLodLevels=state_.importPreparedLodLevels;
-    prepared.optimizePolygonOrder=state_.importPreparedOptimizeOrder;
-    prepared.fbxDeformation=state_.importPreparedFbxDeformation;prepared.fbxReduceWeights=state_.importPreparedFbxReduceWeights;
-    prepared.fbxApproximateSteps=state_.importPreparedFbxApproximateSteps;prepared.fbxBakeRate=state_.importPreparedFbxBakeRate;
-    return prepared;
-  }
+  resources::ImportProfile importProfilePrepared() const;
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
     return resources::applyImportProfile(importLimits_,profile);
   }
@@ -1152,66 +1005,16 @@ public:
   // carga, feita antes de reimportar as fontes.
   std::string serializeAssets() const { return assets_.serialize(); }
   // O registro e, com ele, os materiais do projeto que ele declara.
-  bool loadAssets(std::string_view text) {
-    if(!resources::AssetRegistry::deserialize(text, assets_)) return false;
-    environmentMaps_.clear();
-    loadMaterialAssets();
-    loadEnvironmentProfiles();
-    loadPhysicsMaterials();
-    loadAnimatorControllers();
-    loadNavMeshes();
-    loadAnimationClipAssets();
-    refreshLibraryRows();
-    return true;
-  }
-  bool extractMap(std::vector<renderer::MapDrawState> &out) const {
-    const auto &graph=evaluatedEditorScene();
-    if(!mapScene_.extract(graph, out)) return false;
-    applyLodGroups(graph, out);
-    if(state_.clipOpen&&state_.clipPoseSelectionIsolated&&!isPlaying())for(auto &draw:out)
-      if(!animationPoseSelectionVisible(draw.objectId))draw.visible=false;
-    // Camadas e objetos escondidos na vista da cena (só o editor; o Play
-    // extrai do mundo).
-    if(state_.hiddenLayers || !state_.sceneHidden.empty()) for(auto &draw:out)
-      if(const auto *entity=graph.find(static_cast<EditorEntityId>(draw.objectId));
-         entity && ((entity->layer<32 && (state_.hiddenLayers&(1u<<entity->layer))) || state_.sceneHiddenHas(entity->id))) draw.visible=false;
-    return true;
-  }
+  bool loadAssets(std::string_view text);
+  bool extractMap(std::vector<renderer::MapDrawState> &out) const;
   // A vista que escolhe os níveis dos LOD Groups: a câmera da cena no Play,
   // quando existe, e a do editor no resto — a mesma que desenha o quadro.
-  runtime::LodView lodView() const {
-    runtime::LodView lod;
-    if(isPlaying() && playScene_.active()) {
-      const auto camera=resolveSceneCamera(playScene_.document());
-      if(camera.entity) {
-        std::copy(camera.position,camera.position+3,lod.position);
-        lod.verticalFov=camera.verticalFov*.017453292519943295f;
-        lod.orthographicHalfHeight=camera.projection==scene::CameraProjection::Orthographic?camera.orthographicHalfHeight:0;
-        return lod;
-      }
-    }
-    const auto &frustum=view_.frustum;
-    std::copy(frustum.cameraPosition,frustum.cameraPosition+3,lod.position);
-    lod.verticalFov=2*std::atan(frustum.tangentHalfVertical);
-    lod.orthographicHalfHeight=renderer::isOrthographic(frustum)?frustum.orthographicHalfHeight:0;
-    return lod;
-  }
+  runtime::LodView lodView() const;
   // Verdadeiro quando a câmera cruzou uma transição desde a última extração.
   // Fora do Play a cena só é republicada quando a revisão muda; é esta pergunta
   // que faz a troca de nível chegar à tela — pela publicação de poses, porque
   // esconder desenhos não muda a topologia.
-  bool lodSelectionChanged() const {
-    const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():evaluatedEditorScene();
-    // Uma troca animada muda a cobertura a cada quadro até terminar.
-    if(runtime::lodCrossFadeRunning(lodClock_,lastWallSeconds_)) return true;
-    // A própria consulta inicia a troca quando a câmera cruza o limite. Esse
-    // primeiro quadro ainda tem fator zero e pode ser visualmente idêntico ao
-    // anterior; por isso o relógio real precisa reter a transição e o estado
-    // "correndo" também conta como mudança. Copiar o relógio aqui descartava
-    // o início, então a cena não era republicada nos quadros seguintes.
-    const auto next=runtime::lodObjectStates(graph,lodView(),&lodClock_,lastWallSeconds_);
-    return runtime::lodCrossFadeRunning(lodClock_,lastWallSeconds_)||next!=lodStates_;
-  }
+  bool lodSelectionChanged() const;
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
   // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
@@ -1230,106 +1033,7 @@ public:
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
-                      const runtime::InputDeviceState &platformInput={},bool platformFocus=true) {
-    if(!isPlaying()) return false;
-    if(!playScene_.active()) {
-      if(EditorPlayScene::unresolvedEntity(document_)!=kInvalidEntity) {
-        state_.status="Play indisponível: há componentes de tipo ausente";
-        reportProblem(EditorConsoleSeverity::Error,state_.status);return false;
-      }
-      runtimeCodeGeneration_=code_.publishedGeneration();
-      playScene_.configureGui(gui_.document());
-      playScene_.setActiveScene(activeSceneName());
-      playScene_.animatorGraphs().setControllers(animatorControllers_);
-      playScene_.navigation().setMeshes(navMeshes_);
-      if(!playScene_.start(document_,mapScene_)) {
-        state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
-        reportProblem(EditorConsoleSeverity::Error,state_.status);
-        return false;
-      }
-      reportedPhysicsConnectionDiagnostic_.clear();
-      reportedEventConnectionDiagnostic_.clear();
-      reportProblem(EditorConsoleSeverity::Info,"Play iniciado · código publicado "+std::to_string(runtimeCodeGeneration_));
-      playLastSeconds_=sceneTime_;
-    }
-    const double elapsed=std::max(0.0,static_cast<double>(sceneTime_)-playLastSeconds_);
-    playLastSeconds_=sceneTime_;
-    playScene_.pause(state_.playPaused);
-    if(state_.playPaused) playTouches_.cancel();
-    // O toque vira ESTADO DE DISPOSITIVO; quem decide o que ele significa é o
-    // mapa de ações do projeto. Pausado, o gameplay perde o foco: as ações leem
-    // zero e nenhum botão fica preso ao retomar.
-    const auto actions=playTouches_.consumeInput();
-    if(!gameplayInputFocused()||!platformFocus)cancelPlayButtons();
-    runtime::InputDeviceState device;
-    device.moveX=actions.moveRight;device.moveY=actions.moveForward;
-    device.lookX=actions.lookScreenX;device.lookY=actions.lookScreenY;
-    device.touchButtons=(jumpPressed_?1u:0u)|(secondaryPressed_?2u:0u);
-    for(const auto &[pointer,mask]:playButtonPointers_)device.touchButtons|=mask;
-    device.canceledDeviceGroups=platformInput.canceledDeviceGroups|playButtonCanceled_;
-    device.canceledSources=platformInput.canceledSources;
-    playButtonCanceled_=0;
-    device.keys=platformInput.keys;
-    device.gamepadButtons=platformInput.gamepadButtons;
-    device.gamepadAxes=platformInput.gamepadAxes;
-    device.mouseButtons=platformInput.mouseButtons;device.mouseAxes=platformInput.mouseAxes;
-    jumpPressed_=false;
-    secondaryPressed_=false;
-    playScene_.setInputFocus(gameplayInputFocused()&&platformFocus);
-    playScene_.submitInput(device,elapsed);
-    const auto &input=playScene_.input();
-    const auto &map=input.map();
-    float look[2]{0,0};
-    input.axis2(map.lookAction(),look);
-    auto view=resolveSceneCamera(playScene_.document());
-    const auto *viewEntity=playScene_.document().find(view.entity);
-    if(viewEntity&&cameraLook(*viewEntity)) {
-      if(!applyCameraLook(*playScene_.executionGraph(),view.entity,look[0],look[1])) return false;
-      view=resolveSceneCamera(playScene_.document());
-      viewEntity=playScene_.document().find(view.entity);
-    }
-    const auto motorTarget=playScene_.motorReceiver(view.entity,state_.selection);
-    if(!playScene_.routeDefaultMotorControl(motorTarget,view.entity?view.yaw:0))return false;
-    if(state_.playStepRequested) {
-      state_.playStepRequested=false;
-      if(!playScene_.step()) return false;
-    }
-    playScene_.setGameView(gameView());
-    if(!playScene_.advance(elapsed)) {state_.status=playScene_.frameError();reportProblem(EditorConsoleSeverity::Error,state_.status);return false;}
-    // SceneManager.LoadScene (única): o mundo inteiro é trocado aqui, fora de
-    // qualquer callback de script. O documento autoral continua intacto e volta
-    // ao parar o Play, como as cenas carregadas em Play Mode na Unity.
-    runtime::SceneGraph next;std::string nextName;
-    if(playScene_.takeSceneRequest(next,nextName)) {
-      playScene_.stop();
-      playScene_.configureGui(gui_.document());
-      playScene_.setActiveScene(nextName);
-      playScene_.animatorGraphs().setControllers(animatorControllers_);
-      playScene_.navigation().setMeshes(navMeshes_);
-      if(!playScene_.start(next,mapScene_)) {
-        state_.status="Troca de cena falhou: "+nextName+(playScene_.scriptDiagnostics().empty()?"":" · "+playScene_.scriptDiagnostics());
-        reportProblem(EditorConsoleSeverity::Error,state_.status);
-        return false;
-      }
-      state_.selection=kInvalidEntity;state_.componentSelection=kInvalidEntity;state_.expandedNative=0;
-      reportedPhysicsConnectionDiagnostic_.clear();reportedEventConnectionDiagnostic_.clear();
-    }
-    const auto &eventDiagnostic=playScene_.eventConnections().diagnostic();
-    if(eventDiagnostic!=reportedEventConnectionDiagnostic_) {
-      reportedEventConnectionDiagnostic_=eventDiagnostic;
-      if(!eventDiagnostic.empty())reportProblem(EditorConsoleSeverity::Warning,eventDiagnostic);
-    }
-    const auto &connectionDiagnostic=playScene_.physicsConnections().diagnostic();
-    if(connectionDiagnostic!=reportedPhysicsConnectionDiagnostic_) {
-      reportedPhysicsConnectionDiagnostic_=connectionDiagnostic;
-      if(!connectionDiagnostic.empty())reportProblem(EditorConsoleSeverity::Warning,connectionDiagnostic);
-    }
-    state_.playTimeScale=playScene_.world().clock().scale();
-    if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
-    if(!playScene_.extract(mapScene_,out)) {reportProblem(EditorConsoleSeverity::Error,"Play: recurso da malha não pôde ser extraído");return false;}
-    applyLodGroups(playScene_.document(),out);
-    return true;
-  }
+                      const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
   // Instancia DENTRO de uma transação já aberta. É o que permite um modelo de
   // cena inteiro caber num passo de Desfazer; `instantiateAsset` é esta mesma
@@ -1346,16 +1050,7 @@ public:
   // que o shell consome para gravar o arquivo e reconstruir o renderer. O editor
   // não conhece Vulkan nem sabe reconstruir nada.
   const renderer::ProjectRenderingSettings &renderingSettings() const noexcept { return renderingSettings_; }
-  void setRenderingSettings(const renderer::ProjectRenderingSettings &settings) {
-    renderingSettings_ = settings;
-    state_.qualityDraft = settings;
-    state_.qualityApplied = settings;
-    state_.qualityDirty = false;
-    renderingSettingsRequested_ = false;
-    renderingSettingsRequestInFlight_ = false;
-    qualityRevision_ = 0;
-    renderingSettingsRequestRevision_ = 0;
-  }
+  void setRenderingSettings(const renderer::ProjectRenderingSettings &settings);
   bool consumeEnvironmentImportRequest() {
     const bool requested=std::exchange(state_.environmentImportRequested,false);
     if(requested) {state_.importEnvironment=true;state_.importTexture=false;}
@@ -1393,19 +1088,7 @@ public:
   }
   // Confirma o commit feito pelo shell. Falha de disco mantém o rascunho e o
   // botão Aplicar ativos; só sucesso passa a ser o estado autoral aplicado.
-  void completeRenderingSettingsRequest(bool success) {
-    if (!renderingSettingsRequestInFlight_) return;
-    renderingSettingsRequestInFlight_ = false;
-    if (success) {
-      renderingSettings_ = requestedRenderingSettings_;
-      state_.qualityApplied = renderingSettings_;
-      state_.qualityDirty = qualityRevision_ != renderingSettingsRequestRevision_;
-      state_.status = state_.qualityDirty ? "Qualidade aplicada; há novas alterações" : "Qualidade aplicada";
-    } else {
-      state_.qualityDirty = true;
-      state_.status = "Não foi possível salvar a qualidade; revise o armazenamento e tente novamente";
-    }
-  }
+  void completeRenderingSettingsRequest(bool success);
   // O que o renderer está fazendo agora, para o rodapé do painel.
   void setRenderStats(u32 width, u32 height, float gpuMilliseconds,
                       std::string_view detectedLevel);
@@ -1513,22 +1196,7 @@ private:
   // trocas animadas (estado de execução, nunca gravado).
   mutable std::vector<runtime::LodObjectState> lodStates_;
   mutable runtime::LodCrossFadeClock lodClock_;
-  void applyLodGroups(const runtime::SceneGraph &graph,std::vector<renderer::MapDrawState> &draws) const {
-    lodStates_=runtime::lodObjectStates(graph,lodView(),&lodClock_,lastWallSeconds_);
-    if(lodStates_.empty()) return;
-    for(auto &draw:draws) {
-      const auto found=std::lower_bound(lodStates_.begin(),lodStates_.end(),static_cast<runtime::ObjectId>(draw.objectId),
-          [](const runtime::LodObjectState &state,runtime::ObjectId id){return state.object<id;});
-      if(found==lodStates_.end()||found->object!=draw.objectId) continue;
-      if(found->hidden) {draw.visible=false;continue;}
-      // Cobertura do cross-fade no MESMO campo que o LOD do pacote usa
-      // (GpuMeshInstance::normalColumns[7]); o shader faz o dither complementar.
-      draw.pose.instance.normalColumns[7]=found->dither;
-      // Durante a troca, só o nível que sai projeta sombra: as duas sombras
-      // somadas escureceriam o chão no meio do fade.
-      if(found->dither<0) draw.castShadow=false;
-    }
-  }
+  void applyLodGroups(const runtime::SceneGraph &graph,std::vector<renderer::MapDrawState> &draws) const;
   // Geometria importada neste processo, UM bloco por arquivo de origem.
   EditorComponentPresets componentPresets_;
   // O mapa que a publicação gravaria, calculado na prévia. É dele que sai a
@@ -2048,25 +1716,20 @@ private:
   std::vector<EditorEntityId> retargetCandidates() const;
   bool readRigForRoot(EditorEntityId root,resources::RigAsset &out,bool &published,std::string &error) const;
   bool transferAnimationClipTo(EditorEntityId target,std::string &summary,std::string &error);
-  u32 rigRetargetIndex_=0;
+  // Estado do estudio vive em editor_studio_state.h (build incremental).
+  std::unique_ptr<EditorStudioState,void(*)(EditorStudioState*)> studio_{createStudioState(),&destroyStudioState};
+  friend struct EditorStudio;
   void refreshAnimationGhost();
   void refreshClipRowFilter();
   bool stageRigLocalPose(std::span<const resources::RigTransform> local,std::string &error);
   bool mirrorAnimationPoseWithRig(std::string &error);
   bool applyRigPoseToClip(u32 index,std::string &error);
   void publishClipRigState();
-  float clipIkPole_[3]{};bool clipIkPoleDrag_=false;
   bool handleAnimationPoseIk(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
-  u32 clipIkPointer_=0;float clipIkPlane_[6]{};EditorEntityId clipIkEnd_=0;
   void refreshRigTool();
   bool openRigTool(EditorEntityId root);
   bool publishRigDraft(std::string &error);
   bool applyRigPoseToScene(std::span<const resources::RigTransform> local,std::span<const u8> channels,std::string_view label,std::string &error);
-  resources::RigAsset rigDraft_;
-  std::vector<resources::RigPose> rigPoses_;
-  EditorEntityId rigRoot_=0; EditorEntityId rigSyncedTarget_=0;
-  u32 rigControl_=0,rigJoint_=0,rigPose_=0,rigMirrorLeft_=0,rigMirrorRight_=0,rigPoseWeight_=100;
-  bool rigCaptured_=false,rigDirty_=false;
   runtime::ObjectId pathEditorEntity_=0,pathStatsTarget_=0;
   u64 pathStatsInstance_=0;
   resources::Curve3D pathStatsCurve_;

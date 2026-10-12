@@ -1,3 +1,4 @@
+#include "editor/editor_widgets.h"
 #include "harness.h"
 #include "editor/editor_session.h"
 #include "editor/editor_archive.h"

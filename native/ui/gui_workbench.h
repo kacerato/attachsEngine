@@ -16,6 +16,7 @@ public:
   enum class NodeCommand {Up,Down,Duplicate,Remove};
   bool command(NodeCommand command);
   GuiId create(GuiKind kind);
+  GuiId createComposition(GuiComposition kind);
   bool pointer(const UiPointerEvent &event);
   void cancelPointers();
   void text(std::string_view text) { immediate_.text(text); }
@@ -75,6 +76,7 @@ private:
   bool previewing_=false, captured_=false, canvasPointer_=false;
   u32 pointerId_=0;
   int compactRoute_=0;
+  int contextRoute_=0;
   int actionSelection_=0,stateSelection_=0;
   char resource_[256]="UI/main.aeui";
   std::string diagnostic_, lastEvent_;

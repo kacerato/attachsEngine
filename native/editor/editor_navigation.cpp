@@ -1,3 +1,4 @@
+#include "editor/editor_widgets.h"
 // Navegação no editor (bloco J): bake em segundo plano, recurso .navmesh no
 // projeto e a vista da Superfície para o Inspector e o viewport.
 //

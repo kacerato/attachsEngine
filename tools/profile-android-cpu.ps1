@@ -20,7 +20,7 @@ function Invoke-CpuAdb {
 if (-not $DeviceSerial) {
     $devices = @(& $resolvedAdb devices)
     if ($LASTEXITCODE -ne 0) { throw 'ADB indisponível.' }
-    $serials = @($devices | ForEach-Object { if ($_ -match '^(\S+)\s+device\s*$') { $Matches[1] } })
+    $serials = @($devices | ForEach-Object { if ($_ -match '^(.+?)\tdevice\s*$') { $Matches[1] } })
     if ($serials.Count -ne 1) { throw 'Informe -DeviceSerial para um único aparelho autorizado.' }
     $DeviceSerial = $serials[0]
 }
@@ -65,8 +65,8 @@ try {
             Set-Content -LiteralPath (Join-Path $resolvedOutput "$($spec.name).txt") -Encoding utf8
     }
     $report.sha256 = (Get-FileHash -LiteralPath (Join-Path $resolvedOutput 'perf.data') -Algorithm SHA256).Hash
-    if ($log -notmatch 'Samples recorded:\s*([1-9]\d*)') { throw 'Nenhuma amostra confirmada; consulte record.txt.' }
-    $report.samples = [long]$Matches[1]
+    if ($log -notmatch 'Samples recorded:\s*([1-9][\d,]*)') { throw 'Nenhuma amostra confirmada; consulte record.txt.' }
+    $report.samples = [long]$Matches[1].Replace(',','')
     $report.status = 'captured'
 } catch {
     $report.status = 'failed'; $report.error = $_.Exception.Message

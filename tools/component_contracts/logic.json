@@ -308,6 +308,125 @@
    "searchTerms": "Grounder Foot IK Pé Chão Rampa",
    "reference": "https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html",
    "apiName": "FootGrounding"
+  },
+  {
+   "type": "LookAtIk",
+   "name": "Look At IK",
+   "description": "Coluna e cabeça olham para o alvo com pesos e ângulo máximo",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/ik-look-at",
+   "searchTerms": "Look At Olhar Cabeça Coluna",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html",
+   "apiName": "LookAtIk"
+  },
+  {
+   "type": "AimIk",
+   "name": "Aim IK",
+   "description": "Cadeia gira para o eixo da ponta mirar o alvo",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/ik-aim",
+   "searchTerms": "Aim Mira Arma Apontar",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html",
+   "apiName": "AimIk"
+  },
+  {
+   "type": "RotationLimit",
+   "name": "Limite de rotação",
+   "description": "Dobradiça ou cone aplicados ao osso depois do IK",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/rotation-limit",
+   "searchTerms": "Rotation Limit Hinge Joint Limite",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html",
+   "apiName": "RotationLimit"
+  },
+  {
+   "type": "GrounderBody",
+   "name": "Grounder do corpo",
+   "description": "Desce a pelve para os pés alcançarem o chão (bípede ou quadrúpede)",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/grounder",
+   "searchTerms": "Grounder Pelvis Quadruped Chão",
+   "reference": "https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html",
+   "apiName": "GrounderBody"
+  },
+  {
+   "type": "FingerCurl",
+   "name": "Curvatura de dedo",
+   "description": "Fecha ou abre a cadeia do dedo no eixo local",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/finger-curl",
+   "searchTerms": "Finger Curl Dedo Mão Grip",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/ChainIKConstraint.html",
+   "apiName": "FingerCurl"
+  },
+  {
+   "type": "IkOffset",
+   "name": "Offset de efetor",
+   "description": "Desloca o alvo do IK desta ponta",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/ik-offset",
+   "searchTerms": "Effector Offset IK Offset",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html",
+   "apiName": "IkOffset"
+  },
+  {
+   "type": "TwistRelaxer",
+   "name": "Relaxar torção",
+   "description": "Divide a torção do filho com este osso",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/twist-relaxer",
+   "searchTerms": "Twist Relaxer Antebraço Torção",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwistCorrection.html",
+   "apiName": "TwistRelaxer"
   }
  ],
  "defaults": {

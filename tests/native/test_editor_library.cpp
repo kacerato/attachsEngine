@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "harness.h"
 #include "editor/editor_session.h"
 #include "ui_software_raster.h"

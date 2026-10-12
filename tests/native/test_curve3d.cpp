@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "editor/editor_creation_catalog.h"
 #include <filesystem>
 #include <fstream>

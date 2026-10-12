@@ -632,14 +632,14 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
       const float tint[4]{1,1,1,1};
       if(!renderer::buildGpuMeshInstance(update.pose.draw.model,tint,&update.pose.instance)) return false;
       const bool route=slot==0 && waterRoute(*entity).count;
-      if(!(route?bounds(document,id,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius)
-                :slotBounds(document,id,index,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius))) return false;
+      bool posedBounds=false;
       update.visible=inheritedVisible(document,id) && render->enabled;
       update.castShadow=entity->castShadow;
       if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor));
          skinned && deformation(index)) {
         DeformedPose pose;
         if(deformedPose(document,*skinned,index,update.pose.draw.model,pose)) {
+          posedBounds=true;
           std::copy(pose.center,pose.center+3,update.pose.draw.boundsCenter);update.pose.draw.boundsRadius=pose.radius;
           update.skinPalette=std::move(pose.palette);
           update.morphWeights=std::move(pose.weights);
@@ -647,6 +647,10 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
         update.skinInfluences=static_cast<u8>(skinned->influences());
         update.skinnedMotion=skinned->skinnedMotionVectors;
       }
+      // The palette and its bounds are one result. Calling slotBounds first
+      // evaluated the same skeleton twice (including every ancestor matrix).
+      if(!posedBounds && !(route?bounds(document,id,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius)
+                               :slotBounds(document,id,index,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius))) return false;
       update.material=slotMaterial(*render,slot);
       if(isolateChannel_ && id==isolateEntity_ && slot==isolateSlot_) update.material.isolate=isolateChannel_;
       const auto &body=waterBody(*entity);

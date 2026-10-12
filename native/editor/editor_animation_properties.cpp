@@ -1,3 +1,5 @@
+#include "editor/editor_widgets.h"
+#include "editor/editor_screen.h"
 #include "editor/editor_session.h"
 #include "runtime/animation_property_binding.h"
 #include "scene/ui_canvas.h"

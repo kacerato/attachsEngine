@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "harness.h"
 #include "resources/unity_material_import.h"
 #include "editor/editor_session.h"

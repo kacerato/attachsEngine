@@ -30,7 +30,9 @@ void AnimationClipPreview::drawGui(ui::UiDrawList &out,const ui::UiFontMetrics &
     const auto *value=object?object->components.findInstance(key.second):nullptr;
     if(!value||&value->type()!=&scene::UiCanvas::descriptor||!scene_.activeInHierarchy(key.first))continue;
     const auto &component=static_cast<const scene::UiCanvas&>(*value);if(!component.enabled)continue;
-    const auto canvas=runtime::uiCanvasPresentation(component);
+    const auto canvas=runtime::uiCanvasPresentation(component,instance->document().canvas());
+    std::string canvasError;
+    if(!instance->document().setCanvas(canvas,canvasError))continue;
     if(canvas.mode==ui::GuiCanvasMode::Screen) {
       instance->layout(viewport);out.pushClip(viewport);instance->draw(out);out.popClip();
     } else {

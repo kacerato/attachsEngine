@@ -1,3 +1,4 @@
+#include "editor/editor_screen.h"
 #include "harness.h"
 #include "fbx_fixture.h"
 #include "editor/editor_session.h"

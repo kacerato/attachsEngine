@@ -1,4 +1,7 @@
+#include "editor/editor_screen.h"
 #include "editor/editor_session.h"
+#include "editor/editor_studio_state.h"
+#include "editor/editor_studio_tools.h"
 #include "runtime/transform_math.h"
 #include "resources/animation_binding_path.h"
 #include "resources/animation_clip_arrange.h"
@@ -747,10 +750,21 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     if(state_.clipStudioTab==1&&handleRigTool(routing))return true;
     if(w::owns(routing.widgetId)) {
       const auto code=animator_widget::code(routing.widgetId);
-      if(code>=w::StudioTabKey&&code<=w::StudioTabPose) {
+      if(code>=w::StudioTabKey&&code<=w::StudioTabIk) {
         state_.clipStudioTab=static_cast<u8>(code-w::StudioTabKey);
-        if(state_.clipStudioTab==1&&(!state_.rigToolOpen||rigRoot_!=state_.clipOwner))openRigTool(state_.clipOwner);
+        if(state_.clipStudioTab==1&&(!state_.rigToolOpen||studio_->rigRoot!=state_.clipOwner))openRigTool(state_.clipOwner);
         return true;
+      }
+      if(code>=w::PoseIkWizard&&code<=w::PoseFollow) {
+        std::string summary,error;const auto selected=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+        const float start=state_.clipRangeShown?std::min(state_.clipRangeStart,state_.clipRangeEnd):0.f;
+        const float end=state_.clipRangeShown?std::max(state_.clipRangeStart,state_.clipRangeEnd):(state_.clipAsset?state_.clipAsset->duration:0.f);
+        bool ok=false;
+        if(code==w::PoseIkWizard)ok=EditorStudio::setupIk(*this,state_.clipOwner,summary,error);
+        else if(code==w::PosePin)ok=EditorStudio::pinTip(*this,selected,start,end,summary,error);
+        else if(code==w::PoseFollowParent) {studio_->followParent=selected;ok=selected!=0;summary="Pai definido · selecione o objeto que vai seguir";error="Selecione um osso ou objeto";}
+        else ok=EditorStudio::followObject(*this,selected,studio_->followParent,start,end,summary,error);
+        state_.clipDiagnostic=ok?summary:error;return true;
       }
       if(code==w::PoseIkCreate) {std::string error;const auto tip=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
         if(createTwoBoneIkForTip(tip,error))state_.clipDiagnostic="IK permanente criado · alvo e direção na cena, ativo em Play";else state_.clipDiagnostic=error;return true;}
@@ -784,7 +798,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     const auto code=animator_widget::code(routing.widgetId);
     const bool poseAction=w::owns(routing.widgetId)&&((code>=w::PoseAutoKey&&code<=w::PoseViewport)||
       code==w::PosePrevious||code==w::PoseNext||code==w::PoseMirrorRig||code==w::PoseIk||code==w::PoseIkPoleReset||code==w::PoseLibrarySave||code==w::TrackFilter||
-      (code>=w::PoseLibrary&&code<w::PoseLibrary+16)||(code>=w::StudioTabKey&&code<=w::StudioTabPose)||
+      (code>=w::PoseLibrary&&code<w::PoseLibrary+16)||(code>=w::StudioTabKey&&code<=w::StudioTabIk)||
       code==w::PoseToolsSelection||code==w::PoseSetSave||code==w::PoseSelectAdd||
       (code>=w::PoseTools&&code<=w::PoseUnlock)||(code>=w::PoseLock&&code<w::PoseLock+resources::MaximumMorphTargets)||
         (code>=w::PoseValue&&code<w::PoseValue+resources::MaximumMorphTargets)||(code>=w::PoseGizmo&&code<w::PoseGizmo+3));

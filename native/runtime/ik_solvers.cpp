@@ -128,4 +128,27 @@ bool solveChainIk(ChainIkSolver solver,std::span<const std::array<float,16>> wor
   for(const auto &m:out)for(float v:m)if(!std::isfinite(v))return false;
   return true;
 }
+void ikWeightedFromTo(const float aValue[3],const float bValue[3],float weight,float maximumDegrees,float r[9]) {
+  V a{aValue[0],aValue[1],aValue[2]},b{bValue[0],bValue[1],bValue[2]};
+  r[0]=r[4]=r[8]=1;r[1]=r[2]=r[3]=r[5]=r[6]=r[7]=0;
+  if(!normalize(a)||!normalize(b)||!(weight>0))return;
+  V axis=cross(a,b);const float s=length(axis),c=std::clamp(dot(a,b),-1.f,1.f);
+  if(s<1e-6f)return;
+  axis=axis*(1/s);
+  float angle=std::atan2(s,c)*std::clamp(weight,0.f,1.f);
+  const float limit=maximumDegrees*3.14159265f/180;
+  if(maximumDegrees>=0&&angle>limit)angle=limit;
+  const float cs=std::cos(angle),sn=std::sin(angle),t=1-cs,x=axis.x,y=axis.y,z=axis.z;
+  r[0]=t*x*x+cs;  r[1]=t*x*y-sn*z;r[2]=t*x*z+sn*y;
+  r[3]=t*x*y+sn*z;r[4]=t*y*y+cs;  r[5]=t*y*z-sn*x;
+  r[6]=t*x*z-sn*y;r[7]=t*y*z+sn*x;r[8]=t*z*z+cs;
+}
+void ikRotateWorld(const float in[16],const float r[9],float out[16]) {
+  rotated(in,r,position(in),out);
+}
+void ikAxisWorld(const float world[16],u32 axis,float out[3]) {
+  const u32 column=axis%3;const float sign=axis>=3?-1.f:1.f;
+  V v{world[column*4],world[column*4+1],world[column*4+2]};normalize(v);
+  out[0]=v.x*sign;out[1]=v.y*sign;out[2]=v.z*sign;
+}
 } // namespace ae::runtime

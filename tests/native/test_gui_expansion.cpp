@@ -8,6 +8,63 @@
 #include <sstream>
 #include <cmath>
 using namespace ae;using namespace ae::ui;
+AE_TEST(gui_compositions_are_transactional_editable_and_persistent) {
+  GuiDocument document;std::string error;
+  for(auto kind:{GuiComposition::Hud,GuiComposition::Menu,GuiComposition::Inventory}) {
+    const auto root=appendGuiComposition(document,kind,error);
+    AE_EXPECT_TRUE(root&&document.find(root)&&document.validate(error),"composition creates a valid editable subtree");
+  }
+  const auto revision=document.revision(),count=document.nodes().size();
+  AE_EXPECT_TRUE(!appendGuiComposition(document,static_cast<GuiComposition>(255),error),"unknown composition rejected");
+  AE_EXPECT_TRUE(document.revision()==revision&&document.nodes().size()==count,"failed composition leaves document untouched");
+  std::ostringstream saved;document.write(saved);GuiDocument restored;std::istringstream input(saved.str());
+  AE_EXPECT_TRUE(restored.read(input,error)&&restored.nodes().size()==count,"all ordinary nodes round-trip");
+  GuiId progress=0,action=0;
+  for(const auto &node:restored.nodes()){if(node.kind==GuiKind::Progress)progress=node.id;if(node.kind==GuiKind::ActionButton)action=node.id;}
+  GuiRuntime runtime;runtime.load(restored);runtime.layout({0,0,1280,720});
+  AE_EXPECT_TRUE(progress&&action&&runtime.setValue(progress,.25f),"HUD values have a runtime consumer");
+  const auto *placement=runtime.placement(action);
+  AE_EXPECT_TRUE(placement&&placement->bounds.width>0,"touch action receives real geometry");
+  if(placement){const UiPoint point{placement->bounds.x+placement->bounds.width*.5f,placement->bounds.y+placement->bounds.height*.5f};
+    AE_EXPECT_TRUE(runtime.pointer({8,UiPointerPhase::Down,point})&&runtime.controlState(action)->down,"composition action produces a live touch signal");
+    runtime.pointer({8,UiPointerPhase::Up,point});
+    AE_EXPECT_TRUE(!runtime.controlState(action)->down,"release clears the touch signal");
+  }
+  GuiDocument full;for(u32 i=0;i<1022;++i)full.create(GuiKind::Text);
+  const auto before=full.revision();
+  AE_EXPECT_TRUE(!appendGuiComposition(full,GuiComposition::Hud,error)&&full.nodes().size()==1022&&full.revision()==before,"node budget failure rolls back the entire subtree");
+}
+AE_TEST(gui_canvas_reference_scaling_roundtrip_layout_and_input) {
+  GuiDocument d;std::string error;auto c=d.canvas();c.resolution={800,600};c.scaleMode=GuiScaleMode::Fit;
+  AE_EXPECT_TRUE(d.setCanvas(c,error),"reference canvas accepted");
+  const auto button=d.create(GuiKind::Button);auto n=*d.find(button);n.offsets={20,30,120,80};d.update(n,error);
+  std::ostringstream saved;d.write(saved);GuiDocument restored;std::istringstream stream(saved.str());
+  AE_EXPECT_TRUE(restored.read(stream,error)&&restored.canvas().scaleMode==GuiScaleMode::Fit,"scaling persists in AEUI");
+  GuiRuntime r;r.load(restored);r.layout({40,60,1600,1200});
+  const auto *p=r.placement(button);
+  AE_EXPECT_TRUE(p&&p->bounds.x==80&&p->bounds.y==120&&p->bounds.width==200&&p->scale==2,"offset viewport, dimensions and text share scale");
+  AE_EXPECT_TRUE(r.pointer({1,UiPointerPhase::Down,{100,150}})&&r.pointer({1,UiPointerPhase::Up,{100,150}}),"scaled hit testing owns button");
+  GuiEvent event;AE_EXPECT_TRUE(r.poll(event)&&event.node==button,"scaled button emits actual click");
+  c.scaleMode=GuiScaleMode::Match;c.match=.5f;d.setCanvas(c,error);
+  AE_EXPECT_TRUE(std::abs(guiCanvasScale(c,{0,0,1600,600})-std::sqrt(2.f))<.0001f,"width-height matching is logarithmic");
+  c.mode=GuiCanvasMode::World;AE_EXPECT_EQ(guiCanvasScale(c,{0,0,1600,1200}),1.f,"world units are not screen-scaled");
+}
+AE_TEST(gui_runtime_hud_scalar_updates_keep_transactions_and_capture) {
+  GuiDocument document;const auto label=document.create(GuiKind::Text),slider=document.create(GuiKind::Slider);
+  GuiRuntime runtime;runtime.load(document);runtime.layout({0,0,800,600});
+  const auto initial=runtime.document().revision();
+  AE_EXPECT_TRUE(runtime.setText(label,document.find(label)->text),"same HUD text accepted");
+  AE_EXPECT_EQ(runtime.document().revision(),initial,"identical per-frame HUD writes keep layout revision");
+  AE_EXPECT_TRUE(!runtime.setText(label,std::string(4097,'x')),"oversized text rejected before mutation");
+  AE_EXPECT_EQ(runtime.document().revision(),initial,"invalid text leaves runtime intact");
+  runtime.pointer({12,UiPointerPhase::Down,{80,50}});
+  AE_EXPECT_TRUE(runtime.captures(12),"slider owns gesture");
+  AE_EXPECT_TRUE(runtime.setValue(slider,.75f),"game value update accepted");
+  runtime.layout({0,0,800,600});
+  AE_EXPECT_TRUE(runtime.captures(12),"paint-only update preserves capture");
+  AE_EXPECT_TRUE(runtime.setEnabled(slider,false)&&!runtime.captures(12),"disable still reconciles captured input");
+  AE_EXPECT_TRUE(document.find(slider)->enabled&&document.find(slider)->value==.5f,"runtime changes preserve authoring");
+}
 AE_TEST(gui_joystick_modes_curve_return_and_independent_image_sources) {
   GuiDocument d;const auto id=d.create(GuiKind::Joystick);auto n=*d.find(id);std::string error;n.offsets={0,0,200,200};n.control.deadzone=0;n.control.exponent=2;n.control.mode=GuiStickMode::Floating;n.control.baseImage="UI/base.png";n.control.knobImage="UI/knob.png";AE_EXPECT_TRUE(d.update(n,error),"editable floating joystick");
   GuiImageAtlas images;u32 loads=0;images.reconcile(d,1,[&](std::string_view,std::vector<u8>&pixels,u32 &w,u32 &h,std::string &){++loads;w=h=16;pixels.assign(16*16*4,255);return true;});

@@ -91,7 +91,7 @@ AE_TEST(gui_authored_opacity_migrates_composes_and_preserves_input_authority) {
   AE_EXPECT_TRUE(reopened.find(group)->opacity==.5f,"runtime ownership preserves reopened authoring");
   AE_EXPECT_TRUE(runtime.setOpacity(group,.5f)&&runtime.pointer({73,UiPointerPhase::Down,point})&&runtime.pointer({73,UiPointerPhase::Up,point})&&runtime.poll(event)&&event.node==button,"restoring opacity restores the same control without recreating its identity");
   std::istringstream rows(saved);std::string line,legacy;std::getline(rows,line);legacy="AEUI 5 2 3\n";
-  std::getline(rows,line);legacy+=line+'\n';
+  std::getline(rows,line);for(int i=0;i<2;++i)line.resize(line.find_last_of(' '));legacy+=line+'\n';
   while(std::getline(rows,line)){line.resize(line.find_last_of(' '));legacy+=line+'\n';}
   std::istringstream old(legacy);GuiDocument migrated;
   AE_EXPECT_TRUE(migrated.read(old,error)&&migrated.find(group)->opacity==1&&migrated.find(button)->opacity==1,"AEUI5 migrates to unit opacity without changing old visual semantics");
@@ -290,7 +290,7 @@ AE_TEST(gui_image_actions_persistence_duplication_and_lifecycle) {
   r.document().remove(root);AE_EXPECT_TRUE(!r.poll(event),"removed event source cannot escape as a stale handle");
   // Legacy images remain decorative; load defaults do not invent click behavior.
   GuiDocument legacy;legacy.create(GuiKind::Image);std::istringstream lines(encoded(legacy));std::string header,canvas,line;
-  std::getline(lines,header);std::getline(lines,canvas);std::getline(lines,line);for(int i=0;i<55;++i)line.erase(line.find_last_of(' '));
+  std::getline(lines,header);std::getline(lines,canvas);for(int i=0;i<2;++i)canvas.resize(canvas.find_last_of(' '));std::getline(lines,line);for(int i=0;i<55;++i)line.erase(line.find_last_of(' '));
   std::istringstream v2("AEUI 2 1 2\n"+canvas+"\n"+line+"\n");
   AE_EXPECT_TRUE(restored.read(v2,error)&&!restored.nodes()[0].interaction.clickable&&!restored.nodes()[0].motion.enabled,"v2 migration preserves existing meaning");
 }

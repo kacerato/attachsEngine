@@ -1,3 +1,4 @@
+#include "editor/editor_widgets.h"
 #include <cstdio>
 #include "editor/editor_session.h"
 #include "scene/path.h"

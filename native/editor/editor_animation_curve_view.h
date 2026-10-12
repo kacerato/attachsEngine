@@ -1,7 +1,7 @@
 #pragma once
 // View transforms never modify the resource or its sampler. Bounds are rebuilt
 // only on explicit framing / channel selection, so a drag cannot rescale itself.
-#include "editor/editor_screen.h"
+#include "editor/editor_screen_state.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>

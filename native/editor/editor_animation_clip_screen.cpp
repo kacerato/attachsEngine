@@ -1,4 +1,5 @@
 #include "editor/editor_screen.h"
+#include "editor/editor_studio_state.h"
 #include "editor/editor_animation_curve_view.h"
 #include "resources/animation_binding_path.h"
 #include "scene/skinned_mesh.h"
@@ -143,9 +144,9 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       router.addRegion(row,w::id(w::BoneRow+n));
     }
     auto tabs=top(side,44);list.addRect(tabs,theme.color.silhouette);
-    const char *tabNames[]{"Chave","Rig","Pose"};const UiIcon tabIcons[]{UiIcon::AnimationKey,UiIcon::AnimationSkeleton,UiIcon::AnimationPoseTools};
-    const float tabWidth=tabs.width/3;
-    for(u32 t=0;t<3;++t) {
+    const char *tabNames[]{"Chave","Rig","Pose","IK"};const UiIcon tabIcons[]{UiIcon::AnimationKey,UiIcon::AnimationSkeleton,UiIcon::AnimationPoseTools,UiIcon::ComponentIkTwoBone};
+    const float tabWidth=tabs.width/4;
+    for(u32 t=0;t<4;++t) {
       const UiRect tab{tabs.x+tabWidth*t,tabs.y,tabWidth,tabs.height};const bool active=state.clipStudioTab==t;
       if(active)list.addRect({tab.x+10,tab.bottom()-3,tab.width-20,3},theme.color.accent,1.5f);
       list.addImage({tab.x+10,tab.y+13,18,18},static_cast<UiImageId>(tabIcons[t]),active?0xffffffff:withAlpha(0xffffffff,.6f));
@@ -167,13 +168,19 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     if(state.clipStudioTab==1) {
       if(state.rigToolOpen)buildEditorRigScreen(state.rigTool,theme,list,router,side);
       else label({side.x+12,side.y+8,side.width-24,40},"Selecione um objeto com hierarquia para o rig.",theme.color.textDim);
+    } else if(state.clipStudioTab==3) {
+      if(state.clipIkMode&&state.clipIkPoleSet)card(side,"Direção da dobra","Fixada · toque para seguir a pose",w::PoseIkPoleReset,true,UiIcon::AnimationRotationBranch,true);
+      card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
+      card(side,"Assistente de IK","Mãos, pés, pelve e cabeça pela hierarquia",w::PoseIkWizard,true,UiIcon::ComponentGrounder);
+      card(side,"Fixar ponta no intervalo",state.clipRangeShown?"Intervalo da timeline · chaves FK":"Clipe inteiro · chaves FK",w::PosePin,state.clipPoseShown,UiIcon::ComponentIkOffset);
+      {const auto *parentObject=state.studio&&state.studio->followParent&&state.document?state.document->find(state.studio->followParent):nullptr;
+       card(side,"Seguir pai (Child-Of)",parentObject?std::string("Segue ")+parentObject->name+" mantendo a distância":"Defina um pai primeiro",w::PoseFollow,state.clipPoseShown&&parentObject,UiIcon::ComponentIkTwoBone);
+       card(side,"Definir como pai",parentObject?std::string("Pai: ")+parentObject->name:"O osso selecionado vira o pai",w::PoseFollowParent,state.clipPoseShown,UiIcon::AnimationBinding,parentObject!=nullptr);}
+      card(side,"IK permanente nesta ponta","Cria alvo e direção na cena; resolve em Play",w::PoseIkCreate,state.clipPreviewTarget!=0||state.clipTarget!=0,UiIcon::ComponentIkTwoBone);
     } else if(state.clipStudioTab==2) {
       card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
-      if(state.clipIkMode&&state.clipIkPoleSet)card(side,"Direção da dobra","Fixada · toque para seguir a pose",w::PoseIkPoleReset,true,UiIcon::AnimationRotationBranch,true);
       card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
-      card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
       card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
-      card(side,"IK permanente nesta ponta","Cria alvo e direção na cena; resolve em Play",w::PoseIkCreate,state.clipPreviewTarget!=0||state.clipTarget!=0,UiIcon::ComponentIkTwoBone);
       card(side,"Salvar pose atual","Entra na biblioteca deste rig",w::PoseLibrarySave,state.clipPoseShown&&state.clipRigLoaded,UiIcon::AnimationRecordPose);
       card(side,"Fantasma",state.clipGhost?"Quadro anterior (azul) e seguinte (âmbar)":"Desligado",w::PoseGhost,state.clipPoseShown,UiIcon::AnimationFrame,state.clipGhost);
       card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);

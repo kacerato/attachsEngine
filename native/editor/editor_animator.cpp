@@ -1,3 +1,4 @@
+#include "editor/editor_widgets.h"
 // Editor de grafo do Animator: toque, arrasto e edições (bloco I). O desenho
 // está em editor_screen.cpp (buildAnimatorEditor) e a geometria comum em
 // editor_animator_view.h. Toda edição passa pelo histórico; arrastar um estado

@@ -9,7 +9,7 @@
 
 namespace ae::runtime {
 class ScenePhysics;
-ui::GuiCanvas uiCanvasPresentation(const scene::UiCanvas &canvas);
+ui::GuiCanvas uiCanvasPresentation(const scene::UiCanvas &canvas,const ui::GuiCanvas &authored={});
 // Runtime host, usable without EditorSession/EditorPlayScene or Android.
 // Immutable authored documents are shared; every lease owns its execution copy.
 class SceneGui final {

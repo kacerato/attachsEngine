@@ -1,4 +1,6 @@
 #include "editor/editor_texture_import_screen.h"
+#include "editor/editor_widgets.h"
+#include "ui/ui_draw_list.h"
 #include "resources/texture_profile.h"
 #include "ui/ui_icon_id.h"
 #include <algorithm>

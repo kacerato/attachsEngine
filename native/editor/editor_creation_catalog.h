@@ -1,5 +1,6 @@
 #pragma once
-#include "editor/editor_screen.h"
+#include "editor/editor_widgets.h"
+#include "editor/editor_screen_state.h"
 #include "scene/component_properties.h"
 #include "scene/primitive.h"
 #include "resources/curve3d.h"

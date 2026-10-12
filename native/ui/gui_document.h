@@ -39,6 +39,7 @@ struct GuiControlState final {
 enum class GuiAlignment : u8 { Start, Center, End, Stretch };
 enum class GuiImageFit : u8 { Stretch, Contain, Cover };
 enum class GuiCanvasMode : u8 { Screen, World };
+enum class GuiScaleMode : u8 { Pixels, Fit, Match };
 enum class GuiClickAction : u8 { Notify, ToggleVisible, ToggleEnabled, SetValue, PlayAnimation, StopAnimation };
 enum class GuiEasing : u8 { Linear, Smooth, EaseIn, EaseOut };
 enum class GuiEventKind : u8 { Click, ValueChanged };
@@ -84,7 +85,10 @@ struct GuiCanvas final {
   float position[3]{0,1,0}, rotation[3]{}; // Euler degrees; XY plane, top-left pixels
   float unitsPerPixel=.005f;
   bool occlusion=true;
+  GuiScaleMode scaleMode=GuiScaleMode::Pixels;
+  float match=.5f; // Logarithmic width/height match; only for screen canvases.
 };
+float guiCanvasScale(const GuiCanvas &,const UiRect &viewport) noexcept;
 struct GuiSizing final {
   UiPoint minimum{}, preferred{}, flexible{};
   UiInsets padding=UiInsets::all(8);
@@ -94,6 +98,7 @@ struct GuiSizing final {
   bool ignore=false;
 };
 class GuiImageAtlas;
+enum class GuiComposition : u8 { Hud, Menu, Inventory };
 const char *guiKindName(GuiKind kind) noexcept;
 
 // Authoring data, independent of ImGui state and of the resolved pixel layout.
@@ -130,6 +135,11 @@ public:
   // Independent scalar update for per-frame animation; no tree validation or
   // node copy is needed because this property cannot affect structural rules.
   bool setOpacity(GuiId id,float opacity);
+  // Runtime scalar writes preserve the already validated tree and resource bindings.
+  bool setText(GuiId id,std::string text);
+  bool setValue(GuiId id,float value);
+  bool setVisible(GuiId id,bool visible);
+  bool setEnabled(GuiId id,bool enabled);
   bool remove(GuiId id);
   GuiId duplicate(GuiId id);
   bool reorder(GuiId id,int direction);
@@ -152,6 +162,8 @@ private:
   GuiId nextId_ = 1;
   u64 revision_ = 0;
 };
+// Appends ordinary editable nodes atomically; no hidden runtime widget or asset.
+GuiId appendGuiComposition(GuiDocument &,GuiComposition,std::string &error);
 
 // Snapshot history is bounded. One property drag is one operation, not one per frame.
 class GuiHistory final {
@@ -187,7 +199,7 @@ public:
   const GuiDocument &document() const noexcept { return document_; }
   void layout(const UiRect &canvas);
   void draw(UiDrawList &list) const;
-  void setImages(const GuiImageAtlas *images) {images_=images;layoutRevision_=~u64{0};}
+  void setImages(const GuiImageAtlas *images);
   bool pointer(const UiPointerEvent &event);
   GuiId hit(UiPoint point, bool interactiveOnly = false) const noexcept;
   const GuiPlacement *placement(GuiId id) const noexcept;
@@ -204,6 +216,7 @@ public:
   u32 captureCount() const noexcept {return static_cast<u32>(captures_.size());}
   void cancelPointers() noexcept;
   const UiRect &viewport() const {return canvas_;}
+  float canvasScale() const noexcept {return guiCanvasScale(document_.canvas(),canvas_);}
   const GuiControlState *controlState(GuiId id) const;
   std::span<const GuiControlState> controls() const {return controls_;}
   u32 takeControlPresses(GuiId id);
@@ -243,6 +256,7 @@ private:
   UiRect canvas_{};
   u64 layoutRevision_=~u64{0};
   const GuiImageAtlas *images_=nullptr;
+  u64 imageRevision_=~u64{0};
   struct Capture {GuiId node=0;u32 pointer=0;UiPointerDevice device=UiPointerDevice::Touch;UiRect bounds{},clip{};float scale=1;bool inside=true;};
   std::vector<Capture> captures_;
   bool pressed(GuiId id) const noexcept;
