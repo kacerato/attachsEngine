@@ -22,6 +22,7 @@
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_ik.h"
+#include "scene/ik_effects.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_animator_graph.h"
@@ -230,6 +231,7 @@ public:
     scripts_.setVirtualCameras(&virtualCameras_);
     scripts_.setAnimatorGraphs(&animatorGraphs_);
     scripts_.setNavigation(&navigation_);
+    scripts_.setIk(&ik_);
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
     scripts_.setAudio(&audio_);
@@ -293,6 +295,7 @@ public:
     animatorGraphs_.setPhysics(nullptr);
     scripts_.setVirtualCameras(nullptr);
     scripts_.setNavigation(nullptr);
+    scripts_.setIk(nullptr);
     events_.reset();
     eventConnections_.reset();
     scripts_.setSceneGui(nullptr);
@@ -360,7 +363,7 @@ public:
     if(!active_) return runtime::WorldStatus::NotRunning;
     return runtime::invokeComponentMethod(operationServices(),{world_.handle(object),instance},method,arguments,result);
   }
-  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_,&navigation_};}
+  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_,&navigation_,&ik_};}
   runtime::ComponentEventQueue &events() noexcept {return events_;}
   const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
   // Quem desenha o quadro publica a vista de jogo antes de avançar o mundo.
@@ -441,6 +444,14 @@ private:
   // A órbita lê a mesma ação Olhar do mapa de entrada que Olhar e scripts leem.
   // IK depois das constraints; o apoio do pe consulta a fisica real do Play.
   bool advanceIk() {
+    const bool ok=solveIk();
+    for(const auto &e:ik_.takeEvents()) {
+      const scene::ComponentOperationValue values[2]{scene::ComponentOperationValue::makeObject(e.effector),scene::ComponentOperationValue::makeObject(e.object)};
+      events_.emit(world_,e.system,0,scene::InteractionSystem::descriptor,e.id,values);
+    }
+    return ok;
+  }
+  bool solveIk() {
     return ik_.advance(world_,[this](const float origin[3],const float direction[3],runtime::ObjectId ignore,float point[3],float normal[3]) {
       runtime::QueryFilter filter;filter.includeDynamic=false;filter.ignore=ignore;runtime::QueryHit hit;
       if(!runtime::validPhysicsQueryRay(origin,direction)||!physics_.rayCast(origin,direction,filter,hit))return false;
@@ -515,6 +526,11 @@ private:
     self.physicsConnections_.contact(self.world_,event.first,event.second,event.phase);
     self.emitContact(scene::Collider::descriptor,event.first,0,event.second,event.phase,false);
     self.emitContact(scene::Collider::descriptor,event.second,0,event.first,event.phase,false);
+    if(event.phase==0&&event.hasNormal) {
+      // Reacao a impacto: a normal vai do primeiro para o segundo corpo.
+      const float towardSecond[3]{event.normal[0],event.normal[1],event.normal[2]},towardFirst[3]{-event.normal[0],-event.normal[1],-event.normal[2]};
+      self.ik_.collision(self.world_,event.first,towardSecond);self.ik_.collision(self.world_,event.second,towardFirst);
+    }
     return self.scripts_.contact(event) && self.drainCommands();
   }
   static bool characterHitEvent(void *context,const runtime::CharacterHit &hit) {

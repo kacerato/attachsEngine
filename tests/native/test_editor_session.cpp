@@ -1058,7 +1058,7 @@ AE_TEST(session_play_time_scale_button_controls_runtime_without_authoring_histor
 }
 // Rola a lista do Add pelo arraste, como a pessoa faz, até o item aparecer.
 void revealAddEntry(Fixture &fixture,u32 widget) {
-  for(u32 attempt=0;attempt<32 && locateWidget(fixture.session,widget).x<0;++attempt) {
+  for(u32 attempt=0;attempt<96 && locateWidget(fixture.session,widget).x<0;++attempt) {
     UiPoint row{-1,-1};
     for(u32 i=0;i<editorComponentCatalog.size() && row.x<0;++i)
       row=locateWidget(fixture.session,widgetId(EditorWidget::ComponentAddBase)+i);

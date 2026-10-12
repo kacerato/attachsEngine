@@ -2137,6 +2137,76 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/hit-reaction": {
+      "category": "component",
+      "name": "hit-reaction",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/recoil": {
+      "category": "component",
+      "name": "recoil",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/inertia": {
+      "category": "component",
+      "name": "inertia",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/amplifier": {
+      "category": "component",
+      "name": "amplifier",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/body-tilt": {
+      "category": "component",
+      "name": "body-tilt",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/hand-poser": {
+      "category": "component",
+      "name": "hand-poser",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/penetration-avoidance": {
+      "category": "component",
+      "name": "penetration-avoidance",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/interaction-object": {
+      "category": "component",
+      "name": "interaction-object",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/interaction-system": {
+      "category": "component",
+      "name": "interaction-system",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/full-body-ik": {
+      "category": "component",
+      "name": "full-body-ik",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

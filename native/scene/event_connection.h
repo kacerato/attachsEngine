@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,33> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,35> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -55,8 +55,9 @@ inline constexpr std::array<EventConnectionEventKey,33> eventConnectionEventKeys
   {27,"astra.navigation.agent","destination_reached"},{28,"astra.navigation.agent","path_failed"},{29,"astra.navigation.agent","link_entered"},
   {30,"astra.animation","clip_event"},{31,"astra.animation","clip_events_lost"},
   {32,"astra.animation.animator","clip_event"},{33,"astra.animation.animator","clip_events_lost"},
+  {34,"astra.ik.interaction_system","reached"},{35,"astra.ik.interaction_system","released"},
 }};
-inline constexpr std::array<ComponentEnumOption,34> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,36> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -73,8 +74,9 @@ inline constexpr std::array<ComponentEnumOption,34> eventConnectionEvents{{
   {27,"Agente: chegou"},{28,"Agente: caminho falhou"},{29,"Agente: entrou num link"},
   {30,"Animation: evento do clipe"},{31,"Animation: limite de eventos"},
   {32,"Animator: evento do clipe"},{33,"Animator: limite de eventos"},
+  {34,"Interação: mão alcançou"},{35,"Interação: mão soltou"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,31> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,32> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -106,8 +108,9 @@ inline constexpr std::array<EventConnectionMethodKey,31> eventConnectionMethodKe
   {29,"astra.audio.snapshot","apply"},
   {30,"astra.navigation.agent","stop"},
   {31,"astra.navigation.agent","resume"},
+  {32,"astra.ik.recoil","fire"},
 }};
-inline constexpr std::array<ComponentEnumOption,32> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,33> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -119,6 +122,7 @@ inline constexpr std::array<ComponentEnumOption,32> eventConnectionMethods{{
   {26,"Câmera virtual: priorizar"},{27,"Câmera virtual: encaixar"},
   {28,"Snapshot: transicionar"},{29,"Snapshot: aplicar"},
   {30,"Agente: parar"},{31,"Agente: retomar"},
+  {32,"Recuo: disparar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
@@ -138,10 +142,11 @@ inline const EventConnectionMethodKey *findEventConnectionMethod(u32 value) {
   return nullptr;
 }
 // Eventos que carregam o outro objeto (contatos) aceitam filtro por ele.
-inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || (event>=15 && event<=21);}
+inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=10) || (event>=15 && event<=21) || event==34 || event==35;}
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
-// audio.seek (segundos) e snapshot.transition_to (duração; negativo usa a autorada).
-inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28;}
+// audio.seek (segundos), snapshot.transition_to (duração; negativo usa a autorada)
+// e recoil.fire (intensidade; 1 usa os valores autorados).
+inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32;}
 
 class EventConnection final : public ComponentValue {
 public:

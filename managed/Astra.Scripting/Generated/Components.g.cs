@@ -1322,6 +1322,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         AnimationLimiteDeEventos = 31,
         AnimatorEventoDoClipe = 32,
         AnimatorLimiteDeEventos = 33,
+        InteracaoMaoAlcancou = 34,
+        InteracaoMaoSoltou = 35,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1377,6 +1379,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         SnapshotAplicar = 29,
         AgenteParar = 30,
         AgenteRetomar = 31,
+        RecuoDisparar = 32,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -1982,6 +1985,575 @@ public readonly struct TwistRelaxer : IComponentFacade<TwistRelaxer>
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Reação a impacto: Gira a cadeia para longe do golpe e volta. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiRotationConstraint.html</remarks>
+public readonly struct HitReaction : IComponentFacade<HitReaction>
+{
+    public static string TypeId => "astra.ik.hit_reaction";
+    public static HitReaction Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public HitReaction(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Força do golpe (graus)</summary>
+    /// <remarks>Faixa válida: 0 a 90.</remarks>
+    public float Strength
+    {
+        get => Component.GetFloat("strength");
+        set => Component.SetFloat("strength", value);
+    }
+    /// <summary>Recuperação (s)</summary>
+    /// <remarks>Faixa válida: 0.05 a 5.</remarks>
+    public float Duration
+    {
+        get => Component.GetFloat("duration");
+        set => Component.SetFloat("duration", value);
+    }
+    /// <summary>Ossos que reagem (ossos)</summary>
+    /// <remarks>Faixa válida: 1 a 8.</remarks>
+    public float ChainLength
+    {
+        get => Component.GetFloat("chain_length");
+        set => Component.SetFloat("chain_length", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Reagir a colisões</summary>
+    public bool ReactToCollisions
+    {
+        get => Component.GetBool("react_to_collisions");
+        set => Component.SetBool("react_to_collisions", value);
+    }
+    /// <summary>Golpear. Gira a cadeia para longe da direção; força 1 usa a força autorada</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Hit(Vector3 direction, double force) => Component.Invoke("hit", ComponentValue.Vector(direction), ComponentValue.Number(force));
+}
+
+/// <summary>Recuo: Levanta e recua a cadeia a cada disparo. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html</remarks>
+public readonly struct Recoil : IComponentFacade<Recoil>
+{
+    public static string TypeId => "astra.ik.recoil";
+    public static Recoil Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Recoil(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Levantar (graus)</summary>
+    /// <remarks>Faixa válida: 0 a 60.</remarks>
+    public float KickAngle
+    {
+        get => Component.GetFloat("kick_angle");
+        set => Component.SetFloat("kick_angle", value);
+    }
+    /// <summary>Recuar (m)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float KickBack
+    {
+        get => Component.GetFloat("kick_back");
+        set => Component.SetFloat("kick_back", value);
+    }
+    /// <summary>Recuperação (s)</summary>
+    /// <remarks>Faixa válida: 0.02 a 3.</remarks>
+    public float Duration
+    {
+        get => Component.GetFloat("duration");
+        set => Component.SetFloat("duration", value);
+    }
+    /// <summary>Ossos no recuo (ossos)</summary>
+    /// <remarks>Faixa válida: 1 a 8.</remarks>
+    public float ChainLength
+    {
+        get => Component.GetFloat("chain_length");
+        set => Component.SetFloat("chain_length", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum AxisOption : uint
+    {
+        X = 0,
+        Y = 1,
+        Z = 2,
+        X3 = 3,
+        Y4 = 4,
+        Z5 = 5,
+    }
+    /// <summary>Eixo do cano</summary>
+    public AxisOption Axis
+    {
+        get => (AxisOption)Component.GetEnum("axis");
+        set => Component.SetEnum("axis", (uint)value);
+    }
+    /// <summary>Disparar. Aplica um recuo; intensidade 1 usa os valores autorados</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Fire(double magnitude) => Component.Invoke("fire", ComponentValue.Number(magnitude));
+}
+
+/// <summary>Inércia: A ponta do osso segue a pose por uma mola. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/DampedTransform.html</remarks>
+public readonly struct Inertia : IComponentFacade<Inertia>
+{
+    public static string TypeId => "astra.ik.inertia";
+    public static Inertia Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Inertia(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Rigidez</summary>
+    /// <remarks>Faixa válida: 1 a 400.</remarks>
+    public float Stiffness
+    {
+        get => Component.GetFloat("stiffness");
+        set => Component.SetFloat("stiffness", value);
+    }
+    /// <summary>Amortecimento</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Damping
+    {
+        get => Component.GetFloat("damping");
+        set => Component.SetFloat("damping", value);
+    }
+    /// <summary>Desvio máximo (graus)</summary>
+    /// <remarks>Faixa válida: 0 a 120.</remarks>
+    public float MaxAngle
+    {
+        get => Component.GetFloat("max_angle");
+        set => Component.SetFloat("max_angle", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Amplificador: Exagera a rotação animada do osso. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiRotationConstraint.html</remarks>
+public readonly struct Amplifier : IComponentFacade<Amplifier>
+{
+    public static string TypeId => "astra.ik.amplifier";
+    public static Amplifier Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Amplifier(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Exagero</summary>
+    /// <remarks>Faixa válida: 0 a 3.</remarks>
+    public float Amount
+    {
+        get => Component.GetFloat("amount");
+        set => Component.SetFloat("amount", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Inclinação do corpo: Inclina o osso para dentro da curva. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/OverrideTransform.html</remarks>
+public readonly struct BodyTilt : IComponentFacade<BodyTilt>
+{
+    public static string TypeId => "astra.ik.body_tilt";
+    public static BodyTilt Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public BodyTilt(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Inclinação por giro (graus por grau/s)</summary>
+    /// <remarks>Faixa válida: 0 a 2.</remarks>
+    public float TiltPerTurn
+    {
+        get => Component.GetFloat("tilt_per_turn");
+        set => Component.SetFloat("tilt_per_turn", value);
+    }
+    /// <summary>Inclinação máxima (graus)</summary>
+    /// <remarks>Faixa válida: 0 a 60.</remarks>
+    public float MaxAngle
+    {
+        get => Component.GetFloat("max_angle");
+        set => Component.SetFloat("max_angle", value);
+    }
+    /// <summary>Suavização (s)</summary>
+    /// <remarks>Faixa válida: 0 a 2.</remarks>
+    public float Smoothing
+    {
+        get => Component.GetFloat("smoothing");
+        set => Component.SetFloat("smoothing", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    public enum AxisOption : uint
+    {
+        X = 0,
+        Y = 1,
+        Z = 2,
+        X3 = 3,
+        Y4 = 4,
+        Z5 = 5,
+    }
+    /// <summary>Eixo frontal do personagem</summary>
+    public AxisOption Axis
+    {
+        get => (AxisOption)Component.GetEnum("axis");
+        set => Component.SetEnum("axis", (uint)value);
+    }
+}
+
+/// <summary>Poser de mão: Copia a pose de uma hierarquia de referência. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/OverrideTransform.html</remarks>
+public readonly struct HandPoser : IComponentFacade<HandPoser>
+{
+    public static string TypeId => "astra.ik.hand_poser";
+    public static HandPoser Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public HandPoser(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Incluir este osso</summary>
+    public bool IncludeSelf
+    {
+        get => Component.GetBool("include_self");
+        set => Component.SetBool("include_self", value);
+    }
+    /// <summary>Pose de referência</summary>
+    public ObjectReference Reference
+    {
+        get => Component.GetReference("reference");
+        set => Component.SetReference("reference", value);
+    }
+}
+
+/// <summary>Evitar penetração: Para o alvo do IK na superfície do colisor. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
+public readonly struct PenetrationAvoidance : IComponentFacade<PenetrationAvoidance>
+{
+    public static string TypeId => "astra.ik.penetration_avoidance";
+    public static PenetrationAvoidance Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PenetrationAvoidance(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Folga da superfície (m)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Objeto interagível: Ponto de pegada, pose da mão e tempos. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
+public readonly struct InteractionObject : IComponentFacade<InteractionObject>
+{
+    public static string TypeId => "astra.ik.interaction_object";
+    public static InteractionObject Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public InteractionObject(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Tempo para alcançar (s)</summary>
+    /// <remarks>Faixa válida: 0.05 a 5.</remarks>
+    public float ReachTime
+    {
+        get => Component.GetFloat("reach_time");
+        set => Component.SetFloat("reach_time", value);
+    }
+    /// <summary>Tempo para soltar (s)</summary>
+    /// <remarks>Faixa válida: 0.05 a 5.</remarks>
+    public float ReleaseTime
+    {
+        get => Component.GetFloat("release_time");
+        set => Component.SetFloat("release_time", value);
+    }
+    /// <summary>Pegar ao alcançar</summary>
+    public bool PickUp
+    {
+        get => Component.GetBool("pick_up");
+        set => Component.SetBool("pick_up", value);
+    }
+    /// <summary>Ponto de pegada</summary>
+    public ObjectReference Grip
+    {
+        get => Component.GetReference("grip");
+        set => Component.SetReference("grip", value);
+    }
+    /// <summary>Pose da mão</summary>
+    public ObjectReference HandPose
+    {
+        get => Component.GetReference("hand_pose");
+        set => Component.SetReference("hand_pose", value);
+    }
+}
+
+/// <summary>Sistema de interação: Leva a mão até objetos interagíveis. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
+public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
+{
+    public static string TypeId => "astra.ik.interaction_system";
+    public static InteractionSystem Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public InteractionSystem(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Velocidade</summary>
+    /// <remarks>Faixa válida: 0.1 a 5.</remarks>
+    public float Speed
+    {
+        get => Component.GetFloat("speed");
+        set => Component.SetFloat("speed", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Interagir. Leva a mão até o Objeto interagível; falso se a mão ou o objeto não servem</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Start(ObjectReference effector, ObjectReference @object) => Component.Invoke("start", ComponentValue.Object(effector), ComponentValue.Object(@object)).AsBoolean();
+    /// <summary>Soltar. Devolve a mão à animação e larga o objeto pego</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Stop(ObjectReference effector) => Component.Invoke("stop", ComponentValue.Object(effector));
+    /// <summary>Alcançou. A mão chegou ao ponto de pegada. Payload: Mão: objeto, Objeto: objeto</summary>
+    public ComponentSubscription OnReached(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "reached", handler);
+    /// <summary>Soltou. A mão voltou à animação. Payload: Mão: objeto, Objeto: objeto</summary>
+    public ComponentSubscription OnReleased(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "released", handler);
+}
+
+/// <summary>IK de corpo inteiro: Puxa a pelve para alcançar alvos e resolve os membros. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
+public readonly struct FullBodyIk : IComponentFacade<FullBodyIk>
+{
+    public static string TypeId => "astra.ik.full_body";
+    public static FullBodyIk Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public FullBodyIk(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Puxar o corpo</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float BodyPull
+    {
+        get => Component.GetFloat("body_pull");
+        set => Component.SetFloat("body_pull", value);
+    }
+    /// <summary>Deslocamento máximo da pelve (m)</summary>
+    /// <remarks>Faixa válida: 0 a 3.</remarks>
+    public float MaxBodyOffset
+    {
+        get => Component.GetFloat("max_body_offset");
+        set => Component.SetFloat("max_body_offset", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Pelve</summary>
+    public ObjectReference Pelvis
+    {
+        get => Component.GetReference("pelvis");
+        set => Component.SetReference("pelvis", value);
+    }
+    /// <summary>Ponta 1 (mão esq.)</summary>
+    public ObjectReference Tip1
+    {
+        get => Component.GetReference("tip_1");
+        set => Component.SetReference("tip_1", value);
+    }
+    /// <summary>Alvo 1</summary>
+    public ObjectReference Target1
+    {
+        get => Component.GetReference("target_1");
+        set => Component.SetReference("target_1", value);
+    }
+    /// <summary>Ponta 2 (mão dir.)</summary>
+    public ObjectReference Tip2
+    {
+        get => Component.GetReference("tip_2");
+        set => Component.SetReference("tip_2", value);
+    }
+    /// <summary>Alvo 2</summary>
+    public ObjectReference Target2
+    {
+        get => Component.GetReference("target_2");
+        set => Component.SetReference("target_2", value);
+    }
+    /// <summary>Ponta 3 (pé esq.)</summary>
+    public ObjectReference Tip3
+    {
+        get => Component.GetReference("tip_3");
+        set => Component.SetReference("tip_3", value);
+    }
+    /// <summary>Alvo 3</summary>
+    public ObjectReference Target3
+    {
+        get => Component.GetReference("target_3");
+        set => Component.SetReference("target_3", value);
+    }
+    /// <summary>Ponta 4 (pé dir.)</summary>
+    public ObjectReference Tip4
+    {
+        get => Component.GetReference("tip_4");
+        set => Component.SetReference("tip_4", value);
+    }
+    /// <summary>Alvo 4</summary>
+    public ObjectReference Target4
+    {
+        get => Component.GetReference("target_4");
+        set => Component.SetReference("target_4", value);
     }
 }
 

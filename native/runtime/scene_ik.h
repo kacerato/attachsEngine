@@ -8,8 +8,10 @@
 
 namespace ae::runtime {
 struct SceneIkTypes {
-  enum class Issue { MissingTarget, ShortChain, Degenerate, NotConverged, NoGround, InvalidPose };
+  enum class Issue { MissingTarget, ShortChain, Degenerate, NotConverged, NoGround, InvalidPose, NotInteractable };
   struct Diagnostic {ObjectId object;Issue issue;float residual=0;};
+  // Acontecimento do pacote C, entregue a fila de eventos de componente pelo Play.
+  struct Event {ObjectId system=0;const char *id="";ObjectId effector=0,object=0;};
   // Raio de apoio: origem, direcao com comprimento; devolve ponto e normal.
   using GroundQuery=std::function<bool(const float origin[3],const float direction[3],ObjectId ignore,float point[3],float normal[3])>;
   static const char *issueText(Issue issue) {
@@ -20,6 +22,7 @@ struct SceneIkTypes {
     case Issue::NotConverged:return "IK não convergiu na tolerância";
     case Issue::NoGround:return "Sem chão no alcance do raio";
     case Issue::InvalidPose:return "Pose resultante inválida";
+    case Issue::NotInteractable:return "Objeto sem Objeto interagível ou mão sem cadeia";
     }
     return "IK";
   }
@@ -34,6 +37,14 @@ public:
   const std::vector<Diagnostic> &diagnostics() const;
   void reset();
   bool advance(GameWorld &world,const GroundQuery &ground={});
+  // Pacote C: golpe, recuo, interacao e colisao. Recusam objeto sem o
+  // componente ativo; o efeito aparece no proximo advance.
+  WorldStatus hit(GameWorld &world,ObjectId object,const float direction[3],float force);
+  WorldStatus fire(GameWorld &world,ObjectId object,float magnitude);
+  WorldStatus interactionStart(GameWorld &world,ObjectId system,ObjectId effector,ObjectId object,bool &started);
+  WorldStatus interactionStop(GameWorld &world,ObjectId system,ObjectId effector);
+  void collision(GameWorld &world,ObjectId object,const float normal[3]);
+  std::vector<Event> takeEvents();
 private:
   std::unique_ptr<SceneIkSolver> solver_;
 };

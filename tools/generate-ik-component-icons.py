@@ -1,4 +1,4 @@
-"""Astra IK component marks (N04): two-bone, chain and foot grounding."""
+"""Astra IK component marks (N04): solvers, grounding and pack C effects."""
 import importlib.util
 import json
 from pathlib import Path
@@ -36,12 +36,39 @@ finger = chain([(7, 27), (9, 18), (15, 12), (22, 13)], 2.6, 2.3)
 offset = target((10, 22), 3.6) + target((24, 9), 3.6) + [("poly", mark.bar((13, 19), (21, 12), 1.8))]
 twist = chain([(4, 16), (28, 16)]) + [("poly", mark.bar((10, 9), (14, 23), 1.6)), ("poly", mark.bar((18, 9), (22, 23), 1.6))]
 
+# Pacote C: efeitos procedurais, interacao e corpo inteiro.
+def arrow(a, b, width=1.8):
+    (x0, y0), (x1, y1) = a, b
+    dx, dy = x1 - x0, y1 - y0
+    n = max((dx * dx + dy * dy) ** 0.5, 1e-6)
+    ux, uy = dx / n, dy / n
+    head = [(x1, y1), (x1 - ux * 4.5 - uy * 3, y1 - uy * 4.5 + ux * 3), (x1 - ux * 4.5 + uy * 3, y1 - uy * 4.5 - ux * 3)]
+    return [("poly", mark.bar(a, (x1 - ux * 3, y1 - uy * 3), width)), ("poly", head)]
+
+
+hit_reaction = chain([(8, 28), (12, 18), (17, 9)]) + arrow((29, 6), (20, 12)) + [("poly", mark.bar((24, 16), (28, 20), 1.4))]
+recoil = [("poly", mark.bar((6, 20), (24, 14), 3.6))] + chain([(6, 20), (10, 28)], 2.4, 2.2) + arrow((22, 24), (12, 27), 1.6) + [("poly", mark.bar((27, 8), (29, 4), 1.4))]
+inertia = chain([(5, 26), (12, 20)]) + chain([(12, 20), (20, 19), (27, 23)], 2.2, 2.0) + [("poly", mark.bar((15, 12), (24, 11), 1.2)), ("poly", mark.bar((17, 8), (26, 7), 1.2))]
+amplifier = chain([(6, 27), (14, 16)]) + [("poly", mark.bar((14, 16), (20, 6), 2.2)), ("poly", mark.bar((14, 16), (27, 9), 2.2))] + arrow((21, 15), (27, 12), 1.4)
+body_tilt = chain([(12, 28), (16, 17), (21, 7)]) + [("poly", mark.bar((3, 30), (29, 30), 2.0))] + arrow((6, 12), (10, 6), 1.4)
+hand_poser = chain([(8, 28), (10, 17)], 2.6, 2.3) + chain([(10, 17), (8, 9)], 2.0, 1.8) + chain([(10, 17), (14, 8)], 2.0, 1.8) + chain([(10, 17), (19, 11)], 2.0, 1.8)
+hand_poser += [("poly", mark.bar((22, 20), (29, 20), 1.4)), ("poly", mark.bar((22, 25), (29, 25), 1.4))]
+penetration = chain([(4, 26), (12, 16)]) + [("poly", mark.bar((12, 16), (19, 14), 2.6))] + [("poly", [(22, 3), (26, 3), (26, 29), (22, 29)])] + target((19, 14), 3.0)
+interaction_object = [("poly", [(10, 14), (24, 14), (24, 28), (10, 28)])] + [("poly", mark.bar((13, 14), (13, 7), 1.6)), ("poly", mark.bar((21, 14), (21, 7), 1.6)), ("poly", mark.bar((13, 7), (21, 7), 1.6))]
+interaction_system = chain([(4, 28), (10, 18), (16, 14)]) + arrow((16, 14), (22, 12), 1.6) + [("poly", [(23, 14), (30, 14), (30, 21), (23, 21)])]
+full_body = [("circle", ((16, 5), 3.0))] + chain([(16, 9), (16, 17)]) + chain([(16, 11), (8, 15), (4, 10)], 2.0, 1.8) + chain([(16, 11), (24, 15), (28, 10)], 2.0, 1.8)
+full_body += chain([(16, 17), (11, 23), (10, 29)], 2.0, 1.8) + chain([(16, 17), (21, 23), (24, 29)], 2.0, 1.8)
+
 named = root / "assets/astra-visual/icons/named"
 catalog = named / "catalog.json"
 data = json.loads(catalog.read_text(encoding="utf-8"))
 for name, geometry in (("ik-two-bone", two_bone), ("ik-chain", ik_chain), ("foot-grounding", grounding),
                        ("ik-look-at", look_at), ("ik-aim", aim), ("rotation-limit", limit), ("grounder", grounder),
-                       ("finger-curl", finger), ("ik-offset", offset), ("twist-relaxer", twist)):
+                       ("finger-curl", finger), ("ik-offset", offset), ("twist-relaxer", twist),
+                       ("hit-reaction", hit_reaction), ("recoil", recoil), ("inertia", inertia), ("amplifier", amplifier),
+                       ("body-tilt", body_tilt), ("hand-poser", hand_poser), ("penetration-avoidance", penetration),
+                       ("interaction-object", interaction_object), ("interaction-system", interaction_system),
+                       ("full-body-ik", full_body)):
     mark.render(geometry).save(named / f"component/{name}.png")
     data["icons"][f"component/{name}"] = dict(category="component", name=name, dark_ui_ready=True,
                                                generation="ik-components-v1",

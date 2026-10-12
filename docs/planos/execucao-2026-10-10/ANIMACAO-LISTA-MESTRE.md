@@ -52,11 +52,11 @@ Legenda: `feito` · `parcial` (o que falta está descrito) · `pacote X` (planej
 | **FK ↔ IK**: blend, converter IK em chaves FK num intervalo | FKtoIKConversion | pacote B |
 | **Child-Of animável** (troca de pai mantendo a pose, com chave) | ChildOf | pacote B |
 | **Pinning** (fixar efetor no mundo enquanto edita o resto) | Constraints | pacote B |
-| FABRIK Root (árvore de várias cadeias) e Full Body Biped | FABRIKRoot, FullBodyBipedIK | pacote C |
-| Interação (objeto, alvo, gatilho, mãos em prop) | InteractionSystem, InteractionObject | pacote C |
-| Reação a impacto, recuo, inércia, amplificador, inclinação | HitReaction, Recoil, Inertia, Amplifier, BodyTilt | pacote C |
-| Poser de mão / pose genérica | HandPoser, GenericPoser | pacote C |
-| Evitar penetração | PenetrationAvoidance | pacote C |
+| FABRIK Root (árvore de várias cadeias) e Full Body Biped | FABRIKRoot, FullBodyBipedIK | pacote C: IK de corpo inteiro implementado (pelve + membros); FABRIK Root pesquisado |
+| Interação (objeto, alvo, gatilho, mãos em prop) | InteractionSystem, InteractionObject | implementado (pacote C) |
+| Reação a impacto, recuo, inércia, amplificador, inclinação | HitReaction, Recoil, Inertia, Amplifier, BodyTilt | implementado (pacote C) |
+| Poser de mão / pose genérica | HandPoser, GenericPoser | implementado (pacote C, Poser de mão) |
+| Evitar penetração | PenetrationAvoidance | implementado (pacote C) |
 | VRIK | VRIK | condicional: exige tracking XR real (N14) |
 
 ## N05 — Locomoção, root motion (UMotion RootMotion · FinalIK Grounder)

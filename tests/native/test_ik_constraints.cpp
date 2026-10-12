@@ -3,6 +3,7 @@
 // persistencia; apoio do pe pela consulta de chao; criacao pelo editor com Undo.
 #include "harness.h"
 #include "runtime/scene_ik.h"
+#include "scene/ik_effects.h"
 #include "runtime/ik_solvers.h"
 #include "runtime/transform_math.h"
 #include "runtime/game_world.h"
@@ -220,4 +221,146 @@ AE_TEST(ik_finger_curl_offset_and_twist_relaxer_act_on_real_bones) {
   float headAfter[16];worldMatrix(w3.graph(),t.head,headAfter);
   AE_EXPECT_TRUE(std::abs(w3.graph().find(t.chest)->transform.rotationDegrees[1]-30)<.5f,"half of the twist moves to the middle bone");
   for(u32 i=0;i<12;++i)AE_EXPECT_TRUE(std::abs(headAfter[i]-headBefore[i])<1e-3f,"child keeps its world pose");
+}
+
+// ---- Pacote C: efeitos procedurais, interacao e corpo inteiro ----
+namespace {
+void step(GameWorld &world,SceneIk &ik,u32 frames=1,const SceneIk::GroundQuery &ground={}) {
+  for(u32 i=0;i<frames;++i) {world.beginFrame(1/60.);ik.advance(world,ground);world.flush();}
+}
+float worldX(const GameWorld &w,ObjectId id,u32 component=0) {float m[16];worldMatrix(w.graph(),id,m);return m[12+component];}
+}
+
+AE_TEST(ik_hit_reaction_pushes_the_chain_and_recovers) {
+  Spine s;auto *c=addComponent<scene::HitReaction>(s.g,s.head);c->strength=30;c->duration=.4f;c->chainLength=2;
+  GameWorld world;world.load(s.g);SceneIk ik;step(world,ik);
+  const float rest=worldX(world,s.head);
+  const float right[3]{1,0,0};
+  AE_EXPECT_TRUE(ik.hit(world,s.head,right,1)==WorldStatus::Ok,"hit accepted");
+  AE_EXPECT_TRUE(ik.hit(world,s.hips,right,1)==WorldStatus::ComponentMissing,"hit refuses a bone without the component");
+  step(world,ik,6);
+  AE_EXPECT_TRUE(worldX(world,s.head)>rest+.1f,"head pushed along the blow");
+  step(world,ik,30);
+  AE_EXPECT_TRUE(std::abs(worldX(world,s.head)-rest)<1e-3f,"pose recovers after the duration");
+  const float normal[3]{-1,0,0};ik.collision(world,s.head,normal);step(world,ik,6);
+  AE_EXPECT_TRUE(worldX(world,s.head)>rest+.1f,"solid contact triggers the same reaction");
+}
+
+AE_TEST(ik_recoil_lifts_and_kicks_back_then_returns) {
+  Spine s;auto *c=addComponent<scene::Recoil>(s.g,s.head);c->kickAngle=20;c->kickBack=.1f;c->duration=.3f;c->chainLength=2;c->axis=2;
+  GameWorld world;world.load(s.g);SceneIk ik;step(world,ik);
+  float before[16];worldMatrix(world.graph(),s.head,before);const float hipsZ=worldX(world,s.hips,2);
+  AE_EXPECT_TRUE(ik.fire(world,s.head,1)==WorldStatus::Ok,"fire accepted");
+  step(world,ik,3);
+  float now[16];worldMatrix(world.graph(),s.head,now);
+  AE_EXPECT_TRUE(now[9]>before[9]+.05f,"barrel axis lifted");
+  AE_EXPECT_TRUE(worldX(world,s.hips,2)<hipsZ-.03f,"chain base kicked back");
+  step(world,ik,30);worldMatrix(world.graph(),s.head,now);
+  for(u32 i=0;i<16;++i)AE_EXPECT_TRUE(std::abs(now[i]-before[i])<1e-3f,"recoil returns to the frame pose");
+}
+
+AE_TEST(ik_inertia_lags_behind_motion_and_settles) {
+  Spine s;addComponent<scene::Inertia>(s.g,s.chest)->stiffness=60;
+  GameWorld world;world.load(s.g);SceneIk ik;step(world,ik);
+  Transform moved;moved.position[0]=1;world.setLocalTransform(world.handle(s.owner),moved);
+  step(world,ik);
+  AE_EXPECT_TRUE(worldX(world,s.head)<worldX(world,s.chest)-.01f,"tip trails the sudden move");
+  step(world,ik,240);
+  AE_EXPECT_TRUE(std::abs(worldX(world,s.head)-worldX(world,s.chest))<2e-3f,"spring settles on the animated pose");
+}
+
+AE_TEST(ik_amplifier_exaggerates_the_animated_rotation) {
+  Spine s;addComponent<scene::Amplifier>(s.g,s.chest)->amount=1;
+  GameWorld world;world.load(s.g);SceneIk ik;step(world,ik);
+  Transform animated=world.graph().find(s.chest)->transform;animated.rotationDegrees[0]=10;world.setLocalTransform(world.handle(s.chest),animated);
+  step(world,ik);
+  AE_EXPECT_TRUE(std::abs(world.graph().find(s.chest)->transform.rotationDegrees[0]-20)<.2f,"twice the animated delta");
+  step(world,ik,3);
+  AE_EXPECT_TRUE(std::abs(world.graph().find(s.chest)->transform.rotationDegrees[0]-20)<.2f,"no accumulation across frames");
+}
+
+AE_TEST(ik_body_tilt_leans_into_turns) {
+  Spine s;auto *c=addComponent<scene::BodyTilt>(s.g,s.chest);c->tiltPerTurn=.2f;c->maxAngle=20;c->smoothing=0;
+  GameWorld world;world.load(s.g);SceneIk ik;step(world,ik);
+  const auto turn=[&](float yaw) {Transform t;t.rotationDegrees[1]=yaw;world.setLocalTransform(world.handle(s.owner),t);step(world,ik);};
+  for(u32 i=1;i<=5;++i)turn(3.f*float(i));
+  float m[16];worldMatrix(world.graph(),s.chest,m);
+  AE_EXPECT_TRUE(m[5]<std::cos(15*3.14159265f/180),"chest tilted while turning");
+  const float a=15*3.14159265f/180,side=m[4]*std::cos(a)-m[6]*std::sin(a);
+  for(u32 i=1;i<=10;++i)turn(15-3.f*float(i));
+  worldMatrix(world.graph(),s.chest,m);
+  const float b=-15*3.14159265f/180,other=m[4]*std::cos(b)-m[6]*std::sin(b);
+  AE_EXPECT_TRUE(side*other<0,"opposite turn leans to the other side");
+}
+
+AE_TEST(ik_hand_poser_copies_reference_rotations_by_order) {
+  SceneGraph g;const auto hand=g.createEntity(g.root(),ObjectKind::Folder,"Mao");
+  const auto f1=g.createEntity(hand,ObjectKind::Folder,"Dedo");const auto f2=g.createEntity(f1,ObjectKind::Folder,"Ponta");
+  const auto ref=g.createEntity(g.root(),ObjectKind::Folder,"Pose");
+  const auto r1=g.createEntity(ref,ObjectKind::Folder,"R1");const auto r2=g.createEntity(r1,ObjectKind::Folder,"R2");
+  Transform bent;bent.rotationDegrees[0]=40;g.setTransform(r1,bent);g.setTransform(r2,bent);
+  addComponent<scene::HandPoser>(g,hand)->reference=ref;
+  GameWorld world;world.load(g);SceneIk ik;step(world,ik);
+  AE_EXPECT_TRUE(std::abs(world.graph().find(f1)->transform.rotationDegrees[0]-40)<.1f&&std::abs(world.graph().find(f2)->transform.rotationDegrees[0]-40)<.1f,"fingers take the reference pose");
+  AE_EXPECT_TRUE(std::abs(world.graph().find(hand)->transform.rotationDegrees[0])<1e-4f,"the hand itself stays with the IK/animation");
+}
+
+AE_TEST(ik_penetration_avoidance_stops_target_at_the_wall) {
+  Leg leg;leg.ik(1);addComponent<scene::PenetrationAvoidance>(leg.g,leg.foot)->radius=.05f;
+  GameWorld world;world.load(leg.g);SceneIk ik;
+  const SceneIk::GroundQuery wall=[](const float *o,const float *d,ObjectId,float *p,float *n) {
+    if(d[0]<=0)return false;
+    const float t=(.3f-o[0])/d[0];
+    if(t<0||t>1)return false;
+    for(u32 i=0;i<3;++i)p[i]=o[i]+d[i]*t;
+    n[0]=-1;n[1]=0;n[2]=0;return true;};
+  step(world,ik,1,wall);
+  AE_EXPECT_TRUE(std::abs(worldX(world,leg.foot)-.25f)<3e-3f,"tip stops at the surface minus the clearance");
+}
+
+AE_TEST(ik_interaction_reaches_picks_up_and_releases_with_events) {
+  Leg leg;
+  addComponent<scene::InteractionSystem>(leg.g,leg.owner);
+  const auto prop=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Caixa");
+  Transform at;at.position[0]=.6f;at.position[1]=.6f;leg.g.setTransform(prop,at);
+  auto *object=addComponent<scene::InteractionObject>(leg.g,prop);object->reachTime=.2f;object->releaseTime=.1f;object->pickUp=true;
+  GameWorld world;world.load(leg.g);SceneIk ik;step(world,ik);
+  bool started=false;
+  AE_EXPECT_TRUE(ik.interactionStart(world,leg.owner,leg.foot,leg.target,started)==WorldStatus::Ok&&!started,"plain object is not interactable");
+  AE_EXPECT_TRUE(ik.interactionStart(world,leg.owner,leg.foot,prop,started)==WorldStatus::Ok&&started,"interaction starts");
+  std::vector<SceneIk::Event> events;
+  for(u32 i=0;i<14;++i) {step(world,ik);for(auto &e:ik.takeEvents())events.push_back(e);}
+  AE_EXPECT_TRUE(!events.empty()&&std::string(events.front().id)=="reached"&&events.front().object==prop,"reached event with hand and object");
+  AE_EXPECT_TRUE(world.graph().find(prop)->parent==leg.foot,"object picked up into the hand");
+  float propWorld[16];worldMatrix(world.graph(),prop,propWorld);
+  AE_EXPECT_TRUE(std::abs(propWorld[12]-.6f)<1e-2f&&std::abs(propWorld[13]-.6f)<1e-2f,"pick up keeps the world pose");
+  AE_EXPECT_TRUE(ik.interactionStop(world,leg.owner,leg.foot)==WorldStatus::Ok,"stop");
+  for(u32 i=0;i<12;++i) {step(world,ik);for(auto &e:ik.takeEvents())events.push_back(e);}
+  AE_EXPECT_TRUE(world.graph().find(prop)->parent==world.graph().root(),"stop drops the object back");
+  AE_EXPECT_TRUE(!events.empty()&&std::string(events.back().id)=="released","released event");
+}
+
+AE_TEST(ik_full_body_pulls_pelvis_to_reach_far_targets) {
+  Leg leg;
+  const auto far=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Longe");Transform t;t.position[1]=-.5f;leg.g.setTransform(far,t);
+  auto *c=addComponent<scene::FullBodyIk>(leg.g,leg.owner);c->pelvis=leg.hip;c->tips[2]=leg.foot;c->targets[2]=far;c->bodyPull=1;c->maxBodyOffset=1;
+  GameWorld world;world.load(leg.g);SceneIk ik;
+  const float hipBefore=worldX(world,leg.hip,1);step(world,ik);
+  const float hipFirst=worldX(world,leg.hip,1);
+  float foot[16];worldMatrix(world.graph(),leg.foot,foot);
+  AE_EXPECT_TRUE(worldX(world,leg.hip,1)<hipBefore-.4f,"pelvis pulled toward the far target");
+  AE_EXPECT_TRUE(std::abs(foot[13]+.5f)<1e-2f&&std::abs(foot[12])<1e-2f,"limb reaches after the body moves");
+  step(world,ik,5);
+  AE_EXPECT_TRUE(std::abs(worldX(world,leg.hip,1)-hipFirst)<1e-3f,"no accumulation of the pelvis pull");
+}
+
+AE_TEST(ik_pack_c_components_round_trip) {
+  const scene::ComponentType *types[]{&scene::HitReaction::descriptor,&scene::Recoil::descriptor,&scene::Inertia::descriptor,&scene::Amplifier::descriptor,
+    &scene::BodyTilt::descriptor,&scene::HandPoser::descriptor,&scene::PenetrationAvoidance::descriptor,&scene::InteractionObject::descriptor,
+    &scene::InteractionSystem::descriptor,&scene::FullBodyIk::descriptor};
+  for(const auto *type:types) {
+    const auto value=type->create();std::ostringstream out;value->write(out);
+    const auto copy=type->create();std::istringstream in(out.str());
+    AE_EXPECT_TRUE(value->valid()&&copy->read(in,type->version)&&copy->valid(),"component persists");
+  }
 }

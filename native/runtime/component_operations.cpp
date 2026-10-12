@@ -8,6 +8,8 @@
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_navigation.h"
+#include "runtime/scene_ik.h"
+#include "scene/ik_effects.h"
 #include "scene/audio_mixer.h"
 #include "runtime/scene_animator_graph.h"
 #include "scene/animator.h"
@@ -102,7 +104,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,76> bindings{{
+const std::array<ComponentMethodBinding,80> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -194,6 +196,20 @@ const std::array<ComponentMethodBinding,76> bindings{{
   {&scene::AudioSnapshot::descriptor,"apply",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){
     if(!s.audio) return WorldStatus::NotRunning;
     return s.audio->transitionSnapshot(*s.world,h,0);}},
+  {&scene::HitReaction::descriptor,"hit",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!s.ik||!s.world) return WorldStatus::NotRunning;
+    return s.ik->hit(*s.world,h.object.id,a[0].vector,static_cast<float>(a[1].number));}},
+  {&scene::Recoil::descriptor,"fire",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!s.ik||!s.world) return WorldStatus::NotRunning;
+    return s.ik->fire(*s.world,h.object.id,static_cast<float>(a[0].number));}},
+  {&scene::InteractionSystem::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){
+    if(!s.ik||!s.world) return WorldStatus::NotRunning;
+    bool started=false;const auto status=s.ik->interactionStart(*s.world,h.object.id,static_cast<ObjectId>(a[0].object),static_cast<ObjectId>(a[1].object),started);
+    if(status==WorldStatus::Ok) r=Value::makeBoolean(started);
+    return status;}},
+  {&scene::InteractionSystem::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!s.ik||!s.world) return WorldStatus::NotRunning;
+    return s.ik->interactionStop(*s.world,h.object.id,static_cast<ObjectId>(a[0].object));}},
   {&scene::PathFollow::descriptor,"restart",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,0,r);}},
   {&scene::PathFollow::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,1,r);}},
   {&scene::PathFollow::descriptor,"progress",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,2,r);}},

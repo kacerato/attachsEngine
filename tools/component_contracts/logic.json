@@ -427,6 +427,176 @@
    "searchTerms": "Twist Relaxer Antebraço Torção",
    "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwistCorrection.html",
    "apiName": "TwistRelaxer"
+  },
+  {
+   "type": "HitReaction",
+   "name": "Reação a impacto",
+   "description": "Gira a cadeia para longe do golpe e volta",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/hit-reaction",
+   "searchTerms": "Hit Reaction Impacto Golpe Dano",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiRotationConstraint.html",
+   "apiName": "HitReaction"
+  },
+  {
+   "type": "Recoil",
+   "name": "Recuo",
+   "description": "Levanta e recua a cadeia a cada disparo",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/recoil",
+   "searchTerms": "Recoil Recuo Arma Disparo Tiro",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html",
+   "apiName": "Recoil"
+  },
+  {
+   "type": "Inertia",
+   "name": "Inércia",
+   "description": "A ponta do osso segue a pose por uma mola",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/inertia",
+   "searchTerms": "Inertia Inércia Damped Cauda Orelha Jiggle",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/DampedTransform.html",
+   "apiName": "Inertia"
+  },
+  {
+   "type": "Amplifier",
+   "name": "Amplificador",
+   "description": "Exagera a rotação animada do osso",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/amplifier",
+   "searchTerms": "Amplifier Amplificador Exagero Cartoon",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiRotationConstraint.html",
+   "apiName": "Amplifier"
+  },
+  {
+   "type": "BodyTilt",
+   "name": "Inclinação do corpo",
+   "description": "Inclina o osso para dentro da curva",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/body-tilt",
+   "searchTerms": "Body Tilt Inclinação Curva Lean",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/OverrideTransform.html",
+   "apiName": "BodyTilt"
+  },
+  {
+   "type": "HandPoser",
+   "name": "Poser de mão",
+   "description": "Copia a pose de uma hierarquia de referência",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/hand-poser",
+   "searchTerms": "Hand Poser Generic Poser Pose Mão Garra",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/OverrideTransform.html",
+   "apiName": "HandPoser"
+  },
+  {
+   "type": "PenetrationAvoidance",
+   "name": "Evitar penetração",
+   "description": "Para o alvo do IK na superfície do colisor",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/penetration-avoidance",
+   "searchTerms": "Penetration Avoidance Colisão Parede IK",
+   "reference": "https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html",
+   "apiName": "PenetrationAvoidance"
+  },
+  {
+   "type": "InteractionObject",
+   "name": "Objeto interagível",
+   "description": "Ponto de pegada, pose da mão e tempos",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/interaction-object",
+   "searchTerms": "Interaction Object Interagível Pegar Prop",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html",
+   "apiName": "InteractionObject"
+  },
+  {
+   "type": "InteractionSystem",
+   "name": "Sistema de interação",
+   "description": "Leva a mão até objetos interagíveis",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/interaction-system",
+   "searchTerms": "Interaction System Interação Pegar Alcançar",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html",
+   "apiName": "InteractionSystem"
+  },
+  {
+   "type": "FullBodyIk",
+   "name": "IK de corpo inteiro",
+   "description": "Puxa a pelve para alcançar alvos e resolve os membros",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/full-body-ik",
+   "searchTerms": "Full Body Biped IK FABRIK Root Corpo Inteiro",
+   "reference": "https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html",
+   "apiName": "FullBodyIk"
   }
  ],
  "defaults": {
