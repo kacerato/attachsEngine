@@ -17,5 +17,9 @@ struct EditorStudio {
   // Child-Of gravado: `object` acompanha `parent` de `start` a `end` mantendo
   // o deslocamento atual, como chaves de posicao/rotacao do proprio objeto.
   static bool followObject(EditorSession &,EditorEntityId object,EditorEntityId parent,float start,float end,std::string &summary,std::string &error);
+  // Root motion: cria no personagem o componente com o osso raiz encontrado
+  // (nomes ou primeira bifurcacao); com o componente presente, liga/desliga.
+  static bool toggleRootMotion(EditorSession &,EditorEntityId owner,std::string &summary,std::string &error);
+  static EditorEntityId rootMotionBone(const runtime::SceneGraph &document,EditorEntityId owner);
 };
 } // namespace ae::editor

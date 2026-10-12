@@ -7351,6 +7351,97 @@ public readonly struct Animator : IComponentFacade<Animator>
     public ComponentSubscription OnClipEventsLost(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "clip_events_lost", handler);
 }
 
+/// <summary>Root motion: O passo do osso raiz anima o personagem; o osso fica no lugar. Família Animação · Movimento.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/RootMotion.html</remarks>
+public readonly struct RootMotion : IComponentFacade<RootMotion>
+{
+    public static string TypeId => "astra.animation.root_motion";
+    public static RootMotion Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public RootMotion(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Weight
+    {
+        get => Component.GetFloat("weight");
+        set => Component.SetFloat("weight", value);
+    }
+    /// <summary>Salto de laço (m)</summary>
+    /// <remarks>Faixa válida: 0.01 a 10.</remarks>
+    public float LoopJump
+    {
+        get => Component.GetFloat("loop_jump");
+        set => Component.SetFloat("loop_jump", value);
+    }
+    /// <summary>Giro de laço (graus)</summary>
+    /// <remarks>Faixa válida: 1 a 180.</remarks>
+    public float LoopTurn
+    {
+        get => Component.GetFloat("loop_turn");
+        set => Component.SetFloat("loop_turn", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Andar no plano</summary>
+    public bool Horizontal
+    {
+        get => Component.GetBool("horizontal");
+        set => Component.SetBool("horizontal", value);
+    }
+    /// <summary>Subir e descer</summary>
+    public bool Vertical
+    {
+        get => Component.GetBool("vertical");
+        set => Component.SetBool("vertical", value);
+    }
+    /// <summary>Girar</summary>
+    public bool Rotation
+    {
+        get => Component.GetBool("rotation");
+        set => Component.SetBool("rotation", value);
+    }
+    /// <summary>Osso fica no lugar</summary>
+    public bool KeepBoneInPlace
+    {
+        get => Component.GetBool("keep_bone_in_place");
+        set => Component.SetBool("keep_bone_in_place", value);
+    }
+    public enum AxisOption : uint
+    {
+        X = 0,
+        Y = 1,
+        Z = 2,
+        X3 = 3,
+        Y4 = 4,
+        Z5 = 5,
+    }
+    /// <summary>Frente do osso</summary>
+    public AxisOption Axis
+    {
+        get => (AxisOption)Component.GetEnum("axis");
+        set => Component.SetEnum("axis", (uint)value);
+    }
+    /// <summary>Osso raiz</summary>
+    public ObjectReference Bone
+    {
+        get => Component.GetReference("bone");
+        set => Component.SetReference("bone", value);
+    }
+}
+
 /// <summary>Campo de gravidade 2D: Gravidade XY em área sobre corpos dinâmicos 2D. Família Física 2D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
 public readonly struct GravityField2D : IComponentFacade<GravityField2D>

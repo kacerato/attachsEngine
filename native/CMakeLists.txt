@@ -558,6 +558,7 @@ add_library(aether_runtime STATIC
   runtime/rig_instance.cpp
   runtime/ik_solvers.cpp
   runtime/scene_ik.cpp
+  runtime/scene_root_motion.cpp
   runtime/game_world.cpp
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
@@ -1140,7 +1141,7 @@ if(NOT ANDROID)
   add_executable(aether_animation_runtime_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_animator.cpp ../tests/native/test_skeletal_animation.cpp
     ../tests/native/test_atomic_asset_file.cpp ../tests/native/test_physics2d_bridge.cpp
-    ../tests/native/test_ik_constraints.cpp)
+    ../tests/native/test_ik_constraints.cpp ../tests/native/test_root_motion.cpp)
   target_include_directories(aether_animation_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_runtime_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)

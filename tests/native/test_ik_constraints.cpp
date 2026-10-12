@@ -5,6 +5,8 @@
 #include "runtime/scene_ik.h"
 #include "scene/ik_effects.h"
 #include "scene/physics_body.h"
+#include "scene/collider.h"
+#include "runtime/scene_physics.h"
 #include "runtime/ik_solvers.h"
 #include "runtime/transform_math.h"
 #include "runtime/game_world.h"
@@ -496,4 +498,32 @@ AE_TEST(ik_interaction_carries_a_physics_body_as_kinematic_and_restores_it) {
   AE_EXPECT_TRUE(moves>0&&std::abs(last[0]-footNow[12])<2e-2f&&std::abs(last[1]-footNow[13])<2e-2f,"body is moved with the hand");
   AE_EXPECT_TRUE(ik.interactionStop(world,leg.owner,leg.foot)==WorldStatus::Ok,"stop");step(world,ik);
   AE_EXPECT_TRUE(world.getProperty(body,"motion",motion)==WorldStatus::Ok&&std::get<u32>(motion)==2,"release restores dynamic motion");
+}
+
+AE_TEST(ik_interaction_carries_a_real_physics_body_through_scene_physics) {
+  Leg leg;addComponent<scene::InteractionSystem>(leg.g,leg.owner);
+  const auto crate=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Caixa");
+  Transform at;at.position[0]=.6f;at.position[1]=.6f;leg.g.setTransform(crate,at);
+  auto *object=addComponent<scene::InteractionObject>(leg.g,crate);object->reachTime=.1f;object->releaseTime=.1f;object->pickUp=true;
+  auto *body=addComponent<scene::PhysicsBody>(leg.g,crate);body->motion=scene::BodyMotion::Dynamic;body->gravityFactor=0;body->linearDamping=0;body->angularDamping=0;
+  auto *box=addComponent<scene::Collider>(leg.g,crate);box->halfX=box->halfY=box->halfZ=.05f;
+  GameWorld world;AE_EXPECT_TRUE(world.load(leg.g),"world");ScenePhysics physics;AE_EXPECT_TRUE(physics.start(world),physics.error().c_str());
+  SceneIk ik;ik.setBodyMover([&](ObjectId id,const float pose[7]){return physics.moveKinematic(id,pose);});
+  const auto frame=[&](u32 count) {
+    for(u32 i=0;i<count;++i) {
+      world.beginFrame(1/60.);
+      if(world.consumeInvalidation()&(scene::Invalidate::PhysicsBody|scene::Invalidate::PhysicsShape))AE_EXPECT_TRUE(physics.rebuild(world,nullptr),physics.error().c_str());
+      AE_EXPECT_TRUE(physics.advance(1/60.,world),"physics step");ik.advance(world);world.flush();
+    }
+  };
+  frame(1);bool started=false;
+  AE_EXPECT_TRUE(ik.interactionStart(world,leg.owner,leg.foot,crate,started)==WorldStatus::Ok&&started,"start");
+  frame(30);
+  float foot[16],held[16];worldMatrix(world.graph(),leg.foot,foot);worldMatrix(world.graph(),crate,held);
+  AE_EXPECT_TRUE(distance(foot+12,held+12)<2e-2f,"the simulated body is carried by the hand");
+  AE_EXPECT_TRUE(ik.diagnostics().empty(),"no carry diagnostic");
+  AE_EXPECT_TRUE(ik.interactionStop(world,leg.owner,leg.foot)==WorldStatus::Ok,"release");frame(3);
+  scene::ComponentPropertyValue motion;
+  AE_EXPECT_TRUE(world.getProperty(world.findComponent(world.handle(crate),"astra.physics.body"),"motion",motion)==WorldStatus::Ok&&std::get<u32>(motion)==2,"dynamic again after release");
+  physics.stop();
 }

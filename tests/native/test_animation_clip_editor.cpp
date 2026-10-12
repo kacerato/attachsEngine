@@ -4,6 +4,7 @@
 #include "editor/editor_studio_tools.h"
 #include "editor/editor_animation_pose_selection.h"
 #include "scene/ik_constraints.h"
+#include "scene/root_motion.h"
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_animation_clip_preview.h"
@@ -1761,6 +1762,28 @@ AE_TEST(animation_studio_ik_wizard_reads_unnamed_skeletons_by_structure) {
                  doc.find(top)->components.find(scene::LookAtIk::descriptor)&&doc.find(bot)->components.find(scene::GrounderBody::descriptor),summary.c_str());
 }
 
+AE_TEST(animation_studio_root_motion_card_creates_and_toggles_the_component) {
+  using namespace editor;
+  TemporaryProject project;EditorSession session;std::string error,summary;
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto fox=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Raposa");
+  const auto root=doc.createEntity(fox,EditorEntityKind::Folder,"root");
+  const auto hip=doc.createEntity(root,EditorEntityKind::Folder,"b_Hip_01");
+  doc.createEntity(hip,EditorEntityKind::Folder,"b_Spine");doc.createEntity(hip,EditorEntityKind::Folder,"b_Leg");
+  AE_EXPECT_EQ(EditorStudio::rootMotionBone(doc,fox),hip,"hips found by name");
+  AE_EXPECT_TRUE(EditorStudio::toggleRootMotion(session,fox,summary,error),error.c_str());
+  const auto *motion=static_cast<const scene::RootMotion*>(doc.find(fox)->components.find(scene::RootMotion::descriptor));
+  AE_EXPECT_TRUE(motion&&motion->bone==hip&&motion->enabled,summary.c_str());
+  AE_EXPECT_TRUE(EditorStudio::toggleRootMotion(session,fox,summary,error)&&!static_cast<const scene::RootMotion*>(doc.find(fox)->components.find(scene::RootMotion::descriptor))->enabled,"second tap disables");
+  AE_EXPECT_TRUE(session.history().undo(doc)&&session.history().undo(doc)&&!doc.find(fox)->components.find(scene::RootMotion::descriptor),"undo removes it");
+  // Sem nomes: primeira bifurcacao.
+  const auto bot=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Bot");
+  const auto j0=doc.createEntity(bot,EditorEntityKind::Folder,"J0");const auto j1=doc.createEntity(j0,EditorEntityKind::Folder,"J1");
+  doc.createEntity(j1,EditorEntityKind::Folder,"J2");doc.createEntity(j1,EditorEntityKind::Folder,"J3");
+  AE_EXPECT_EQ(EditorStudio::rootMotionBone(doc,bot),j1,"first branching when names are missing");
+}
+
 AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   using namespace editor;
   TemporaryProject project;EditorSession session;std::string error,summary;
@@ -1805,6 +1828,14 @@ AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   float after[16];runtime::worldMatrix(session.evaluatedEditorScene(),hand,after);
   {char pinMessage[200];std::snprintf(pinMessage,sizeof pinMessage,"pinned tip stays fixed while the hip moves: before %.3f %.3f %.3f after %.3f %.3f %.3f",before[12],before[13],before[14],after[12],after[13],after[14]);
   AE_EXPECT_TRUE(std::abs(after[12]-before[12])<2e-3f&&std::abs(after[13]-before[13])<2e-3f&&std::abs(after[14]-before[14])<2e-3f,(std::string(pinMessage)+" "+summary).c_str());}
+  {
+    // Fixar ponta e um unico Desfazer, mesmo com passes de correcao.
+    const auto pinned=session.animationClipAsset(guid)->tracks.size();
+    AE_EXPECT_TRUE(session.history().undo(doc),"pin undo");session.update();
+    AE_EXPECT_TRUE(session.animationClipAsset(guid)->tracks.size()<pinned,"one undo removes every pin pass");
+    AE_EXPECT_TRUE(session.history().redo(doc),"pin redo");session.update();
+    AE_EXPECT_EQ(session.animationClipAsset(guid)->tracks.size(),pinned,"redo restores the final pin");
+  }
   // Seguir: o graveto acompanha a mao mantendo a distancia.
   AE_EXPECT_TRUE(session.seekAnimationClip(0,error),error.c_str());
   float hand0[16],prop0[16];runtime::worldMatrix(session.evaluatedEditorScene(),hip,hand0);runtime::worldMatrix(session.evaluatedEditorScene(),prop,prop0);

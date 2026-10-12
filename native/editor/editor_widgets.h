@@ -600,7 +600,7 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
-    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,
     BoneRow=0xb680,PoseLibrary=0xb6e0,
     PoseLock=0xb540,
     PoseGizmo=0xb500

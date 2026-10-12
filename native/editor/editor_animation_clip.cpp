@@ -766,6 +766,8 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         else ok=EditorStudio::followObject(*this,selected,studio_->followParent,start,end,summary,error);
         state_.clipDiagnostic=ok?summary:error;return true;
       }
+      if(code==w::PoseRootMotion) {std::string summary,error;
+        state_.clipDiagnostic=EditorStudio::toggleRootMotion(*this,state_.clipOwner,summary,error)?summary:error;return true;}
       if(code==w::PoseIkCreate) {std::string error;const auto tip=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
         if(createTwoBoneIkForTip(tip,error))state_.clipDiagnostic="IK permanente criado · alvo e direção na cena, ativo em Play";else state_.clipDiagnostic=error;return true;}
       if(code==w::PoseGhost) {state_.clipGhost=!state_.clipGhost;refreshAnimationGhost();return true;}

@@ -10,6 +10,7 @@
 #include "runtime/transform_math.h"
 #include "core/rotation_math.h"
 #include "scene/ik_constraints.h"
+#include "scene/root_motion.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -154,6 +155,51 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
   return true;
 }
 
+EditorEntityId EditorStudio::rootMotionBone(const runtime::SceneGraph &doc,EditorEntityId owner) {
+  std::vector<EditorEntityId> bones;doc.collectSubtree(owner,bones);
+  for(const auto id:bones) {
+    const auto *o=doc.find(id);if(!o||id==owner)continue;
+    if(contains(lower(o->name),{"hip","pelvis","quadril","pelve"}))return id;
+  }
+  // Sem nomes: a primeira bifurcacao abaixo do personagem (onde pernas e
+  // coluna se separam); sem bifurcacao, o primeiro filho.
+  std::vector<EditorEntityId> queue{owner};
+  for(usize at=0;at<queue.size();++at) {
+    const auto children=doc.childrenOf(queue[at]);
+    if(queue[at]!=owner&&children.size()>=2)return queue[at];
+    for(const auto c:children)queue.push_back(c);
+  }
+  const auto children=doc.childrenOf(owner);
+  return children.empty()?0:children.front();
+}
+
+bool EditorStudio::toggleRootMotion(EditorSession &s,EditorEntityId owner,std::string &summary,std::string &error) {
+  summary.clear();error.clear();
+  if(s.isPlaying()||s.history_.isOpen()) {error="Pare o Play e conclua a edição";return false;}
+  auto &doc=s.document_;
+  if(!doc.exists(owner)) {error="Objeto animado ausente";return false;}
+  auto values=*doc.find(owner);
+  if(values.components.find(scene::RootMotion::descriptor)) {
+    auto *existing=static_cast<scene::RootMotion*>(values.components.edit(scene::RootMotion::descriptor));
+    existing->enabled=!existing->enabled;
+    if(!s.history_.begin("Root motion"))return false;
+    const bool ok=s.history_.applyValues(doc,owner,values);s.history_.end();
+    if(!ok) {s.history_.undo(doc);error="Não foi possível alterar o root motion";return false;}
+    summary=existing->enabled?"Root motion ligado":"Root motion desligado · a animação fica no lugar";
+    return true;
+  }
+  const auto bone=rootMotionBone(doc,owner);
+  if(!bone) {error="Nenhum osso abaixo do personagem";return false;}
+  auto *c=static_cast<scene::RootMotion*>(values.components.add(scene::RootMotion::descriptor));
+  if(!c) {error="Root motion não cabe neste objeto";return false;}
+  c->bone=bone;
+  if(!s.history_.begin("Root motion"))return false;
+  const bool ok=s.history_.applyValues(doc,owner,values);s.history_.end();
+  if(!ok) {s.history_.undo(doc);error="Não foi possível criar o root motion";return false;}
+  summary="Root motion no personagem · osso "+std::string(doc.find(bone)->name)+" · ativo em Play";
+  return true;
+}
+
 bool EditorStudio::pinTip(EditorSession &s,EditorEntityId tip,float start,float end,std::string &summary,std::string &error) {
   summary.clear();error.clear();
   // O preview precisa refletir a revisao atual do clipe antes de amostrar.
@@ -182,11 +228,19 @@ bool EditorStudio::pinTip(EditorSession &s,EditorEntityId tip,float start,float 
   }
   s.clipPreview_.seek(now,seekError);
   const auto owner=s.state_.clipOwner;const auto guid=s.state_.clipGuid;
-  bool ok=s.editAnimationClipAsset(guid,live->revision,[&](resources::AnimationClipAsset &clip) {
-    return writeTrack(clip,s.document_,owner,root,resources::AnimationPath::Rotation,times,rootValues,error)&&
-           writeTrack(clip,s.document_,owner,mid,resources::AnimationPath::Rotation,times,midValues,error);
-  },error);
-  s.refreshAnimationClip();
+  // Passes gravados sem historico; no fim, um unico registro original->final.
+  const auto original=*live;
+  const auto write=[&]() {
+    const auto *current=s.animationClipAsset(guid);if(!current) {error="Clipe ausente";return false;}
+    auto candidate=*current;
+    if(!candidate.edit(current->revision,[&](resources::AnimationClipAsset &clip) {
+      return writeTrack(clip,s.document_,owner,root,resources::AnimationPath::Rotation,times,rootValues,error)&&
+             writeTrack(clip,s.document_,owner,mid,resources::AnimationPath::Rotation,times,midValues,error);
+    },error))return false;
+    const bool committed=candidate.revision==current->revision||s.commitAnimationClipAsset(candidate,error,false);
+    s.refreshAnimationClip();return committed;
+  };
+  bool ok=write();
   if(!ok)return false;
   // Verificacao no clipe gravado: cada quadro e reavaliado; o que ficou fora
   // da ponta fixa e resolvido de novo a partir da pose gravada (ate 3 passes).
@@ -206,13 +260,17 @@ bool EditorStudio::pinTip(EditorSession &s,EditorEntityId tip,float start,float 
     }
     s.clipPreview_.seek(now,seekError);
     if(!changed)break;
-    const auto *current=s.animationClipAsset(guid);if(!current)break;
-    ok=s.editAnimationClipAsset(guid,current->revision,[&](resources::AnimationClipAsset &clip) {
-      return writeTrack(clip,s.document_,owner,root,resources::AnimationPath::Rotation,times,rootValues,error)&&
-             writeTrack(clip,s.document_,owner,mid,resources::AnimationPath::Rotation,times,midValues,error);
-    },error);
+    if(!write())break;
+  }
+  // Volta ao original sem historico e publica o final com um unico Desfazer.
+  {
+    const auto *current=s.animationClipAsset(guid);
+    if(!current) {error="Clipe ausente";return false;}
+    auto result=*current;auto back=original;back.revision=current->revision+1;back.nextId=std::max(back.nextId,current->nextId);
+    if(!s.commitAnimationClipAsset(back,error,false))return false;
+    result.revision=back.revision+1;result.nextId=std::max(result.nextId,back.nextId);
+    if(!s.commitAnimationClipAsset(result,error,true))return false;
     s.refreshAnimationClip();
-    if(!ok)return false;
   }
   char residual[48];std::snprintf(residual,sizeof residual," · desvio máx. %.1f mm",worst*1000);
   summary="Ponta fixa de "+std::to_string(start).substr(0,4)+" s a "+std::to_string(end).substr(0,4)+" s · "+std::to_string(frames)+" quadros em 2 ossos"+residual;

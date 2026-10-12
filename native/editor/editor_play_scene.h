@@ -22,6 +22,7 @@
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_ik.h"
+#include "runtime/scene_root_motion.h"
 #include "scene/ik_effects.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_virtual_cameras.h"
@@ -201,7 +202,7 @@ public:
     animator_.begin(world_.poseGraph(),resources);
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
-    constraints_.reset();ik_.reset();
+    constraints_.reset();ik_.reset();rootMotion_.reset();
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     navigation_.reset();
     paths_.reset();
@@ -306,7 +307,7 @@ public:
     animator_.reset();
     timers_.reset();physicsConnections_.reset();
     cameraFollow_.reset();
-    constraints_.reset();ik_.reset();
+    constraints_.reset();ik_.reset();rootMotion_.reset();
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     resources_=nullptr;
     active_=false;
@@ -426,6 +427,7 @@ private:
     gui_.advance(frameElapsed);
     sceneGui_.advance(world_,frameElapsed);
     return stage(runScripts(scriptElapsed),"Update") && stage(advanceTimers(frameElapsed,std::min(elapsed,.25)),"timers") && stage(animate(scriptElapsed,static_cast<float>(std::min(elapsed,.25))),"animação") &&
+           stage(rootMotion_.advance(world_,static_cast<float>(frameElapsed),&physics_),"root motion") &&
            stage(navigation_.advance(world_,static_cast<float>(frameElapsed)),"navegação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
@@ -461,6 +463,7 @@ private:
     });
   }
   const runtime::SceneIk &ik() const noexcept {return ik_;}
+  const runtime::SceneRootMotion &rootMotion() const noexcept {return rootMotion_;}
   bool advanceVirtualCameras() {
     float look[2]{0,0};input_.axis2(input_.map().lookAction(),look);
     // Scoped Canvas look belongs to its real Camera/Cérebro, not the global
@@ -602,6 +605,7 @@ private:
   runtime::SceneCameraFollow cameraFollow_;
   runtime::SceneConstraints constraints_;
   runtime::SceneIk ik_;
+  runtime::SceneRootMotion rootMotion_;
   runtime::SceneTweens tweens_;
   runtime::SceneTweenSequences sequences_;
   runtime::ScenePhysicsQueries queries_;

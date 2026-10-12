@@ -1,3 +1,4 @@
+#include "scene/root_motion.h"
 #include "editor/editor_screen.h"
 #include "editor/editor_studio_state.h"
 #include "editor/editor_animation_curve_view.h"
@@ -177,6 +178,11 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
        card(side,"Seguir pai (Child-Of)",parentObject?std::string("Segue ")+parentObject->name+" mantendo a distância":"Defina um pai primeiro",w::PoseFollow,state.clipPoseShown&&parentObject,UiIcon::ComponentIkTwoBone);
        card(side,"Definir como pai",parentObject?std::string("Pai: ")+parentObject->name:"O osso selecionado vira o pai",w::PoseFollowParent,state.clipPoseShown,UiIcon::AnimationBinding,parentObject!=nullptr);}
       card(side,"IK permanente nesta ponta","Cria alvo e direção na cena; resolve em Play",w::PoseIkCreate,state.clipPreviewTarget!=0||state.clipTarget!=0,UiIcon::ComponentIkTwoBone);
+      {const auto *owner=state.document?state.document->find(state.clipOwner):nullptr;
+       const auto *motion=owner?static_cast<const scene::RootMotion*>(owner->components.find(scene::RootMotion::descriptor)):nullptr;
+       const auto *bone=motion&&state.document?state.document->find(static_cast<EditorEntityId>(motion->bone)):nullptr;
+       card(side,"Root motion",motion?(motion->enabled?std::string("Ativo · osso ")+(bone?bone->name:std::string("ausente"))+" · toque para desligar":"Desligado · toque para ligar"):"O passo do quadril anda com o personagem em Play",
+            w::PoseRootMotion,owner!=nullptr,UiIcon::ComponentRootMotion,motion&&motion->enabled);}
     } else if(state.clipStudioTab==2) {
       card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
       card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);

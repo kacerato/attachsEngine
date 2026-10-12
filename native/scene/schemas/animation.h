@@ -2,6 +2,7 @@
 #pragma once
 #include "scene/animation.h"
 #include "scene/animator.h"
+#include "scene/root_motion.h"
 
 namespace ae::scene {
 // Animação legada e Animator escreveriam a mesma pose: um ou outro por objeto.
