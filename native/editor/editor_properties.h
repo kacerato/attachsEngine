@@ -97,7 +97,8 @@ inline constexpr auto editorNumericProperties=[] {
       [](EditorEntity &e,u32 slot)->float* {auto *c=editCameraLook(e);return c?cameraLookNumbers[slot].write(*c):nullptr;},
       i,p.minimum,p.maximum,p.dragStep,EditorPropertyGroup::CameraLook,&EditorCameraLook::descriptor,p.id};
   }
-  for(u32 i=0;i<characterNumbers.size();++i) {
+  // Tabela legada: so os 14 numeros da v5; os novos aparecem no inspector por componente.
+  for(u32 i=0;i<14;++i) {
     const auto &p=characterNumbers[i];
     result[RoutePropertyBase+renderer::MaximumWaterRoutePoints*8+6+i]={p.name,
       [](const EditorEntity &e,u32 slot)->const float& {static const EditorCharacter defaults;const auto *c=characterComponent(e);return characterNumbers[slot].read(c?*c:defaults);},

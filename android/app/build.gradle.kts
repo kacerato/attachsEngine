@@ -291,6 +291,7 @@ android {
     defaultConfig {
         val configuredApplicationId = providers.gradleProperty("astraApplicationId").getOrElse("dev.aether.editor")
         applicationId = configuredApplicationId
+        manifestPlaceholders["astraProfileable"] = providers.gradleProperty("astraProfileable").getOrElse("false")
         manifestPlaceholders["astraApplicationLabel"] = providers.gradleProperty("astraApplicationLabel")
             .getOrElse(if (configuredApplicationId == "dev.aether.editor") "Astra" else "Astra Dev")
         buildConfigField("boolean", "INCLUDE_LEGACY_DEMOS", includeLegacyDemos.toString())
@@ -309,6 +310,11 @@ android {
             cmake {
                 cppFlags += listOf("-std=c++20")
                 arguments += listOf("-DANDROID_STL=c++_shared")
+                // ccache opcional (ASTRA_CCACHE=caminho do executavel): reaproveita
+                // unidades ja compiladas entre builds; sem a variavel, nada muda.
+                System.getenv("ASTRA_CCACHE")?.takeIf { it.isNotBlank() && file(it).exists() }?.let {
+                    arguments += listOf("-DCMAKE_C_COMPILER_LAUNCHER=$it", "-DCMAKE_CXX_COMPILER_LAUNCHER=$it")
+                }
                 targets += listOf("aether_android", "aether_transform")
             }
         }
@@ -326,6 +332,11 @@ android {
     // lá) — sem isso o empacotamento "comprimido" (padrão do AGP moderno) ainda impede extração
     // real em disco mesmo com a flag do manifesto ligada.
     packaging {
+        resources {
+            // Desktop OSGi descriptors are not Android runtime resources.
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            merges += listOf("META-INF/LICENSE.md", "META-INF/NOTICE.md")
+        }
         jniLibs {
             useLegacyPackaging = true
         }
@@ -387,6 +398,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":export-core"))
     implementation("androidx.games:games-frame-pacing:2.1.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

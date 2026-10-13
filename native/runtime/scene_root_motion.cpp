@@ -46,6 +46,16 @@ bool SceneRootMotion::advance(GameWorld &world,float dt,ScenePhysics *physics) {
     float delta[3]{rel.position[0]-s.position[0],rel.position[1]-s.position[1],rel.position[2]-s.position[2]};
     float turn=hasYaw?wrapDegrees(yaw-s.yaw):0;
     Report report;report.owner=owner;
+    // Resultado do pedido anterior: deslocamento realizado e residuo.
+    if(s.pending) {
+      float requested=0,residual=0;
+      for(u32 i=0;i<3;++i) {report.realized[i]=ownerWorld[12+i]-s.origin[i];requested+=s.requested[i]*s.requested[i];
+        const float d=s.requested[i]-report.realized[i];residual+=d*d;}
+      report.residual=std::sqrt(residual);requested=std::sqrt(requested);
+      report.blocked=requested>1e-4f&&report.residual>requested*.5f;
+      if(report.blocked)diagnostics_.push_back({owner,"Root motion bloqueado pelo mundo: o personagem andou menos que a animação"});
+      s.pending=false;
+    }
     if(std::sqrt(delta[0]*delta[0]+delta[1]*delta[1]+delta[2]*delta[2])>c->loopJump) {for(u32 i=0;i<3;++i)delta[i]=s.step[i];report.loop=true;}
     if(std::abs(turn)>c->loopTurn) {turn=s.turn;report.loop=true;}
     for(u32 i=0;i<3;++i) {s.position[i]=rel.position[i];s.step[i]=delta[i];}
@@ -63,9 +73,13 @@ bool SceneRootMotion::advance(GameWorld &world,float dt,ScenePhysics *physics) {
     const bool owned=physics&&physics->ownsWorld(world);
     if(owned&&physics->hasCharacter(owner)) {
       report.route=Route::Character;
-      const float target[3]{ownerWorld[12]+worldStep[0],ownerWorld[13]+worldStep[1],ownerWorld[14]+worldStep[2]};
+      // O passo vira velocidade pedida ao motor: a colisao decide o realizado.
+      const float inv=dt>1e-6f?1/dt:0;
+      const float velocity[3]{worldStep[0]*inv,worldStep[1]*inv,worldStep[2]*inv};
       float ownerYaw=0;yawOf(ownerWorld,2,ownerYaw);
-      const bool moved=physics->teleportCharacter(owner,target,world);
+      const bool moved=physics->requestCharacterVelocity(owner,velocity,c->vertical);
+      for(u32 i=0;i<3;++i) {s.requested[i]=worldStep[i];s.origin[i]=ownerWorld[12+i];}
+      s.pending=moved;
       const bool turned=appliedTurn==0||physics->setCharacterYaw(owner,(ownerYaw+appliedTurn)/kDegrees);
       if(!moved||!turned)diagnostics_.push_back({owner,"Personagem recusou o passo do root motion"});
     } else if(float probe[3];owned&&physics->getBodyVelocity(owner,probe)) {

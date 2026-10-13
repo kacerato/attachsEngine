@@ -5,7 +5,7 @@
 #include "renderer/water_world.h"
 
 namespace ae::editor {
-inline bool extractEditorWaterWorld(const EditorDocument &document,const renderer::WaterFieldSetup &base,
+inline bool extractEditorWaterWorld(const runtime::SceneGraph &document,const renderer::WaterFieldSetup &base,
                                    renderer::WaterWorld &output) {
   renderer::WaterWorld replacement;
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);

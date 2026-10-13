@@ -22,7 +22,7 @@ public:
   const std::vector<Diagnostic> &diagnostics() const {return diagnostics_;}
   void reset() {
     limitRest_.clear();cache_.clear();diagnostics_.clear();candidates_.clear();knownRevision_=0;knownWorld_=0;
-    impulses_.clear();springs_.clear();tilts_.clear();ampRest_.clear();interactions_.clear();events_.clear();lastTime_=-1;
+    impulses_.clear();springs_.clear();tilts_.clear();ampRest_.clear();interactions_.clear();events_.clear();lastTime_=-1;footLocks_.clear();
   }
 
   bool advance(GameWorld &world,const GroundQuery &ground={}) {
@@ -86,6 +86,8 @@ public:
     each(scene::FingerCurl::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::FingerCurl&>(v);if(c.enabled&&c.weight>0)finger(world,id,c,touched);});
     each(scene::TwistRelaxer::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::TwistRelaxer&>(v);if(c.enabled&&c.weight>0)twist(world,id,c,touched);});
     limits(world,touched);
+    // Encaixes por ultimo: seguem a pose final, inclusive o IK.
+    each(scene::Socket::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::Socket&>(v);if(c.enabled)socket(world,id,c);});
     // Ossos que deixaram de ser escritos voltam a seguir a pose de entrada.
     for(auto it=cache_.begin();it!=cache_.end();) {
       if(!touched.count(it->first)) {
@@ -102,13 +104,13 @@ private:
     for(const auto &n:value.type().numbers)if(n.id=="priority")return n.read(value);
     return 0;
   }
-  static std::array<const scene::ComponentType*,21> types() {
+  static std::array<const scene::ComponentType*,22> types() {
     return {&scene::TwoBoneIk::descriptor,&scene::ChainIk::descriptor,&scene::FootGrounding::descriptor,&scene::LookAtIk::descriptor,
             &scene::AimIk::descriptor,&scene::RotationLimit::descriptor,&scene::GrounderBody::descriptor,&scene::FingerCurl::descriptor,
             &scene::IkOffset::descriptor,&scene::TwistRelaxer::descriptor,&scene::HitReaction::descriptor,&scene::Recoil::descriptor,
             &scene::Inertia::descriptor,&scene::Amplifier::descriptor,&scene::BodyTilt::descriptor,&scene::HandPoser::descriptor,
             &scene::PenetrationAvoidance::descriptor,&scene::InteractionSystem::descriptor,&scene::FullBodyIk::descriptor,
-            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor};
+            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor,&scene::Socket::descriptor};
   }
   struct Cache {Transform input{},output{};};
   std::map<ObjectId,Cache> cache_;
@@ -210,13 +212,29 @@ private:
   }
   void grounding(GameWorld &world,ObjectId id,const scene::FootGrounding &c,const GroundQuery &ground,std::map<ObjectId,bool> &touched) {
     if(!ground) {diagnostics_.push_back({id,Issue::NoGround});return;}
+    // A perna volta a pose animada antes de medir o pe (trava e apoio usam o pe animado).
+    if(const auto *e=world.graph().find(id))if(const auto *m=world.graph().find(e->parent)) {
+      if(m->id!=world.graph().root())beginBone(world,m->id,touched);
+      if(m->parent!=world.graph().root()&&world.graph().find(m->parent))beginBone(world,m->parent,touched);
+    }
     float foot[16];if(!worldMatrix(world.graph(),id,foot)) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
     ObjectId owner=id;for(const auto *o=world.graph().find(id);o&&o->parent!=world.graph().root();o=world.graph().find(o->parent))owner=o->parent;
     const float origin[3]{foot[12],foot[13]+c.rayHeight,foot[14]},direction[3]{0,-(c.rayHeight+c.rayDistance),0};
     float point[3],normal[3];
     if(!ground(origin,direction,owner,point,normal)) {diagnostics_.push_back({id,Issue::NoGround});return;}
     const float desired=point[1]+c.footOffset,correction=std::clamp(desired-foot[13],-c.maxCorrection,c.maxCorrection);
-    const float target[3]{foot[12],foot[13]+correction,foot[14]};
+    float target[3]{foot[12],foot[13]+correction,foot[14]};
+    if(c.lockFoot) {
+      auto &lock=footLocks_[id];
+      const bool contact=foot[13]-desired<=c.lockHeight;
+      if(!contact)lock.locked=false;
+      else if(!lock.locked) {lock.locked=true;lock.point[0]=target[0];lock.point[2]=target[2];}
+      if(lock.locked) {
+        // Preso alem da correcao maxima esticaria a perna: solta.
+        if(std::hypot(lock.point[0]-foot[12],lock.point[2]-foot[14])>c.maxCorrection)lock.locked=false;
+        else {target[0]=lock.point[0];target[2]=lock.point[2];}
+      }
+    } else footLocks_.erase(id);
     float footAfter[16];
     if(!solveLimb(world,id,target,nullptr,c.weight,touched,footAfter))return;
     if(c.alignToSurface) {
@@ -472,6 +490,8 @@ private:
   struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0,originalMotion=2;float time=0,weight=0,releaseFrom=1;bool held=false,physical=false;float offset[16]{};};
   BodyMover mover_;
   std::vector<Impulse> impulses_;
+  struct FootLock {bool locked=false;float point[3]{};};
+  std::map<ObjectId,FootLock> footLocks_;
   std::map<ObjectId,Spring> springs_;
   std::map<ObjectId,Tilt> tilts_;
   std::map<ObjectId,Transform> ampRest_;
@@ -509,6 +529,24 @@ private:
     return owner;
   }
 
+  void socket(GameWorld &world,ObjectId id,const scene::Socket &c) {
+    const ObjectId bone=static_cast<ObjectId>(c.bone);
+    if(!bone||!world.graph().find(bone)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
+    if(world.graph().isDescendantOf(bone,id)) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
+    float boneWorld[16],offset[16],desired[16],parent[16];
+    if(!worldMatrix(world.graph(),bone,boneWorld))return;
+    if(!c.followScale)for(u32 col=0;col<3;++col) {
+      const float n=std::sqrt(boneWorld[col*4]*boneWorld[col*4]+boneWorld[col*4+1]*boneWorld[col*4+1]+boneWorld[col*4+2]*boneWorld[col*4+2]);
+      if(n>1e-6f)for(u32 r=0;r<3;++r)boneWorld[col*4+r]/=n;
+    }
+    Transform local;for(u32 i=0;i<3;++i){local.position[i]=c.position[i];local.rotationDegrees[i]=c.rotation[i];}
+    // A escala do acessorio continua a dele.
+    const auto *self=world.graph().find(id);if(self)for(u32 i=0;i<3;++i)local.scale[i]=self->transform.scale[i];
+    transformMatrix(local,offset);multiplyMatrix(boneWorld,offset,desired);
+    Transform placed;
+    if(!parentWorldMatrix(world.graph(),id,parent)||!localTransformForWorld(desired,parent,placed)||
+       world.setLocalTransform(world.handle(id),placed)!=WorldStatus::Ok)diagnostics_.push_back({id,Issue::InvalidPose});
+  }
   void amplify(GameWorld &world,ObjectId id,const scene::Amplifier &c,std::map<ObjectId,bool> &touched) {
     beginBone(world,id,touched);
     auto rest=ampRest_.find(id);if(rest==ampRest_.end())rest=ampRest_.emplace(id,cache_[id].input).first;

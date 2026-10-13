@@ -19,6 +19,8 @@
 #include "renderer/primitive_geometry.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
+#include "editor/editor_studio_tools.h"
+#include "editor/editor_studio_state.h"
 #include "editor/editor_texture_history.h"
 #include "editor/editor_property_tween.h"
 #include "scene/property_tween.h"
@@ -6258,6 +6260,8 @@ void EditorSession::refreshSkinningStatus() {
 void EditorSession::update() {
   state_.studio=studio_.get();
   refreshAnimationClip();
+  if(studio_->bake) {std::string summary,error;EditorStudio::bakeStep(*this,12,summary,error);
+    if(!summary.empty())state_.clipDiagnostic=summary;else if(!error.empty())state_.clipDiagnostic=error;}
   refreshMotorDecomposition();
   if(inputCapture_ && !validateInputCapture()) cancelInputBindingCapture();
   refreshScriptInspection();

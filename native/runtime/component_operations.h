@@ -40,7 +40,7 @@ struct ComponentOperationServices {
   ScenePaths *paths=nullptr;
   SceneTweenSequences *sequences=nullptr;
   ScenePhysicsQueries *queries=nullptr;
-  const ScenePhysics *physics=nullptr;
+  ScenePhysics *physics=nullptr;
   SceneVirtualCameras *cameras=nullptr;
   SceneAnimatorGraphs *animators=nullptr;
   SceneNavigation *navigation=nullptr;

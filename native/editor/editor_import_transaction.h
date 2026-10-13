@@ -2,6 +2,8 @@
 #include "core/base.h"
 #include <optional>
 #include "platform/atomic_asset_file.h"
+#include <chrono>
+#include <thread>
 #include "core/sha256.h"
 #include <filesystem>
 #include <fstream>
@@ -53,6 +55,15 @@ public:
       error.clear();
     }
     return true;
+  }
+  // Renomear com novas tentativas curtas quando o Windows nega acesso por um
+  // instante (antivirus/indexador segurando o arquivo recem-escrito).
+  static void renameRetrying(const std::filesystem::path &from,const std::filesystem::path &to,std::error_code &error) {
+    for(int attempt=0;attempt<40;++attempt) {
+      std::filesystem::rename(from,to,error);
+      if(!error||(error!=std::errc::permission_denied&&error!=std::errc::device_or_resource_busy))return;
+      std::this_thread::sleep_for(std::chrono::milliseconds(attempt<10?5:25));
+    }
   }
   static bool read(const std::filesystem::path &path,std::vector<u8> &bytes,usize maximum=256u*1024u*1024u) {
     std::ifstream input(path,std::ios::binary|std::ios::ate);
@@ -288,8 +299,8 @@ public:
       std::filesystem::path staged,target;std::error_code error;
       if(!safePath(root_,companions_[i].staged,staged) || !safePath(root_,companions_[i].relative,target)) return false;
       std::filesystem::create_directories(target.parent_path(),error);if(error) return false;
-      if(hadCompanion_[i]) {std::filesystem::rename(target,companionBackup(i),error);if(error) return false;}
-      std::filesystem::rename(staged,target,error);if(error) return false;
+      if(hadCompanion_[i]) {renameRetrying(target,companionBackup(i),error);if(error) return false;}
+      renameRetrying(staged,target,error);if(error) return false;
     }
     if(!write(source_,bytes,diagnostic) || !writeText(registry_,registry,diagnostic)) return false;
     if(!extraRelative_.empty() && !writeText(extra_,extra,diagnostic)) return false;
@@ -371,7 +382,7 @@ private:
       const auto backup=companionBackup(i);
       if(std::filesystem::exists(backup,error)) {
         std::filesystem::remove(target,error);error.clear();
-        std::filesystem::rename(backup,target,error);companions=companions && !error;
+        renameRetrying(backup,target,error);companions=companions && !error;
       } else if(!hadCompanion_[i]) {
         std::filesystem::remove(target,error);companions=companions && !error;
       }

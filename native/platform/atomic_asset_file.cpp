@@ -58,8 +58,18 @@ bool replaceAssetFile(const char *path, uint64_t expectedBytes, AssetRead read, 
   if (std::fclose(output) != 0) ok = fail(AssetFileStage::Close,errno);
   if (ok) {
 #if defined(_WIN32)
-    ok = MoveFileExW(temporaryWide, targetWide, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-    if(!ok)fail(AssetFileStage::Publish,static_cast<int>(GetLastError()));
+    // Antivirus, indexador ou visualizador podem segurar o alvo por alguns
+    // milissegundos (ERROR_ACCESS_DENIED/ERROR_SHARING_VIOLATION). A troca
+    // continua atomica; so tentamos de novo por um tempo curto e limitado.
+    DWORD code=0;
+    for(int attempt=0;attempt<40;++attempt) {
+      ok = MoveFileExW(temporaryWide, targetWide, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+      if(ok)break;
+      code=GetLastError();
+      if(code!=ERROR_ACCESS_DENIED&&code!=ERROR_SHARING_VIOLATION&&code!=ERROR_LOCK_VIOLATION)break;
+      Sleep(attempt<10?5:25);
+    }
+    if(!ok)fail(AssetFileStage::Publish,static_cast<int>(code));
 #else
     ok = std::rename(temporary, path) == 0;
     if(!ok)fail(AssetFileStage::Publish,errno);

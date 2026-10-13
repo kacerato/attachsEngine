@@ -4,6 +4,9 @@
 // em vez dos ~60 que incluem a sessao.
 #include "resources/rig_asset.h"
 #include "editor/editor_document.h"
+#include "resources/asset_registry.h"
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace ae::editor {
@@ -20,6 +23,10 @@ struct EditorStudioState {
   float clipIkPole[3]{};bool clipIkPoleDrag=false;
   // Child-Of gravado: objeto escolhido como pai para "Seguir pai".
   EditorEntityId followParent=0;
+  // Bake da pose final: job em andamento, progresso 0..1, ultimo relatorio.
+  std::shared_ptr<struct StudioBakeJob> bake;
+  float bakeProgress=0;bool bakeRootToOwner=false;
+  std::string bakeReport;resources::AssetGuid bakeGuid{};
 };
 EditorStudioState *createStudioState();
 void destroyStudioState(EditorStudioState *);

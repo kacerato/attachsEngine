@@ -631,6 +631,23 @@
    "searchTerms": "VRIK VR IK Corpo Alvos Cabeça Mãos Avatar Tracking",
    "reference": "https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html",
    "apiName": "BodyByTargets"
+  },
+  {
+   "type": "Socket",
+   "name": "Encaixe",
+   "description": "Acessório preso a um osso com deslocamento; segue a pose final",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/socket",
+   "searchTerms": "Socket Encaixe Acessório Arma Attachment BoneAttachment Chapéu Mochila",
+   "reference": "https://docs.godotengine.org/en/4.5/classes/class_boneattachment3d.html",
+   "apiName": "Socket"
   }
  ],
  "defaults": {

@@ -469,6 +469,7 @@ add_library(aether_assets STATIC
   resources/asset_registry.cpp
   resources/json_reader.cpp
   resources/gltf_import.cpp
+  resources/gltf_export.cpp
   resources/fbx_import.cpp
   resources/fbx_scene_import.cpp
   resources/rig_asset.cpp
@@ -625,6 +626,8 @@ add_library(aether_editor STATIC
   editor/editor_animation_ik_tool.cpp
   editor/editor_ik_authoring.cpp
   editor/editor_studio_tools.cpp
+  editor/editor_studio_bake.cpp
+  editor/editor_studio_export.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
@@ -1141,7 +1144,7 @@ if(NOT ANDROID)
   add_executable(aether_animation_runtime_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_animator.cpp ../tests/native/test_skeletal_animation.cpp
     ../tests/native/test_atomic_asset_file.cpp ../tests/native/test_physics2d_bridge.cpp
-    ../tests/native/test_ik_constraints.cpp ../tests/native/test_root_motion.cpp)
+    ../tests/native/test_ik_constraints.cpp ../tests/native/test_root_motion.cpp ../tests/native/test_character_locomotion.cpp)
   target_include_directories(aether_animation_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_animation_runtime_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)

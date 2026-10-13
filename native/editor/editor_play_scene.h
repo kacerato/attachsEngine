@@ -23,6 +23,7 @@
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_ik.h"
 #include "runtime/scene_root_motion.h"
+#include "editor/editor_water_world.h"
 #include "scene/ik_effects.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_virtual_cameras.h"
@@ -192,6 +193,15 @@ public:
     if(!resources.extract(world_.graph(),validated)) {world_.clear();return false;}
     const CollisionGeometry geometry(resources);
     if(!physics_.start(world_,&geometry)) {world_.clear();return false;}
+    // Nado do Personagem: a superficie vem dos volumes de agua com fisica da cena.
+    water_.clear();
+    if(extractEditorWaterWorld(world_.graph(),renderer::WaterFieldSetup{},water_)&&water_.volumeCount()) {
+      physics_.setWaterQuery([this](float x,float z,float &surface) {
+        const renderer::WaterVec2 point{x,z};renderer::WaterVolumeQuery query;
+        if(!water_.sample(std::span(&point,1),world_.elapsedSeconds(),~0u,std::span(&query,1))||query.volume==renderer::InvalidWaterVolume||query.surface.coverage<=.5f)return false;
+        surface=query.surface.height;return true;
+      });
+    } else physics_.setWaterQuery({});
     if(!physics2D_.start(world_)){physics_.stop();world_.clear();return false;}
     input_.setMap(world_.graph().inputActions());
     input_.reset();
@@ -606,6 +616,7 @@ private:
   runtime::SceneConstraints constraints_;
   runtime::SceneIk ik_;
   runtime::SceneRootMotion rootMotion_;
+  renderer::WaterWorld water_;
   runtime::SceneTweens tweens_;
   runtime::SceneTweenSequences sequences_;
   runtime::ScenePhysicsQueries queries_;

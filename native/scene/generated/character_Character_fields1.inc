@@ -3,3 +3,8 @@
   float stepHeight = .4f;
   float floorSnapLength = .5f;
   float gravity = 9.81f;
+  float acceleration = 0;
+  float braking = 0;
+  float airControl = 1;
+  float swimSpeed = .6f;
+  float turnRate = 90;

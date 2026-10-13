@@ -9,6 +9,8 @@
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_ik.h"
+#include "runtime/scene_physics.h"
+#include "scene/character.h"
 #include "scene/ik_effects.h"
 #include "scene/audio_mixer.h"
 #include "runtime/scene_animator_graph.h"
@@ -104,7 +106,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,81> bindings{{
+const std::array<ComponentMethodBinding,84> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -202,6 +204,18 @@ const std::array<ComponentMethodBinding,81> bindings{{
   {&scene::HitReaction::descriptor,"hit_front",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.ik||!s.world) return WorldStatus::NotRunning;
     return s.ik->hitFront(*s.world,h.object.id,static_cast<float>(a[0].number));}},
+  {&scene::Character::descriptor,"crouch",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){
+    if(!s.physics||!s.world) return WorldStatus::NotRunning;
+    if(!s.physics->hasCharacter(h.object.id)) return WorldStatus::NotRunning;
+    r=Value::makeBoolean(s.physics->setCharacterCrouching(h.object.id,a[0].boolean!=0));return WorldStatus::Ok;}},
+  {&scene::Character::descriptor,"set_vertical",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(!s.physics||!s.world) return WorldStatus::NotRunning;
+    if(!std::isfinite(a[0].number)) return WorldStatus::InvalidArgument;
+    return s.physics->setCharacterVertical(h.object.id,static_cast<float>(a[0].number))?WorldStatus::Ok:WorldStatus::NotRunning;}},
+  {&scene::Character::descriptor,"in_water",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.physics||!s.world) return WorldStatus::NotRunning;
+    bool swimming=false;if(!s.physics->characterInWater(h.object.id,swimming)) return WorldStatus::NotRunning;
+    r=Value::makeBoolean(swimming);return WorldStatus::Ok;}},
   {&scene::Recoil::descriptor,"fire",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.ik||!s.world) return WorldStatus::NotRunning;
     return s.ik->fire(*s.world,h.object.id,static_cast<float>(a[0].number));}},

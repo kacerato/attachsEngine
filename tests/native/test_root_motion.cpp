@@ -81,7 +81,23 @@ AE_TEST(root_motion_drives_physics_body_velocity_and_character) {
     const float start=at(world,k.owner,2);
     for(u32 f=0;f<=10;++f) {world.beginFrame(1/60.);pose(world,k.hips,.05f*float(f));rm.advance(world,1/60.f,&physics);physics.advance(1/60.,world);}
     AE_EXPECT_TRUE(rm.reports()[0].route==SceneRootMotion::Route::Character,"character route");
-    AE_EXPECT_TRUE(std::abs(at(world,k.owner,2)-start-.5f)<2e-2f,"character walked the animated distance");
+    AE_EXPECT_TRUE(std::abs(at(world,k.owner,2)-start-.5f)<2e-2f,"character walked the animated distance through the motor");
+    AE_EXPECT_TRUE(!rm.reports()[0].blocked&&rm.reports()[0].residual<5e-3f,"free path leaves no residual");
+    physics.stop();
+  }
+  {
+    // Parede no caminho: o motor para; o residuo vira diagnostico.
+    Walker k;auto v=*k.g.find(k.owner);v.components.add(scene::Character::descriptor);k.g.applyEntityValues(k.owner,v);
+    const auto floor=k.g.createEntity(k.g.root(),ObjectKind::Folder,"Chao");auto support=*k.g.find(floor);support.transform.position[1]=-.5f;
+    support.components.add(scene::PhysicsBody::descriptor);auto *shape=static_cast<scene::Collider*>(support.components.add(scene::Collider::descriptor));shape->halfX=shape->halfZ=30;shape->halfY=.5f;k.g.applyEntityValues(floor,support);
+    const auto wall=k.g.createEntity(k.g.root(),ObjectKind::Folder,"Parede");auto w=*k.g.find(wall);w.transform.position[1]=1;w.transform.position[2]=1;
+    w.components.add(scene::PhysicsBody::descriptor);auto *ws=static_cast<scene::Collider*>(w.components.add(scene::Collider::descriptor));ws->halfX=5;ws->halfY=2;ws->halfZ=.2f;k.g.applyEntityValues(wall,w);
+    GameWorld world;world.load(k.g);ScenePhysics physics;AE_EXPECT_TRUE(physics.start(world),physics.error().c_str());SceneRootMotion rm;
+    bool blocked=false;
+    for(u32 f=0;f<=40;++f) {world.beginFrame(1/60.);pose(world,k.hips,.05f*float(f));rm.advance(world,1/60.f,&physics);physics.advance(1/60.,world);
+      for(const auto &r:rm.reports())blocked=blocked||r.blocked;}
+    AE_EXPECT_TRUE(at(world,k.owner,2)<.85f,"wall stops the root motion instead of a teleport through it");
+    AE_EXPECT_TRUE(blocked&&!rm.diagnostics().empty(),"blocked step reported");
     physics.stop();
   }
 }

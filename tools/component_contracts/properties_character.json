@@ -269,6 +269,101 @@
               "cpp": "Invalidate::Input"
             }
           }
+        },
+        {
+          "id": "acceleration",
+          "label": "Aceleração",
+          "member": "acceleration",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "200"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s²",
+            "help": "Zero responde na hora (comportamento anterior); maior que zero acelera até a velocidade pedida."
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "braking",
+          "label": "Frenagem",
+          "member": "braking",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "200"
+          },
+          "presentation": {
+            "group": "Locomoção",
+            "unit": "m/s²",
+            "help": "Zero para na hora; maior que zero desacelera ao soltar o comando ou mudar de direção."
+          },
+          "default": {
+            "cpp": "0"
+          }
+        },
+        {
+          "id": "air_control",
+          "label": "Controle no ar",
+          "member": "airControl",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Salto",
+            "unit": "",
+            "help": "Fração da aceleração disponível sem apoio; zero conserva o impulso do salto."
+          },
+          "default": {
+            "cpp": "1"
+          }
+        },
+        {
+          "id": "swim_speed",
+          "label": "Velocidade de nado",
+          "member": "swimSpeed",
+          "min": {
+            "cpp": ".05f"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Modos",
+            "unit": "",
+            "help": "Fração da velocidade usada dentro da água."
+          },
+          "default": {
+            "cpp": ".6f"
+          }
+        },
+        {
+          "id": "turn_rate",
+          "label": "Giro ao dirigir",
+          "member": "turnRate",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "720"
+          },
+          "presentation": {
+            "group": "Modos",
+            "unit": "°/s",
+            "help": "Velocidade de giro no modo Dirigir; cresce com a velocidade e inverte de ré."
+          },
+          "default": {
+            "cpp": "90"
+          }
         }
       ],
       "defaults": {
@@ -322,6 +417,17 @@
               "cpp": "Invalidate::Input"
             }
           }
+        },
+        {
+          "id": "movement_mode",
+          "label": "Modo de movimento",
+          "type": "Character",
+          "member": "movementMode",
+          "options": "characterMovementModes",
+          "presentation": {
+            "group": "Modos",
+            "help": "Solo usa gravidade e apoio; Voo ignora a gravidade e usa o eixo vertical; Nado entra em vigor dentro de um volume de água da cena e volta ao solo fora dele; Dirigir transforma frente/trás em acelerador e lados em giro, sem deslizar de lado."
+          }
         }
       ]
     }
@@ -345,7 +451,12 @@
       "properties": [
         "characterNumbers/step_height",
         "characterNumbers/floor_snap_length",
-        "characterNumbers/gravity"
+        "characterNumbers/gravity",
+        "characterNumbers/acceleration",
+        "characterNumbers/braking",
+        "characterNumbers/air_control",
+        "characterNumbers/swim_speed",
+        "characterNumbers/turn_rate"
       ]
     },
     {

@@ -1782,12 +1782,15 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
 
   const auto *meshes = importer.array(*root, "meshes");
   const auto *nodes = importer.array(*root, "nodes");
-  if (!meshes || !nodes) return giveUp("GLB sem malhas ou sem nós.");
+  // Arquivo so de esqueleto e animacao (exportacao Astra) e aceito apenas
+  // quando quem chama pede; a importacao de modelo continua exigindo malha.
+  if (!nodes || (!meshes && !limits.allowAnimationOnly)) return giveUp("GLB sem malhas ou sem nós.");
+  const u32 meshCount = meshes ? meshes->childCount : 0;
   if (nodes->childCount > limits.maximumNodes) return giveUp("O arquivo passa do limite de nós desta importação.");
 
   // Geometria primeiro, uma vez por mesh: instâncias reaproveitam os blocos.
-  std::vector<std::vector<Importer::PrimitiveRange>> byMesh(meshes->childCount);
-  for (u32 m = 0; m < meshes->childCount; ++m) {
+  std::vector<std::vector<Importer::PrimitiveRange>> byMesh(meshCount);
+  for (u32 m = 0; m < meshCount; ++m) {
     if (importer.cancelled()) return giveUp("Importação cancelada.");
     const auto &mesh = *document.child(*meshes, m);
     if (mesh.kind != Kind::Object) return giveUp("Malha inválida.");
@@ -1830,7 +1833,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         if (names.size() == set.targetCount) set.names = names;
       }
     }
-    importer.report(.1f + .6f * static_cast<float>(m + 1) / static_cast<float>(meshes->childCount), "Geometria");
+    importer.report(.1f + .6f * static_cast<float>(m + 1) / static_cast<float>(meshCount), "Geometria");
   }
 
   // Hierarquia depois: cada nó com malha vira um desenho com a matriz de mundo
@@ -2064,7 +2067,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
       }
     }
     const auto meshIndex = document.index(node, "mesh");
-    if (meshIndex >= 0 && meshIndex < meshes->childCount) {
+    if (meshIndex >= 0 && meshIndex < meshCount) {
       const auto skinIndex = document.index(node, "skin");
       const auto &sourceRanges = byMesh[static_cast<u32>(meshIndex)];
       for (usize r = 0; r < sourceRanges.size(); ++r) {
@@ -2284,7 +2287,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
           sampled.path = AnimationPath::Weights;
           const auto &gltfNode = *document.child(*nodes, static_cast<u32>(nodeIndex));
           const auto meshIndex = document.index(gltfNode, "mesh");
-          if (meshIndex >= 0 && meshIndex < static_cast<i64>(meshes->childCount))
+          if (meshIndex >= 0 && meshIndex < static_cast<i64>(meshCount))
             for (const auto &range : byMesh[static_cast<u32>(meshIndex)])
               if (range.morph >= 0) {sampled.weightCount = result.morphs[static_cast<usize>(range.morph)].targetCount;break;}
           if (!sampled.weightCount) {++result.unsupportedAnimationChannels;continue;}
@@ -2399,7 +2402,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     result.lights = std::move(keptLights);
   }
 
-  if (result.draws.empty())
+  if (result.draws.empty() && !(limits.allowAnimationOnly && !result.animations.empty()))
     return giveUp("O arquivo não tem nenhuma malha de triângulos que esta importação saiba ler.");
   // Names in glTF are labels, not unique identifiers. Retain legacy keys when
   // unique; namespace every collision, including the first occurrence.

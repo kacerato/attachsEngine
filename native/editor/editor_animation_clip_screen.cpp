@@ -183,6 +183,12 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
        const auto *bone=motion&&state.document?state.document->find(static_cast<EditorEntityId>(motion->bone)):nullptr;
        card(side,"Root motion",motion?(motion->enabled?std::string("Ativo · osso ")+(bone?bone->name:std::string("ausente"))+" · toque para desligar":"Desligado · toque para ligar"):"O passo do quadril anda com o personagem em Play",
             w::PoseRootMotion,owner!=nullptr,UiIcon::ComponentRootMotion,motion&&motion->enabled);}
+      {const auto *studio=state.studio;const bool baking=studio&&studio->bake;
+       char progress[96];std::snprintf(progress,sizeof progress,"Bake %.0f%% · toque para cancelar",studio?studio->bakeProgress*100:0.f);
+       card(side,"Bake da pose final",baking?std::string(progress):std::string(state.clipRangeShown?"Intervalo · IK, constraints e root motion viram chaves FK":"Clipe inteiro · IK, constraints e root motion viram chaves FK"),
+            w::PoseBake,state.clipTarget!=0||state.clipOwner!=0,UiIcon::AnimationRecordPose,baking);
+       card(side,"Exportar GLB","Esqueleto e animação · relatório e prova de reimportação em Exportados",w::PoseExportGlb,!baking&&state.clipOwner!=0,UiIcon::AnimationBinding);
+       card(side,"Root motion no bake",studio&&studio->bakeRootToOwner?"Vai para o personagem (trilha do dono)":"Fica no osso (como animado)",w::PoseBakeRoot,!baking,UiIcon::ComponentRootMotion,studio&&studio->bakeRootToOwner);}
     } else if(state.clipStudioTab==2) {
       card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
       card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);

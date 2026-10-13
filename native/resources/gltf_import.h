@@ -63,6 +63,9 @@ inline constexpr u8 GltfTangentsImport = 0;    // usa TANGENT do arquivo; gera q
 inline constexpr u8 GltfTangentsCalculate = 1; // gera sempre que houver UV, mesmo com TANGENT no arquivo
 
 struct GltfImportLimits {
+  // Aceita arquivo sem malhas quando ha animacao (esqueleto exportado). A
+  // importacao de modelo deixa falso e continua recusando arquivo sem desenho.
+  bool allowAnimationOnly = false;
   u64 maximumBytes = 256ull << 20;
   u32 maximumNodes = 8192;
   u32 maximumDraws = 4096;

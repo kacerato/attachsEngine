@@ -52,13 +52,20 @@ public:
 // sem chao dentro do alcance, a pose animada fica intacta (fase aerea).
 class FootGrounding final : public ComponentValue {
 public:
-  bool enabled=true,alignToSurface=true;float weight=1,rayHeight=.5f,rayDistance=1,footOffset=0,maxCorrection=.4f;
+  // Trava (anti-deslize): enquanto o pe animado esta no apoio, fica no ponto
+  // onde tocou; solta quando sobe acima de Altura de contato ou quando ficar
+  // preso esticaria a perna alem da Correcao maxima.
+  bool enabled=true,alignToSurface=true,lockFoot=false;float weight=1,rayHeight=.5f,rayDistance=1,footOffset=0,maxCorrection=.4f,lockHeight=.05f;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<FootGrounding>(*this);}
   bool valid() const override {return ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<enabled<<' '<<alignToSurface<<' '<<weight<<' '<<rayHeight<<' '<<rayDistance<<' '<<footOffset<<' '<<maxCorrection;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>enabled>>alignToSurface>>weight>>rayHeight>>rayDistance>>footOffset>>maxCorrection)&&valid();}
+  void write(std::ostream &out) const override {out<<enabled<<' '<<alignToSurface<<' '<<weight<<' '<<rayHeight<<' '<<rayDistance<<' '<<footOffset<<' '<<maxCorrection<<' '<<lockFoot<<' '<<lockHeight;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>enabled>>alignToSurface>>weight>>rayHeight>>rayDistance>>footOffset>>maxCorrection))return false;
+    lockFoot=false;lockHeight=.05f;
+    return (version==1||static_cast<bool>(in>>lockFoot>>lockHeight))&&valid();
+  }
 };
 
 #define AE_IK_NUM(T,id,label,member,lo,hi,step,group,unit) ComponentNumber{label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).member;},[](ComponentValue&v){return &static_cast<T&>(v).member;},id,{group,unit}}
@@ -86,15 +93,17 @@ inline constexpr std::array<ComponentObjectReference,1> chainIkReferences{{
   {"target","Alvo","",ObjectReferenceScope::OtherNonDescendant,"Escolher alvo",[](const ComponentValue &v){return static_cast<const ChainIk&>(v).target;},[](ComponentValue &v,u64 n){static_cast<ChainIk&>(v).target=n;},{"Alvo"}}}};
 inline const ComponentType ChainIk::descriptor{"astra.ik.chain",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ChainIk>();},chainIkNumbers,chainIkBooleans,chainIkEnums,nullptr,false,chainIkReferences};
 
-inline constexpr std::array<ComponentNumber,5> footGroundingNumbers{{
+inline constexpr std::array<ComponentNumber,6> footGroundingNumbers{{
   AE_IK_NUM(FootGrounding,"weight","Peso",weight,0,1,.01f,"Influência",""),
   AE_IK_NUM(FootGrounding,"ray_height","Início do raio acima do pé",rayHeight,0,10,.01f,"Sondagem","m"),
   AE_IK_NUM(FootGrounding,"ray_distance","Alcance abaixo do pé",rayDistance,.01f,20,.01f,"Sondagem","m"),
   AE_IK_NUM(FootGrounding,"foot_offset","Altura do pé sobre a superfície",footOffset,-1,1,.005f,"Apoio","m"),
-  AE_IK_NUM(FootGrounding,"max_correction","Correção máxima",maxCorrection,0,5,.01f,"Apoio","m")}};
-inline constexpr std::array<ComponentBoolean,2> footGroundingBooleans{{AE_IK_BOOL(FootGrounding,"enabled","Ativo",enabled,"Influência"),
-  AE_IK_BOOL(FootGrounding,"align_to_surface","Alinhar à superfície",alignToSurface,"Apoio")}};
-inline const ComponentType FootGrounding::descriptor{"astra.ik.foot_grounding",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<FootGrounding>();},footGroundingNumbers,footGroundingBooleans,{},nullptr,false,{}};
+  AE_IK_NUM(FootGrounding,"max_correction","Correção máxima",maxCorrection,0,5,.01f,"Apoio","m"),
+  AE_IK_NUM(FootGrounding,"lock_height","Altura de contato",lockHeight,0,1,.005f,"Trava","m")}};
+inline constexpr std::array<ComponentBoolean,3> footGroundingBooleans{{AE_IK_BOOL(FootGrounding,"enabled","Ativo",enabled,"Influência"),
+  AE_IK_BOOL(FootGrounding,"align_to_surface","Alinhar à superfície",alignToSurface,"Apoio"),
+  AE_IK_BOOL(FootGrounding,"lock_foot","Travar pé no apoio",lockFoot,"Trava")}};
+inline const ComponentType FootGrounding::descriptor{"astra.ik.foot_grounding",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<FootGrounding>();},footGroundingNumbers,footGroundingBooleans,{},nullptr,false,{}};
 #undef AE_IK_NUM
 #undef AE_IK_BOOL
 // ---- Pacote A (FinalIK no jeito Astra) ----

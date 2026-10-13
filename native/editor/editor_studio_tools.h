@@ -21,5 +21,14 @@ struct EditorStudio {
   // (nomes ou primeira bifurcacao); com o componente presente, liga/desliga.
   static bool toggleRootMotion(EditorSession &,EditorEntityId owner,std::string &summary,std::string &error);
   static EditorEntityId rootMotionBone(const runtime::SceneGraph &document,EditorEntityId owner);
+  // Bake da pose final (N06): job incremental sobre o clipe aberto. `bakeStep`
+  // avanca `frames` quadros; devolve verdadeiro enquanto ainda ha trabalho. O
+  // resultado e um clipe novo verificado sem solvers; cancelar nao publica.
+  static bool bakeStart(EditorSession &,bool rootToOwner,std::string &summary,std::string &error);
+  static bool bakeStep(EditorSession &,u32 frames,std::string &summary,std::string &error);
+  static void bakeCancel(EditorSession &);
+  // Exportacao GLB do clipe aberto (esqueleto + animacao) com relatorio de
+  // perdas e prova de reimportacao; grava em Exportados/.
+  static bool exportGlb(EditorSession &,std::string &summary,std::string &error);
 };
 } // namespace ae::editor

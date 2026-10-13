@@ -527,3 +527,34 @@ AE_TEST(ik_interaction_carries_a_real_physics_body_through_scene_physics) {
   AE_EXPECT_TRUE(world.getProperty(world.findComponent(world.handle(crate),"astra.physics.body"),"motion",motion)==WorldStatus::Ok&&std::get<u32>(motion)==2,"dynamic again after release");
   physics.stop();
 }
+
+AE_TEST(ik_foot_lock_plants_the_foot_until_it_lifts_or_overstretches) {
+  Leg leg;auto *f=addComponent<scene::FootGrounding>(leg.g,leg.foot);f->lockFoot=true;f->rayDistance=2;f->maxCorrection=.4f;f->alignToSurface=false;
+  GameWorld world;world.load(leg.g);SceneIk ik;
+  const SceneIk::GroundQuery flat=[](const float *o,const float *,ObjectId,float *p,float *n){p[0]=o[0];p[1]=0;p[2]=o[2];n[0]=0;n[1]=1;n[2]=0;return true;};
+  const auto slide=[&](float x){Transform t;t.position[0]=x;world.setLocalTransform(world.handle(leg.owner),t);world.beginFrame(1/60.);ik.advance(world,flat);};
+  slide(0);slide(.1f);slide(.2f);
+  AE_EXPECT_TRUE(std::abs(worldX(world,leg.foot))<5e-3f,"planted foot does not slide with the body");
+  slide(.5f);
+  AE_EXPECT_TRUE(worldX(world,leg.foot)>.4f,"lock releases instead of overstretching the leg");
+  Transform up;up.position[1]=-1;up.position[2]=.3f;world.setLocalTransform(world.handle(leg.knee),up);
+  Transform lifted;lifted.position[1]=-.8f;world.setLocalTransform(world.handle(leg.foot),lifted);
+  slide(.6f);
+  AE_EXPECT_TRUE(std::abs(worldX(world,leg.foot)-.6f)<2e-2f,"lifted foot follows the animation");
+  std::istringstream old("1 1 1 .5 1 0 .4");scene::FootGrounding legacy;
+  AE_EXPECT_TRUE(legacy.read(old,1)&&!legacy.lockFoot,"version 1 keeps the foot unlocked");
+}
+
+AE_TEST(ik_socket_attaches_accessories_after_ik_and_reports_missing_bones) {
+  Spine s;const auto hat=s.g.createEntity(s.g.root(),ObjectKind::Folder,"Chapeu");
+  auto *socket=addComponent<scene::Socket>(s.g,hat);socket->bone=s.head;socket->position[1]=.2f;
+  auto *aim=addComponent<scene::AimIk>(s.g,s.head);aim->target=s.target;aim->chainLength=2;aim->axis=1;
+  GameWorld world;world.load(s.g);SceneIk ik;world.beginFrame(1/60.);ik.advance(world);
+  float head[16],h[16];worldMatrix(world.graph(),s.head,head);worldMatrix(world.graph(),hat,h);
+  const float expected[3]{head[12]+head[4]*.2f,head[13]+head[5]*.2f,head[14]+head[6]*.2f};
+  AE_EXPECT_TRUE(distance(h+12,expected)<1e-3f,"hat sits on the IK-solved head");
+  AE_EXPECT_TRUE(std::abs(head[5]-1)>1e-3f,"the head really moved by IK");
+  world.destroyObject(world.handle(s.head));world.flush();world.beginFrame(1/60.);ik.advance(world);
+  bool missing=false;for(const auto &d:ik.diagnostics())missing=missing||(d.object==hat&&d.issue==SceneIk::Issue::MissingTarget);
+  AE_EXPECT_TRUE(missing,"missing bone is diagnosed instead of attaching elsewhere");
+}

@@ -3,6 +3,7 @@
 #include "physics/jolt_bridge.h"
 #include "renderer/static_collision_mesh.h"
 
+#include <cmath>
 #include <span>
 
 namespace ae::physics {
@@ -17,6 +18,11 @@ struct CharacterMotorSettings {
   float fixedStepSeconds = 1.0f/60.0f;
   float stepHeight=.4f,floorSnapLength=.5f;
   bool inheritPlatformHorizontal=false;
+};
+// Locomocao (N05): zero em aceleracao/frenagem responde na hora, como antes.
+struct CharacterLocomotion {
+  float acceleration=0,braking=0,airControl=1,swimSpeed=.6f,turnRate=90;
+  u32 mode=0; // 0 solo, 1 voo, 2 nado quando ha agua, 3 dirigir
 };
 
 // Runtime character primitive over the engine physics facade. It owns one
@@ -41,6 +47,22 @@ public:
   // Navegação (Warp, travessia de link): move o olho para `eye` sem simular o caminho.
   bool teleportEye(AetherVec3 eye);
   bool configureMotion(float speed,float gravity,float stepHeight,float floorSnapLength,bool inheritPlatformHorizontal=false);
+  bool configureLocomotion(const CharacterLocomotion &locomotion);
+  // Velocidade pedida por root motion neste passo (mundo, m/s): substitui o
+  // comando no plano e, se `vertical`, tambem no eixo Y. A colisao decide o
+  // deslocamento realizado; consumido pelo proximo update.
+  void requestVelocity(AetherVec3 velocity,bool vertical);
+  // Eixo vertical (-1..1) do voo/nado; consumido pelo proximo update.
+  void setVerticalAxis(float axis);
+  // Superficie da agua neste ponto (altura do mundo); sem agua, `present` falso.
+  void setWater(bool present,float surfaceHeight);
+  bool inWater() const noexcept {return swimming_;}
+  // Cápsula baixa; levantar falha quando nao ha espaco acima.
+  bool setCrouching(bool crouching);
+  bool crouching() const noexcept {return crouching_;}
+  // Dirigir: o motor guarda a propria direcao (radianos); a camera nao gira o veiculo.
+  void setHeading(float radians) {if(std::isfinite(radians))heading_=radians;}
+  float heading() const noexcept {return heading_;}
   // Scalar state only: never carries old-world Jolt contacts, bodies or handles.
   struct MotionState {AetherVec3 velocity{};float pendingJump=0,accumulator=0;AetherVec3 resolvedVelocity{};bool hasMeasuredStep=false;AetherVec3 platformCarry{};};
   struct RuntimeState {AetherVec3 position{},velocity{},motorVelocity{},groundVelocity{},groundNormal{},groundPoint{},capsuleBottom{},capsuleTop{};float capsuleRadius=0;AetherCharacterGroundState groundState=AetherCharacterGroundState::InAir;bool hasMeasuredStep=false,hasGroundPoint=false,hasCapsule=false;AetherBodyHandle groundBody=AetherBodyHandle_Invalid;};
@@ -66,6 +88,9 @@ private:
   float pendingJump_=0;
   AetherVec3 resolvedVelocity_{},platformCarry_{};
   bool hasMeasuredStep_=false;
+  CharacterLocomotion locomotion_{};
+  AetherVec3 planar_{},requested_{};bool hasRequest_=false,requestVertical_=false;
+  float vertical_=0,waterSurface_=0,heading_=0;bool waterPresent_=false,swimming_=false,crouching_=false;
 };
 
 } // namespace ae::physics

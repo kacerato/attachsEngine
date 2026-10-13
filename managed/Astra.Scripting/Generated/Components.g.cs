@@ -1381,6 +1381,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         AgenteRetomar = 31,
         RecuoDisparar = 32,
         ImpactoGolpearDeFrente = 33,
+        PersonagemSubirDescer = 34,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -1588,6 +1589,13 @@ public readonly struct FootGrounding : IComponentFacade<FootGrounding>
         get => Component.GetFloat("max_correction");
         set => Component.SetFloat("max_correction", value);
     }
+    /// <summary>Altura de contato (m)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float LockHeight
+    {
+        get => Component.GetFloat("lock_height");
+        set => Component.SetFloat("lock_height", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -1599,6 +1607,12 @@ public readonly struct FootGrounding : IComponentFacade<FootGrounding>
     {
         get => Component.GetBool("align_to_surface");
         set => Component.SetBool("align_to_surface", value);
+    }
+    /// <summary>Travar pé no apoio</summary>
+    public bool LockFoot
+    {
+        get => Component.GetBool("lock_foot");
+        set => Component.SetBool("lock_foot", value);
     }
 }
 
@@ -2829,6 +2843,55 @@ public readonly struct BodyByTargets : IComponentFacade<BodyByTargets>
     {
         get => Component.GetReference("right_target");
         set => Component.SetReference("right_target", value);
+    }
+}
+
+/// <summary>Encaixe: Acessório preso a um osso com deslocamento; segue a pose final. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_boneattachment3d.html</remarks>
+public readonly struct Socket : IComponentFacade<Socket>
+{
+    public static string TypeId => "astra.ik.socket";
+    public static Socket Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Socket(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Posição</summary>
+    public Vector3 Position
+    {
+        get => new(Component.GetFloat("position_x"), Component.GetFloat("position_y"), Component.GetFloat("position_z"));
+        set => Component.SetVector3("position", value);
+    }
+    /// <summary>Rotação</summary>
+    public Vector3 Rotation
+    {
+        get => new(Component.GetFloat("rotation_x"), Component.GetFloat("rotation_y"), Component.GetFloat("rotation_z"));
+        set => Component.SetVector3("rotation", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Seguir escala do osso</summary>
+    public bool FollowScale
+    {
+        get => Component.GetBool("follow_scale");
+        set => Component.SetBool("follow_scale", value);
+    }
+    /// <summary>Osso</summary>
+    public ObjectReference Bone
+    {
+        get => Component.GetReference("bone");
+        set => Component.SetReference("bone", value);
     }
 }
 
@@ -5693,6 +5756,41 @@ public readonly struct Character : IComponentFacade<Character>
         get => Component.GetFloat("control_priority_ai");
         set => Component.SetFloat("control_priority_ai", value);
     }
+    /// <summary>Aceleração (m/s²). Zero responde na hora (comportamento anterior); maior que zero acelera até a velocidade pedida.</summary>
+    /// <remarks>Faixa válida: 0 a 200.</remarks>
+    public float Acceleration
+    {
+        get => Component.GetFloat("acceleration");
+        set => Component.SetFloat("acceleration", value);
+    }
+    /// <summary>Frenagem (m/s²). Zero para na hora; maior que zero desacelera ao soltar o comando ou mudar de direção.</summary>
+    /// <remarks>Faixa válida: 0 a 200.</remarks>
+    public float Braking
+    {
+        get => Component.GetFloat("braking");
+        set => Component.SetFloat("braking", value);
+    }
+    /// <summary>Controle no ar. Fração da aceleração disponível sem apoio; zero conserva o impulso do salto.</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float AirControl
+    {
+        get => Component.GetFloat("air_control");
+        set => Component.SetFloat("air_control", value);
+    }
+    /// <summary>Velocidade de nado. Fração da velocidade usada dentro da água.</summary>
+    /// <remarks>Faixa válida: 0.05 a 1.</remarks>
+    public float SwimSpeed
+    {
+        get => Component.GetFloat("swim_speed");
+        set => Component.SetFloat("swim_speed", value);
+    }
+    /// <summary>Giro ao dirigir (°/s). Velocidade de giro no modo Dirigir; cresce com a velocidade e inverte de ré.</summary>
+    /// <remarks>Faixa válida: 0 a 720.</remarks>
+    public float TurnRate
+    {
+        get => Component.GetFloat("turn_rate");
+        set => Component.SetFloat("turn_rate", value);
+    }
     /// <summary>Impulso ao sair. Conserva X/Z da superfície no ar; desligar remove apenas esse impulso, sem recriar a cápsula.</summary>
     public bool InheritPlatformHorizontal
     {
@@ -5714,6 +5812,28 @@ public readonly struct Character : IComponentFacade<Character>
         get => (ControlSourceOption)Component.GetEnum("control_source");
         set => Component.SetEnum("control_source", (uint)value);
     }
+    public enum MovementModeOption : uint
+    {
+        Solo = 0,
+        Voo = 1,
+        NadoNaAgua = 2,
+        Dirigir = 3,
+    }
+    /// <summary>Modo de movimento. Solo usa gravidade e apoio; Voo ignora a gravidade e usa o eixo vertical; Nado entra em vigor dentro de um volume de água da cena e volta ao solo fora dele; Dirigir transforma frente/trás em acelerador e lados em giro, sem deslizar de lado.</summary>
+    public MovementModeOption MovementMode
+    {
+        get => (MovementModeOption)Component.GetEnum("movement_mode");
+        set => Component.SetEnum("movement_mode", (uint)value);
+    }
+    /// <summary>Agachar. Troca para a cápsula baixa; levantar falha sem espaço acima</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Crouch(bool crouching) => Component.Invoke("crouch", ComponentValue.Boolean(crouching)).AsBoolean();
+    /// <summary>Subir/descer. Eixo vertical do voo e do nado neste quadro (-1 a 1)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetVertical(double axis) => Component.Invoke("set_vertical", ComponentValue.Number(axis));
+    /// <summary>Na água. Verdadeiro enquanto o nado está em vigor</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool InWater() => Component.Invoke("in_water").AsBoolean();
     /// <summary>Bateu num colisor. O movimento do personagem colidiu com um corpo; carrega o objeto, o ponto e a normal. Payload: Objeto tocado: objeto, Ponto: vetor, Normal: vetor</summary>
     public ComponentSubscription OnColliderHit(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "collider_hit", handler);
 }

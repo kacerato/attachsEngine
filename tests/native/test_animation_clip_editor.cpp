@@ -1784,6 +1784,59 @@ AE_TEST(animation_studio_root_motion_card_creates_and_toggles_the_component) {
   AE_EXPECT_EQ(EditorStudio::rootMotionBone(doc,bot),j1,"first branching when names are missing");
 }
 
+AE_TEST(animation_studio_bakes_the_solved_pose_into_a_verified_fk_clip) {
+  using namespace editor;
+  TemporaryProject project;EditorSession session;std::string error,summary;
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto bot=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Robo");
+  const auto hip=doc.createEntity(bot,EditorEntityKind::Folder,"Quadril");
+  const auto upper=doc.createEntity(hip,EditorEntityKind::Folder,"Coxa");
+  const auto lower=doc.createEntity(upper,EditorEntityKind::Folder,"Canela");
+  const auto tip=doc.createEntity(lower,EditorEntityKind::Folder,"Pe");
+  const auto target=doc.createEntity(bot,EditorEntityKind::Folder,"Alvo");
+  runtime::Transform h;h.position[1]=2;doc.setTransform(hip,h);
+  runtime::Transform d;d.position[1]=-.9f;d.position[2]=.1f;doc.setTransform(upper,d);doc.setTransform(lower,d);
+  runtime::Transform f;f.position[1]=-.9f;doc.setTransform(tip,f);
+  runtime::Transform tg;tg.position[0]=.5f;tg.position[1]=.6f;doc.setTransform(target,tg);
+  // IK permanente: o pe vai ao alvo enquanto o quadril sobe e desce no clipe.
+  {auto v=*doc.find(tip);auto *ik=static_cast<scene::TwoBoneIk*>(v.components.add(scene::TwoBoneIk::descriptor));ik->target=target;AE_EXPECT_TRUE(doc.applyEntityValues(tip,v),"ik");}
+  resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(bot,1,guid,error)&&session.openAnimationClip(guid,bot,error),error.c_str());
+  const auto *asset=session.animationClipAsset(guid);
+  AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,asset->revision,[&](resources::AnimationClipAsset &clip) {
+    resources::AnimationClipBinding binding;std::string e;if(!animationPoseTargetPath(doc,bot,hip,binding.path,e))return false;binding.name="Quadril";
+    u64 track=0;const float a[3]{0,2,0},b[3]{.1f,1.8f,0};
+    return clip.addTrack(binding,resources::AnimationPath::Translation,resources::AnimationRotationMode::Quaternion,a,track,e)&&clip.putPose(track,0,a,e)&&clip.putPose(track,1,b,e);
+  },error),error.c_str());
+  const auto clipFiles=[&]{usize n=0;std::error_code ec;for(const auto &e:std::filesystem::recursive_directory_iterator(project.path,ec))if(e.path().extension()==".aeclip")++n;return n;};
+  const auto before=clipFiles();
+  // Cancelar no meio nao publica nada.
+  AE_EXPECT_TRUE(EditorStudio::bakeStart(session,false,summary,error),error.c_str());
+  AE_EXPECT_TRUE(EditorStudio::bakeStep(session,5,summary,error),"partial progress");
+  EditorStudio::bakeCancel(session);
+  AE_EXPECT_EQ(clipFiles(),before,"cancel publishes nothing");
+  // Bake completo.
+  AE_EXPECT_TRUE(EditorStudio::bakeStart(session,false,summary,error),error.c_str());
+  u32 guard=0;while(EditorStudio::bakeStep(session,16,summary,error)&&++guard<100) {}
+  AE_EXPECT_TRUE(summary.find("Bake publicado")!=std::string::npos,(summary+" / "+error).c_str());
+  AE_EXPECT_EQ(clipFiles(),before+1,"one new clip");
+  float mm=99;std::sscanf(summary.c_str()+summary.find("solvers: ")+9,"%f",&mm);
+  AE_EXPECT_TRUE(mm<5,("verification without solvers stays within 5 mm: "+summary).c_str());
+  AE_EXPECT_TRUE(session.screen().clipGuid==guid,"original clip reopened");
+  // Fonte alterada durante o job: cancela.
+  AE_EXPECT_TRUE(EditorStudio::bakeStart(session,false,summary,error),error.c_str());
+  EditorStudio::bakeStep(session,3,summary,error);
+  asset=session.animationClipAsset(guid);
+  AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,asset->revision,[&](resources::AnimationClipAsset &clip){clip.duration=1.5f;return true;},error),error.c_str());
+  AE_EXPECT_TRUE(!EditorStudio::bakeStep(session,3,summary,error)&&error.find("mudou")!=std::string::npos,"changed source cancels the job");
+  AE_EXPECT_EQ(clipFiles(),before+1,"no extra clip after the changed source");
+  // Exportacao GLB com prova de reimportacao.
+  AE_EXPECT_TRUE(EditorStudio::exportGlb(session,summary,error),error.c_str());
+  AE_EXPECT_TRUE(std::filesystem::exists(project.path/"Exportados"/"Clipe.glb")||summary.find(".glb")!=std::string::npos,summary.c_str());
+  float exportMm=99;std::sscanf(summary.c_str()+summary.find("reimportação: ")+15,"%f",&exportMm);
+  AE_EXPECT_TRUE(summary.find("reimportação")!=std::string::npos&&exportMm<1,("round trip within 1 mm: "+summary).c_str());
+}
+
 AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   using namespace editor;
   TemporaryProject project;EditorSession session;std::string error,summary;

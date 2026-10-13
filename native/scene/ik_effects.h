@@ -184,6 +184,23 @@ public:
   }
 };
 
+// Encaixe (aparencia): acessorio, arma ou parte modular presa a um osso com
+// deslocamento. Resolve no fim do passo de IK, entao segue a pose final (com
+// IK); osso ausente apos trocar o visual vira diagnostico, nunca o osso errado.
+class Socket final : public ComponentValue {
+public:
+  u64 bone=0;bool enabled=true,followScale=false;float position[3]{},rotation[3]{};
+  AE_FX_VALUE(Socket)
+  bool valid() const override {return ikReference(bone)&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<bone<<' '<<enabled<<' '<<followScale;for(float v:position)out<<' '<<v;for(float v:rotation)out<<' '<<v;}
+  bool read(std::istream &in,u32 version) override {
+    if(version!=1||!(in>>bone>>enabled>>followScale))return false;
+    for(float &v:position)if(!(in>>v))return false;
+    for(float &v:rotation)if(!(in>>v))return false;
+    return valid();
+  }
+};
+
 inline constexpr std::array<ComponentNumber,4> hitReactionNumbers{{AE_FX_NUM(HitReaction,"weight","Peso",weight,0,1,.01f,"Influência",""),
   AE_FX_NUM(HitReaction,"strength","Força do golpe",strength,0,90,1,"Golpe","graus"),AE_FX_NUM(HitReaction,"duration","Recuperação",duration,.05f,5,.01f,"Golpe","s"),
   AE_FX_NUM(HitReaction,"chain_length","Ossos que reagem",chainLength,1,8,1,"Golpe","ossos")}};
@@ -289,6 +306,14 @@ inline constexpr std::array<ComponentObjectReference,8> bodyByTargetsReferences{
   AE_FX_REF(BodyByTargets,"left_hand","Mão esquerda",leftHand,Descendant,"Sem mão","Mãos"),AE_FX_REF(BodyByTargets,"left_target","Alvo esquerdo",leftTarget,OtherNonDescendant,"Sem alvo","Mãos"),
   AE_FX_REF(BodyByTargets,"right_hand","Mão direita",rightHand,Descendant,"Sem mão","Mãos"),AE_FX_REF(BodyByTargets,"right_target","Alvo direito",rightTarget,OtherNonDescendant,"Sem alvo","Mãos")}};
 inline const ComponentType BodyByTargets::descriptor{"astra.ik.body_by_targets",1,AE_FX_MAKE(BodyByTargets),bodyByTargetsNumbers,bodyByTargetsBooleans,{},nullptr,false,bodyByTargetsReferences};
+inline constexpr std::array<ComponentNumber,6> socketNumbers{{
+  AE_FX_NUM(Socket,"position_x","Posição X",position[0],-100,100,.005f,"Deslocamento","m"),AE_FX_NUM(Socket,"position_y","Posição Y",position[1],-100,100,.005f,"Deslocamento","m"),
+  AE_FX_NUM(Socket,"position_z","Posição Z",position[2],-100,100,.005f,"Deslocamento","m"),AE_FX_NUM(Socket,"rotation_x","Rotação X",rotation[0],-360,360,.5f,"Deslocamento","graus"),
+  AE_FX_NUM(Socket,"rotation_y","Rotação Y",rotation[1],-360,360,.5f,"Deslocamento","graus"),AE_FX_NUM(Socket,"rotation_z","Rotação Z",rotation[2],-360,360,.5f,"Deslocamento","graus")}};
+inline constexpr std::array<ComponentBoolean,2> socketBooleans{{AE_FX_BOOL(Socket,"enabled","Ativo",enabled,"Encaixe"),AE_FX_BOOL(Socket,"follow_scale","Seguir escala do osso",followScale,"Encaixe")}};
+inline constexpr std::array<ComponentObjectReference,1> socketReferences{{AE_FX_REF(Socket,"bone","Osso",bone,Other,"Escolher osso","Encaixe")}};
+inline constexpr std::array<ComponentTriple,2> socketTriples{{{"position","Posição",{"position_x","position_y","position_z"}},{"rotation","Rotação",{"rotation_x","rotation_y","rotation_z"}}}};
+inline const ComponentType Socket::descriptor{"astra.ik.socket",1,AE_FX_MAKE(Socket),socketNumbers,socketBooleans,{},nullptr,false,socketReferences,socketTriples};
 #undef AE_FX_NUM
 #undef AE_FX_BOOL
 #undef AE_FX_ENUM

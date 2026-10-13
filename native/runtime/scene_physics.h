@@ -12,6 +12,7 @@
 #include "runtime/scene_components.h"
 #include "physics/jolt_bridge.h"
 #include "physics/character_motor.h"
+#include <functional>
 #include "runtime/physics_field_sample.h"
 #include "runtime/motor_control.h"
 
@@ -151,6 +152,15 @@ public:
   bool hasCharacter(ObjectId id) const;
   // Guinada da pose publicada do Personagem (o motor não gira a cápsula).
   bool setCharacterYaw(ObjectId id,float yawRadians);
+  // N05: velocidade pedida (root motion) passa pela colisao do motor; eixo
+  // vertical de voo/nado; agachar com consulta de teto; estado de nado.
+  bool requestCharacterVelocity(ObjectId id,const float velocity[3],bool vertical);
+  bool setCharacterVertical(ObjectId id,float axis);
+  bool setCharacterCrouching(ObjectId id,bool crouching);
+  bool characterInWater(ObjectId id,bool &swimming) const;
+  // Superficie de agua (altura do mundo) num ponto X/Z; falso sem agua.
+  using WaterQuery=std::function<bool(float x,float z,float &surface)>;
+  void setWaterQuery(WaterQuery query) {waterQuery_=std::move(query);}
   bool hasDynamicMotor(ObjectId id) const;
   bool hasMovingBody(ObjectId id) const;
   // Fonte do bake de navegação: triângulos em mundo dos corpos estáticos, com o
@@ -244,9 +254,11 @@ private:
     float world[16];
     float eyeHeight;
     float jumpSpeed = 0;
+    bool headingKnown=false;
     MotorControlState control;
   };
   std::vector<CharacterBinding> characters_;
+  WaterQuery waterQuery_;
   std::vector<AetherCharacterContactV1> characterContacts_;
   u32 jointCount_ = 0;
   struct JointBinding {ObjectId owner=0;u64 instance=0;AetherJointHandle handle=AetherJointHandle_Invalid;float breakForce=0,breakTorque=0;};

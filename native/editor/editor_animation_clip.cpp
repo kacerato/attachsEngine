@@ -766,6 +766,13 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         else ok=EditorStudio::followObject(*this,selected,studio_->followParent,start,end,summary,error);
         state_.clipDiagnostic=ok?summary:error;return true;
       }
+      if(code==w::PoseBake) {std::string summary,error;
+        if(studio_->bake) {EditorStudio::bakeCancel(*this);state_.clipDiagnostic=studio_->bakeReport;return true;}
+        state_.clipDiagnostic=EditorStudio::bakeStart(*this,studio_->bakeRootToOwner,summary,error)?summary:error;return true;}
+      if(code==w::PoseExportGlb) {std::string summary,error;
+        state_.clipDiagnostic=EditorStudio::exportGlb(*this,summary,error)?summary:error;return true;}
+      if(code==w::PoseBakeRoot) {studio_->bakeRootToOwner=!studio_->bakeRootToOwner;
+        state_.clipDiagnostic=studio_->bakeRootToOwner?"Bake: root motion vai para o personagem":"Bake: root motion fica no osso";return true;}
       if(code==w::PoseRootMotion) {std::string summary,error;
         state_.clipDiagnostic=EditorStudio::toggleRootMotion(*this,state_.clipOwner,summary,error)?summary:error;return true;}
       if(code==w::PoseIkCreate) {std::string error;const auto tip=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;

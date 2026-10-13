@@ -561,6 +561,24 @@ bool ScenePhysics::setCharacterYaw(ObjectId id,float yawRadians) {
   }
   return false;
 }
+bool ScenePhysics::requestCharacterVelocity(ObjectId id,const float v[3],bool vertical) {
+  if(!v||!std::isfinite(v[0])||!std::isfinite(v[1])||!std::isfinite(v[2])) return false;
+  for(auto &c:characters_) if(c.id==id) {c.motor->requestVelocity({v[0],v[1],v[2]},vertical);return true;}
+  return false;
+}
+bool ScenePhysics::setCharacterVertical(ObjectId id,float axis) {
+  if(!std::isfinite(axis)) return false;
+  for(auto &c:characters_) if(c.id==id) {c.motor->setVerticalAxis(axis);return true;}
+  return false;
+}
+bool ScenePhysics::setCharacterCrouching(ObjectId id,bool crouching) {
+  for(auto &c:characters_) if(c.id==id) return c.motor->setCrouching(crouching);
+  return false;
+}
+bool ScenePhysics::characterInWater(ObjectId id,bool &swimming) const {
+  for(const auto &c:characters_) if(c.id==id) {swimming=c.motor->inWater();return true;}
+  return false;
+}
 bool ScenePhysics::hasCharacter(ObjectId id) const {
   return std::any_of(characters_.begin(),characters_.end(),[&](const auto &c){return c.id==id;});
 }
@@ -648,12 +666,23 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
     for(auto &c:characters_) {
       const auto*entity=world.graph().find(c.id);const auto*settings=entity?characterComponent(*entity):nullptr;
       if(!settings||!c.motor->configureMotion(settings->speed,settings->gravity,settings->stepHeight,settings->floorSnapLength,settings->inheritPlatformHorizontal))return false;
+      physics::CharacterLocomotion locomotion;locomotion.acceleration=settings->acceleration;locomotion.braking=settings->braking;
+      locomotion.airControl=settings->airControl;locomotion.swimSpeed=settings->swimSpeed;locomotion.mode=settings->movementMode;locomotion.turnRate=settings->turnRate;
+      if(settings->movementMode==3&&!c.headingKnown) {c.motor->setHeading(std::atan2(c.world[8],c.world[10]));c.headingKnown=true;}
+      if(settings->movementMode!=3)c.headingKnown=false;
+      if(!c.motor->configureLocomotion(locomotion))return false;
+      if(settings->movementMode==2) {
+        float surface=0;const auto eye=c.motor->eyePosition();
+        const bool present=waterQuery_&&waterQuery_(eye.x,eye.z,surface);
+        c.motor->setWater(present,surface);
+      } else c.motor->setWater(false,0);
       c.jumpSpeed=settings->jumpSpeed;
       const bool active=world.activeInHierarchy(world.handle(c.id));
       if(!active)c.control.clear();
       const auto intent=c.control.resolve(settings->control,controlFocused_&&active);
       if(intent.jump)c.motor->jump(c.jumpSpeed);
       if(!c.motor->update(intent.right,intent.forward,intent.yaw,static_cast<float>(fixed))) return false;
+      if(settings->movementMode==3)setCharacterYaw(c.id,c.motor->heading());
       if(!characterHit) continue;
       const auto total=AetherPhysics_GetCharacterContactsV1(c.motor->physicsWorld(),c.motor->handle(),nullptr,0);
       if(total<=0) continue;
