@@ -2,6 +2,10 @@
 #include "harness.h"
 #include "editor/editor_animation_ik.h"
 #include "editor/editor_studio_tools.h"
+#include "editor/editor_scene_template.h"
+#include "editor/editor_humanoid_bones.h"
+#include "scene/ik_effects.h"
+#include "runtime/scene_ik.h"
 #include "editor/editor_animation_pose_selection.h"
 #include "scene/ik_constraints.h"
 #include "scene/root_motion.h"
@@ -1923,4 +1927,112 @@ AE_TEST(animation_studio_ik_wizard_pin_and_follow_write_real_resources) {
   float hand1[16],prop1[16];runtime::worldMatrix(session.evaluatedEditorScene(),hip,hand1);runtime::worldMatrix(session.evaluatedEditorScene(),prop,prop1);
   AE_EXPECT_TRUE(std::abs((prop1[12]-hand1[12])-(prop0[12]-hand0[12]))<5e-3f,"follower keeps its offset from the parent");
   AE_EXPECT_TRUE(session.history().undo(doc),"follow is one undoable edit");
+}
+
+AE_TEST(animation_templates_build_with_real_components_and_work_in_play) {
+  using namespace editor;
+  const auto withCube=[](EditorSession &s){std::vector<u8> v;std::vector<u32> i;std::vector<renderer::MapDrawRecord> d;std::vector<renderer::MapMaterialRecord> m;
+    return renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,v,i,d,m)&&s.importMap(d,m,false,v,i);};
+  const auto templates=sceneTemplates();
+  const auto indexOf=[&](std::string_view id){for(u32 i=0;i<templates.size();++i)if(templates[i].id==id)return i;return 0u;};
+  const auto find=[](const runtime::SceneGraph &g,const char *name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);
+    for(const auto id:ids) {if(std::string(g.find(id)->name)==name)return id;}
+    return runtime::ObjectId{};};
+  const auto at=[](const runtime::SceneGraph &g,runtime::ObjectId id){float m[16];runtime::worldMatrix(g,id,m);return std::array<float,3>{m[12],m[13],m[14]};};
+  const auto gap=[](std::array<float,3> a,std::array<float,3> b){return std::hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);};
+  const auto play=[](EditorSession &s,u32 frames){std::vector<renderer::MapDrawState> draws;for(u32 i=0;i<frames;++i){s.advanceClock(10+float(i)/60.f);s.extractPlayMap(draws);}};
+  {
+    TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
+    AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("manequim_ik")),s.screen().status.c_str());
+    const auto hand=find(s.document(),"Mão dir.");
+    AE_EXPECT_TRUE(s.document().find(hand)->components.find(scene::TwoBoneIk::descriptor),"hand IK authored");
+    AE_EXPECT_TRUE(s.startPlay(),"mannequin plays");
+    play(s,60);
+    const auto &g=s.playScene().document();
+    {const auto h=at(g,find(g,"Mão dir.")),t=at(g,find(g,"Alvo da mão"));char m[220];
+     std::snprintf(m,sizeof m,"hand reaches its target in Play: hand %.3f %.3f %.3f target %.3f %.3f %.3f · %s",h[0],h[1],h[2],t[0],t[1],t[2],s.playScene().frameError().c_str());
+     AE_EXPECT_TRUE(gap(h,t)<.02f,m);}
+    AE_EXPECT_TRUE(at(g,find(g,"Pé dir."))[1]>at(g,find(g,"Pé esq."))[1]+.1f,"foot on the block is grounded higher than the other");
+    AE_EXPECT_TRUE(s.history().canUndo(),"undoable");
+  }
+  {
+    TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
+    AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("interacao")),s.screen().status.c_str());
+    AE_EXPECT_TRUE(s.startPlay(),"interaction plays");play(s,120);
+    const auto &g=s.playScene().document();
+    AE_EXPECT_TRUE(g.find(find(g,"Caixa"))->parent==find(g,"Mão dir."),"hand picked the box without any script");
+  }
+  {
+    TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
+    AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("braco_mecanico")),s.screen().status.c_str());
+    AE_EXPECT_TRUE(s.startPlay(),"arm plays");play(s,30);
+    const auto &g=s.playScene().document();
+    AE_EXPECT_TRUE(gap(at(g,find(g,"Garra")),at(g,find(g,"Alvo da garra")))<.03f,"claw reaches the target");
+  }
+  {
+    TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
+    AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("quadrupede")),s.screen().status.c_str());
+    AE_EXPECT_TRUE(s.startPlay(),"quadruped plays");play(s,30);
+  }
+  {
+    TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
+    AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("personagem_jogavel")),s.screen().status.c_str());
+    AE_EXPECT_TRUE(s.startPlay(),(std::string("playable character plays: ")+s.screen().status).c_str());play(s,60);
+    const auto &g=s.playScene().document();
+    const auto y=at(g,find(g,"Personagem"))[1];
+    AE_EXPECT_TRUE(y>-.05f&&y<.2f,"character stands on the ground");
+  }
+  {
+    // Nomes de ossos humanoides: Kyle, Mixamo, Blender e os modelos da Astra.
+    using namespace humanoid_detail;
+    const auto check=[](const char *name,Role r,int s){return role(words(name))==r&&(s<0||side(words(name))==s);};
+    AE_EXPECT_TRUE(check("Left_Wrist_Joint_01",Role::Hand,0)&&check("Right_Forearm_Joint_01",Role::Forearm,1)&&check("Left_Upper_Arm_Joint_01",Role::UpperArm,0)&&
+                   check("Hip",Role::Hips,-1)&&check("Ribs",Role::Chest,-1)&&check("Right_Ankle_Joint_01",Role::Foot,1)&&check("Left_Shoulder_Joint_01",Role::None,-1)&&
+                   check("Left_Index_Finger_Joint_01a",Role::None,-1)&&check("Left_Thigh_Joint_01",Role::None,-1),"Robot Kyle bone names");
+    AE_EXPECT_TRUE(check("mixamorig:LeftHand",Role::Hand,0)&&check("mixamorig:RightForeArm",Role::Forearm,1)&&check("mixamorig:LeftArm",Role::UpperArm,0)&&
+                   check("mixamorig:Hips",Role::Hips,-1)&&check("mixamorig:Spine2",Role::Chest,-1)&&check("mixamorig:LeftHandIndex1",Role::None,-1)&&
+                   check("hand.L",Role::Hand,0)&&check("forearm.R",Role::Forearm,1),"Mixamo and Blender bone names");
+    AE_EXPECT_TRUE(check("Mão esq.",Role::Hand,0)&&check("Antebraço dir.",Role::Forearm,1)&&check("Braço esq.",Role::UpperArm,0)&&check("Pé dir.",Role::Foot,1)&&
+                   check("Pelve",Role::Hips,-1)&&check("Peito",Role::Chest,-1)&&check("Mão esq. · visual",Role::None,-1),"Astra mannequin bone names");
+  }
+  {
+    // Duas maos (Final IK 2.2, Interaction Pick Up 2-Handed): agacha, as duas
+    // maos chegam as pegadas, a caixa sobe ao ponto de carregar e as maos
+    // seguem presas a ela; tudo por componentes, sem script.
+    TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
+    AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("carregar_caixa")),s.screen().status.c_str());
+    const auto &d=s.document();
+    const auto *system=static_cast<const scene::InteractionSystem*>(d.find(find(d,"Manequim"))->components.find(scene::InteractionSystem::descriptor));
+    const auto *object=static_cast<const scene::InteractionObject*>(d.find(find(d,"Caixa"))->components.find(scene::InteractionObject::descriptor));
+    AE_EXPECT_TRUE(system&&object&&system->autoEffector==find(d,"Mão esq.")&&system->autoSecond==find(d,"Mão dir.")&&system->pelvis==find(d,"Pelve")&&system->chest==find(d,"Peito"),"system wired to both hands, pelvis and chest");
+    AE_EXPECT_TRUE(object&&object->grip==find(d,"Pegada esq.")&&object->secondGrip==find(d,"Pegada dir.")&&object->holdPoint==find(d,"Ponto de carregar"),"object wired to two grips and the hold point");
+    AE_EXPECT_TRUE(d.find(find(d,"Pé esq."))->components.find(scene::FootGrounding::descriptor),"feet grounded so the knees bend");
+    {
+      // Universal: qualquer componente de corpo adicionado a um humanoide chega
+      // com os ossos preenchidos pelo nome; nada ja escolhido e sobrescrito.
+      scene::FullBodyIk full;full.chest=12345;
+      AE_EXPECT_TRUE(prefillHumanoidReferences(d,find(d,"Manequim"),full)&&full.pelvis==find(d,"Pelve")&&full.chest==12345&&
+                     full.tips[0]==find(d,"Mão esq.")&&full.tips[1]==find(d,"Mão dir.")&&full.tips[3]==find(d,"Pé dir."),"full body IK prefilled from bone names");
+      scene::GrounderBody grounder;AE_EXPECT_TRUE(prefillHumanoidReferences(d,find(d,"Manequim"),grounder)&&grounder.pelvis==find(d,"Pelve"),"grounder prefilled");
+    }
+    AE_EXPECT_TRUE(s.history().undo(s.document())&&!find(s.document(),"Caixa")&&!find(s.document(),"Manequim"),"one undo removes the carry scene");
+    AE_EXPECT_TRUE(s.history().redo(s.document())&&find(s.document(),"Caixa"),"redo restores it");
+    AE_EXPECT_TRUE(s.startPlay(),(std::string("carry plays: ")+s.screen().status).c_str());
+    std::vector<renderer::MapDrawState> draws;
+    s.advanceClock(10);s.extractPlayMap(draws);
+    const auto &g=s.playScene().document();
+    AE_EXPECT_TRUE(find(g,"Pelve")!=0,"play world loaded");
+    const float rest=at(g,find(g,"Pelve"))[1];float lowest=rest;
+    for(u32 i=1;i<60;++i){s.advanceClock(10+float(i)/60.f);s.extractPlayMap(draws);lowest=std::min(lowest,at(g,find(g,"Pelve"))[1]);}
+    {char m[200];std::snprintf(m,sizeof m,"body crouches to reach the box: rest %.3f lowest %.3f",rest,lowest);AE_EXPECT_TRUE(lowest<rest-.05f,m);}
+    for(u32 i=60;i<200;++i){s.advanceClock(10+float(i)/60.f);s.extractPlayMap(draws);}
+    AE_EXPECT_TRUE(g.find(find(g,"Caixa"))->parent==find(g,"Manequim"),"box carried by the character");
+    {const auto b=at(g,find(g,"Caixa")),h=at(g,find(g,"Ponto de carregar"));char m[220];
+     std::snprintf(m,sizeof m,"box lifted to the hold point: box %.3f %.3f %.3f hold %.3f %.3f %.3f",b[0],b[1],b[2],h[0],h[1],h[2]);AE_EXPECT_TRUE(gap(b,h)<.03f,m);}
+    for(const auto &[hand,grip]:{std::pair{"Mão esq.","Pegada esq."},std::pair{"Mão dir.","Pegada dir."}}) {
+      const auto a=at(g,find(g,hand)),b=at(g,find(g,grip));char m[220];
+      std::snprintf(m,sizeof m,"%s holds %s: %.3f %.3f %.3f vs %.3f %.3f %.3f",hand,grip,a[0],a[1],a[2],b[0],b[1],b[2]);AE_EXPECT_TRUE(gap(a,b)<.03f,m);
+    }
+    {const float y=at(g,find(g,"Pelve"))[1];char m[160];std::snprintf(m,sizeof m,"stands back up while carrying: pelvis %.3f rest %.3f",y,rest);AE_EXPECT_TRUE(y>rest-.06f,m);}
+  }
 }

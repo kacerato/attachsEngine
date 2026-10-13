@@ -1,4 +1,5 @@
 #include "editor/editor_session_internal.h"
+#include "editor/editor_humanoid_bones.h"
 #include "editor/editor_screen.h"
 #include "resources/model_import.h"
 #include "scene/path.h"
@@ -218,6 +219,9 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
       auto plan=scene::planComponentAddition(entity->components,request.componentType);if(!plan.ready) break;
       auto values=*entity;values.components=std::move(plan.candidate);
       auto *added=values.components.editInstance(plan.requestedInstance);if(!added) break;
+      // Componentes que pedem ossos (interacao, corpo inteiro, grounder) chegam
+      // com pelve, peito, maos e pes do humanoide reconhecidos pelo nome.
+      prefillHumanoidReferences(document_,request.entity,*added);
       if(entry->type==&EditorCollider::descriptor && meshAsset(*entity)) {
         // Missing geometry leaves the explicit default shape available; a fit
         // only publishes a fully prepared conservative candidate.
@@ -5816,6 +5820,10 @@ bool EditorSession::createSceneTemplate(u32 index) {
     if(!history_.applyValues(document_,id,values)) {complete=false;break;}
     created[n]=id;
   }
+  // Componentes do modelo (IK, apoio, interação, Personagem, colisores, câmera).
+  if(complete&&!model.components.empty())
+    complete=applySceneTemplateComponents(model,created,document_,[&](EditorEntityId id,const EditorEntity &values){return history_.applyValues(document_,id,values);});
+  if(complete&&model.carry&&!created.empty()) {std::string error;complete=addCarrySetupInTransaction(created[0],group,error);}
   if(!complete) {
     // Modelo pela metade é pior do que modelo nenhum: o autor não sabe o que
     // faltou e a comparação nasce torta.

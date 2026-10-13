@@ -9846,27 +9846,95 @@ void buildSceneTemplatePanel(ScreenBuilder &builder, const UiRect &viewport) {
   auto &list = builder.list;
   auto &router = builder.router;
   const auto models = sceneTemplates();
-  const float width = std::min(360.0f, std::max(220.0f, viewport.width - 32.0f));
-  const UiRect panel{viewport.x + (viewport.width - width) * .5f, viewport.y + 48.0f, width,
-                     56.0f + static_cast<float>(models.size()) * 78.0f};
-  list.addRect(panel, theme.color.surface, 6);
+  // Cartões em grade: ícone e família do cenário, o que ele entrega e o que
+  // será criado (objetos, componentes e vistas reais do modelo).
+  struct Look { const char *id; UiIcon icon; const char *family; };
+  static constexpr Look looks[]{
+      {"referencia", UiIcon::LightingSceneLighting, "Ambiente"},
+      {"manequim_ik", UiIcon::ComponentIkTwoBone, "Animação · IK"},
+      {"quadrupede", UiIcon::ComponentGrounder, "Animação · apoio"},
+      {"braco_mecanico", UiIcon::ComponentIkChain, "Animação · cadeia"},
+      {"interacao", UiIcon::ComponentInteractionSystem, "Interação"},
+      {"carregar_caixa", UiIcon::ComponentInteractionCarry, "Interação · duas mãos"},
+      {"personagem_jogavel", UiIcon::ComponentCharacter, "Locomoção"}};
+  const auto look = [&](const SceneTemplate &model) {
+    for (const auto &l : looks) if (std::string_view(l.id) == model.id) return l;
+    return Look{model.id, UiIcon::SceneObjectAdd, "Cena"};
+  };
+  const float width = std::min(680.0f, std::max(240.0f, viewport.width - 24.0f));
+  const u32 columns = width >= 480.0f ? 2u : 1u;
+  const float headerHeight = 50.0f, gap = 8.0f;
+  // Entre a barra de ferramentas da vista (56 px, em cima) e a barra de
+  // navegacao (64 px, embaixo): paginas de ate tres linhas de cartoes.
+  const float top = 60.0f;
+  const float available = std::max(160.0f, viewport.height - top - 64.0f - 24.0f - headerHeight);
+  const u32 maxRows = std::clamp(static_cast<u32>((available + gap) / (100.0f + gap)), 1u, 3u);
+  const u32 perPage = columns * maxRows;
+  const u32 pages = (static_cast<u32>(models.size()) + perPage - 1) / perPage;
+  const u32 page = std::min(builder.state.templatePage, pages - 1);
+  const u32 first = page * perPage, last = std::min<u32>(static_cast<u32>(models.size()), first + perPage);
+  const u32 rows = (last - first + columns - 1) / columns;
+  const float cardHeight = std::clamp((available - gap * static_cast<float>(maxRows)) / static_cast<float>(maxRows), 92.0f, 124.0f);
+  const UiRect panel{viewport.x + (viewport.width - width) * .5f, viewport.y + top, width,
+                     24.0f + headerHeight + static_cast<float>(rows) * (cardHeight + gap)};
+  list.addRect(panel, withAlpha(theme.color.surface, .97f), 8);
   router.addBlocker(panel);
   auto content = deflate(panel, UiInsets::all(12));
-  auto header = takeTop(content, 26);
-  const auto close = takeRight(header, 28);
-  builder.label(close, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
-  router.addRegion(close, widgetId(EditorWidget::SceneTemplateClose));
-  builder.label(header, "Modelo de cena", theme.color.text, theme.type.cardName);
-  for (u32 index = 0; index < models.size(); ++index) {
-    auto row = takeTop(content, 78);
-    const auto card = deflate(row, UiInsets::symmetric(0, 3));
+  auto header = takeTop(content, headerHeight);
+  const auto close = takeRight(header, 40);
+  const UiRect closeButton{close.x + 4, close.y + 4, 32, 32};
+  list.addRect(closeButton, theme.color.raised, theme.radius.control);
+  builder.label(closeButton, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
+  router.addRegion(closeButton, widgetId(EditorWidget::SceneTemplateClose), theme.touch.minimumTarget);
+  if (pages > 1) {
+    // Paginas: anterior, posicao e proxima, antes do fechar.
+    const auto next = takeRight(header, 40), position = takeRight(header, 44), previous = takeRight(header, 40);
+    const UiRect nextButton{next.x + 4, next.y + 4, 32, 32}, previousButton{previous.x + 4, previous.y + 4, 32, 32};
+    list.addRect(previousButton, theme.color.raised, theme.radius.control);
+    list.addImage(centred(previousButton, 18, 18), static_cast<UiImageId>(UiIcon::UiChevronLeft), page > 0 ? theme.color.text : theme.color.textFaint);
+    list.addRect(nextButton, theme.color.raised, theme.radius.control);
+    list.addImage(centred(nextButton, 18, 18), static_cast<UiImageId>(UiIcon::UiChevronRight), page + 1 < pages ? theme.color.text : theme.color.textFaint);
+    builder.label({position.x, position.y + 4, position.width, 32}, std::to_string(page + 1) + "/" + std::to_string(pages), theme.color.textDim, theme.type.caption, UiAlign::Center);
+    if (page > 0) router.addRegion(previousButton, widgetId(EditorWidget::SceneTemplatePrevious), theme.touch.minimumTarget);
+    if (page + 1 < pages) router.addRegion(nextButton, widgetId(EditorWidget::SceneTemplateNext), theme.touch.minimumTarget);
+  }
+  const auto badge = takeLeft(header, 40);
+  list.addRect({badge.x, badge.y + 2, 36, 36}, withAlpha(theme.color.accent, .16f), theme.radius.control);
+  list.addImage(centred({badge.x, badge.y + 2, 36, 36}, 22, 22), static_cast<UiImageId>(UiIcon::SceneObjectAdd), theme.color.accent);
+  auto titles = deflate(header, UiInsets::symmetric(8, 0));
+  builder.label(takeTop(titles, 22), "Modelo de cena", theme.color.text, theme.type.cardName);
+  builder.label(titles, "Monta o cenário na cena aberta; um Desfazer remove tudo.", theme.color.textDim, theme.type.caption);
+  const float cardWidth = (content.width - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+  for (u32 index = first; index < last; ++index) {
+    const auto &model = models[index];
+    const auto l = look(model);
+    const u32 slot = index - first;
+    const float x = content.x + static_cast<float>(slot % columns) * (cardWidth + gap);
+    const float y = content.y + 4 + static_cast<float>(slot / columns) * (cardHeight + gap);
+    const UiRect card{x, y, cardWidth, cardHeight};
     list.addRect(card, theme.color.raised, theme.radius.control);
-    auto inner = deflate(card, UiInsets::all(8));
-    builder.label(takeTop(inner, 20), models[index].name, theme.color.text, theme.type.caption);
-    for (const auto &line : wrapText(list, models[index].summary, inner.width, theme.type.caption)) {
-      builder.label(takeTop(inner, 20), line, theme.color.textMuted, theme.type.caption);
-      if (inner.height <= 0) break;
+    list.addRect({card.x, card.y + 10, 3, card.height - 20}, theme.color.accent);
+    auto inner = deflate(card, UiInsets{14, 10, 10, 8});
+    auto top = takeTop(inner, 38);
+    const auto tile = takeLeft(top, 38);
+    list.addRect(tile, withAlpha(theme.color.accent, .14f), theme.radius.control);
+    list.addImage(centred(tile, 24, 24), static_cast<UiImageId>(l.icon), theme.color.accent);
+    auto names = deflate(top, UiInsets::symmetric(8, 0));
+    builder.label(takeTop(names, 20), model.name, theme.color.text, theme.type.body);
+    builder.label(names, l.family, theme.color.accent, theme.type.caption);
+    // Contagem do que nasce: rodape quando cabe; senao, o resumo tem prioridade.
+    if (cardHeight >= 112.0f) {
+      const auto footer = takeBottom(inner, 18);
+      const std::string counts = std::to_string(model.nodes.size()) + " objetos · " + std::to_string(model.components.size()) +
+          " componentes · " + std::to_string(model.views.size()) + (model.views.size() == 1 ? " vista" : " vistas");
+      builder.label(footer, counts, theme.color.textFaint, theme.type.caption);
     }
+    list.pushClip(inner);
+    for (const auto &line : wrapText(list, model.summary, inner.width, theme.type.caption)) {
+      if (inner.height < 16) break;
+      builder.label(takeTop(inner, 17), line, theme.color.textMuted, theme.type.caption);
+    }
+    list.popClip();
     router.addRegion(card, widgetId(EditorWidget::SceneTemplateRowBase) + index);
   }
 }
@@ -10528,7 +10596,7 @@ void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layou
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
     const auto *controlled=state.document?state.document->find(state.selection):nullptr;
     const bool hasSecondary=!state.playSecondaryActionLabel.empty();
-    const bool showJump=hasSecondary?state.playHasCharacter:
+    const bool showJump=hasSecondary||state.playHasCharacter?state.playHasCharacter:
         (controlled&&characterComponent(*controlled)&&characterComponent(*controlled)->jumpSpeed>0);
     if(showJump) {
       const UiRect jump{layout.viewport.x+layout.viewport.width-(hasSecondary?208.0f:108.0f),layout.viewport.y+layout.viewport.height-76,92,56};
@@ -10543,6 +10611,14 @@ void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layou
       if(!state.playPaused) router.addRegion(action,widgetId(EditorWidget::PlaySecondaryAction),theme.touch.minimumTarget);
     }
     if(debug)buildPlayDebugLines(builder);
+    if(state.playStickActive&&state.playStickRadius>0) {
+      // Joystick flutuante: aparece onde o dedo pousou e segue o arrasto.
+      const float r=state.playStickRadius,kr=std::max(18.0f,r*.42f);
+      const UiRect base{layout.viewport.x+state.playStickOrigin[0]-r,layout.viewport.y+state.playStickOrigin[1]-r,r*2,r*2};
+      const UiRect knob{layout.viewport.x+state.playStickKnob[0]-kr,layout.viewport.y+state.playStickKnob[1]-kr,kr*2,kr*2};
+      list.addRect(base,withAlpha(theme.color.surface,.38f),r);
+      list.addRect(knob,withAlpha(theme.color.accent,.88f),kr);
+    }
     if(state.playFirstPerson) {
       const float cx=layout.viewport.x+layout.viewport.width*.5f,cy=layout.viewport.y+layout.viewport.height*.5f;
       list.addRect({cx-1,cy-9,2,18},theme.color.accent);

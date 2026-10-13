@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -22,7 +23,7 @@ public:
   const std::vector<Diagnostic> &diagnostics() const {return diagnostics_;}
   void reset() {
     limitRest_.clear();cache_.clear();diagnostics_.clear();candidates_.clear();knownRevision_=0;knownWorld_=0;
-    impulses_.clear();springs_.clear();tilts_.clear();ampRest_.clear();interactions_.clear();events_.clear();lastTime_=-1;footLocks_.clear();
+    impulses_.clear();autoStarted_.clear();springs_.clear();tilts_.clear();ampRest_.clear();interactions_.clear();holds_.clear();events_.clear();lastTime_=-1;footLocks_.clear();
   }
 
   bool advance(GameWorld &world,const GroundQuery &ground={}) {
@@ -58,6 +59,9 @@ public:
     grounderBodies(world,ground,touched);
     each(scene::FullBodyIk::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::FullBodyIk&>(v);if(c.enabled&&c.weight>0)fullBody(world,id,c,touched);});
     each(scene::FabrikRoot::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::FabrikRoot&>(v);if(c.enabled&&c.weight>0)fabrikRoot(world,id,c,touched);});
+    // Carregar: o objeto sobe ao ponto de carregar e o corpo agacha/inclina
+    // antes dos membros e pes, para o apoio dobrar os joelhos.
+    carry(world,touched);
     std::vector<std::pair<float,ObjectId>> limbs;
     for(const auto id:candidates_) {
       const auto *o=world.graph().find(id);if(!o||!world.graph().activeInHierarchy(id))continue;
@@ -76,6 +80,14 @@ public:
       if(const auto *c=static_cast<const scene::FootGrounding*>(o->components.find(scene::FootGrounding::descriptor));c&&c->enabled&&c->weight>0)
         grounding(world,id,*c,ground,touched);
     }
+    // Interacoes sem script: comecam uma vez por Play.
+    each(scene::InteractionSystem::descriptor,[&](ObjectId id,const scene::ComponentValue &v){
+      const auto &c=static_cast<const scene::InteractionSystem&>(v);
+      if(!c.enabled||!c.autoEffector||!c.autoObject||autoStarted_.count(id))return;
+      autoStarted_.insert(id);bool started=false;
+      interactionStart(world,id,static_cast<ObjectId>(c.autoEffector),static_cast<ObjectId>(c.autoObject),started);
+      if(c.autoSecond)interactionStart(world,id,static_cast<ObjectId>(c.autoSecond),static_cast<ObjectId>(c.autoObject),started);
+    });
     interactions(world,touched);
     each(scene::HandPoser::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::HandPoser&>(v);if(c.enabled&&c.weight>0)poser(world,id,c,touched);});
     each(scene::AimIk::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::AimIk&>(v);if(c.enabled&&c.weight>0)aim(world,id,c,touched);});
@@ -296,12 +308,23 @@ private:
       if(!ground) {diagnostics_.push_back({id,Issue::NoGround});continue;}
       const ObjectId pelvis=static_cast<ObjectId>(g->pelvis);
       if(!pelvis||!world.graph().find(pelvis)) {diagnostics_.push_back({id,Issue::MissingTarget});continue;}
+      // A pelve volta a pose animada ANTES de medir os pes; medir com a descida
+      // do quadro anterior concluiria que nao precisa descer e a pelve
+      // alternaria entre quadros.
+      beginBone(world,pelvis,touched);
       // Correcao de cada pe (negativa = o chao esta abaixo do pe).
       std::vector<ObjectId> subtree;world.graph().collectSubtree(id,subtree);float lowest=0;bool any=false;
       for(const auto foot:subtree) {
         const auto *f=world.graph().find(foot);if(!f)continue;
         const auto *fg=static_cast<const scene::FootGrounding*>(f->components.find(scene::FootGrounding::descriptor));
         if(!fg||!fg->enabled)continue;
+        // Mede o pe na pose animada do quadro: a perna ainda guarda o IK do
+        // quadro anterior, e medir por ela faria a pelve alternar entre descer
+        // e nao descer a cada quadro.
+        if(const auto *shin=world.graph().find(f->parent);shin&&shin->id!=world.graph().root()) {
+          beginBone(world,shin->id,touched);
+          if(shin->parent!=world.graph().root()&&world.graph().find(shin->parent))beginBone(world,shin->parent,touched);
+        }
         float m[16];if(!worldMatrix(world.graph(),foot,m))continue;
         const float origin[3]{m[12],m[13]+fg->rayHeight,m[14]},direction[3]{0,-(fg->rayHeight+fg->rayDistance),0};
         float point[3],normal[3];if(!ground(origin,direction,id,point,normal))continue;
@@ -463,6 +486,7 @@ public:
     for(auto it=interactions_.begin();it!=interactions_.end();++it)
       if(it->system==system&&it->effector==effector) {dropHeld(world,*it);interactions_.erase(it);break;}
     Interaction entry;entry.system=system;entry.effector=effector;entry.object=object;entry.originalParent=g.find(object)->parent;
+    for(const auto &other:interactions_)entry.second=entry.second||(other.system==system&&other.object==object&&other.effector!=effector&&other.phase<2);
     interactions_.push_back(entry);started=true;return WorldStatus::Ok;
   }
   WorldStatus interactionStop(GameWorld &world,ObjectId system,ObjectId effector) {
@@ -471,6 +495,10 @@ public:
     for(auto it=interactions_.begin();it!=interactions_.end();++it) {
       if(it->system!=system||it->effector!=effector)continue;
       dropHeld(world,*it);
+      // Carregando com as duas maos: larga quando nenhuma mao segura mais.
+      const ObjectId object=it->object;bool holding=false;
+      for(const auto &other:interactions_)holding=holding||(&other!=&*it&&other.system==system&&other.object==object&&other.phase<2);
+      if(!holding)endHold(world,system,object);
       if(it->phase==3) {events_.push_back({system,"released",effector,it->object});interactions_.erase(it);}
       else if(it->phase<2) {it->phase=2;it->time=0;it->releaseFrom=it->weight;}
       return WorldStatus::Ok;
@@ -487,9 +515,120 @@ private:
   // Objeto com corpo fisico: em vez de mudar de pai, vira cinematico e segue a
   // mao pela pose relativa capturada na pegada (physical); volta ao movimento
   // original ao soltar.
-  struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0,originalMotion=2;float time=0,weight=0,releaseFrom=1;bool held=false,physical=false;float offset[16]{};};
+  struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0,originalMotion=2;float time=0,weight=0,releaseFrom=1;bool held=false,physical=false,second=false;float offset[16]{};};
+  // Objeto carregado (Ponto de carregar): filho do personagem, sobe da pose
+  // da pegada ate o ponto; as maos seguem presas as pegadas.
+  struct Hold {ObjectId system=0,object=0,originalParent=0;u32 originalMotion=2;float time=0;bool physical=false;Transform start;};
+  std::vector<Hold> holds_;
+  void beginHold(GameWorld &world,ObjectId system,ObjectId effector,ObjectId object) {
+    for(const auto &h:holds_)if(h.system==system&&h.object==object)return;
+    Hold h;h.system=system;h.object=object;h.originalParent=world.graph().find(object)->parent;
+    float systemWorld[16],objectWorld[16];
+    if(!worldMatrix(world.graph(),system,systemWorld)||!worldMatrix(world.graph(),object,objectWorld)||!localTransformForWorld(objectWorld,systemWorld,h.start)) {diagnostics_.push_back({object,Issue::InvalidPose});return;}
+    // A troca de pai e enfileirada (vale no fim do quadro): h.start ja e a
+    // pose relativa ao personagem, aplicada so depois que o pai mudou.
+    const auto status=world.setParent(world.handle(object),world.handle(system),std::numeric_limits<u32>::max(),ReparentPosePolicy::KeepWorld);
+    if(status==WorldStatus::Ok){}
+    else if(status==WorldStatus::TransformOwnedByPhysics&&mover_) {
+      const auto body=world.findComponent(world.handle(object),"astra.physics.body");scene::ComponentPropertyValue motion;
+      if(world.getProperty(body,"motion",motion)!=WorldStatus::Ok||!std::holds_alternative<u32>(motion)||
+         world.setProperty(body,"motion",scene::ComponentPropertyValue{u32{1}})!=WorldStatus::Ok) {diagnostics_.push_back({object,Issue::NotInteractable});return;}
+      h.originalMotion=std::get<u32>(motion);h.physical=true;
+    } else {diagnostics_.push_back({object,Issue::NotInteractable});return;}
+    holds_.push_back(h);events_.push_back({system,"picked",effector,object});
+  }
+  void endHold(GameWorld &world,ObjectId system,ObjectId object) {
+    for(auto it=holds_.begin();it!=holds_.end();++it) {
+      if(it->system!=system||it->object!=object)continue;
+      if(it->physical) {
+        const auto body=world.findComponent(world.handle(object),"astra.physics.body");
+        if(world.setProperty(body,"motion",scene::ComponentPropertyValue{it->originalMotion})!=WorldStatus::Ok)diagnostics_.push_back({object,Issue::InvalidPose});
+      } else {
+        const auto parent=world.graph().find(it->originalParent)?it->originalParent:world.graph().root();
+        if(world.setParent(world.handle(object),world.handle(parent),std::numeric_limits<u32>::max(),ReparentPosePolicy::KeepWorld)!=WorldStatus::Ok)diagnostics_.push_back({object,Issue::InvalidPose});
+      }
+      holds_.erase(it);return;
+    }
+  }
+  // Ponto da pegada desta mao (segunda mao usa a pegada dela, se houver).
+  bool gripPosition(GameWorld &world,const Interaction &e,const scene::InteractionObject &object,float out[3]) {
+    const u64 chosen=e.second&&object.secondGrip?object.secondGrip:object.grip;
+    const ObjectId gripId=chosen&&world.graph().find(static_cast<ObjectId>(chosen))?static_cast<ObjectId>(chosen):e.object;
+    float m[16];if(!worldMatrix(world.graph(),gripId,m))return false;
+    out[0]=m[12];out[1]=m[13];out[2]=m[14];return true;
+  }
+  void carry(GameWorld &world,std::map<ObjectId,bool> &touched) {
+    // 1) Objetos carregados sobem ao ponto de carregar (pose do personagem).
+    for(auto it=holds_.begin();it!=holds_.end();) {
+      const auto *system=component<scene::InteractionSystem>(world,it->system);
+      const auto *object=component<scene::InteractionObject>(world,it->object);
+      if(!system||!object) {it=holds_.erase(it);continue;}
+      if(!it->physical&&world.graph().find(it->object)->parent!=it->system) {++it;continue;}
+      it->time+=dt_*system->speed;
+      const float w=smooth(it->time/std::max(.01f,object->liftTime));
+      Transform local=it->start,hold;float systemWorld[16],holdWorld[16];
+      const ObjectId point=static_cast<ObjectId>(object->holdPoint);
+      const bool frame=worldMatrix(world.graph(),it->system,systemWorld);
+      if(frame&&point&&world.graph().find(point)&&worldMatrix(world.graph(),point,holdWorld)&&localTransformForWorld(holdWorld,systemWorld,hold))
+        for(u32 k=0;k<3;++k)local.position[k]=it->start.position[k]+(hold.position[k]-it->start.position[k])*w;
+      if(it->physical) {
+        float m[16],desired[16];transformMatrix(local,m);
+        if(frame) {
+          multiplyMatrix(systemWorld,m,desired);
+          Transform pose;const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};float q[4];
+          if(localTransformForWorld(desired,identity,pose)) {transformRotationQuaternion(pose,q);
+            const float values[7]{pose.position[0],pose.position[1],pose.position[2],q[0],q[1],q[2],q[3]};
+            if(!mover_(it->object,values))diagnostics_.push_back({it->object,Issue::InvalidPose});}
+        }
+      } else if(world.setLocalTransform(world.handle(it->object),local)!=WorldStatus::Ok)diagnostics_.push_back({it->object,Issue::InvalidPose});
+      ++it;
+    }
+    // 2) Corpo: o tronco inclina para as pegadas e a pelve desce o que ainda
+    // falta ao braco (limitado por Agachar ate).
+    std::map<ObjectId,std::vector<std::pair<ObjectId,std::array<float,4>>>> bySystem;
+    for(const auto &e:interactions_) {
+      if(e.weight<=0||e.held)continue;
+      const auto *object=component<scene::InteractionObject>(world,e.object);float target[3];
+      if(object&&gripPosition(world,e,*object,target))bySystem[e.system].push_back({e.effector,{target[0],target[1],target[2],e.weight}});
+    }
+    for(auto &[id,effectors]:bySystem) {
+      const auto *c=component<scene::InteractionSystem>(world,id);if(!c||!c->enabled)continue;
+      const ObjectId pelvis=static_cast<ObjectId>(c->pelvis),chest=static_cast<ObjectId>(c->chest);
+      float weight=0;for(const auto &[tip,t]:effectors)weight=std::max(weight,t[3]);
+      if(pelvis&&world.graph().find(pelvis))beginBone(world,pelvis,touched);
+      if(chest&&world.graph().find(chest)&&c->lean>0) {
+        beginBone(world,chest,touched);
+        float chestWorld[16],tips[3]{},goals[3]{};
+        if(worldMatrix(world.graph(),chest,chestWorld)) {
+          for(const auto &[tip,t]:effectors){float m[16];if(worldMatrix(world.graph(),tip,m))for(u32 k=0;k<3;++k){tips[k]+=m[12+k];goals[k]+=t[k];}}
+          const float n=float(effectors.size());
+          const float from[3]{tips[0]/n-chestWorld[12],tips[1]/n-chestWorld[13],tips[2]/n-chestWorld[14]};
+          const float to[3]{goals[0]/n-chestWorld[12],goals[1]/n-chestWorld[13],goals[2]/n-chestWorld[14]};
+          float r[9];ikWeightedFromTo(from,to,c->lean*weight,60,r);
+          if(!rotateBone(world,chest,r))diagnostics_.push_back({id,Issue::InvalidPose});
+        }
+      }
+      if(!pelvis||!world.graph().find(pelvis)||c->crouch<=0)continue;
+      float down=0;
+      for(const auto &[tip,t]:effectors) {
+        std::vector<ObjectId> member;
+        if(!ancestors(world.graph(),tip,static_cast<u32>(c->limbBones),member))continue;
+        member.push_back(tip);float reach=0,root[16];
+        if(!worldMatrix(world.graph(),member.front(),root))continue;
+        for(usize k=0;k+1<member.size();++k){float a[16],b[16];if(worldMatrix(world.graph(),member[k],a)&&worldMatrix(world.graph(),member[k+1],b)){const float d[3]{b[12]-a[12],b[13]-a[13],b[14]-a[14]};reach+=length3(d);}}
+        // Desce ate o alvo ficar ao alcance (so a componente vertical).
+        const float dx=t[0]-root[12],dz=t[2]-root[14],dy=t[1]-root[13],flat=std::sqrt(dx*dx+dz*dz);
+        reach*=.98f;if(flat>=reach||dy>=0)continue;
+        const float need=-dy-std::sqrt(std::max(0.f,reach*reach-flat*flat));
+        down=std::max(down,need*t[3]);
+      }
+      down=std::min(down,c->crouch);
+      if(down>1e-5f) {float m[16];if(worldMatrix(world.graph(),pelvis,m)){m[13]-=down;if(!writeWorld(world,pelvis,m))diagnostics_.push_back({id,Issue::InvalidPose});}}
+    }
+  }
   BodyMover mover_;
   std::vector<Impulse> impulses_;
+  std::set<ObjectId> autoStarted_;
   struct FootLock {bool locked=false;float point[3]{};};
   std::map<ObjectId,FootLock> footLocks_;
   std::map<ObjectId,Spring> springs_;
@@ -787,19 +926,21 @@ private:
       }
       if(e.held&&e.physical)followHand(world,e);
       if(e.weight>0&&!e.held) {
-        const ObjectId gripId=object->grip&&world.graph().find(static_cast<ObjectId>(object->grip))?static_cast<ObjectId>(object->grip):e.object;
-        float grip[16];
-        if(worldMatrix(world.graph(),gripId,grip)) {
-          const float target[3]{grip[12],grip[13],grip[14]};
-          solveMember(world,e.effector,static_cast<u32>(system->limbBones),target,e.weight,touched);
-        }
+        float target[3];
+        if(gripPosition(world,e,*object,target))solveMember(world,e.effector,static_cast<u32>(system->limbBones),target,e.weight,touched);
       }
       if(object->handPose&&e.weight>0)poseHierarchy(world,e.effector,static_cast<ObjectId>(object->handPose),e.weight,false,touched);
       // A pegada acontece depois da mao chegar neste quadro: o objeto e
       // capturado na pose final da mao, sem deslocamento residual.
       if(reachedNow) {
         events_.push_back({e.system,"reached",e.effector,e.object});
-        if(object->pickUp) {
+        const ObjectId point=static_cast<ObjectId>(object->holdPoint);
+        if(point&&world.graph().find(point)) {
+          // Carregar: as maos ficam nas pegadas; o objeto sobe quando todas chegaram.
+          e.phase=1;bool all=true;
+          for(const auto &other:interactions_)if(other.system==e.system&&other.object==e.object&&other.phase==0)all=false;
+          if(all)beginHold(world,e.system,e.effector,e.object);
+        } else if(object->pickUp) {
           const auto status=world.setParent(world.handle(e.object),world.handle(e.effector),std::numeric_limits<u32>::max(),ReparentPosePolicy::KeepWorld);
           if(status==WorldStatus::Ok) {e.held=true;e.phase=2;e.time=0;e.releaseFrom=1;}
           else if(status==WorldStatus::TransformOwnedByPhysics&&mover_&&carryPhysical(world,e)) {e.held=true;e.phase=2;e.time=0;e.releaseFrom=1;}

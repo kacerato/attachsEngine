@@ -1043,6 +1043,9 @@ public:
   // Modelos de cena (editor/editor_scene_template.h): monta o cenário do modelo
   // `index` na cena aberta, com as vistas salvas que vêm com ele, num passo só.
   bool createSceneTemplate(u32 index);
+  // Cena de exemplo do modelo "Carregar com as duas maos" (editor_carry_setup.cpp):
+  // mesa, caixa com duas pegadas e ponto de carregar sobre componentes universais.
+  bool addCarrySetupInTransaction(EditorEntityId character,EditorEntityId group,std::string &error);
   // Slot do cubo autoral na biblioteca, ou zero quando a biblioteca não o traz.
   u32 boxAssetSlot() const;
   // Configurações de renderização do projeto (painel Qualidade). O shell entrega

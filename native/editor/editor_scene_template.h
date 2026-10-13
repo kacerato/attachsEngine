@@ -12,70 +12,12 @@
 // O modelo é DADO: uma lista de nós com pose, e as vistas salvas que vêm com
 // ele. Nada aqui conhece Vulkan, arquivo ou aparelho, então o mesmo modelo vale
 // em qualquer projeto e é conferível em teste.
-#include "core/base.h"
-
-#include <span>
+#include "editor/editor_scene_template_types.h"
+#include "editor/editor_animation_templates.h"
+#include "editor/editor_document.h"
+#include <functional>
 
 namespace ae::editor {
-
-// 0 nenhuma, e os três tipos do componente Luz na ordem do contrato da cena.
-enum class SceneTemplateLight : u8 { None = 0, Directional = 1, Point = 2, Spot = 3 };
-
-struct SceneTemplateNode final {
-  const char *name;
-  // Índice do nó pai DENTRO do modelo; -1 pendura na raiz do modelo.
-  i32 parent;
-  float position[3];
-  float rotationDegrees[3];
-  float scale[3];
-  // Instancia o cubo autoral da biblioteca. Um modelo de referência precisa
-  // funcionar em projeto vazio, e o cubo é a única geometria que sempre existe.
-  bool mesh;
-  SceneTemplateLight light;
-  // Lux para direcional, lúmen para pontual/spot — as unidades fotométricas do
-  // componente Luz.
-  float lightIntensity;
-  float lightRange;
-  float color[3];
-  // Sombra suave nas luzes locais do modelo: o cenário de referência existe
-  // para mostrar sombra de contato no interior, e luz sem sombra atravessa a mesa.
-  bool shadows;
-};
-
-// Enquadramento que nasce com o modelo, para comparar as mesmas vistas depois
-// de cada mudança visual.
-struct SceneTemplateView final {
-  const char *name;
-  float target[3];
-  float distance, yaw, pitch;
-};
-
-// Volume de Ambiente que nasce com o modelo. Luz fotométrica exige exposição
-// coerente: o sol de 100.000 lux e a lâmpada de 1.200 lúmen diferem uns 12 EV,
-// como na vida real, e uma exposição só estoura um lado ou apaga o outro. É o
-// que o Volume da Unity (HDRP: Exposure por volume) resolve, e é o mesmo
-// componente Ambiente, com caixa e mistura, que resolve aqui.
-struct SceneTemplateVolume final {
-  const char *name;
-  i32 parent; // índice do nó pai no modelo; -1 pendura na raiz
-  float position[3];
-  bool box;   // falso = global
-  float size[3];
-  float exposureEv;
-  float priority;
-  float blendDistance;
-  // Difuso e reflexo indiretos (Indirect Lighting Controller). Dentro de uma
-  // sala o céu não chega inteiro; sem sondas de luz, é este número que diz isso.
-  float indirectDiffuse;
-  float indirectSpecular;
-};
-
-struct SceneTemplate final {
-  const char *id, *name, *summary;
-  std::span<const SceneTemplateNode> nodes;
-  std::span<const SceneTemplateView> views;
-  std::span<const SceneTemplateVolume> volumes;
-};
 
 namespace detail {
 
@@ -157,10 +99,32 @@ inline constexpr SceneTemplate kTemplates[]{
     {"referencia", "Cenário de referência",
      "Interior fechado e exterior aberto na mesma cena, com escala humana, aberturas e vistas salvas.",
      kReferenceNodes, kReferenceViews, kReferenceVolumes},
+    {"manequim_ik", "Manequim com IK e apoio",
+     "Mão vai ao alvo, cabeça olha, pés apoiados (um sobre o bloco) e pelve ajustada. Mova os alvos e dê Play.",
+     kMannequinNodes, kMannequinViews, kAnimationDayExposure, kMannequinComponents},
+    {"quadrupede", "Quadrúpede com grounder",
+     "Quatro patas apoiadas na rampa, pelve ajustada e cauda com inércia.",
+     kQuadrupedNodes, kQuadrupedViews, kAnimationDayExposure, kQuadrupedComponents},
+    {"braco_mecanico", "Braço mecânico com IK de cadeia",
+     "Quatro segmentos resolvidos por FABRIK até o alvo, com limite de rotação na base.",
+     kArmNodes, kArmViews, kAnimationDayExposure, kArmComponents},
+    {"interacao", "Interação: pegar a caixa",
+     "Sem script: ao dar Play, a mão alcança a caixa e a pega.",
+     kInteractionNodes, kInteractionViews, kAnimationDayExposure, kInteractionComponents},
+    {"carregar_caixa", "Carregar com as duas mãos",
+     "Sem script: ao dar Play, agacha, pega a caixa com as duas mãos e a leva junto ao corpo.",
+     kCarryNodes, kCarryViews, kAnimationDayExposure, kCarryComponents, true},
+    {"personagem_jogavel", "Personagem jogável",
+     "Corpo visível, câmera seguidora, rampa, degraus e passagem baixa para testar a locomoção.",
+     kPlayableNodes, kPlayableViews, kAnimationDayExposure, kPlayableComponents},
 };
 
 } // namespace detail
 
 inline std::span<const SceneTemplate> sceneTemplates() { return detail::kTemplates; }
+
+// Liga os componentes do modelo aos nos criados (indices do modelo -> ids).
+bool applySceneTemplateComponents(const SceneTemplate &model,std::span<const EditorEntityId> created,const EditorDocument &document,
+                                  const std::function<bool(EditorEntityId,const EditorEntity &)> &apply);
 
 } // namespace ae::editor

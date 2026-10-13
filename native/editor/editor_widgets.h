@@ -21,6 +21,7 @@ enum class EditorWidget : u32 {
   TabGui = 0xDB000000u,
   GuiCanvasEdit = 0xDB000001u,
   CharacterConversionOpen=0xDB000010u,CharacterConversionApply,CharacterConversionBack,
+  SceneTemplatePrevious=0xDB000019u,SceneTemplateNext,
   MotorSetupOpen=0xDB000020u,MotorSetupApply,MotorSetupBack,MotorSetupPreserve,MotorSetupFit,MotorSetupConvex,
   MotorSetupDecompose,MotorBakeStart,MotorBakeCancel,MotorBakeBudgetLow,MotorBakeBudgetMedium,MotorBakeBudgetHigh,
   MotorBakePrevious,MotorBakeNext,MotorBakeSourcesOpen,MotorBakeSourcesDone,MotorBakeSourcesObject,MotorBakeSourcesHierarchy,

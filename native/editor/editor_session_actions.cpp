@@ -2418,10 +2418,10 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(state_.draggingEntity && event.pointerId!=hierarchyPointer_) return true;
   if(isPlaying() && routing.target==UiPointerTarget::Viewport) {
     if(event.device==UiPointerDevice::Mouse) return false;
-    const auto *controlled=document_.find(state_.selection);
     const auto view=sceneCameraPose();const auto *cameraEntity=document_.find(view.entity);
     const bool canLook=cameraEntity&&cameraLook(*cameraEntity);
-    if((!state_.playHasScripts && (!controlled || !characterComponent(*controlled)) && !canLook) || state_.playPaused) return true;
+    const bool canMove=playScene_.motorReceiver(view.entity,state_.selection)!=0;
+    if((!state_.playHasScripts && !canMove && !canLook) || state_.playPaused) return true;
     const float x=event.position.x-layout_.viewport.x,y=event.position.y-layout_.viewport.y;
     if(event.phase==UiPointerPhase::Down) playTouches_.pointerDown(event.pointerId,x,y,layout_.viewport.width,layout_.viewport.height);
     else if(event.phase==UiPointerPhase::Move) playTouches_.pointerMove(event.pointerId,x,y,layout_.viewport.width,layout_.viewport.height);
@@ -2755,10 +2755,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateSceneTemplate)) {
-    state_.templatePanel=true;state_.creationMenu=false;return true;
+    state_.templatePanel=true;state_.templatePage=0;state_.creationMenu=false;return true;
   }
   if(state_.templatePanel && routing.tapped) {
     if(routing.widgetId==widgetId(EditorWidget::SceneTemplateClose)) {state_.templatePanel=false;return true;}
+    if(routing.widgetId==widgetId(EditorWidget::SceneTemplatePrevious)) {if(state_.templatePage)--state_.templatePage;return true;}
+    if(routing.widgetId==widgetId(EditorWidget::SceneTemplateNext)) {++state_.templatePage;return true;}
     if(routing.widgetId>=widgetId(EditorWidget::SceneTemplateRowBase) &&
        routing.widgetId<widgetId(EditorWidget::SceneTemplateRowBase)+sceneTemplates().size()) {
       createSceneTemplate(routing.widgetId-widgetId(EditorWidget::SceneTemplateRowBase));

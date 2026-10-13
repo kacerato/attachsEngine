@@ -102,23 +102,37 @@ public:
 // se o objeto passa para a mao ao ser alcancado.
 class InteractionObject final : public ComponentValue {
 public:
-  u64 grip=0,handPose=0;bool pickUp=false;float reachTime=.5f,releaseTime=.35f;
+  // Duas maos (Final IK 2.2, PickUp2Handed): a segunda mao vai a sua pegada;
+  // com Ponto de carregar, o objeto sobe ate ele e as maos ficam presas a ele.
+  u64 grip=0,handPose=0,secondGrip=0,holdPoint=0;bool pickUp=false;float reachTime=.5f,releaseTime=.35f,liftTime=.4f;
   AE_FX_VALUE(InteractionObject)
-  bool valid() const override {return ikReference(grip)&&ikReference(handPose)&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<grip<<' '<<handPose<<' '<<pickUp<<' '<<reachTime<<' '<<releaseTime;}
-  bool read(std::istream &in,u32 version) override {return version==1&&(in>>grip>>handPose>>pickUp>>reachTime>>releaseTime)&&valid();}
+  bool valid() const override {return ikReference(grip)&&ikReference(handPose)&&ikReference(secondGrip)&&ikReference(holdPoint)&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<grip<<' '<<handPose<<' '<<pickUp<<' '<<reachTime<<' '<<releaseTime<<' '<<secondGrip<<' '<<holdPoint<<' '<<liftTime;}
+  bool read(std::istream &in,u32 version) override {
+    if(version<1||version>2||!(in>>grip>>handPose>>pickUp>>reachTime>>releaseTime))return false;
+    secondGrip=holdPoint=0;liftTime=.4f;
+    if(version>=2&&!(in>>secondGrip>>holdPoint>>liftTime))return false;
+    return valid();
+  }
 };
 // Sistema de interacao: no personagem. `start(mao, objeto)` leva a mao ate o
 // objeto com IK de dois ossos; `stop(mao)` solta (e larga o objeto pego).
 class InteractionSystem final : public ComponentValue {
 public:
-  bool enabled=true;float speed=1,limbBones=2;
+  // Inicio sem script: com mao e objeto escolhidos, a interacao comeca no Play.
+  // Corpo: com Pelve, o corpo agacha quando a pegada fica alem do braco; com
+  // Peito, o tronco se inclina para ela. Segunda mao ao iniciar: duas maos.
+  u64 autoEffector=0,autoObject=0,autoSecond=0,pelvis=0,chest=0;bool enabled=true;float speed=1,limbBones=2,crouch=.5f,lean=.5f;
   AE_FX_VALUE(InteractionSystem)
-  bool valid() const override {return ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<enabled<<' '<<speed<<' '<<limbBones;}
+  bool valid() const override {return ikReference(autoEffector)&&ikReference(autoObject)&&ikReference(autoSecond)&&ikReference(pelvis)&&ikReference(chest)&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<enabled<<' '<<speed<<' '<<limbBones<<' '<<autoEffector<<' '<<autoObject<<' '<<autoSecond<<' '<<pelvis<<' '<<chest<<' '<<crouch<<' '<<lean;}
   bool read(std::istream &in,u32 version) override {
-    if(version<1||version>2||!(in>>enabled>>speed))return false;
-    limbBones=2;return (version==1||static_cast<bool>(in>>limbBones))&&valid();
+    if(version<1||version>4||!(in>>enabled>>speed))return false;
+    limbBones=2;autoEffector=autoObject=autoSecond=pelvis=chest=0;crouch=.5f;lean=.5f;
+    if(version>=2&&!(in>>limbBones))return false;
+    if(version>=3&&!(in>>autoEffector>>autoObject))return false;
+    if(version>=4&&!(in>>autoSecond>>pelvis>>chest>>crouch>>lean))return false;
+    return valid();
   }
 };
 // Corpo inteiro: ate quatro pontas com alvo; quando um alvo esta alem do
@@ -251,27 +265,39 @@ inline constexpr std::array<ComponentNumber,1> penetrationNumbers{{AE_FX_NUM(Pen
 inline constexpr std::array<ComponentBoolean,1> penetrationBooleans{{AE_FX_BOOL(PenetrationAvoidance,"enabled","Ativo",enabled,"Colisão")}};
 inline const ComponentType PenetrationAvoidance::descriptor{"astra.ik.penetration_avoidance",1,AE_FX_MAKE(PenetrationAvoidance),penetrationNumbers,penetrationBooleans};
 
-inline constexpr std::array<ComponentNumber,2> interactionObjectNumbers{{AE_FX_NUM(InteractionObject,"reach_time","Tempo para alcançar",reachTime,.05f,5,.01f,"Tempo","s"),
-  AE_FX_NUM(InteractionObject,"release_time","Tempo para soltar",releaseTime,.05f,5,.01f,"Tempo","s")}};
+inline constexpr std::array<ComponentNumber,3> interactionObjectNumbers{{AE_FX_NUM(InteractionObject,"reach_time","Tempo para alcançar",reachTime,.05f,5,.01f,"Tempo","s"),
+  AE_FX_NUM(InteractionObject,"release_time","Tempo para soltar",releaseTime,.05f,5,.01f,"Tempo","s"),
+  AE_FX_NUM(InteractionObject,"lift_time","Tempo para levantar",liftTime,.05f,5,.01f,"Carregar","s")}};
 inline constexpr std::array<ComponentBoolean,1> interactionObjectBooleans{{AE_FX_BOOL(InteractionObject,"pick_up","Pegar ao alcançar",pickUp,"Pegada")}};
-inline constexpr std::array<ComponentObjectReference,2> interactionObjectReferences{{
+inline constexpr std::array<ComponentObjectReference,4> interactionObjectReferences{{
   AE_FX_REF(InteractionObject,"grip","Ponto de pegada",grip,Descendant,"O próprio objeto","Pegada"),
-  AE_FX_REF(InteractionObject,"hand_pose","Pose da mão",handPose,Descendant,"Sem pose","Pegada")}};
-inline const ComponentType InteractionObject::descriptor{"astra.ik.interaction_object",1,AE_FX_MAKE(InteractionObject),interactionObjectNumbers,interactionObjectBooleans,{},nullptr,false,interactionObjectReferences};
+  AE_FX_REF(InteractionObject,"second_grip","Pegada da 2ª mão",secondGrip,Descendant,"Mesma pegada","Pegada"),
+  AE_FX_REF(InteractionObject,"hand_pose","Pose da mão",handPose,Descendant,"Sem pose","Pegada"),
+  AE_FX_REF(InteractionObject,"hold_point","Ponto de carregar",holdPoint,OtherNonDescendant,"Fica na mão","Carregar")}};
+inline const ComponentType InteractionObject::descriptor{"astra.ik.interaction_object",2,AE_FX_MAKE(InteractionObject),interactionObjectNumbers,interactionObjectBooleans,{},nullptr,false,interactionObjectReferences};
 
-inline constexpr std::array<ComponentNumber,2> interactionSystemNumbers{{AE_FX_NUM(InteractionSystem,"speed","Velocidade",speed,.1f,5,.05f,"Interação",""),
-  AE_FX_NUM(InteractionSystem,"limb_bones","Ossos do braço",limbBones,2,8,1,"Interação","ossos")}};
+inline constexpr std::array<ComponentNumber,4> interactionSystemNumbers{{AE_FX_NUM(InteractionSystem,"speed","Velocidade",speed,.1f,5,.05f,"Interação",""),
+  AE_FX_NUM(InteractionSystem,"limb_bones","Ossos do braço",limbBones,2,8,1,"Interação","ossos"),
+  AE_FX_NUM(InteractionSystem,"crouch","Agachar até",crouch,0,2,.01f,"Corpo","m"),
+  AE_FX_NUM(InteractionSystem,"lean","Inclinar o tronco",lean,0,1,.01f,"Corpo","")}};
 inline constexpr std::array<ComponentBoolean,1> interactionSystemBooleans{{AE_FX_BOOL(InteractionSystem,"enabled","Ativo",enabled,"Interação")}};
+inline constexpr std::array<ComponentObjectReference,5> interactionSystemReferences{{
+  AE_FX_REF(InteractionSystem,"auto_effector","Mão ao iniciar",autoEffector,Descendant,"Sem início automático","Início sem script"),
+  AE_FX_REF(InteractionSystem,"auto_object","Objeto ao iniciar",autoObject,OtherNonDescendant,"Sem objeto","Início sem script"),
+  AE_FX_REF(InteractionSystem,"auto_second","Segunda mão ao iniciar",autoSecond,Descendant,"Uma mão","Início sem script"),
+  AE_FX_REF(InteractionSystem,"pelvis","Pelve",pelvis,Descendant,"Sem agachar","Corpo"),
+  AE_FX_REF(InteractionSystem,"chest","Peito",chest,Descendant,"Sem inclinar","Corpo")}};
 inline constexpr std::array<ComponentParameter,2> interactionStartParameters{{{"effector","Mão",ComponentValueKind::Object},{"object","Objeto",ComponentValueKind::Object}}};
 inline constexpr std::array<ComponentParameter,1> interactionStopParameters{{{"effector","Mão",ComponentValueKind::Object}}};
 inline constexpr std::array<ComponentMethod,2> interactionSystemMethods{{
   {"start","Interagir","Leva a mão até o Objeto interagível; falso se a mão ou o objeto não servem",interactionStartParameters,ComponentValueKind::Boolean},
   {"stop","Soltar","Devolve a mão à animação e larga o objeto pego",interactionStopParameters}}};
 inline constexpr std::array<ComponentParameter,2> interactionEventPayload{{{"effector","Mão",ComponentValueKind::Object},{"object","Objeto",ComponentValueKind::Object}}};
-inline constexpr std::array<ComponentEvent,2> interactionSystemEvents{{
+inline constexpr std::array<ComponentEvent,3> interactionSystemEvents{{
   {"reached","Alcançou","A mão chegou ao ponto de pegada",interactionEventPayload},
+  {"picked","Levantou","A última mão chegou e o objeto sobe ao ponto de carregar",interactionEventPayload},
   {"released","Soltou","A mão voltou à animação",interactionEventPayload}}};
-inline const ComponentType InteractionSystem::descriptor{"astra.ik.interaction_system",2,AE_FX_MAKE(InteractionSystem),interactionSystemNumbers,interactionSystemBooleans,{},nullptr,false,{},{},{},{},{},{},interactionSystemMethods,interactionSystemEvents};
+inline const ComponentType InteractionSystem::descriptor{"astra.ik.interaction_system",4,AE_FX_MAKE(InteractionSystem),interactionSystemNumbers,interactionSystemBooleans,{},nullptr,false,interactionSystemReferences,{},{},{},{},{},interactionSystemMethods,interactionSystemEvents};
 
 inline constexpr std::array<ComponentNumber,5> fullBodyNumbers{{AE_FX_NUM(FullBodyIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
   AE_FX_NUM(FullBodyIk,"body_pull","Puxar o corpo",bodyPull,0,1,.01f,"Corpo",""),AE_FX_NUM(FullBodyIk,"max_body_offset","Deslocamento máximo da pelve",maxBodyOffset,0,3,.01f,"Corpo","m"),

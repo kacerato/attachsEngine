@@ -628,6 +628,8 @@ add_library(aether_editor STATIC
   editor/editor_studio_tools.cpp
   editor/editor_studio_bake.cpp
   editor/editor_studio_export.cpp
+  editor/editor_scene_template_components.cpp
+  editor/editor_carry_setup.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp

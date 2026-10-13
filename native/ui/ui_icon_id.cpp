@@ -113,6 +113,7 @@ constexpr const char *kNames[] = {
     "component/ik-offset",
     "component/ik-two-bone",
     "component/inertia",
+    "component/interaction-carry",
     "component/interaction-object",
     "component/interaction-system",
     "component/joint",

@@ -1324,6 +1324,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         AnimatorLimiteDeEventos = 33,
         InteracaoMaoAlcancou = 34,
         InteracaoMaoSoltou = 35,
+        InteracaoObjetoLevantado = 36,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -2456,6 +2457,13 @@ public readonly struct InteractionObject : IComponentFacade<InteractionObject>
         get => Component.GetFloat("release_time");
         set => Component.SetFloat("release_time", value);
     }
+    /// <summary>Tempo para levantar (s)</summary>
+    /// <remarks>Faixa válida: 0.05 a 5.</remarks>
+    public float LiftTime
+    {
+        get => Component.GetFloat("lift_time");
+        set => Component.SetFloat("lift_time", value);
+    }
     /// <summary>Pegar ao alcançar</summary>
     public bool PickUp
     {
@@ -2468,11 +2476,23 @@ public readonly struct InteractionObject : IComponentFacade<InteractionObject>
         get => Component.GetReference("grip");
         set => Component.SetReference("grip", value);
     }
+    /// <summary>Pegada da 2ª mão</summary>
+    public ObjectReference SecondGrip
+    {
+        get => Component.GetReference("second_grip");
+        set => Component.SetReference("second_grip", value);
+    }
     /// <summary>Pose da mão</summary>
     public ObjectReference HandPose
     {
         get => Component.GetReference("hand_pose");
         set => Component.SetReference("hand_pose", value);
+    }
+    /// <summary>Ponto de carregar</summary>
+    public ObjectReference HoldPoint
+    {
+        get => Component.GetReference("hold_point");
+        set => Component.SetReference("hold_point", value);
     }
 }
 
@@ -2507,11 +2527,55 @@ public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
         get => Component.GetFloat("limb_bones");
         set => Component.SetFloat("limb_bones", value);
     }
+    /// <summary>Agachar até (m)</summary>
+    /// <remarks>Faixa válida: 0 a 2.</remarks>
+    public float Crouch
+    {
+        get => Component.GetFloat("crouch");
+        set => Component.SetFloat("crouch", value);
+    }
+    /// <summary>Inclinar o tronco</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Lean
+    {
+        get => Component.GetFloat("lean");
+        set => Component.SetFloat("lean", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Mão ao iniciar</summary>
+    public ObjectReference AutoEffector
+    {
+        get => Component.GetReference("auto_effector");
+        set => Component.SetReference("auto_effector", value);
+    }
+    /// <summary>Objeto ao iniciar</summary>
+    public ObjectReference AutoObject
+    {
+        get => Component.GetReference("auto_object");
+        set => Component.SetReference("auto_object", value);
+    }
+    /// <summary>Segunda mão ao iniciar</summary>
+    public ObjectReference AutoSecond
+    {
+        get => Component.GetReference("auto_second");
+        set => Component.SetReference("auto_second", value);
+    }
+    /// <summary>Pelve</summary>
+    public ObjectReference Pelvis
+    {
+        get => Component.GetReference("pelvis");
+        set => Component.SetReference("pelvis", value);
+    }
+    /// <summary>Peito</summary>
+    public ObjectReference Chest
+    {
+        get => Component.GetReference("chest");
+        set => Component.SetReference("chest", value);
     }
     /// <summary>Interagir. Leva a mão até o Objeto interagível; falso se a mão ou o objeto não servem</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
@@ -2521,6 +2585,8 @@ public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
     public void Stop(ObjectReference effector) => Component.Invoke("stop", ComponentValue.Object(effector));
     /// <summary>Alcançou. A mão chegou ao ponto de pegada. Payload: Mão: objeto, Objeto: objeto</summary>
     public ComponentSubscription OnReached(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "reached", handler);
+    /// <summary>Levantou. A última mão chegou e o objeto sobe ao ponto de carregar. Payload: Mão: objeto, Objeto: objeto</summary>
+    public ComponentSubscription OnPicked(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "picked", handler);
     /// <summary>Soltou. A mão voltou à animação. Payload: Mão: objeto, Objeto: objeto</summary>
     public ComponentSubscription OnReleased(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "released", handler);
 }

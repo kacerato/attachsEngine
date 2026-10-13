@@ -261,6 +261,8 @@ struct EditorScreenState final {
   std::string inputCapturePrompt,inputCaptureFeedback;
   bool playHasScripts=false;
   bool playFirstPerson=false,playHasCharacter=false;
+  // Joystick flutuante do Play (relativo ao viewport): base, botão e raio.
+  bool playStickActive=false;float playStickOrigin[2]{},playStickKnob[2]{},playStickRadius=0;
   std::string playSecondaryActionLabel,playHudMessage;
   bool playPaused=false;
   bool playStepRequested=false;
@@ -557,6 +559,7 @@ struct EditorScreenState final {
   bool viewsPanel=false,viewNaming=false,viewRenaming=false;
   // Escolha do modelo de cena a montar.
   bool templatePanel=false;
+  u32 templatePage=0;
   // Painel Qualidade: o rascunho que o autor edita, se difere do aplicado, e o
   // que o renderer está fazendo de fato agora (resolução real e custo de GPU).
   bool qualityPanel=false,qualityDirty=false;

@@ -150,9 +150,9 @@ void EditorSession::preparePlay() {
   const auto view=resolveSceneCamera(document_);
   const auto *camera=document_.find(view.entity);
   state_.playFirstPerson=camera&&cameraLook(*camera);
-  state_.playHasCharacter=false;
-  for(auto *ancestor=camera;ancestor;ancestor=document_.find(ancestor->parent))
-    if(characterComponent(*ancestor)) {state_.playHasCharacter=true;break;}
+  // Mesmo receptor do motor: ancestral da câmera, alvo da câmera seguidora ou
+  // a seleção. Sem isso a cena com câmera seguidora não recebia o toque.
+  state_.playHasCharacter=EditorPlayScene::defaultMotorReceiver(document_,view.entity,state_.selection)!=0;
   playRequested_ = true;
   cancelPointers();
 }

@@ -138,6 +138,8 @@ bool EditorSession::extractPlayMap(std::vector<renderer::MapDrawState> &out,
   // mapa de ações do projeto. Pausado, o gameplay perde o foco: as ações leem
   // zero e nenhum botão fica preso ao retomar.
   const auto actions=playTouches_.consumeInput();
+  {const auto &stick=playTouches_.joystickState();state_.playStickActive=stick.active&&!state_.playPaused;
+   state_.playStickOrigin[0]=stick.originX;state_.playStickOrigin[1]=stick.originY;state_.playStickKnob[0]=stick.knobX;state_.playStickKnob[1]=stick.knobY;state_.playStickRadius=stick.radiusPixels;}
   if(!gameplayInputFocused()||!platformFocus)cancelPlayButtons();
   runtime::InputDeviceState device;
   device.moveX=actions.moveRight;device.moveY=actions.moveForward;
