@@ -12,4 +12,12 @@ Aparelho (Astra Dev code 51–54, projeto AnimatorFox):
   do aparelho: 481 quadros a 240 Hz, 0,06% do tamanho, maior desvio na cabeça aos 1,84 s (movimento rápido da pose
   resolvida). A tela do aparelho bloqueou antes da repetição no code 54.
 
-Pendente por ADB: repetir o bake no aparelho com o code 54; locomoção (voo, nado, dirigir, agachar) em cena real.
+Repetição com ADB liberado (code 54):
+- `bake-aparelho-code54.png`: bake no aparelho igual ao PC — 481 quadros a 240 Hz, 11 canais, 0,06% do tamanho,
+  maior desvio em b_Head_05 aos 1,84 s.
+- `modos-personagem.png`: Personagem criado pelo menu de criação; Modo de movimento com Solo, Voo, Nado na água e
+  Dirigir; abas Locomoção (Aceleração, Frenagem) e Modos (Velocidade de nado, Giro ao dirigir).
+- `play-dirigir.png`: Play com o Personagem em modo Dirigir, sem falha. O joystick desta cena controla o robô (motor
+  dinâmico) e a cápsula não tem malha, então o comportamento dos modos é coberto pelos cenários do host
+  (test_character_locomotion: aceleração, frenagem, controle no ar, voo, nado, dirigir, agachar sob teto).
+  Personagem de teste desfeito.
