@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 namespace ae::editor {
 struct StudioBakeJob {
@@ -46,7 +47,7 @@ bool ownerSpacePose(const runtime::SceneGraph &g,EditorEntityId owner,EditorEnti
 }
 } // namespace
 
-bool EditorStudio::bakeStart(EditorSession &s,bool rootToOwner,std::string &summary,std::string &error) {
+bool EditorStudio::bakeStart(EditorSession &s,bool rootToOwner,std::string &summary,std::string &error,float rate) {
   summary.clear();error.clear();
   if(s.studio_->bake) {error="Bake em andamento · toque para cancelar";return false;}
   s.refreshAnimationClip();
@@ -54,13 +55,14 @@ bool EditorStudio::bakeStart(EditorSession &s,bool rootToOwner,std::string &summ
   if(!live||!s.clipPreview_.active()||s.clipPoseDraft_||s.isPlaying()||s.history_.isOpen()) {error="Grave a pose pendente e mantenha o clipe aberto";return false;}
   if(s.state_.clipLayer) {error="O bake lê a camada Base composta; selecione a Base";return false;}
   auto job=std::make_shared<StudioBakeJob>();
+  job->rate=std::clamp(rate,1.f,240.f);
   job->source=s.state_.clipGuid;job->sourceRevision=live->revision;job->owner=s.state_.clipOwner;job->rootToOwner=rootToOwner;
   job->start=s.state_.clipRangeShown?std::min(s.state_.clipRangeStart,s.state_.clipRangeEnd):0.f;
   job->end=s.state_.clipRangeShown?std::max(s.state_.clipRangeStart,s.state_.clipRangeEnd):live->duration;
   job->start=std::clamp(job->start,0.f,live->duration);job->end=std::clamp(job->end,0.f,live->duration);
   if(job->end-job->start<1.f/job->rate) {error="Intervalo curto demais para o bake";return false;}
   const u32 keys=static_cast<u32>(std::ceil((job->end-job->start)*job->rate))+1;
-  if(keys>4096) {error="Intervalo longo demais (máximo 4096 quadros)";return false;}
+  if(keys>8192) {error="Intervalo longo demais (máximo 8192 quadros)";return false;}
   for(u32 i=0;i<2*keys-1;++i)job->times.push_back(job->start+(job->end-job->start)*float(i)/float(2*keys-2));
   job->worldStep=(job->end-job->start)/float(2*keys-2);
   const auto &preview=s.clipPreview_.scene();
@@ -72,7 +74,7 @@ bool EditorStudio::bakeStart(EditorSession &s,bool rootToOwner,std::string &summ
   }
   if(!job->world.load(preview)) {error="Não foi possível montar o mundo do bake";return false;}
   s.studio_->bake=job;s.studio_->bakeProgress=0;s.studio_->bakeReport.clear();
-  summary="Bake iniciado · "+std::to_string(keys)+" quadros";
+  summary="Bake iniciado · "+std::to_string(keys)+" quadros a "+std::to_string(static_cast<int>(job->rate))+" Hz";
   return true;
 }
 
@@ -111,6 +113,37 @@ bool EditorStudio::bakeStep(EditorSession &s,u32 frames,std::string &summary,std
   }
   s.studio_->bakeProgress=float(job->next)/float(job->times.size());
   if(job->next<job->times.size())return true;
+  // Qualidade antes de publicar: cada quadro impar (nao gravado) e comparado
+  // com a interpolacao dos vizinhos gravados. Passou de 1 mm ou 0,5 grau, o
+  // bake recomeca com o dobro da taxa (ate 240 Hz) e so entao publica.
+  {
+    float ownerScale=1;
+    if(const auto *o=job->world.graph().find(job->owner)) {
+      float m[16];if(runtime::worldMatrix(job->world.graph(),job->owner,m))ownerScale=std::sqrt(m[0]*m[0]+m[1]*m[1]+m[2]*m[2]);(void)o;
+    }
+    float worstPosition=0,worstAngle=0;
+    // Tolerancia proporcional ao personagem: 1 mm ou 0,1% do tamanho dele.
+    float size=0;for(const auto &p:job->ownerSpace.front())size=std::max(size,std::hypot(p[0],p[1],p[2])*ownerScale);
+    const float tolerance=std::max(.001f,size*.001f);
+    for(usize i=1;i+1<job->ownerSpace.size();i+=2)for(usize b=0;b<job->bones.size();++b) {
+      const auto &a=job->ownerSpace[i-1][b],&c=job->ownerSpace[i+1][b],&m=job->ownerSpace[i][b];
+      float mid[3];for(u32 k=0;k<3;++k)mid[k]=(a[k]+c[k])*.5f;
+      worstPosition=std::max(worstPosition,std::hypot(mid[0]-m[0],mid[1]-m[1],mid[2]-m[2])*ownerScale);
+      float q[4];const float sign=a[3]*c[3]+a[4]*c[4]+a[5]*c[5]+a[6]*c[6]<0?-1.f:1.f;
+      for(u32 k=0;k<4;++k)q[k]=a[3+k]+sign*c[3+k];
+      const float n=std::sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);if(n<1e-6f)continue;
+      const float dot=std::abs((q[0]*m[3]+q[1]*m[4]+q[2]*m[5]+q[3]*m[6])/n);
+      worstAngle=std::max(worstAngle,2*std::acos(std::clamp(dot,0.f,1.f))*57.2957795f);
+    }
+    if((worstPosition>tolerance||worstAngle>.5f)&&job->rate*2<=240.f) {
+      const bool root=job->rootToOwner;const float next=job->rate*2;
+      s.studio_->bake.reset();std::string seek;s.clipPreview_.seek(s.state_.clipTime,seek);
+      std::string startSummary;
+      if(!bakeStart(s,root,startSummary,error,next))return false;
+      summary="Refinando o bake a "+std::to_string(static_cast<int>(next))+" Hz (movimento rápido entre quadros)";
+      return true;
+    }
+  }
   // Publica: chaves nos quadros pares; impares ficam para a verificacao.
   resources::AnimationClipAsset value;
   value.guid=resources::assetGuidFromSeed("bake:"+s.files_.rootPath()+":"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+":"+std::to_string(++s.importInstanceCounter_));
@@ -118,11 +151,15 @@ bool EditorStudio::bakeStep(EditorSession &s,u32 frames,std::string &summary,std
   std::vector<float> keyTimes;for(usize i=0;i<job->times.size();i+=2)keyTimes.push_back(job->times[i]-job->start);
   u32 channels=0;
   const auto keep=[&](usize slot,bool translation) {
-    // Canal entra se variou ao longo do bake ou se o clipe original o anima.
-    for(usize i=2;i<job->locals.size();i+=2) {
-      const auto &a=job->locals[0][slot],&b=job->locals[i][slot];
-      if(translation) {for(u32 k=0;k<3;++k)if(std::abs(a.position[k]-b.position[k])>1e-5f)return true;}
-      else if(!same(a,b))return true;
+    // O clipe novo toca sobre a pose de repouso do documento: o canal entra
+    // sempre que a pose resolvida difere do repouso em algum quadro (inclusive
+    // correcoes constantes, como a pelve rebaixada pelo grounder).
+    const EditorEntityId object=slot==0?job->owner:job->bones[slot-1];
+    const auto *rest=s.document_.find(object);if(!rest)return true;
+    for(usize i=0;i<job->locals.size();i+=2) {
+      const auto &b=job->locals[i][slot];
+      if(translation) {for(u32 k=0;k<3;++k)if(std::abs(rest->transform.position[k]-b.position[k])>1e-5f)return true;}
+      else if(!same(rest->transform,b))return true;
     }
     return false;
   };
@@ -171,14 +208,18 @@ bool EditorStudio::bakeStep(EditorSession &s,u32 frames,std::string &summary,std
   const auto original=job->source;const auto owner=job->owner;
   if(!s.createAnimationClipAsset(value,path,error)) {bakeCancel(s);return false;}
   // Verificacao independente: o clipe novo, tocado sem solvers, nos quadros impares.
-  float maxPosition=0,maxAngle=0;
+  float maxPosition=0,maxAngle=0,worstTime=0,characterSize=0;std::string worstBone;
+  // Distancias do espaco do personagem convertidas para unidades do mundo.
+  float verifyScale=1;{float m[16];if(runtime::worldMatrix(job->world.graph(),owner,m))verifyScale=std::sqrt(m[0]*m[0]+m[1]*m[1]+m[2]*m[2]);}
+  for(const auto &p:job->ownerSpace.front())characterSize=std::max(characterSize,std::hypot(p[0],p[1],p[2])*verifyScale);
   if(s.openAnimationClip(value.guid,owner,error)) {
     for(usize i=1;i<job->times.size();i+=2) {
       if(!s.clipPreview_.seek(job->times[i]-job->start,seekError))break;
       const auto &solved=job->ownerSpace[i];
       for(usize b=0;b<job->bones.size();++b) {
         std::array<float,7> baked{};if(!ownerSpacePose(s.clipPreview_.scene(),owner,job->bones[b],baked))continue;
-        maxPosition=std::max(maxPosition,std::hypot(baked[0]-solved[b][0],baked[1]-solved[b][1],baked[2]-solved[b][2]));
+        const float positionError=std::hypot(baked[0]-solved[b][0],baked[1]-solved[b][1],baked[2]-solved[b][2])*verifyScale;
+        if(positionError>maxPosition) {maxPosition=positionError;worstTime=job->times[i]-job->start;if(const auto *o=s.document_.find(job->bones[b]))worstBone=o->name;}
         const float dot=std::abs(baked[3]*solved[b][3]+baked[4]*solved[b][4]+baked[5]*solved[b][5]+baked[6]*solved[b][6]);
         maxAngle=std::max(maxAngle,2*std::acos(std::clamp(dot,0.f,1.f))*57.2957795f);
       }
@@ -186,8 +227,10 @@ bool EditorStudio::bakeStep(EditorSession &s,u32 frames,std::string &summary,std
   }
   std::string reopen;s.openAnimationClip(original,owner,reopen);
   s.studio_->bake.reset();s.studio_->bakeProgress=1;
-  char report[220];std::snprintf(report,sizeof report,"Bake publicado · %s · %zu quadros · %u canais · verificação sem solvers: %.1f mm / %.2f°",
-                                 path.c_str(),keyTimes.size(),channels,maxPosition*1000,maxAngle);
+  char report[420];std::snprintf(report,sizeof report,"Bake publicado · %s · %zu quadros a %.0f Hz · %u canais · verificação sem solvers: %.1f mm / %.2f° (%.2f%% do tamanho)%s%s",
+                                 path.c_str(),keyTimes.size(),job->rate,channels,maxPosition*1000,maxAngle,characterSize>0?maxPosition/characterSize*100:0.f,
+                                 worstBone.empty()?"":" · maior desvio em ",worstBone.c_str());
+  if(!worstBone.empty()) {char at[48];std::snprintf(at,sizeof at," aos %.2f s",worstTime);std::strncat(report,at,sizeof report-std::strlen(report)-1);}
   s.studio_->bakeReport=summary=report;
   s.studio_->bakeGuid=value.guid;
   return false;

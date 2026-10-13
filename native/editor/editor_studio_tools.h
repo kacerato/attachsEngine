@@ -24,7 +24,7 @@ struct EditorStudio {
   // Bake da pose final (N06): job incremental sobre o clipe aberto. `bakeStep`
   // avanca `frames` quadros; devolve verdadeiro enquanto ainda ha trabalho. O
   // resultado e um clipe novo verificado sem solvers; cancelar nao publica.
-  static bool bakeStart(EditorSession &,bool rootToOwner,std::string &summary,std::string &error);
+  static bool bakeStart(EditorSession &,bool rootToOwner,std::string &summary,std::string &error,float rate=30);
   static bool bakeStep(EditorSession &,u32 frames,std::string &summary,std::string &error);
   static void bakeCancel(EditorSession &);
   // Exportacao GLB do clipe aberto (esqueleto + animacao) com relatorio de

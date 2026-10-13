@@ -41,19 +41,24 @@ bool EditorStudio::exportGlb(EditorSession &s,std::string &summary,std::string &
     std::copy(v,v+3,n.translation);std::copy(v+3,v+7,n.rotation);std::copy(v+7,v+10,n.scale);
     nodes.push_back(n);
   }
-  // Amostragem pelo preview (camadas, mute/solo e referencias ja compostos).
-  const float rate=static_cast<float>(std::clamp<u32>(live->displayRate,1,120));
-  const u32 frames=std::max(2u,static_cast<u32>(std::ceil(live->duration*rate))+1);
-  std::vector<float> times;for(u32 i=0;i<frames;++i)times.push_back(live->duration*float(i)/float(frames-1));
-  std::vector<std::vector<std::array<float,10>>> samples(objects.size());
+  // Qualidade mensuravel: a taxa dobra (ate 4x) enquanto a reimportacao
+  // passar de 1 mm ou 0,1 grau nos tempos intermediarios.
+  const float baseRate=static_cast<float>(std::clamp<u32>(live->displayRate,1,120));
   const float now=s.state_.clipTime;std::string seek;
-  for(const float t:times) {
+  float rate=baseRate,maxPosition=0,maxAngle=0;u32 frames=0,channels=0,compared=0;std::vector<u8> bytes;
+  for(u32 multiplier=1;;multiplier*=2) {
+    // Amostragem pelo preview (camadas, mute/solo e referencias ja compostos).
+    rate=baseRate*float(multiplier);
+    frames=std::max(2u,static_cast<u32>(std::ceil(live->duration*rate))+1);
+    std::vector<float> times;for(u32 i=0;i<frames;++i)times.push_back(live->duration*float(i)/float(frames-1));
+    std::vector<std::vector<std::array<float,10>>> samples(objects.size());
+    for(const float t:times) {
     if(!s.clipPreview_.seek(t,seek)) {s.clipPreview_.seek(now,seek);error="Amostragem falhou: "+seek;return false;}
     for(usize i=0;i<objects.size();++i){std::array<float,10> v{};trs(s.clipPreview_.scene().find(objects[i])->transform,v.data());samples[i].push_back(v);}
-  }
-  resources::GltfExportAnimation animation;animation.name=live->name;
-  u32 channels=0;
-  for(usize i=0;i<objects.size();++i)for(const auto path:{resources::AnimationPath::Translation,resources::AnimationPath::Rotation,resources::AnimationPath::Scale}) {
+    }
+    resources::GltfExportAnimation animation;animation.name=live->name;
+    channels=0;
+    for(usize i=0;i<objects.size();++i)for(const auto path:{resources::AnimationPath::Translation,resources::AnimationPath::Rotation,resources::AnimationPath::Scale}) {
     const u32 first=path==resources::AnimationPath::Translation?0:path==resources::AnimationPath::Rotation?3:7,width=path==resources::AnimationPath::Rotation?4:3;
     bool varies=false;
     for(const auto &v:samples[i])for(u32 k=0;k<width;++k)varies=varies||std::abs(v[first+k]-samples[i][0][first+k])>1e-6f;
@@ -67,16 +72,16 @@ bool EditorStudio::exportGlb(EditorSession &s,std::string &summary,std::string &
       previous=v;c.values.insert(c.values.end(),v.begin(),v.begin()+width);
     }
     animation.channels.push_back(std::move(c));++channels;
-  }
-  std::vector<u8> bytes;
-  if(!resources::writeGlb(nodes,{animation},bytes,error)) {s.clipPreview_.seek(now,seek);return false;}
-  // Prova de reimportacao, comparada ao clipe em tempos intermediarios.
-  resources::GltfImport imported;
-  resources::GltfImportLimits limits;limits.allowAnimationOnly=true;
-  if(!resources::importGlb(bytes,limits,{},imported)||imported.animations.empty()) {s.clipPreview_.seek(now,seek);error="Reimportação recusou o arquivo: "+imported.diagnostic;return false;}
-  float maxPosition=0,maxAngle=0;u32 compared=0;
-  const auto &clip=imported.animations.front();
-  for(u32 f=0;f+1<frames;++f) {
+    }
+    bytes.clear();
+    if(!resources::writeGlb(nodes,{animation},bytes,error)) {s.clipPreview_.seek(now,seek);return false;}
+    // Prova de reimportacao, comparada ao clipe em tempos intermediarios.
+    resources::GltfImport imported;
+    resources::GltfImportLimits limits;limits.allowAnimationOnly=true;
+    if(!resources::importGlb(bytes,limits,{},imported)||imported.animations.empty()) {s.clipPreview_.seek(now,seek);error="Reimportação recusou o arquivo: "+imported.diagnostic;return false;}
+    maxPosition=0;maxAngle=0;compared=0;
+    const auto &clip=imported.animations.front();
+    for(u32 f=0;f+1<frames;++f) {
     const float t=(times[f]+times[f+1])*.5f;
     if(!s.clipPreview_.seek(t,seek))break;
     for(const auto &c:clip.channels) {
@@ -94,6 +99,8 @@ bool EditorStudio::exportGlb(EditorSession &s,std::string &summary,std::string &
       }
       ++compared;
     }
+    }
+    if((maxPosition<=.001f&&maxAngle<=.1f)||multiplier>=4||rate*2>480)break;
   }
   s.clipPreview_.seek(now,seek);
   // Arquivo e relatorio em Exportados/.

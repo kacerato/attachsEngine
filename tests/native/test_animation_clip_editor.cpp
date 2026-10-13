@@ -1801,6 +1801,10 @@ AE_TEST(animation_studio_bakes_the_solved_pose_into_a_verified_fk_clip) {
   runtime::Transform tg;tg.position[0]=.5f;tg.position[1]=.6f;doc.setTransform(target,tg);
   // IK permanente: o pe vai ao alvo enquanto o quadril sobe e desce no clipe.
   {auto v=*doc.find(tip);auto *ik=static_cast<scene::TwoBoneIk*>(v.components.add(scene::TwoBoneIk::descriptor));ik->target=target;AE_EXPECT_TRUE(doc.applyEntityValues(tip,v),"ik");}
+  // Correcao constante (nao varia no tempo): precisa entrar no bake mesmo assim.
+  const auto toe=doc.createEntity(tip,EditorEntityKind::Folder,"Dedo");doc.createEntity(toe,EditorEntityKind::Folder,"Ponta");
+  {runtime::Transform tt;tt.position[2]=.2f;doc.setTransform(toe,tt);
+   auto v=*doc.find(toe);auto *curl=static_cast<scene::FingerCurl*>(v.components.add(scene::FingerCurl::descriptor));curl->curl=.6f;curl->chainLength=1;AE_EXPECT_TRUE(doc.applyEntityValues(toe,v),"constant curl");}
   resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(bot,1,guid,error)&&session.openAnimationClip(guid,bot,error),error.c_str());
   const auto *asset=session.animationClipAsset(guid);
   AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,asset->revision,[&](resources::AnimationClipAsset &clip) {
@@ -1830,6 +1834,28 @@ AE_TEST(animation_studio_bakes_the_solved_pose_into_a_verified_fk_clip) {
   AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,asset->revision,[&](resources::AnimationClipAsset &clip){clip.duration=1.5f;return true;},error),error.c_str());
   AE_EXPECT_TRUE(!EditorStudio::bakeStep(session,3,summary,error)&&error.find("mudou")!=std::string::npos,"changed source cancels the job");
   AE_EXPECT_EQ(clipFiles(),before+1,"no extra clip after the changed source");
+  // Personagem que anda (trilha do dono) com olhar e inercia: o caso do Fox no aparelho.
+  {
+    const auto walker=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Andador");
+    const auto pelvis=doc.createEntity(walker,EditorEntityKind::Folder,"Pelve");const auto spine=doc.createEntity(pelvis,EditorEntityKind::Folder,"Coluna");
+    const auto neck=doc.createEntity(spine,EditorEntityKind::Folder,"Pescoco");const auto head=doc.createEntity(neck,EditorEntityKind::Folder,"Cabeca");
+    const auto nose=doc.createEntity(head,EditorEntityKind::Folder,"Focinho");const auto look=doc.createEntity(walker,EditorEntityKind::Folder,"Olhar");
+    runtime::Transform up;up.position[1]=.4f;doc.setTransform(pelvis,up);doc.setTransform(spine,up);doc.setTransform(neck,up);doc.setTransform(head,up);doc.setTransform(nose,up);
+    runtime::Transform lt;lt.position[0]=1.5f;lt.position[1]=1.2f;lt.position[2]=1;doc.setTransform(look,lt);
+    {auto v=*doc.find(head);auto *c=static_cast<scene::LookAtIk*>(v.components.add(scene::LookAtIk::descriptor));c->target=look;c->chainLength=3;AE_EXPECT_TRUE(doc.applyEntityValues(head,v),"look");}
+    {auto v=*doc.find(neck);v.components.add(scene::Inertia::descriptor);AE_EXPECT_TRUE(doc.applyEntityValues(neck,v),"inertia");}
+    resources::AssetGuid walk;AE_EXPECT_TRUE(session.createAnimationClip(walker,2,walk,error)&&session.openAnimationClip(walk,walker,error),error.c_str());
+    const auto *w=session.animationClipAsset(walk);
+    AE_EXPECT_TRUE(session.editAnimationClipAsset(walk,w->revision,[&](resources::AnimationClipAsset &clip) {
+      for(auto &track:clip.tracks)if(track.path==resources::AnimationPath::Translation&&track.curves[2].keys.size()==2)track.curves[2].keys[1].value=3;
+      return true;
+    },error),error.c_str());
+    AE_EXPECT_TRUE(EditorStudio::bakeStart(session,false,summary,error),error.c_str());
+    u32 walkGuard=0;while(EditorStudio::bakeStep(session,16,summary,error)&&++walkGuard<100) {}
+    float walkMm=99;std::sscanf(summary.c_str()+summary.find("solvers: ")+9,"%f",&walkMm);
+    AE_EXPECT_TRUE(walkMm<5,("walking character with look-at and inertia bakes within 5 mm: "+summary+" / "+error).c_str());
+    AE_EXPECT_TRUE(session.openAnimationClip(guid,bot,error),error.c_str());
+  }
   // Exportacao GLB com prova de reimportacao.
   AE_EXPECT_TRUE(EditorStudio::exportGlb(session,summary,error),error.c_str());
   AE_EXPECT_TRUE(std::filesystem::exists(project.path/"Exportados"/"Clipe.glb")||summary.find(".glb")!=std::string::npos,summary.c_str());
