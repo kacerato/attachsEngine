@@ -4,6 +4,8 @@
 #include "editor/editor_studio_tools.h"
 #include "editor/editor_scene_template.h"
 #include "editor/editor_humanoid_bones.h"
+#include "editor/editor_umotion_import.h"
+#include "umotion_synthetic_project.h"
 #include "scene/ik_effects.h"
 #include "runtime/scene_ik.h"
 #include "editor/editor_animation_pose_selection.h"
@@ -2035,4 +2037,124 @@ AE_TEST(animation_templates_build_with_real_components_and_work_in_play) {
     }
     {const float y=at(g,find(g,"Pelve"))[1];char m[160];std::snprintf(m,sizeof m,"stands back up while carrying: pelvis %.3f rest %.3f",y,rest);AE_EXPECT_TRUE(y>rest-.06f,m);}
   }
+}
+
+AE_TEST(umotion_project_imports_as_editable_rig_with_rotate_plane_ik_and_child_of) {
+  // Projeto UMotion Pro sintetico (formato do plugin) importado num rig da cena
+  // espelhado em X: FK, alvo de IK animado, IK de plano rotativo, Filho de com
+  // troca de pai e evento. Referencia: manual UMotion Pro 1.29 (Inverse
+  // Kinematics, Child-Of) e a serializacao V01_02 do proprio plugin.
+  using namespace editor;namespace um=test::umotion;
+  TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str()),"project");
+  auto &d=s.document();
+  const auto make=[&](EditorEntityId parent,const char *name,float x,float y,float z){const auto id=d.createEntity(parent,EditorEntityKind::Folder,name);auto v=*d.find(id);v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;d.applyEntityValues(id,v);return id;};
+  const auto rig=make(d.root(),"Rig",0,0,0),root=make(rig,"Root",0,1,0),upper=make(root,"UpperArm",.2f,.3f,0),fore=make(upper,"Forearm",.3f,0,.02f),hand=make(fore,"Hand",.28f,0,0);
+  (void)hand;
+  std::vector<um::Object> objects(7);
+  objects[0].path="";
+  objects[1].path="Root";objects[1].position={0,1,0};objects[1].positionKeys[1]={{0,1},{60,1.2f}};
+  objects[2].path="Root/UpperArm";objects[2].position={-.2f,.3f,0};
+  objects[3].path="Root/UpperArm/Forearm";objects[3].position={-.3f,0,.02f};
+  objects[4].path="Root/UpperArm/Forearm/Hand";objects[4].position={-.28f,0,0};
+  objects[5].path="Root/Handle";objects[5].type=2;objects[5].position={-.78f,.3f,.02f};
+  objects[5].positionKeys[0]={{0,-.6f},{60,-.5f}};objects[5].positionKeys[1]={{0,.2f},{60,.45f}};objects[5].positionKeys[2]={{0,.25f},{60,.2f}};
+  objects[5].ik=true;objects[5].ikTarget=4;objects[5].blend={{0,1},{60,1}};
+  objects[6].path="Root/Cube";objects[6].position={-.4f,-.5f,.3f};objects[6].childOf=true;objects[6].parents={{0,-1},{30,4}};
+  for(int c=0;c<3;++c)objects[6].positionKeys[c]={{29,objects[6].position[c]},{30,c==0?-.05f:0.f},{60,c==0?-.05f:0.f}};
+  const auto text=um::project(objects,60);
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.path/"Sintetico.asset",text),"write project");
+  UMotionImportReport report;std::string error;
+  AE_EXPECT_TRUE(s.importUMotionProject("Sintetico.asset",rig,report,error),error.c_str());
+  AE_EXPECT_TRUE(report.restError<1e-4&&report.bones==4&&report.helpers==2&&report.ikChains==1&&report.childOf==1&&report.cues==1,"mirrored rig mapped, helpers, IK, Child-Of and event");
+  AE_EXPECT_TRUE(report.propertyTracks>=2,"FK/IK blend and Child-Of parent are animated channels");
+  const auto find=[](const runtime::SceneGraph &g,const char *name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(auto id:ids)if(std::string_view(g.find(id)->name)==name)return id;return runtime::ObjectId{};};
+  const auto *ik=static_cast<const scene::TwoBoneIk*>(d.find(find(d,"Hand"))->components.find(scene::TwoBoneIk::descriptor));
+  AE_EXPECT_TRUE(ik&&ik->solver==1&&ik->reference==1&&ik->target==find(d,"Handle"),"rotate-plane IK from the reference pose on the hand");
+  AE_EXPECT_TRUE(s.startPlay(),"plays");
+  const auto &g=s.playScene().document();
+  const auto at=[&](const char *n){float m[16];runtime::worldMatrix(g,find(g,n),m);return std::array<float,3>{m[12],m[13],m[14]};};
+  std::vector<renderer::MapDrawState> draws;float worstReach=0;
+  // Tres ciclos: o IK e o Filho de nao podem acumular erro de um quadro para o
+  // seguinte (a pose de cada ciclo repete a do primeiro).
+  std::vector<std::array<float,3>> firstCycle;float worstDrift=0;
+  for(int i=0;i<=180;++i) {
+    s.advanceClock(10+(double(i)+.001)/60.0);s.extractPlayMap(draws);
+    const auto h=at("Hand"),t=at("Handle");worstReach=std::max(worstReach,std::hypot(h[0]-t[0],h[1]-t[1],h[2]-t[2]));
+    const auto cube=at("Cube");
+    if(i<60)firstCycle.push_back(cube);
+    else if(i%60<59)worstDrift=std::max(worstDrift,std::hypot(cube[0]-firstCycle[i%60][0],cube[1]-firstCycle[i%60][1],cube[2]-firstCycle[i%60][2]));
+    if(i==10) {
+      const auto c=at("Cube"),r=at("Root");char m[200];
+      std::snprintf(m,sizeof m,"cube in Root space before the switch: %.3f %.3f %.3f",c[0]-r[0],c[1]-r[1],c[2]-r[2]);
+      AE_EXPECT_TRUE(std::fabs(c[0]-r[0]-.4f)<1e-3f&&std::fabs(c[1]-r[1]+.5f)<1e-3f&&std::fabs(c[2]-r[2]-.3f)<1e-3f,m);
+      // Lado do cotovelo pelo plano: zero do UMotion = perpendicular do meio (-Y aqui).
+      const auto a=at("UpperArm"),e=at("Forearm");const float ax[3]{h[0]-a[0],h[1]-a[1],h[2]-a[2]},ev[3]{e[0]-a[0],e[1]-a[1],e[2]-a[2]};
+      const float n=std::sqrt(ax[0]*ax[0]+ax[1]*ax[1]+ax[2]*ax[2]),dp=(ev[0]*ax[0]+ev[1]*ax[1]+ev[2]*ax[2])/(n*n);
+      float rej[3]{ev[0]-ax[0]*dp,ev[1]-ax[1]*dp,ev[2]-ax[2]*dp};const float rl=std::sqrt(rej[0]*rej[0]+rej[1]*rej[1]+rej[2]*rej[2]);
+      std::snprintf(m,sizeof m,"elbow bends to the converted plane (-Y): %.3f %.3f %.3f",rej[0]/rl,rej[1]/rl,rej[2]/rl);
+      AE_EXPECT_TRUE(rl>1e-3f&&rej[1]/rl<-.9f,m);
+    }
+    if(i==45) {
+      const auto c=at("Cube");float hm[16];runtime::worldMatrix(g,find(g,"Hand"),hm);
+      const float expected[3]{hm[12]+hm[0]*.05f,hm[13]+hm[1]*.05f,hm[14]+hm[2]*.05f};char m[200];
+      std::snprintf(m,sizeof m,"cube follows the hand after the keyed switch: %.4f %.4f %.4f vs %.4f %.4f %.4f",c[0],c[1],c[2],expected[0],expected[1],expected[2]);
+      AE_EXPECT_TRUE(std::hypot(c[0]-expected[0],c[1]-expected[1],c[2]-expected[2])<1e-3f,m);
+    }
+    // O clipe e em loop: no quadro 60 volta ao inicio; o quadro 59 e o penultimo.
+    if(i==59) {const auto r=at("Root");char m[120];std::snprintf(m,sizeof m,"FK translation of Root follows its keys (%.4f)",r[1]);AE_EXPECT_TRUE(std::fabs(r[1]-(1.f+.2f*59/60))<1e-3f,m);}
+  }
+  {char m[120];std::snprintf(m,sizeof m,"hand reaches the animated IK target every frame (worst %.5f m)",worstReach);AE_EXPECT_TRUE(worstReach<1e-3f,m);}
+  {char m[120];std::snprintf(m,sizeof m,"later cycles repeat the first (cube drift %.5f m)",worstDrift);AE_EXPECT_TRUE(worstDrift<1e-3f,m);}
+}
+AE_TEST(umotion_euler_rotation_imports_with_original_keys_order_and_frame) {
+  // Rotacao em modo Euler do UMotion (Rotation [E], Quaternion.Euler: Z, X, Y)
+  // num rig espelhado: a trilha fica Euler ZXY com as chaves originais e o
+  // referencial absorve o espelho; a pose e a mesma da Unity espelhada.
+  using namespace editor;namespace um=test::umotion;
+  TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str()),"project");
+  auto &d=s.document();
+  const auto make=[&](EditorEntityId parent,const char *name,float x,float y,float z){const auto id=d.createEntity(parent,EditorEntityKind::Folder,name);auto v=*d.find(id);v.transform.position[0]=x;v.transform.position[1]=y;v.transform.position[2]=z;d.applyEntityValues(id,v);return id;};
+  // Pontos fora de linha para o ajuste do referencial no repouso.
+  const auto rig=make(d.root(),"Rig",0,0,0),root=make(rig,"Root",0,1,0),head=make(root,"Head",.1f,.4f,0),arm=make(root,"Arm",.25f,.3f,.05f);
+  (void)head;make(arm,"Hand",.2f,-.1f,.12f);
+  std::vector<um::Object> objects(5);
+  objects[0].path="";
+  objects[1].path="Root";objects[1].position={0,1,0};
+  objects[3].path="Root/Arm";objects[3].position={-.25f,.3f,.05f};
+  objects[4].path="Root/Arm/Hand";objects[4].position={-.2f,-.1f,.12f};
+  objects[2].path="Root/Head";objects[2].position={-.1f,.4f,0};objects[2].rotationMode=2;
+  objects[2].rotationKeys[0]={{0,10},{60,40}};objects[2].rotationKeys[1]={{0,-20},{60,50}};objects[2].rotationKeys[2]={{0,5},{60,-30}};
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.path/"Euler.asset",um::project(objects,60)),"write project");
+  UMotionImportReport report;std::string error;
+  AE_EXPECT_TRUE(s.importUMotionProject("Euler.asset",rig,report,error),error.c_str());
+  AE_EXPECT_TRUE(report.clips.size()==1&&report.restError<1e-4,"clip created on a mirrored rig");
+  if(report.clips.empty())return;
+  std::string text;{std::ifstream in(project.path/report.clips[0],std::ios::binary);text.assign(std::istreambuf_iterator<char>(in),{});}
+  resources::AnimationClipAsset clip;AE_EXPECT_TRUE(resources::AnimationClipAsset::deserialize(text,clip,&error),error.c_str());
+  const resources::AnimationClipTrack *euler=nullptr;
+  for(const auto &t:clip.tracks)if(t.path==resources::AnimationPath::Rotation&&t.rotationMode==resources::AnimationRotationMode::Euler)euler=&t;
+  AE_EXPECT_TRUE(euler&&euler->euler.order==RotationEulerOrder::ZXY,"Euler track keeps the Unity ZXY order");
+  if(!euler)return;
+  AE_EXPECT_TRUE(euler->curves[0].keys.size()==2&&euler->curves[0].keys[0].value==10&&euler->curves[0].keys[1].value==40&&
+                 euler->curves[1].keys[1].value==50&&euler->curves[2].keys[1].value==-30,"original angle keys, not a per-frame resample");
+  AE_EXPECT_TRUE(s.startPlay(),"plays");
+  const auto &g=s.playScene().document();
+  std::vector<renderer::MapDrawState> draws;double worst=0;
+  for(int i=0;i<60;i+=7) {
+    s.advanceClock(10+(double(i)+.001)/60.0);s.extractPlayMap(draws);
+    // A cena de Play existe depois do primeiro passo do relogio.
+    std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);runtime::ObjectId played=0;
+    for(auto id:ids)if(std::string_view(g.find(id)->name)=="Head")played=id;
+    AE_EXPECT_TRUE(played!=0,"Head in the play scene");
+    if(!played)return;
+    const float a=(float(i)+.001f)/60.f;
+    const float e[3]{10+30*a,-20+70*a,5-35*a};
+    float unity[4];rotationQuaternionEuler(RotationEulerOrder::ZXY,e,unity);
+    // Espelho em X: R_A = D R_U D, isto e (x,-y,-z,w).
+    const float expected[4]{unity[0],-unity[1],-unity[2],unity[3]};
+    float local[4];runtime::transformRotationQuaternion(g.find(played)->transform,local);
+    worst=std::max(worst,rotationDistanceDegrees(local,expected));
+  }
+  char m[120];std::snprintf(m,sizeof m,"Head pose equals the mirrored Unity Euler pose (worst %.4f deg)",worst);
+  AE_EXPECT_TRUE(worst<.05,m);
 }

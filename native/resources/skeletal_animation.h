@@ -26,6 +26,7 @@
 // modelo do desenho continua sendo a do nó, e o resultado no mundo é o que o
 // glTF manda (a pose do nó da malha é ignorada pelo skin).
 #include "core/base.h"
+#include "core/rotation_math.h"
 #include "resources/asset_registry.h"
 #include "resources/animation_curve.h"
 #include "resources/animation_property.h"
@@ -51,6 +52,23 @@ enum class AnimationRotationMode : u8 { Quaternion, Euler, ProgressiveQuaternion
 inline constexpr u32 rotationCurveComponents(AnimationRotationMode mode) {
   return mode==AnimationRotationMode::Euler?3u:mode==AnimationRotationMode::ProgressiveQuaternion?5u:4u;
 }
+// Curvas Euler: ordem de composicao (Godot Node3D.rotation_order; ordem de
+// rotacao da Unity) e o referencial fixo em volta dos angulos, como a
+// orientacao da junta antes e o eixo de rotacao depois:
+// rotacao = antes * Euler(ordem, angulos) * depois. O padrao (XYZ, identidade)
+// e a convencao da cena; um projeto UMotion em Euler entra com as proprias
+// chaves (ordem ZXY da Unity) e o referencial absorve a troca de espaco.
+struct AnimationEulerFrame {
+  RotationEulerOrder order=RotationEulerOrder::XYZ;
+  float before[4]{0,0,0,1},after[4]{0,0,0,1};
+  bool identity() const noexcept;
+  bool valid() const noexcept;
+  bool operator==(const AnimationEulerFrame &other) const noexcept;
+};
+// Angulos (graus por eixo X, Y, Z) -> rotacao local.
+bool eulerFrameQuaternion(const AnimationEulerFrame &frame,const float degrees[3],float out[4]);
+// Rotacao local -> angulos do ramo mais proximo da referencia.
+bool eulerFrameAnglesNear(const AnimationEulerFrame &frame,const float quaternion[4],const float reference[3],float degrees[3]);
 
 struct AnimationChannel {
   u32 node = 0; // índice em GltfImport::nodes
@@ -67,6 +85,7 @@ struct AnimationChannel {
   // present; authored metadata cannot be silently written to a glTF cache.
   std::vector<AnimationCurve> curves;
   AnimationRotationMode rotationMode=AnimationRotationMode::Quaternion;
+  AnimationEulerFrame euler; // so em rotacao Euler
   // Compiled authored composition: one flat source per participating layer,
   // base first. Imported channels never contain this representation.
   std::vector<AnimationChannel> layerSources;

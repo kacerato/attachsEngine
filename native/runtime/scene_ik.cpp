@@ -5,6 +5,7 @@ SceneIk::SceneIk():solver_(std::make_unique<SceneIkSolver>()) {}
 SceneIk::~SceneIk()=default;
 const std::vector<SceneIkTypes::Diagnostic> &SceneIk::diagnostics() const {return solver_->diagnostics();}
 void SceneIk::reset() {solver_->reset();}
+void SceneIk::captureRest(const SceneGraph &graph) {solver_->captureRest(graph);}
 bool SceneIk::advance(GameWorld &world,const GroundQuery &ground) {return solver_->advance(world,ground);}
 WorldStatus SceneIk::hit(GameWorld &world,ObjectId object,const float direction[3],float force) {return solver_->hit(world,object,direction,force);}
 WorldStatus SceneIk::hitFront(GameWorld &world,ObjectId object,float force) {return solver_->hitFront(world,object,force);}

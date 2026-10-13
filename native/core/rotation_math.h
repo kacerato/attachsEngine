@@ -90,4 +90,62 @@ inline bool interpolateRotationArc(const float a[4],const float b[4],double prog
   for(u32 c=0;c<4;++c)out[c]=static_cast<float>(std::cos(phase)*start[c]+(angle?std::sin(phase)*direction[c]:0));
   return normalizeRotationQuaternion(out);
 }
+// Euler orders named by application order, as in the Unity rotation order
+// (ZXY: around Z, then X, then Y) and Godot Node3D.rotation_order. Angles are
+// always stored per axis (X, Y, Z); only the composition order changes.
+// XYZ is the scene convention above (Rz * Ry * Rx).
+enum class RotationEulerOrder : u8 { XYZ, XZY, YXZ, YZX, ZXY, ZYX };
+inline constexpr u32 RotationEulerOrderCount=6;
+inline constexpr const char *rotationEulerOrderName(RotationEulerOrder order) {
+  constexpr const char *names[]{"XYZ","XZY","YXZ","YZX","ZXY","ZYX"};
+  return static_cast<u32>(order)<RotationEulerOrderCount?names[static_cast<u32>(order)]:"?";
+}
+inline void rotationMultiply(const float a[4],const float b[4],float out[4]) {
+  const float r[]{a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],
+                  a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]};
+  std::copy_n(r,4,out);
+}
+namespace rotation_detail {
+// The order (a,b,c) is XYZ seen through the proper signed permutation P with
+// P*x=e_a, P*y=e_b, P*z=s*e_c: R_c(g)*R_b(b)*R_a(a) = P*R_XYZ(a,b,s*g)*P^-1.
+struct EulerAxes {u32 first,second,third;float sign;float frame[4];};
+inline EulerAxes eulerAxes(RotationEulerOrder order) {
+  constexpr u32 table[6][3]{{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};
+  const u32 index=static_cast<u32>(order)<RotationEulerOrderCount?static_cast<u32>(order):0;
+  EulerAxes axes{table[index][0],table[index][1],table[index][2],1,{0,0,0,1}};
+  // Even permutations (XYZ, YZX, ZXY) are rotations; odd ones flip the third axis.
+  axes.sign=(index==0||index==3||index==4)?1.f:-1.f;
+  double m[3][3]{};m[axes.first][0]=1;m[axes.second][1]=1;m[axes.third][2]=axes.sign;
+  const double trace=m[0][0]+m[1][1]+m[2][2];double q[4];
+  if(trace>0) {const double s=std::sqrt(trace+1)*2;q[3]=.25*s;q[0]=(m[2][1]-m[1][2])/s;q[1]=(m[0][2]-m[2][0])/s;q[2]=(m[1][0]-m[0][1])/s;}
+  else if(m[0][0]>m[1][1]&&m[0][0]>m[2][2]) {const double s=std::sqrt(1+m[0][0]-m[1][1]-m[2][2])*2;q[3]=(m[2][1]-m[1][2])/s;q[0]=.25*s;q[1]=(m[0][1]+m[1][0])/s;q[2]=(m[0][2]+m[2][0])/s;}
+  else if(m[1][1]>m[2][2]) {const double s=std::sqrt(1+m[1][1]-m[0][0]-m[2][2])*2;q[3]=(m[0][2]-m[2][0])/s;q[0]=(m[0][1]+m[1][0])/s;q[1]=.25*s;q[2]=(m[1][2]+m[2][1])/s;}
+  else {const double s=std::sqrt(1+m[2][2]-m[0][0]-m[1][1])*2;q[3]=(m[1][0]-m[0][1])/s;q[0]=(m[0][2]+m[2][0])/s;q[1]=(m[1][2]+m[2][1])/s;q[2]=.25*s;}
+  for(u32 c=0;c<4;++c)axes.frame[c]=static_cast<float>(q[c]);
+  return axes;
+}
+} // namespace rotation_detail
+inline void rotationQuaternionEuler(RotationEulerOrder order,const float degrees[3],float out[4]) {
+  if(order==RotationEulerOrder::XYZ) {rotationQuaternionXYZ(degrees,out);return;}
+  const auto axes=rotation_detail::eulerAxes(order);
+  const float mapped[3]{degrees[axes.first],degrees[axes.second],axes.sign*degrees[axes.third]};
+  float inner[4],left[4];rotationQuaternionXYZ(mapped,inner);
+  const float inverse[4]{-axes.frame[0],-axes.frame[1],-axes.frame[2],axes.frame[3]};
+  rotationMultiply(axes.frame,inner,left);rotationMultiply(left,inverse,out);
+}
+// Branch of `order` nearest the reference angles (same gimbal handling as XYZ).
+inline bool rotationEulerNear(RotationEulerOrder order,const float quaternion[4],const float reference[3],float degrees[3]) {
+  if(order==RotationEulerOrder::XYZ)return rotationEulerXYZNear(quaternion,reference,degrees);
+  const auto axes=rotation_detail::eulerAxes(order);
+  float q[4];std::copy_n(quaternion,4,q);if(!normalizeRotationQuaternion(q))return false;
+  const float inverse[4]{-axes.frame[0],-axes.frame[1],-axes.frame[2],axes.frame[3]};
+  float left[4],inner[4];rotationMultiply(inverse,q,left);rotationMultiply(left,axes.frame,inner);
+  const float mappedReference[3]{reference[axes.first],reference[axes.second],axes.sign*reference[axes.third]};
+  float mapped[3];if(!rotationEulerXYZNear(inner,mappedReference,mapped))return false;
+  degrees[axes.first]=mapped[0];degrees[axes.second]=mapped[1];degrees[axes.third]=axes.sign*mapped[2];
+  return true;
+}
+inline bool rotationEuler(RotationEulerOrder order,const float quaternion[4],float degrees[3]) {
+  const float zero[3]{};return rotationEulerNear(order,quaternion,zero,degrees);
+}
 } // namespace ae

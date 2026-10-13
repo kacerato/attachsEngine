@@ -1,4 +1,6 @@
 #include "editor/editor_session.h"
+#include "editor/editor_umotion_import.h"
+#include <fstream>
 #include "resources/unity_material_import.h"
 #include "resources/unity_import_recipe.h"
 #include <algorithm>
@@ -18,6 +20,12 @@ bool fileHash(const std::filesystem::path &path,std::string &hash,u64 &bytes,con
     const auto count=input.gcount();if(count>0){bytes+=static_cast<u64>(count);digest.update({chunk.data(),static_cast<usize>(count)});}}
   if(!input.eof())return false;
   hash=Sha256::hex(digest.digest());return true;
+}
+// Projeto UMotion Pro: .asset com a lista de objetos animados e de clipes.
+bool umotionProject(const std::filesystem::path &path) {
+  std::ifstream input(path,std::ios::binary);if(!input)return false;
+  std::string head(262144,'\0');input.read(head.data(),static_cast<std::streamsize>(head.size()));head.resize(static_cast<usize>(input.gcount()));
+  return head.find("\n  AnimatedObjectList:")!=head.npos&&head.find("\n  EditorState:")!=head.npos;
 }
 LibraryItemKind kind(const std::string &path) {
   const auto ext=lower(std::filesystem::path(path).extension().string());
@@ -86,9 +94,11 @@ PreparedLibraryPackage prepareLibraryPackage(const std::string &project,const st
     result.companions.push_back({staging+"/"+file.relative,destination+file.relative});
     if(file.relative.ends_with(".meta"))continue;
     LibraryItem item;item.path=destination+file.relative;item.sourceHash=file.sha256;item.kind=kind(file.relative);
+    const bool umotion=lower(file.relative).ends_with(".asset")&&umotionProject(EditorImportTransaction::fromUtf8(staging+"/"+file.relative));
+    if(umotion)item.kind=LibraryItemKind::Clip;
     const auto meta=metadata.find(file.relative);item.sourceIdentity=meta==metadata.end()?"path:"+file.relative:"unity:"+meta->second;
     item.id=assetGuidFromSeed(package.id.text()+":"+item.sourceIdentity);sourceIds.emplace(file.relative,item.id);
-    item.diagnostic="Fonte preservada; conversão ainda não executada.";
+    item.diagnostic=umotion?"Projeto UMotion Pro: selecione o personagem e abra para importar clipes, alvos de IK e Filho de.":"Fonte preservada; conversão ainda não executada.";
     if(item.kind==LibraryItemKind::Code||item.kind==LibraryItemKind::Scene||
        (item.kind==LibraryItemKind::Model&&!lower(file.relative).ends_with(".glb")&&!lower(file.relative).ends_with(".gltf")&&!lower(file.relative).ends_with(".fbx"))) {
       item.conversion=LibraryConversionState::Unsupported;item.diagnostic="Fonte preservada. Este formato de origem ainda não possui conversor neste fluxo.";
@@ -238,6 +248,17 @@ bool EditorSession::openLibraryItem(resources::AssetGuid id,std::string &diagnos
   state_.libraryCanInstantiate=state_.libraryCanAssignController=state_.libraryCanReimport=false;
   const auto resolution=library_.resolve(id,assets_);
   const auto extension=lower(std::filesystem::path(item->path).extension().string());
+  if(extension==".asset") {
+    std::filesystem::path absolute;const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+    if(EditorImportTransaction::safePath(root,item->path,absolute)&&umotionProject(absolute)) {
+      if(!document_.find(state_.selection)||state_.selection==document_.root()) {diagnostic="Selecione o personagem (a raiz do modelo) que recebe o projeto UMotion.";return false;}
+      UMotionImportReport report;if(!importUMotionProject(sourcePath,state_.selection,report,diagnostic))return false;
+      state_.workspace=EditorWorkspace::Scene;
+      diagnostic="Projeto UMotion importado: "+std::to_string(report.clips.size())+" clipe(s), "+std::to_string(report.bones)+" ossos, "+
+        std::to_string(report.helpers)+" auxiliares, "+std::to_string(report.ikChains)+" IK, "+std::to_string(report.childOf)+" Filho de.";
+      state_.status=diagnostic;return true;
+    }
+  }
   const bool unity=extension==".anim"||extension==".prefab"||extension==".controller";
   if(unity) {
     std::filesystem::path absolute;std::error_code ec;

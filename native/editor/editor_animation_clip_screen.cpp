@@ -53,8 +53,22 @@ std::string bindingLabel(const resources::AnimationClipBinding &binding) {
   }
   return label;
 }
+// Euler mostra a ordem quando nao e a da cena (XYZ) e marca o referencial
+// importado (orientacao antes/depois dos angulos, como a de um projeto UMotion).
+const char *eulerName(const resources::AnimationEulerFrame &frame) {
+  static constexpr const char *plain[]{"Euler","Euler XZY","Euler YXZ","Euler YZX","Euler ZXY","Euler ZYX"};
+  static constexpr const char *framed[]{"Euler · ref.","Euler XZY · ref.","Euler YXZ · ref.","Euler YZX · ref.","Euler ZXY · ref.","Euler ZYX · ref."};
+  const u32 order=std::min<u32>(static_cast<u32>(frame.order),5);
+  auto identity=frame;identity.order=RotationEulerOrder::XYZ;
+  return identity.identity()?plain[order]:framed[order];
+}
+// Ordem que o bake Euler vai produzir: a escolhida ou a da trilha.
+std::string bakeOrderName(const resources::AnimationBakeSettings &settings,const resources::AnimationClipTrack *track) {
+  if(settings.eulerOrder<RotationEulerOrderCount)return rotationEulerOrderName(static_cast<RotationEulerOrder>(settings.eulerOrder));
+  return rotationEulerOrderName(track&&track->rotationMode==resources::AnimationRotationMode::Euler?track->euler.order:RotationEulerOrder::XYZ);
+}
 const char *pathName(const resources::AnimationClipTrack &track) {
-  switch(track.path) {case resources::AnimationPath::Translation:return "Posição";case resources::AnimationPath::Rotation:return track.rotationMode==resources::AnimationRotationMode::Euler?"Euler":track.rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion?"Progressivo":"Quaternion";
+  switch(track.path) {case resources::AnimationPath::Translation:return "Posição";case resources::AnimationPath::Rotation:return track.rotationMode==resources::AnimationRotationMode::Euler?eulerName(track.euler):track.rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion?"Progressivo":"Quaternion";
     case resources::AnimationPath::Scale:return "Escala";default:return "Morph";}
 }
 std::string componentName(const resources::AnimationClipTrack &track,u32 component) {
@@ -297,23 +311,26 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   } else if(bake) {
     auto controls=top(transport,42);const float width=controls.width;
     if(state.clipBakeReferenceShown&&state.clipBakeSettings.rotation==1) {
-      button(left(controls,width*.28f),"Ramo XYZ",w::BakeSeedUse,true,state.clipBakeSettings.eulerReferenceExplicit,UiIcon::AnimationRotationBranch);
-      for(u32 c=0;c<3;++c)button(left(controls,width*.24f),std::string(c==0?"X · ":c==1?"Y · ":"Z · ")+number(state.clipBakeSettings.eulerReference[c]," °"),w::BakeSeedX+c);
+      button(left(controls,width*.2f),"Ordem · "+bakeOrderName(state.clipBakeSettings,selected),w::BakeOrder,true,state.clipBakeSettings.eulerOrder<RotationEulerOrderCount,UiIcon::AnimationRotationBranch);
+      button(left(controls,width*.2f),"Ramo",w::BakeSeedUse,true,state.clipBakeSettings.eulerReferenceExplicit,UiIcon::AnimationRotationBranch);
+      for(u32 c=0;c<3;++c)button(left(controls,width*.2f),std::string(c==0?"X · ":c==1?"Y · ":"Z · ")+number(state.clipBakeSettings.eulerReference[c]," °"),w::BakeSeedX+c);
     } else {
     button(left(controls,width*.21f),std::to_string(state.clipBakeSettings.sampleRate)+" amostras/s",w::BakeRate);
     const bool rotation=state.clipBakeConsolidate||selected->path==resources::AnimationPath::Rotation;const auto mode=state.clipBakeSettings.rotation;
     button(left(controls,width*.25f),"Erro · "+number(static_cast<float>(state.clipBakeSettings.tolerance),rotation?" °":""),w::BakeTolerance);
-    button(left(controls,width*.32f),!rotation||mode==3?"Preservar":mode==0?"Quaternion":mode==1?"Euler XYZ":"Progressivo",w::BakeMode,rotation);
+    button(left(controls,width*.32f),!rotation||mode==3?"Preservar":mode==0?"Quaternion":mode==1?"Euler "+bakeOrderName(state.clipBakeSettings,selected):"Progressivo",w::BakeMode,rotation);
     button(controls,"Redução",w::BakeReduction,true,state.clipBakeSettings.reduce,UiIcon::AnimationReduce);
     }
     const auto &report=state.clipBakeReport;auto outcome=top(transport,42);
     button(left(outcome,118),state.clipBakeConsolidate?"Clipe novo":"Canal",w::BakeTarget,true,state.clipBakeConsolidate,UiIcon::AnimationConsolidate);
-    if(state.clipBakeSettings.rotation==1)button(left(outcome,74),"XYZ",w::BakeReference,true,state.clipBakeReferenceShown,UiIcon::AnimationRotationBranch);
+    if(state.clipBakeSettings.rotation==1)button(left(outcome,74),bakeOrderName(state.clipBakeSettings,selected),w::BakeReference,true,state.clipBakeReferenceShown,UiIcon::AnimationRotationBranch);
     auto close=UiRect{outcome.right()-42,outcome.y,42,outcome.height};outcome.width-=42;
     auto apply=UiRect{outcome.right()-110,outcome.y,110,outcome.height};outcome.width-=110;
     label({outcome.x,outcome.y,outcome.width,21},state.clipBakeHasReport?std::to_string(report.inputKeys)+" → "+std::to_string(report.outputKeys)+" chaves":state.clipBakeConsolidate?"Original preservado":"Bake · "+std::string(pathName(*selected)),theme.color.textDim);
-    label({outcome.x,outcome.y+21,outcome.width,21},state.clipBakeHasReport?"Erro · "+number(static_cast<float>(report.maximumError),state.clipBakeReportConsolidated?" u/°":selected->path==resources::AnimationPath::Rotation?" °":"")+" · "+std::to_string(report.verifiedSamples)+" pontos":state.clipBakeSettings.rotation==1&&!state.clipBakeSettings.eulerReferenceExplicit?"Confirme o ramo XYZ":state.clipBakeConsolidate?"Graus / unidades por canal":"Verificação amostrada",theme.color.textMuted);
-    const bool needsBranch=state.clipBakeSettings.rotation==1&&(state.clipBakeConsolidate||selected->rotationMode!=resources::AnimationRotationMode::Euler);
+    label({outcome.x,outcome.y+21,outcome.width,21},state.clipBakeHasReport?"Erro · "+number(static_cast<float>(report.maximumError),state.clipBakeReportConsolidated?" u/°":selected->path==resources::AnimationPath::Rotation?" °":"")+" · "+std::to_string(report.verifiedSamples)+" pontos":state.clipBakeSettings.rotation==1&&!state.clipBakeSettings.eulerReferenceExplicit?"Confirme o ramo "+bakeOrderName(state.clipBakeSettings,selected):state.clipBakeConsolidate?"Graus / unidades por canal":"Verificação amostrada",theme.color.textMuted);
+    const bool reorder=state.clipBakeSettings.eulerOrder<RotationEulerOrderCount&&(selected->rotationMode!=resources::AnimationRotationMode::Euler||
+                       static_cast<RotationEulerOrder>(state.clipBakeSettings.eulerOrder)!=selected->euler.order);
+    const bool needsBranch=state.clipBakeSettings.rotation==1&&(state.clipBakeConsolidate||selected->rotationMode!=resources::AnimationRotationMode::Euler||reorder);
     button(apply,state.clipBakeConsolidate?"Criar":"Aplicar",w::BakeApply,!needsBranch||state.clipBakeSettings.eulerReferenceExplicit,false,UiIcon::AnimationBake);button(close,"",w::BakeClose,true,false,UiIcon::UiClose);
   } else {
   const bool compact=state.surface.width<768;

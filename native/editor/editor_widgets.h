@@ -576,7 +576,7 @@ enum : u32 {
     Edits,EditsClose,CopyKeys,CutKeys,PasteReplace,PasteInsertTracks,PasteInsertAll,
     BakeOpen,BakeClose,BakeRate,BakeTolerance,BakeReduction,BakeMode,BakeApply,
     Layers,LayerClose,LayerPrevious,LayerNext,LayerName,LayerAdd,LayerDuplicate,LayerRemove,LayerUp,LayerDown,LayerBlend,LayerWeight,LayerReference,LayerReferenceTime,LayerMute,LayerSolo,LayerCopy,LayerChoose,LayerPickerClose,LayerPickerPrevious,LayerPickerNext,
-    BakeTarget,BakeReference,BakeSeedUse,BakeSeedX,BakeSeedY,BakeSeedZ,
+    BakeTarget,BakeReference,BakeSeedUse,BakeSeedX,BakeSeedY,BakeSeedZ,BakeOrder,
     Cues,CueAddEvent,CueAddMarker,CueName,CueTime,CueTag,CueValue,CueOptions,CueForward,CueReverse,CueEnabled,CueDuplicate,CueDelete,CuePrevious,CueNext,CueOptionsClose,
     SelectMode=0xb080,Row=0xb100,Choice=0xb200,TargetChoice=0xb300,TargetEnter=0xb340,PropertyChoice=0xb380,LayerChoice=0xb3c0,PoseValue=0xb400,
     PoseAutoKey=0xb480,PoseRecord,PoseCancel,PoseIsolate,PoseNumbers,PoseJoints,PoseTranslate,PoseRotate,PoseScale,PoseFocus,Restart,PoseOrbit,PosePan,PoseZoom,PoseViewport,

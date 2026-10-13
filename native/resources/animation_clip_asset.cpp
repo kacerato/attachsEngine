@@ -95,6 +95,7 @@ bool AnimationClipAsset::valid(std::string *diagnostic) const {
   for(const auto &t:tracks) {
     if(!idValid(t.id)||!bindingIds.contains(t.binding)||static_cast<u8>(t.path)>3||static_cast<u8>(t.rotationMode)>2||
        (t.path!=AnimationPath::Rotation&&t.rotationMode!=AnimationRotationMode::Quaternion)||
+       (!t.euler.identity()&&(t.rotationMode!=AnimationRotationMode::Euler||!t.euler.valid()))||
        (t.path==AnimationPath::Weights?(!t.weightCount||t.weightCount>MaximumMorphTargets):t.weightCount!=0)||
        !layerIds.contains(t.layer)||t.curves.size()!=t.components()||!targets.insert(std::to_string(t.layer)+":"+std::to_string(t.binding)+":"+std::to_string(static_cast<u8>(t.path))).second)
       return fail(diagnostic,"Canal duplicado, incompatível ou sem binding");
@@ -115,7 +116,7 @@ bool AnimationClipAsset::valid(std::string *diagnostic) const {
         if(norm<1e-20||!std::isfinite(norm))return fail(diagnostic,"Quaternion nulo ou inválido");
       }
       if(t.rotationMode==AnimationRotationMode::ProgressiveQuaternion) {
-        AnimationChannel channel;channel.path=t.path;channel.rotationMode=t.rotationMode;channel.curves=t.curves;
+        AnimationChannel channel;channel.path=t.path;channel.rotationMode=t.rotationMode;channel.euler=t.euler;channel.curves=t.curves;
         if(!validAnimationChannel(channel))return fail(diagnostic,"Progressão de rotação incompatível com as poses");
       }
     }
@@ -154,7 +155,14 @@ std::string AnimationClipAsset::serialize() const {
   for(const auto &l:layers)out<<l.id<<' '<<std::quoted(l.name)<<' '<<static_cast<u32>(l.blend)<<' '<<l.weight<<' '<<l.referenceTime<<' '<<(l.muted?1:0)<<' '<<(l.solo?1:0)<<'\n';
   out<<tracks.size()<<'\n';
   for(const auto &t:tracks) {
-    out<<t.id<<' '<<t.binding<<' '<<static_cast<u32>(t.path)<<' '<<t.weightCount<<' '<<(t.sourceOverride?1:0)<<' '<<static_cast<u32>(t.rotationMode)<<' '<<t.layer<<' '<<t.curves.size()<<'\n';
+    out<<t.id<<' '<<t.binding<<' '<<static_cast<u32>(t.path)<<' '<<t.weightCount<<' '<<(t.sourceOverride?1:0)<<' '<<static_cast<u32>(t.rotationMode)<<' '<<t.layer<<' '<<t.curves.size();
+    // v8: ordem e referencial Euler (so em trilhas Euler).
+    if(t.rotationMode==AnimationRotationMode::Euler) {
+      out<<' '<<static_cast<u32>(t.euler.order);
+      for(const float v:t.euler.before)out<<' '<<v;
+      for(const float v:t.euler.after)out<<' '<<v;
+    }
+    out<<'\n';
     for(const auto &c:t.curves) {
       out<<c.keys.size()<<'\n';
       for(const auto &k:c.keys)out<<k.id<<' '<<k.time<<' '<<k.value<<' '<<k.inSlope<<' '<<k.outSlope<<' '<<k.inWeight<<' '<<k.outWeight<<' '
@@ -204,6 +212,13 @@ bool AnimationClipAsset::deserialize(std::string_view text,AnimationClipAsset &o
        !(in>>components)||path>3||override>1||rotation>2||!components||components>MaximumMorphTargets)
       return fail(diagnostic,"Cabeçalho de canal inválido");
     t.path=static_cast<AnimationPath>(path);t.sourceOverride=override!=0;t.rotationMode=static_cast<AnimationRotationMode>(rotation);
+    if(version>=8&&t.rotationMode==AnimationRotationMode::Euler) {
+      u32 order=0;
+      if(!(in>>order)||order>=RotationEulerOrderCount)return fail(diagnostic,"Ordem Euler inválida");
+      t.euler.order=static_cast<RotationEulerOrder>(order);
+      for(float &v:t.euler.before)if(!(in>>v))return fail(diagnostic,"Referencial Euler incompleto");
+      for(float &v:t.euler.after)if(!(in>>v))return fail(diagnostic,"Referencial Euler incompleto");
+    }
     if(components!=t.components())return fail(diagnostic,"Número de componentes incompatível");
     t.curves.resize(components);for(auto &c:t.curves)if(!readCurve(in,c,total))return fail(diagnostic,"Curva do clipe incompleta");
   }
@@ -241,17 +256,17 @@ bool AnimationClipAsset::compile(AnimationClip &out,std::string *diagnostic) con
   for(const auto &t:tracks) {
     if(t.layer)continue;
     const auto b=std::find_if(bindings.begin(),bindings.end(),[&](const auto &entry){return entry.id==t.binding;});
-    AnimationChannel c;c.node=static_cast<u32>(b-bindings.begin());c.path=t.path;c.weightCount=t.weightCount;c.curves=t.curves;c.rotationMode=t.rotationMode;
+    AnimationChannel c;c.node=static_cast<u32>(b-bindings.begin());c.path=t.path;c.weightCount=t.weightCount;c.curves=t.curves;c.rotationMode=t.rotationMode;c.euler=t.euler;
     if(layers.size()>1||layers.front().muted||solo) {
       auto base=c;base.layerWeight=layers.front().muted||(solo&&!layers.front().solo)?0.f:1.f;
-      c.curves.clear();c.rotationMode=AnimationRotationMode::Quaternion;c.layerSources.push_back(std::move(base));
+      c.curves.clear();c.rotationMode=AnimationRotationMode::Quaternion;c.euler={};c.layerSources.push_back(std::move(base));
       for(usize i=1;i<layers.size();++i) {
         const auto &l=layers[i];if(l.muted||(solo&&!l.solo)||l.weight==0)continue;
         const auto entry=channels.find({l.id,t.binding,static_cast<u8>(t.path)});
         if(entry==channels.end())continue;
         const auto *found=entry->second;
         AnimationChannel source;source.node=c.node;source.path=t.path;source.weightCount=t.weightCount;
-        source.curves=found->curves;source.rotationMode=found->rotationMode;source.layerWeight=l.weight;
+        source.curves=found->curves;source.rotationMode=found->rotationMode;source.euler=found->euler;source.layerWeight=l.weight;
         source.layerAdditive=l.blend==AnimationAuthorBlend::Additive;source.layerReferenceTime=l.referenceTime;
         if(source.layerAdditive&&l.referenceTime>=0) {
           float reference[MaximumMorphTargets];
@@ -376,17 +391,18 @@ bool AnimationClipAsset::addLayerTrack(u64 layerId,u64 sourceId,bool copyCurves,
   if(copyCurves&&rotation&&*rotation!=source->rotationMode)return fail(&error,"Cópia entre formatos exige bake explícito");
   auto candidate=*this;auto value=*source;
   if(rotation)value.rotationMode=*rotation;
+  if(value.rotationMode!=AnimationRotationMode::Euler||source->rotationMode!=AnimationRotationMode::Euler)value.euler={};
   value.curves.resize(value.components());value.layer=layerId;value.id=candidate.nextId++;value.sourceOverride=true;
   if(copyCurves)for(auto &curve:value.curves)for(auto &key:curve.keys)key.id=candidate.nextId++;
   else {
-    AnimationChannel c;c.path=source->path;c.weightCount=source->weightCount;c.rotationMode=source->rotationMode;c.curves=source->curves;
+    AnimationChannel c;c.path=source->path;c.weightCount=source->weightCount;c.rotationMode=source->rotationMode;c.euler=source->euler;c.curves=source->curves;
     float initial[MaximumMorphTargets]{};
     if(l->blend==AnimationAuthorBlend::Override) {
       if(source->rotationMode==AnimationRotationMode::Euler&&value.rotationMode==AnimationRotationMode::Euler)for(u32 i=0;i<3;++i)initial[i]=source->curves[i].keys.front().value;
       else {
         if(!sampleValidatedAnimationChannel(c,0,{initial,MaximumMorphTargets}))return fail(&error,"Propriedade não produz pose inicial válida");
         if(source->path==AnimationPath::Rotation&&value.rotationMode==AnimationRotationMode::Euler) {
-          float angles[3];if(!rotationEulerXYZ(initial,angles))return fail(&error,"Pose inicial Euler inválida");std::copy_n(angles,3,initial);
+          float angles[3];const float zero[3]{};if(!eulerFrameAnglesNear(value.euler,initial,zero,angles))return fail(&error,"Pose inicial Euler inválida");std::copy_n(angles,3,initial);
         }
       }
     } else {
@@ -461,7 +477,7 @@ bool authorAnimationClip(const AnimationClip &clip,AssetGuid guid,AssetGuid sour
       if(curve.keys.size()>AnimationClipAsset::MaximumKeys-total)return fail(&diagnostic,"Origem excede o limite de chaves");
       total+=curve.keys.size();
     }
-    AnimationClipTrack t;t.id=result.nextId++;t.binding=result.bindings[c.node].id;t.path=c.path;t.weightCount=c.weightCount;t.rotationMode=c.rotationMode;
+    AnimationClipTrack t;t.id=result.nextId++;t.binding=result.bindings[c.node].id;t.path=c.path;t.weightCount=c.weightCount;t.rotationMode=c.rotationMode;t.euler=c.euler;
     t.curves.resize(t.components());
     const bool cubic=c.interpolation==AnimationInterpolation::CubicSpline;
     for(u32 component=0;component<t.components();++component) {

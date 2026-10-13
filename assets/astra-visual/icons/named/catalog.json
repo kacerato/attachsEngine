@@ -2242,6 +2242,13 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/child-of": {
+      "category": "component",
+      "name": "child-of",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

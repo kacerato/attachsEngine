@@ -111,7 +111,7 @@ bool EditorSession::stageRigLocalPose(std::span<const resources::RigTransform> l
     std::vector<float> values;float value[4]{q[0],q[1],q[2],q[3]};
     if(mode==resources::AnimationRotationMode::Euler) {
       std::vector<float> sampled;float euler[3];
-      if(!sampleAnimationPoseChannel(*candidate.track(id),state_.clipTime,sampled)||sampled.size()<3||!rotationEulerXYZNear(value,sampled.data(),euler)) {error="Rotação Euler fora do ramo";return false;}
+      if(!sampleAnimationPoseChannel(*candidate.track(id),state_.clipTime,sampled)||sampled.size()<3||!resources::eulerFrameAnglesNear(candidate.track(id)->euler,value,sampled.data(),euler)) {error="Rotação Euler fora do ramo";return false;}
       values.assign(euler,euler+3);
     } else values.assign(value,value+4);
     if(!id) {

@@ -1043,6 +1043,9 @@ public:
   // Modelos de cena (editor/editor_scene_template.h): monta o cenário do modelo
   // `index` na cena aberta, com as vistas salvas que vêm com ele, num passo só.
   bool createSceneTemplate(u32 index);
+  // Projeto UMotion Pro (.asset) no personagem `owner`: clipes, alvos de IK,
+  // IK de plano rotativo, Filho de, camadas e eventos (editor_umotion_import.cpp).
+  bool importUMotionProject(std::string_view relative,EditorEntityId owner,struct UMotionImportReport &report,std::string &error);
   // Cena de exemplo do modelo "Carregar com as duas maos" (editor_carry_setup.cpp):
   // mesa, caixa com duas pegadas e ponto de carregar sobre componentes universais.
   bool addCarrySetupInTransaction(EditorEntityId character,EditorEntityId group,std::string &error);

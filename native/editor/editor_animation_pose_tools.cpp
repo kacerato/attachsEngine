@@ -18,10 +18,19 @@ bool sampleAnimationPoseChannel(const resources::AnimationClipTrack &track,float
     }
     return true;
   }
-  resources::AnimationChannel channel;channel.path=track.path;channel.rotationMode=track.rotationMode;
+  resources::AnimationChannel channel;channel.path=track.path;channel.rotationMode=track.rotationMode;channel.euler=track.euler;
   channel.weightCount=track.weightCount;channel.curves=track.curves;
   values.resize(track.path==resources::AnimationPath::Rotation&&track.rotationMode!=resources::AnimationRotationMode::Euler?4:track.components());
   return resources::sampleValidatedAnimationChannel(channel,time,values);
+}
+bool animationEulerPoseValues(const resources::AnimationClipTrack &track,float time,const runtime::Transform &pose,std::vector<float> &values) {
+  // Trilha no padrao da cena: os graus da pose sao os proprios valores.
+  if(track.euler.identity()) {values.assign(pose.rotationDegrees,pose.rotationDegrees+3);return true;}
+  std::vector<float> current;float q[4],angles[3];
+  if(!sampleAnimationPoseChannel(track,time,current)||current.size()<3)return false;
+  runtime::transformRotationQuaternion(pose,q);
+  if(!resources::eulerFrameAnglesNear(track.euler,q,current.data(),angles))return false;
+  values.assign(angles,angles+3);return true;
 }
 bool applyAnimationPoseLocks(const resources::AnimationClipTrack &track,float time,u64 mask,
                              std::span<const float> requested,std::vector<float> &out,std::string &error) {
@@ -71,7 +80,9 @@ bool EditorSession::resetAnimationClipPose(bool identity,std::string &error) {
   else if(track->path==resources::AnimationPath::Scale)values=identity?std::vector<float>(3,1):std::vector<float>(object->transform.scale,object->transform.scale+3);
   else if(track->path==resources::AnimationPath::Rotation) {
     runtime::Transform pose;if(!identity)pose=object->transform;
-    if(track->rotationMode==resources::AnimationRotationMode::Euler)values.assign(pose.rotationDegrees,pose.rotationDegrees+3);
+    if(track->rotationMode==resources::AnimationRotationMode::Euler) {
+      if(!animationEulerPoseValues(*track,state_.clipTime,pose,values)) {error="Rotação Euler fora do ramo";return false;}
+    }
     else {float q[4];runtime::transformRotationQuaternion(pose,q);values.assign(q,q+4);}
   } else {
     const auto *skin=static_cast<const scene::SkinnedMesh*>(object->components.find(scene::SkinnedMesh::descriptor));
@@ -119,7 +130,9 @@ bool EditorSession::pasteAnimationClipPose(std::string &error) {
       std::vector<float> values;
       if(path==resources::AnimationPath::Translation)values.assign(local.position,local.position+3);
       else if(path==resources::AnimationPath::Scale)values.assign(local.scale,local.scale+3);
-      else if(mode==resources::AnimationRotationMode::Euler)values.assign(local.rotationDegrees,local.rotationDegrees+3);
+      else if(mode==resources::AnimationRotationMode::Euler) {
+        if(!animationEulerPoseValues(*candidate.track(id),state_.clipTime,local,values)) {error="Rotação Euler fora do ramo";return false;}
+      }
       else {float q[4];runtime::transformRotationQuaternion(local,q);values.assign(q,q+4);}
       if(!id) {
         if(!state_.clipPoseRecording.createChannels) {error="Pose mundial requer os três canais TRS; política proíbe criá-los";return false;}

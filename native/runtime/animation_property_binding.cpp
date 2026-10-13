@@ -6,6 +6,7 @@
 #include "ui/gui_document.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 
@@ -86,6 +87,7 @@ bool readAnimationProperty(const scene::ComponentValue &v,const AnimationPropert
   if(const auto *p=triple(v,a)) {for(u32 c=0;c<p->dimensions();++c)components[c]=number(v,p->channels[c])->read(v);out=fromNumbers(a.kind,components);return true;}
   if(a.kind==AnimationPropertyKind::Boolean)for(const auto &p:v.type().booleans)if(p.id==a.property&&p.animationSafe&&p.read&&p.write&&discreteEligible(v,p.presentation)){out=p.read(v);return true;}
   if(a.kind==AnimationPropertyKind::Enumeration)for(const auto &p:v.type().enums)if(p.id==a.property&&p.animationSafe&&p.read&&p.write&&discreteEligible(v,p.presentation)){out=p.read(v);return true;}
+  if(a.kind==AnimationPropertyKind::Object)for(const auto &p:v.type().references)if(p.id==a.property&&p.animationSafe&&p.read&&p.write&&discreteEligible(v,p.presentation)){out=AnimationPropertyObject{p.read(v)};return true;}
   return fail(error,"Tipo ou propriedade sem contrato animável efetivo");
 }
 bool writeAnimationProperty(scene::ComponentValue &v,const AnimationPropertyAddress &a,const AnimationPropertyValue &input,std::string &error) {
@@ -94,6 +96,10 @@ bool writeAnimationProperty(scene::ComponentValue &v,const AnimationPropertyAddr
   if(a.kind==AnimationPropertyKind::Boolean) {
     const auto *value=std::get_if<bool>(&input);if(!value)return fail(error,"Booleano incompatível");
     for(const auto &p:v.type().booleans)if(p.id==a.property){p.write(v,*value);return true;}
+  } else if(a.kind==AnimationPropertyKind::Object) {
+    const auto *value=std::get_if<AnimationPropertyObject>(&input);if(!value)return fail(error,"Referência incompatível");
+    if(value->id>std::numeric_limits<u32>::max())return fail(error,"Referência de objeto fora da faixa");
+    for(const auto &p:v.type().references)if(p.id==a.property){p.write(v,value->id);return true;}
   } else if(a.kind==AnimationPropertyKind::Enumeration) {
     const auto *value=std::get_if<u32>(&input);if(!value)return fail(error,"Enum incompatível");
     for(const auto &p:v.type().enums)if(p.id==a.property) {
@@ -134,6 +140,7 @@ std::vector<AnimationPropertyDescriptor> animationPropertyCatalog(const scene::C
   for(const auto &p:v.type().numbers)append(p.id,AnimationPropertyKind::Number,p.name,p.presentation.unit,p.minimum,p.maximum);
   for(const auto &p:v.type().booleans)append(p.id,AnimationPropertyKind::Boolean,p.name);
   for(const auto &p:v.type().enums)append(p.id,AnimationPropertyKind::Enumeration,p.name);
+  for(const auto &p:v.type().references)if(p.animationSafe)append(p.id,AnimationPropertyKind::Object,p.name);
   if(&v.type()==&scene::MeshRenderer::descriptor) {
     const auto &mesh=static_cast<const scene::MeshRenderer&>(v);
     for(u32 slot=0;slot<mesh.slotCount();++slot)if(mesh.slotMaterial(slot).enabled&&mesh.slotAsset(slot).valid()) {

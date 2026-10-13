@@ -189,6 +189,8 @@ public:
   bool start(const runtime::SceneGraph &source, const EditorMapScene &resources) {
     if(active_ || unresolvedEntity(source)!=kInvalidEntity) return false;
     if(!world_.load(source)) return false;
+    // Repouso antes de qualquer amostra de animacao (plano rotativo do IK).
+    ik_.captureRest(world_.graph());
     std::vector<renderer::MapDrawState> validated;
     if(!resources.extract(world_.graph(),validated)) {world_.clear();return false;}
     const CollisionGeometry geometry(resources);

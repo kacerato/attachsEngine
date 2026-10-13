@@ -113,6 +113,26 @@ AE_TEST(skin_palette_deforms_in_draw_space_and_bounds_follow_the_joints) {
   AE_EXPECT_TRUE(!computeSkinPalette(skin, identity, wrongSize, palette), "contagem de juntas errada recusada");
 }
 
+AE_TEST(skinned_bounds_follow_a_bind_with_scale) {
+  // Como o Robot Kyle: malha em centimetros, desenho em escala 0,01 e a junta
+  // em metros (inversa de bind com escala 0,01). A esfera da junta fica no
+  // espaco da junta; os limites tem de sair no tamanho que se ve.
+  SkinDefinition skin;
+  skin.joints = {0};
+  skin.inverseBind = {.01f, 0, 0, 0, 0, .01f, 0, 0, 0, 0, .01f, 0, 0, 0, 0, 1};
+  skin.jointSpheres = {0, 1.5f, 0, .1f}; // vertice em (0,150,0) cm, raio 10 cm
+  const float model[16]{.01f, 0, 0, 0, 0, .01f, 0, 0, 0, 0, .01f, 0, 0, 0, 0, 1};
+  const std::vector<float> joint{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  std::vector<float> palette;
+  AE_EXPECT_TRUE(computeSkinPalette(skin, model, joint, palette), "paleta calculada");
+  float center[3], radius = 0;
+  AE_EXPECT_TRUE(skinnedLocalBounds(skin, palette, center, radius), "limites deformados");
+  // No espaco do desenho (centimetros): centro (0,150,0) e raio 10.
+  AE_EXPECT_TRUE(near(center[0], 0) && std::fabs(center[1] - 150) < 1e-2f && near(center[2], 0), "centro no espaco do desenho");
+  // Esfera que envolve a caixa da esfera de 10 cm: entre 10 e 10*raiz(3), nunca 100x.
+  AE_EXPECT_TRUE(radius >= 10 - 1e-2f && radius <= 17.33f, "raio sem a escala do bind aplicada duas vezes");
+}
+
 AE_TEST(skin_and_animation_survive_the_import_cache) {
   GltfImport model;
   AE_EXPECT_TRUE(importGlb(test::skinnedAnimatedGlb(), {}, {}, model), model.diagnostic.c_str());

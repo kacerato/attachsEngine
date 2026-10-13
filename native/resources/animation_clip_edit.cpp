@@ -65,7 +65,7 @@ bool rebuildProgress(AnimationClipTrack &track,std::string &error) {
   return validAnimationCurve(progress);
 }
 bool cropProgressive(const AnimationClipTrack &source,AnimationClipTrack &track,float start,float end,u64 &nextId,std::string &error) {
-  AnimationChannel channel;channel.path=AnimationPath::Rotation;channel.rotationMode=source.rotationMode;channel.curves=source.curves;
+  AnimationChannel channel;channel.path=AnimationPath::Rotation;channel.rotationMode=source.rotationMode;channel.euler=source.euler;channel.curves=source.curves;
   auto &progress=track.curves[4];
   if(!cropAnimationCurve(progress,start,end,nextId)) {error="Corte não preserva os handles da progressão";return false;}
   // New boundaries may lie on an overshoot, wrap, or reversal. Split the exact
@@ -227,7 +227,7 @@ bool AnimationClipAsset::putKey(u64 trackId,u32 component,AnimationCurveKey key,
         if(!putAnimationCurveKey(t->curves[c],linked,candidate.nextId,ignored)) {diagnostic="Tempos de rotação colidem";return false;}
       }
     } else if(std::none_of(curve.keys.begin(),curve.keys.end(),[&](const auto &k){return k.time==key.time;})) {
-      AnimationChannel channel;channel.path=AnimationPath::Rotation;channel.rotationMode=t->rotationMode;channel.curves=t->curves;float pose[4];
+      AnimationChannel channel;channel.path=AnimationPath::Rotation;channel.rotationMode=t->rotationMode;channel.euler=t->euler;channel.curves=t->curves;float pose[4];
       if(!sampleAnimationChannel(channel,key.time,pose)) {diagnostic="Rotação não produz pose válida";return false;}
       if(progressive) {
         u64 ignored=0;auto &progress=t->curves[4];

@@ -11,7 +11,7 @@ namespace {
 using Mode=AnimationTangentMode;
 struct Frame {float time=0;std::array<float,MaximumMorphTargets> value{};};
 AnimationChannel channel(const AnimationClipTrack &t) {
-  AnimationChannel c;c.path=t.path;c.rotationMode=t.rotationMode;c.weightCount=t.weightCount;c.curves=t.curves;return c;
+  AnimationChannel c;c.path=t.path;c.rotationMode=t.rotationMode;c.euler=t.euler;c.weightCount=t.weightCount;c.curves=t.curves;return c;
 }
 bool step(const AnimationCurveKey &a,const AnimationCurveKey &b) {
   return a.outgoing==Mode::Constant||a.outgoing==Mode::NextConstant||b.incoming==Mode::Constant||b.incoming==Mode::NextConstant;
@@ -26,13 +26,16 @@ static bool bakeTrack(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
   auto reject=[&](const char *why){error=why;return false;};
   if(!asset.valid(&error))return false;
   if(!settings.sampleRate||settings.sampleRate>240||settings.verificationSteps<2||settings.verificationSteps>16||
-     settings.maximumFrames<2||settings.maximumFrames>65536||!std::isfinite(settings.tolerance)||settings.tolerance<=0||settings.rotation>3)
+     settings.maximumFrames<2||settings.maximumFrames>65536||!std::isfinite(settings.tolerance)||settings.tolerance<=0||settings.rotation>3||
+     settings.eulerOrder>RotationEulerOrderCount)
     return reject("Configuração de bake inválida");
   const auto *original=asset.track(id);if(!original)return reject("Canal de bake inexistente");
   const bool rotation=original->path==AnimationPath::Rotation;
   const auto mode=settings.rotation==3?original->rotationMode:static_cast<AnimationRotationMode>(settings.rotation);
   if(!rotation&&settings.rotation!=3)return reject("Modo de rotação exige um canal de rotação");
-  if(rotation&&mode==AnimationRotationMode::Euler&&(original->rotationMode!=mode||composed))
+  const bool reorder=settings.eulerOrder<RotationEulerOrderCount&&static_cast<RotationEulerOrder>(settings.eulerOrder)!=
+                    (original->rotationMode==AnimationRotationMode::Euler?original->euler.order:RotationEulerOrder::XYZ);
+  if(rotation&&mode==AnimationRotationMode::Euler&&(original->rotationMode!=mode||composed||reorder))
     return bakeEuler(asset,id,settings,report,error,cancelled,composed);
   const bool euler=rotation&&mode==AnimationRotationMode::Euler;
   const u32 components=rotation?(euler?3u:4u):original->components();
@@ -91,7 +94,7 @@ static bool bakeTrack(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
     double result=0;
     if(rotation) {
       if(!euler)return rotationDistanceDegrees(a.value.data(),b.value.data());
-      float qa[4],qb[4];rotationQuaternionXYZ(a.value.data(),qa);rotationQuaternionXYZ(b.value.data(),qb);
+      float qa[4],qb[4];if(!eulerFrameQuaternion(original->euler,a.value.data(),qa)||!eulerFrameQuaternion(original->euler,b.value.data(),qb))return std::numeric_limits<double>::infinity();
       result=rotationDistanceDegrees(qa,qb);
     }
     for(u32 c=0;c<components;++c)result=std::max(result,std::abs(double(a.value[c])-b.value[c]));
@@ -163,7 +166,7 @@ static bool bakeTrack(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
       if(chosen) {retained[chosen]=true;work.push_back({a,chosen});work.push_back({chosen,b});}
     }
   }
-  auto candidate=asset;auto *target=candidate.track(id);target->rotationMode=mode;target->curves.assign(outputComponents,{});target->sourceOverride=true;
+  auto candidate=asset;auto *target=candidate.track(id);target->rotationMode=mode;if(mode!=AnimationRotationMode::Euler)target->euler={};target->curves.assign(outputComponents,{});target->sourceOverride=true;
   auto add=[&](u32 c,const Frame &frame) {
     AnimationCurveKey key;key.time=frame.time;key.value=frame.value[c];key.incoming=key.outgoing=Mode::Linear;
     if(c<original->curves.size()) {
@@ -207,6 +210,9 @@ static bool bakeEuler(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
   if(!settings.eulerReferenceExplicit) {error="Conversão Euler exige uma referência XYZ explícita";return false;}
   for(float value:settings.eulerReference)if(!std::isfinite(value)||std::abs(value)>1e7f) {error="Referência Euler inválida";return false;}
   const auto *original=asset.track(id);const auto source=composed?*composed:channel(*original);
+  // Euler -> Euler mantem a ordem e o referencial; vindo de quaternion, o padrao da cena.
+  AnimationEulerFrame frame=original->rotationMode==AnimationRotationMode::Euler&&!composed?original->euler:AnimationEulerFrame{};
+  if(settings.eulerOrder<RotationEulerOrderCount)frame.order=static_cast<RotationEulerOrder>(settings.eulerOrder);
   auto candidate=asset;auto dense=settings;dense.rotation=0;dense.reduce=false;dense.tolerance*=.2;
   AnimationBakeReport initial;
   if(!bakeTrack(candidate,id,dense,initial,error,cancelled,composed))return false;
@@ -227,7 +233,7 @@ static bool bakeEuler(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
     frames.clear();float reference[3];std::copy_n(settings.eulerReference,3,reference);
     for(float t:times) {
       float q[4];Frame f;f.time=t;
-      if(!pose(t,q)||!rotationEulerXYZNear(q,reference,f.value.data())) {if(error.empty())error="Não foi possível levantar o ramo Euler";return false;}
+      if(!pose(t,q)||!eulerFrameAnglesNear(frame,q,reference,f.value.data())) {if(error.empty())error="Não foi possível levantar o ramo Euler";return false;}
       std::copy_n(f.value.data(),3,reference);frames.push_back(f);
     }
     std::vector<float> additions;
@@ -240,7 +246,8 @@ static bool bakeEuler(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
         if(t<=a.time||t>=b.time)continue;
         float q[4],angles[3],test[4];if(!pose(t,q))return false;
         for(u32 c=0;c<3;++c)angles[c]=static_cast<float>(double(a.value[c])+(double(b.value[c])-a.value[c])*alpha);
-        rotationQuaternionXYZ(angles,test);const double distance=rotationDistanceDegrees(q,test);
+        if(!eulerFrameQuaternion(frame,angles,test))return false;
+        const double distance=rotationDistanceDegrees(q,test);
         if(!std::isfinite(distance)) {error="Erro Euler não finito";return false;}
         split|=distance>settings.tolerance*.2;
       }
@@ -252,7 +259,7 @@ static bool bakeEuler(AnimationClipAsset &asset,u64 id,const AnimationBakeSettin
     if(round>=24||times.size()+additions.size()>limit) {error="Continuidade Euler excede a precisão ou orçamento";return false;}
     times.insert(additions.begin(),additions.end());
   }
-  auto *target=candidate.track(id);target->rotationMode=AnimationRotationMode::Euler;target->curves.assign(3,{});target->sourceOverride=true;
+  auto *target=candidate.track(id);target->rotationMode=AnimationRotationMode::Euler;target->euler=frame;target->curves.assign(3,{});target->sourceOverride=true;
   for(const auto &frame:frames)for(u32 c=0;c<3;++c) {
     if(candidate.nextId==std::numeric_limits<u64>::max()) {error="Identidades de chave esgotadas";return false;}
     AnimationCurveKey key;key.id=candidate.nextId++;key.time=frame.time;key.value=frame.value[c];key.incoming=key.outgoing=Mode::Linear;

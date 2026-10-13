@@ -64,6 +64,10 @@ static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool ren
 int main(int argc,char **argv) {
   if(argc<2)return 1;
   const std::filesystem::path root=AETHER_REPOSITORY_ROOT;
+  if(std::string_view(argv[1])=="write-kyle-umotion") {
+    if(argc!=6)return 180;
+    return test::writeKyleUMotionProject(std::filesystem::absolute(argv[2]),std::filesystem::absolute(argv[3]),std::filesystem::absolute(argv[4]),std::filesystem::absolute(argv[5]));
+  }
   if(std::string_view(argv[1])=="write-kyle-carry") {
     if(argc!=4)return 180;
     return test::writeKyleCarryProject(std::filesystem::absolute(argv[2]),std::filesystem::absolute(argv[3]));

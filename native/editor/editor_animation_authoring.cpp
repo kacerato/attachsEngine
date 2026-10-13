@@ -237,7 +237,7 @@ struct AnimationAuthoringScope::Impl {
       if(found==draft->asset.tracks.end()) {s.reject("Canal inexistente");return -1;}
       const int count=found->path==resources::AnimationPath::Rotation?4:static_cast<int>(found->components());
       if(!values||capacity<count)return count;
-      resources::AnimationChannel channel;channel.path=found->path;channel.rotationMode=found->rotationMode;
+      resources::AnimationChannel channel;channel.path=found->path;channel.rotationMode=found->rotationMode;channel.euler=found->euler;
       channel.weightCount=found->weightCount;channel.curves=found->curves;
       if(!resources::sampleAnimationChannel(channel,time,{values,static_cast<usize>(count)})) {s.reject("Canal não produz pose válida");return -1;}
       return count;

@@ -1435,6 +1435,20 @@ public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
         get => Component.GetFloat("priority");
         set => Component.SetFloat("priority", value);
     }
+    /// <summary>Ângulo do plano (°). Gira o plano da dobra em torno do eixo raiz→ponta; o zero é perpendicular ao osso do meio no repouso.</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float PlaneAngle
+    {
+        get => Component.GetFloat("plane_angle");
+        set => Component.SetFloat("plane_angle", value);
+    }
+    /// <summary>Rotação do polo (°). Gira a cadeia resolvida em torno do eixo raiz→alvo (sem Direção da dobra).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float PoleRotation
+    {
+        get => Component.GetFloat("pole_rotation");
+        set => Component.SetFloat("pole_rotation", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -1446,6 +1460,28 @@ public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
     {
         get => Component.GetBool("match_target_rotation");
         set => Component.SetBool("match_target_rotation", value);
+    }
+    public enum SolverOption : uint
+    {
+        Pose = 0,
+        PlanoRotativo = 1,
+    }
+    /// <summary>Solver</summary>
+    public SolverOption Solver
+    {
+        get => (SolverOption)Component.GetEnum("solver");
+        set => Component.SetEnum("solver", (uint)value);
+    }
+    public enum ReferenceOption : uint
+    {
+        Animacao = 0,
+        PoseDeRepouso = 1,
+    }
+    /// <summary>Referência. De onde a cadeia parte antes de resolver.</summary>
+    public ReferenceOption Reference
+    {
+        get => (ReferenceOption)Component.GetEnum("reference");
+        set => Component.SetEnum("reference", (uint)value);
     }
     /// <summary>Alvo</summary>
     public ObjectReference Target
@@ -1485,6 +1521,20 @@ public readonly struct ChainIk : IComponentFacade<ChainIk>
         get => Component.GetFloat("weight");
         set => Component.SetFloat("weight", value);
     }
+    /// <summary>Ângulo do plano (°). Gira o plano da dobra em torno do eixo raiz→ponta.</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float PlaneAngle
+    {
+        get => Component.GetFloat("plane_angle");
+        set => Component.SetFloat("plane_angle", value);
+    }
+    /// <summary>Rotação do polo (°). Gira a cadeia resolvida em torno do eixo raiz→alvo.</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float PoleRotation
+    {
+        get => Component.GetFloat("pole_rotation");
+        set => Component.SetFloat("pole_rotation", value);
+    }
     /// <summary>Prioridade</summary>
     /// <remarks>Faixa válida: -100 a 100.</remarks>
     public float Priority
@@ -1519,10 +1569,17 @@ public readonly struct ChainIk : IComponentFacade<ChainIk>
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
     }
+    /// <summary>Ponta segue rotação do alvo</summary>
+    public bool MatchTargetRotation
+    {
+        get => Component.GetBool("match_target_rotation");
+        set => Component.SetBool("match_target_rotation", value);
+    }
     public enum SolverOption : uint
     {
         CCD = 0,
         FABRIK = 1,
+        PlanoRotativo = 2,
     }
     /// <summary>Solver</summary>
     public SolverOption Solver
@@ -1530,11 +1587,28 @@ public readonly struct ChainIk : IComponentFacade<ChainIk>
         get => (SolverOption)Component.GetEnum("solver");
         set => Component.SetEnum("solver", (uint)value);
     }
+    public enum ReferenceOption : uint
+    {
+        Animacao = 0,
+        PoseDeRepouso = 1,
+    }
+    /// <summary>Referência. De onde a cadeia parte antes de resolver.</summary>
+    public ReferenceOption Reference
+    {
+        get => (ReferenceOption)Component.GetEnum("reference");
+        set => Component.SetEnum("reference", (uint)value);
+    }
     /// <summary>Alvo</summary>
     public ObjectReference Target
     {
         get => Component.GetReference("target");
         set => Component.SetReference("target", value);
+    }
+    /// <summary>Direção da dobra</summary>
+    public ObjectReference Pole
+    {
+        get => Component.GetReference("pole");
+        set => Component.SetReference("pole", value);
     }
 }
 
@@ -2958,6 +3032,43 @@ public readonly struct Socket : IComponentFacade<Socket>
     {
         get => Component.GetReference("bone");
         set => Component.SetReference("bone", value);
+    }
+}
+
+/// <summary>Filho de: Troca o pai do objeto durante a animação; os canais locais valem no espaço do pai escolhido. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ParentConstraint.html</remarks>
+public readonly struct ChildOf : IComponentFacade<ChildOf>
+{
+    public static string TypeId => "astra.constraint.child_of";
+    public static ChildOf Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ChildOf(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Fixo no personagem. Os canais valem no espaço da raiz do personagem (IK pinning).</summary>
+    public bool Pinned
+    {
+        get => Component.GetBool("pinned");
+        set => Component.SetBool("pinned", value);
+    }
+    /// <summary>Pai. Os canais locais do objeto valem no espaço deste pai; troque com uma chave.</summary>
+    public ObjectReference Parent
+    {
+        get => Component.GetReference("parent");
+        set => Component.SetReference("parent", value);
     }
 }
 

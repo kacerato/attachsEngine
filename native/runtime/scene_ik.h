@@ -38,6 +38,9 @@ public:
   SceneIk &operator=(const SceneIk &)=delete;
   const std::vector<Diagnostic> &diagnostics() const;
   void reset();
+  // Pose de repouso (autoria) para a Referencia "Pose de repouso" do plano
+  // rotativo; chamada logo apos carregar o mundo, antes da animacao.
+  void captureRest(const SceneGraph &graph);
   bool advance(GameWorld &world,const GroundQuery &ground={});
   // Pacote C: golpe, recuo, interacao e colisao. Recusam objeto sem o
   // componente ativo; o efeito aparece no proximo advance.

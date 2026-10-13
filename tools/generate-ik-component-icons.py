@@ -71,6 +71,10 @@ root_motion += arrow((17, 13), (29, 13), 2.0) + [("poly", mark.bar((3, 31), (29,
 interaction_carry = chain([(4, 5), (5, 15), (10, 21)], 2.4, 2.2) + chain([(28, 5), (27, 15), (22, 21)], 2.4, 2.2)
 interaction_carry += [("poly", [(10, 15), (22, 15), (22, 27), (10, 27)])] + [("poly", mark.bar((12, 11), (20, 11), 1.4))]
 
+# Filho de: dois pais (osso e mao) e o objeto preso ao segundo, com a seta da troca.
+child_of = chain([(4, 27), (9, 19)], 2.2, 2.0) + chain([(28, 27), (23, 19)], 2.2, 2.0)
+child_of += [("poly", [(18, 7), (26, 7), (26, 15), (18, 15)])] + arrow((7, 13), (16, 10), 1.6) + [("poly", mark.bar((22, 15), (23, 19), 1.4))]
+
 socket = chain([(5, 27), (12, 17)]) + [("poly", [(12, 11), (22, 11), (22, 21), (12, 21)])] + [("poly", mark.bar((22, 16), (29, 16), 2.2))] + [("circle", ((26, 6), 2.6))]
 
 named = root / "assets/astra-visual/icons/named"
@@ -83,7 +87,7 @@ for name, geometry in (("ik-two-bone", two_bone), ("ik-chain", ik_chain), ("foot
                        ("body-tilt", body_tilt), ("hand-poser", hand_poser), ("penetration-avoidance", penetration),
                        ("interaction-object", interaction_object), ("interaction-system", interaction_system),
                        ("full-body-ik", full_body), ("fabrik-root", fabrik_root), ("body-by-targets", body_by_targets), ("root-motion", root_motion), ("socket", socket),
-                       ("interaction-carry", interaction_carry)):
+                       ("interaction-carry", interaction_carry), ("child-of", child_of)):
     mark.render(geometry).save(named / f"component/{name}.png")
     data["icons"][f"component/{name}"] = dict(category="component", name=name, dark_ui_ready=True,
                                                generation="ik-components-v1",

@@ -30,11 +30,12 @@ struct AnimationClipTrack {
   bool sourceOverride=false;
   std::vector<AnimationCurve> curves;
   AnimationRotationMode rotationMode=AnimationRotationMode::Quaternion;
+  AnimationEulerFrame euler; // ordem e referencial das curvas Euler
   u64 layer=0;
   u32 components() const {return path==AnimationPath::Rotation?rotationCurveComponents(rotationMode):path==AnimationPath::Weights?weightCount:3u;}
 };
 struct AnimationClipAsset {
-  static constexpr u32 FormatVersion=7,MaximumLayers=32;
+  static constexpr u32 FormatVersion=8,MaximumLayers=32;
   static constexpr usize MaximumBytes=64*1024*1024,MaximumBindings=4096,MaximumTracks=16384,MaximumKeys=262144;
   AssetGuid guid,source,sourceClip;
   u64 nextId=1;

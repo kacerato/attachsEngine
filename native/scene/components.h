@@ -127,6 +127,9 @@ struct ComponentObjectReference {
   // enabled DynamicBodyMotor on a dynamic non-sensor Body). Shared by picker,
   // authoring, removal checks and runtime readiness.
   bool (*acceptsComponents)(const Components &)=nullptr;
+  // Troca de referencia por quadro e segura (o consumidor le a cada quadro):
+  // a referencia entra no catalogo de propriedades animaveis como canal discreto.
+  bool animationSafe=false;
   bool isRequiredForExecution(const ComponentValue &value) const {
     return requiredForExecution && requiredForExecution(value);
   }

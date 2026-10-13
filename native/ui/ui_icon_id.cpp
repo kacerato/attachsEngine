@@ -95,6 +95,7 @@ constexpr const char *kNames[] = {
     "component/camera-brain",
     "component/camera-follow",
     "component/character",
+    "component/child-of",
     "component/collider",
     "component/constant-force",
     "component/convex-parts",

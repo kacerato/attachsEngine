@@ -86,6 +86,7 @@ bool validAnimationChannel(const AnimationChannel &channel) {
          (source.layerReferenceTime<0&&source.layerReferenceTime!=-1)||!validAnimationChannel(source))return false;
     return !channel.layerSources.front().layerAdditive;
   }
+  if(!channel.euler.identity()&&(channel.path!=AnimationPath::Rotation||channel.rotationMode!=AnimationRotationMode::Euler||!channel.euler.valid()))return false;
   if(!channel.curves.empty()) {
     if(!channel.times.empty()||!channel.values.empty()||channel.curves.size()!=channel.curveComponents())return false;
     for(const auto &curve:channel.curves)if(!validAnimationCurve(curve))return false;
@@ -144,6 +145,36 @@ bool validAnimationChannel(const AnimationChannel &channel) {
   return true;
 }
 
+bool AnimationEulerFrame::identity() const noexcept {
+  return order==RotationEulerOrder::XYZ&&before[0]==0&&before[1]==0&&before[2]==0&&before[3]==1&&after[0]==0&&after[1]==0&&after[2]==0&&after[3]==1;
+}
+bool AnimationEulerFrame::valid() const noexcept {
+  if(static_cast<u32>(order)>=RotationEulerOrderCount)return false;
+  for(const float *q:{before,after}) {
+    double norm=0;for(u32 c=0;c<4;++c){if(!std::isfinite(q[c]))return false;norm+=double(q[c])*q[c];}
+    if(std::abs(norm-1)>1e-3)return false;
+  }
+  return true;
+}
+bool AnimationEulerFrame::operator==(const AnimationEulerFrame &other) const noexcept {
+  return order==other.order&&std::equal(before,before+4,other.before)&&std::equal(after,after+4,other.after);
+}
+bool eulerFrameQuaternion(const AnimationEulerFrame &frame,const float degrees[3],float out[4]) {
+  float inner[4];rotationQuaternionEuler(frame.order,degrees,inner);
+  if(frame.identity()) {std::copy_n(inner,4,out);return normalizeRotationQuaternion(out);}
+  float left[4];rotationMultiply(frame.before,inner,left);rotationMultiply(left,frame.after,out);
+  return normalizeRotationQuaternion(out);
+}
+bool eulerFrameAnglesNear(const AnimationEulerFrame &frame,const float quaternion[4],const float reference[3],float degrees[3]) {
+  float q[4];std::copy_n(quaternion,4,q);
+  if(!frame.identity()) {
+    const float before[4]{-frame.before[0],-frame.before[1],-frame.before[2],frame.before[3]};
+    const float after[4]{-frame.after[0],-frame.after[1],-frame.after[2],frame.after[3]};
+    float left[4];rotationMultiply(before,quaternion,left);rotationMultiply(left,after,q);
+  }
+  return rotationEulerNear(frame.order,q,reference,degrees);
+}
+
 bool sampleAnimationChannel(const AnimationChannel &channel, float time, float out[4]) {
   if (channel.components() > 4) return false;
   return sampleAnimationChannel(channel, time, std::span<float>(out, 4));
@@ -197,7 +228,7 @@ bool sampleValidatedAnimationChannel(const AnimationChannel &channel,float time,
         AnimationCurveSample value;if(!sampleValidatedAnimationCurve(channel.curves[c],time,value))return false;
         angles[c]=static_cast<float>(value.value);
       }
-      rotationQuaternionXYZ(angles,out.data());return normalizeRotationQuaternion(out.data());
+      return eulerFrameQuaternion(channel.euler,angles,out.data());
     }
     if(channel.path==AnimationPath::Rotation&&channel.rotationMode==AnimationRotationMode::ProgressiveQuaternion) {
       const auto &keys=channel.curves[0].keys;usize i=0;
@@ -414,7 +445,13 @@ bool skinnedLocalBounds(const SkinDefinition &skin, const std::vector<float> &pa
   for (usize j = 0; j < joints; ++j) {
     const float *sphere = skin.jointSpheres.data() + j * 4;
     if (sphere[3] < 0) continue;
-    const float *m = palette.data() + j * 16;
+    // A esfera esta no espaco da junta (inversa de bind ja aplicada aos
+    // vertices); a paleta inclui essa inversa, entao a junta no espaco do
+    // desenho e paleta * bind. Sem isso, binds com escala (armadura em 0,01
+    // e malha em centimetros) aplicavam a escala duas vezes.
+    float bind[16], m[16];
+    if (!invert(skin.inverseBind.data() + j * 16, bind)) return false;
+    multiply(palette.data() + j * 16, bind, m);
     float c[3];
     for (u32 axis = 0; axis < 3; ++axis)
       c[axis] = m[axis] * sphere[0] + m[4 + axis] * sphere[1] + m[8 + axis] * sphere[2] + m[12 + axis];

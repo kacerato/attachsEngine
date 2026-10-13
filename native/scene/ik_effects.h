@@ -13,7 +13,7 @@
 #include "scene/ik_constraints.h"
 
 namespace ae::scene {
-#define AE_FX_NUM(T,id,label,member,lo,hi,step,group,unit) ComponentNumber{label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).member;},[](ComponentValue&v){return &static_cast<T&>(v).member;},id,{group,unit}}
+#define AE_FX_NUM(T,id,label,member,lo,hi,step,group,unit) ComponentNumber{label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).member;},[](ComponentValue&v){return &static_cast<T&>(v).member;},id,{group,unit},true}
 #define AE_FX_BOOL(T,id,label,member,group) ComponentBoolean{id,label,[](const ComponentValue&v){return static_cast<const T&>(v).member;},[](ComponentValue&v,bool n){static_cast<T&>(v).member=n;},{group}}
 #define AE_FX_ENUM(T,id,label,options,member,group) ComponentEnum{id,label,options,[](const ComponentValue &v){return static_cast<const T&>(v).member;},[](ComponentValue &v,u32 n){static_cast<T&>(v).member=n;},{group}}
 #define AE_FX_REF(T,id,label,member,scope,none,group) ComponentObjectReference{id,label,"",ObjectReferenceScope::scope,none,[](const ComponentValue &v){return static_cast<const T&>(v).member;},[](ComponentValue &v,u64 n){static_cast<T&>(v).member=n;},{group}}
@@ -215,6 +215,19 @@ public:
   }
 };
 
+// Filho de (Child-Of animavel, UMotion Pro 1.29 "Child-Of Constraint"): troca
+// o pai do objeto durante a animacao. Os canais locais do objeto passam a valer
+// no espaco do Pai escolhido; Fixo no personagem usa a raiz do personagem
+// (IK pinning). Sem pai e sem fixo, segue a hierarquia normal.
+class ChildOf final : public ComponentValue {
+public:
+  u64 parent=0;bool enabled=true,pinned=false;
+  AE_FX_VALUE(ChildOf)
+  bool valid() const override {return ikReference(parent);}
+  void write(std::ostream &out) const override {out<<parent<<' '<<enabled<<' '<<pinned;}
+  bool read(std::istream &in,u32 version) override {return version==1&&(in>>parent>>enabled>>pinned)&&valid();}
+};
+
 inline constexpr std::array<ComponentNumber,4> hitReactionNumbers{{AE_FX_NUM(HitReaction,"weight","Peso",weight,0,1,.01f,"Influência",""),
   AE_FX_NUM(HitReaction,"strength","Força do golpe",strength,0,90,1,"Golpe","graus"),AE_FX_NUM(HitReaction,"duration","Recuperação",duration,.05f,5,.01f,"Golpe","s"),
   AE_FX_NUM(HitReaction,"chain_length","Ossos que reagem",chainLength,1,8,1,"Golpe","ossos")}};
@@ -339,6 +352,11 @@ inline constexpr std::array<ComponentNumber,6> socketNumbers{{
 inline constexpr std::array<ComponentBoolean,2> socketBooleans{{AE_FX_BOOL(Socket,"enabled","Ativo",enabled,"Encaixe"),AE_FX_BOOL(Socket,"follow_scale","Seguir escala do osso",followScale,"Encaixe")}};
 inline constexpr std::array<ComponentObjectReference,1> socketReferences{{AE_FX_REF(Socket,"bone","Osso",bone,Other,"Escolher osso","Encaixe")}};
 inline constexpr std::array<ComponentTriple,2> socketTriples{{{"position","Posição",{"position_x","position_y","position_z"}},{"rotation","Rotação",{"rotation_x","rotation_y","rotation_z"}}}};
+inline constexpr std::array<ComponentBoolean,2> childOfBooleans{{AE_FX_BOOL(ChildOf,"enabled","Ativo",enabled,"Filho de"),
+  ComponentBoolean{"pinned","Fixo no personagem",[](const ComponentValue&v){return static_cast<const ChildOf&>(v).pinned;},[](ComponentValue&v,bool n){static_cast<ChildOf&>(v).pinned=n;},{"Filho de","","Os canais valem no espaço da raiz do personagem (IK pinning)."},true}}};
+inline constexpr std::array<ComponentObjectReference,1> childOfReferences{{
+  ComponentObjectReference{"parent","Pai","",ObjectReferenceScope::Other,"Hierarquia normal",[](const ComponentValue &v){return static_cast<const ChildOf&>(v).parent;},[](ComponentValue &v,u64 n){static_cast<ChildOf&>(v).parent=n;},{"Filho de","","Os canais locais do objeto valem no espaço deste pai; troque com uma chave."},nullptr,nullptr,true}}};
+inline const ComponentType ChildOf::descriptor{"astra.constraint.child_of",1,AE_FX_MAKE(ChildOf),{},childOfBooleans,{},nullptr,false,childOfReferences};
 inline const ComponentType Socket::descriptor{"astra.ik.socket",1,AE_FX_MAKE(Socket),socketNumbers,socketBooleans,{},nullptr,false,socketReferences,socketTriples};
 #undef AE_FX_NUM
 #undef AE_FX_BOOL

@@ -648,6 +648,23 @@
    "searchTerms": "Socket Encaixe Acessório Arma Attachment BoneAttachment Chapéu Mochila",
    "reference": "https://docs.godotengine.org/en/4.5/classes/class_boneattachment3d.html",
    "apiName": "Socket"
+  },
+  {
+   "type": "ChildOf",
+   "name": "Filho de",
+   "description": "Troca o pai do objeto durante a animação; os canais locais valem no espaço do pai escolhido",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/child-of",
+   "searchTerms": "Child-Of ChildOf Filho de Pai animável Pegar Soltar Pinning Fixar UMotion",
+   "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-ParentConstraint.html",
+   "apiName": "ChildOf"
   }
  ],
  "defaults": {

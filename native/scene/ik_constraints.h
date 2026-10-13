@@ -18,32 +18,48 @@ template<class T> inline bool ikNumbersValid(const T &v) {
   return true;
 }
 
+// Solver: Pose (plano da dobra da pose atual ou do alvo de direcao) ou Plano
+// rotativo (rotate-plane, como o IK do UMotion Pro 1.29 e o RP solver do Maya):
+// a cadeia parte da Referencia (animacao ou repouso), a dobra fica no plano
+// definido pelo Angulo do plano em torno do eixo raiz->ponta, a Rotacao do polo
+// gira a cadeia resolvida em torno do eixo raiz->alvo, e o Peso mistura cada
+// osso da animacao para o IK por rotacao.
 class TwoBoneIk final : public ComponentValue {
 public:
   u64 target=0,pole=0;bool enabled=true,matchTargetRotation=false;float weight=1,priority=0;
+  u32 solver=0,reference=0;float planeAngle=0,poleRotation=0;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<TwoBoneIk>(*this);}
-  bool valid() const override {return target<=std::numeric_limits<u32>::max()&&pole<=std::numeric_limits<u32>::max()&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<target<<' '<<pole<<' '<<enabled<<' '<<matchTargetRotation<<' '<<weight<<' '<<priority;}
+  bool valid() const override {return solver<=1&&reference<=1&&target<=std::numeric_limits<u32>::max()&&pole<=std::numeric_limits<u32>::max()&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<target<<' '<<pole<<' '<<enabled<<' '<<matchTargetRotation<<' '<<weight<<' '<<priority<<' '<<solver<<' '<<reference<<' '<<planeAngle<<' '<<poleRotation;}
   bool read(std::istream &in,u32 version) override {
-    if(version<1||version>2||!(in>>target>>pole>>enabled>>matchTargetRotation>>weight))return false;
-    priority=0;return (version==1||static_cast<bool>(in>>priority))&&valid();
+    if(version<1||version>3||!(in>>target>>pole>>enabled>>matchTargetRotation>>weight))return false;
+    priority=0;solver=reference=0;planeAngle=poleRotation=0;
+    if(version>=2&&!(in>>priority))return false;
+    if(version>=3&&!(in>>solver>>reference>>planeAngle>>poleRotation))return false;
+    return valid();
   }
 };
 
-enum class ChainIkSolverKind : u32 { Ccd=0, Fabrik=1 };
+// Solver 2, Plano rotativo: a cadeia inteira dobra no plano do Angulo do plano
+// (CCD restrito ao plano, como o IK de cadeia longa do UMotion Pro 1.29).
+enum class ChainIkSolverKind : u32 { Ccd=0, Fabrik=1, RotatePlane=2 };
 class ChainIk final : public ComponentValue {
 public:
-  u64 target=0;bool enabled=true;float weight=1,chainLength=3,iterations=12,tolerance=.001f,priority=0;u32 solver=1;
+  u64 target=0,pole=0;bool enabled=true,matchTargetRotation=false;float weight=1,chainLength=3,iterations=12,tolerance=.001f,priority=0;u32 solver=1,reference=0;
+  float planeAngle=0,poleRotation=0;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<ChainIk>(*this);}
-  bool valid() const override {return target<=std::numeric_limits<u32>::max()&&solver<=1&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<chainLength<<' '<<iterations<<' '<<tolerance<<' '<<solver<<' '<<priority;}
+  bool valid() const override {return target<=std::numeric_limits<u32>::max()&&pole<=std::numeric_limits<u32>::max()&&solver<=2&&reference<=1&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<target<<' '<<enabled<<' '<<weight<<' '<<chainLength<<' '<<iterations<<' '<<tolerance<<' '<<solver<<' '<<priority<<' '<<pole<<' '<<matchTargetRotation<<' '<<reference<<' '<<planeAngle<<' '<<poleRotation;}
   bool read(std::istream &in,u32 version) override {
-    if(version<1||version>2||!(in>>target>>enabled>>weight>>chainLength>>iterations>>tolerance>>solver))return false;
-    priority=0;return (version==1||static_cast<bool>(in>>priority))&&valid();
+    if(version<1||version>3||!(in>>target>>enabled>>weight>>chainLength>>iterations>>tolerance>>solver))return false;
+    priority=0;pole=0;matchTargetRotation=false;reference=0;planeAngle=poleRotation=0;
+    if(version>=2&&!(in>>priority))return false;
+    if(version>=3&&!(in>>pole>>matchTargetRotation>>reference>>planeAngle>>poleRotation))return false;
+    return valid();
   }
 };
 
@@ -68,30 +84,45 @@ public:
   }
 };
 
-#define AE_IK_NUM(T,id,label,member,lo,hi,step,group,unit) ComponentNumber{label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).member;},[](ComponentValue&v){return &static_cast<T&>(v).member;},id,{group,unit}}
+// Os parametros de IK sao lidos pelo solver a cada quadro: animaveis.
+#define AE_IK_NUM(T,id,label,member,lo,hi,step,group,unit) ComponentNumber{label,lo,hi,step,[](const ComponentValue&v)->const float&{return static_cast<const T&>(v).member;},[](ComponentValue&v){return &static_cast<T&>(v).member;},id,{group,unit},true}
 #define AE_IK_BOOL(T,id,label,member,group) ComponentBoolean{id,label,[](const ComponentValue&v){return static_cast<const T&>(v).member;},[](ComponentValue&v,bool n){static_cast<T&>(v).member=n;},{group}}
 
-inline constexpr std::array<ComponentNumber,2> twoBoneIkNumbers{{AE_IK_NUM(TwoBoneIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
-  AE_IK_NUM(TwoBoneIk,"priority","Prioridade",priority,-100,100,1,"Influência","")}};
+inline bool twoBoneRotatePlane(const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).solver==1;}
+inline constexpr std::array<ComponentNumber,4> twoBoneIkNumbers{{AE_IK_NUM(TwoBoneIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  AE_IK_NUM(TwoBoneIk,"priority","Prioridade",priority,-100,100,1,"Influência",""),
+  ComponentNumber{"Ângulo do plano",-360,360,.5f,[](const ComponentValue&v)->const float&{return static_cast<const TwoBoneIk&>(v).planeAngle;},[](ComponentValue&v){return &static_cast<TwoBoneIk&>(v).planeAngle;},"plane_angle",{"Plano","°","Gira o plano da dobra em torno do eixo raiz→ponta; o zero é perpendicular ao osso do meio no repouso.",twoBoneRotatePlane},true},
+  ComponentNumber{"Rotação do polo",-360,360,.5f,[](const ComponentValue&v)->const float&{return static_cast<const TwoBoneIk&>(v).poleRotation;},[](ComponentValue&v){return &static_cast<TwoBoneIk&>(v).poleRotation;},"pole_rotation",{"Plano","°","Gira a cadeia resolvida em torno do eixo raiz→alvo (sem Direção da dobra).",twoBoneRotatePlane},true}}};
+inline constexpr std::array<ComponentEnumOption,2> twoBoneIkSolvers{{{0,"Pose"},{1,"Plano rotativo"}}};
+inline constexpr std::array<ComponentEnumOption,2> twoBoneIkReferenceModes{{{0,"Animação"},{1,"Pose de repouso"}}};
+inline constexpr std::array<ComponentEnum,2> twoBoneIkEnums{{
+  ComponentEnum{"solver","Solver",twoBoneIkSolvers,[](const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).solver;},[](ComponentValue &v,u32 n){static_cast<TwoBoneIk&>(v).solver=n;},{"Plano"}},
+  ComponentEnum{"reference","Referência",twoBoneIkReferenceModes,[](const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).reference;},[](ComponentValue &v,u32 n){static_cast<TwoBoneIk&>(v).reference=n;},{"Plano","","De onde a cadeia parte antes de resolver.",twoBoneRotatePlane}}}};
 inline constexpr std::array<ComponentBoolean,2> twoBoneIkBooleans{{AE_IK_BOOL(TwoBoneIk,"enabled","Ativo",enabled,"Influência"),
   AE_IK_BOOL(TwoBoneIk,"match_target_rotation","Ponta segue rotação do alvo",matchTargetRotation,"Alvo")}};
 inline constexpr std::array<ComponentObjectReference,2> twoBoneIkReferences{{
   {"target","Alvo","",ObjectReferenceScope::OtherNonDescendant,"Escolher alvo",[](const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).target;},[](ComponentValue &v,u64 n){static_cast<TwoBoneIk&>(v).target=n;},{"Alvo"}},
   {"pole","Direção da dobra","",ObjectReferenceScope::OtherNonDescendant,"Seguir a pose",[](const ComponentValue &v){return static_cast<const TwoBoneIk&>(v).pole;},[](ComponentValue &v,u64 n){static_cast<TwoBoneIk&>(v).pole=n;},{"Alvo"}}}};
-inline const ComponentType TwoBoneIk::descriptor{"astra.ik.two_bone",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TwoBoneIk>();},twoBoneIkNumbers,twoBoneIkBooleans,{},nullptr,false,twoBoneIkReferences};
+inline const ComponentType TwoBoneIk::descriptor{"astra.ik.two_bone",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TwoBoneIk>();},twoBoneIkNumbers,twoBoneIkBooleans,twoBoneIkEnums,nullptr,false,twoBoneIkReferences};
 
-inline constexpr std::array<ComponentNumber,5> chainIkNumbers{{
+inline bool chainRotatePlane(const ComponentValue &v){return static_cast<const ChainIk&>(v).solver==2;}
+inline constexpr std::array<ComponentNumber,7> chainIkNumbers{{
   AE_IK_NUM(ChainIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
+  ComponentNumber{"Ângulo do plano",-360,360,.5f,[](const ComponentValue&v)->const float&{return static_cast<const ChainIk&>(v).planeAngle;},[](ComponentValue&v){return &static_cast<ChainIk&>(v).planeAngle;},"plane_angle",{"Plano","°","Gira o plano da dobra em torno do eixo raiz→ponta.",chainRotatePlane},true},
+  ComponentNumber{"Rotação do polo",-360,360,.5f,[](const ComponentValue&v)->const float&{return static_cast<const ChainIk&>(v).poleRotation;},[](ComponentValue&v){return &static_cast<ChainIk&>(v).poleRotation;},"pole_rotation",{"Plano","°","Gira a cadeia resolvida em torno do eixo raiz→alvo.",chainRotatePlane},true},
   AE_IK_NUM(ChainIk,"priority","Prioridade",priority,-100,100,1,"Influência",""),
   AE_IK_NUM(ChainIk,"chain_length","Ossos na cadeia",chainLength,2,32,1,"Cadeia","ossos"),
   AE_IK_NUM(ChainIk,"iterations","Iterações máximas",iterations,1,128,1,"Solver",""),
   AE_IK_NUM(ChainIk,"tolerance","Tolerância",tolerance,.00001f,1,.0005f,"Solver","m")}};
-inline constexpr std::array<ComponentBoolean,1> chainIkBooleans{{AE_IK_BOOL(ChainIk,"enabled","Ativo",enabled,"Influência")}};
-inline constexpr std::array<ComponentEnumOption,2> chainIkSolverOptions{{{0,"CCD"},{1,"FABRIK"}}};
-inline constexpr std::array<ComponentEnum,1> chainIkEnums{{{"solver","Solver",chainIkSolverOptions,[](const ComponentValue &v){return static_cast<const ChainIk&>(v).solver;},[](ComponentValue &v,u32 n){static_cast<ChainIk&>(v).solver=n;},{"Solver"}}}};
-inline constexpr std::array<ComponentObjectReference,1> chainIkReferences{{
-  {"target","Alvo","",ObjectReferenceScope::OtherNonDescendant,"Escolher alvo",[](const ComponentValue &v){return static_cast<const ChainIk&>(v).target;},[](ComponentValue &v,u64 n){static_cast<ChainIk&>(v).target=n;},{"Alvo"}}}};
-inline const ComponentType ChainIk::descriptor{"astra.ik.chain",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ChainIk>();},chainIkNumbers,chainIkBooleans,chainIkEnums,nullptr,false,chainIkReferences};
+inline constexpr std::array<ComponentBoolean,2> chainIkBooleans{{AE_IK_BOOL(ChainIk,"enabled","Ativo",enabled,"Influência"),
+  ComponentBoolean{"match_target_rotation","Ponta segue rotação do alvo",[](const ComponentValue&v){return static_cast<const ChainIk&>(v).matchTargetRotation;},[](ComponentValue&v,bool n){static_cast<ChainIk&>(v).matchTargetRotation=n;},{"Alvo","","",chainRotatePlane}}}};
+inline constexpr std::array<ComponentEnumOption,3> chainIkSolverOptions{{{0,"CCD"},{1,"FABRIK"},{2,"Plano rotativo"}}};
+inline constexpr std::array<ComponentEnum,2> chainIkEnums{{{"solver","Solver",chainIkSolverOptions,[](const ComponentValue &v){return static_cast<const ChainIk&>(v).solver;},[](ComponentValue &v,u32 n){static_cast<ChainIk&>(v).solver=n;},{"Solver"}},
+  ComponentEnum{"reference","Referência",twoBoneIkReferenceModes,[](const ComponentValue &v){return static_cast<const ChainIk&>(v).reference;},[](ComponentValue &v,u32 n){static_cast<ChainIk&>(v).reference=n;},{"Plano","","De onde a cadeia parte antes de resolver.",chainRotatePlane}}}};
+inline constexpr std::array<ComponentObjectReference,2> chainIkReferences{{
+  {"target","Alvo","",ObjectReferenceScope::OtherNonDescendant,"Escolher alvo",[](const ComponentValue &v){return static_cast<const ChainIk&>(v).target;},[](ComponentValue &v,u64 n){static_cast<ChainIk&>(v).target=n;},{"Alvo"}},
+  {"pole","Direção da dobra","",ObjectReferenceScope::OtherNonDescendant,"Ângulo do plano",[](const ComponentValue &v){return static_cast<const ChainIk&>(v).pole;},[](ComponentValue &v,u64 n){static_cast<ChainIk&>(v).pole=n;},{"Plano","","",chainRotatePlane}}}};
+inline const ComponentType ChainIk::descriptor{"astra.ik.chain",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ChainIk>();},chainIkNumbers,chainIkBooleans,chainIkEnums,nullptr,false,chainIkReferences};
 
 inline constexpr std::array<ComponentNumber,6> footGroundingNumbers{{
   AE_IK_NUM(FootGrounding,"weight","Peso",weight,0,1,.01f,"Influência",""),

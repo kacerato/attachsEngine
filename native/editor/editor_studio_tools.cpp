@@ -45,7 +45,8 @@ bool writeTrack(resources::AnimationClipAsset &clip,const runtime::SceneGraph &d
     std::vector<float> key;
     if(rotation&&mode==resources::AnimationRotationMode::Euler) {
       const float q[4]{values[i][0],values[i][1],values[i][2],values[i][3]};float euler[3];
-      if(hasPrevious?!rotationEulerXYZNear(q,previous,euler):!rotationEulerXYZ(q,euler)) {error="Rotação Euler fora do ramo";return false;}
+      const auto &frame=clip.track(id)->euler;
+      if(hasPrevious?!resources::eulerFrameAnglesNear(frame,q,previous,euler):frame.identity()?!rotationEulerXYZ(q,euler):!resources::eulerFrameAnglesNear(frame,q,previous,euler)) {error="Rotação Euler fora do ramo";return false;}
       std::copy(euler,euler+3,previous);hasPrevious=true;key.assign(euler,euler+3);
     } else key.assign(values[i].begin(),values[i].begin()+(rotation?4:3));
     if(!clip.putPose(id,times[i],key,error))return false;

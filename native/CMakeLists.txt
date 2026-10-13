@@ -499,6 +499,7 @@ add_library(aether_assets STATIC
   resources/unity_yaml.cpp
   resources/unity_subassets.cpp
   resources/unity_animation_import.cpp
+  resources/umotion_project.cpp
   resources/unity_animation_merge.cpp
   resources/unity_controller_import.cpp
   resources/unity_prefab_import.cpp
@@ -630,6 +631,7 @@ add_library(aether_editor STATIC
   editor/editor_studio_export.cpp
   editor/editor_scene_template_components.cpp
   editor/editor_carry_setup.cpp
+  editor/editor_umotion_import.cpp
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp

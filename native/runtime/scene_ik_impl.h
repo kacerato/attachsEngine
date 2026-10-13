@@ -6,6 +6,7 @@
 // pose de ENTRADA do quadro, guardada aqui, para nao acumular entre quadros.
 #include "runtime/game_world.h"
 #include "runtime/ik_solvers.h"
+#include "runtime/ik_rotate_plane.h"
 #include "runtime/transform_math.h"
 #include "core/rotation_math.h"
 #include "scene/ik_effects.h"
@@ -54,6 +55,9 @@ public:
       std::stable_sort(ordered.begin(),ordered.end(),[](const auto &x,const auto &y){return x.first>y.first;});
       for(const auto &[priority,id]:ordered) {(void)priority;run(id,*world.graph().find(id)->components.find(type));}
     };
+    // Filho de antes do IK: alvos de IK presos a outro pai (ou fixos no
+    // personagem) ja estao no lugar quando o IK os le.
+    each(scene::ChildOf::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::ChildOf&>(v);if(c.enabled)childOf(world,id,c,touched);});
     each(scene::Amplifier::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::Amplifier&>(v);if(c.enabled&&c.weight>0)amplify(world,id,c,touched);});
     each(scene::BodyByTargets::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::BodyByTargets&>(v);if(c.enabled&&c.weight>0)bodyByTargets(world,id,c,touched);});
     grounderBodies(world,ground,touched);
@@ -99,6 +103,9 @@ public:
     each(scene::TwistRelaxer::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::TwistRelaxer&>(v);if(c.enabled&&c.weight>0)twist(world,id,c,touched);});
     limits(world,touched);
     // Encaixes por ultimo: seguem a pose final, inclusive o IK.
+    // Filho de outra vez, com a pose final: o objeto preso a uma mao segue a
+    // mao ja resolvida pelo IK.
+    each(scene::ChildOf::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::ChildOf&>(v);if(c.enabled)childOf(world,id,c,touched);});
     each(scene::Socket::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::Socket&>(v);if(c.enabled)socket(world,id,c);});
     // Ossos que deixaram de ser escritos voltam a seguir a pose de entrada.
     for(auto it=cache_.begin();it!=cache_.end();) {
@@ -116,13 +123,13 @@ private:
     for(const auto &n:value.type().numbers)if(n.id=="priority")return n.read(value);
     return 0;
   }
-  static std::array<const scene::ComponentType*,22> types() {
+  static std::array<const scene::ComponentType*,23> types() {
     return {&scene::TwoBoneIk::descriptor,&scene::ChainIk::descriptor,&scene::FootGrounding::descriptor,&scene::LookAtIk::descriptor,
             &scene::AimIk::descriptor,&scene::RotationLimit::descriptor,&scene::GrounderBody::descriptor,&scene::FingerCurl::descriptor,
             &scene::IkOffset::descriptor,&scene::TwistRelaxer::descriptor,&scene::HitReaction::descriptor,&scene::Recoil::descriptor,
             &scene::Inertia::descriptor,&scene::Amplifier::descriptor,&scene::BodyTilt::descriptor,&scene::HandPoser::descriptor,
             &scene::PenetrationAvoidance::descriptor,&scene::InteractionSystem::descriptor,&scene::FullBodyIk::descriptor,
-            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor,&scene::Socket::descriptor};
+            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor,&scene::Socket::descriptor,&scene::ChildOf::descriptor};
   }
   struct Cache {Transform input{},output{};};
   std::map<ObjectId,Cache> cache_;
@@ -176,7 +183,125 @@ private:
     if(endWorldOut)worldMatrix(world.graph(),end,endWorldOut);
     return true;
   }
+public:
+  void captureRest(const SceneGraph &graph) {
+    rest_.clear();std::vector<ObjectId> ids;graph.collectSubtree(graph.root(),ids);
+    for(const auto id:ids)if(const auto *o=graph.find(id))rest_.emplace(id,o->transform);
+  }
+private:
+  // Pose de repouso (autoria), capturada no inicio do Play antes da animacao.
+  std::map<ObjectId,Transform> rest_;
+  // Plano rotativo: a sequencia do solver do UMotion Pro 1.29 (zera a cadeia
+  // na referencia, resolve no plano, gira pelo polo, mistura FK->IK por osso,
+  // corrige o osso do meio com peso 1 e copia a rotacao do alvo). Tres ossos
+  // usam a solucao analitica; cadeias maiores, o CCD restrito ao plano.
+  struct RotatePlaneSettings {u64 target=0,pole=0;bool matchTargetRotation=false;u32 reference=0;float weight=1,planeAngle=0,poleRotation=0;};
+  void rotatePlane(GameWorld &world,const std::vector<ObjectId> &ids,const RotatePlaneSettings &c,std::map<ObjectId,bool> &touched) {
+    namespace rp=rotate_plane;using rp::V;
+    const auto &g=world.graph();const usize count=ids.size();const ObjectId tip=ids.back();
+    if(count<2) {diagnostics_.push_back({tip,Issue::ShortChain});return;}
+    float handle[16];
+    if(!c.target||!g.find(static_cast<ObjectId>(c.target))||!worldMatrix(g,static_cast<ObjectId>(c.target),handle)) {diagnostics_.push_back({tip,Issue::MissingTarget});return;}
+    for(const auto id:ids)beginBone(world,id,touched);
+    std::vector<Transform> fk(count);for(usize i=0;i<count;++i)fk[i]=g.find(ids[i])->transform;
+    // 1) Camada IK: parte do repouso (posicao, rotacao e escala) ou do FK.
+    if(c.reference==1)for(const auto id:ids)if(auto it=rest_.find(id);it!=rest_.end())world.setLocalTransform(world.handle(id),it->second);
+    if(!c.matchTargetRotation) {Transform t=g.find(tip)->transform;std::copy(fk[count-1].rotationDegrees,fk[count-1].rotationDegrees+3,t.rotationDegrees);world.setLocalTransform(world.handle(tip),t);}
+    const V restMid=[&]{auto it=rest_.find(ids[1]);const auto &p=it!=rest_.end()?it->second.position:fk[1].position;return V{p[0],p[1],p[2]};}();
+    const auto pos=[&](ObjectId id){float m[16];worldMatrix(g,id,m);return rp::position(m);};
+    // Plano: eixo raiz->ponta; zero perpendicular ao segundo osso no repouso.
+    const auto plane=[&](V &start,V &axis,V &dir) {
+      float rw[16],tw[16];if(!worldMatrix(g,ids[0],rw)||!worldMatrix(g,tip,tw))return false;
+      start=rp::position(rw);axis=rp::position(tw)-start;
+      dir=rp::direction(rw,rp::perpendicular(restMid));
+      if(count>2)dir=rp::reject(dir,rp::normalized(axis));
+      float r[9];rp::axisAngle(axis,c.planeAngle,r);dir=rp::apply(r,dir);return true;
+    };
+    const auto abandon=[&](Issue issue){for(usize i=0;i<count;++i)writeLocal(world,ids[i],fk[i]);diagnostics_.push_back({tip,issue});};
+    V start,axis,dir;
+    if(!plane(start,axis,dir)) {abandon(Issue::InvalidPose);return;}
+    axis=rp::normalized(axis);dir=rp::normalized(rp::reject(dir,axis));
+    const V binormal=rp::cross(axis,dir);
+    const V goal=rp::position(handle),toGoal=goal-start;const float distance=rp::length(toGoal);
+    if(rp::length(axis)<.5f||rp::length(dir)<.5f||distance<1e-6f) {abandon(Issue::Degenerate);return;}
+    float q[9];
+    if(count==3) {
+      const V upper=pos(ids[1])-start,lower=pos(tip)-pos(ids[1]);
+      const float along=(rp::dot(upper,upper)+distance*distance-rp::dot(lower,lower))/(2*distance);
+      const float side=std::sqrt(std::max(0.f,rp::dot(upper,upper)-along*along));
+      if(rp::lookDelta(dir*side+axis*along,upper,binormal,q))rotateBone(world,ids[0],q);
+      const V reach=start+axis*distance-pos(ids[1]);
+      if(rp::lookDelta(reach,pos(tip)-pos(ids[1]),binormal,q))rotateBone(world,ids[1],q);
+    } else if(count>3) {
+      const auto flat=[&](V v){return rp::reject(v,binormal);};
+      const auto signedAngle=[&](V a,V b){return std::atan2(rp::dot(binormal,rp::cross(a,b)),rp::dot(a,b))*57.2957795f;};
+      // Juntas retas recebem uma dobra minima para o CCD ter para onde girar.
+      for(usize i=2;i<count;++i) {
+        const V a=flat(pos(ids[i-1])-pos(ids[i-2])),b=flat(pos(ids[i])-pos(ids[i-1]));
+        if(std::fabs(signedAngle(a,b))<1){rp::axisAngle(binormal,1,q);rotateBone(world,ids[i-1],q);}
+      }
+      const usize last=count-1;std::vector<float> weights(count,0.f);weights[0]=1;
+      for(usize l=1;l<count;++l)weights[l]=float(last-l)/float(last);
+      const V point=start+axis*distance;bool done=false;
+      for(u32 iteration=0;iteration<150&&!done;++iteration)
+        for(i32 k=static_cast<i32>(count)-2;k>=0;--k) {
+          if(weights[k]>0) {
+            const V bone=pos(ids[k]);float angle=signedAngle(flat(pos(tip))-flat(bone),point-bone);
+            if(weights[k]<1&&iteration<40)angle*=weights[k];
+            rp::axisAngle(binormal,angle,q);rotateBone(world,ids[k],q);
+          }
+          if(std::fabs(rp::length(pos(tip)-start)-distance)<.005f)done=true;
+        }
+      // Dobra do lado contrario ao plano: espelha a cadeia em torno do eixo.
+      if(signedAngle(axis,flat(pos(ids[1]))-flat(start))<0) {
+        V previous=axis;
+        for(usize i=0;i+1<count;++i) {
+          const V v=flat(pos(ids[i+1]))-flat(pos(ids[i]));
+          rp::axisAngle(binormal,-2*signedAngle(previous,v),q);rotateBone(world,ids[i],q);
+          previous=rp::normalized(pos(ids[i+1])-pos(ids[i]));
+        }
+      }
+    }
+    if(rp::fromTo(axis,rp::normalized(toGoal),q))rotateBone(world,ids[0],q);
+    // 2) Polo: alvo de direcao gira o plano ate ele; sem alvo, Rotacao do polo.
+    if(float pw[16];c.pole&&g.find(static_cast<ObjectId>(c.pole))&&worldMatrix(g,static_cast<ObjectId>(c.pole),pw)) {
+      V s,a,d;
+      if(plane(s,a,d)) {
+        const V toPole=rp::reject(rp::position(pw)-s,rp::normalized(a));
+        if(rp::fromTo(d,toPole,q))rotateBone(world,ids[0],q);
+      }
+    } else if(c.poleRotation!=0) {
+      rp::axisAngle(pos(tip)-pos(ids[0]),c.poleRotation,q);rotateBone(world,ids[0],q);
+    }
+    // 3) Rotacao do alvo copiada do objeto alvo (na camada IK).
+    if(c.matchTargetRotation) {
+      // Rotacao do alvo no mundo -> rotacao local da ponta (escala e posicao da ponta mantidas).
+      float parent[16],hq[4],pq[4];
+      if(parentWorldMatrix(g,tip,parent)&&rp::basisQuaternion(handle,hq)&&rp::basisQuaternion(parent,pq)) {
+        const float pc[4]{-pq[0],-pq[1],-pq[2],pq[3]};float local[4];rotationMultiply(pc,hq,local);writeLocalRotation(world,tip,local);
+      }
+    }
+    std::vector<Transform> ik(count);for(usize i=0;i<count;++i)ik[i]=g.find(ids[i])->transform;
+    // 4) Saida: posicao/escala da animacao, rotacao misturada FK->IK.
+    const float w=std::clamp(c.weight,0.f,1.f);
+    for(usize i=0;i<count;++i) {
+      Transform out=fk[i];float a[4],b[4],r[4];transformRotationQuaternion(fk[i],a);transformRotationQuaternion(ik[i],b);
+      if(interpolateRotationArc(a,b,w,r))rotationEulerXYZ(r,out.rotationDegrees);
+      writeLocal(world,ids[i],out);
+    }
+    // 5) Com peso total, o penultimo osso aponta a ponta para o alvo se isso aproximar.
+    if(w>=1) {
+      const ObjectId before=ids[count-2];const V tipNow=pos(tip),beforeNow=pos(before);
+      const float distanceBefore=rp::length(tipNow-goal);const Transform keep=g.find(before)->transform;
+      if(rp::fromTo(tipNow-beforeNow,goal-beforeNow,q)&&rotateBone(world,before,q)&&distanceBefore<rp::length(pos(tip)-goal))writeLocal(world,before,keep);
+    }
+  }
   void twoBone(GameWorld &world,ObjectId id,const scene::TwoBoneIk &c,std::map<ObjectId,bool> &touched) {
+    if(c.solver==1) {
+      const auto *e=world.graph().find(id);const auto *m=e?world.graph().find(e->parent):nullptr;const auto *r=m?world.graph().find(m->parent):nullptr;
+      if(!r||m->id==world.graph().root()||r->id==world.graph().root()) {diagnostics_.push_back({id,Issue::ShortChain});return;}
+      rotatePlane(world,{r->id,m->id,id},{c.target,c.pole,c.matchTargetRotation,c.reference,c.weight,c.planeAngle,c.poleRotation},touched);return;
+    }
     float target[3],pole[3];
     if(!targetPosition(world,c.target,target)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
     applyOffset(world.graph(),id,target);
@@ -193,6 +318,12 @@ private:
     }
   }
   void chain(GameWorld &world,ObjectId id,const scene::ChainIk &c,std::map<ObjectId,bool> &touched) {
+    if(c.solver==2) {
+      std::vector<ObjectId> ids;
+      if(!ancestors(world.graph(),id,static_cast<u32>(c.chainLength),ids)) {diagnostics_.push_back({id,Issue::ShortChain});return;}
+      ids.push_back(id);
+      rotatePlane(world,ids,{c.target,c.pole,c.matchTargetRotation,c.reference,c.weight,c.planeAngle,c.poleRotation},touched);return;
+    }
     float target[3];if(!targetPosition(world,c.target,target)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
     applyOffset(world.graph(),id,target);
     avoidPenetration(world,id,static_cast<u32>(c.chainLength),target);
@@ -691,15 +822,68 @@ private:
     o[2]=a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3];o[3]=a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2];
   }
   // Gira o osso no mundo em torno da propria posicao e grava.
+  // Rotacao no mundo aplicada a rotacao local como quaternion: posicao e
+  // escala locais ficam intactas e nada e decomposto de uma matriz. Decompor a
+  // cada passo transformava ruido de float em escala nao uniforme, que voltava
+  // como entrada do quadro seguinte e crescia ate a pose ser recusada.
   bool rotateBone(GameWorld &world,ObjectId id,const float r[9]) {
-    float bone[16],next[16];if(!worldMatrix(world.graph(),id,bone))return false;
-    ikRotateWorld(bone,r,next);return writeWorld(world,id,next);
+    const auto *o=world.graph().find(id);float parent[16],pq[4];
+    if(!o||!parentWorldMatrix(world.graph(),id,parent))return false;
+    if(!rotate_plane::basisQuaternion(parent,pq)) {
+      float bone[16],next[16];if(!worldMatrix(world.graph(),id,bone))return false;
+      ikRotateWorld(bone,r,next);return writeWorld(world,id,next);
+    }
+    float rq[4],lq[4],a[4],b[4],c[4];rotate_plane::quaternion(r,rq);transformRotationQuaternion(o->transform,lq);
+    const float pc[4]{-pq[0],-pq[1],-pq[2],pq[3]};
+    rotationMultiply(pc,rq,a);rotationMultiply(a,pq,b);rotationMultiply(b,lq,c);
+    return writeLocalRotation(world,id,c);
+  }
+  // Rotacao local nova, no ramo Euler mais proximo da atual.
+  bool writeLocalRotation(GameWorld &world,ObjectId id,float q[4]) {
+    const auto *o=world.graph().find(id);if(!o||!normalizeRotationQuaternion(q))return false;
+    Transform t=o->transform;
+    if(!rotationEulerXYZNear(q,o->transform.rotationDegrees,t.rotationDegrees)&&!rotationEulerXYZ(q,t.rotationDegrees))return false;
+    return writeLocal(world,id,t);
   }
   ObjectId characterOf(const SceneGraph &g,ObjectId id) const {
     ObjectId owner=id;for(const auto *o=g.find(id);o&&o->parent!=g.root();o=g.find(o->parent))owner=o->parent;
     return owner;
   }
 
+  // Canais locais do objeto (entrada do quadro) no espaco do pai escolhido.
+  void childOf(GameWorld &world,ObjectId id,const scene::ChildOf &c,std::map<ObjectId,bool> &touched) {
+    const auto &g=world.graph();
+    const ObjectId parent=c.pinned?characterOf(g,id):static_cast<ObjectId>(c.parent);
+    if(!parent)return;
+    if(!g.find(parent)||!g.activeInHierarchy(parent)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
+    if(parent==id||g.isDescendantOf(parent,id)) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
+    beginBone(world,id,touched);
+    float parentWorld[16],hierarchy[16];
+    if(!worldMatrix(g,parent,parentWorld)||!parentWorldMatrix(g,id,hierarchy))return;
+    // Composto por partes (quaternion, razao de escala, ponto): sem decompor a
+    // matriz pai*local, que recusava a pose com escala local grande (caixa de
+    // 10 cm sob uma armadura em 0,01) e deixava o objeto parado no quadro.
+    const auto &input=cache_[id].input;float pq[4],hq[4];
+    const auto scaleOf=[](const float m[16]){return std::cbrt(std::fabs(
+      m[0]*(m[5]*m[10]-m[6]*m[9])-m[4]*(m[1]*m[10]-m[2]*m[9])+m[8]*(m[1]*m[6]-m[2]*m[5])));};
+    const float sp=scaleOf(parentWorld),sh=scaleOf(hierarchy);
+    if(sp>1e-12f&&sh>1e-12f&&rotate_plane::basisQuaternion(parentWorld,pq)&&rotate_plane::basisQuaternion(hierarchy,hq)) {
+      Transform out=input;float lq[4],wq[4],q[4];transformRotationQuaternion(input,lq);
+      rotationMultiply(pq,lq,wq);const float hc[4]{-hq[0],-hq[1],-hq[2],hq[3]};rotationMultiply(hc,wq,q);
+      if(normalizeRotationQuaternion(q)&&(rotationEulerXYZNear(q,input.rotationDegrees,out.rotationDegrees)||rotationEulerXYZ(q,out.rotationDegrees))) {
+        float p[3];for(u32 r=0;r<3;++r)p[r]=parentWorld[12+r]+parentWorld[r]*input.position[0]+parentWorld[4+r]*input.position[1]+parentWorld[8+r]*input.position[2];
+        // Ponto no espaco do pai da hierarquia: base ortonormal transposta / escala.
+        float x[3][3];for(u32 c=0;c<3;++c)for(u32 r=0;r<3;++r)x[c][r]=hierarchy[c*4+r]/sh;
+        const float d[3]{p[0]-hierarchy[12],p[1]-hierarchy[13],p[2]-hierarchy[14]};
+        for(u32 c=0;c<3;++c)out.position[c]=(x[c][0]*d[0]+x[c][1]*d[1]+x[c][2]*d[2])/sh;
+        for(u32 c=0;c<3;++c)out.scale[c]=input.scale[c]*sp/sh;
+        if(writeLocal(world,id,out))return;
+      }
+    }
+    float local[16],desired[16];
+    transformMatrix(input,local);multiplyMatrix(parentWorld,local,desired);
+    if(!writeWorld(world,id,desired))diagnostics_.push_back({id,Issue::InvalidPose});
+  }
   void socket(GameWorld &world,ObjectId id,const scene::Socket &c) {
     const ObjectId bone=static_cast<ObjectId>(c.bone);
     if(!bone||!world.graph().find(bone)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}

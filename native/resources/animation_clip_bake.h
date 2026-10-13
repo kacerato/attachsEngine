@@ -13,6 +13,10 @@ struct AnimationBakeSettings {
   // continuous branch. No orientation-only representation invents lost turns.
   bool eulerReferenceExplicit=false;
   float eulerReference[3]{};
+  // Ordem Euler do resultado (RotationEulerOrder). RotationEulerOrderCount
+  // mantem a da trilha (XYZ vindo de quaternion). Trocar a ordem reconstroi as
+  // curvas pela mesma orientacao; a referencia acima vale na ordem nova.
+  u32 eulerOrder=RotationEulerOrderCount;
 };
 struct AnimationBakeReport {
   u32 inputKeys=0,outputKeys=0,sampledFrames=0,verifiedSamples=0;

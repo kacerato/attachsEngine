@@ -20,7 +20,7 @@ AE_TEST(animation_clip_regions_identity_migration_roundtrip_and_runtime_section_
   std::string error;auto asset=sectionFixture(error);AE_EXPECT_TRUE(asset.valid(&error),error.c_str());
   u64 id=0;AE_EXPECT_TRUE(asset.putRegion({0,"Engate",1,2},id,error),error.c_str());
   const auto before=asset.serialize();AnimationClipAsset reopened;
-  AE_EXPECT_TRUE(before.starts_with("AECLIP 7 ")&&AnimationClipAsset::deserialize(before,reopened,&error)&&reopened.serialize()==before,"current version persists stable section boundaries and identity");
+  AE_EXPECT_TRUE(before.starts_with("AECLIP 8 ")&&AnimationClipAsset::deserialize(before,reopened,&error)&&reopened.serialize()==before,"current version persists stable section boundaries and identity");
   AnimationClip runtime;AE_EXPECT_TRUE(reopened.compile(runtime,&error)&&runtime.regions.size()==1,"compiled runtime contains the same section");
   float time=-1;
   AE_EXPECT_TRUE(animationRegionTime(runtime.regions[0],1.25,AnimationWrapMode::Loop,time)&&time==1.25f,"loop uses section-relative clock");
@@ -118,6 +118,100 @@ AE_TEST(animation_euler_near_selects_equivalent_branches_and_gimbal_freedom) {
     float q[4],lifted[3];rotationQuaternionXYZ(angles,q);
     AE_EXPECT_TRUE(rotationEulerXYZNear(q,angles,lifted),"nearest equivalent XYZ branch");
     for(u32 c=0;c<3;++c)AE_EXPECT_TRUE(std::abs(lifted[c]-angles[c])<.01,"explicit seed retains equivalent turns and gimbal X/Z split");
+  }
+}
+AE_TEST(animation_euler_orders_compose_per_axis_and_lift_back) {
+  // Ordem pela aplicacao: ZXY gira em Z, depois X, depois Y (Quaternion.Euler
+  // da Unity). Cada ordem compoe as tres rotacoes de eixo nessa sequencia.
+  const auto axis=[](u32 i,float degrees,float out[4]) {
+    const float half=degrees*0.00872664626f;out[0]=out[1]=out[2]=0;out[i]=std::sin(half);out[3]=std::cos(half);
+  };
+  constexpr u32 sequence[6][3]{{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};
+  const float poses[][3]{{20,35,-50},{-70,10,80},{15,89,30},{120,-45,200},{0,0,0}};
+  for(u32 o=0;o<RotationEulerOrderCount;++o) {
+    const auto order=static_cast<RotationEulerOrder>(o);
+    for(const auto &angles:poses) {
+      float expected[4]{0,0,0,1};
+      for(u32 step=0;step<3;++step) {
+        float r[4],next[4];axis(sequence[o][step],angles[sequence[o][step]],r);rotationMultiply(r,expected,next);std::copy_n(next,4,expected);
+      }
+      float q[4];rotationQuaternionEuler(order,angles,q);
+      AE_EXPECT_TRUE(rotationDistanceDegrees(q,expected)<1e-3,rotationEulerOrderName(order));
+      float lifted[3];
+      AE_EXPECT_TRUE(rotationEulerNear(order,q,angles,lifted),"angulos levantados na mesma ordem");
+      for(u32 c=0;c<3;++c)AE_EXPECT_TRUE(std::abs(lifted[c]-angles[c])<.02,"ramo mais proximo devolve os mesmos angulos");
+      float canonical[3],back[4];
+      AE_EXPECT_TRUE(rotationEuler(order,q,canonical),"decomposicao canonica");
+      rotationQuaternionEuler(order,canonical,back);
+      AE_EXPECT_TRUE(rotationDistanceDegrees(q,back)<1e-3,"canonica reconstroi a orientacao");
+    }
+  }
+}
+AE_TEST(animation_euler_track_frame_persists_and_samples_before_curve_after) {
+  AnimationClipAsset clip;clip.guid.high=7;clip.guid.low=9;clip.name="Euler";clip.duration=1;
+  clip.bindings.push_back({clip.nextId++,{},"",""});
+  AnimationClipTrack track;track.id=clip.nextId++;track.binding=clip.bindings[0].id;track.path=AnimationPath::Rotation;
+  track.rotationMode=AnimationRotationMode::Euler;track.euler.order=RotationEulerOrder::ZXY;
+  const float before[4]{0,0.70710678f,0,0.70710678f},after[4]{0.38268343f,0,0,0.92387953f};
+  std::copy_n(before,4,track.euler.before);std::copy_n(after,4,track.euler.after);
+  track.curves.resize(3);
+  const float start[3]{10,20,30},end[3]{-40,95,170};
+  for(u32 c=0;c<3;++c)for(u32 k=0;k<2;++k) {
+    AnimationCurveKey key;key.id=clip.nextId++;key.time=float(k);key.value=k?end[c]:start[c];
+    key.incoming=key.outgoing=AnimationTangentMode::Linear;track.curves[c].keys.push_back(key);
+  }
+  clip.tracks.push_back(track);
+  std::string error;
+  AE_EXPECT_TRUE(clip.valid(&error),error.c_str());
+  const auto text=clip.serialize();
+  AnimationClipAsset reopened;
+  AE_EXPECT_TRUE(text.starts_with("AECLIP 8 ")&&AnimationClipAsset::deserialize(text,reopened,&error)&&reopened.serialize()==text,"ordem e referencial persistem");
+  AE_EXPECT_TRUE(reopened.tracks[0].euler==track.euler,"referencial identico apos reabrir");
+  AnimationClip compiled;AE_EXPECT_TRUE(reopened.compile(compiled,&error),error.c_str());
+  for(float t:{0.f,.37f,1.f}) {
+    float angles[3];for(u32 c=0;c<3;++c)angles[c]=start[c]+(end[c]-start[c])*t;
+    float inner[4],left[4],expected[4],sampled[4];
+    rotationQuaternionEuler(RotationEulerOrder::ZXY,angles,inner);rotationMultiply(before,inner,left);rotationMultiply(left,after,expected);
+    AE_EXPECT_TRUE(sampleAnimationChannel(compiled.channels[0],t,sampled)&&rotationDistanceDegrees(sampled,expected)<1e-3,
+                   "rotacao = antes * Euler(ZXY, curvas) * depois, interpolando os angulos");
+    float lifted[3];
+    AE_EXPECT_TRUE(eulerFrameAnglesNear(track.euler,sampled,angles,lifted),"pose volta aos angulos da trilha");
+    for(u32 c=0;c<3;++c)AE_EXPECT_TRUE(std::abs(lifted[c]-angles[c])<.02,"angulos recuperados no referencial");
+  }
+  // Bake para outra ordem: mesma orientacao, curvas novas na ordem pedida e o
+  // referencial preservado.
+  {
+    auto reordered=reopened;AnimationBakeSettings settings;settings.rotation=1;settings.eulerOrder=static_cast<u32>(RotationEulerOrder::XYZ);
+    settings.eulerReferenceExplicit=true;settings.tolerance=.01;
+    {
+      float first[4];AE_EXPECT_TRUE(sampleAnimationChannel(compiled.channels[0],0,first),"pose inicial");
+      float seed[3];const auto xyz=[&]{auto f=track.euler;f.order=RotationEulerOrder::XYZ;return f;}();
+      AE_EXPECT_TRUE(eulerFrameAnglesNear(xyz,first,settings.eulerReference,seed),"semente na ordem nova");
+      std::copy_n(seed,3,settings.eulerReference);
+    }
+    AnimationBakeReport report;
+    AE_EXPECT_TRUE(bakeAnimationClipTrack(reordered,reordered.tracks[0].id,settings,report,error),error.c_str());
+    AE_EXPECT_TRUE(reordered.tracks[0].euler.order==RotationEulerOrder::XYZ&&
+                   std::equal(track.euler.before,track.euler.before+4,reordered.tracks[0].euler.before),"ordem nova e referencial mantido");
+    AnimationClip baked;AE_EXPECT_TRUE(reordered.compile(baked,&error),error.c_str());
+    double worst=0;
+    for(float t=0;t<=1;t+=.05f) {
+      float a[4],b[4];sampleAnimationChannel(compiled.channels[0],t,a);sampleAnimationChannel(baked.channels[0],t,b);
+      worst=std::max(worst,rotationDistanceDegrees(a,b));
+    }
+    char m[120];std::snprintf(m,sizeof m,"ZXY -> XYZ preserva a orientacao (%.4f graus)",worst);
+    AE_EXPECT_TRUE(worst<.05,m);
+  }
+  // Referencial so vale em trilhas Euler.
+  auto wrong=clip;wrong.tracks[0].rotationMode=AnimationRotationMode::Quaternion;wrong.tracks[0].curves.resize(4);
+  for(auto &curve:wrong.tracks[0].curves)if(curve.keys.empty())curve=wrong.tracks[0].curves[0];
+  AE_EXPECT_TRUE(!wrong.valid(),"referencial Euler em trilha quaternion recusado");
+  // Arquivo v7 (sem referencial) continua abrindo como XYZ.
+  auto legacy=text;legacy.replace(0,9,"AECLIP 7 ");
+  const auto header=legacy.find(" 3 4 0 ");
+  if(header!=std::string::npos) {
+    const auto end=legacy.find('\n',header);legacy.erase(header+2,end-header-2);
+    AnimationClipAsset old;AE_EXPECT_TRUE(AnimationClipAsset::deserialize(legacy,old,&error)&&old.tracks[0].euler.identity(),"v7 abre com ordem XYZ e referencial identidade");
   }
 }
 AE_TEST(animation_clip_bake_weighted_curves_steps_reduction_and_atomic_refusal) {

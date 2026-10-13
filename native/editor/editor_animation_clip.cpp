@@ -389,7 +389,7 @@ void EditorSession::refreshAnimationClip() {
           state_.clipPoseValues[c]=static_cast<float>(v.value)*(track->path==resources::AnimationPath::Weights?100.f:1.f);
       }
     } else {
-      resources::AnimationChannel channel;channel.path=track->path;channel.rotationMode=track->rotationMode;channel.curves=track->curves;
+      resources::AnimationChannel channel;channel.path=track->path;channel.rotationMode=track->rotationMode;channel.euler=track->euler;channel.curves=track->curves;
       float q[4],matrix[16];const float zero[]{0,0,0},one[]{1,1,1},identity[]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};runtime::Transform pose;
       if(resources::sampleValidatedAnimationChannel(channel,state_.clipTime,q)) {
         resources::composeTransform(zero,q,one,matrix);
@@ -398,7 +398,7 @@ void EditorSession::refreshAnimationClip() {
     }
     if(state_.clipPoseShown&&state_.clipPoseIsolated&&clipPreview_.active()&&
         (!state_.clipPreviewTarget||state_.clipPreviewTarget==state_.clipTarget)) {
-      resources::AnimationChannel channel;channel.path=track->path;channel.rotationMode=track->rotationMode;channel.weightCount=track->weightCount;channel.curves=track->curves;
+      resources::AnimationChannel channel;channel.path=track->path;channel.rotationMode=track->rotationMode;channel.euler=track->euler;channel.weightCount=track->weightCount;channel.curves=track->curves;
       float values[resources::MaximumMorphTargets];std::string error;
       // The raw override belongs to one property. Remove it before isolating
       // another property; a static preview needs no extra evaluation per frame.
@@ -542,7 +542,7 @@ bool EditorSession::handleAnimationPoseGizmo(const ui::UiPointerEvent &event,con
       if(mode==EditorGizmoMode::Rotate) {
         float q[4];runtime::transformRotationQuaternion(moved,q);
         if(track->rotationMode==resources::AnimationRotationMode::Euler) {
-          float euler[3];if(!rotationEulerXYZNear(q,state_.clipPoseValues,euler))return true;values.assign(euler,euler+3);
+          float euler[3];if(!resources::eulerFrameAnglesNear(track->euler,q,state_.clipPoseValues,euler))return true;values.assign(euler,euler+3);
         } else values.assign(q,q+4);
       } else if(mode==EditorGizmoMode::Translate)values.assign(moved.position,moved.position+3);
       else values.assign(moved.scale,moved.scale+3);
@@ -1277,6 +1277,11 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   if(code==w::BakeReduction) {state_.clipBakeSettings.reduce=!state_.clipBakeSettings.reduce;state_.clipBakeHasReport=false;return true;}
   if(code==w::BakeTarget) {state_.clipBakeConsolidate=!state_.clipBakeConsolidate;state_.clipBakeHasReport=false;return true;}
   if(code==w::BakeReference) {state_.clipBakeReferenceShown=!state_.clipBakeReferenceShown;return true;}
+  if(code==w::BakeOrder) {
+    // Ordem do resultado: mantem a da trilha, depois as seis ordens.
+    auto &order=state_.clipBakeSettings.eulerOrder;order=order>=RotationEulerOrderCount?0:order+1;
+    state_.clipBakeHasReport=false;return true;
+  }
   if(code==w::BakeSeedUse) {state_.clipBakeSettings.eulerReferenceExplicit=!state_.clipBakeSettings.eulerReferenceExplicit;state_.clipBakeHasReport=false;return true;}
   if(code>=w::BakeSeedX&&code<=w::BakeSeedZ) {beginAnimationClipNumber(code,state_.clipBakeSettings.eulerReference[code-w::BakeSeedX]);return true;}
   if(code==w::BakeMode) {

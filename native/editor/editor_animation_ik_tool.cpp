@@ -61,7 +61,7 @@ bool EditorSession::applyAnimationPoseIk(EditorEntityId end,const float target[3
     if(mode==resources::AnimationRotationMode::Euler) {
       float euler[3];std::vector<float> current;
       if(!sampleAnimationPoseChannel(*candidate.track(id),state_.clipTime,current)||current.size()<3)return false;
-      if(!rotationEulerXYZNear(q,current.data(),euler)) {error="Rotação Euler fora do ramo";return false;}
+      if(!resources::eulerFrameAnglesNear(candidate.track(id)->euler,q,current.data(),euler)) {error="Rotação Euler fora do ramo";return false;}
       values.assign(euler,euler+3);
     } else values.assign(q,q+4);
     if(!id) {

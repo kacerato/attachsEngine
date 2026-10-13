@@ -2,6 +2,7 @@
 #include "resources/animation_clip_asset.h"
 #include <array>
 
+namespace ae::runtime {struct Transform;}
 namespace ae::editor {
 // Authoring state only. It never changes a runtime channel or the source scene.
 struct AnimationPoseRecordingPolicy {
@@ -15,6 +16,8 @@ struct AnimationPoseClipboard {
   std::vector<float> values;
   std::array<float,16> worldMatrix{};
 };
+// Pose local -> angulos da trilha Euler (ordem e referencial), no ramo do valor atual.
+bool animationEulerPoseValues(const resources::AnimationClipTrack &track,float time,const runtime::Transform &pose,std::vector<float> &values);
 // Rotation masks address local XYZ angles, never quaternion components.
 // Weights/TRS masks address their native property components.
 bool applyAnimationPoseLocks(const resources::AnimationClipTrack &,float time,u64 mask,

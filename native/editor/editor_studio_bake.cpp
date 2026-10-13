@@ -73,6 +73,7 @@ bool EditorStudio::bakeStart(EditorSession &s,bool rootToOwner,std::string &summ
     for(const auto &track:live->tracks)if(track.binding==binding.id)job->ownerAnimated=true;
   }
   if(!job->world.load(preview)) {error="Não foi possível montar o mundo do bake";return false;}
+  job->ik.captureRest(s.document_);
   s.studio_->bake=job;s.studio_->bakeProgress=0;s.studio_->bakeReport.clear();
   summary="Bake iniciado · "+std::to_string(keys)+" quadros a "+std::to_string(static_cast<int>(job->rate))+" Hz";
   return true;
