@@ -71,6 +71,8 @@ inline Role role(const std::vector<std::string> &w) {
 // Preenche referencias vazias de Sistema de interacao, IK de corpo inteiro e
 // Grounder do corpo com os ossos do humanoide (editor_carry_setup.cpp).
 bool prefillHumanoidReferences(const EditorDocument &document,EditorEntityId owner,scene::ComponentValue &value);
+// Altura do osso do pe acima da raiz do personagem (Desvio do pe ao adicionar Apoio do pe).
+float footRestHeight(const EditorDocument &document,EditorEntityId foot);
 
 inline HumanoidBones findHumanoidBones(const runtime::SceneGraph &graph,EditorEntityId root) {
   using namespace humanoid_detail;

@@ -38,6 +38,23 @@ nas pegadas e caixa no ponto de carregar com desvio < 1 mm.
 - Painel de modelos paginado (6 por página) entre as barras da vista; ícone novo
   `component/interaction-carry` no atlas real.
 
+## Projeto só com o Kyle (code 60–61)
+- Primeira abertura: Kyle invisível/minúsculo. Causas no gerador: registro de fontes não
+  gravado e biblioteca com o cubo autoral antes das fontes (slots de malha deslocados em 1).
+  Corrigido; `kyle-so-projeto.png`, `kyle-so-carregar-caixa.mp4`, `kyle-so-carregar-sequencia.png`.
+- O proprietário viu o tronco esticar e os pés girarem. Medido no host e corrigido no runtime:
+  1. agachar baixava só `Hip`; no Kyle `Hip` e `Ribs` são irmãos sob `Root` — agora desce o
+     ancestral comum de pelve e peito;
+  2. "Alinhar à superfície" girava o pé até o Y local apontar para cima (no Kyle não é o cima do
+     pé) — agora inclina só o quanto a superfície se inclina em relação ao chão plano;
+  3. Desvio do pé 0 levava o tornozelo ao chão — ao adicionar Apoio do pé a altura do osso no
+     repouso é medida (menu, modelo de cena e montagem);
+  4. perna reta no repouso: o joelho escolhia o lado — o plano do joelho usa a frente do
+     personagem (sentido para trás preservado para patas traseiras).
+  Host: agacha 22,5 cm, tronco estica 0,0 mm, tornozelo se move 0,0 mm, joelho desvia 1,1 cm
+  para o lado (gerador falha acima de 1 cm / 2 cm / 6 cm). APK code 61 instalado; captura no
+  aparelho pendente (aparelho em uso pelo proprietário).
+
 ## Pendências
 - Play do projeto "Kyle – Carregar caixa" no aparelho (aparelho em uso pelo proprietário).
 - Rotação da mão pela pegada (InteractionTarget), gatilho por proximidade e olhar durante a

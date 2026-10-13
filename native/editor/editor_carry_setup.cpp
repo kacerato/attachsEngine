@@ -11,6 +11,7 @@
 #include "scene/ik_constraints.h"
 #include "scene/ik_effects.h"
 #include "scene/physics_body.h"
+#include <algorithm>
 #include <cmath>
 
 namespace ae::editor {
@@ -29,7 +30,21 @@ bool position(const runtime::SceneGraph &g,EditorEntityId id,Vec3 &out) {
 
 // Universal: ao adicionar um componente que pede ossos, preenche o que estiver
 // vazio com os ossos humanoides da subarvore (nada e sobrescrito).
+// Altura do osso do pe acima da raiz do personagem, na pose atual: e onde o
+// tornozelo fica quando o pe esta no chao. Com Desvio do pe 0, o tornozelo ia
+// ao chao e a malha do pe afundava.
+float footRestHeight(const EditorDocument &document,EditorEntityId foot) {
+  EditorEntityId top=foot;for(const auto *o=document.find(foot);o&&o->parent!=document.root();o=document.find(o->parent))top=o->parent;
+  float f[16],r[16];
+  if(top==foot||!runtime::worldMatrix(document,foot,f)||!runtime::worldMatrix(document,top,r))return 0;
+  return std::clamp(f[13]-r[13],0.f,.5f);
+}
 bool prefillHumanoidReferences(const EditorDocument &document,EditorEntityId owner,scene::ComponentValue &value) {
+  if(&value.type()==&scene::FootGrounding::descriptor) {
+    auto &c=static_cast<scene::FootGrounding&>(value);
+    if(c.footOffset==0)c.footOffset=footRestHeight(document,owner);
+    return true;
+  }
   const bool interaction=&value.type()==&scene::InteractionSystem::descriptor,full=&value.type()==&scene::FullBodyIk::descriptor,
              grounder=&value.type()==&scene::GrounderBody::descriptor;
   if(!interaction&&!full&&!grounder)return false;
@@ -50,8 +65,11 @@ bool prefillHumanoidReferences(const EditorDocument &document,EditorEntityId own
 bool EditorSession::addCarrySetupInTransaction(EditorEntityId character,EditorEntityId group,std::string &error) {
   const auto bones=findHumanoidBones(document_,character);
   if(!bones.arms()||!bones.hips) {error="Personagem sem mãos, antebraços, braços e quadril reconhecíveis pelo nome";return false;}
-  const auto slot=boxAssetSlot();
-  if(!slot) {error="O cubo autoral não está nesta biblioteca";return false;}
+  // Cubo autoral quando a biblioteca o traz; senao o cubo primitivo, que o
+  // shell publica sempre no indice 0 (as primitivas vem primeiro).
+  u32 slot=boxAssetSlot();
+  if(!slot&&mapScene_.assetCount())slot=1;
+  if(!slot) {error="Sem cubo na biblioteca";return false;}
   // Medidas da pose atual: tudo proporcional ao braco do personagem.
   Vec3 root,hips,chest,hand[2],fore[2],upper[2];
   if(!position(document_,character,root)||!position(document_,bones.hips,hips)) {error="Pose do personagem inválida";return false;}
@@ -146,7 +164,7 @@ bool EditorSession::addCarrySetupInTransaction(EditorEntityId character,EditorEn
     auto values=*document_.find(bones.foot[s]);
     if(values.components.find(scene::FootGrounding::descriptor))continue;
     auto *c=static_cast<scene::FootGrounding*>(values.components.add(scene::FootGrounding::descriptor));if(!c)return false;
-    c->lockFoot=true;
+    c->lockFoot=true;c->footOffset=footRestHeight(document_,bones.foot[s]);
     if(!history_.applyValues(document_,bones.foot[s],values))return false;
   }
   return true;

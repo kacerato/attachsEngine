@@ -2,6 +2,7 @@
 // reais (os mesmos da autoria manual). Chamado dentro da transacao do modelo.
 #include "editor/editor_scene_template.h"
 #include "editor/editor_document.h"
+#include "editor/editor_humanoid_bones.h"
 #include "scene/ik_constraints.h"
 #include "scene/ik_effects.h"
 #include "scene/character.h"
@@ -63,7 +64,7 @@ bool applySceneTemplateComponents(const SceneTemplate &model,std::span<const Edi
     }
     case K::FootGrounding: {
       auto *c=static_cast<scene::FootGrounding*>(values.components.add(scene::FootGrounding::descriptor));if(!c)return false;
-      c->lockFoot=true;break;
+      c->lockFoot=true;c->footOffset=footRestHeight(document,id);break;
     }
     case K::Grounder: {
       auto *c=static_cast<scene::GrounderBody*>(values.components.add(scene::GrounderBody::descriptor));if(!c)return false;

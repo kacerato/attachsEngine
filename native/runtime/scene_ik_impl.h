@@ -247,12 +247,37 @@ private:
         else {target[0]=lock.point[0];target[2]=lock.point[2];}
       }
     } else footLocks_.erase(id);
+    // Plano do joelho: frente do personagem; o sentido (para frente, como o
+    // joelho humano, ou para tras, como a pata traseira) vem da pose. A dobra
+    // lateral de um repouso em A nao e seguida: o joelho abria para o lado.
+    float pole[3]{},*hint=nullptr;
+    if(const auto *e=world.graph().find(id))if(const auto *m=world.graph().find(e->parent))if(m->parent!=world.graph().root()) {
+      float rw[16],mw[16],ow[16];
+      if(worldMatrix(world.graph(),m->parent,rw)&&worldMatrix(world.graph(),m->id,mw)&&worldMatrix(world.graph(),owner,ow)) {
+        const float axis[3]{foot[12]-rw[12],foot[13]-rw[13],foot[14]-rw[14]};const float len=length3(axis);
+        if(len>1e-4f) {
+          const float rel[3]{mw[12]-rw[12],mw[13]-rw[13],mw[14]-rw[14]};const float t=(rel[0]*axis[0]+rel[1]*axis[1]+rel[2]*axis[2])/(len*len);
+          float bend[3]{rel[0]-axis[0]*t,rel[1]-axis[1]*t,rel[2]-axis[2]*t};
+          float forward[3]{ow[8],0,ow[10]};const float fl=length3(forward);
+          if(fl>1e-5f) {
+            for(float &v:forward)v/=fl;
+            const float bl=length3(bend),along=bl>1e-6f?(bend[0]*forward[0]+bend[2]*forward[2])/bl:0;
+            const float sign=bl>=.02f*len&&along<-.3f?-1.f:1.f;
+            for(u32 k=0;k<3;++k)bend[k]=forward[k]*sign;
+          }
+          const float b=length3(bend);
+          if(b>1e-5f) {for(u32 k=0;k<3;++k)pole[k]=(k==0?mw[12]:k==1?mw[13]:mw[14])+bend[k]/b*len;hint=pole;}
+        }
+      }
+    }
     float footAfter[16];
-    if(!solveLimb(world,id,target,nullptr,c.weight,touched,footAfter))return;
+    if(!solveLimb(world,id,target,hint,c.weight,touched,footAfter))return;
     if(c.alignToSurface) {
-      // Gira o pe para o "cima" dele seguir a normal da superficie.
+      // Inclina o pe o quanto a superficie se inclina em relacao ao chao plano
+      // (cima do mundo -> normal). Nao usa o eixo local do osso: em rigs
+      // importados ele nao e o "cima" do pe, e o pe girava sozinho no plano.
       beginBone(world,id,touched);
-      float up[3]{footAfter[4],footAfter[5],footAfter[6]};const float n=std::sqrt(up[0]*up[0]+up[1]*up[1]+up[2]*up[2]);
+      float up[3]{0,1,0};const float n=1;
       if(n>1e-6f) {
         for(float &v:up)v/=n;
         float axis[3]{up[1]*normal[2]-up[2]*normal[1],up[2]*normal[0]-up[0]*normal[2],up[0]*normal[1]-up[1]*normal[0]};
@@ -609,6 +634,13 @@ private:
         }
       }
       if(!pelvis||!world.graph().find(pelvis)||c->crouch<=0)continue;
+      // O corpo desce junto: quando peito e pelve sao irmaos (Kyle: Hip e
+      // Ribs sob Root), desce o ancestral comum, senao o tronco esticava.
+      ObjectId body=pelvis;
+      if(chest&&world.graph().find(chest)&&!world.graph().isDescendantOf(chest,pelvis))
+        for(const auto *o=world.graph().find(pelvis);o&&o->parent!=world.graph().root()&&o->parent!=id;o=world.graph().find(o->parent))
+          if(world.graph().isDescendantOf(chest,o->parent)){body=o->parent;break;}
+      beginBone(world,body,touched);
       float down=0;
       for(const auto &[tip,t]:effectors) {
         std::vector<ObjectId> member;
@@ -623,7 +655,7 @@ private:
         down=std::max(down,need*t[3]);
       }
       down=std::min(down,c->crouch);
-      if(down>1e-5f) {float m[16];if(worldMatrix(world.graph(),pelvis,m)){m[13]-=down;if(!writeWorld(world,pelvis,m))diagnostics_.push_back({id,Issue::InvalidPose});}}
+      if(down>1e-5f) {float m[16];if(worldMatrix(world.graph(),body,m)){m[13]-=down;if(!writeWorld(world,body,m))diagnostics_.push_back({id,Issue::InvalidPose});}}
     }
   }
   BodyMover mover_;
