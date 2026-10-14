@@ -48,9 +48,11 @@ struct KyleStage {
   });
   auto &graph=session.document();
   const auto bytes=read(glb);
-  if(bytes.empty()||!EditorImportTransaction::write(out/"Sources/RobotKyle.glb",bytes))return 184;
+  // A extensao da fonte decide o importador (GLB convertido ou o FBX do pacote).
+  const std::string source="Sources/RobotKyle"+glb.extension().string();
+  if(bytes.empty()||!EditorImportTransaction::write(out/source,bytes))return 184;
   EditorSession::ModelImportReport report;
-  if(!session.importModel(bytes,"Sources/RobotKyle.glb",{},report)){std::fprintf(stderr,"IMPORT: %s\n",report.diagnostic.c_str());return 185;}
+  if(!session.importModel(bytes,source,{},report)){std::fprintf(stderr,"IMPORT: %s\n",report.diagnostic.c_str());return 185;}
   const auto imported=session.selection();
   kyle=graph.createEntity(graph.root(),runtime::ObjectKind::Folder,"Robot Kyle");
   if(!kyle||!graph.reparent(imported,kyle,0))return 186;
@@ -243,6 +245,12 @@ inline int writeKyleUMotionProject(const std::filesystem::path &glb,const std::f
         if(std::getenv("AE_KYLE_STEP")&&std::fabs(da-du)>.003f)std::printf("STEP f%03d astra %.4f unity %.4f\n",i,da,du);
       }
       lastCube=cu;lastUnity={u[0],u[1],u[2]};
+    }
+    if(const char *dump=std::getenv("AE_KYLE_DUMP");dump&&i==std::atoi(dump)) {
+      // Posicao e eixos de mundo de cada objeto do personagem neste quadro.
+      std::vector<runtime::ObjectId> all;g.collectSubtree(g.root(),all);
+      for(auto id:all){float m[16];runtime::worldMatrix(g,id,m);
+        std::printf("DUMP %s %.5f %.5f %.5f | %.4f %.4f %.4f | %.4f %.4f %.4f\n",g.find(id)->name,m[12],m[13],m[14],m[0],m[1],m[2],m[4],m[5],m[6]);}
     }
     if(std::getenv("AE_KYLE_SWITCH")&&((i>=26&&i<=34)||(i>=56&&i<=66)||(i>=84&&i<=92)||(i>=110&&i<=126)))
       std::printf("s%03d cube-root astra %.4f unity %.4f keyed=%d\n",i,dRoot,uRoot,int(keyed));

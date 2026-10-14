@@ -65,15 +65,15 @@ Com Kyle e Viking reais: a cena **Kyle – Carregar caixa** (projeto próprio, s
 | Eventos, marcadores, intervalos, regiões | cues/regiões | feito |
 | Pose Mode, ferramentas, eixos, espaço local/mundo, travas | modo pose | feito |
 | Seleção (pai/filhos/irmãos, conjuntos, isolar) | feito | feito |
-| Rotation Modes (Quaternion/Euler) | feito | feito |
+| Rotation Modes (Quaternion/Euler) | feito; ordem Euler por trilha (XYZ..ZYX) e referencial, AECLIP 8 (13/10) | feito |
 | Auto-key, gravar/cancelar pose | feito | feito |
 | Animated Properties, Custom Property | N02 (catálogo tipado, drivers DAG) | parcial: aceite Android pendente |
 | Rig Hierarchy, limites | N03 | feito |
 | Mirror Mapping | N03 | feito |
 | Pose Editor (biblioteca de poses) | N03 | feito; miniatura falta |
 | IK Setup Wizard | Assistente de IK do estúdio | feito |
-| Inverse Kinematics no estúdio, FK↔IK, Pinning | aba IK, Fixar ponta, Seguir | parcial: blend FK↔IK animável (peso como canal) falta |
-| Child-Of animável | Seguir objeto | parcial: troca de pai com chave e compensação falta |
+| Inverse Kinematics no estúdio, FK↔IK, Pinning | aba IK, Fixar ponta, Seguir; IK de plano rotativo (dois ossos e cadeia), peso e rotação do polo animáveis (13/10) | feito |
+| Child-Of animável | `astra.constraint.child_of` com pai como canal discreto, Fixo no personagem (13/10) | feito; compensação automática ao trocar de pai no editor falta |
 | Root Motion | N05 | feito |
 | Import/Export (FBX/glTF) | Exportar GLB com reimportação (N06) | parcial: FBX não |
 | Config Display / Pose Display (ossos configuráveis) | — | **falta** |
@@ -81,7 +81,7 @@ Com Kyle e Viking reais: a cena **Kyle – Carregar caixa** (projeto próprio, s
 | Unity Timeline Integration | N09 Sequências | **falta** |
 | UMotion API | SDK ABI 12 (N08) | parcial |
 | Clips **Humanoid** (curvas de músculo: PickUp, Idle, WalkRM, IKPullups) | importador aceita só Transform/blend shape | **falta**: conversão de músculos para rotação de ossos |
-| Projetos `.asset` do UMotion | — | falta (formato proprietário; avaliar só se houver especificação) |
+| Projetos `.asset` do UMotion | importador: clipes com chaves originais, alvos, IK, Child-Of, camadas, eventos (13/10) | parcial: Custom Property (drivers sobre canais de transform) falta; Humanoid depende da linha acima |
 
 ## 4. Animator (controle de estados)
 

@@ -1449,6 +1449,48 @@ public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
         get => Component.GetFloat("pole_rotation");
         set => Component.SetFloat("pole_rotation", value);
     }
+    /// <summary>Zero do plano X. Direção do zero do ângulo no espaço do osso raiz; zerado usa a perpendicular do osso do meio.</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float PlaneZeroX
+    {
+        get => Component.GetFloat("plane_zero_x");
+        set => Component.SetFloat("plane_zero_x", value);
+    }
+    /// <summary>Zero do plano Y. Direção do zero do ângulo no espaço do osso raiz; zerado usa a perpendicular do osso do meio.</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float PlaneZeroY
+    {
+        get => Component.GetFloat("plane_zero_y");
+        set => Component.SetFloat("plane_zero_y", value);
+    }
+    /// <summary>Zero do plano Z. Direção do zero do ângulo no espaço do osso raiz; zerado usa a perpendicular do osso do meio.</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float PlaneZeroZ
+    {
+        get => Component.GetFloat("plane_zero_z");
+        set => Component.SetFloat("plane_zero_z", value);
+    }
+    /// <summary>Desvio da rotação do alvo X (°). Rotação somada à do alvo quando a ponta segue a rotação do alvo (eixos do alvo).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float TargetOffsetX
+    {
+        get => Component.GetFloat("target_offset_x");
+        set => Component.SetFloat("target_offset_x", value);
+    }
+    /// <summary>Desvio da rotação do alvo Y (°). Rotação somada à do alvo quando a ponta segue a rotação do alvo (eixos do alvo).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float TargetOffsetY
+    {
+        get => Component.GetFloat("target_offset_y");
+        set => Component.SetFloat("target_offset_y", value);
+    }
+    /// <summary>Desvio da rotação do alvo Z (°). Rotação somada à do alvo quando a ponta segue a rotação do alvo (eixos do alvo).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float TargetOffsetZ
+    {
+        get => Component.GetFloat("target_offset_z");
+        set => Component.SetFloat("target_offset_z", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -1562,6 +1604,48 @@ public readonly struct ChainIk : IComponentFacade<ChainIk>
     {
         get => Component.GetFloat("tolerance");
         set => Component.SetFloat("tolerance", value);
+    }
+    /// <summary>Zero do plano X. Direção do zero do ângulo no espaço do osso raiz; zerado usa a perpendicular do osso do meio.</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float PlaneZeroX
+    {
+        get => Component.GetFloat("plane_zero_x");
+        set => Component.SetFloat("plane_zero_x", value);
+    }
+    /// <summary>Zero do plano Y. Direção do zero do ângulo no espaço do osso raiz; zerado usa a perpendicular do osso do meio.</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float PlaneZeroY
+    {
+        get => Component.GetFloat("plane_zero_y");
+        set => Component.SetFloat("plane_zero_y", value);
+    }
+    /// <summary>Zero do plano Z. Direção do zero do ângulo no espaço do osso raiz; zerado usa a perpendicular do osso do meio.</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float PlaneZeroZ
+    {
+        get => Component.GetFloat("plane_zero_z");
+        set => Component.SetFloat("plane_zero_z", value);
+    }
+    /// <summary>Desvio da rotação do alvo X (°). Rotação somada à do alvo quando a ponta segue a rotação do alvo (eixos do alvo).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float TargetOffsetX
+    {
+        get => Component.GetFloat("target_offset_x");
+        set => Component.SetFloat("target_offset_x", value);
+    }
+    /// <summary>Desvio da rotação do alvo Y (°). Rotação somada à do alvo quando a ponta segue a rotação do alvo (eixos do alvo).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float TargetOffsetY
+    {
+        get => Component.GetFloat("target_offset_y");
+        set => Component.SetFloat("target_offset_y", value);
+    }
+    /// <summary>Desvio da rotação do alvo Z (°). Rotação somada à do alvo quando a ponta segue a rotação do alvo (eixos do alvo).</summary>
+    /// <remarks>Faixa válida: -360 a 360.</remarks>
+    public float TargetOffsetZ
+    {
+        get => Component.GetFloat("target_offset_z");
+        set => Component.SetFloat("target_offset_z", value);
     }
     /// <summary>Ativo</summary>
     public bool Enabled

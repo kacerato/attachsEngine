@@ -28,8 +28,12 @@ bool prepareFbxSkin(const ufbx_mesh &mesh,const ufbx_scene &scene,const FbxDefor
   const auto fail=[&](const char *message){out={};diagnostic=message;return false;};
   if(mesh.skin_deformers.count!=1)return fail("FBX requer um deformer de skin por malha; combinação de deformers não integrada.");
   const auto &skin=*mesh.skin_deformers.data[0];
-  if(skin.skinning_method!=UFBX_SKINNING_METHOD_LINEAR&&skin.skinning_method!=UFBX_SKINNING_METHOD_RIGID)
-    return fail("FBX dual quaternion exige consumidor correspondente; este perfil aceita linear/rigid.");
+  // Dual quaternion (e o misto) usam os mesmos clusters e pesos; a Unity os
+  // importa e deforma em mistura linear. O relatorio registra a troca.
+  if(skin.skinning_method==UFBX_SKINNING_METHOD_DUAL_QUATERNION||skin.skinning_method==UFBX_SKINNING_METHOD_BLENDED_DQ_LINEAR)
+    out.linearFromDualQuaternion=true;
+  else if(skin.skinning_method!=UFBX_SKINNING_METHOD_LINEAR&&skin.skinning_method!=UFBX_SKINNING_METHOD_RIGID)
+    return fail("Método de skin FBX desconhecido.");
   if(!skin.clusters.count||skin.clusters.count>MaximumSkinJoints)return fail("Skin FBX fora do limite de 1 a 256 juntas.");
   if(skin.vertices.count!=mesh.num_vertices||mesh.num_vertices>policy.maximumBytes/33)
     return fail("Atributos de skin FBX excedem o orçamento ou não correspondem aos vértices de controle.");

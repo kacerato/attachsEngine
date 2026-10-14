@@ -10581,7 +10581,9 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     const bool texture=item.kind==resources::LibraryItemKind::Texture&&(suffix==".png"||suffix==".jpg"||suffix==".jpeg"||suffix==".ktx2"||suffix==".tga"||suffix==".tif"||suffix==".tiff");
     const bool model=item.kind==resources::LibraryItemKind::Model&&(suffix==".glb"||suffix==".gltf"||suffix==".fbx");
     const bool unity=item.kind==resources::LibraryItemKind::Clip||item.kind==resources::LibraryItemKind::Prefab||item.kind==resources::LibraryItemKind::Controller;
-    const char *status=registered?"Abrir":(texture||model)&&!refused?"Preparar":(item.kind==resources::LibraryItemKind::Material||unity)&&!refused?"Converter":"Diagnóstico";
+    // Projeto UMotion: aplica clipes, alvos, IK e Filho de ao personagem selecionado.
+    const bool umotion=item.kind==resources::LibraryItemKind::Clip&&suffix==".asset";
+    const char *status=registered?"Abrir":umotion&&!refused?"Aplicar":(texture||model)&&!refused?"Preparar":(item.kind==resources::LibraryItemKind::Material||unity)&&!refused?"Converter":"Diagnóstico";
     auto statusArea=takeRight(label,96);builder.label(statusArea,status,registered?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::End);
     builder.label(takeTop(label,26),item.name.c_str(),theme.color.text,theme.type.body);
     builder.label(label,item.context.c_str(),theme.color.textMuted,theme.type.caption);

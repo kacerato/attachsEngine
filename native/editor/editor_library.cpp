@@ -94,7 +94,10 @@ PreparedLibraryPackage prepareLibraryPackage(const std::string &project,const st
     result.companions.push_back({staging+"/"+file.relative,destination+file.relative});
     if(file.relative.ends_with(".meta"))continue;
     LibraryItem item;item.path=destination+file.relative;item.sourceHash=file.sha256;item.kind=kind(file.relative);
-    const bool umotion=lower(file.relative).ends_with(".asset")&&umotionProject(EditorImportTransaction::fromUtf8(staging+"/"+file.relative));
+    // O preparo e relativo ao projeto: sem a raiz, o arquivo so era achado
+    // quando o diretorio atual do processo era o projeto (no PC, nao no Android).
+    std::filesystem::path sniffed;
+    const bool umotion=lower(file.relative).ends_with(".asset")&&EditorImportTransaction::safePath(root,staging+"/"+file.relative,sniffed)&&umotionProject(sniffed);
     if(umotion)item.kind=LibraryItemKind::Clip;
     const auto meta=metadata.find(file.relative);item.sourceIdentity=meta==metadata.end()?"path:"+file.relative:"unity:"+meta->second;
     item.id=assetGuidFromSeed(package.id.text()+":"+item.sourceIdentity);sourceIds.emplace(file.relative,item.id);
@@ -255,7 +258,8 @@ bool EditorSession::openLibraryItem(resources::AssetGuid id,std::string &diagnos
       UMotionImportReport report;if(!importUMotionProject(sourcePath,state_.selection,report,diagnostic))return false;
       state_.workspace=EditorWorkspace::Scene;
       diagnostic="Projeto UMotion importado: "+std::to_string(report.clips.size())+" clipe(s), "+std::to_string(report.bones)+" ossos, "+
-        std::to_string(report.helpers)+" auxiliares, "+std::to_string(report.ikChains)+" IK, "+std::to_string(report.childOf)+" Filho de.";
+        std::to_string(report.helpers)+" auxiliares, "+std::to_string(report.ikChains)+" IK, "+std::to_string(report.childOf)+" Filho de"+
+        (report.silencedAnimations.empty()?std::string("."):"; animação do modelo pausada.");
       state_.status=diagnostic;return true;
     }
   }

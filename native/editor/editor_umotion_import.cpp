@@ -355,12 +355,23 @@ bool EditorSession::importUMotionProject(std::string_view relative,EditorEntityI
       auto *component=values.components.find(type)?values.components.edit(type):values.components.add(type);
       if(!component)return cancel("Não foi possível adicionar IK em '"+objects[o.ikTarget].path+"'");
       const u64 pole=o.ikPole>=0?node[o.ikPole]:0;const u32 reference=o.ikReferenceMode==0?1u:0u;const float weight=std::clamp(o.fkIkBlend.reference,0.f,1.f);
+      // Rotacao do alvo: a mao recebe a do alvo no referencial do osso dela
+      // (Psi do alvo -> Psi da ponta), nao no referencial do auxiliar.
+      float offset[3]{};
+      if(o.ikTargetRotationMode==1) {
+        const M4 relative=mul(inverse(psi[i]),psi[o.ikTarget]);float r[9];
+        for(int row=0;row<3;++row)for(int col=0;col<3;++col)r[row*3+col]=relative.m[col*4+row];
+        for(int col=0;col<3;++col){const float n=std::sqrt(r[col]*r[col]+r[3+col]*r[3+col]+r[6+col]*r[6+col]);if(n>1e-9f)for(int row=0;row<3;++row)r[row*3+col]/=n;}
+        float q[4];runtime::rotate_plane::quaternion(r,q);
+        if(normalizeRotationQuaternion(q))rotationEulerXYZ(q,offset);
+      }
       if(&type==&scene::TwoBoneIk::descriptor) {
         auto *c=static_cast<scene::TwoBoneIk*>(component);c->target=node[i];c->pole=pole;c->solver=1;c->reference=reference;
-        c->matchTargetRotation=o.ikTargetRotationMode==1;c->weight=weight;c->enabled=true;
+        c->matchTargetRotation=o.ikTargetRotationMode==1;c->weight=weight;c->enabled=true;std::copy(offset,offset+3,c->targetOffset);
       } else {
         auto *c=static_cast<scene::ChainIk*>(component);c->target=node[i];c->pole=pole;c->solver=2;c->reference=reference;
         c->matchTargetRotation=o.ikTargetRotationMode==1;c->weight=weight;c->enabled=true;c->chainLength=static_cast<float>(std::clamp<u32>(o.ikChainLength,2,32));
+        std::copy(offset,offset+3,c->targetOffset);
       }
       if(!history_.applyValues(document_,target,values))return cancel("IK recusado em '"+objects[o.ikTarget].path+"'");
       ikComponent[target]=document_.find(target)->components.find(type)->instanceId();++report.ikChains;
@@ -372,9 +383,11 @@ bool EditorSession::importUMotionProject(std::string_view relative,EditorEntityI
       childOfComponent[node[i]]=document_.find(node[i])->components.find(scene::ChildOf::descriptor)->instanceId();++report.childOf;
     }
   }
-  // Angulo do plano: zero de cada lado e a perpendicular do osso do meio no
-  // repouso; o desvio entre os dois zeros e constante no referencial do pai.
-  std::map<usize,float> planeOffset;const float mirrorSign=det3(fit.perm)<0?-1.f:1.f;
+  // Zero do plano: a perpendicular do UMotion (osso do meio no repouso, no
+  // espaco do osso de cima da Unity) levada ao espaco do osso de cima da Astra.
+  // Um angulo fixo entre as duas perpendiculares so valeria no repouso: com
+  // eixos locais diferentes (FBX x GLB) o erro crescia com a pose.
+  std::map<usize,std::array<float,3>> planeZero;const float mirrorSign=det3(fit.perm)<0?-1.f:1.f;
   for(usize i=0;i<count;++i) {
     const auto &o=objects[i];if(!o.ik||o.ikTarget<0)continue;
     // Cadeia: raiz `top` (ikChainLength acima da ponta) e o segundo osso `mid`.
@@ -392,21 +405,22 @@ bool EditorSession::importUMotionProject(std::string_view relative,EditorEntityI
     // Para o referencial F (so direcoes: P*v).
     rp::V zUF{},axisF{};
     for(int r=0;r<3;++r){float s=0,a=0;for(int c=0;c<3;++c){s+=fit.perm[r*3+c]*dirU[c];a+=fit.perm[r*3+c]*axisU[c];}(&zUF.x)[r]=s;(&axisF.x)[r]=a;}
-    // Astra: zero no repouso do osso de cima.
-    const M4 topA=astraInFrame(node[top]);const auto &midRest=document_.find(node[mid])->transform.position;
-    float zA[3];perpendicular(midRest,zA);
-    const rp::V zAF=rp::direction(topA.m,rp::V{zA[0],zA[1],zA[2]});
-    const rp::V axis=rp::normalized(axisF);
-    const rp::V a=rp::normalized(rp::reject(zAF,axis)),b=rp::normalized(rp::reject(zUF,axis));
-    planeOffset[i]=std::atan2(rp::dot(rp::cross(a,b),axis),rp::dot(a,b))*57.2957795f;
+    (void)axisF;
+    // Espaco local do osso de cima da Astra: colunas normalizadas da rotacao.
+    const M4 topA=astraInFrame(node[top]);std::array<float,3> zero{};
+    for(int c=0;c<3;++c) {const rp::V column=rp::normalized(rp::V{topA.m[c*4],topA.m[c*4+1],topA.m[c*4+2]});zero[c]=rp::dot(column,rp::normalized(zUF));}
+    planeZero[i]=zero;
   }
   for(usize i=0;i<count;++i) {
     const auto &o=objects[i];if(!o.ik||o.ikTarget<0)continue;
     auto values=*document_.find(node[o.ikTarget]);
-    const float angle=planeOffset.count(i)?planeOffset[i]+mirrorSign*o.ikPlaneAngle:o.ikPlaneAngle;
+    const float angle=mirrorSign*o.ikPlaneAngle;
     const float poleRotation=std::clamp(mirrorSign*o.poleRotation.reference,-360.f,360.f);
-    if(auto *c=static_cast<scene::TwoBoneIk*>(values.components.edit(scene::TwoBoneIk::descriptor));c&&o.ikChainLength==2){c->planeAngle=std::remainder(angle,360.f);c->poleRotation=poleRotation;}
-    else if(auto *k=static_cast<scene::ChainIk*>(values.components.edit(scene::ChainIk::descriptor))){k->planeAngle=std::remainder(angle,360.f);k->poleRotation=poleRotation;}
+    const std::array<float,3> zero=planeZero.count(i)?planeZero[i]:std::array<float,3>{};
+    if(auto *c=static_cast<scene::TwoBoneIk*>(values.components.edit(scene::TwoBoneIk::descriptor));c&&o.ikChainLength==2){
+      c->planeAngle=std::remainder(angle,360.f);c->poleRotation=poleRotation;std::copy(zero.begin(),zero.end(),c->planeZero);}
+    else if(auto *k=static_cast<scene::ChainIk*>(values.components.edit(scene::ChainIk::descriptor))){
+      k->planeAngle=std::remainder(angle,360.f);k->poleRotation=poleRotation;std::copy(zero.begin(),zero.end(),k->planeZero);}
     if(!history_.applyValues(document_,node[o.ikTarget],values))return cancel("Plano do IK recusado");
   }
   history_.end();
@@ -667,9 +681,25 @@ bool EditorSession::importUMotionProject(std::string_view relative,EditorEntityI
   for(const auto guid:clipGuids)animation->appendClip(guid);
   animation->clip=clipGuids.front();animation->playAutomatically=true;
   if(!history_.applyValues(document_,owner,values)) {history_.cancel(document_);error="Animation recusado no personagem";return false;}
+  // Outras animacoes do personagem (o take embutido de um FBX, por exemplo)
+  // tocariam os mesmos ossos ao mesmo tempo: param de iniciar sozinhas. O
+  // componente e os clipes ficam, so a reproducao automatica e desligada.
+  {
+    std::vector<EditorEntityId> subtree;document_.collectSubtree(owner,subtree);
+    for(const auto id:subtree) {
+      if(id==owner)continue;
+      const auto *entity=document_.find(id);
+      const auto *other=entity?static_cast<const scene::Animation*>(entity->components.find(scene::Animation::descriptor)):nullptr;
+      if(!other||!other->playAutomatically)continue;
+      auto silenced=*entity;static_cast<scene::Animation*>(silenced.components.edit(scene::Animation::descriptor))->playAutomatically=false;
+      if(!history_.applyValues(document_,id,silenced)) {history_.cancel(document_);error="Não foi possível pausar a animação de '"+std::string(entity->name)+"'";return false;}
+      report.silencedAnimations.push_back(entity->name);
+    }
+  }
   history_.end();
   report.bones=0;for(usize i=0;i<count;++i)if(node[i]&&!created[i]&&!objects[i].path.empty())++report.bones;
   state_.status="UMotion: "+std::to_string(report.clips.size())+" clipe(s), "+std::to_string(report.bones)+" ossos, "+std::to_string(report.ikChains)+" IK, "+std::to_string(report.childOf)+" Filho de";
+  if(!report.silencedAnimations.empty())state_.status+=" · animação do modelo pausada ("+report.silencedAnimations.front()+")";
   return true;
 }
 } // namespace ae::editor

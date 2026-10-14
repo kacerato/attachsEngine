@@ -66,6 +66,14 @@ def main():
             W[i] = w(parent[i]) @ M(*locals_[i]); return W[i]
         for i in range(len(objs)): w(i)
         return W
+    import os
+    if os.environ.get('UMOTION_DUMP'):
+        # Posicoes de mundo so do FK num quadro (referencia para comparar rigs).
+        f = float(os.environ['UMOTION_DUMP'])
+        W = worlds([fk_local(i, f) for i in range(len(objs))])
+        for i, o in enumerate(objs):
+            if o['path']: print('UDUMP %s %.5f %.5f %.5f' % (o['path'].rsplit('/', 1)[-1], *W[i][:3, 3]))
+        return
     def perp(v):
         a = np.abs(v)
         return np.array([-v[2], 0, v[0]]) if (a[2] > a[0] and a[2] > a[1]) else np.array([-v[1], v[0], 0])

@@ -21,6 +21,9 @@ struct FbxSkinAttributes {
   std::vector<u16> joints;
   std::vector<float> weights;
   bool reducedWeights=false;
+  // Skin marcado como dual quaternion (ou misto) no FBX, deformado com os mesmos
+  // pesos em mistura linear, como o SkinnedMeshRenderer da Unity faz ao importar.
+  bool linearFromDualQuaternion=false;
 };
 struct FbxBakedTake {
   std::string name;

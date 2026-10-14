@@ -2971,7 +2971,8 @@ void android_main(android_app *app) {
               // .gltf, ou GLB com URI externa: as dependências vêm dos arquivos
               // escolhidos junto e entram num GLB autocontido, que é o que o
               // projeto guarda. Reabrir não depende da pasta nem da permissão do seletor.
-              if(ae::resources::gltfNeedsPackage(result.bytes)) {
+              // FBX segue para o importador de modelos; so glTF e empacotado aqui.
+              if(!ae::resources::isFbxSource(result.bytes)&&ae::resources::gltfNeedsPackage(result.bytes)) {
                 std::vector<ae::resources::GltfPackageFile> files;
                 for(const auto &companion:picked.companions) files.push_back({companion.name,companion.bytes});
                 ae::resources::GltfPackage package;

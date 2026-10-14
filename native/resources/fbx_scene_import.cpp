@@ -126,7 +126,7 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
     return fail(deformationDiagnostic);
   struct MorphBinding {u32 node=0;std::vector<std::pair<u32,u32>> targets;};
   std::vector<MorphBinding> morphBindings;
-  bool reducedWeights=false,recalculateTangents=false,droppedTangents=false;
+  bool reducedWeights=false,recalculateTangents=false,droppedTangents=false,linearFromDualQuaternion=false;
   for(const auto *material:scene->materials) {
     const auto &p=material->pbr;const auto &f=material->fbx;
     const auto color=p.base_color.has_value?p.base_color.value_vec3:(f.diffuse_color.has_value?f.diffuse_color.value_vec3:ufbx_vec3{{{1,1,1}}});
@@ -192,7 +192,7 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
       FbxSkinAttributes skin;std::vector<FbxMorphTarget> morph;
       if(policy.deformation&&mesh->skin_deformers.count) {
         if(!prepareFbxSkin(*mesh,*scene,bake,progress,skin,deformationDiagnostic))return fail(deformationDiagnostic);
-        reducedWeights=reducedWeights||skin.reducedWeights;
+        reducedWeights=reducedWeights||skin.reducedWeights;linearFromDualQuaternion=linearFromDualQuaternion||skin.linearFromDualQuaternion;
         u32 binds=0;if(!data.floats(skin.inverseBinds,16,"MAT4",binds))return fail("Binds FBX excedem o orçamento.");
         auto encoded=jsonStream();encoded<<"{\"name\":"<<jsonString(stringOf(mesh->name))<<",\"inverseBindMatrices\":"<<binds<<",\"joints\":[";
         join(encoded,skin.jointNodes);encoded<<"]}";item<<",\"skin\":"<<skins.size();skins.push_back(encoded.str());
@@ -420,6 +420,7 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
   if(legacy)out.appearanceExtensions.push_back("FBX Phong/Lambert: somente cor difusa/emissão; resposta especular original não reproduzida.");
   if(droppedTangents)out.appearanceExtensions.push_back("Base de tangentes FBX degenerada: tangentes do modelo recalculadas a partir da UV pelo preparador nativo onde disponível.");
   if(reducedWeights)out.notes.push_back("Skin FBX: quatro maiores influências renormalizadas por autorização da receita.");
+  if(linearFromDualQuaternion)out.notes.push_back("Skin FBX marcado como dual quaternion: deformado em mistura linear com os mesmos pesos, como na Unity.");
   if(std::any_of(takes.begin(),takes.end(),[](const auto &take){return take.approximatedSteps;}))
     out.notes.push_back("Descontinuidades FBX aproximadas pela taxa de bake por autorização explícita da receita.");
   if(!takes.empty())out.notes.push_back("Takes FBX: bake quaternion/TRS/morph a "+std::to_string(bake.bakeRate)+" Hz; intervalos nomeados preservados.");

@@ -195,7 +195,7 @@ private:
   // na referencia, resolve no plano, gira pelo polo, mistura FK->IK por osso,
   // corrige o osso do meio com peso 1 e copia a rotacao do alvo). Tres ossos
   // usam a solucao analitica; cadeias maiores, o CCD restrito ao plano.
-  struct RotatePlaneSettings {u64 target=0,pole=0;bool matchTargetRotation=false;u32 reference=0;float weight=1,planeAngle=0,poleRotation=0;};
+  struct RotatePlaneSettings {u64 target=0,pole=0;bool matchTargetRotation=false;u32 reference=0;float weight=1,planeAngle=0,poleRotation=0;const float *zero=nullptr,*targetOffset=nullptr;};
   void rotatePlane(GameWorld &world,const std::vector<ObjectId> &ids,const RotatePlaneSettings &c,std::map<ObjectId,bool> &touched) {
     namespace rp=rotate_plane;using rp::V;
     const auto &g=world.graph();const usize count=ids.size();const ObjectId tip=ids.back();
@@ -213,7 +213,8 @@ private:
     const auto plane=[&](V &start,V &axis,V &dir) {
       float rw[16],tw[16];if(!worldMatrix(g,ids[0],rw)||!worldMatrix(g,tip,tw))return false;
       start=rp::position(rw);axis=rp::position(tw)-start;
-      dir=rp::direction(rw,rp::perpendicular(restMid));
+      const bool explicitZero=c.zero&&(c.zero[0]!=0||c.zero[1]!=0||c.zero[2]!=0);
+      dir=rp::direction(rw,explicitZero?rp::V{c.zero[0],c.zero[1],c.zero[2]}:rp::perpendicular(restMid));
       if(count>2)dir=rp::reject(dir,rp::normalized(axis));
       float r[9];rp::axisAngle(axis,c.planeAngle,r);dir=rp::apply(r,dir);return true;
     };
@@ -278,6 +279,9 @@ private:
       // Rotacao do alvo no mundo -> rotacao local da ponta (escala e posicao da ponta mantidas).
       float parent[16],hq[4],pq[4];
       if(parentWorldMatrix(g,tip,parent)&&rp::basisQuaternion(handle,hq)&&rp::basisQuaternion(parent,pq)) {
+        if(c.targetOffset&&(c.targetOffset[0]!=0||c.targetOffset[1]!=0||c.targetOffset[2]!=0)) {
+          float oq[4],turned[4];rotationQuaternionXYZ(c.targetOffset,oq);rotationMultiply(hq,oq,turned);std::copy(turned,turned+4,hq);
+        }
         const float pc[4]{-pq[0],-pq[1],-pq[2],pq[3]};float local[4];rotationMultiply(pc,hq,local);writeLocalRotation(world,tip,local);
       }
     }
@@ -300,7 +304,7 @@ private:
     if(c.solver==1) {
       const auto *e=world.graph().find(id);const auto *m=e?world.graph().find(e->parent):nullptr;const auto *r=m?world.graph().find(m->parent):nullptr;
       if(!r||m->id==world.graph().root()||r->id==world.graph().root()) {diagnostics_.push_back({id,Issue::ShortChain});return;}
-      rotatePlane(world,{r->id,m->id,id},{c.target,c.pole,c.matchTargetRotation,c.reference,c.weight,c.planeAngle,c.poleRotation},touched);return;
+      rotatePlane(world,{r->id,m->id,id},{c.target,c.pole,c.matchTargetRotation,c.reference,c.weight,c.planeAngle,c.poleRotation,c.planeZero,c.targetOffset},touched);return;
     }
     float target[3],pole[3];
     if(!targetPosition(world,c.target,target)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
@@ -312,6 +316,10 @@ private:
       beginBone(world,id,touched);
       float targetWorld[16],tipWorld[16];
       if(worldMatrix(world.graph(),static_cast<ObjectId>(c.target),targetWorld)&&worldMatrix(world.graph(),id,tipWorld)) {
+        if(c.targetOffset[0]!=0||c.targetOffset[1]!=0||c.targetOffset[2]!=0) {
+          Transform offset;std::copy(c.targetOffset,c.targetOffset+3,offset.rotationDegrees);
+          float turn[16],turned[16];transformMatrix(offset,turn);multiplyMatrix(targetWorld,turn,turned);std::copy(turned,turned+16,targetWorld);
+        }
         for(u32 i=12;i<15;++i)targetWorld[i]=tipWorld[i];
         if(!writeBone(world,id,targetWorld,c.weight))diagnostics_.push_back({id,Issue::InvalidPose});
       }
@@ -322,7 +330,7 @@ private:
       std::vector<ObjectId> ids;
       if(!ancestors(world.graph(),id,static_cast<u32>(c.chainLength),ids)) {diagnostics_.push_back({id,Issue::ShortChain});return;}
       ids.push_back(id);
-      rotatePlane(world,ids,{c.target,c.pole,c.matchTargetRotation,c.reference,c.weight,c.planeAngle,c.poleRotation},touched);return;
+      rotatePlane(world,ids,{c.target,c.pole,c.matchTargetRotation,c.reference,c.weight,c.planeAngle,c.poleRotation,c.planeZero,c.targetOffset},touched);return;
     }
     float target[3];if(!targetPosition(world,c.target,target)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
     applyOffset(world.graph(),id,target);
