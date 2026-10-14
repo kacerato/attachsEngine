@@ -150,6 +150,17 @@ public:
   void setStandalonePlayer(bool value) noexcept {state_.standalonePlayer=value;}
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
+  bool openTerrain(EditorEntityId target=0);
+  bool applyTerrain(const resources::TerrainRecipe &,std::string &error);
+  bool setTerrainNumber(u32 field,double number);
+  bool handleTerrainInput(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
+  void refreshTerrainJob();
+  void startTerrainJob();
+  struct TerrainJob;
+  std::shared_ptr<TerrainJob> terrainJob_;
+  resources::AssetGuid terrainSource_{};
+  bool publishTerrain(const resources::TerrainRecipe &,const resources::TerrainMesh &,
+                      const std::vector<u8> &,const resources::GltfImport &,std::string &);
   // Clip authoring operations are independent of the animation panel. They
   // publish through the project journal and expose the same revision contract
   // to the editor and native authoring clients.

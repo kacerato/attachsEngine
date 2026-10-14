@@ -331,7 +331,8 @@ bool EditorSession::importUMotionProject(std::string_view relative,EditorEntityI
       if(slot) {
         // Nasce na origem do objeto (a posicao local e zerada logo abaixo).
         float at[16];editorWorldMatrix(document_,id,at);const float origin[3]{at[12],at[13],at[14]};
-        EditorAssetInstantiation options;options.name=name+" · visual";options.rigidBody=false;
+        const auto visualName=name+" · visual";
+        EditorAssetInstantiation options;options.name=visualName;options.rigidBody=false;
         const auto visual=instantiateAssetInTransaction(slot-1,id,origin,&options);
         if(visual) {
           auto v=*document_.find(visual);for(int c=0;c<3;++c){v.transform.position[c]=0;v.transform.rotationDegrees[c]=0;v.transform.scale[c]=1;}

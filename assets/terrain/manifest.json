@@ -1,0 +1,38 @@
+[
+  {
+    "layer": 0,
+    "source": "3DH FTT Grass_002 Grass_001a 2K.png",
+    "package": "Path Painter II v2.1.10",
+    "source_sha256": "8a9cb7dc73342d923df746586fb4f5f8833397c6189d86bb131978c454f990c4",
+    "output": "layer-0.png",
+    "sha256": "31254bc907b71e598cf9e987b0b2fe89592811f1a3f73d6400638187bba519bf",
+    "conversion": "RGB PNG, 256x256 Lanczos"
+  },
+  {
+    "layer": 1,
+    "source": "3DH FTT Cliff_001 4K.png",
+    "package": "Path Painter II v2.1.10",
+    "source_sha256": "88096300aa45a9f914956f415c7c3ceec1f2546221d5fd0f415e7bf2c724ab4c",
+    "output": "layer-1.png",
+    "sha256": "af4e5464d28e66d99d33d3dd59266cbe552ead0dd5aa136e5523a5f4655c4d4f",
+    "conversion": "RGB PNG, 256x256 Lanczos"
+  },
+  {
+    "layer": 2,
+    "source": "3DH FTT Dirt_002a 1K.png",
+    "package": "Path Painter II v2.1.10",
+    "source_sha256": "cb18d05bcb555250d0dca25604d681af701a41e6a8f8fe46770db21a25f9e548",
+    "output": "layer-2.png",
+    "sha256": "0bac2f67b62496480bfeeb0e4a86c85f919f409fd127ac01604e44766d61dc5a",
+    "conversion": "RGB PNG, 256x256 Lanczos"
+  },
+  {
+    "layer": 3,
+    "source": "3DH FTT Path_001 2K.png",
+    "package": "Path Painter II v2.1.10",
+    "source_sha256": "dc449f8f5639e5b7d8d3678aefc2a78e804b04ae7b8ebe87415ba88184e727b7",
+    "output": "layer-3.png",
+    "sha256": "e53dc0245352ed4aa3ceaf2682d84af29271775f6de999a29f93fd48258df74c",
+    "conversion": "RGB PNG, 256x256 Lanczos"
+  }
+]

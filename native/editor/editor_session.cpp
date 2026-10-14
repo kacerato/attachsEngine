@@ -1925,6 +1925,14 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   }
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
+    const auto terrainBase=widgetId(EditorWidget::TerrainNumberBase);
+    if(edit.field>=terrainBase&&edit.field<terrainBase+16) {
+      NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
+      if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(edit.field-terrainBase,number)) {
+        state_.numericError=true;state_.status=reason.empty()?"Valor de terreno fora do limite":reason;return false;
+      }
+      close();return true;
+    }
     const auto bakeBase=widgetId(EditorWidget::MotorBakeSettingsNumberBase);
     if(edit.field>=bakeBase&&edit.field<bakeBase+6) {
       NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
@@ -6308,6 +6316,7 @@ void EditorSession::refreshSkinningStatus() {
   }
 }
 void EditorSession::update() {
+  refreshTerrainJob();
   state_.studio=studio_.get();
   refreshAnimationClip();
   if(studio_->bake) {std::string summary,error;EditorStudio::bakeStep(*this,12,summary,error);

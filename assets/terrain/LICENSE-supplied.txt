@@ -1,0 +1,5 @@
+LICENÇA DE USO DE ASSETS E MATERIAIS E CODIGO.
+
+Fica autorizada a utilização, reprodução, modificação, adaptação e implementação de todos os assets, arquivos, recursos e demais materiais disponibilizados neste projeto em engines, jogos, aplicativos e outros projetos.
+
+O uso para desenvolvimento é permitido livremente. Caso os materiais sejam incorporados a um produto que será comercializado, o responsável deverá comunicar EM ALGUM MOMENTO, NAO SE PREOCUPE COM TEMPO, essa intenção ao representante autorizado. A comunicação é obrigatória, mas não constitui, por si só, um pedido de aprovação, ENTAO FIQUE TRANQUILO COM USO.

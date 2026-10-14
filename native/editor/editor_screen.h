@@ -26,6 +26,7 @@
 #include "ui/ui_input.h"
 
 namespace ae::editor {
+void buildTerrainSurface(const EditorScreenState &,const ui::UiTheme &,ui::UiDrawList &,ui::UiInputRouter &,const ui::UiRect &);
 void animationStudioBones(const runtime::SceneGraph &,EditorEntityId owner,std::vector<std::pair<EditorEntityId,u32>> &);
 // Monta o frame. `router` recebe os bloqueios e as regiões; `list` recebe o
 // desenho. As duas coisas acontecem na mesma passagem de propósito: uma região

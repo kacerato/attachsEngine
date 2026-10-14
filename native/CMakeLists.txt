@@ -466,6 +466,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_library(aether_assets STATIC
+  resources/terrain_asset.cpp
   resources/asset_registry.cpp
   resources/json_reader.cpp
   resources/gltf_import.cpp
@@ -639,6 +640,8 @@ add_library(aether_editor STATIC
   editor/editor_texture_assets.cpp
   editor/editor_texture_publication.cpp
   editor/editor_model_publication.cpp
+  editor/editor_terrain.cpp
+  editor/editor_terrain_screen.cpp
   editor/editor_fbx_rig_binding.cpp
   editor/editor_model_takes.cpp
   editor/editor_texture_import_screen.cpp
@@ -1082,6 +1085,9 @@ if(NOT ANDROID)
     target_compile_options(aether_fields50_tests PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
+  add_executable(aether_terrain_tests ../tests/native/family_base_main.cpp ../tests/native/test_terrain.cpp)
+  target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
   add_executable(aether_gui_tests ../tests/native/family_base_main.cpp ../tests/native/test_gui.cpp ../tests/native/test_gui_expansion.cpp
     ../tests/native/test_scene_gui.cpp
     ../tests/native/test_character_authoring.cpp

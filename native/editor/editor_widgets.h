@@ -7,6 +7,10 @@ namespace ae::editor {
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
 // no próprio identificador.
 enum class EditorWidget : u32 {
+  TerrainOpen=0xEC000000u,TerrainClose,TerrainGenerate,TerrainCancel,TerrainNew,TerrainLoad,
+  TerrainMode,TerrainIsland,TerrainCollision,TerrainBrushArm,TerrainStamp,TerrainRemoveStroke,
+  TerrainPrevious,TerrainNext,TerrainFrame,TerrainTabBase=0xEC000020u,
+  TerrainToolBase=0xEC000030u,TerrainLayerBase=0xEC000040u,TerrainNumberBase=0xEC000100u,
   LibraryOpen=0xCD100000u,LibraryImport,LibraryClose,LibraryPrevious,LibraryNext,LibraryKinds,LibraryPackages,LibrarySearch,LibraryDetailsClose,
   LibraryReimport,LibraryKeepLocal,LibraryReceiveSource,LibraryInstantiate,LibraryControllerAssign,
   LibraryItemBase=0xCD110000u,

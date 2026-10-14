@@ -168,6 +168,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  if(handleTerrainInput(event,routing)) return true;
   if(handleContextMenu(event,routing)) return true;
   if(handleColliderAuthoringInput(event,routing))return true;
   if(routing.target==UiPointerTarget::Widget &&

@@ -1,5 +1,6 @@
 // Estado autoral/transitorio da tela. Nao inclui os IDs nem a API de desenho.
 #pragma once
+#include "resources/terrain_asset.h"
 namespace ae::ui { class UiDrawList; }
 #include <functional>
 
@@ -1126,6 +1127,13 @@ struct EditorScreenState final {
   bool editingHierarchySearch=false;
   char hierarchySearch[kEditorNameCapacity]{};
   u32 waterTab=0,routePoint=0;
+  bool terrainOpen=false,terrainBusy=false,terrainBrushArmed=false;
+  u32 terrainTab=0,terrainPage=0;
+  EditorEntityId terrainTarget=0;
+  resources::TerrainRecipe terrainDraft;
+  resources::TerrainStroke terrainBrush;
+  std::string terrainMessage="Configure e gere o terreno";
+  float terrainProgress=0;
   std::vector<EditorEntityId> collapsedEntities;
   EditorEntityId renameEntity = kInvalidEntity;
   char renameText[kEditorNameCapacity]{};

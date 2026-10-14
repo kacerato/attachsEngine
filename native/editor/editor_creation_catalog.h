@@ -234,7 +234,7 @@ inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água"
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
-inline const std::array<EditorCreationEntry,90> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,91> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -390,7 +390,8 @@ inline const std::array<EditorCreationEntry,90> editorCreationCatalog{{
   {"path.follower",EditorWidget::None,5,"Seguidor de caminho","Escolha um Path; avance por velocidade ou duração.",ui::UiIcon::ComponentPathFollow,
     runtime::ObjectKind::Folder,recipe::pathFollow,CreationPose::ViewTarget,0,"astra.path.follow","target","PathFollow3D Seguidor"},
   {"path.camera",EditorWidget::None,5,"Câmera no caminho","Câmera e seguidor real; selecione o Path antes de criar.",ui::UiIcon::PathCamera,
-    runtime::ObjectKind::Camera,recipe::pathCamera,CreationPose::EditorCamera,0,"astra.path.follow","target","Camera Rail PathFollow3D"}
+    runtime::ObjectKind::Camera,recipe::pathCamera,CreationPose::EditorCamera,0,"astra.path.follow","target","Camera Rail PathFollow3D"},
+  {"terrain.generator",EditorWidget::TerrainOpen,1,"Terreno e voxel","Gerar, esculpir, pintar e gerenciar chunks.",ui::UiIcon::TerrainTerrain}
 }};
 inline constexpr u32 kCreationRecipeRange=0x0010'0000u;
 static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(editorCreationCatalog)>><kCreationRecipeRange);

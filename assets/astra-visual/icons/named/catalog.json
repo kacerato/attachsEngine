@@ -2249,6 +2249,18 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "terrain/terrain": {
+      "source": "vector/terrain/terrain.svg"
+    },
+    "terrain/voxel": {
+      "source": "vector/terrain/voxel.svg"
+    },
+    "terrain/sculpt": {
+      "source": "vector/terrain/sculpt.svg"
+    },
+    "terrain/layers": {
+      "source": "vector/terrain/layers.svg"
     }
   },
   "unmapped": []

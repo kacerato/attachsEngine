@@ -11528,6 +11528,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // O editor de curvas abre o teclado numérico para tempo e valor da chave:
   // desenhado antes, fica por baixo dele.
   if(state.curveField) buildCurveEditor(builder,layout);
+  if(state.terrainOpen) {
+    auto panel=layout.inspectorPanel;
+    if(panel.width<260||panel.height<240) panel={state.surface.right()-std::min(330.f,state.surface.width*.52f),layout.topBar.bottom(),std::min(330.f,state.surface.width*.52f),state.surface.bottom()-layout.topBar.bottom()-24};
+    buildTerrainSurface(state,theme,list,router,panel);
+  }
   buildNumericWindow(builder);
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);
