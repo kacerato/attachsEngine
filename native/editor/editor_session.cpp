@@ -3015,6 +3015,21 @@ void EditorSession::validateFocusedInspectors() {
   // projeto não apaga as abas da cena onde foram abertas.
 }
 
+void EditorSession::collapseImportedHierarchies(EditorEntityId root) {
+  std::vector<EditorEntityId> ids;document_.collectSubtree(root,ids);
+  auto &collapsed=state_.collapsedEntities;
+  for(const auto id:ids) {
+    const auto *entity=document_.find(id);
+    const auto children=document_.childrenOf(id);
+    if(!entity||id==document_.root()||children.empty()) continue;
+    // Nó importado, ou o grupo que reúne as raízes de um modelo com várias.
+    const bool imported=scene::importLink(entity->components)!=nullptr||
+        std::all_of(children.begin(),children.end(),[&](EditorEntityId child) {
+          const auto *value=document_.find(child);return value&&scene::importLink(value->components);});
+    if(imported&&std::find(collapsed.begin(),collapsed.end(),id)==collapsed.end()) collapsed.push_back(id);
+  }
+}
+
 void EditorSession::pingEntity(EditorEntityId id) {
   const auto *entity=document_.find(id);
   if(!entity || id==document_.root()) return;
@@ -3920,6 +3935,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   reportImportReconcile(reconcile,"Cena aberta");
   state_.selection=kInvalidEntity;state_.status="Cena restaurada";
   state_.collapsedEntities.clear();state_.hierarchyScroll=0;state_.renameEntity=kInvalidEntity;
+  collapseImportedHierarchies(document_.root());
   validateFocusedInspectors();
   restoreSceneVisibility();
   return true;
@@ -5314,6 +5330,7 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
   // The newly imported object must be discoverable immediately. Fit only this
   // instance (all its roots), preserving authored scale and source transforms.
   if(!newRoots.empty()) {
+    for(const auto root:newRoots) collapseImportedHierarchies(root);
     state_.workspace=EditorWorkspace::Scene;setSelection(newRoots.front());
     float low[3]{},high[3]{};bool first=true;
     std::vector<EditorEntityId> importedIds;
@@ -6444,6 +6461,7 @@ void EditorSession::update() {
   }
   u32 pressed = 0;
   state_.pressedWidget = router_.pressedWidget(pressed) ? pressed : 0;
+  state_.clipPreviewReady = state_.clipOpen && clipPreview_.active();
 
   const UiFontMetrics metrics = font_->metrics(UiFontWeight::Regular);
 

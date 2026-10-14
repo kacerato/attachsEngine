@@ -1687,6 +1687,12 @@ private:
   u32 inspectorScrollPointer_ = 0, inspectorWidgetPointer_ = 0;
   EditorEntityId inspectorScrollOwner_ = 0;
   bool handleInspectorScroll(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
+  // Menu de contexto da Hierarquia: abre (+, ⋮, toque longo), navega e rola;
+  // as ações tocadas nele seguem pelo caminho normal.
+  bool handleContextMenu(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
+  // Pai de um objeto criado pela folha ou pelo menu: o selecionado quando o
+  // destino é "filho", senão a raiz.
+  EditorEntityId creationParent() const;
   u32 numericFieldSeen_ = 0;
   u32 scriptArrayPointer_ = 0, scriptArrayPagerHover_ = 0;
   // Janela de cor: amostras do projeto, abertura com a cor do campo e a cor
@@ -1818,6 +1824,8 @@ private:
   u64 clipPreviewTopologyRevision_=~u64(0);
   bool pickAnimationClipPreviewTarget(ui::UiPoint position);
   u64 clipEpoch_=0;u32 clipPointer_=0,clipNumberRevision_=0,clipHandle_=0;
+  // Arraste da arvore de ossos do estudio: sobra em pixels ate a proxima linha.
+  float clipBoneDrag_=0;
   resources::AssetGuid clipNumberGuid_;
   std::optional<resources::AnimationClipAsset> clipDriverDraft_;
   u64 clipDriverNumberNode_=0,clipDriverNumberKey_=0;
@@ -1985,6 +1993,9 @@ private:
 public:
   // Ping (Unity): abre os pais, rola a Hierarquia até o objeto e pisca a linha.
   void pingEntity(EditorEntityId id);
+  // Modelos importados entram recolhidos na Hierarquia, um nivel por vez
+  // (Unity): cada no importado com filhos comeca fechado.
+  void collapseImportedHierarchies(EditorEntityId root);
   // Inspector focado (Unity: Properties) de um objeto ou de um componente dele.
   void openFocusedInspector(EditorEntityId entity,u64 component=0);
   // Multisseleção. `selectedRoots` tira do conjunto quem já é descendente de

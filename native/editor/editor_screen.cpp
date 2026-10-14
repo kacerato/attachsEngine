@@ -348,116 +348,74 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
                        theme.color.line);
   takeLeft(content, theme.spacing.medium);
 
-  // Ações à direita, de trás para frente para ficarem ancoradas na borda.
-  const UiRect play = takeRight(content, 52.0f);
-  builder.list.addRect(play, theme.color.accent, theme.radius.control);
-  builder.list.addImage(centred(play, 18.0f, 18.0f), static_cast<UiImageId>(builder.state.workspace==EditorWorkspace::Play?UiIcon::EditorAuthorStop:UiIcon::EditorAuthorPlay),
-                        theme.color.accentInk);
-  builder.router.addRegion(play, widgetId(EditorWidget::PlayFromTopBar), theme.touch.minimumTarget);
-  takeRight(content, theme.spacing.small);
-  const auto action = [&](UiIcon icon, EditorWidget widget, bool enabled) {
-    builder.iconButton(takeRight(content, kActionButton), icon, widgetId(widget), false,
-                       enabled ? theme.color.text : theme.color.textFaint);
-    takeRight(content, theme.spacing.tiny);
+  // Barra só de ícones (ITsMagic): à esquerda o projeto e o histórico, no
+  // centro o Play (rodando, também parar, pausar, passo, velocidade e
+  // inspecionar) e à direita as ferramentas. Nenhum botão de texto.
+  const auto &state=builder.state;
+  const bool playing=state.workspace==EditorWorkspace::Play && !waterCreationAvailable(state);
+  const auto button=[&](UiRect rect,UiIcon icon,EditorWidget widget,bool enabled=true,bool active=false) {
+    builder.iconButton(rect,icon,widgetId(widget),active,enabled?theme.color.text:theme.color.textFaint);
   };
-
-
-  if(builder.state.workspace==EditorWorkspace::Play && !waterCreationAvailable(builder.state)) {
-    const auto control=[&](const char *label,EditorWidget id,bool enabled,bool active=false) {
-      const auto rect=takeRight(content,active||id==EditorWidget::PlayInspect?92:76);
-      builder.list.addRect(rect,active?theme.color.accent:theme.color.raised,theme.radius.control);
-      builder.label(rect,label,active?theme.color.accentInk:enabled?theme.color.text:theme.color.textFaint,
-                    theme.type.caption,UiAlign::Center);
-      if(enabled) builder.router.addRegion(rect,widgetId(id),theme.touch.minimumTarget);
-      takeRight(content,theme.spacing.small);
-    };
-    if(builder.state.playPaused) control("Passo",EditorWidget::StepPlay,true);
-    else {
-      char speed[32];std::snprintf(speed,sizeof(speed),"Tempo %.2gx",double(builder.state.playTimeScale));
-      control(speed,EditorWidget::PlayTimeScale,true,builder.state.playTimeScale!=1);
-    }
-    control(builder.state.playPaused?"Retomar":"Pausar",EditorWidget::PausePlay,true);
-    control("Inspecionar",EditorWidget::PlayInspect,true,builder.state.playInspect);
-  } else {
-    action(UiIcon::EditorAuthorRedo, EditorWidget::Redo, builder.state.canRedo);
-    action(UiIcon::EditorAuthorUndo, EditorWidget::Undo, builder.state.canUndo);
-    // Unity 6000.0: a Busca global fica na barra, ao lado do histórico.
-    builder.iconButton(takeRight(content, kActionButton), UiIcon::IdeSearch, widgetId(EditorWidget::GlobalSearchOpen),
-                       builder.state.globalSearch);
-    takeRight(content, theme.spacing.tiny);
-  }
-
-  const auto sceneMenu=takeLeft(content,76.0f);
-  builder.list.addRect(sceneMenu,theme.color.raised,theme.radius.control);
-  builder.label(sceneMenu,builder.state.workspace==EditorWorkspace::Gui?"Interface":"Cena",theme.color.text,theme.type.caption,UiAlign::Center);
-  builder.router.addRegion(sceneMenu,widgetId(EditorWidget::ProjectMenu));
+  button(takeLeft(content,kActionButton),UiIcon::UiMenu,EditorWidget::ProjectMenu,true,state.workspaceMenu);
+  takeLeft(content,theme.spacing.tiny);
+  button(takeLeft(content,kActionButton),UiIcon::AssetsSave,EditorWidget::SaveDocument);
   takeLeft(content,theme.spacing.small);
-  const auto save=takeLeft(content,64.0f);
-  builder.list.addRect(save,theme.color.raised,theme.radius.control);
-  builder.label(save,"Salvar",theme.color.text,theme.type.caption,UiAlign::Center);
-  builder.router.addRegion(save,widgetId(EditorWidget::SaveDocument));
-
-  takeLeft(content,theme.spacing.small);
-  if(builder.state.workspace==EditorWorkspace::Scene && content.width>=44.0f) {
-    builder.iconButton(takeLeft(content,40.0f),UiIcon::UiDiagnostics,
-                       widgetId(EditorWidget::DiagnosticDockToggle),builder.state.diagnosticDockOpen);
+  if(!playing) {
+    button(takeLeft(content,kActionButton),UiIcon::EditorAuthorUndo,EditorWidget::Undo,state.canUndo);
+    takeLeft(content,theme.spacing.tiny);
+    button(takeLeft(content,kActionButton),UiIcon::EditorAuthorRedo,EditorWidget::Redo,state.canRedo);
     takeLeft(content,theme.spacing.small);
   }
-  if(content.width>=52.0f) {
-    const bool labelled=content.width>=180.0f;
-    const auto graphics=takeLeft(content,labelled?108.0f:40.0f);
-    builder.list.addRect(graphics,builder.state.qualityPanel?theme.color.accent:theme.color.raised,
-                         theme.radius.control);
-    const auto icon=labelled?UiRect{graphics.x+8.0f,graphics.y,24.0f,graphics.height}:graphics;
-    builder.list.addImage(centred(icon,18.0f,18.0f),static_cast<UiImageId>(UiIcon::UiSliders),
-                          builder.state.qualityPanel?theme.color.accentInk:theme.color.text);
-    if(labelled) builder.label({graphics.x+34.0f,graphics.y,graphics.width-38.0f,graphics.height},
-                               "Gráficos",builder.state.qualityPanel?theme.color.accentInk:theme.color.text,
-                               theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(graphics,widgetId(EditorWidget::QualityOpen),theme.touch.minimumTarget);
-    takeLeft(content,theme.spacing.medium);
-  }
-  // Ampliação temporal na barra: mostra o que o renderer EXECUTOU e alterna
-  // Desligada → TAA nativo → Arm ASR → AMD FSR 2, pulando o que o aparelho
-  // recusa (o motivo vai para a barra de estado).
-  if(builder.state.workspace==EditorWorkspace::Scene || builder.state.workspace==EditorWorkspace::Play) {
-    // Cabe o chip: o rótulo de contexto à direita é opcional e some antes. Uma
-    // vista de diagnóstico ligada tem prioridade: é estado vivo que precisa de
-    // saída à vista, então o chip de modo cede o espaço a ela.
-    const bool debugQuick=builder.state.workspace==EditorWorkspace::Scene &&
-        builder.state.qualityTemporalAvailable && builder.state.qualityTemporalDebug!=0;
-    if(content.width>=(debugQuick?264.0f:120.0f)) {
-      const auto &state=builder.state;
-      const char *executed=renderer::isTemporalUpscaler(state.qualityExecutedUpscaler)
-          ?renderer::upscalingFilterLabel(state.qualityExecutedUpscaler)
-          :state.qualityTemporalAaExecuted?"TAA nativo":"Sem temporal";
-      const auto chip=takeLeft(content,112.0f);
-      const bool temporalActive=renderer::isTemporalUpscaler(state.qualityExecutedUpscaler)||state.qualityTemporalAaExecuted;
-      builder.list.addRect(chip,temporalActive?withAlpha(theme.color.accent,0.20f):theme.color.raised,theme.radius.control);
-      builder.label(chip,executed,temporalActive?theme.color.accent:theme.color.text,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(chip,widgetId(EditorWidget::QualityTemporalModeQuick),theme.touch.minimumTarget);
-      takeLeft(content,theme.spacing.small);
+  // Direita, de trás para frente.
+  const auto right=[&](UiIcon icon,EditorWidget widget,bool active) {
+    const auto rect=takeRight(content,kActionButton);button(rect,icon,widget,true,active);
+    takeRight(content,theme.spacing.tiny);return rect;
+  };
+  if(state.workspace==EditorWorkspace::Scene || state.workspace==EditorWorkspace::Play) {
+    // Ampliação temporal: o ícone acende com o que o renderer EXECUTOU e o selo
+    // diz qual (TAA, ASR, FSR); tocar alterna, e a recusa vai para o estado.
+    const bool upscaler=renderer::isTemporalUpscaler(state.qualityExecutedUpscaler);
+    const bool temporal=upscaler||state.qualityTemporalAaExecuted;
+    const auto rect=right(UiIcon::LightingPostProcessing,EditorWidget::QualityTemporalModeQuick,temporal);
+    if(temporal) {
+      const std::string_view label=upscaler?renderer::upscalingFilterLabel(state.qualityExecutedUpscaler):"TAA";
+      const char *badge=label.find("ASR")!=std::string_view::npos?"ASR":label.find("FSR")!=std::string_view::npos?"FSR":"TAA";
+      const UiRect pill{rect.right()-24,rect.bottom()-12,24,12};
+      builder.list.addRect(pill,theme.color.voidBlack,3);
+      builder.label(pill,badge,theme.color.accent,theme.type.caption,UiAlign::Center);
     }
+    if(state.workspace==EditorWorkspace::Scene && state.qualityTemporalAvailable && state.qualityTemporalDebug!=0)
+      right(UiIcon::DebugTools,EditorWidget::QualityTemporalDebugQuick,true);
   }
-  if(builder.state.workspace==EditorWorkspace::Scene &&
-     builder.state.qualityTemporalAvailable && builder.state.qualityTemporalDebug!=0 &&
-     content.width>=136.0f) {
-    constexpr const char *quickNames[]{"","Temporal: profundidade","Temporal: histórico","Temporal: rejeição",
-                                       "Temporal: vetor","Temporal: reatividade","Temporal: composição"};
-    const auto quick=takeLeft(content,128.0f);
-    builder.list.addRect(quick,withAlpha(theme.color.accent,0.20f),theme.radius.control);
-    builder.label(quick,quickNames[std::min(builder.state.qualityTemporalDebug,6u)],
-                  theme.color.accent,theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(quick,widgetId(EditorWidget::QualityTemporalDebugQuick),
-                             theme.touch.minimumTarget);
-    takeLeft(content,theme.spacing.small);
+  right(UiIcon::UiSliders,EditorWidget::QualityOpen,state.qualityPanel);
+  if(state.workspace==EditorWorkspace::Scene) right(UiIcon::UiDiagnostics,EditorWidget::DiagnosticDockToggle,state.diagnosticDockOpen);
+  if(!playing) right(UiIcon::IdeSearch,EditorWidget::GlobalSearchOpen,state.globalSearch); // Unity 6000.0: busca global na barra.
+  // Centro: o Play no meio da barra, e rodando, os controles dele ao lado.
+  const float gap=theme.spacing.tiny,playWidth=56,speedWidth=56;
+  const float group=playWidth+(playing?3*(kActionButton+gap)+speedWidth+gap:0);
+  const float x=std::clamp(bar.x+(bar.width-group)*.5f,content.x,std::max(content.x,content.right()-group));
+  UiRect center{x,content.y,group,content.height};
+  const UiRect play=takeLeft(center,playWidth);
+  builder.list.addRect(play,theme.color.accent,theme.radius.control);
+  builder.list.addImage(centred(play,18,18),static_cast<UiImageId>(state.workspace==EditorWorkspace::Play?UiIcon::EditorAuthorStop:UiIcon::EditorAuthorPlay),
+                        theme.color.accentInk);
+  builder.router.addRegion(play,widgetId(EditorWidget::PlayFromTopBar),theme.touch.minimumTarget);
+  if(playing) {
+    takeLeft(center,gap);
+    button(takeLeft(center,kActionButton),state.playPaused?UiIcon::RuntimePlay:UiIcon::RuntimePause,EditorWidget::PausePlay,true,state.playPaused);
+    takeLeft(center,gap);
+    button(takeLeft(center,kActionButton),UiIcon::UiArrowRight,EditorWidget::StepPlay,state.playPaused);
+    takeLeft(center,gap);
+    // Velocidade: um valor, não um rótulo; tocar alterna as escalas.
+    const auto speed=takeLeft(center,speedWidth);
+    const bool scaled=state.playTimeScale!=1;
+    builder.list.addRect(speed,scaled?theme.color.accent:theme.color.raised,theme.radius.control);
+    char value[16];std::snprintf(value,sizeof(value),"%.2g×",double(state.playTimeScale));
+    builder.label(speed,value,scaled?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(speed,widgetId(EditorWidget::PlayTimeScale),theme.touch.minimumTarget);
+    takeLeft(center,gap);
+    button(takeLeft(center,kActionButton),UiIcon::EditorInspection,EditorWidget::PlayInspect,true,state.playInspect);
   }
-  const char *context=builder.state.workspace==EditorWorkspace::Play ? (builder.state.playPaused?"Pausado":"Em execução") :
-      builder.state.workspace==EditorWorkspace::Lighting ? "Ambiente da cena" :
-      builder.state.workspace==EditorWorkspace::Project ? "Configurações do projeto" :
-      builder.state.workspace==EditorWorkspace::Assets ? "Recursos importados" : "Edição";
-  if(content.width>80) builder.label(content,context,theme.color.textDim,theme.type.caption);
-
 }
 
 // Janela de cor (Unity 6000.0 Manual/InspectorColorPicker), para triples de
@@ -2153,15 +2111,28 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     // SceneVisibility), mas continua selecionável pela Hierarquia.
     const bool layerHidden = (entity->layer < 32 && (builder.state.hiddenLayers & (1u << entity->layer))) ||
                              builder.state.sceneHiddenHas(frame.entity);
-    const UiColor ink = selected ? theme.color.accentInk : layerHidden ? theme.color.textFaint : theme.color.text;
-    const UiRect twisty = takeLeft(rowContent, 28.0f);
+    // Objeto inativo (ou dentro de um pai inativo) fica apagado, como no
+    // ITsMagic e na Unity.
+    const bool inactive = !document.activeInHierarchy(frame.entity);
+    const UiColor ink = selected ? theme.color.accentInk : layerHidden || inactive ? theme.color.textFaint : theme.color.text;
+    const UiRect twisty = takeLeft(rowContent, 26.0f);
     if (!children.empty() || guiChildren)
       builder.list.addImage(centred(twisty, 12.0f, 12.0f),
-                            static_cast<UiImageId>(collapsed ? UiIcon::EditorAuthorAdd : UiIcon::EditorAuthorChevron),
+                            static_cast<UiImageId>(collapsed ? UiIcon::UiChevronRight : UiIcon::UiChevronDown),
                             selected ? theme.color.accentInk : theme.color.textDim);
+    // Caixa de ativo da linha (ITsMagic), antes do ícone.
+    const UiRect activeBox = takeLeft(rowContent, 24.0f);
+    {
+      const auto box = centred(activeBox, 14.0f, 14.0f);
+      if (entity->active) {
+        builder.list.addRect(box, selected ? theme.color.accentInk : theme.color.accent, 2);
+        builder.list.addImage(deflate(box, UiInsets::all(2)), static_cast<UiImageId>(UiIcon::UiCheck),
+                              selected ? theme.color.accent : theme.color.accentInk);
+      } else builder.list.addBorder(box, selected ? theme.color.accentInk : theme.color.textDim, 1, 2);
+    }
     builder.list.addImage(centred(takeLeft(rowContent, 22.0f), 15.0f, 15.0f),
                           static_cast<UiImageId>(iconForEntity(*entity)),
-                          selected ? theme.color.accentInk : theme.color.accent);
+                          selected ? theme.color.accentInk : inactive ? theme.color.textFaint : theme.color.accent);
     // Olho e mão (Unity: Scene visibility e Scene picking), só do editor. Com
     // filhos em estado diferente do pai, um ponto marca a mistura (pai visível
     // com filho oculto, pai oculto com filho visível; idem para a seleção).
@@ -2201,6 +2172,7 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
     // fundo da linha, senão tocar nele seleciona em vez de alternar.
     builder.router.addRegion(row, hierarchyRowWidget(frame.entity));
     if (!children.empty() || guiChildren) builder.router.addRegion(twisty,widgetId(EditorWidget::HierarchyCollapseBase)+frame.entity);
+    builder.router.addRegion(activeBox, widgetId(EditorWidget::HierarchyActiveBase)+frame.entity);
     builder.router.addRegion(eye, hierarchyEyeWidget(frame.entity));
     builder.router.addRegion(hand, hierarchyPickWidget(frame.entity));
   }
@@ -6704,6 +6676,121 @@ void buildComponentMenu(ScreenBuilder &builder,UiRect &content,const EditorEntit
                     action.danger?theme.color.danger:theme.color.text,theme.type.caption);
       if(action.enabled) builder.router.addRegion(rect,action.widget);
     }
+  }
+}
+
+// Menu de contexto (ITsMagic, Unity): painel de linhas com ícone, rótulo e seta
+// de submenu, aberto onde o dedo tocou. O mesmo componente serve ao "+" e ao
+// "⋮" da Hierarquia e ao toque longo numa linha; as ações são os widgets de
+// sempre. Tocar fora fecha; a lista rola pelo dedo quando não cabe.
+void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
+  namespace cm=context_menu_widget;
+  const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+  struct Item {UiIcon icon;std::string label;u32 widget;bool enabled=true;bool submenu=false;bool danger=false;};
+  std::vector<Item> items;std::string title;
+  const auto *document=state.document;
+  const auto *selected=document?document->find(state.selection):nullptr;
+  const bool hasObject=selected&&state.selection!=document->root();
+  const u32 level=state.contextMenuLevel;
+  if(level==0) {
+    title=hasObject?std::string(selected->name):"Hierarquia";
+    items.push_back({UiIcon::SceneObjectAdd,hasObject?"Criar filho":"Criar",cm::id(cm::Create),true,true});
+    if(hasObject) {
+      items.push_back({UiIcon::SceneDuplicate,"Duplicar",widgetId(EditorWidget::DuplicateSelection)});
+      items.push_back({UiIcon::AssetsDocs,"Renomear",widgetId(EditorWidget::RenameSelection)});
+      items.push_back({UiIcon::EditorFrameObject,"Enquadrar na vista",widgetId(EditorWidget::FrameSelection)});
+      items.push_back({UiIcon::UiChevronUp,"Mover acima",widgetId(EditorWidget::MoveEarlier)});
+      items.push_back({UiIcon::UiChevronDown,"Mover abaixo",widgetId(EditorWidget::MoveLater)});
+      items.push_back({UiIcon::ComponentChildOf,"Mudar pai",widgetId(EditorWidget::ReparentSelection)});
+      items.push_back({UiIcon::UiHome,"Mover para a raiz",widgetId(EditorWidget::MoveToRoot)});
+      items.push_back({UiIcon::ScenePin,"Abrir em janela",widgetId(EditorWidget::HierarchyProperties)});
+      if(runtime::meshRenderer(*selected)&&state.workspace==EditorWorkspace::Scene)
+        items.push_back({UiIcon::ComponentCharacter,"Criar raiz Character…",widgetId(EditorWidget::CharacterConversionOpen)});
+      items.push_back({UiIcon::SceneObjectRemove,"Excluir",widgetId(EditorWidget::DeleteSelection),true,false,true});
+    }
+  } else if(level==1) {
+    title="Criar";
+    for(u32 c=0;c<std::size(creationCategories);++c) {
+      bool any=false;
+      for(u32 i=0;i<editorCreationCatalog.size();++i) any|=editorCreationCatalog[i].category==c&&creationAvailable(state,i);
+      items.push_back({editorIconByName(creationCategoryIcons[c]),creationCategories[c],cm::id(cm::Category+c),any,true});
+    }
+    items.push_back({UiIcon::AssetsImport,"Importar modelo…",widgetId(EditorWidget::ImportModel)});
+    items.push_back({UiIcon::AssetsSearch,"Todas as receitas…",cm::id(cm::AllRecipes)});
+  } else {
+    const u32 category=level-2;
+    title=category<std::size(creationCategories)?creationCategories[category]:"";
+    for(u32 i=0;i<editorCreationCatalog.size();++i) {
+      const auto &entry=editorCreationCatalog[i];
+      if(entry.category!=category||entry.action==EditorWidget::ImportModel) continue;
+      items.push_back({entry.icon,entry.name,creationWidget(i),creationAvailable(state,i)});
+    }
+  }
+  // Fundo: bloqueia o resto da tela e fecha no toque.
+  router.addBlocker(state.surface);
+  router.addRegion(state.surface,cm::id(cm::Close));
+  list.addRect(state.surface,withAlpha(theme.color.voidBlack,.25f));
+  const bool destination=level>=1&&hasObject;
+  constexpr float rowHeight=44,headerHeight=44,destinationHeight=40;
+  const float width=std::min(290.f,state.surface.width-16);
+  const float wanted=headerHeight+(destination?destinationHeight:0)+rowHeight*static_cast<float>(items.size())+8;
+  const float height=std::min(wanted,state.surface.height-16);
+  const float x=std::clamp(state.contextMenuAnchor.x,8.f,std::max(8.f,state.surface.right()-width-8));
+  const float y=std::clamp(state.contextMenuAnchor.y,8.f,std::max(8.f,state.surface.bottom()-height-8));
+  const UiRect panel{x,y,width,height};
+  list.addRect(panel,theme.color.surface,theme.radius.card);
+  list.addBorder(panel,theme.color.line,1,theme.radius.card);
+  router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets{0,0,0,8});
+  // Cabeçalho: voltar (nos submenus), título e fechar.
+  auto header=takeTop(content,headerHeight);
+  if(level>state.contextMenuRootLevel) {
+    const auto back=takeLeft(header,40);
+    list.addImage(centred(back,16,16),static_cast<UiImageId>(UiIcon::UiChevronLeft),theme.color.text);
+    router.addRegion(back,cm::id(cm::Back));
+  } else takeLeft(header,12);
+  const auto close=takeRight(header,40);
+  list.addImage(centred(close,14,14),static_cast<UiImageId>(UiIcon::UiClose),theme.color.textDim);
+  router.addRegion(close,cm::id(cm::Close));
+  builder.label(header,fitMiddle(list,title,header.width,theme.type.cardName),theme.color.text,theme.type.cardName);
+  list.addRect({panel.x,header.bottom()-1,panel.width,1},theme.color.lineSoft);
+  // Destino da criação, o mesmo controle da folha: raiz ou filho do objeto.
+  if(destination) {
+    auto row=deflate(takeTop(content,destinationHeight),UiInsets{8,4,8,4});
+    list.addRect(row,theme.color.canvas,theme.radius.control);
+    const auto segment=[&](UiRect rect,const std::string &text,bool on,EditorWidget widget) {
+      const auto pill=deflate(rect,UiInsets::all(2));
+      if(on) list.addRect(pill,theme.color.raised,theme.radius.control);
+      builder.label(pill,fitMiddle(list,text,pill.width-8,theme.type.caption),on?theme.color.text:theme.color.textDim,theme.type.caption,UiAlign::Center);
+      router.addRegion(rect,widgetId(widget));
+    };
+    segment(takeLeft(row,row.width*.38f),"Na raiz",!state.creationAsChild,EditorWidget::CreationAtRoot);
+    segment(row,std::string("Em ")+selected->name,state.creationAsChild,EditorWidget::CreationAsChild);
+  }
+  // Linhas, roláveis dentro da janela que sobrou.
+  const UiRect window=content;
+  const float total=rowHeight*static_cast<float>(items.size());
+  const float offset=std::clamp(state.contextMenuScroll,0.f,std::max(0.f,total-window.height));
+  layout.contextMenuWindow=window;layout.contextMenuContent=total;
+  list.pushClip(window);router.pushClip(window);
+  UiRect column{window.x,window.y-offset,window.width,total};
+  for(const auto &item:items) {
+    const auto row=takeTop(column,rowHeight);
+    auto inner=deflate(row,UiInsets{12,0,10,0});
+    const UiColor ink=!item.enabled?theme.color.textFaint:item.danger?theme.color.danger:theme.color.text;
+    list.addImage(centred(takeLeft(inner,26),18,18),static_cast<UiImageId>(item.icon),
+                  !item.enabled?theme.color.textFaint:item.danger?theme.color.danger:theme.color.accent);
+    takeLeft(inner,8);
+    if(item.submenu) list.addImage(centred(takeRight(inner,18),12,12),static_cast<UiImageId>(UiIcon::UiChevronRight),
+                                   item.enabled?theme.color.textDim:theme.color.textFaint);
+    builder.label(inner,fitMiddle(list,item.label,inner.width,theme.type.body),ink,theme.type.body);
+    if(item.enabled) router.addRegion(row,item.widget);
+  }
+  list.popClip();router.popClip();
+  if(total>window.height+1) {
+    const float thumb=std::max(24.f,window.height*window.height/total);
+    const float at=std::clamp(offset/(total-window.height),0.f,1.f);
+    list.addRect({window.right()-4,window.y+(window.height-thumb)*at,3,thumb},withAlpha(theme.color.textDim,.55f),1.5f);
   }
 }
 
@@ -11262,24 +11349,6 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // Menus contextuais e modais abaixo continuam acima dele deliberadamente.
   if(state.qualityPanel) buildQualityPanel(builder,layout.viewport);
   if(state.lightExplorer) buildLightExplorer(builder,layout.viewport);
-  if (state.entityMenu) {
-    const auto *selected=state.document?state.document->find(state.selection):nullptr;
-    const bool convert=selected&&runtime::meshRenderer(*selected)&&state.workspace==EditorWorkspace::Scene;
-    const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(240.0f,layout.viewport.width), std::min(convert?370.0f:333.0f,layout.viewport.height-56.0f)};
-    builder.list.addRect(menu, theme.color.raised, theme.radius.control);
-    UiRect rows=menu;
-    const char *names[]={"Duplicar selecionado","Criar grupo","Excluir selecionado","Mover acima","Mover abaixo","Mudar pai","Mover para raiz","Renomear","Propriedades"};
-    const EditorWidget actions[]={EditorWidget::DuplicateSelection,EditorWidget::CreateGroup,EditorWidget::DeleteSelection,EditorWidget::MoveEarlier,EditorWidget::MoveLater,EditorWidget::ReparentSelection,EditorWidget::MoveToRoot,EditorWidget::RenameSelection,EditorWidget::HierarchyProperties};
-    for(u32 i=0;i<9;++i) {
-      const auto row=takeTop(rows,menu.height/(convert?10.f:9.f));
-      builder.label(row,names[i],theme.color.text,theme.type.body,UiAlign::Center);
-      router.addRegion(row,widgetId(actions[i]));
-    }
-    if(convert) {
-      builder.label(rows,"Criar raiz Character…",theme.color.accent,theme.type.caption,UiAlign::Center);
-      router.addRegion(rows,widgetId(EditorWidget::CharacterConversionOpen));
-    }
-  }
   // Janelas que não bloqueiam o editor (Inspectors focados, histórico, camadas
   // na vista) ficam sobre os painéis e SOB tudo que é modal: busca, teclados,
   // menus, folhas de Adicionar e Criar e as janelas de valor. Desenhadas por
@@ -11314,6 +11383,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(row,widgetId(EditorWidget::SetValueRowBase)+i);
     }
   }
+  // Menu de contexto da Hierarquia: acima dos painéis e janelas, abaixo dos
+  // teclados que as ações dele abrem (Renomear).
+  if(state.contextMenu && state.document) buildContextMenu(builder,layout);
   // O grafo do Animator abre teclados (nome, número): desenhado antes deles.
   if(state.animatorOpen) buildAnimatorEditor(builder,layout);
   // A busca global fica sob o teclado interno, que edita o campo dela.

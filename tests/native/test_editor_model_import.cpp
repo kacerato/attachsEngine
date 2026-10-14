@@ -686,6 +686,9 @@ AE_TEST(m06_m08_resource_publication_and_independent_instances) {
   AE_EXPECT_TRUE(session.instantiateModel(source,report),"first instance");
   const auto firstRoot=session.document().childrenOf(session.document().root()).front();
   AE_EXPECT_EQ(session.document().childrenOf(firstRoot).size(),2u,"source roots preserved under one movable wrapper");
+  // Unity: o modelo entra recolhido na Hierarquia, um nível por vez.
+  const auto &collapsed=session.screen().collapsedEntities;
+  AE_EXPECT_TRUE(std::find(collapsed.begin(),collapsed.end(),firstRoot)!=collapsed.end(),"new model instance starts collapsed");
   auto group=*session.document().find(firstRoot);group.transform.position[0]=10;
   session.history().begin("Move model");session.history().applyValues(session.document(),firstRoot,group);session.history().end();
   float world[16];

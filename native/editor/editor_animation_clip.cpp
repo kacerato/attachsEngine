@@ -776,6 +776,36 @@ bool EditorSession::applyAnimationClipNumber(u32 code,double value) {
 }
 bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing) {
   using ui::UiPointerPhase;
+  if(w::owns(routing.widgetId)&&routing.target==ui::UiPointerTarget::Widget) {
+    const auto code=animator_widget::code(routing.widgetId);
+    // Arvore de ossos: arrastar na vertical rola de linha em linha (40 px),
+    // sem escolher osso; o toque curto continua escolhendo.
+    if((code==w::BoneTree||(code>=w::BoneRow&&code<w::BoneRow+0x60))&&routing.dragging) {
+      if(event.phase==UiPointerPhase::Move) {
+        const u32 rows=static_cast<u32>(std::max(0.f,layout_.clipBoneRows));
+        const u32 limit=layout_.clipBoneCount>rows?layout_.clipBoneCount-rows:0u;
+        state_.clipBoneScroll=std::min(state_.clipBoneScroll,limit);clipBoneDrag_+=routing.stepDelta.y;
+        while(clipBoneDrag_<=-40.f) {if(state_.clipBoneScroll<limit)++state_.clipBoneScroll;clipBoneDrag_+=40.f;}
+        while(clipBoneDrag_>=40.f) {if(state_.clipBoneScroll)--state_.clipBoneScroll;clipBoneDrag_-=40.f;}
+      }
+      if(routing.released)clipBoneDrag_=0;
+      return true;
+    }
+    if(code==w::BoneTree)return true;
+    // Regua do tempo (Unity Animation window: clicar ou arrastar na regua move
+    // o playhead): tocar busca o tempo, arrastar faz o scrub.
+    if(code==w::TimeRuler) {
+      const auto *asset=state_.clipAsset;const auto &canvas=layout_.clipCanvas;
+      if(asset&&!canvas.isEmpty()&&(event.phase==UiPointerPhase::Down||(event.phase==UiPointerPhase::Move&&routing.dragging))) {
+        state_.clipPlaying=false;
+        const float t=state_.clipStart+(event.position.x-canvas.x)/std::max(1.f,canvas.width)*(state_.clipEnd-state_.clipStart);
+        const float time=std::clamp(std::round(t*asset->displayRate)/asset->displayRate,0.f,asset->duration);
+        std::string error;
+        if(time!=state_.clipTime&&!seekAnimationClip(time,error))state_.clipDiagnostic=error;
+      }
+      return true;
+    }
+  }
   // Estudio: abas do inspector, arvore de ossos e folha de rig vivem ao lado
   // do viewport; tratadas antes do fluxo da timeline, sem cancelar a pose.
   if(routing.tapped&&routing.target==ui::UiPointerTarget::Widget) {
@@ -818,7 +848,10 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
       if(code>=w::PoseLibrary&&code<w::PoseLibrary+16) {std::string error;if(applyRigPoseToClip(code-w::PoseLibrary,error))state_.clipDiagnostic="Pose aplicada como chave";else state_.clipDiagnostic=error;return true;}
       if(code==w::PoseIk) {state_.clipIkMode=!state_.clipIkMode;state_.clipDiagnostic=state_.clipIkMode?"IK: arraste o alvo na ponta selecionada":"";return true;}
       if(code==w::BoneTreeUp) {state_.clipBoneScroll=state_.clipBoneScroll>6?state_.clipBoneScroll-6:0;return true;}
-      if(code==w::BoneTreeDown) {state_.clipBoneScroll+=6;return true;}
+      if(code==w::BoneTreeDown) {
+        const u32 rows=static_cast<u32>(std::max(0.f,layout_.clipBoneRows));
+        state_.clipBoneScroll=std::min(state_.clipBoneScroll+6,layout_.clipBoneCount>rows?layout_.clipBoneCount-rows:0u);return true;
+      }
       if(code>=w::BoneRow&&code<w::BoneRow+0x60) {
         const runtime::SceneGraph &graph=clipPreview_.active()?clipPreview_.scene():document_;
         std::vector<std::pair<EditorEntityId,u32>> bones;animationStudioBones(graph,state_.clipOwner,bones);

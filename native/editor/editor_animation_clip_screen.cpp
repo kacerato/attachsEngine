@@ -143,6 +143,10 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     auto scroll=UiRect{treeHeader.right()-84,treeHeader.y,84,treeHeader.height};treeHeader.width-=84;
     label(treeHeader,"Hierarquia · "+std::to_string(bones.size()),theme.color.text);
     const u32 rowsVisible=static_cast<u32>(std::max(0.f,tree.height)/40); layout.clipBoneRows=float(rowsVisible);
+    layout.clipBoneCount=static_cast<unsigned>(bones.size());
+    // Arrastar na lista rola (como a coluna do Inspector); as linhas, por cima,
+    // continuam recebendo o toque curto.
+    router.addRegion({tree.x,tree.y,tree.width,float(rowsVisible)*40},w::id(w::BoneTree));
     const u32 first=std::min<u32>(state.clipBoneScroll,bones.size()>rowsVisible?static_cast<u32>(bones.size())-rowsVisible:0);
     button(left(scroll,42),"",w::BoneTreeUp,first>0,false,UiIcon::UiChevronUp);
     button(scroll,"",w::BoneTreeDown,first+rowsVisible<bones.size(),false,UiIcon::UiChevronDown);
@@ -342,7 +346,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   button(left(transport,44),"Editar",w::Edits,true,state.clipEditPicker);
   button(left(transport,44),"|<",w::Restart);
   button(left(transport,40),"",w::PreviousFrame,true,false,UiIcon::UiChevronLeft);
-  button(left(transport,44),"",w::Play,state.clipDiagnostic.empty(),state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
+  button(left(transport,44),"",w::Play,state.clipPreviewReady,state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
   button(left(transport,40),"",w::NextFrame,true,false,UiIcon::UiChevronRight);
   button(left(transport,44),"Loop",w::Loop,true,state.clipLoop);
   button(left(transport,76),number(state.clipTime," s"),w::Time);
@@ -368,6 +372,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     label(top(names,26),"Eventos · "+std::to_string(std::count_if(asset->cues.begin(),asset->cues.end(),[](const auto &c){return c.kind==resources::AnimationCueKind::Event;})),theme.color.text);
     label(top(names,26),"Marcadores",theme.color.textDim);
     const auto ruler=top(body,34);const auto canvas=deflate(body,{2,2,8,3});layout.clipCanvas=canvas;router.addRegion(canvas,w::id(w::Canvas));
+    router.addRegion(ruler,w::id(w::TimeRuler));
     const float span=std::max(.0001f,state.clipEnd-state.clipStart);
     const auto xAt=[&](float t){return canvas.x+(t-state.clipStart)/span*canvas.width;};
     for(u32 i=0;i<=4;++i) {const float x=canvas.x+canvas.width*i/4;
@@ -402,6 +407,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   button(left(navigation,42),"",w::AddKey,selected!=nullptr,false,UiIcon::AnimationKey);button(left(navigation,42),"",w::DeleteKey,multi||(key&&curve->keys.size()>1),false,UiIcon::UiRemove);
   const auto ruler=top(body,34);layout.clipCanvas=deflate(body,{2,2,8,3});
   const auto &canvas=layout.clipCanvas;router.addRegion(canvas,w::id(w::Canvas));
+  // Regua do tempo: tocar ou arrastar nela move o cursor (scrub).
+  router.addRegion(ruler,w::id(w::TimeRuler));
   layout.clipVisibleRows=std::min(64u,std::max(1u,static_cast<u32>(names.height/30)));
   u32 index=0,visible=0;
   struct VisibleRow {const resources::AnimationClipTrack *track;u32 component;};std::vector<VisibleRow> visibleRows;
@@ -446,6 +453,8 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       const float x=canvas.x+canvas.width*i/8;list.addLine({x,canvas.y},{x,canvas.bottom()},theme.color.lineSoft,1);
       label({x-25,ruler.y,58,ruler.height},number(state.clipStart+span*i/8,"s"),theme.color.textMuted,UiAlign::Center);
     }
+    if(const float head=xAt(state.clipTime);head>=canvas.x&&head<=canvas.right())
+      list.addRect({head-4,ruler.bottom()-8,8,8},theme.color.accent,2);
     list.pushClip(canvas);
     regionBracket(list,theme,canvas,asset->region(state.clipRegion),state.clipStart,state.clipEnd);
     if(state.clipRangeShown) {
@@ -917,7 +926,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       auto bounds=top(sheet,42);button(left(bounds,bounds.width*.5f),"Início · "+number(region->start," s"),w::RegionStart);
       button(bounds,"Fim · "+number(region->end," s"),w::RegionEnd);
       button(top(sheet,42),state.clipPreviewRegion==region->id?"Voltar ao clipe inteiro":"Usar esta região no preview",w::RegionPreview,true,state.clipPreviewRegion==region->id,UiIcon::AnimationRegion);
-      auto actions=top(sheet,42);button(left(actions,actions.width*.5f),state.clipPlaying?"Pausar":"Reproduzir",w::Play,state.clipDiagnostic.empty(),state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
+      auto actions=top(sheet,42);button(left(actions,actions.width*.5f),state.clipPlaying?"Pausar":"Reproduzir",w::Play,state.clipPreviewReady,state.clipPlaying,state.clipPlaying?UiIcon::RuntimePause:UiIcon::RuntimePlay);
       button(actions,"Excluir região",w::RegionDelete,true,false,UiIcon::UiRemove);
       auto playback=top(sheet,42);button(left(playback,playback.width*.5f),"Reiniciar",w::Restart,true,false,UiIcon::RuntimeRestart);
       button(playback,state.clipLoop?"Loop ligado":"Loop desligado",w::Loop,true,state.clipLoop,UiIcon::AnimationCycle);

@@ -342,6 +342,9 @@ struct EditorScreenState final {
   std::vector<AnimationPoseSelectionSet> clipPoseSets;
   bool clipPoseIsolated=false;
   bool clipPoseNumbers=false,clipPoseJoints=true,clipPreviewExpanded=false;
+  // A prévia do clipe está montada: é o que o Play exige. A linha de status
+  // (clipDiagnostic) também leva avisos da Pose e não decide o botão.
+  bool clipPreviewReady=false;
   EditorEntityId clipPreviewTarget=0;
   std::vector<EditorEntityId> clipPreviewJoints;
   const runtime::SceneGraph *clipPoseGraph=nullptr;
@@ -848,6 +851,17 @@ struct EditorScreenState final {
   std::string motorBakeMappingSummary;
   bool creationMenu=false;
   bool creationAsChild=false;
+  // Menu de contexto (ITsMagic, Unity): o mesmo componente para o "+" e o "⋮"
+  // da Hierarquia e o toque longo numa linha. Nível 0: ações do objeto; 1:
+  // Criar (categorias); 2+n: receitas da categoria n. A raiz é o nível em que
+  // ele abriu, para o voltar fechar.
+  bool contextMenu=false;
+  u32 contextMenuLevel=0,contextMenuRootLevel=0;
+  ui::UiPoint contextMenuAnchor{};
+  float contextMenuScroll=0;
+  // A ação tocada no menu cria com o destino escolhido nele (raiz ou filho),
+  // pelo mesmo caminho da folha de criação.
+  bool contextMenuCreating=false;
   bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationScroll=0;
   std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.

@@ -563,6 +563,16 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     return outcome;
   }
 
+  if (widget >= widgetId(EditorWidget::HierarchyActiveBase) && widget < widgetId(EditorWidget::HierarchyActiveBase)+EditorDocument::kMaximumEntities) {
+    // Caixa de ativo da linha (ITsMagic): liga e desliga o objeto daquela
+    // linha, com Desfazer, sem trocar a seleção.
+    const EditorEntityId entity=widget-widgetId(EditorWidget::HierarchyActiveBase);
+    if(const auto *found=document.find(entity);found && entity!=document.root()) {
+      auto values=*found;values.active=!values.active;
+      outcome.documentChanged=history.applyValues(document,entity,values);
+    }
+    return outcome;
+  }
   if (widget >= widgetId(EditorWidget::HierarchyCollapseBase) && widget < widgetId(EditorWidget::ImpactOpenBase)) {
     const auto entity=widget-widgetId(EditorWidget::HierarchyCollapseBase);
     if(document.find(entity)) {
@@ -678,7 +688,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::HierarchyExpandAll: state.collapsedEntities.clear();state.hierarchyScroll=0;break;
     case EditorWidget::HierarchyCollapseAll:
       document.collectSubtree(document.root(),state.collapsedEntities);state.hierarchyScroll=0;break;
-    case EditorWidget::HierarchyMenu: state.entityMenu = !state.entityMenu; break;
+    case EditorWidget::HierarchyMenu: {
+      // O "⋮" abre o menu de contexto (a sessão o posiciona no toque).
+      const bool object=document.exists(state.selection) && state.selection!=document.root();
+      state.contextMenu=true;state.contextMenuLevel=state.contextMenuRootLevel=object?0u:1u;state.contextMenuScroll=0;
+      state.creationAsChild=object;state.entityMenu=false;
+      break;
+    }
     case EditorWidget::DuplicateSelection: {
       const auto copy=history.duplicateEntity(document,state.selection);
       if(copy) {state.selection=copy;outcome.documentChanged=true;}
@@ -686,7 +702,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       break;
     }
     case EditorWidget::CreateGroup: {
-      const auto parent=state.creationMenu && state.creationAsChild && document.exists(state.selection) && state.selection!=document.root()?state.selection:document.root();
+      const auto parent=(state.creationMenu || state.contextMenuCreating) && state.creationAsChild && document.exists(state.selection) && state.selection!=document.root()?state.selection:document.root();
       const auto copy=history.createEntity(document,parent,EditorEntityKind::Folder,"Objeto vazio");
       if(copy) {state.selection=copy;outcome.documentChanged=true;}
       state.entityMenu=false;state.inspectorMenu=false;

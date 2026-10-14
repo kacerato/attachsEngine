@@ -350,6 +350,10 @@ enum class EditorWidget : u32 {
   AnimatorBase=0xE5000000u,
   // Superfície de navegação no Inspector: + código de navigation_widget.
   NavigationBase=0xE6000000u,
+  // Hierarquia: caixa de ativo da linha (ITsMagic), + id do objeto.
+  HierarchyActiveBase=0xE7000000u,
+  // Menu de contexto: + código de context_menu_widget.
+  ContextMenuBase=0xE8000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -565,6 +569,14 @@ enum Code : u32 {Bake=1,Cancel=2,Clear=3,ShowMesh=4};
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::NavigationBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::NavigationBase);}
 } // namespace navigation_widget
+namespace context_menu_widget {
+// Fundo (fecha), voltar, abrir Criar, objeto vazio, a folha com todas as
+// receitas e as categorias de criação (+ índice). As ações em si usam os
+// widgets de sempre (Duplicar, Renomear, receitas), pelo mesmo caminho.
+enum Code : u32 {Close=1,Back=2,Create=3,AllRecipes=4,Category=0x10};
+inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ContextMenuBase)+code;}
+inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ContextMenuBase);}
+} // namespace context_menu_widget
 namespace clip_widget {
 enum : u32 {
   Open=0xb000,Close,New,Choose,Play,Loop,PreviousFrame,NextFrame,Time,Duration,
@@ -601,7 +613,7 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
-    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,TimeRuler,BoneTree,
     BoneRow=0xb680,PoseLibrary=0xb6e0,
     PoseLock=0xb540,
     PoseGizmo=0xb500

@@ -6,6 +6,7 @@
 namespace ae::editor {
 struct EditorScreenLayout final {
   float clipBoneRows=0; // linhas visiveis da arvore de ossos do estudio
+  unsigned clipBoneCount=0; // ossos na arvore: limite da rolagem pelo dedo
   u32 libraryPages=1,libraryDiagnosticPages=1;
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};
@@ -41,6 +42,9 @@ struct EditorScreenLayout final {
   // Coluna rolável do Inspector (principal e focado): a janela visível e a
   // altura de tudo que foi empilhado nela.
   ui::UiRect inspectorScrollWindow{},focusedScrollWindow{};
+  // Lista do menu de contexto: janela visível e altura total, para rolar.
+  ui::UiRect contextMenuWindow{};
+  float contextMenuContent=0;
   float inspectorScrollContent=0,focusedScrollContent=0;
   float texturePickerContent[2]{},texturePickerWindow[2]{};
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira

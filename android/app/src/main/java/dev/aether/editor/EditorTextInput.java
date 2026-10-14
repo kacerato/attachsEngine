@@ -137,23 +137,37 @@ final class EditorTextInput {
     private final ViewTreeObserver.OnGlobalLayoutListener imeWatcher =
         new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override public void onGlobalLayout() {
-                if (field == null || !field.active) return;
+                if (field == null) return;
                 final View root = field.getRootView();
                 if (root == null || root.getHeight() <= 0) return;
+                final float fraction;
                 if (Build.VERSION.SDK_INT >= 30 && root.getRootWindowInsets() != null) {
                     WindowInsets insets = root.getRootWindowInsets();
-                    ime(insets.isVisible(WindowInsets.Type.ime())
-                        ? insets.getInsets(WindowInsets.Type.ime()).bottom / (float) root.getHeight() : 0);
+                    fraction = insets.isVisible(WindowInsets.Type.ime())
+                        ? insets.getInsets(WindowInsets.Type.ime()).bottom / (float) root.getHeight() : 0;
+                } else {
+                    final Rect visible = new Rect();
+                    root.getWindowVisibleDisplayFrame(visible);
+                    final float covered = root.getHeight() - visible.height();
+                    // Barras do sistema tambem entram nessa conta. O corte de 15%
+                    // separa "teclado aberto" de "barra de navegacao", sem precisar
+                    // de API nova.
+                    final float measured = covered / (float) root.getHeight();
+                    fraction = measured > 0.15f ? measured : 0.0f;
+                }
+                if (!field.active) {
+                    // Sem pedido aberto o teclado nao fica na tela: confirmar e o
+                    // IME terminar de abrir podem se cruzar e deixa-lo aberto sem
+                    // campo nenhum. O editor de codigo tem foco proprio e fica de fora.
+                    final View focus = activity.getCurrentFocus();
+                    if (fraction > 0 && (focus == null || focus == field)) {
+                        final InputMethodManager manager =
+                            (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
+                        if (manager != null) manager.hideSoftInputFromWindow(root.getWindowToken(), 0);
+                    }
                     return;
                 }
-                final Rect visible = new Rect();
-                root.getWindowVisibleDisplayFrame(visible);
-                final float covered = root.getHeight() - visible.height();
-                // Barras do sistema tambem entram nessa conta. O corte de 15%
-                // separa "teclado aberto" de "barra de navegacao", sem precisar
-                // de API nova.
-                final float fraction = covered / (float) root.getHeight();
-                ime(fraction > 0.15f ? fraction : 0.0f);
+                ime(fraction);
             }
         };
 

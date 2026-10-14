@@ -885,12 +885,12 @@ AE_TEST(session_cancelling_pointers_closes_an_open_gizmo_transaction) {
 AE_TEST(session_reports_when_play_was_requested) {
   Fixture fixture;
   AE_EXPECT_TRUE(!fixture.session.playRequested(), "");
+  // O Play fica no centro da barra superior (ITsMagic).
   const UiRect bar = fixture.session.layout().topBar;
-  for (float x = bar.right() - 2.0f; x > bar.x; x -= 2.0f) {
-    fixture.down(1, {x, bar.y + bar.height * 0.5f});
-    fixture.up(1, {x, bar.y + bar.height * 0.5f});
-    if (fixture.session.playRequested()) break;
-  }
+  const UiPoint play = locateWidget(fixture.session, widgetId(EditorWidget::PlayFromTopBar));
+  AE_EXPECT_TRUE(play.x >= 0 && bar.contains(play), "Play esta na barra superior");
+  fixture.down(1, play);
+  fixture.up(1, play);
   AE_EXPECT_TRUE(fixture.session.playRequested(), "o botao de Play pede a execucao");
   fixture.session.clearPlayRequest();
   AE_EXPECT_TRUE(!fixture.session.playRequested(), "");
@@ -1017,6 +1017,25 @@ u32 recipeWidget(std::string_view id) {
 void tapWidget(Fixture &fixture,u32 widget) {
   if((widget==widgetId(EditorWidget::TabAssets) || widget==widgetId(EditorWidget::TabProject) || widget==widgetId(EditorWidget::TabLighting)) && !fixture.session.screen().workspaceMenu)
     tapWidget(fixture,widgetId(EditorWidget::ProjectMenu));
+  // Menu de contexto aberto: a receita mora no submenu da categoria dela, e a
+  // lista rola pelo dedo até ela aparecer.
+  if(fixture.session.screen().contextMenu) {
+    for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==creationWidget(i)) {
+      const u32 category=editorCreationCatalog[i].category;
+      if(fixture.session.screen().contextMenuLevel!=2+category) {
+        if(fixture.session.screen().contextMenuLevel==0) tapWidget(fixture,context_menu_widget::id(context_menu_widget::Create));
+        tapWidget(fixture,context_menu_widget::id(context_menu_widget::Category+category));
+      }
+      break;
+    }
+    for(u32 attempt=0;attempt<16 && locateWidget(fixture.session,widget).x<0;++attempt) {
+      const auto window=fixture.session.layout().contextMenuWindow;
+      const UiPoint from{window.x+window.width*.5f,window.bottom()-12.0f};
+      fixture.down(81,from);
+      for(u32 step=1;step<=4;++step) fixture.move(81,{from.x,from.y-30.0f*static_cast<float>(step)});
+      fixture.up(81,{from.x,from.y-120.0f});fixture.session.update();
+    }
+  }
   if(fixture.session.screen().creationMenu) for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==creationWidget(i)) {
     tapWidget(fixture,widgetId(EditorWidget::CreationCategoryBase)+editorCreationCatalog[i].category);
     // A grade rola pelo arraste: arrasta um cartão visível até o pedido aparecer.
@@ -1084,7 +1103,7 @@ AE_TEST(session_play_time_scale_button_controls_runtime_without_authoring_histor
   AE_EXPECT_TRUE(session.extractPlayMap(draws) && session.sceneTime()==frozen,"shader/render clock follows simulation freeze");
   AE_EXPECT_TRUE(!session.setPlayTimeScale(-1) && session.screen().playTimeScale==0,"invalid setting is atomic");
   tapWidget(f,widgetId(EditorWidget::PausePlay));
-  AE_EXPECT_TRUE(locateWidget(session,widgetId(EditorWidget::StepPlay)).x>=0 && locateWidget(session,widgetId(EditorWidget::PlayTimeScale)).x<0,"paused toolbar offers Step in same space");
+  AE_EXPECT_TRUE(session.screen().playPaused && locateWidget(session,widgetId(EditorWidget::StepPlay)).x>=0,"paused toolbar offers Step next to Play");
   tapWidget(f,widgetId(EditorWidget::StepPlay));AE_EXPECT_TRUE(session.extractPlayMap(draws),"Step executes real runtime");
   AE_EXPECT_TRUE(session.screen().playTimeScale==0 && session.document().revision()==revision && session.history().undoDepth()==undo,"step/scale never enter authoring history");
   tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
@@ -2246,6 +2265,20 @@ AE_TEST(session_component_property_search_uses_ime_without_authoring_changes) {
   AE_EXPECT_EQ(history.undoDepth(),0u,"limpar busca não cria Undo");
 }
 
+// Hierarquia (ITsMagic): a caixa de ativo da linha liga e desliga aquele
+// objeto com Desfazer, sem trocar a seleção.
+AE_TEST(session_hierarchy_row_active_box_toggles_object_with_undo) {
+  Fixture f;auto &document=f.session.document();auto &history=f.session.history();
+  const auto parent=document.find(f.cube)->parent;
+  f.session.setSelection(parent);f.session.update();history.clear();
+  const u32 box=widgetId(EditorWidget::HierarchyActiveBase)+f.cube;
+  tapWidget(f,box);
+  AE_EXPECT_TRUE(!document.find(f.cube)->active,"the row box turns the object off");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"one undo step");
+  AE_EXPECT_EQ(f.session.selection(),parent,"the selection stays where it was");
+  AE_EXPECT_TRUE(history.undo(document) && document.find(f.cube)->active,"undo turns it back on");
+}
+
 // Coluna do Inspector (ITsMagic Properties, Unity Inspector): Transformação e
 // componente ficam abertos juntos, o arraste vertical rola sem editar nada e o
 // cabeçalho e a subseção dobram por tipo.
@@ -2534,7 +2567,7 @@ AE_TEST(session_river_popup_points_and_all_point_properties_work_through_touch) 
   AE_EXPECT_TRUE(renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials),"real library");
   AE_EXPECT_TRUE(f.session.importMap(draws,materials,false),"empty scene");
   tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
-  AE_EXPECT_TRUE(f.session.screen().creationMenu,"creation popup opens");
+  AE_EXPECT_TRUE(f.session.screen().contextMenu && f.session.screen().contextMenuLevel==1,"o + abre o menu Criar");
   tapWidget(f,widgetId(EditorWidget::CreateRiverWater));
   const auto river=f.session.selection();
   AE_EXPECT_EQ(f.session.document().entityCount(),2u,"only requested river exists");
@@ -2629,6 +2662,54 @@ AE_TEST(session_explicit_camera_creation_is_undoable) {
   tapWidget(f,widgetId(EditorWidget::Undo));
   AE_EXPECT_EQ(resolveSceneCamera(f.session.document()).entity,0u,"desfaz a criação inteira");
 }
+// Menu de contexto (ITsMagic, Unity): toque longo na linha cria filho dela; o
+// "+" cria na raiz quando o destino pede; categorias são submenus que rolam;
+// voltar sobe um nível e tocar fora fecha.
+AE_TEST(session_context_menu_creates_child_or_root_and_navigates_submenus) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto parent=doc.find(f.cube)->parent;
+  f.session.update();history.clear();
+  const auto row=locateWidget(f.session,hierarchyRowWidget(parent));
+  AE_EXPECT_TRUE(row.x>=0,"linha do pai visível");
+  f.session.handlePointer({60,UiPointerPhase::Down,row,30.0});
+  f.session.handlePointer({60,UiPointerPhase::Up,row,30.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  const auto &state=f.session.screen();
+  AE_EXPECT_TRUE(state.contextMenu && state.contextMenuLevel==0 && state.selection==parent,"toque longo abre as ações do objeto");
+  tapWidget(f,recipeWidget("basic.camera"));
+  const auto camera=f.session.selection();
+  AE_EXPECT_EQ(doc.find(camera)->parent,parent,"Criar filho pelo menu anexa ao objeto da linha");
+  AE_EXPECT_TRUE(!state.contextMenu,"criar fecha o menu");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"uma criação, um passo");
+  f.session.setSelection(parent);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  AE_EXPECT_TRUE(state.contextMenu && state.contextMenuLevel==1 && state.creationAsChild,"o + abre Criar com destino no selecionado");
+  tapWidget(f,widgetId(EditorWidget::CreationAtRoot));
+  AE_EXPECT_TRUE(state.contextMenu && !state.creationAsChild,"trocar o destino mantém o menu aberto");
+  tapWidget(f,recipeWidget("basic.camera"));
+  AE_EXPECT_EQ(doc.find(f.session.selection())->parent,doc.root(),"Na raiz cria na raiz");
+  // Categoria grande: a lista rola pelo dedo; voltar sobe e fecha na raiz.
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  tapWidget(f,context_menu_widget::id(context_menu_widget::Category+3));
+  AE_EXPECT_EQ(state.contextMenuLevel,5u,"submenu Física");
+  if(f.session.layout().contextMenuContent>f.session.layout().contextMenuWindow.height) {
+    const auto window=f.session.layout().contextMenuWindow;
+    const UiPoint from{window.x+window.width*.5f,window.bottom()-12.0f};
+    f.down(61,from);for(u32 step=1;step<=4;++step) f.move(61,{from.x,from.y-25.0f*static_cast<float>(step)});
+    f.up(61,{from.x,from.y-100.0f});f.session.update();
+    AE_EXPECT_TRUE(state.contextMenuScroll>0,"a lista do submenu rola");
+  }
+  tapWidget(f,context_menu_widget::id(context_menu_widget::Back));
+  AE_EXPECT_EQ(state.contextMenuLevel,1u,"voltar sobe para Criar");
+  AE_EXPECT_TRUE(locateWidget(f.session,context_menu_widget::id(context_menu_widget::Back)).x<0,"no nível em que abriu não há voltar");
+  tapWidget(f,context_menu_widget::id(context_menu_widget::Close));
+  AE_EXPECT_TRUE(!state.contextMenu,"o X fecha");
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  const UiPoint outside{state.surface.right()-12.0f,state.surface.bottom()-12.0f};
+  f.down(62,outside);f.up(62,outside);f.session.update();
+  AE_EXPECT_TRUE(!state.contextMenu,"tocar fora fecha");
+  AE_EXPECT_EQ(history.undoDepth(),2u,"navegar não cria passos");
+}
+
 AE_TEST(session_creation_menu_places_objects_under_selected_parent_or_root) {
   Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
   const auto parent=doc.find(f.cube)->parent;
@@ -2744,7 +2825,7 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   tapWidget(f,recipeWidget("physics.static_sphere"));
   AE_EXPECT_EQ(doc.entityCount(),16u,"invalid physics ancestry creates no partial object");
   AE_EXPECT_EQ(history.undoDepth(),15u,"rejected creation records no undo command");
-  tapWidget(f,widgetId(EditorWidget::CreateMenuClose));
+  AE_EXPECT_TRUE(!f.session.screen().contextMenu && !f.session.screen().creationMenu,"o menu fecha; o motivo fica na barra de estado");
   namespace fs=std::filesystem;
   const auto path=fs::temp_directory_path()/("aether-builtins-"+
       std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".aescene");
@@ -3863,14 +3944,18 @@ AE_TEST(focused_inspectors_open_edit_ping_and_restore) {
   tapWidget(f,widgetId(EditorWidget::InspectorOpenFocused));
   AE_EXPECT_EQ(state.focusedInspectors.size(),1u,"uma aba do cubo");
   AE_EXPECT_EQ(state.focusedInspectors[0].entity,f.cube,"presa ao cubo");
-  // Toque longo na linha do poste: abre sem trocar a seleção.
+  // Toque longo na linha do poste: o menu de contexto dele (como o clique
+  // direito, seleciona a linha) e "Abrir em janela".
   const auto row=locateWidget(f.session,hierarchyRowWidget(post));
   AE_EXPECT_TRUE(row.x>=0,"linha do poste visível");
   f.session.handlePointer({120,UiPointerPhase::Down,row,20.0});
   f.session.handlePointer({120,UiPointerPhase::Up,row,20.0+ui::kUiLongPressSeconds+.05});f.session.update();
+  AE_EXPECT_TRUE(state.contextMenu && state.contextMenuLevel==0 && state.selection==post,"toque longo abre o menu do poste");
+  tapWidget(f,widgetId(EditorWidget::HierarchyProperties));
   AE_EXPECT_EQ(state.focusedInspectors.size(),2u,"aba do poste");
   AE_EXPECT_EQ(state.focusedActive,2u,"a nova aba fica à frente");
-  AE_EXPECT_EQ(state.selection,f.cube,"a seleção não muda");
+  AE_EXPECT_TRUE(!state.contextMenu,"a ação fecha o menu");
+  f.session.setSelection(f.cube);f.session.update();
   // ⋮ do cartão da Malha › Propriedades: aba só do componente; repetir não duplica.
   const u64 mesh=doc.find(f.cube)->components.at(0)->instanceId();
   for(u32 i=0;i<2;++i) {

@@ -217,17 +217,13 @@ AE_TEST(graphics_entry_lives_in_the_editor_top_bar) {
   WaterLab lab;
   Frame frame;
   composeFrame(frame,waterLabState(lab));
-  UiRect graphics{};
-  bool found=false;
-  for(const auto &command:frame.list.commands()) {
-    if(command.kind==UiPrimitive::Text&&frame.list.textOf(command)=="Gráficos") {
-      graphics=command.bounds;found=true;break;
-    }
-  }
-  AE_EXPECT_TRUE(found,"barra superior oferece Gráficos");
-  AE_EXPECT_TRUE(frame.layout.topBar.contains({graphics.x+1.0f,graphics.y+1.0f})&&
-                 frame.layout.topBar.contains({graphics.right()-1.0f,graphics.bottom()-1.0f}),
-                 "entrada fica na barra do editor, fora do viewport");
+  // Barra só de ícones: o botão de Gráficos é achado pelo toque, dentro dela.
+  UiPoint graphics{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::QualityOpen),frame.layout.topBar,graphics),
+                 "barra superior oferece Gráficos, fora do viewport");
+  UiPoint play{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::PlayFromTopBar),frame.layout.topBar,play),"Play na barra");
+  AE_EXPECT_TRUE(std::abs(play.x-frame.layout.topBar.width*.5f)<frame.layout.topBar.width*.12f,"Play no centro da barra");
 }
 
 AE_TEST(graphics_panel_draws_after_viewport_toolbars) {
@@ -736,8 +732,8 @@ AE_TEST(screen_play_button_is_painted_with_the_accent) {
   test::rasterizeUi(frame.instances, font(), icons(), target);
 
   float sampled[4];
-  // Canto superior direito, dentro da pastilha de Play e fora do triangulo.
-  target.sample(static_cast<u32>(frame.layout.topBar.right() - 24.0f),
+  // Centro da barra, dentro da pastilha de Play e fora do triangulo.
+  target.sample(static_cast<u32>(frame.layout.topBar.x + frame.layout.topBar.width * 0.5f - 20.0f),
                 static_cast<u32>(frame.layout.topBar.y + 18.0f), sampled);
   AE_EXPECT_TRUE(colourDistance(sampled, defaultTheme().color.accent) < 0.12f, "");
 }

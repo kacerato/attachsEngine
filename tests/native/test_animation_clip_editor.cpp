@@ -1634,6 +1634,64 @@ AE_TEST(animation_studio_docks_bone_tree_and_inspector_beside_viewport) {
   captureClipSurface(session,font,icons,"studio-rig-1386.ppm");
 }
 
+// Unity Animation window: clicar ou arrastar na régua move o playhead. A
+// árvore de ossos rola pelo dedo e o Play não depende de avisos da Pose.
+AE_TEST(animation_studio_ruler_scrubs_bone_tree_drags_and_play_ignores_pose_notices) {
+  using namespace editor;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  AE_EXPECT_TRUE(font.load(productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"))&&
+                 icons.load(productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui")),"production font and icon atlas");
+  session.initialize(&font,&icons);session.setSurface({0,0,1386,640},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto owner=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Cobra");
+  EditorEntityId parent=owner;
+  for(u32 i=0;i<30;++i) parent=doc.createEntity(parent,EditorEntityKind::Folder,("Vertebra "+std::to_string(i)).c_str());
+  resources::AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error)&&session.openAnimationClip(guid,owner,error),error.c_str());
+  session.update();
+  const auto find=[&](u32 id) {
+    UiDrawList list;list.begin(session.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+    buildEditorScreen(session.screen(),editorTheme(),list,router);UiPoint point{-1,-1};
+    const auto s=session.screen().surface;
+    for(float y=2;y<s.height&&point.x<0;y+=3)for(float x=2;x<s.width;x+=3) {
+      const auto hit=router.hitTest({x,y});if(hit.target==UiPointerTarget::Widget&&hit.widgetId==id) {point={x,y};break;}
+    }
+    return point;
+  };
+  // Régua: o toque busca o tempo pela posição; o arraste continua buscando.
+  const auto ruler=find(clip_widget::id(clip_widget::TimeRuler));
+  AE_EXPECT_TRUE(ruler.x>=0,"the time ruler takes touch");
+  const auto &canvas=session.layout().clipCanvas;
+  const UiPoint at{canvas.x+canvas.width*.75f,ruler.y};
+  session.handlePointer({3,UiPointerPhase::Down,at,1});session.update();
+  AE_EXPECT_TRUE(std::abs(session.screen().clipTime-1.5f)<.05f,"tapping the ruler seeks to its time");
+  session.handlePointer({3,UiPointerPhase::Move,{canvas.x+canvas.width*.5f,ruler.y},1.05});
+  session.handlePointer({3,UiPointerPhase::Move,{canvas.x+canvas.width*.25f,ruler.y},1.1});session.update();
+  AE_EXPECT_TRUE(std::abs(session.screen().clipTime-.5f)<.05f,"dragging along the ruler scrubs");
+  session.handlePointer({3,UiPointerPhase::Up,{canvas.x+canvas.width*.25f,ruler.y},1.15});session.update();
+  // Árvore: arrastar 3 linhas para cima rola 3 ossos e não escolhe nenhum.
+  const auto target=session.screen().clipPreviewTarget?session.screen().clipPreviewTarget:session.screen().clipTarget;
+  const auto row=find(clip_widget::id(clip_widget::BoneRow+6));
+  AE_EXPECT_TRUE(row.x>=0,"bone row reachable");
+  session.handlePointer({4,UiPointerPhase::Down,row,2});
+  for(u32 step=1;step<=6;++step) session.handlePointer({4,UiPointerPhase::Move,{row.x,row.y-20.f*float(step)},2+.02*step});
+  session.handlePointer({4,UiPointerPhase::Up,{row.x,row.y-120},2.2});session.update();
+  AE_EXPECT_EQ(session.screen().clipBoneScroll,3u,"three rows scrolled by the finger");
+  AE_EXPECT_EQ(session.screen().clipPreviewTarget?session.screen().clipPreviewTarget:session.screen().clipTarget,target,"scrolling does not pick a bone");
+  for(u32 i=0;i<8;++i) {
+    const auto down=find(clip_widget::id(clip_widget::BoneTreeDown));if(down.x<0)break;
+    session.handlePointer({5,UiPointerPhase::Down,down,3});session.handlePointer({5,UiPointerPhase::Up,down,3.05});session.update();
+  }
+  AE_EXPECT_TRUE(session.screen().clipBoneScroll+static_cast<u32>(session.layout().clipBoneRows)<=session.layout().clipBoneCount,"the arrow stops at the last row");
+  // Um aviso da Pose na linha de status não desliga o Play.
+  const_cast<EditorScreenState &>(session.screen()).clipDiagnostic="Alvo fora do alcance · cadeia esticada";session.update();
+  AE_EXPECT_TRUE(session.screen().clipPreviewReady,"preview ready");
+  const auto play=find(clip_widget::id(clip_widget::Play));
+  AE_EXPECT_TRUE(play.x>=0,"Play stays enabled with a pose notice");
+  session.handlePointer({6,UiPointerPhase::Down,play,4});session.handlePointer({6,UiPointerPhase::Up,play,4.05});session.update();
+  AE_EXPECT_TRUE(session.screen().clipPlaying,"Play starts the preview");
+}
+
 AE_TEST(two_bone_ik_reaches_target_keeps_lengths_and_bend_side) {
   const auto identity=[](float x,float y,float z,float *m){for(int i=0;i<16;++i)m[i]=(i%5==0)?1.f:0.f;m[12]=x;m[13]=y;m[14]=z;};
   float root[16],mid[16],tip[16];identity(0,0,0,root);identity(1,.2f,0,mid);identity(2,0,0,tip);

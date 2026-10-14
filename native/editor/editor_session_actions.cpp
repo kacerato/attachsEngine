@@ -90,6 +90,70 @@ bool EditorSession::handleInspectorScroll(const UiPointerEvent &event,const UiPo
   return true;
 }
 
+EditorEntityId EditorSession::creationParent() const {
+  const bool chosen=(state_.creationMenu||state_.contextMenuCreating)&&state_.creationAsChild;
+  return chosen&&document_.exists(state_.selection)&&state_.selection!=document_.root()?state_.selection:document_.root();
+}
+
+// Menu de contexto (ITsMagic, Unity): o "+" da Hierarquia abre Criar, o "⋮" e
+// o toque longo numa linha abrem as ações do objeto (o toque longo seleciona a
+// linha, como o clique direito). Com ele aberto, a lista rola pelo dedo, o
+// fundo fecha e uma ação tocada fecha o menu e segue pelo caminho normal, com
+// o destino de criação escolhido nele.
+bool EditorSession::handleContextMenu(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  namespace cm=context_menu_widget;
+  if(event.phase==UiPointerPhase::Down) state_.contextMenuCreating=false;
+  const auto open=[&](u32 level,UiPoint at) {
+    const bool object=document_.exists(state_.selection)&&state_.selection!=document_.root();
+    state_.contextMenu=true;state_.contextMenuLevel=state_.contextMenuRootLevel=object?level:1u;
+    state_.contextMenuAnchor=at;state_.contextMenuScroll=0;
+    state_.creationAsChild=object;state_.entityMenu=false;state_.creationMenu=false;
+  };
+  if(!state_.contextMenu) {
+    if(isPlaying()||!routing.tapped||routing.target!=UiPointerTarget::Widget) return false;
+    const u32 key=routing.widgetId,rows=widgetId(EditorWidget::HierarchyRowBase);
+    if(key==widgetId(EditorWidget::HierarchyAdd)) {open(1,routing.position);return true;}
+    if(key==widgetId(EditorWidget::HierarchyMenu)) {open(0,routing.position);return true;}
+    if(routing.heldSeconds>=ui::kUiLongPressSeconds&&key>=rows&&key<rows+EditorDocument::kMaximumEntities&&!state_.reparentEntity) {
+      setSelection(key-rows);open(0,routing.position);return true;
+    }
+    return false;
+  }
+  if(routing.dragging&&layout_.contextMenuWindow.contains(routing.start)) {
+    const float limit=std::max(0.f,layout_.contextMenuContent-layout_.contextMenuWindow.height);
+    state_.contextMenuScroll=std::clamp(state_.contextMenuScroll-routing.stepDelta.y,0.f,limit);
+    return true;
+  }
+  if(!routing.tapped) return true;
+  const u32 key=routing.widgetId;
+  if(cm::owns(key)) {
+    const u32 code=key-widgetId(EditorWidget::ContextMenuBase);
+    if(code==cm::Close) state_.contextMenu=false;
+    else if(code==cm::Back) {
+      if(state_.contextMenuLevel<=state_.contextMenuRootLevel) state_.contextMenu=false;
+      else state_.contextMenuLevel=state_.contextMenuLevel>=2?1u:0u;
+      state_.contextMenuScroll=0;
+    } else if(code==cm::Create) {state_.contextMenuLevel=1;state_.contextMenuScroll=0;}
+    else if(code==cm::AllRecipes) {
+      // A folha completa (busca, prévia, receitas indisponíveis com o motivo)
+      // abre com o destino escolhido aqui e uma receita da categoria atual.
+      state_.contextMenu=false;state_.creationMenu=true;
+      const auto query=editorSearchKey(state_.creationSearch);
+      if(!creationAvailable(state_,state_.creationSelection)||
+         !creationListed(editorCreationCatalog[state_.creationSelection],query,state_.creationCategory))
+        for(u32 i=0;i<editorCreationCatalog.size();++i)
+          if(creationAvailable(state_,i)&&creationListed(editorCreationCatalog[i],query,state_.creationCategory)) {state_.creationSelection=i;break;}
+    } else if(code>=cm::Category&&code<cm::Category+std::size(creationCategories)) {
+      state_.contextMenuLevel=2+(code-cm::Category);state_.contextMenuScroll=0;
+    }
+    return true;
+  }
+  // Trocar o destino (raiz ou filho) não fecha o menu.
+  if(key==widgetId(EditorWidget::CreationAtRoot)||key==widgetId(EditorWidget::CreationAsChild)) return false;
+  state_.contextMenu=false;state_.contextMenuCreating=true;
+  return false;
+}
+
 bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) {playTouches_.cancel();cancelPlayButtons();}
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) {
@@ -104,6 +168,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   UiPointerRouting routing = router_.route(event);
+  if(handleContextMenu(event,routing)) return true;
   if(handleColliderAuthoringInput(event,routing))return true;
   if(routing.target==UiPointerTarget::Widget &&
      ((routing.widgetId>=widgetId(EditorWidget::GuiHierarchyRowBase)&&routing.widgetId<widgetId(EditorWidget::GuiHierarchyRowBase)+0x00100000u) ||
@@ -341,15 +406,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
   }
   // Toque longo no cabeçalho de um componente abre o menu dele, como o clique
-  // direito da Unity (Manual/UsingComponents).
-  // Unity "PropertyEditor/OpenMouseOver": toque longo numa linha da Hierarquia
-  // abre o Inspector focado daquele objeto sem trocar a seleção.
-  if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds &&
-     routing.widgetId>=widgetId(EditorWidget::HierarchyRowBase) &&
-     routing.widgetId<widgetId(EditorWidget::HierarchyRowBase)+EditorDocument::kMaximumEntities && !isPlaying()) {
-    openFocusedInspector(routing.widgetId-widgetId(EditorWidget::HierarchyRowBase));
-    return true;
-  }
+  // direito da Unity (Manual/UsingComponents). O toque longo numa linha da
+  // Hierarquia abre o menu de contexto (handleContextMenu).
   if(routing.tapped && routing.heldSeconds>=ui::kUiLongPressSeconds) {
     const u32 operation=routing.widgetId&0xff000000u,index=routing.widgetId&0x00ffffffu;
     if(operation==widgetId(EditorWidget::ComponentFoldBase)) routing.widgetId=widgetId(EditorWidget::ComponentMenuBase)+index;
@@ -2541,7 +2599,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateGround) || routing.widgetId==widgetId(EditorWidget::CreateCube))) {
     const bool ground=routing.widgetId==widgetId(EditorWidget::CreateGround);
-    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
+    const auto parent=creationParent();
     for(u32 i=0;i<mapScene_.assetCount();++i) if(mapScene_.materialFlagsForAsset(i)&renderer::BoxAuthoringResource) {
       const float position[]{camera_.target[0],ground?-.1f:.5f,camera_.target[2]};
       EditorAssetInstantiation options;options.name=ground?"Chão":"Cubo";
@@ -2832,22 +2890,21 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   }
   if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreationRecipeBase) &&
      routing.widgetId<widgetId(EditorWidget::CreationRecipeBase)+editorCreationCatalog.size()) {
-    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
-        state_.selection!=document_.root()?state_.selection:document_.root();
+    const auto parent=creationParent();
     if(createRecipe(routing.widgetId-widgetId(EditorWidget::CreationRecipeBase),parent)!=kInvalidEntity)
       state_.creationMenu=false;
     return true;
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateFiniteWater) ||
                         routing.widgetId==widgetId(EditorWidget::CreateOceanWater))) {
-    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
+    const auto parent=creationParent();
     state_.creationMenu=false;
     createWaterSurface(routing.widgetId==widgetId(EditorWidget::CreateOceanWater),parent);
     return true;
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateRiverWater) || routing.widgetId==widgetId(EditorWidget::CreateBuoyantBox))) {
     const bool box=routing.widgetId==widgetId(EditorWidget::CreateBuoyantBox);
-    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
+    const auto parent=creationParent();
     for(u32 i=0;i<mapScene_.assetCount();++i) if(mapScene_.materialFlagsForAsset(i)&(box?renderer::BoxAuthoringResource:renderer::WaterRouteResource)) {
       const float position[]{camera_.target[0],box?3.0f:0.0f,camera_.target[2]};
       if(instantiateAsset(i,parent,position)) {
