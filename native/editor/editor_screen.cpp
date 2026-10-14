@@ -5285,9 +5285,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         const auto encoded=index+(f.index<<8)+(f.slot<<16);
         auto remove=takeRight(slot,32),down=takeRight(slot,32),up=takeRight(slot,32);
         pickerHit.width=std::max(0.0f,pickerHit.width-96.0f);
-        builder.label(up,"↑",f.slot?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
-        builder.label(down,"↓",f.slot+1<binding.slotCount(*component)?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
-        builder.label(remove,"×",theme.color.danger,theme.type.body,UiAlign::Center);
+        // Ícones do atlas, como Subir/Descer/Remover do menu do cartão (a fonte
+        // não tem as setas e as trocava por "^ v x").
+        builder.list.addImage(centred(up,16,16),static_cast<UiImageId>(UiIcon::UiChevronUp),f.slot?theme.color.textDim:theme.color.textFaint);
+        builder.list.addImage(centred(down,16,16),static_cast<UiImageId>(UiIcon::UiChevronDown),
+                              f.slot+1<binding.slotCount(*component)?theme.color.textDim:theme.color.textFaint);
+        builder.list.addImage(centred(remove,16,16),static_cast<UiImageId>(UiIcon::UiRemove),theme.color.danger);
         if(f.slot) builder.router.addRegion(up,widgetId(EditorWidget::ComponentClipMoveUpBase)+encoded);
         if(f.slot+1<binding.slotCount(*component)) builder.router.addRegion(down,widgetId(EditorWidget::ComponentClipMoveDownBase)+encoded);
         builder.router.addRegion(remove,widgetId(EditorWidget::ComponentClipRemoveBase)+encoded);
@@ -6741,7 +6744,19 @@ void buildEnumPicker(ScreenBuilder &builder) {
 namespace {
 std::vector<std::string> wrapText(const UiDrawList &list,std::string_view text,float width,const UiTypeStyle &style);
 }
-void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity, bool addInHeader=false) {
+// `lead` desenha as linhas de contexto do objeto (prefab, rig, fonte importada):
+// na coluna elas rolam junto com os cartões; nas outras rotas ficam no topo.
+void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity, bool addInHeader=false,
+                     const std::function<void(UiRect &)> &lead={}) {
+  bool leadPending=static_cast<bool>(lead);
+  {
+    const auto &st=builder.state;const bool sameSelection=st.componentSelection==entity.id;
+    const bool picker=(st.presetInputIndex&&st.referenceInstance)||(st.presetPanel&&st.presetEntity==entity.id)||
+        (st.impactInstance&&st.impactEntity==entity.id)||(sameSelection&&(st.referenceInstance||
+        (st.meshPicker&&(meshRenderer(entity)||(st.resourceInstance&&entity.components.findInstance(st.resourceInstance))))||
+        ((st.materialPicker||st.textureViewer||st.texturePicker)&&meshRenderer(entity))));
+    if(leadPending&&(picker||builder.onlyComponent)) {leadPending=false;lead(content);}
+  }
   if(builder.state.presetInputIndex && builder.state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
   if(builder.state.presetPanel && builder.state.presetEntity==entity.id) {
     const auto &state=builder.state;const auto &theme=builder.theme;
@@ -7024,6 +7039,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     builder.list.pushClip(window);builder.router.pushClip(window);
     builder.stackHeight=window.height;
     builder.componentPage=0;
+    if(leadPending) {leadPending=false;lead(column);}
     for(const auto &item:cards) {
       const auto *script=scene::scriptBehavior(item.value);
       const bool usable=item.object||item.transform||item.native||script;
@@ -9106,6 +9122,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     return;
   }
   takeTop(content,6);
+  const auto lead=[&](UiRect &content) {
   if(const auto *link=scene::prefabLink(entity->components)) {
     const auto *record=builder.state.assetRegistry?builder.state.assetRegistry->find(link->asset):nullptr;
     auto row=takeTop(content,44);
@@ -9123,7 +9140,8 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.label(row,"Rig articulado · controles, espelho, poses",theme.color.textDim,theme.type.caption);
   }
   buildImportLinkCard(builder,content);
-  buildComponents(builder,content,*entity,addInHeader);
+  };
+  buildComponents(builder,content,*entity,addInHeader,lead);
 }
 
 void buildSplitter(ScreenBuilder &builder, const UiRect &bounds, EditorWidget widget) {
