@@ -352,8 +352,16 @@ AE_TEST(animation_clip_preview_seek_cancel_and_failure_never_modify_source_docum
   const auto pose=preview.scene().find(target)->transform;
   AE_EXPECT_TRUE(!preview.seek(std::numeric_limits<float>::quiet_NaN(),error),"invalid seek");
   AE_EXPECT_EQ(preview.scene().find(target)->transform.position[0],pose.position[0],"invalid seek preserves last pose");
-  auto bad=asset;bad.bindings[1].path="Ausente/Junta";
-  AE_EXPECT_TRUE(!preview.begin(original,owner,bad,error)&&preview.active(),"failed binding retains current preview");
+  auto partial=asset;resources::AnimationClipBinding absent;absent.path="Ausente/Caixa";absent.name="Caixa";
+  const float box[]{0,1,0};u64 boxTrack=0;
+  AE_EXPECT_TRUE(partial.addTrack(absent,resources::AnimationPath::Translation,resources::AnimationRotationMode::Quaternion,box,boxTrack,error),error.c_str());
+  editor::AnimationClipPreview partialPreview;
+  AE_EXPECT_TRUE(partialPreview.begin(original,owner,partial,error)&&partialPreview.seek(1,error),error.c_str());
+  AE_EXPECT_TRUE(partialPreview.missingBindings().size()==1&&partialPreview.missingBindings().front()=="Ausente/Caixa",
+                 "a missing node is skipped and listed, like Unity and Play");
+  AE_EXPECT_TRUE(std::abs(partialPreview.scene().find(target)->transform.position[0]-2)<1e-5,"the nodes that exist still play");
+  auto bad=asset;for(auto &binding:bad.bindings)binding.path="Ausente/"+binding.path;
+  AE_EXPECT_TRUE(!preview.begin(original,owner,bad,error)&&preview.active(),"a clip with no node under the root retains current preview");
   AE_EXPECT_EQ(preview.time(),.5f,"failed begin retains time");
   AE_EXPECT_EQ(editor::serializeEditorDocument(original,0),before,"no source state, morph weight, ID or component changed");
   preview.cancel();AE_EXPECT_TRUE(!preview.active(),"cancel destroys evaluated scene");

@@ -209,6 +209,10 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   clipPoseDraft_.reset();state_.clipPosePending=false;state_.clipPoseIsolated=false;clipPoseGizmo_={};state_.clipPoseAxis=EditorGizmoHandle::None;
   std::string previewDiagnostic;
   if(!clipPreview_.begin(document_,owner,*asset,previewDiagnostic)||!clipPreview_.seek(0,previewDiagnostic))clipPreview_.cancel();
+  else if(const auto &missing=clipPreview_.missingBindings();!missing.empty()) {
+    previewDiagnostic="Fora do personagem, ignorado como na Unity: "+missing.front();
+    if(missing.size()>1)previewDiagnostic+=" e mais "+std::to_string(missing.size()-1);
+  }
   state_.clipLayer=0;state_.clipLayersShown=state_.clipLayerPicker=false;
   state_.clipOpen=true;state_.clipGuid=guid;state_.clipOwner=owner;state_.clipTime=0;
   // Rig publicado desta raiz entra junto: limites, espelho e poses ficam ativos.
