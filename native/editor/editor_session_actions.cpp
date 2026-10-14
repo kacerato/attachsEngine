@@ -1091,8 +1091,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::CameraAlignView)) {
+      // Qualquer objeto vai para a pose da vista (Align With View da Unity);
+      // numa camera, o Play passa a ver o que o editor mostra.
       const auto *entity=document_.find(state_.selection);
-      if(!entity || !cameraComponent(*entity) || history_.isOpen()) return true;
+      if(!entity || state_.selection==document_.root() || history_.isOpen()) return true;
+      state_.inspectorMenu=false;
       if(!isViewportValid(view_)) {state_.status="A vista precisa de uma projeção válida";return true;}
       float world[16]{},parent[16];editorTransformMatrix(EditorTransform{},world);editorTransformMatrix(EditorTransform{},parent);
       const auto basis=renderer::buildCameraViewBasis(view_.frustum.yaw,view_.frustum.pitch,view_.frustum.roll);
@@ -1100,7 +1103,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       EditorTransform pose;
       if((!entity->parent || editorWorldMatrix(document_,entity->parent,parent)) && editorLocalTransformForWorld(world,parent,pose)) {
         std::copy(entity->transform.scale,entity->transform.scale+3,pose.scale);
-        if(history_.setTransform(document_,entity->id,pose)) state_.status="Câmera alinhada à vista";
+        if(history_.setTransform(document_,entity->id,pose)) state_.status=cameraComponent(*entity)?"Câmera alinhada à vista":"Objeto alinhado à vista";
       } else state_.status="A hierarquia não permite alinhar esta pose sem shear";
       return true;
     }

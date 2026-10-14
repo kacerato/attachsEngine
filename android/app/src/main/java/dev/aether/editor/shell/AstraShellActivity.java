@@ -49,6 +49,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
 
@@ -79,6 +80,10 @@ public final class AstraShellActivity extends Activity implements ShellView.List
 
     @Override public void onProjectPicked(Project project) {
         beginOpening(project);
+    }
+    @Override public void onProjectExport(Project project) {
+        startActivity(new Intent(this,dev.aether.editor.GameExportActivity.class)
+            .putExtra("astra.project_path",project.path).putExtra("astra.project_name",project.name));
     }
 
     /**

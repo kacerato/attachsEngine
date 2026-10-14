@@ -5232,8 +5232,17 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
       const auto parent=node.parent>=0 && static_cast<usize>(node.parent)<created.size()
           ? created[static_cast<usize>(node.parent)] : instanceParent;
       if(parent==kInvalidEntity) { return rollback("Hierarquia do modelo fora de ordem."); }
-      const auto id=history_.createEntity(document_,parent,EditorEntityKind::Mesh,
-                                          node.name.empty()?"Objeto":node.name.c_str());
+      // Raiz unica sem nome no arquivo (o no raiz de um FBX vira "n0"): o
+      // objeto leva o nome do arquivo, como a Unity faz ao instanciar.
+      std::string nodeName=node.name.empty()?"Objeto":node.name;
+      const bool generated=node.name.empty()||(node.name.size()>1&&node.name[0]=='n'&&
+          std::all_of(node.name.begin()+1,node.name.end(),[](char c){return c>='0'&&c<='9';}));
+      if(node.parent<0&&rootCount==1&&generated)if(const auto *record=assets_.find(source)) {
+        auto stem=record->path;const auto slash=stem.find_last_of("/\\");if(slash!=std::string::npos)stem.erase(0,slash+1);
+        const auto dot=stem.find_last_of('.');if(dot!=std::string::npos)stem.resize(dot);
+        if(!stem.empty())nodeName=stem;
+      }
+      const auto id=history_.createEntity(document_,parent,EditorEntityKind::Mesh,nodeName.c_str());
       if(!id) { return rollback("Não foi possível criar os objetos do modelo."); }
       created[n]=id;
       if(node.parent<0 && instanceParent==document_.root()) newRoots.push_back(id);

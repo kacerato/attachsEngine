@@ -98,7 +98,9 @@ public sealed class ProjectCompiler
                 if ((attributes & FileAttributes.Directory) != 0)
                 {
                     var name = Path.GetFileName(path);
-                    if (name is not (".astra" or ".git" or "bin" or "obj" or "Library" or "Packages")) pending.Push(path);
+                    // Biblioteca: fontes de pacotes preservadas (scripts da Unity incluídos),
+                    // não código do projeto; só entram depois de convertidas.
+                    if (name is not (".astra" or ".git" or "bin" or "obj" or "Library" or "Packages" or "Biblioteca")) pending.Push(path);
                     continue;
                 }
                 if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;

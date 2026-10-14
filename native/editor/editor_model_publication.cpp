@@ -1,4 +1,5 @@
 #include "editor/editor_session.h"
+#include "renderer/authoring_texture.h"
 #include "editor/editor_texture_history.h"
 #include "resources/model_import.h"
 #include <limits>
@@ -66,9 +67,15 @@ template<class T>u64 storage(const std::vector<T> &values) {return static_cast<u
 u64 EditorSession::retainedModelBytes(const ImportedSource &source) {
   // Imported samplers own flat arrays. Authored curves/layer composition belong
   // to editable clip resources and cannot enter this source replay snapshot.
-  // Shared GPU texture payloads require their separate retained-byte contract.
-  if(!source.textures.empty())return std::numeric_limits<u64>::max();
-  u64 bytes=sizeof(source)+storage(source.vertices)+storage(source.indices)+storage(source.draws)+storage(source.materials)+
+  // Texturas compartilhadas e imutaveis: cada versao retida conta os mips em
+  // memoria de cada uma (conservador; versoes que dividem o mesmo bloco contam
+  // de novo). Antes, qualquer textura recusava o FBX inteiro.
+  u64 textureBytes=0;
+  for(const auto &texture:source.textures)if(texture) {
+    textureBytes+=sizeof(*texture)+texture->mipChain.capacity();
+    if(texture->file)textureBytes+=sizeof(*texture->file)+texture->file->path.capacity();
+  }
+  u64 bytes=textureBytes+sizeof(source)+storage(source.vertices)+storage(source.indices)+storage(source.draws)+storage(source.materials)+
       storage(source.identities)+storage(source.names)+storage(source.nodes)+storage(source.drawNodes)+storage(source.map.nodes)+
       storage(source.materialNames)+storage(source.textures)+storage(source.skins)+storage(source.drawSkins)+storage(source.skinInfluences)+
       storage(source.animations)+storage(source.morphs)+storage(source.drawMorphs)+storage(source.textureImages)+storage(source.meshLods)+source.map.sourceHash.capacity();

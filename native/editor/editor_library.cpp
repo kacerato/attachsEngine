@@ -1,5 +1,6 @@
 #include "editor/editor_session.h"
 #include "editor/editor_umotion_import.h"
+#include "scene/skinned_mesh.h"
 #include <fstream>
 #include "resources/unity_material_import.h"
 #include "resources/unity_import_recipe.h"
@@ -254,8 +255,22 @@ bool EditorSession::openLibraryItem(resources::AssetGuid id,std::string &diagnos
   if(extension==".asset") {
     std::filesystem::path absolute;const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
     if(EditorImportTransaction::safePath(root,item->path,absolute)&&umotionProject(absolute)) {
-      if(!document_.find(state_.selection)||state_.selection==document_.root()) {diagnostic="Selecione o personagem (a raiz do modelo) que recebe o projeto UMotion.";return false;}
-      UMotionImportReport report;if(!importUMotionProject(sourcePath,state_.selection,report,diagnostic))return false;
+      // Personagem: o selecionado; sem selecao, o unico modelo com malha
+      // deformavel na cena (o caso comum de um personagem so).
+      EditorEntityId character=document_.find(state_.selection)&&state_.selection!=document_.root()?state_.selection:kInvalidEntity;
+      if(!character) {
+        std::vector<EditorEntityId> roots;
+        std::vector<EditorEntityId> all;document_.collectSubtree(document_.root(),all);
+        for(const auto top:all) {
+          if(top==document_.root()||document_.find(top)->parent!=document_.root())continue;
+          std::vector<EditorEntityId> subtree;document_.collectSubtree(top,subtree);
+          if(std::any_of(subtree.begin(),subtree.end(),[&](EditorEntityId id){const auto *e=document_.find(id);return e&&e->components.find(scene::SkinnedMesh::descriptor);}))roots.push_back(top);
+        }
+        if(roots.size()!=1) {diagnostic=roots.empty()?"Coloque o personagem na cena antes de aplicar o projeto UMotion.":"Há mais de um personagem na cena: selecione o que recebe o projeto UMotion.";return false;}
+        character=roots.front();
+      }
+      UMotionImportReport report;if(!importUMotionProject(sourcePath,character,report,diagnostic))return false;
+      setSelection(character);
       state_.workspace=EditorWorkspace::Scene;
       diagnostic="Projeto UMotion importado: "+std::to_string(report.clips.size())+" clipe(s), "+std::to_string(report.bones)+" ossos, "+
         std::to_string(report.helpers)+" auxiliares, "+std::to_string(report.ikChains)+" IK, "+std::to_string(report.childOf)+" Filho de"+

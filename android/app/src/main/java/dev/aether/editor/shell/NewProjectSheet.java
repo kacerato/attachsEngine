@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -56,7 +57,7 @@ public final class NewProjectSheet extends FrameLayout {
         cardParams.bottomMargin = dp(16);
         addView(card, cardParams);
 
-        card.addView(label("NEW PROJECT", 9f, Design.MUTED, .28f));
+        card.addView(label("NOVO PROJETO", 9f, Design.MUTED, .28f));
 
         TextView title = new TextView(context);
         title.setText("Novo projeto vazio");
@@ -72,6 +73,9 @@ public final class NewProjectSheet extends FrameLayout {
         nameField.setTextColor(Design.TEXT);
         nameField.setTextSize(14f);
         nameField.setSingleLine(true);
+        // Paisagem: o teclado nao cobre a folha em tela cheia, e "Concluido"
+        // cria o projeto quando o nome e valido.
+        nameField.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN);
         nameField.setBackground(panel(0xFF0A0A0A, 9f, Design.LINE));
         nameField.setPadding(dp(14), dp(8), dp(14), dp(8));
         card.addView(nameField, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(42)));
@@ -117,6 +121,11 @@ public final class NewProjectSheet extends FrameLayout {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) { validate(); }
+        });
+        nameField.setOnEditorActionListener((view, action, event) -> {
+            if (action != EditorInfo.IME_ACTION_DONE) return false;
+            if (confirm.isEnabled()) submit();
+            return true;
         });
     }
 

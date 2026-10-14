@@ -7721,6 +7721,7 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
       {"Duplicar",EditorWidget::DuplicateSelection,!root},
       {"Excluir",EditorWidget::DeleteSelection,!root},
       {"Enquadrar na vista",EditorWidget::FrameSelection,true},
+      {"Alinhar com a vista",EditorWidget::CameraAlignView,!root&&state.workspace!=EditorWorkspace::Play},
       {"Criar filho vazio",EditorWidget::CreateChildGroup,true},
       {"Criar prefab da seleção",EditorWidget::PrefabCreate,!root && !scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},
       {"Desvincular instância de prefab",EditorWidget::PrefabUnpack,scene::prefabLink(entity.components) && state.workspace!=EditorWorkspace::Play},

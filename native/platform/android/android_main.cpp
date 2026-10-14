@@ -2950,7 +2950,7 @@ void android_main(android_app *app) {
               result.expectedHash=exists?ae::Sha256::hex(previous):std::string();
               result.bytes=picked.accepted?std::move(picked.bytes):std::move(previous);
               // Reimportar uma fonte em pasta (S0): lê a própria pasta publicada.
-              if(!picked.accepted && ae::resources::gltfIsFolderSource(result.bytes)) {
+              if(!picked.accepted && !ae::resources::isFbxSource(result.bytes) && ae::resources::gltfIsFolderSource(result.bytes)) {
                 result.folderSource=true;result.folderDirectory=absolute.parent_path();
                 std::vector<ae::u8> manifest;
                 std::filesystem::path manifestPath=absolute;manifestPath+=".deps";
@@ -2982,9 +2982,47 @@ void android_main(android_app *app) {
                 result.unusedCompanions=package.unusedFiles;
                 result.bytes=std::move(package.glb);
               }
+              // Arquivos que o modelo cita por caminho (texturas de um FBX): ao
+              // lado da fonte; senao, pelo nome dentro do pacote da Biblioteca
+              // de onde a fonte veio (a Unity procura assim no projeto).
+              struct SourceFiles {
+                std::atomic<bool> *cancel=nullptr;std::filesystem::path project,directory,package;
+              } files;files.cancel=cancel.get();
+              files.project=ae::editor::EditorImportTransaction::fromUtf8(root);
+              if(std::filesystem::path source;ae::editor::EditorImportTransaction::safePath(files.project,path,source)) {
+                files.directory=source.parent_path();files.package=files.directory;
+                if(path.starts_with("Biblioteca/")) {
+                  const auto slash=path.find('/',std::string("Biblioteca/").size());
+                  if(slash!=std::string::npos)ae::editor::EditorImportTransaction::safePath(files.project,path.substr(0,slash),files.package);
+                }
+              }
               ae::resources::GltfImportProgress progress{};
-              progress.context=cancel.get();
-              progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+              progress.context=&files;
+              progress.cancelled=[](void *context) {return static_cast<SourceFiles *>(context)->cancel->load();};
+              progress.externalFile=[](void *context,std::string_view uri,ae::u64,std::vector<ae::u8> &bytes) {
+                const auto &files=*static_cast<SourceFiles *>(context);
+                if(files.directory.empty()||uri.empty()||uri.size()>1024)return false;
+                std::string relative(uri);for(auto &c:relative)if(c=='\\')c='/';
+                const auto lower=[](std::string text){for(auto &c:text)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return text;};
+                std::error_code error;
+                // 1) Caminho relativo a fonte, sem sair do projeto.
+                if(relative.find(':')==std::string::npos&&!relative.starts_with("/")) {
+                  const auto candidate=(files.directory/ae::editor::EditorImportTransaction::fromUtf8(relative)).lexically_normal();
+                  const auto inside=std::filesystem::relative(candidate,files.project,error);
+                  if(!error&&!inside.empty()&&inside.native()[0]!='.'&&std::filesystem::is_regular_file(candidate,error)&&
+                     ae::editor::EditorImportTransaction::read(candidate,bytes,64ull<<20))return true;
+                }
+                // 2) Mesmo nome de arquivo em qualquer pasta do pacote.
+                const auto name=lower(relative.substr(relative.find_last_of('/')==std::string::npos?0:relative.find_last_of('/')+1));
+                if(name.empty())return false;
+                ae::usize visited=0;
+                for(std::filesystem::recursive_directory_iterator it(files.package,std::filesystem::directory_options::skip_permission_denied,error),end;
+                    !error&&it!=end&&visited<8192;it.increment(error),++visited) {
+                  if(!it->is_regular_file(error)||lower(it->path().filename().string())!=name)continue;
+                  if(ae::editor::EditorImportTransaction::read(it->path(),bytes,64ull<<20))return true;
+                }
+                return false;
+              };
               result.accepted=ae::resources::importModelSource(result.bytes,limits,progress,result.model);
               result.measure();
               // Hash no worker: a revisão compara com o mapa publicado sem

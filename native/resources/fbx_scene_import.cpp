@@ -127,6 +127,33 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
   struct MorphBinding {u32 node=0;std::vector<std::pair<u32,u32>> targets;};
   std::vector<MorphBinding> morphBindings;
   bool reducedWeights=false,recalculateTangents=false,droppedTangents=false,linearFromDualQuaternion=false;
+  // Texturas: embutidas no FBX vao para o binario; externas viram URI pelo
+  // caminho gravado no FBX, e o chamador resolve o arquivo (ao lado da fonte
+  // ou pelo nome dentro do pacote, como a Unity procura no projeto).
+  GlbData data;data.maximum=budget;
+  std::vector<std::string> images,textures;std::map<const ufbx_texture*,i32> textureIndex;
+  const auto addTexture=[&](const ufbx_texture *texture)->i32 {
+    if(!texture)return -1;
+    if(const auto found=textureIndex.find(texture);found!=textureIndex.end())return found->second;
+    auto image=jsonStream();
+    if(texture->content.size) {
+      const auto *bytes=static_cast<const u8*>(texture->content.data);const usize size=texture->content.size;
+      if(size>data.maximum||data.binary.size()>data.maximum-size)return textureIndex[texture]=-1;
+      while(data.binary.size()%4)data.binary.push_back(0);
+      const auto begin=data.binary.size();data.binary.insert(data.binary.end(),bytes,bytes+size);
+      auto view=jsonStream();view<<"{\"buffer\":0,\"byteOffset\":"<<begin<<",\"byteLength\":"<<size<<'}';data.views.push_back(view.str());
+      const char *mime=size>=4&&bytes[0]==0x89&&bytes[1]=='P'?"image/png":size>=2&&bytes[0]==0xff&&bytes[1]==0xd8?"image/jpeg":"image/x-tga";
+      image<<"{\"bufferView\":"<<data.views.size()-1<<",\"mimeType\":\""<<mime<<"\"}";
+    } else {
+      std::string uri=stringOf(texture->relative_filename);if(uri.empty())uri=stringOf(texture->filename);
+      if(uri.empty())return textureIndex[texture]=-1;
+      for(auto &c:uri)if(c=='\\')c='/';
+      image<<"{\"uri\":"<<jsonString(uri)<<'}';
+    }
+    images.push_back(image.str());
+    auto item=jsonStream();item<<"{\"source\":"<<images.size()-1<<'}';textures.push_back(item.str());
+    return textureIndex[texture]=static_cast<i32>(textures.size()-1);
+  };
   for(const auto *material:scene->materials) {
     const auto &p=material->pbr;const auto &f=material->fbx;
     const auto color=p.base_color.has_value?p.base_color.value_vec3:(f.diffuse_color.has_value?f.diffuse_color.value_vec3:ufbx_vec3{{{1,1,1}}});
@@ -138,14 +165,22 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
     const double strength=p.emission_factor.has_value?p.emission_factor.value_real:(f.emission_factor.has_value?f.emission_factor.value_real:0);
     const double values[]{color.x*factor,color.y*factor,color.z*factor,alpha,roughness,metallic,emission.x*strength,emission.y*strength,emission.z*strength};
     for(const auto value:values)if(!std::isfinite(value)||value<0||value>1)return fail("Fatores de material FBX fora do perfil PBR representável.");
-    auto item=jsonStream();item<<"{\"name\":"<<jsonString(stringOf(material->name))<<",\"pbrMetallicRoughness\":{\"baseColorFactor\":["<<values[0]<<','<<values[1]<<','<<values[2]<<','<<alpha<<"],\"roughnessFactor\":"<<roughness<<",\"metallicFactor\":"<<metallic<<"},\"emissiveFactor\":["<<values[6]<<','<<values[7]<<','<<values[8]<<']';
+    const ufbx_texture *baseTexture=p.base_color.texture?p.base_color.texture:f.diffuse_color.texture;
+    const ufbx_texture *normalTexture=p.normal_map.texture?p.normal_map.texture:f.normal_map.texture;
+    const i32 base=addTexture(baseTexture),normal=addTexture(normalTexture);
+    auto item=jsonStream();item<<"{\"name\":"<<jsonString(stringOf(material->name))<<",\"pbrMetallicRoughness\":{\"baseColorFactor\":["<<values[0]<<','<<values[1]<<','<<values[2]<<','<<alpha<<"],\"roughnessFactor\":"<<roughness<<",\"metallicFactor\":"<<metallic;
+    if(base>=0)item<<",\"baseColorTexture\":{\"index\":"<<base<<'}';
+    item<<"},\"emissiveFactor\":["<<values[6]<<','<<values[7]<<','<<values[8]<<']';
+    if(normal>=0)item<<",\"normalTexture\":{\"index\":"<<normal<<'}';
     if(alpha<1)item<<",\"alphaMode\":\"BLEND\"";
     if(material->features.double_sided.enabled)item<<",\"doubleSided\":true";
     item<<'}';materials.push_back(item.str());
-    for(const auto &map:p.maps)if(map.texture&&map.texture_enabled)omittedTextures.insert(map.texture->element_id);
-    for(const auto &map:f.maps)if(map.texture&&map.texture_enabled)omittedTextures.insert(map.texture->element_id);
+    for(const auto &map:p.maps)if(map.texture&&map.texture_enabled&&!textureIndex.count(map.texture))omittedTextures.insert(map.texture->element_id);
+    for(const auto &map:f.maps)if(map.texture&&map.texture_enabled&&!textureIndex.count(map.texture))omittedTextures.insert(map.texture->element_id);
+    // Mapas sem textura utilizavel (sem arquivo) continuam contados como omitidos.
+    for(const auto *used:{baseTexture,normalTexture})if(used&&textureIndex.count(used)&&textureIndex[used]<0)omittedTextures.insert(used->element_id);
   }
-  GlbData data;data.maximum=budget;u64 vertexCount=0;u32 primitiveCount=0;
+  u64 vertexCount=0;u32 primitiveCount=0;
   for(usize nodeIndex=0;nodeIndex<scene->nodes.count;++nodeIndex) {
     if(cancelled()){out={};out.cancelled=true;out.diagnostic="Importação FBX cancelada.";return false;}
     const auto *node=scene->nodes.data[nodeIndex];auto item=jsonStream();item<<"{\"name\":"<<jsonString(stringOf(node->name));
@@ -402,6 +437,7 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
   auto document=jsonStream();document<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"Astra ufbx family/2\"},\"scene\":0,\"scenes\":[{\"nodes\":["<<nodeIds.at(scene->root_node)<<"]}],\"nodes\":[";
   join(document,nodes);document<<"],\"meshes\":[";join(document,meshes);document<<"],\"materials\":[";join(document,materials);
   document<<"],\"skins\":[";join(document,skins);document<<"],\"animations\":[";join(document,animations);
+  if(!textures.empty()){document<<"],\"images\":[";join(document,images);document<<"],\"textures\":[";join(document,textures);}
   document<<"],\"buffers\":[{\"byteLength\":"<<data.binary.size()<<"}],\"bufferViews\":[";join(document,data.views);document<<"],\"accessors\":[";join(document,data.accessors);document<<"]}";
   auto json=document.str();while(json.size()%4)json+=' ';while(data.binary.size()%4)data.binary.push_back(0);
   const u64 total=28u+json.size()+data.binary.size();if(total>limits.maximumBytes||total>budget||total>std::numeric_limits<u32>::max())return fail("Intercâmbio FBX excede o orçamento da importação.");
@@ -416,7 +452,8 @@ bool importFbxScene(std::span<const u8> bytes,const GltfImportLimits &limits,
     return fail("Consumidor glTF recusou skin/canal FBX preparado; publicação parcial de deformação recusada.");
   out.skippedAnimations+=emptyTakes;
   out.skippedCameras+=static_cast<u32>(skippedCameras);out.skippedLights+=static_cast<u32>(skippedLights);out.skippedTextures+=static_cast<u32>(omittedTextures.size());
-  if(!omittedTextures.empty())out.notes.push_back("Texturas FBX ainda não vinculadas neste perfil; materiais Unity externos exigem resolução do pacote.");
+  if(!omittedTextures.empty())out.notes.push_back(std::to_string(omittedTextures.size())+" textura(s) FBX sem arquivo utilizável; os slots ficam só com os fatores.");
+  if(!textures.empty())out.notes.push_back("Texturas FBX: cor base e normal ligadas; arquivos externos procurados ao lado da fonte e pelo nome no pacote.");
   if(legacy)out.appearanceExtensions.push_back("FBX Phong/Lambert: somente cor difusa/emissão; resposta especular original não reproduzida.");
   if(droppedTangents)out.appearanceExtensions.push_back("Base de tangentes FBX degenerada: tangentes do modelo recalculadas a partir da UV pelo preparador nativo onde disponível.");
   if(reducedWeights)out.notes.push_back("Skin FBX: quatro maiores influências renormalizadas por autorização da receita.");

@@ -240,7 +240,13 @@ bool gltfNeedsPackage(std::span<const u8> main) {
   std::span<const u8> binary;
   bool glb = false;
   const auto json = mainJson(main, binary, glb);
-  if (!glb) return !main.empty();
+  if (!glb) {
+    // Fora do GLB so glTF texto se empacota: um FBX (binario ou ASCII) segue
+    // para o importador de modelos, nunca para o leitor de JSON.
+    const std::string_view head(reinterpret_cast<const char *>(main.data()), std::min<usize>(main.size(), 4096));
+    if (head.starts_with("Kaydara FBX Binary") || head.find("FBXHeaderExtension:") != head.npos) return false;
+    return !main.empty();
+  }
   JsonDocument document;
   if (json.empty() || !JsonDocument::parse(json, document) || !document.root()) return false;
   const auto &root = *document.root();
