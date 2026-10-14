@@ -1,5 +1,8 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
+#include "scene/ik_constraints.h"
+#include "scene/animation.h"
+#include <cctype>
 #include "editor/editor_studio_state.h"
 #include "editor/editor_studio_tools.h"
 #include "runtime/transform_math.h"
@@ -114,6 +117,21 @@ bool EditorSession::createAnimationClip(EditorEntityId owner,float duration,reso
   }
   if(!createAnimationClipAsset(value,path,error))return false;
   guid=value.guid;return true;
+}
+// Clipe novo do estudio: entra no Animation do dono como clipe padrao, tocando
+// ao iniciar (a janela Animation da Unity faz o mesmo ao criar um clipe). Os
+// clipes que ja estavam ali continuam na lista; so deixam de ser o padrao.
+bool EditorSession::playNewClipOnOwner(EditorEntityId owner,resources::AssetGuid guid,std::string &error) {
+  const auto *entity=document_.find(owner);
+  if(!entity||owner==document_.root()) {error="Escolha um objeto para receber o clipe";return false;}
+  auto values=*entity;
+  auto *animation=static_cast<scene::Animation*>(values.components.find(scene::Animation::descriptor)?values.components.edit(scene::Animation::descriptor):values.components.add(scene::Animation::descriptor));
+  if(!animation||(!animation->contains(guid)&&!animation->appendClip(guid))) {error="Animation do objeto recusou o clipe";return false;}
+  animation->clip=guid;animation->playAutomatically=true;
+  if(!history_.begin("Clipe novo no objeto")) {error="Conclua a edição em andamento";return false;}
+  const bool ok=history_.applyValues(document_,owner,values);history_.end();
+  if(!ok)error="Animation do objeto recusou o clipe";
+  return ok;
 }
 bool EditorSession::extractAnimationClip(resources::AssetGuid sourceClip,EditorEntityId owner,resources::AssetGuid &guid,std::string &error) {
   error.clear();runtime::AnimationClipView view;
@@ -477,6 +495,20 @@ bool EditorSession::pickAnimationClipPreviewTarget(ui::UiPoint position) {
     if(state_.clipPoseSelectionIsolated)std::erase_if(candidates_,[&](const auto &value){return !animationPoseSelectionVisible(value.id);});
     const auto hit=pickNearest(candidates_,screenPointToRay(view_,position));if(hit.hit)target=hit.id;
   }
+  // IK: um toque num dedo pega a mao (o efetor), como os efetores do HumanIK e
+  // o Pinning do UMotion. Efetor = osso com IK de dois ossos ou chamado de
+  // mao/punho/pe/tornozelo, ate quatro niveis acima do osso tocado.
+  if(target&&state_.clipIkMode) {
+    const auto effector=[&](const runtime::SceneObject &o) {
+      if(o.components.find(scene::TwoBoneIk::descriptor))return true;
+      std::string name(o.name);for(auto &c:name)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      for(const char *part:{"wrist","hand","ankle","foot","punho","mao_","mão"})if(name.find(part)!=std::string::npos)return true;
+      return false;
+    };
+    const runtime::SceneObject *at=graph.find(target);
+    for(u32 up=0;at&&up<=4&&at->id!=state_.clipOwner;++up,at=graph.find(at->parent))
+      if(effector(*at)) {target=at->id;break;}
+  }
   if(target) {
     std::string error;const bool bone=std::find(state_.clipPreviewJoints.begin(),state_.clipPreviewJoints.end(),target)!=state_.clipPreviewJoints.end();
     if(state_.clipPoseSelectionAdd)toggleAnimationPoseTarget(target,error);
@@ -763,7 +795,8 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         if(code==w::PoseIkWizard)ok=EditorStudio::setupIk(*this,state_.clipOwner,summary,error);
         else if(code==w::PosePin)ok=EditorStudio::pinTip(*this,selected,start,end,summary,error);
         else if(code==w::PoseFollowParent) {studio_->followParent=selected;ok=selected!=0;summary="Pai definido · selecione o objeto que vai seguir";error="Selecione um osso ou objeto";}
-        else ok=EditorStudio::followObject(*this,selected,studio_->followParent,start,end,summary,error);
+        // Sem intervalo marcado: segue do tempo atual (o quadro da pegada) ao fim.
+        else ok=EditorStudio::followObject(*this,selected,studio_->followParent,state_.clipRangeShown?start:state_.clipTime,end,summary,error);
         state_.clipDiagnostic=ok?summary:error;return true;
       }
       if(code==w::PoseBake) {std::string summary,error;
@@ -1464,7 +1497,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
   } else if(code==w::New) {state_.clipBakeShown=false;state_.clipNewPicker=!state_.clipNewPicker;state_.clipPicker=false;state_.clipTangentPicker=false;state_.clipModeSide=0;state_.clipAuthoringPicker=0;
   } else if(code==w::NewQuaternion||code==w::NewEuler||code==w::NewProgressive) {
     const auto mode=code==w::NewEuler?resources::AnimationRotationMode::Euler:code==w::NewProgressive?resources::AnimationRotationMode::ProgressiveQuaternion:resources::AnimationRotationMode::Quaternion;
-    resources::AssetGuid guid;if(createAnimationClip(state_.clipOwner,2,guid,error,mode))openAnimationClip(guid,state_.clipOwner,error);state_.clipDiagnostic=error;
+    resources::AssetGuid guid;if(createAnimationClip(state_.clipOwner,2,guid,error,mode)&&playNewClipOnOwner(state_.clipOwner,guid,error))openAnimationClip(guid,state_.clipOwner,error);state_.clipDiagnostic=error;
   } else if(code==w::Time||code==w::Duration)beginAnimationClipNumber(code,code==w::Time?state_.clipTime:asset->duration);
   else if(code==w::PreviousFrame||code==w::NextFrame) {
     state_.clipPlaying=false;seekAnimationClip(std::clamp(state_.clipTime+(code==w::PreviousFrame?-1.f:1.f)/asset->displayRate,0.f,asset->duration),error);state_.clipDiagnostic=error;

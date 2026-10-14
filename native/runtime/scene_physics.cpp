@@ -149,7 +149,9 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
       parts.push_back({id,&c});
       // O objeto que contribui a forma também tem a pose congelada pelo corpo:
       // movê-lo por script deslocaria a parte do composto sem a física saber.
-      gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
+      // Corpo cinemático: a transformação manda e a física acompanha.
+      const auto *ownerObject=document.find(owner);const auto *ownerBody=ownerObject?physicsBody(*ownerObject):nullptr;
+      if(!ownerBody||ownerBody->motion!=scene::BodyMotion::Kinematic) gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
     }
   }
   for(auto id:ids) {
@@ -218,7 +220,7 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
     }
     if(body->motion!=scene::BodyMotion::Static) AetherPhysics_SetLinearVelocity(world_,handle,{body->velocityX,body->velocityY,body->velocityZ});
     objects_.emplace(handle,id);
-    gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
+    if(body->motion!=scene::BodyMotion::Kinematic) gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
     std::vector<Binding::ColliderIdentity> instances;instances.reserve(found->second.size());
     for(const auto &source:found->second) instances.push_back({source.object,source.value->instanceId()});
     // A camada de gameplay do objeto vale para o corpo inteiro. Dois colisores
@@ -242,6 +244,10 @@ bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geo
                          {body->velocityX,body->velocityY,body->velocityZ},
                          {body->angularX,body->angularY,body->angularZ},body->instanceId(),body->motion==scene::BodyMotion::Dynamic});
     bindings_.back().interpolation=body->motion==scene::BodyMotion::Static?0u:body->interpolation;
+    if(body->motion==scene::BodyMotion::Kinematic) {
+      auto &b=bindings_.back();b.kinematic=true;b.interpolation=0;
+      AetherVec3 p;AetherQuat q;if(AetherPhysics_TryGetBodyPoseV2(world_,handle,&p,&q)){b.knownPosition=p;b.knownRotation=q;}
+    }
     if(const auto *motor=entity.components.find(scene::DynamicBodyMotor::descriptor))dynamicMotors_.push_back({id,motor->instanceId(),{}, {}});
   }
   // All bodies exist now, including static anchors and forward references.
@@ -699,6 +705,7 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
         if(!characterHit(context,event)) return false;
       }
     }
+    if(!driveKinematicBodies(world)) return false;
     if(const auto result=AetherPhysics_StepV2(world_,static_cast<float>(fixed),1);result!=0) {error_="Solver físico recusou o passo: "+std::to_string(result);return false;}
     accumulated_-=fixed;
     if(!synchronizePoses(world)) return false;
@@ -802,6 +809,11 @@ bool ScenePhysics::synchronizePoses(GameWorld &world) {
     if(!binding.moving) continue;
     AetherVec3 p;AetherQuat q;
     if(!AetherPhysics_TryGetBodyPoseV2(world_,binding.body,&p,&q)) {error_="Não foi possível ler a pose do corpo "+std::to_string(binding.id);return false;}
+    if(binding.kinematic) {
+      // Conduzido pela transformação neste passo: ela já é a verdade.
+      if(binding.driven) {binding.driven=false;continue;}
+      binding.knownPosition=p;binding.knownRotation=q;
+    }
     binding.previousPosition=binding.hasPose?binding.currentPosition:p;binding.previousRotation=binding.hasPose?binding.currentRotation:q;
     binding.currentPosition=p;binding.currentRotation=q;binding.hasPose=true;
     // Interpolados publicam uma vez por quadro, em publishInterpolatedPoses.
@@ -844,6 +856,31 @@ bool ScenePhysics::publishInterpolatedPoses(GameWorld &world) {
     if(!(length>1e-6f)) continue;
     q={q.x/length,q.y/length,q.z/length,q.w/length};
     if(!publishBodyPose(world,binding,p,q)) return false;
+  }
+  return true;
+}
+bool ScenePhysics::driveKinematicBodies(GameWorld &world) {
+  const auto &document=world.poseGraph();
+  for(auto &binding:bindings_) {
+    if(!binding.kinematic) continue;
+    float m[16];if(!document.find(binding.id)||!worldMatrix(document,binding.id,m)) continue;
+    // Rotação da matriz de mundo sem a escala.
+    float c[3][3];
+    for(u32 k=0;k<3;++k) {
+      const float n=std::sqrt(m[k*4]*m[k*4]+m[k*4+1]*m[k*4+1]+m[k*4+2]*m[k*4+2]);if(n<1e-9f) {c[k][0]=c[k][1]=c[k][2]=0;continue;}
+      for(u32 r=0;r<3;++r)c[k][r]=m[k*4+r]/n;
+    }
+    AetherQuat q;const float trace=c[0][0]+c[1][1]+c[2][2];
+    if(trace>0) {const float s=std::sqrt(trace+1)*2;q={(c[1][2]-c[2][1])/s,(c[2][0]-c[0][2])/s,(c[0][1]-c[1][0])/s,.25f*s};}
+    else if(c[0][0]>c[1][1]&&c[0][0]>c[2][2]) {const float s=std::sqrt(1+c[0][0]-c[1][1]-c[2][2])*2;q={.25f*s,(c[1][0]+c[0][1])/s,(c[2][0]+c[0][2])/s,(c[1][2]-c[2][1])/s};}
+    else if(c[1][1]>c[2][2]) {const float s=std::sqrt(1+c[1][1]-c[0][0]-c[2][2])*2;q={(c[1][0]+c[0][1])/s,.25f*s,(c[2][1]+c[1][2])/s,(c[2][0]-c[0][2])/s};}
+    else {const float s=std::sqrt(1+c[2][2]-c[0][0]-c[1][1])*2;q={(c[2][0]+c[0][2])/s,(c[2][1]+c[1][2])/s,.25f*s,(c[0][1]-c[1][0])/s};}
+    const AetherVec3 p{m[12],m[13],m[14]};
+    const float dp=std::fabs(p.x-binding.knownPosition.x)+std::fabs(p.y-binding.knownPosition.y)+std::fabs(p.z-binding.knownPosition.z);
+    const float dot=std::fabs(q.x*binding.knownRotation.x+q.y*binding.knownRotation.y+q.z*binding.knownRotation.z+q.w*binding.knownRotation.w);
+    if(dp<1e-6f&&dot>1-1e-7f) continue;
+    if(!AetherPhysics_MoveKinematicV2(world_,binding.body,p,q,1.0f/60.0f)) {error_="Corpo cinemático "+std::to_string(binding.id)+" recusou a pose da transformação";return false;}
+    binding.knownPosition=p;binding.knownRotation=q;binding.driven=true;
   }
   return true;
 }

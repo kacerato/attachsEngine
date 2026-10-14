@@ -647,6 +647,13 @@ AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_conne
   const auto *progress=session.animationClipAsset(session.screen().clipGuid);
   AE_EXPECT_TRUE(progress&&progress->tracks[1].rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion&&progress->tracks[1].curves.size()==5,"progressive mode creates pose and speed data");
   const auto progressiveGuid=progress->guid;
+  // Criar clipe liga o clipe novo ao Animation do dono (mudanca intencional da
+  // cena); dai em diante, autoria de pose nao pode tocar a cena.
+  {
+    const auto *animation=static_cast<const scene::Animation*>(doc.find(owner)->components.find(scene::Animation::descriptor));
+    AE_EXPECT_TRUE(animation&&animation->clip==progressiveGuid&&animation->playAutomatically,"new clip from the studio becomes the owner's default clip");
+  }
+  const auto sceneAfterNew=serializeEditorDocument(doc,0);
   tap(clip_widget::Name);auto name=session.pendingTextEdit();
   AE_EXPECT_TRUE(session.completeTextEdit(name,"Mecanismo universal",true),"rename commits through the real text flow");session.update();
   AE_EXPECT_EQ(session.animationClipAsset(progressiveGuid)->name,std::string("Mecanismo universal"),"name persists in resource and catalog");
@@ -656,11 +663,11 @@ AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_conne
   AE_EXPECT_TRUE(session.seekAnimationClip(1,error),error.c_str());session.update();tap(clip_widget::Pose);tap(clip_widget::PoseValue+1);
   numeric=session.pendingTextEdit();AE_EXPECT_TRUE(session.completeTextEdit(numeric,"90",true),"pose editor writes a grouped rotation key");session.update();
   AE_EXPECT_TRUE(std::abs(session.evaluatedEditorScene().find(rotor)->transform.rotationDegrees[1]-90)<.01,"full pose flows through curve publication and actual preview");
-  AE_EXPECT_EQ(serializeEditorDocument(doc,0),sceneBefore,"pose authoring never overwrites the original scene transform");
+  AE_EXPECT_EQ(serializeEditorDocument(doc,0),sceneAfterNew,"pose authoring never overwrites the original scene transform");
   capture("clip-pose.ppm");
   tap(clip_widget::RemoveTrack);AE_EXPECT_TRUE(!session.animationClipAsset(progressiveGuid)->track(childTrack),"remove property retires the track");
   tap(clip_widget::Undo);AE_EXPECT_TRUE(session.animationClipAsset(progressiveGuid)->track(childTrack),"undo restores track identity and grouped pose");
-  tap(clip_widget::Close);AE_EXPECT_TRUE(!session.screen().clipOpen&&serializeEditorDocument(doc,0)==sceneBefore,"close restores document display without mutation");
+  tap(clip_widget::Close);AE_EXPECT_TRUE(!session.screen().clipOpen&&serializeEditorDocument(doc,0)==sceneAfterNew,"close restores document display without mutation");
 }
 
 AE_TEST(animation_clip_conversion_consolidation_ui_api_publication_and_reopen) {
@@ -2157,4 +2164,79 @@ AE_TEST(umotion_euler_rotation_imports_with_original_keys_order_and_frame) {
   }
   char m[120];std::snprintf(m,sizeof m,"Head pose equals the mirrored Unity Euler pose (worst %.4f deg)",worst);
   AE_EXPECT_TRUE(worst<.05,m);
+}
+AE_TEST(animation_studio_pickup_scene_authored_in_the_editor_plays_the_same) {
+  // O fluxo do tutorial, so com ferramentas do editor: assistente de IK, IK do
+  // estudio arrastando as maos ate a caixa, Seguir pai a partir do quadro da
+  // pegada e Play. O Play tem de mostrar o que o estudio gravou.
+  using namespace editor;
+  TemporaryProject project;EditorSession s;std::string error,summary;
+  AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str()),"project");
+  auto &d=s.document();
+  const auto make=[&](EditorEntityId parent,const char *name,float x,float y,float z){const auto id=d.createEntity(parent,EditorEntityKind::Folder,name);runtime::Transform t;t.position[0]=x;t.position[1]=y;t.position[2]=z;d.setTransform(id,t);return id;};
+  const auto kyle=make(d.root(),"Robot Kyle",0,0,0),hip=make(kyle,"Hip",0,1,0),ribs=make(hip,"Ribs",0,.3f,0);
+  // Bracos abertos em T, como o repouso do Kyle.
+  const auto lu=make(ribs,"Left_Upper_Arm_Joint_01",.2f,.25f,0),lf=make(lu,"Left_Forearm_Joint_01",.28f,0,.01f),lw=make(lf,"Left_Wrist_Joint_01",.26f,0,0);
+  const auto ru=make(ribs,"Right_Upper_Arm_Joint_01",-.2f,.25f,0),rf=make(ru,"Right_Forearm_Joint_01",-.28f,0,.01f),rw=make(rf,"Right_Wrist_Joint_01",-.26f,0,0);
+  (void)make(lw,"Left_Index_Finger_Joint_01a",.06f,0,0);(void)make(rw,"Right_Index_Finger_Joint_01a",-.06f,0,0);
+  const auto box=make(kyle,"Caixa",0,1.2f,.32f);
+  // Assistente: IK permanente nas maos com alvos na cena.
+  AE_EXPECT_TRUE(EditorStudio::setupIk(s,kyle,summary,error),error.c_str());
+  const auto *ikL=static_cast<const scene::TwoBoneIk*>(d.find(lw)->components.find(scene::TwoBoneIk::descriptor));
+  AE_EXPECT_TRUE(ikL&&ikL->target,"assistant put IK on the left hand");
+  if(!ikL)return;
+  resources::AssetGuid guid;AE_EXPECT_TRUE(s.createAnimationClip(kyle,2,guid,error)&&s.openAnimationClip(guid,kyle,error),error.c_str());
+  const auto pose=[&](float time,EditorEntityId hand,const float point[3]) {
+    std::string e;
+    AE_EXPECT_TRUE(s.seekAnimationClip(time,e),e.c_str());
+    AE_EXPECT_TRUE(s.applyAnimationPoseIk(hand,point,e),e.c_str());
+    AE_EXPECT_TRUE(s.recordAnimationClipPose(e),e.c_str());
+  };
+  // Pegada aos 0,8 s: as palmas nas laterais da caixa. Ergue ate 1,6 s.
+  const float leftGrab[3]{.14f,1.2f,.32f},rightGrab[3]{-.14f,1.2f,.32f};
+  const float leftUp[3]{.14f,1.45f,.3f},rightUp[3]{-.14f,1.45f,.3f};
+  const float leftRest[3]{.3f,.95f,.05f},rightRest[3]{-.3f,.95f,.05f};
+  pose(0,lw,leftRest);pose(0,rw,rightRest);
+  pose(.8f,lw,leftGrab);pose(.8f,rw,rightGrab);
+  pose(1.6f,lw,leftUp);pose(1.6f,rw,rightUp);
+  // Segurar: a pose erguida tambem no fim (trilhas novas nascem com o repouso no fim).
+  pose(2,lw,leftUp);pose(2,rw,rightUp);
+  // Caixa segue a mao esquerda do quadro da pegada ate o fim.
+  AE_EXPECT_TRUE(s.seekAnimationClip(.8f,error),error.c_str());
+  AE_EXPECT_TRUE(EditorStudio::followObject(s,box,lw,.8f,2,summary,error),error.c_str());
+  // Clipe novo do estudio vira o padrao do personagem e toca ao iniciar.
+  AE_EXPECT_TRUE(s.playNewClipOnOwner(kyle,guid,error),error.c_str());
+  {
+    const auto *animation=static_cast<const scene::Animation*>(d.find(kyle)->components.find(scene::Animation::descriptor));
+    AE_EXPECT_TRUE(animation&&animation->clip==guid&&animation->playAutomatically,"new clip is the default and plays on start");
+  }
+  AE_EXPECT_TRUE(s.startPlay(),"plays");
+  const auto &g=s.playScene().document();
+  const auto at=[&](EditorEntityId id){float m[16];runtime::worldMatrix(g,id,m);return std::array<float,3>{m[12],m[13],m[14]};};
+  const auto dist=[](std::array<float,3> a,const float *b){return std::hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);};
+  std::vector<renderer::MapDrawState> draws;
+  // Ciclo inteiro: na pegada as maos estao na caixa; depois a caixa sobe com elas.
+  float grabL=1,grabR=1,upL=1,boxStart=1,boxLift=1,offsetDrift=0;std::array<float,3> offset0{};bool haveOffset=false;
+  for(int i=0;i<=119;++i) {
+    const double t=(double(i)+.001)/60.0;s.advanceClock(10+t);s.extractPlayMap(draws);
+    const auto l=at(lw),r=at(rw),b=at(box);
+    if(i==48){grabL=dist(l,leftGrab);grabR=dist(r,rightGrab);}
+    if(i==96)upL=dist(l,leftUp);
+    if(i==10)boxStart=std::hypot(b[0]-0.f,b[1]-1.2f,b[2]-.32f);
+    if(i>=48) {
+      // Pegada rigida: a caixa fica parada no referencial do punho.
+      float wm[16],bm[16];runtime::Transform rel;runtime::worldMatrix(g,lw,wm);runtime::worldMatrix(g,box,bm);
+      runtime::localTransformForWorld(bm,wm,rel);
+      const std::array<float,3> o{rel.position[0],rel.position[1],rel.position[2]};
+      if(!haveOffset){offset0=o;haveOffset=true;}
+      offsetDrift=std::max(offsetDrift,std::hypot(o[0]-offset0[0],o[1]-offset0[1],o[2]-offset0[2]));
+    }
+    if(i==110)boxLift=b[1]-1.2f;
+    if(std::getenv("AE_PICKUP_TRACE")&&i%12==0)std::printf("f%03d hand %.3f %.3f %.3f box %.3f %.3f %.3f\n",i,l[0],l[1],l[2],b[0],b[1],b[2]);
+  }
+  char m[240];
+  std::snprintf(m,sizeof m,"hands on the box at the grab frame (L %.4f R %.4f m), raised hand at 1.6 s (%.4f m)",grabL,grabR,upL);
+  AE_EXPECT_TRUE(grabL<.01f&&grabR<.01f&&upL<.01f,m);
+  std::snprintf(m,sizeof m,"box rests on the table before the grab (%.4f m), rises with the hands (%.3f m), keeps its grip (%.4f m)",boxStart,boxLift,offsetDrift);
+  AE_EXPECT_TRUE(boxStart<.005f&&boxLift>.15f&&offsetDrift<.01f,m);
 }

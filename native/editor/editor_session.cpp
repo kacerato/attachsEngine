@@ -90,7 +90,9 @@ u64 EditorSession::nextSceneEpoch() noexcept {
 void EditorSession::initialize(const UiFont *font, const UiIconAtlas *icons) {
   font_ = font;
   icons_ = icons;
-  state_.creationAvailable=creationAlwaysAvailable();
+  // A superficie pode ser recriada com a sessao viva (voltar de outro app,
+  // como o seletor de pastas): a biblioteca carregada continua valendo.
+  refreshCreationAvailability();
   state_.document = &document_;
   state_.resources = &mapScene_;
   state_.assetRegistry = &assets_;
@@ -4118,6 +4120,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   std::vector<std::shared_ptr<const EditorMapScene::DrawDeformation>> deformations(primitives);
   deformations.insert(deformations.end(),library.deformations.begin(),library.deformations.end());
   mapScene_.setDeformation(std::move(deformations),library.animations);
+  refreshCreationAvailability();
   return true;
 }
 
@@ -5674,13 +5677,10 @@ bool EditorSession::toggleImportNodeExclusion(usize row) {
   return true;
 }
 
-bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
-  if(isPlaying()) return false;
-  cancelPointers();
-  if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
-  document_.setTags(projectTags_);
-  packageFingerprint_=packageFingerprint;
-  importedSources_.clear();
+// O que o menu Criar oferece depende das primitivas e da agua do pacote
+// carregado. Vale para a abertura e para cada pacote republicado (importar um
+// modelo republica a biblioteca inteira, primitivas incluidas).
+void EditorSession::refreshCreationAvailability() {
   state_.creationAvailable=creationAlwaysAvailable();
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
@@ -5698,6 +5698,16 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
       enableCreation(state_,(flags & renderer::MapMaterialWaterCameraGrid)?
                             EditorWidget::CreateOceanWater:EditorWidget::CreateFiniteWater);
   }
+}
+
+bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
+  if(isPlaying()) return false;
+  cancelPointers();
+  if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
+  document_.setTags(projectTags_);
+  packageFingerprint_=packageFingerprint;
+  importedSources_.clear();
+  refreshCreationAvailability();
   if(state_.workspace==EditorWorkspace::Assets && !mapScene_.assetCount()) state_.workspace=EditorWorkspace::Scene;
   // Sem água na cena, a seção de água some; o projeto continua na primeira seção.
   if(state_.projectSection==EditorProjectSection::Water && !waterCreationAvailable(state_))

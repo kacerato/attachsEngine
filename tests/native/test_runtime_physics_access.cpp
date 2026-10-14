@@ -481,3 +481,29 @@ AE_TEST(mechanisms_block_migration_and_invalid_drafts_are_atomic) {
   AE_EXPECT_TRUE(world.setTriple(drive,"normal_a",parallel)!=runtime::WorldStatus::Ok,"degenerate reference frame rejected atomically");
   AE_EXPECT_TRUE(world.setProperty(drive,"angular_y_motor",u32{1})!=runtime::WorldStatus::Ok,"locked axis cannot advertise an active motor");
 }
+
+AE_TEST(runtime_kinematic_body_follows_animated_transform_and_scripts_still_move_it) {
+  // Unity: um Rigidbody cinemático segue a animação (Animator, IK, Parent
+  // Constraint) e a física acompanha; MoveKinematic por script continua valendo.
+  EditorDocument doc;
+  const auto box = solid(doc, "Caixa", 5, 0, 0, scene::BodyMotion::Kinematic, .5f);
+  Fixture fx;
+  AE_EXPECT_TRUE(fx.start(doc), fx.physics.error().c_str());
+  runtime::Transform pose;
+  AE_EXPECT_EQ(static_cast<u32>(fx.world.localTransform(fx.world.handle(box), pose)), 0u, "leitura");
+  pose.position[0] = 8;
+  AE_EXPECT_EQ(static_cast<u32>(fx.world.setLocalTransform(fx.world.handle(box), pose)), 0u,
+               "animação escreve a pose do corpo cinemático");
+  AE_EXPECT_TRUE(fx.physics.advance(1.0 / 60.0, fx.world), fx.physics.error().c_str());
+  const float origin[3]{0, 0, 0}, direction[3]{20, 0, 0};
+  QueryHit hit;
+  AE_EXPECT_TRUE(fx.physics.rayCast(origin, direction, QueryFilter{}, hit) && std::abs(hit.point[0] - 7.5f) < .02f,
+                 "o corpo da física foi para onde a transformação está");
+  AE_EXPECT_EQ(static_cast<u32>(fx.world.localTransform(fx.world.handle(box), pose)), 0u, "releitura");
+  AE_EXPECT_TRUE(std::abs(pose.position[0] - 8) < 1e-4f, "a física não puxa a caixa de volta");
+  const float target[7]{3, 0, 0, 0, 0, 0, 1};
+  AE_EXPECT_TRUE(fx.physics.moveKinematic(box, target), "script move o corpo cinemático");
+  AE_EXPECT_TRUE(fx.physics.advance(1.0 / 60.0, fx.world), fx.physics.error().c_str());
+  AE_EXPECT_EQ(static_cast<u32>(fx.world.localTransform(fx.world.handle(box), pose)), 0u, "releitura");
+  AE_EXPECT_TRUE(std::abs(pose.position[0] - 3) < .01f, "a pose do script volta para a transformação");
+}

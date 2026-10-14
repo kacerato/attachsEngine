@@ -9,6 +9,7 @@
 #include "scene/light.h"
 #include "scene/physics_body.h"
 #include "editor/editor_umotion_import.h"
+#include "editor/editor_creation_catalog.h"
 #include "runtime/scene_animation.h"
 #include "resources/unity_yaml.h"
 #include <cmath>
@@ -54,6 +55,11 @@ struct KyleStage {
   EditorSession::ModelImportReport report;
   if(!session.importModel(bytes,source,{},report)){std::fprintf(stderr,"IMPORT: %s\n",report.diagnostic.c_str());return 185;}
   const auto imported=session.selection();
+  {
+    // O menu Criar continua oferecendo as primitivas depois de publicar o modelo.
+    u32 cube=0;for(u32 i=0;i<editor::editorCreationCatalog.size();++i)if(editor::editorCreationCatalog[i].action==editor::EditorWidget::CreateCube)cube=i;
+    if(!editor::creationAvailable(session.screen(),cube)){std::fprintf(stderr,"CRIAR: cubo indisponível após importar o modelo\n");return 190;}
+  }
   kyle=graph.createEntity(graph.root(),runtime::ObjectKind::Folder,"Robot Kyle");
   if(!kyle||!graph.reparent(imported,kyle,0))return 186;
   {

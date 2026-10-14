@@ -195,6 +195,12 @@ public:
   // IK permanente: componente na ponta, alvo e direcao como objetos reais (Undo unico).
   bool createTwoBoneIkForTip(EditorEntityId tip,std::string &error);
   bool recordAnimationClipPose(std::string &error);
+  // IK do estudio: cadeia de dois ossos acima de `end` ate o ponto, como pose
+  // pendente (grave com recordAnimationClipPose). Com IK permanente nessa
+  // ponta, o alvo dele recebe a mesma chave.
+  bool applyAnimationPoseIk(EditorEntityId end,const float target[3],std::string &error);
+  // Clipe recem-criado vira o padrao do Animation do dono (cria o componente se faltar).
+  bool playNewClipOnOwner(EditorEntityId owner,resources::AssetGuid guid,std::string &error);
   bool configureAnimationPoseRecording(AnimationPoseRecordingPolicy,std::string &error,std::optional<bool> autoKey=std::nullopt);
   bool configureAnimationPoseLocks(resources::AnimationPath,u64 mask,std::string &error);
   bool resetAnimationClipPose(bool identity,std::string &error);
@@ -519,6 +525,7 @@ public:
   // Enquadra o objeto selecionado. É o gesto de "onde ele está?", e sem ele um
   // objeto longe do alvo da órbita fica inalcançável.
   void frameSelection();
+  void refreshCreationAvailability();
   void frameAll();
   bool saveRequested() const { return state_.saveRequested; }
   bool save(const char *path, u64 fingerprint);
@@ -1716,7 +1723,6 @@ private:
   bool handlePathEditorInput(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
   bool handleRigTool(const ui::UiPointerRouting &routing);
   void revealAnimationClipTrack();
-  bool applyAnimationPoseIk(EditorEntityId end,const float target[3],std::string &error);
   bool loadRigForRoot(EditorEntityId root);
   bool saveRigPoseFromScene(std::string &error);
   std::vector<EditorEntityId> retargetCandidates() const;

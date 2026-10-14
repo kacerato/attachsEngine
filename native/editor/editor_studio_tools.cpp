@@ -7,6 +7,9 @@
 #include "editor/editor_animation_pose_selection.h"
 #include "editor/editor_animation_pose_tools.h"
 #include "runtime/ik_solvers.h"
+#include "runtime/scene_ik.h"
+#include "runtime/scene_constraints.h"
+#include "runtime/game_world.h"
 #include "runtime/transform_math.h"
 #include "core/rotation_math.h"
 #include "scene/ik_constraints.h"
@@ -215,7 +218,7 @@ bool EditorStudio::pinTip(EditorSession &s,EditorEntityId tip,float start,float 
   if(!r||m->id==s.state_.clipOwner||r->id==graph.root()) {error="Selecione a ponta de uma cadeia com dois ossos acima";return false;}
   const EditorEntityId mid=m->id,root=r->id;
   float pinned[16];if(!runtime::worldMatrix(graph,tip,pinned)) {error="Ponta indisponível";return false;}
-  const u32 frames=std::max(2u,static_cast<u32>(std::ceil((end-start)*30))+1);
+  const u32 frames=std::max(2u,static_cast<u32>(std::ceil((end-start)*60))+1);
   std::vector<float> times;std::vector<std::array<float,4>> rootValues,midValues;
   const float now=s.state_.clipTime;std::string seekError;
   for(u32 i=0;i<frames;++i) {
@@ -289,18 +292,31 @@ bool EditorStudio::followObject(EditorSession &s,EditorEntityId object,EditorEnt
   if(s.clipPreview_.scene().isDescendantOf(parentObject,object)) {error="O pai não pode estar dentro do objeto";return false;}
   start=std::clamp(start,0.f,live->duration);end=std::clamp(end,0.f,live->duration);
   if(end<=start) {error="Intervalo vazio: defina início e fim";return false;}
+  // Pose de cada quadro como o Play a mostra: clipe, restricoes e IK
+  // permanente (o do assistente) por cima da previa. Sem isso o objeto
+  // seguiria a mao FK da previa e se afastaria da mao resolvida pelo IK.
+  runtime::GameWorld world;runtime::SceneConstraints constraints;runtime::SceneIk ik;
+  if(!world.load(s.clipPreview_.scene())) {error="Não foi possível montar o mundo da prévia";return false;}
+  ik.captureRest(s.document_);
+  std::vector<EditorEntityId> animated;s.clipPreview_.scene().collectSubtree(s.state_.clipOwner,animated);
+  bool firstFrame=true;
+  const auto evaluate=[&](float t,float pw[16],float ow[16])->bool {
+    std::string e;if(!s.clipPreview_.seek(t,e))return false;
+    for(const auto id:animated)if(const auto *o=s.clipPreview_.scene().find(id))world.setLocalTransform(world.handle(id),o->transform);
+    world.beginFrame(firstFrame?0.0:1.0/60);constraints.advance(world,firstFrame?0.0:1.0/60);ik.advance(world);firstFrame=false;
+    return runtime::worldMatrix(world.graph(),parentObject,pw)&&(!ow||runtime::worldMatrix(world.graph(),object,ow));
+  };
   float objectWorld[16],parentWorld[16],offset[16];runtime::Transform offsetPose;
-  if(!runtime::worldMatrix(s.clipPreview_.scene(),object,objectWorld)||!runtime::worldMatrix(s.clipPreview_.scene(),parentObject,parentWorld)||
-     !runtime::localTransformForWorld(objectWorld,parentWorld,offsetPose)) {error="Pose do pai sem inversa";return false;}
+  if(!evaluate(s.state_.clipTime,parentWorld,objectWorld)||!runtime::localTransformForWorld(objectWorld,parentWorld,offsetPose)) {error="Pose do pai sem inversa";return false;}
   // Deslocamento atual do objeto no espaco do pai (mantido durante o intervalo).
   runtime::transformMatrix(offsetPose,offset);
-  const u32 frames=std::max(2u,static_cast<u32>(std::ceil((end-start)*30))+1);
+  const u32 frames=std::max(2u,static_cast<u32>(std::ceil((end-start)*60))+1);
   std::vector<float> times;std::vector<std::array<float,4>> positions,rotations;
   const float now=s.state_.clipTime;std::string seekError;
   for(u32 i=0;i<frames;++i) {
     const float t=start+(end-start)*i/float(frames-1);times.push_back(t);
     float pw[16],desired[16],holder[16];runtime::Transform local;
-    if(!s.clipPreview_.seek(t,seekError)||!runtime::worldMatrix(s.clipPreview_.scene(),parentObject,pw)) {s.clipPreview_.seek(now,seekError);error="Pai indisponível no quadro";return false;}
+    if(!evaluate(t,pw,nullptr)) {s.clipPreview_.seek(now,seekError);error="Pai indisponível no quadro";return false;}
     runtime::multiplyMatrix(pw,offset,desired);
     if(!runtime::parentWorldMatrix(s.clipPreview_.scene(),object,holder)||!runtime::localTransformForWorld(desired,holder,local)) {s.clipPreview_.seek(now,seekError);error="Pose local sem solução";return false;}
     positions.push_back({local.position[0],local.position[1],local.position[2],0});rotations.push_back(quaternionOf(local));

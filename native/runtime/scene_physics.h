@@ -236,7 +236,13 @@ private:
     AetherVec3 previousPosition{},currentPosition{};
     AetherQuat previousRotation{0,0,0,1},currentRotation{0,0,0,1};
     bool hasPose=false;
+    // Cinematico (como na Unity): segue a transformacao quando animacao, IK,
+    // Filho de ou script a mudam; senao, a pose da fisica (MoveKinematic por
+    // script) volta para a transformacao. `known` e a ultima pose combinada.
+    bool kinematic=false,driven=false;
+    AetherVec3 knownPosition{};AetherQuat knownRotation{0,0,0,1};
   };
+  bool driveKinematicBodies(GameWorld &world);
   bool publishBodyPose(GameWorld &world,const Binding &binding,AetherVec3 p,AetherQuat q);
   bool publishInterpolatedPoses(GameWorld &world);
   QueryHit describeHit(AetherBodyHandle body, u32 subShapeId) const;

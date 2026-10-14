@@ -189,7 +189,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       card(side,"Assistente de IK","Mãos, pés, pelve e cabeça pela hierarquia",w::PoseIkWizard,true,UiIcon::ComponentGrounder);
       card(side,"Fixar ponta no intervalo",state.clipRangeShown?"Intervalo da timeline · chaves FK":"Clipe inteiro · chaves FK",w::PosePin,state.clipPoseShown,UiIcon::ComponentIkOffset);
       {const auto *parentObject=state.studio&&state.studio->followParent&&state.document?state.document->find(state.studio->followParent):nullptr;
-       card(side,"Seguir pai (Child-Of)",parentObject?std::string("Segue ")+parentObject->name+" mantendo a distância":"Defina um pai primeiro",w::PoseFollow,state.clipPoseShown&&parentObject,UiIcon::ComponentIkTwoBone);
+       card(side,"Seguir pai (Child-Of)",parentObject?std::string("Segue ")+parentObject->name+(state.clipRangeShown?" no intervalo":" do tempo atual ao fim"):"Defina um pai primeiro",w::PoseFollow,state.clipPoseShown&&parentObject,UiIcon::ComponentIkTwoBone);
        card(side,"Definir como pai",parentObject?std::string("Pai: ")+parentObject->name:"O osso selecionado vira o pai",w::PoseFollowParent,state.clipPoseShown,UiIcon::AnimationBinding,parentObject!=nullptr);}
       card(side,"IK permanente nesta ponta","Cria alvo e direção na cena; resolve em Play",w::PoseIkCreate,state.clipPreviewTarget!=0||state.clipTarget!=0,UiIcon::ComponentIkTwoBone);
       {const auto *owner=state.document?state.document->find(state.clipOwner):nullptr;

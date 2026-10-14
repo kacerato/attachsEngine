@@ -4,6 +4,7 @@
 #include "editor/editor_session.h"
 #include "editor/editor_studio_state.h"
 #include "editor/editor_animation_ik.h"
+#include "scene/ik_constraints.h"
 #include "editor/editor_animation_pose_selection.h"
 #include "editor/editor_animation_pose_tools.h"
 #include "runtime/transform_math.h"
@@ -73,6 +74,27 @@ bool EditorSession::applyAnimationPoseIk(EditorEntityId end,const float target[3
     if(!candidate.putPose(id,state_.clipTime,values,error))return false;
     if(!primary)primary=id;
   }
+  // IK permanente nesta ponta (o do assistente): o alvo dele tambem recebe a
+  // chave, como os alvos animados do UMotion. Sem isso, o Play resolveria o IK
+  // para o alvo parado e desfaria a pose gravada aqui.
+  if(const auto *ik=static_cast<const scene::TwoBoneIk*>(endObject->components.find(scene::TwoBoneIk::descriptor));
+     ik&&ik->enabled&&ik->target&&document_.isDescendantOf(static_cast<EditorEntityId>(ik->target),state_.clipOwner)) {
+    const auto handle=static_cast<EditorEntityId>(ik->target);
+    float holder[16],point[16]{1,0,0,0,0,1,0,0,0,0,1,0,target[0],target[1],target[2],1};runtime::Transform local;
+    if(runtime::parentWorldMatrix(graph,handle,holder)&&runtime::localTransformForWorld(point,holder,local)) {
+      resources::AnimationClipBinding binding;
+      if(!animationPoseTargetPath(document_,state_.clipOwner,handle,binding.path,error))return false;
+      binding.name=graph.find(handle)->name;u64 bindingId=0,id=0;
+      for(const auto &item:candidate.bindings)if(item.path==binding.path) {binding=item;bindingId=item.id;break;}
+      for(const auto &track:candidate.tracks)if(!track.layer&&bindingId&&track.binding==bindingId&&track.path==resources::AnimationPath::Translation)id=track.id;
+      const std::vector<float> position(local.position,local.position+3);
+      if(!id) {
+        const auto *rest=graph.find(handle);const std::vector<float> initial(rest->transform.position,rest->transform.position+3);
+        if(!candidate.addTrack(binding,resources::AnimationPath::Translation,resources::AnimationRotationMode::Quaternion,initial,id,error))return false;
+      }
+      if(!candidate.putPose(id,state_.clipTime,position,error))return false;
+    }
+  }
   if(!stageAnimationClipPoseCandidate(std::move(candidate),primary,error))return false;
   clipPoseMoved_=true;
   if(limited)state_.clipDiagnostic="Limite do rig aplicado · a ponta para no ângulo permitido";
@@ -96,7 +118,13 @@ bool EditorSession::handleAnimationPoseIk(const ui::UiPointerEvent &event,const 
   };
   if(event.phase==UiPointerPhase::Down) {
     if(routing.target!=ui::UiPointerTarget::Viewport)return false;
-    const auto end=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+    auto end=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+    // Alvo de IK selecionado (o auxiliar do assistente): a ponta e o osso que o usa.
+    if(end) {
+      std::vector<EditorEntityId> bones;evaluatedEditorScene().collectSubtree(state_.clipOwner,bones);
+      for(const auto bone:bones)if(const auto *o=evaluatedEditorScene().find(bone))
+        if(const auto *ik=static_cast<const scene::TwoBoneIk*>(o->components.find(scene::TwoBoneIk::descriptor));ik&&ik->target==end) {end=bone;break;}
+    }
     float world[16];if(!end||!runtime::worldMatrix(evaluatedEditorScene(),end,world))return false;
     // A ponta tem prioridade: so um toque longe dela (e perto do joelho) move a direcao.
     const auto tipPoint=projectWorldToScreen(view_,world+12);

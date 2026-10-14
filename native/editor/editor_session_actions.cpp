@@ -444,7 +444,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(routing.tapped&&routing.widgetId==clip_widget::id(clip_widget::Open)) {
     const auto owner=state_.selection?state_.selection:document_.root();std::string error;
     if(!animationClipAssets_.empty())openAnimationClip(animationClipAssets_.front().guid,owner,error);
-    else {resources::AssetGuid guid;if(createAnimationClip(owner,2,guid,error))openAnimationClip(guid,owner,error);}
+    else {resources::AssetGuid guid;if(createAnimationClip(owner,2,guid,error)&&(owner==document_.root()||playNewClipOnOwner(owner,guid,error)))openAnimationClip(guid,owner,error);}
     state_.status=error;return true;
   }
   if(state_.clipOpen&&!state_.numericField&&!state_.editingAnimatorName) return handleAnimationClip(event,routing);
