@@ -57,6 +57,39 @@ namespace ae::editor {
 using namespace ae::ui;
 using namespace session_detail;
 
+// Coluna do Inspector (ITsMagic Properties): arraste vertical em qualquer
+// ponto dela rola, inclusive sobre campos; o horizontal continua do widget (o
+// arraste de valor da Transformação). Segurar no cabeçalho antes de mover é
+// reordenar, como o toque longo das listas do Android.
+bool EditorSession::handleInspectorScroll(const UiPointerEvent &event,const UiPointerRouting &routing) {
+  const u32 id=event.pointerId+1;
+  if(inspectorWidgetPointer_==id) {if(routing.released) inspectorWidgetPointer_=0;return false;}
+  if(inspectorScrollPointer_!=id) {
+    if(!routing.dragging || event.phase!=UiPointerPhase::Move || state_.componentReorder || state_.scriptArrayDrag) return false;
+    const bool main=layout_.inspectorScrollWindow.contains(routing.start);
+    const bool focused=!main && layout_.focusedScrollWindow.contains(routing.start);
+    if(!main && !focused) return false;
+    const u32 operation=routing.widgetId&0xff000000u;
+    const bool header=operation==widgetId(EditorWidget::ComponentFoldBase) || operation==widgetId(EditorWidget::ScriptFoldBase);
+    const bool ownDrag=operation==widgetId(EditorWidget::ScriptArrayHandleBase) ||
+        (routing.widgetId>=widgetId(EditorWidget::LodBarDividerBase) && routing.widgetId<widgetId(EditorWidget::LodBarDividerBase)+scene::LodGroupMaximumLevels) ||
+        (routing.widgetId>=widgetId(EditorWidget::LodBarSegmentBase) && routing.widgetId<=widgetId(EditorWidget::LodBarSegmentBase)+scene::LodGroupMaximumLevels);
+    if(ownDrag || (header && routing.heldSeconds>=0.35) || std::abs(routing.totalDelta.y)<std::abs(routing.totalDelta.x)) {
+      inspectorWidgetPointer_=id;return false;
+    }
+    inspectorScrollPointer_=id;
+    // O dedo que começou num campo arrastável larga a edição sem deixar passo.
+    if(fieldWidget_ && fieldPointer_==event.pointerId) {history_.cancel(document_);fieldWidget_=0;}
+  }
+  const bool focused=layout_.focusedScrollWindow.contains(routing.start) && !layout_.inspectorScrollWindow.contains(routing.start);
+  const auto &window=focused?layout_.focusedScrollWindow:layout_.inspectorScrollWindow;
+  const float limit=std::max(0.f,(focused?layout_.focusedScrollContent:layout_.inspectorScrollContent)-window.height);
+  float &scroll=focused?state_.focusedInspectorScroll:state_.inspectorScroll;
+  scroll=std::clamp(scroll-routing.stepDelta.y,0.f,limit);
+  if(routing.released) inspectorScrollPointer_=0;
+  return true;
+}
+
 bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) {playTouches_.cancel();cancelPlayButtons();}
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) {
@@ -764,6 +797,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.texturePickerScroll=std::clamp(state_.texturePickerScroll-routing.stepDelta.y,0.f,limit);return true;
     }
   }
+  if(handleInspectorScroll(event,routing)) return true;
   // A aba de componentes usa arraste para navegar, não para reordenar por
   // acidente. A ordem continua disponível pelo menu de cada componente.
   if(routing.dragging && state_.inspectorSurface==EditorInspectorSurface::Components &&
@@ -1333,6 +1367,18 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(history_.applyValues(document_,entity->id,candidate)) state_.status="Propriedade restaurada; disponível em Desfazer";
       return true;
     }
+    // Lupa de um cartão da coluna: o índice põe o foco nele antes de buscar.
+    if(key>=widgetId(EditorWidget::ComponentPropertySearch)+0x100u && key<widgetId(EditorWidget::ComponentPropertySearch)+0x200u) {
+      const auto *entity=document_.find(state_.selection);const u32 at=key-widgetId(EditorWidget::ComponentPropertySearch)-0x100u;
+      const auto *value=entity&&at<entity->components.size()?entity->components.at(at):nullptr;
+      if(!value) return true;
+      if(state_.expandedNative!=value->instanceId()) {state_.propertyQuery.clear();state_.propertyPage=0;}
+      state_.componentSelection=state_.selection;state_.expandedNative=value->instanceId();
+      state_.expandedComponent.clear();state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;
+      state_.editingPropertySearch=true;
+      std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.propertyQuery.c_str());
+      return true;
+    }
     if(key==widgetId(EditorWidget::ComponentPropertySearch)) {
       if(!state_.expandedNative || !document_.find(state_.selection)) return true;
       state_.editingPropertySearch=true;
@@ -1351,12 +1397,12 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.componentCategory=key-widgetId(EditorWidget::ComponentFamilyBase);state_.addScroll=0;return true;
     }
     if(key==widgetId(EditorWidget::ObjectFold)) {
-      state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.object"?"":"astra.object";
+      state_.componentSelection=state_.selection;state_.expandedComponent=state_.tapInspectorCard("astra.object",state_.expandedComponent=="astra.object")?"astra.object":"";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;
       state_.transformMenu=false;state_.propertyPage=0;state_.propertyQuery.clear();return true;
     }
     if(key==widgetId(EditorWidget::TransformFold)) {
-      state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.transform"?"":"astra.transform";
+      state_.componentSelection=state_.selection;state_.expandedComponent=state_.tapInspectorCard("astra.transform",state_.expandedComponent=="astra.transform")?"astra.transform":"";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.propertyPage=0;state_.propertyQuery.clear();return true;
     }
     if(key==widgetId(EditorWidget::MeshChoose)) {
@@ -2007,7 +2053,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       }
       const auto *script=scene::scriptBehavior(entity->components.at(index));if(!script) return true;
       if(operation==widgetId(EditorWidget::ScriptFoldBase)) {
-        state_.expandedScript=state_.expandedScript==script->instanceId()?0:script->instanceId();state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.scriptPropertyPage=0;state_.propertyQuery.clear();
+        state_.expandedScript=state_.tapInspectorCard("script:"+script->scriptType,state_.expandedScript==script->instanceId())?script->instanceId():0;state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.scriptPropertyPage=0;state_.propertyQuery.clear();
       } else if(operation==widgetId(EditorWidget::ScriptMenuBase)) {
         state_.scriptMenu=state_.scriptMenu==script->instanceId()?0:script->instanceId();state_.expandedScript=0;state_.expandedComponent.clear();state_.expandedNative=0;state_.propertyQuery.clear();
       } else if(operation==widgetId(EditorWidget::ScriptSourceBase)) {

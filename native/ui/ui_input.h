@@ -94,6 +94,11 @@ public:
   // isto para que um toque no espaço vazio dele não caia no viewport e vire uma
   // órbita de câmera por trás da própria interface.
   bool addBlocker(const UiRect &rect);
+  // Recorte das regioes (o mesmo da lista de desenho): uma lista rolavel
+  // registra seus widgets dentro da janela visivel e nada que saiu dela recebe
+  // toque. Recortes aninhados se intersectam; o quadro comeca sem recorte.
+  void pushClip(const UiRect &rect);
+  void popClip() noexcept;
 
   UiPointerRouting route(const UiPointerEvent &event) noexcept;
   // Read-only hit test for drop targets; does not transfer pointer capture.
@@ -138,6 +143,7 @@ private:
   void erase(u32 pointerId) noexcept;
 
   std::vector<Region> regions_;
+  std::vector<UiRect> clips_;
   std::vector<ActivePointer> pointers_;
   float dragSlop_ = 10.0f;
 };

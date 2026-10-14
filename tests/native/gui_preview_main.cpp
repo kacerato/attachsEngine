@@ -577,8 +577,10 @@ int main(int argc,char **argv) {
   const bool surfaces=argc>5&&std::string_view(argv[5])=="collider-surface";
   const bool owners=argc>5&&std::string_view(argv[5])=="collider-owners";
   const bool convex=argc>5&&(std::string_view(argv[5])=="convex"||hierarchy);
+  // Inspector em coluna, rasterizado no host: `- inspector [rolagem]`.
+  const bool inspectorView=argc>5&&std::string_view(argv[5])=="inspector";
   test::ConvexCpuLibrary convexLibrary;
-  editor::EditorSession session;session.initialize(&font,&icons);session.setSurface({0,0,float(width),float(height)},{});if(!convex&&!surfaces&&!owners)session.openGui();
+  editor::EditorSession session;session.initialize(&font,&icons);session.setSurface({0,0,float(width),float(height)},{});if(!convex&&!surfaces&&!owners&&!inspectorView)session.openGui();
   if(!session.gui().immediate().setFont(read(root/"assets/astra-visual/ui/gui-inter.ttf"))) return 5;
   if(convex) {
     const auto project=std::filesystem::absolute(argv[4]);std::error_code ec;
@@ -644,7 +646,17 @@ int main(int argc,char **argv) {
     if(!object||std::string_view(object->name)!="RightCylinder"||session.screen().expandedNative!=1||session.history().undoDepth()!=undo||editor::serializeEditorDocument(session.document(),0)!=original)return 111;
     std::printf("Body owners pointer capture: root=%u authoring=%u collider=1; archive/history unchanged\n",id,session.selection());
   }
-  if(argc>4&&!convex&&!surfaces&&!owners) {
+  if(inspectorView) {
+    std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+    if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials)||!session.importMap(draws,materials,false,vertices,indices,0))return 120;
+    auto &g=session.document();const auto id=g.createEntity(g.root(),runtime::ObjectKind::Mesh,"Caixa");auto object=*g.find(id);
+    if(!runtime::configurePrimitive(object,scene::PrimitiveType::Cube,{1,session.mapScene().assetGuid(0),session.mapScene().materialForAsset(0)}))return 121;
+    if(!object.components.find(scene::PhysicsBody::descriptor)) object.components.add(scene::PhysicsBody::descriptor);
+    if(!g.applyEntityValues(id,object))return 122;
+    session.setSelection(id);session.frameSelection();session.update();
+    if(argc>6) const_cast<editor::EditorScreenState&>(session.screen()).inspectorScroll=std::strtof(argv[6],nullptr);
+  }
+  if(argc>4&&!convex&&!surfaces&&!owners&&!inspectorView) {
     const auto folder=std::filesystem::path(argv[4]).parent_path();
     const auto project=folder.filename()=="UI"?folder.parent_path():folder;
     if(!session.setProjectDirectory(project.string().c_str()))return 14;

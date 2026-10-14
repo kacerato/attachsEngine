@@ -1682,6 +1682,11 @@ private:
   u32 assetPointer_ = 0;
   u32 hierarchyPointer_ = 0;
   u32 reorderPointer_ = 0, reorderPagerHover_ = 0;
+  // Coluna do Inspector: o ponteiro (+1) que rola e o que ficou com o widget,
+  // decididos uma vez pela direção do primeiro arraste.
+  u32 inspectorScrollPointer_ = 0, inspectorWidgetPointer_ = 0;
+  EditorEntityId inspectorScrollOwner_ = 0;
+  bool handleInspectorScroll(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   u32 numericFieldSeen_ = 0;
   u32 scriptArrayPointer_ = 0, scriptArrayPagerHover_ = 0;
   // Janela de cor: amostras do projeto, abertura com a cor do campo e a cor

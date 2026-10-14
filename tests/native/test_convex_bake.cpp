@@ -163,7 +163,8 @@ AE_TEST(collider_contour_pointer_inspector_history_archive_and_solver) {
   AE_EXPECT_TRUE(found,"second part contour is reachable without a gizmo or UI intercept");
   s.handlePointer({91,ui::UiPointerPhase::Down,tap,0});s.handlePointer({91,ui::UiPointerPhase::Up,tap,.02});s.update();
   AE_EXPECT_TRUE(s.selection()==id&&s.screen().expandedNative==second&&s.history().undoDepth()==depth&&editor::serializeEditorDocument(g,0)==original,"touch changes only component focus, without moving meshes or authoring state");
-  AE_EXPECT_TRUE(test::tapConvexWidget(s,font,editor::EditorWidget::InspectorComponentPrevious)&&s.screen().expandedNative==first,"actual Inspector navigation back to first part");
+  // Na coluna os dois colisores estão abertos: tocar no cabeçalho do primeiro devolve o foco a ele.
+  AE_EXPECT_TRUE(test::tapConvexWidget(s,font,static_cast<editor::EditorWidget>(editor::widgetId(editor::EditorWidget::ComponentFoldBase)+1))&&s.screen().expandedNative==first,"actual Inspector navigation back to first part");
   const float faceCenter[]{1.5f,0,0};const auto interior=editor::projectWorldToScreen(s.view(),faceCenter);
   AE_EXPECT_TRUE(interior.valid&&!editor::pickColliderContour(g,id,s.view(),&s.mapScene(),interior.screen)&&editor::pickColliderSurface(g,id,s.view(),&s.mapScene(),interior.screen)==second,"surface center is selectable away from every contour");
   s.handlePointer({92,ui::UiPointerPhase::Down,interior.screen,0});s.handlePointer({92,ui::UiPointerPhase::Up,interior.screen,.02});s.update();

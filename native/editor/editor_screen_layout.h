@@ -38,6 +38,10 @@ struct EditorScreenLayout final {
   float multiAssetContent=0,multiAssetWindow=0;
   ui::UiRect componentOverviewWindow{};
   float componentOverviewContent=0;
+  // Coluna rolável do Inspector (principal e focado): a janela visível e a
+  // altura de tudo que foi empilhado nela.
+  ui::UiRect inspectorScrollWindow{},focusedScrollWindow{};
+  float inspectorScrollContent=0,focusedScrollContent=0;
   float texturePickerContent[2]{},texturePickerWindow[2]{};
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor

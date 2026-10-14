@@ -182,11 +182,13 @@ AE_TEST(screen_folded_components_open_into_available_inspector_space) {
   state.surface = {0.0f, 0.0f, 853.0f, 394.0f};
   composeFrame(folded,state);UiPoint point{};
   AE_EXPECT_TRUE(findWidget(folded,widgetId(EditorWidget::TransformFold),state.surface,point),"transform header available");
-  AE_EXPECT_TRUE(!findWidget(folded,transformFieldWidget(0,0),state.surface,point),"fields start closed");
-  state.componentSelection=state.selection;state.expandedComponent="astra.transform";
-  Frame expanded;composeFrame(expanded,state);
-  AE_EXPECT_TRUE(findWidget(expanded,transformFieldWidget(0,0),state.surface,point),"focused component exposes position");
-  AE_EXPECT_TRUE(findWidget(expanded,widgetId(EditorWidget::AddComponentMenu),state.surface,point),"Add stays reachable while editing");
+  // Coluna do Inspector: a Transformação abre por padrão e dobra por tipo.
+  AE_EXPECT_TRUE(findWidget(folded,transformFieldWidget(0,0),state.surface,point),"fields start open in the column");
+  AE_EXPECT_TRUE(findWidget(folded,widgetId(EditorWidget::AddComponentMenu),state.surface,point),"Add stays reachable while editing");
+  state.inspectorFolded={"astra.transform"};
+  Frame closed;composeFrame(closed,state);
+  AE_EXPECT_TRUE(!findWidget(closed,transformFieldWidget(0,0),state.surface,point),"folded type hides its fields");
+  AE_EXPECT_TRUE(findWidget(closed,widgetId(EditorWidget::TransformFold),state.surface,point),"folded header stays available");
 }
 
 AE_TEST(graphics_panel_paginates_before_overlapping_apply_on_short_landscape) {

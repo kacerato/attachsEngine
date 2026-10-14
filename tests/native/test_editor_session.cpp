@@ -1,3 +1,4 @@
+#include "editor/editor_screen_internal.h"
 #include "editor/editor_screen.h"
 #include "script_publication_fixture.h"
 #include "renderer/primitive_geometry.h"
@@ -967,11 +968,10 @@ AE_TEST(session_camera_stays_valid_under_extreme_gestures) {
 }
 
 namespace {
-UiPoint locateWidget(EditorSession &session,u32 widget) {
-  session.update();
+UiPoint scanWidget(EditorSession &session,u32 widget,EditorScreenLayout &layout) {
   UiInputRouter router;UiDrawList list;
   list.begin(session.screen().surface,font().metrics(UiFontWeight::Regular));
-  buildEditorScreen(session.screen(),defaultTheme(),list,router);
+  layout=buildEditorScreen(session.screen(),defaultTheme(),list,router);
   for(float y=2;y<session.screen().surface.height;y+=4)
     for(float x=2;x<session.screen().surface.width;x+=4) {
       const auto routed=router.route({99,UiPointerPhase::Down,{x,y},0});
@@ -979,6 +979,25 @@ UiPoint locateWidget(EditorSession &session,u32 widget) {
       if(routed.target==UiPointerTarget::Widget && routed.widgetId==widget) return {x,y};
     }
   return {-1,-1};
+}
+UiPoint locateWidget(EditorSession &session,u32 widget) {
+  session.update();
+  EditorScreenLayout layout;
+  auto at=scanWidget(session,widget,layout);
+  if(at.x>=0) return at;
+  // O Inspector é uma coluna rolável: desce como o dedo até o widget aparecer.
+  const auto window=layout.inspectorScrollWindow;const float content=layout.inspectorScrollContent;
+  if(window.isEmpty() || content<=window.height) return at;
+  auto &state=const_cast<EditorScreenState &>(session.screen());
+  const float original=state.inspectorScroll,limit=content-window.height,step=std::max(40.f,window.height*.6f);
+  for(float offset=0;;offset=std::min(limit,offset+step)) {
+    state.inspectorScroll=offset;
+    at=scanWidget(session,widget,layout);
+    if(at.x>=0) {session.update();return at;}
+    if(offset>=limit) break;
+  }
+  state.inspectorScroll=original;session.update();
+  return at;
 }
 void importWaterResources(Fixture &fixture) {
   std::vector<u8> vertices;std::vector<u32> indices;
@@ -1011,6 +1030,21 @@ void tapWidget(Fixture &fixture,u32 widget) {
       fixture.up(80,{card.x,card.y-112.0f});fixture.session.update();
     }
     tapWidget(fixture,widgetId(EditorWidget::CreationRowBase)+i);break;
+  }
+  // As abas de grupo viraram subseções da coluna: "ir ao grupo" é abri-la.
+  const u32 groups=widgetId(EditorWidget::ComponentGroupBase);
+  if(widget>=groups && widget<groups+0x10000u && locateWidget(fixture.session,widget).x<0) {
+    const auto &state=fixture.session.screen();
+    const auto *entity=fixture.session.document().find(state.selection);
+    for(u32 i=0;entity && i<entity->components.size();++i) if(entity->components.at(i)->instanceId()==state.expandedNative) {
+      const auto *value=entity->components.at(i);const u32 group=widget-groups;
+      const auto names=value->type().id==std::string_view{"astra.physics.constant_force"}?
+          std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*value);
+      if(group>=names.size()) break;
+      const bool open=!EditorScreenState::listed(state.inspectorSections,std::string(value->type().id)+"/"+std::string(names[group]));
+      if(!open) tapWidget(fixture,groups+0x10000u+(i<<8)+group);
+      return;
+    }
   }
   const auto at=locateWidget(fixture.session,widget);
   if(at.x<0) std::fprintf(stderr,"unreachable test widget: %08x\n",widget);
@@ -1778,11 +1812,16 @@ AE_TEST(dragging_component_header_reorders_components_with_undo) {
     return ~0u;
   };
   const u64 lightInstance=doc.find(f.cube)->components.at(indexOf("astra.render.light"))->instanceId();
+  // Cartões dobrados (por tipo) deixam os cabeçalhos juntos na coluna; a tela
+  // alta põe todos na mesma janela, sem rolar entre um e outro.
+  f.session.setSurface({0,0,1280,900},{});
+  const_cast<EditorScreenState &>(f.session.screen()).inspectorFolded={"astra.transform","astra.render.mesh","astra.render.light","astra.physics.body","astra.physics.collider"};
   f.session.setSelection(f.cube);f.session.update();history.clear();
   const auto header=[&](std::string_view type) {return widgetId(EditorWidget::ComponentFoldBase)+indexOf(type);};
   const auto drag=[&](UiPoint from,std::initializer_list<UiPoint> path) {
+    // Segurar antes de mover é reordenar; o arraste direto rola a coluna.
     f.down(85,from);
-    f.move(85,{from.x,from.y+24});f.session.update();
+    f.session.handlePointer({85,UiPointerPhase::Move,{from.x,from.y+24},0.5});f.session.update();
     AE_EXPECT_TRUE(f.session.screen().componentReorder!=0,"arraste vertical levanta o cartão");
     UiPoint last=from;
     for(const auto &point:path) {f.move(85,point);f.session.update();last=point;}
@@ -1805,22 +1844,17 @@ AE_TEST(dragging_component_header_reorders_components_with_undo) {
   AE_EXPECT_TRUE(order()==before,"soltar no viewport não reordena");
   AE_EXPECT_EQ(history.undoDepth(),1u,"nada gravado");
 
-  // Passar pela seta vira a página: a malha vai para depois do colisor.
-  const auto next=locateWidget(f.session,widgetId(EditorWidget::ComponentNext));
-  AE_EXPECT_TRUE(next.x>=0,"os cartões paginam no telefone");
+  // Na coluna os cabeçalhos dobrados ficam juntos: a malha vai para depois do colisor.
   const auto source=locateWidget(f.session,header("astra.render.mesh"));
-  f.down(86,source);f.move(86,{source.x,source.y+24});f.session.update();
-  f.move(86,next);f.session.update();
   const auto collider=locateWidget(f.session,header("astra.physics.collider"));
-  AE_EXPECT_TRUE(collider.x>=0,"a página seguinte aparece durante o arraste");
-  f.move(86,collider);f.session.update();f.up(86,collider);f.session.update();
+  AE_EXPECT_TRUE(source.x>=0 && collider.x>=0,"malha e colisor visíveis juntos");
+  drag(source,{collider});
   AE_EXPECT_EQ(indexOf("astra.render.mesh"),static_cast<u32>(order().size()-1),"a malha vai para o fim");
   AE_EXPECT_EQ(history.undoDepth(),2u,"outro passo");
   AE_EXPECT_TRUE(history.undo(doc) && history.undo(doc),"desfazer os dois");
   AE_EXPECT_EQ(indexOf("astra.render.mesh"),meshIndex,"ordem original de volta");
 
   // Toque curto no cabeçalho continua abrindo o cartão.
-  if(locateWidget(f.session,header("astra.render.light")).x<0) tapWidget(f,widgetId(EditorWidget::ComponentPrevious));
   tapWidget(f,header("astra.render.light"));
   AE_EXPECT_EQ(f.session.screen().expandedNative,lightInstance,"toque abre o cartão");
 }
@@ -2195,7 +2229,8 @@ AE_TEST(session_component_property_search_uses_ime_without_authoring_changes) {
   AE_EXPECT_TRUE(document.applyEntityValues(target,value),"câmera preparada");
   f.session.setSelection(target);f.session.usePlatformTextInput(true);f.session.update();history.clear();
   tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
-  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch));
+  // A lupa do cabeçalho do cartão (índice 0) abre a busca dele.
+  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch)+0x100u);
   const auto edit=f.session.pendingTextEdit();
   AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::PropertySearch,"busca de propriedade abre o IME");
   const auto revision=document.revision();
@@ -2211,6 +2246,54 @@ AE_TEST(session_component_property_search_uses_ime_without_authoring_changes) {
   AE_EXPECT_EQ(history.undoDepth(),0u,"limpar busca não cria Undo");
 }
 
+// Coluna do Inspector (ITsMagic Properties, Unity Inspector): Transformação e
+// componente ficam abertos juntos, o arraste vertical rola sem editar nada e o
+// cabeçalho e a subseção dobram por tipo.
+AE_TEST(session_inspector_column_stacks_cards_scrolls_and_folds_by_type) {
+  Fixture f;auto &document=f.session.document();auto &history=f.session.history();
+  auto value=*document.find(f.cube);value.components.add(scene::PhysicsBody::descriptor);
+  AE_EXPECT_TRUE(document.applyEntityValues(f.cube,value),"corpo físico no cubo");
+  f.session.setSelection(f.cube);f.session.update();history.clear();
+  // O documento troca o registro a cada atualização: relê o corpo a cada uso.
+  const auto bodyValue=[&]{return document.find(f.cube)->components.find(scene::PhysicsBody::descriptor);};
+  u32 body=0;
+  while(document.find(f.cube)->components.at(body)!=bodyValue()) ++body;
+  const u32 friction=widgetId(EditorWidget::ComponentNumberBase)+body+(1u<<8);
+  const u32 position=widgetId(EditorWidget::TransformFieldBase);
+  auto &state=const_cast<EditorScreenState &>(f.session.screen());
+  AE_EXPECT_TRUE(locateWidget(f.session,position).x>=0,"Transformação aberta por padrão");
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"o corpo também está aberto, sem paginar");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentNext)).x<0,"não há setas de cartão");
+  // Arraste vertical sobre um campo da Transformação: rola, não edita.
+  state.inspectorScroll=0;f.session.update();
+  const auto start=locateWidget(f.session,position);const auto before=document.find(f.cube)->transform;
+  f.down(41,start);for(u32 step=1;step<=6;++step) f.move(41,{start.x+1,start.y-20.f*static_cast<float>(step)});
+  f.up(41,{start.x+1,start.y-120});f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().inspectorScroll>0,"a coluna rolou");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"rolar não cria Undo");
+  AE_EXPECT_TRUE(document.find(f.cube)->transform.position[0]==before.position[0],"rolar não arrasta o valor");
+  // Primeiro toque no cabeçalho põe o foco; o segundo fecha o cartão do tipo.
+  const u32 header=widgetId(EditorWidget::ComponentFoldBase)+body;
+  tapWidget(f,header);
+  AE_EXPECT_EQ(f.session.screen().expandedNative,bodyValue()->instanceId(),"cabeçalho dá o foco ao corpo");
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"focar não fecha");
+  tapWidget(f,header);
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x<0,"segundo toque fecha o cartão");
+  AE_EXPECT_TRUE(EditorScreenState::listed(f.session.screen().inspectorFolded,"astra.physics.body"),"dobra guardada por tipo");
+  tapWidget(f,header);
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"reabrir mostra os campos");
+  // Subseção Material: fecha e abre sem tocar na cena.
+  const auto groups=componentGroups(*bodyValue());
+  u32 material=0;for(;material<groups.size();++material) if(groups[material]=="Material") break;
+  AE_EXPECT_TRUE(material<groups.size(),"o corpo tem a subseção Material");
+  const u32 section=widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(body<<8)+material;
+  tapWidget(f,section);
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x<0,"subseção fechada esconde o atrito");
+  tapWidget(f,section);
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"subseção aberta mostra o atrito");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"dobrar não cria Undo");
+}
+
 AE_TEST(session_restores_one_reflected_property_with_undo) {
   Fixture f;auto &document=f.session.document();auto &history=f.session.history();
   const auto target=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Óptica");
@@ -2220,7 +2303,8 @@ AE_TEST(session_restores_one_reflected_property_with_undo) {
   const auto instance=cameraComponent(*document.find(target))->instanceId();
   f.session.setSelection(target);f.session.usePlatformTextInput(true);f.session.update();history.clear();
   tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
-  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch));
+  // A lupa do cabeçalho do cartão (índice 0) abre a busca dele.
+  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch)+0x100u);
   const auto edit=f.session.pendingTextEdit();
   AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"campo vertical",true),"busca concluída");
   const auto reset=widgetId(EditorWidget::ComponentFieldResetBase)+(2u<<8);
@@ -3810,12 +3894,15 @@ AE_TEST(focused_inspectors_open_edit_ping_and_restore) {
   };
   tapWidget(f,widgetId(EditorWidget::FocusedTabBase)+1);
   AE_EXPECT_EQ(state.focusedActive,2u,"aba do poste ativa");
-  // A janela é baixa: os cartões paginam como no Inspector.
-  for(u32 page=0;page<4 && inWindow(widgetId(EditorWidget::ComponentEnableBase)).x<0;++page) {
-    const auto next=inWindow(widgetId(EditorWidget::ComponentNext));
-    if(next.x<0) break;
-    f.down(122,next);f.up(122,next);f.session.update();
+  // A janela é baixa: a coluna dela rola com o dedo, como a do Inspector.
+  for(u32 drag=0;drag<8 && inWindow(widgetId(EditorWidget::ComponentEnableBase)).x<0;++drag) {
+    const auto window=f.session.layout().focusedWindow;
+    const UiPoint from{window.x+window.width*.5f,window.bottom()-24};
+    f.down(122,from);
+    for(u32 step=1;step<=4;++step) f.move(122,{from.x,from.y-15.f*static_cast<float>(step)});
+    f.up(122,{from.x,from.y-60});f.session.update();
   }
+  AE_EXPECT_TRUE(state.focusedInspectorScroll>0 || inWindow(widgetId(EditorWidget::ComponentEnableBase)).x>=0,"a janela rola até a luz");
   AE_EXPECT_TRUE(inWindow(widgetId(EditorWidget::InspectorLock)).x<0,"sem cadeado na janela focada");
   const auto toggle=inWindow(widgetId(EditorWidget::ComponentEnableBase));
   AE_EXPECT_TRUE(toggle.x>=0,"interruptor da luz na janela");
@@ -6038,7 +6125,7 @@ AE_TEST(character_platform_carry_compact_inspector_exposes_checkbox_search_and_h
   Fixture f;auto&doc=f.session.document();const auto actor=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Actor");auto value=*doc.find(actor);value.components.add(scene::Character::descriptor);doc.applyEntityValues(actor,value);f.session.setSelection(actor);
   auto&state=const_cast<EditorScreenState&>(f.session.screen());state.componentSelection=actor;state.expandedNative=doc.find(actor)->components.find(scene::Character::descriptor)->instanceId();state.componentGroup="Chão";state.inspectorSurface=EditorInspectorSurface::Inspection;f.session.usePlatformTextInput(true);f.session.update();
   const auto checkbox=widgetId(EditorWidget::ComponentBooleanBase);AE_EXPECT_TRUE(locateWidget(f.session,checkbox).x>=0,"short landscape exposes actual carry property");tapWidget(f,checkbox);AE_EXPECT_TRUE(runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"checkbox affects real authoring");
-  const auto depth=f.session.history().undoDepth();tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch));const auto edit=f.session.pendingTextEdit();AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::PropertySearch&&f.session.screen().expandedNative!=0,"header search overrides fold hit and opens IME");
+  const auto depth=f.session.history().undoDepth();tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch)+0x100u);const auto edit=f.session.pendingTextEdit();AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::PropertySearch&&f.session.screen().expandedNative!=0,"header search overrides fold hit and opens IME");
   AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"impulso",7)&&locateWidget(f.session,checkbox).x>=0,"filtered carry remains accessible at same height");AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"impulso",true),"search commits");AE_EXPECT_EQ(f.session.history().undoDepth(),depth,"search does not mutate authoring");tapWidget(f,checkbox);AE_EXPECT_TRUE(!runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"filtered checkbox still edits the selected component");
   AE_EXPECT_TRUE(f.session.history().undo(doc)&&runtime::characterComponent(*doc.find(actor))->inheritPlatformHorizontal,"Undo follows actual filtered edit");
   const auto authored=serializeEditorDocument(doc,0);AE_EXPECT_TRUE(f.session.startPlay(),"real Play starts");std::vector<renderer::MapDrawState>draws;AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"native world initialized");tapWidget(f,widgetId(EditorWidget::PlayInspect));f.session.setSelection(actor);f.session.update();

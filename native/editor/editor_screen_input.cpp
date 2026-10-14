@@ -363,6 +363,17 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     }
     return outcome;
   }
+  if(widget>=widgetId(EditorWidget::ComponentGroupBase)+0x10000u&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x20000u) {
+    // Subseção da coluna: componente no byte alto, grupo no baixo; dobra por tipo.
+    const auto *entity=document.find(state.selection);
+    const u32 at=(widget>>8)&0xffu,group=widget&0xffu;
+    const auto *value=entity&&at<entity->components.size()?entity->components.at(at):nullptr;
+    if(!value) return outcome;
+    const auto groups=value->type().id==std::string_view{"astra.physics.constant_force"}?
+        std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*value);
+    if(group<groups.size()) EditorScreenState::flip(state.inspectorSections,std::string(value->type().id)+"/"+std::string(groups[group]));
+    return outcome;
+  }
   if(widget>=widgetId(EditorWidget::ComponentGroupBase)&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);const auto *value=entity?entity->components.findInstance(state.expandedNative):nullptr;
     if(!value) return outcome;
@@ -375,6 +386,9 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   if(widget==widgetId(EditorWidget::ComponentClipAdd)) {
     const auto *entity=document.find(state.selection);
     const auto *component=entity?entity->components.findInstance(state.expandedNative):nullptr;
+    // Na coluna o cartão da Animação pode estar aberto sem foco.
+    if(entity && (!component || &component->type()!=&scene::Animation::descriptor))
+      component=entity->components.find(scene::Animation::descriptor);
     if(!entity || state.workspace!=EditorWorkspace::Scene || history.isOpen() ||
        !component || &component->type()!=&scene::Animation::descriptor) return outcome;
     auto value=*entity;
@@ -516,7 +530,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     if(operation==widgetId(EditorWidget::ComponentMenuBase)) {
       state.nativeMenu=state.nativeMenu==instance?0:instance;state.expandedNative=0;state.expandedComponent.clear();state.expandedScript=0;state.propertyQuery.clear();
     } else if(operation==widgetId(EditorWidget::ComponentFoldBase)) {
-      state.expandedNative=state.expandedNative==instance?0:instance;state.expandedComponent.clear();state.expandedScript=0;state.nativeMenu=0;state.scriptMenu=0;state.meshPicker=false;state.propertyQuery.clear();state.propertyPage=0;
+      state.expandedNative=state.tapInspectorCard(entry.type->id,state.expandedNative==instance)?instance:0;state.expandedComponent.clear();state.expandedScript=0;state.nativeMenu=0;state.scriptMenu=0;state.meshPicker=false;state.propertyQuery.clear();state.propertyPage=0;
     } else if(operation==widgetId(EditorWidget::ComponentCopyBase)) {
       state.componentClipboard=component->clone();state.status="Componente copiado";state.nativeMenu=0;
     } else {

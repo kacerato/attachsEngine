@@ -179,6 +179,9 @@ struct ScreenBuilder final {
   bool focusedWindow=false;
   // Inspector da multisseleção (o da seleção, fora de janela focada).
   bool multiEdit=false;
+  // Coluna rolável: os campos crescem para baixo sem paginar e os grupos viram
+  // subseções. É a altura da janela, que dá tamanho às listas de escolha.
+  float stackHeight=0;
   bool mixed(std::string_view key) const {return multiEdit && state.multi.isMixed(key);}
   // Interruptor com valores diferentes (Unity: traço no lugar do check):
   // tocar liga em todos.
@@ -4031,11 +4034,18 @@ void buildPathPoints(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   (void)entity;
 }
 
-void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,
+// Na coluna rolável `content` chega alto e volta consumido: o que os campos
+// tomaram por cima é a altura do cartão. Fora dela, a página de sempre.
+void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,
                           const EditorComponentEntry &entry,u32 index) {
   const auto &theme=builder.theme;
   const auto *component=entity.components.at(index);if(!component || &component->type()!=entry.type) return;
   const auto &state=builder.state;
+  const bool stacked=builder.stackHeight>0;
+  // Vários cartões abertos dividem uma busca só: ela vale no cartão em foco, e a
+  // lupa de cada cartão leva o índice para pôr o foco nele antes de buscar.
+  const bool focusedHere=!stacked||state.expandedNative==component->instanceId();
+  const u32 searchId=widgetId(EditorWidget::ComponentPropertySearch)+(stacked?0x100u+index:0u);
   if(entry.type==&scene::Collider::descriptor||entry.type==&scene::PhysicsBody::descriptor||entry.type==&scene::Character::descriptor){
     auto tools=takeTop(content,38);
     if(entry.type==&scene::Collider::descriptor){const float half=tools.width*.5f;colliderToolButton(builder,takeLeft(tools,half),"Geometria",EditorWidget::ColliderGeometryOpen,UiIcon::EditorColliderFace,false,state.workspace!=EditorWorkspace::Play);}
@@ -4068,21 +4078,21 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     return;
   }
   if(entry.type==&scene::PathFollow::descriptor) {
-    const bool commands=state.workspace==EditorWorkspace::Play&&state.componentGroup=="Execução";
+    const bool commands=state.workspace==EditorWorkspace::Play&&(stacked||state.componentGroup=="Execução");
     auto note=takeTop(content,commands?40.f:20.f);
     const auto searchHit=takeRight(note,24);builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
-    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+    builder.router.addRegion(searchHit,searchId);
     if(commands) {
       builder.iconButton(takeRight(note,36),UiIcon::RuntimeStop,widgetId(EditorWidget::PathFollowStop));
       builder.iconButton(takeRight(note,36),UiIcon::RuntimeRestart,widgetId(EditorWidget::PathFollowRestart));
     }
     builder.label(note,fitMiddle(builder.list,state.followStatus.empty()?std::string{"Estado real no Play"}:state.followStatus,note.width,theme.type.caption),state.followStatusWarning?theme.color.warning:theme.color.textDim,theme.type.caption);
   }
-  const std::string_view searchText=state.editingPropertySearch?std::string_view(state.renameText):std::string_view(state.propertyQuery);
+  const std::string_view searchText=!focusedHere?std::string_view{}:state.editingPropertySearch?std::string_view(state.renameText):std::string_view(state.propertyQuery);
   const auto search=editorSearchKey(searchText);
   const bool character=entry.type==&scene::Character::descriptor;
   const bool compactCharacter=character&&content.height<220;
-  const bool searching=!search.empty()||(compactCharacter&&state.editingPropertySearch);
+  const bool searching=!search.empty()||(compactCharacter&&focusedHere&&state.editingPropertySearch);
   const bool mesh=entry.type==&scene::MeshRenderer::descriptor;
   const bool constantForce=entry.type->id==std::string_view{"astra.physics.constant_force"};
   const bool tween=entry.type->id==std::string_view{"astra.tween.transform"};
@@ -4094,7 +4104,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     auto note=takeTop(content,20);const auto searchHit=takeRight(note,24);
     builder.label(note,"Requer Corpo físico dinâmico",theme.color.textMuted,theme.type.caption);
     builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
-    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+    builder.router.addRegion(searchHit,searchId);
   }
   // Consultas físicas: o último resultado no Play; na edição, o alcance.
   if((entry.type==&scene::RayCast::descriptor||entry.type==&scene::ShapeCast::descriptor||entry.type==&scene::SpringArm::descriptor)&&!searching) {
@@ -4374,13 +4384,15 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     const auto status=state.audioStatus.empty()?std::string_view{audioSource?"Pedido salvo · estado no Play":"Estado real no Play"}:std::string_view{state.audioStatus};
     builder.label(note,fitMiddle(builder.list,std::string(status),note.width,theme.type.caption),state.audioStatusWarning?theme.color.warning:theme.color.textMuted,theme.type.caption);
     builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
-    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+    builder.router.addRegion(searchHit,searchId);
   }
-  if((!character&&!constantForce&&(!audio||entry.type!=&scene::AudioListener::descriptor)&&!tween&&entry.type!=&scene::PathFollow::descriptor&&(!mesh||state.meshTab!=2))||searching||state.editingPropertySearch) {
+  // Na coluna a barra só aparece buscando; a lupa mora no cabeçalho do cartão.
+  if(stacked?(focusedHere&&(searching||state.editingPropertySearch)):
+     ((!character&&!constantForce&&(!audio||entry.type!=&scene::AudioListener::descriptor)&&!tween&&entry.type!=&scene::PathFollow::descriptor&&(!mesh||state.meshTab!=2))||searching||state.editingPropertySearch)) {
     auto searchRow=takeTop(content,34),clear=takeRight(searchRow,32);
     builder.list.addRect(searchRow,theme.color.raised,theme.radius.control);
     builder.label(searchRow,searchText.empty()?"Buscar propriedade":searchText,searchText.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
-    builder.router.addRegion(searchRow,widgetId(EditorWidget::ComponentPropertySearch));
+    builder.router.addRegion(searchRow,searchId);
     if(!searchText.empty()) {
       builder.label(clear,"×",theme.color.textDim,theme.type.body,UiAlign::Center);
       builder.router.addRegion(clear,widgetId(EditorWidget::ComponentPropertySearchClear));
@@ -4419,13 +4431,16 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   }
   // A aba Material é por SLOT, com alcance explícito; não é mais a lista de
   // números do componente, que só alcançava o primeiro slot.
-  if(mesh && builder.state.meshTab==1) {buildMaterialSlots(builder,content,searchText);return;}
+  if(mesh && builder.state.meshTab==1) {
+    // A lista por slot pagina na própria altura: na coluna ela ganha a da janela.
+    buildMaterialSlots(builder,stacked?takeTop(content,builder.stackHeight):content,searchText);return;
+  }
   if(mesh && builder.state.meshTab==2 && !searching) {
     const auto note=takeTop(content,34);
     auto firstLine=UiRect{note.x,note.y,note.width,17};
     const auto search=takeRight(firstLine,24);
     builder.list.addImage(centred(search,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
-    builder.router.addRegion({search.x,note.y,search.width,note.height},widgetId(EditorWidget::ComponentPropertySearch));
+    builder.router.addRegion({search.x,note.y,search.width,note.height},searchId);
     builder.label(firstLine,"RGB linear · indireto · UV1",theme.color.textMuted,theme.type.caption);
     const auto &render=static_cast<const scene::MeshRenderer &>(*component);
     u32 invalid=0;std::string firstDiagnostic;
@@ -4447,7 +4462,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   std::string_view group=mesh?std::string_view{builder.state.meshTab==2?"Lightmap":"Geometria"}:std::string_view{builder.state.componentGroup};
   if(constantForce) {if(group=="Torque mundo") group="Força mundo";else if(group=="Torque local") group="Força local";}
   if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
-  if(groups.size()>1 && !searching) {
+  if(groups.size()>1 && !searching && !stacked) {
     // Componentes extensos (Ambiente, materiais futuros) não espremem seis
     // nomes em uma faixa ilegível. A mesma navegação vira uma grade estável de
     // até quatro abas por linha, preservando IDs e área de toque.
@@ -4476,12 +4491,15 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     }
     takeTop(content,6);
   }
+  // Tudo daqui em diante desenha UM grupo: a página da aba escolhida ou, na
+  // coluna, cada subseção aberta, uma depois da outra.
+  const auto body=[&](std::string_view group) {
   if(tween&&!searching) {
     const auto *live=state.tweenRuntime?state.tweenRuntime->state(entity.id,component->instanceId()):nullptr;
     const bool actions=group=="Tempo"&&state.workspace==EditorWorkspace::Play&&state.tweenRuntime;
     auto note=takeTop(content,20);const auto searchHit=takeRight(note,24);
     builder.list.addImage(centred(searchHit,12,12),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textMuted);
-    builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch));
+    builder.router.addRegion(searchHit,searchId);
     const auto status=live?std::string{!static_cast<const scene::TransformTween*>(component)->enabled?"Desabilitado":!state.document->activeInHierarchy(entity.id)?"Inativo":live->paused||state.playPaused?"Pausado":runtime::SceneTweens::statusText(live->status)}:std::string{"Destino local · início em Play"};
     const bool warning=live&&live->status>=runtime::SceneTweens::Status::Authority;
     builder.label(note,fitMiddle(builder.list,status,note.width,theme.type.caption),warning?theme.color.warning:theme.color.textDim,theme.type.caption);
@@ -4518,7 +4536,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         builder.label(takeTop(content,40),"O alvo não tem propriedade interpolável (luz, câmera, áudio…)",theme.color.textMuted,theme.type.caption);
         return;
       }
+      // Na coluna a lista ganha a altura da janela, com o rodapé dentro dela.
+      if(stacked) content.height=std::min(content.height,builder.stackHeight);
       auto footer=takeBottom(content,30),previous=takeLeft(footer,36),next=takeRight(footer,36);
+      if(stacked) {content.height=std::floor(content.height/40)*40;}
       const u32 perPage=std::max(1u,static_cast<u32>(content.height/40));
       const u32 pages=(static_cast<u32>(options.size())+perPage-1)/perPage;
       const u32 page=std::min(builder.state.meshPage,pages-1);
@@ -4539,6 +4560,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
       if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
       builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(stacked) {content.y=footer.bottom();content.height=0;}
       return;
     }
     // Estado: ao vivo no Play; na edição, o que será animado.
@@ -4865,7 +4887,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       }
     });
     builder.label(takeTop(content,24),std::to_string(fields.size())+(fields.size()==1?" propriedade encontrada":" propriedades encontradas"),theme.color.textMuted,theme.type.caption);
-    if(fields.empty()) {builder.label(content,"Nenhuma propriedade encontrada",theme.color.textDim,theme.type.caption);return;}
+    if(fields.empty()) {builder.label(stacked?takeTop(content,28):content,"Nenhuma propriedade encontrada",theme.color.textDim,theme.type.caption);return;}
   }
   if(content.height<40) return;
   const auto defaults=entry.type->create();
@@ -5397,6 +5419,24 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     const auto label=std::to_string(page+1)+" / "+std::to_string(pages);
     builder.label(footer,label.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
   }
+  };
+  if(!stacked || groups.size()<2 || searching) {body(group);return;}
+  // Subseções recolhíveis no lugar das abas (ITsMagic: "Physics material" dentro
+  // do cartão; Unity: foldouts de grupo): uma linha fina com seta, todas abertas
+  // até o autor fechar. O estado é por tipo, então vale para todo objeto.
+  const std::string typeKey(entry.type->id);
+  for(u32 g=0;g<groups.size();++g) {
+    const auto key=typeKey+"/"+std::string(groups[g]);
+    const bool open=!EditorScreenState::listed(state.inspectorSections,key);
+    auto row=takeTop(content,36);const auto hit=row;
+    builder.list.addRect({row.x,row.bottom()-1,row.width,1},theme.color.lineSoft);
+    builder.list.addImage(centred(takeLeft(row,24),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
+                          open?theme.color.accent:theme.color.textDim);
+    const bool spring=entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&groups[g]=="Motor";
+    builder.label(row,spring?std::string_view{"Mola"}:groups[g],open?theme.color.text:theme.color.textDim,theme.type.body);
+    if(index<256&&g<256) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g);
+    if(open) {takeTop(content,4);body(groups[g]);takeTop(content,6);}
+  }
 }
 
 void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
@@ -5604,17 +5644,19 @@ const EditorScriptType *scriptSchema(const EditorScreenState &state,std::string_
   if(state.code) for(const auto &type:state.code->scriptTypes()) if(type.id==id) return &type;
   return nullptr;
 }
-void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::ScriptBehavior &script,u32 index,EditorEntityId owner) {
+void buildScriptFields(ScreenBuilder &builder,UiRect &content,const scene::ScriptBehavior &script,u32 index,EditorEntityId owner) {
   const auto &theme=builder.theme;
+  // Na coluna o aviso ocupa uma linha, não a janela inteira.
+  const auto noteRow=[&]{return builder.stackHeight>0?takeTop(content,32):content;};
   // Ativo mora no interruptor do cabeçalho e "Abrir código" no menu ⋮: repetir
   // as duas aqui roubava duas das poucas linhas que o telefone tem para campos.
   const auto *schema=scriptSchema(builder.state,script.scriptType);
-  if(!schema) {builder.label(content,"Tipo não resolvido; dados preservados",theme.color.textMuted,theme.type.caption);return;}
+  if(!schema) {builder.label(noteRow(),"Tipo não resolvido; dados preservados",theme.color.textMuted,theme.type.caption);return;}
   if(builder.state.playInspect && builder.state.scriptInspectionEntity!=owner) {
-    builder.label(content,"Selecione o objeto para ler os campos em Play",theme.color.textMuted,theme.type.caption);return;
+    builder.label(noteRow(),"Selecione o objeto para ler os campos em Play",theme.color.textMuted,theme.type.caption);return;
   }
   if(builder.state.playInspect && !builder.state.scriptInspectionError.empty()) {
-    builder.label(content,builder.state.scriptInspectionError.c_str(),theme.color.warning,theme.type.caption);return;
+    builder.label(noteRow(),builder.state.scriptInspectionError.c_str(),theme.color.warning,theme.type.caption);return;
   }
   const auto issueFor=[&](std::string_view id)->const runtime::ScriptFieldIssue* {
     if(!builder.state.playInspect) return nullptr;
@@ -6010,7 +6052,7 @@ void buildAdvancedReferencePicker(ScreenBuilder &builder) {
                 theme.color.textMuted,theme.type.caption,UiAlign::Center);
 }
 
-void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity);
+void buildObjectFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity);
 // Catálogo do Add: busca, trilho de famílias e lista rolável agrupada.
 //
 // Substitui cartões grandes paginados de cinco em cinco, que com 15 tipos já
@@ -6916,15 +6958,9 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
   const bool detailFocused=same && (!state.expandedComponent.empty() || state.expandedNative || state.expandedScript ||
                                     state.nativeMenu || state.scriptMenu || state.transformMenu);
-  // Em landscape curto, o Add permanece na faixa das abas; o rodapé não
-  // rouba a única linha editável do componente focado.
-  if(!builder.onlyComponent && !addInHeader) {
-    auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
-    builder.list.addRect(button,theme.color.raised,theme.radius.control);
-    builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
-    builder.list.addImage(centred(takeLeft(button,40),28,28),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
-    builder.label(button,"Adicionar componente",theme.color.text,theme.type.body);
-  }
+  // O Add mora no "+" da faixa das abas e no fim da coluna (Unity: Add
+  // Component depois do último componente); não há mais rodapé fixo.
+  (void)addInHeader;
   struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;bool object=false;};
   std::vector<Card> cards;
   {
@@ -6962,6 +6998,149 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     for(const auto &card:cards) if(card.value && card.value->instanceId()==builder.onlyComponent) only.push_back(card);
     cards=std::move(only);
     if(cards.empty()) {builder.label(content,"O componente não existe mais neste objeto",theme.color.textMuted,theme.type.caption,UiAlign::Center);return;}
+  }
+  const auto titleOf=[&](const Card &item) {
+    const auto *script=scene::scriptBehavior(item.value);const auto *schema=script?scriptSchema(state,script->scriptType):nullptr;
+    std::string title=item.object?"Objeto":item.transform?"Transformação":item.native?item.native->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
+    // Vários do mesmo tipo: numera pela ordem no objeto (1, 2…); sozinho, sem número.
+    if(item.value && item.native && item.native->type->allowMultiple) {
+      u32 ordinal=0,count=0;
+      for(usize i=0;i<entity.components.size();++i) if(&entity.components.at(i)->type()==item.native->type) {
+        ++count;if(entity.components.at(i)==item.value) ordinal=count;
+      }
+      if(count>1&&ordinal) title+=" · "+std::to_string(ordinal);
+    }
+    return title;
+  };
+  // Coluna rolável (ITsMagic Properties, Unity Inspector): os cartões ficam
+  // empilhados, cada um recolhível no cabeçalho, vários abertos ao mesmo tempo,
+  // e a coluna rola no lugar de paginar cartões e campos.
+  if(!builder.onlyComponent) {
+    const UiRect window=content;
+    const bool focused=builder.focusedWindow;
+    const float offset=std::max(0.f,focused?state.focusedInspectorScroll:state.inspectorScroll);
+    UiRect column{window.x,window.y-offset,window.width,1.0e6f};
+    const float top=column.y;
+    builder.list.pushClip(window);builder.router.pushClip(window);
+    builder.stackHeight=window.height;
+    builder.componentPage=0;
+    for(const auto &item:cards) {
+      const auto *script=scene::scriptBehavior(item.value);
+      const bool usable=item.object||item.transform||item.native||script;
+      const std::string key=item.object?std::string("astra.object"):item.transform?std::string("astra.transform"):
+          item.native?std::string(item.native->type->id):script?"script:"+script->scriptType:std::string(item.value->type().id);
+      const bool open=usable&&state.inspectorCardOpen(key);
+      const bool menu=same&&!item.object&&(item.transform?state.transformMenu:item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
+      const bool focus=same&&((item.native&&item.value&&state.expandedNative==item.value->instanceId())||(script&&state.expandedScript==script->instanceId()));
+      const auto icon=item.object?UiIcon::EditorAuthorObject:item.transform?UiIcon::EditorAuthorMove:item.native?item.native->icon:UiIcon::ScriptingCode;
+      auto row=takeTop(column,42.f);const auto hit=row;
+      builder.list.addRect(row,open?theme.color.raised:theme.color.silhouette,theme.radius.control);
+      if(focus) builder.list.addRect({row.x,row.y+6,3,row.height-12},theme.color.accent,1);
+      if(state.componentReorder && item.value && !item.object && !item.transform) {
+        if(state.componentReorder==item.index+1) builder.list.addRect(hit,withAlpha(theme.color.voidBlack,.45f),theme.radius.control);
+        else if(state.componentReorderTarget==item.index+1) {
+          const float y=state.componentReorderTarget<state.componentReorder?hit.y-2:hit.bottom()-1;
+          builder.list.addRect({hit.x,y,hit.width,3},theme.color.accent,1);
+        }
+      }
+      builder.list.addImage(centred(takeLeft(row,38),22,22),static_cast<UiImageId>(icon),0xffffffff);
+      auto more=takeRight(row,item.object?0.f:36.f);
+      const auto chevron=takeRight(row,28);
+      builder.list.addImage(centred(chevron,14,14),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),theme.color.textDim);
+      // Lupa por cartão aberto: põe o foco nele e abre a busca das propriedades.
+      const bool searchable=open&&item.native&&item.index<256&&
+          item.native->type->id!=std::string_view{"astra.physics.constant_force"}&&item.native->type!=&scene::AudioListener::descriptor&&
+          item.native->type->id!=std::string_view{"astra.tween.transform"}&&item.native->type!=&scene::PathFollow::descriptor;
+      const auto searchHit=searchable?takeRight(row,34):UiRect{};
+      // Ativo antes do nome, como a caixa do ITsMagic e o Behaviour.enabled da
+      // Unity: só onde `enabled` tem consumidor, ou no comportamento C#.
+      bool enableToggle=false,enableOn=false;UiRect enableRect{};
+      if(item.value && !item.object && !item.transform) {
+        enableToggle=script!=nullptr;enableOn=script?script->enabled:false;
+        if(item.native) for(const auto &p:item.native->type->booleans) if(p.id=="enabled") {enableToggle=true;enableOn=p.read(*item.value);}
+        if(enableToggle) enableRect=takeLeft(row,34);
+      }
+      builder.label(row,fitMiddle(builder.list,titleOf(item),row.width,theme.type.body),open?theme.color.text:theme.color.textDim,theme.type.body);
+      if(!usable) {
+        builder.label(takeTop(column,26),"Indisponível · dados preservados",theme.color.textMuted,theme.type.caption);
+        takeTop(column,6);continue;
+      }
+      // O interruptor e o ⋮ vêm DEPOIS da área de dobrar: o roteador testa da
+      // última região para a primeira.
+      builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:36),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
+      if(enableToggle) builder.checkbox(enableRect,enableOn,widgetId(EditorWidget::ComponentEnableBase)+item.index,true,
+                                       builder.mixed(multiKey(item.value->instanceId(),"enabled")));
+      if(searchable) {
+        builder.list.addImage(centred(searchHit,16,16),static_cast<UiImageId>(UiIcon::AssetsSearch),theme.color.textDim);
+        builder.router.addRegion(searchHit,widgetId(EditorWidget::ComponentPropertySearch)+0x100u+item.index);
+      }
+      if(!item.object) {
+        builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
+        builder.router.addRegion(more,item.transform?widgetId(EditorWidget::TransformMenu):widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
+      }
+      takeTop(column,4);
+      if(menu && item.transform) {
+        const struct {const char *label;EditorWidget widget;bool enabled;} rows[]{
+            {"Copiar transformação",EditorWidget::TransformCopy,true},{"Colar transformação",EditorWidget::TransformPaste,state.hasTransformClipboard},
+            {"Redefinir posição",EditorWidget::TransformResetPosition,true},{"Redefinir rotação",EditorWidget::TransformResetRotation,true},
+            {"Redefinir escala",EditorWidget::TransformResetScale,true},{"Redefinir tudo",EditorWidget::TransformReset,true}};
+        for(const auto &action:rows) {
+          auto line=takeTop(column,36);
+          builder.label(deflate(line,UiInsets::symmetric(10,0)),action.label,action.enabled?theme.color.text:theme.color.textMuted,theme.type.caption);
+          if(action.enabled) builder.router.addRegion(line,widgetId(action.widget));
+        }
+        takeTop(column,4);
+      } else if(menu) {
+        // O menu mede as próprias linhas pela altura que recebe: 6 linhas de 36.
+        auto actions=takeTop(column,6*36.f);
+        buildComponentMenu(builder,actions,entity,item.index,item.native!=nullptr);
+        column.y-=actions.height;column.height+=actions.height;
+        takeTop(column,4);
+      }
+      if(open) {
+        UiRect fields{column.x+6,column.y,column.width-12,column.height};
+        const float start=fields.y;
+        if(item.object) buildObjectFields(builder,fields,entity);
+        else if(item.transform) {
+          for(u32 i=0;i<3;++i)
+            buildTransformRow(builder,fields,i==0?"Posição":i==1?"Rotação":"Escala",i==0?entity.transform.position:i==1?entity.transform.rotationDegrees:entity.transform.scale,i,i==1?1:3);
+        } else if(builder.multiEdit && item.value && state.multi.isUnsupported(item.value->instanceId())) {
+          auto note=takeTop(fields,56.f);
+          builder.list.addRect(note,withAlpha(theme.color.warning,.12f),theme.radius.control);
+          builder.list.addImage(centred(takeLeft(note,30),16,16),static_cast<UiImageId>(UiIcon::UiWarning),theme.color.warning);
+          builder.label({note.x,note.y+4,note.width,note.height*.5f-4},"Edição múltipla não disponível",theme.color.warning,theme.type.caption);
+          builder.label({note.x,note.y+note.height*.5f,note.width,note.height*.5f-4},"Este componente é editado um objeto por vez",theme.color.textDim,theme.type.caption);
+        } else if(item.native) buildComponentFields(builder,fields,entity,*item.native,item.index);
+        else buildScriptFields(builder,fields,*script,item.index,entity.id);
+        takeTop(column,std::max(0.f,fields.y-start));
+      }
+      takeTop(column,8);
+    }
+    if(cards.empty()) builder.label(takeTop(column,40),"Nenhum componente encontrado",theme.color.textMuted,theme.type.caption);
+    // Add no fim da coluna, a um toque depois do último componente.
+    if(!builder.multiEdit && !focused) {
+      auto add=deflate(takeTop(column,48),UiInsets::symmetric(0,2));
+      builder.list.addBorder(add,withAlpha(theme.color.accent,.6f),1,theme.radius.control);
+      builder.router.addRegion(add,widgetId(EditorWidget::AddComponentMenu));
+      auto inner=centred(add,std::min(add.width,240.f),add.height);
+      builder.list.addImage(centred(takeLeft(inner,34),22,22),static_cast<UiImageId>(UiIcon::ComponentAdd),theme.color.accent);
+      builder.label(inner,"Adicionar componente",theme.color.accent,theme.type.body);
+      takeTop(column,12);
+    }
+    builder.stackHeight=0;
+    builder.list.popClip();builder.router.popClip();
+    const float total=column.y-top;
+    if(builder.layout) {
+      if(focused) {builder.layout->focusedScrollWindow=window;builder.layout->focusedScrollContent=total;}
+      else {builder.layout->inspectorScrollWindow=window;builder.layout->inspectorScrollContent=total;}
+    }
+    // Barra de rolagem fina: diz que há mais e onde se está.
+    if(total>window.height+1) {
+      const float thumb=std::max(28.f,window.height*window.height/total);
+      const float travel=window.height-thumb,at=std::clamp(offset/(total-window.height),0.f,1.f);
+      builder.list.addRect({window.right()-3,window.y+travel*at,3,thumb},withAlpha(theme.color.textDim,.55f),1.5f);
+    }
+    return;
   }
   if(same) {
     const auto focused=std::find_if(cards.begin(),cards.end(),[&](const Card &item) {
@@ -7213,7 +7392,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   }
 }
 
-void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+void buildObjectFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   if(state.inspectorReferenceFlags) {
     auto back=takeTop(content,32);
@@ -8842,7 +9021,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
 
   if(!onlyComponent && !builder.focusedWindow && builder.state.workspace!=EditorWorkspace::Lighting) {
     auto tabs=takeTop(content,42);takeTop(content,6);
-    addInHeader=builder.state.inspectorSurface==EditorInspectorSurface::Inspection && content.height<300 && !builder.state.addingComponent;
+    addInHeader=builder.state.inspectorSurface==EditorInspectorSurface::Inspection && !builder.state.addingComponent;
     if(addInHeader)
       builder.iconButton(takeRight(tabs,36),UiIcon::ComponentAdd,widgetId(EditorWidget::AddComponentMenu));
     const float width=tabs.width*.5f;

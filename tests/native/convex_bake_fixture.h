@@ -1,5 +1,6 @@
 #include "editor/editor_screen.h"
 #pragma once
+#include "inspector_column_fixture.h"
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"
 #include "renderer/primitive_geometry.h"
@@ -72,12 +73,8 @@ inline editor::EditorEntityId convexFixtureHierarchy(editor::EditorSession &s,st
   s.setSelection(root);return root;
 }
 inline bool tapConvexWidget(editor::EditorSession &s,const ui::UiFont &font,editor::EditorWidget widget) {
-  s.update();ui::UiInputRouter router;ui::UiDrawList list;list.begin(s.screen().surface,font.metrics(ui::UiFontWeight::Regular));
-  editor::buildEditorScreen(s.screen(),ui::defaultTheme(),list,router);
-  for(float y=2;y<s.screen().surface.height;y+=4)for(float x=2;x<s.screen().surface.width;x+=4) {
-    const auto hit=router.hitTest({x,y});if(hit.target!=ui::UiPointerTarget::Widget||hit.widgetId!=editor::widgetId(widget))continue;
-    s.handlePointer({88,ui::UiPointerPhase::Down,{x,y},0});s.handlePointer({88,ui::UiPointerPhase::Up,{x,y},.02});s.update();return true;
-  }
+  const auto at=findEditorWidget(s,font,editor::widgetId(widget));
+  if(at.x>=0) {s.handlePointer({88,ui::UiPointerPhase::Down,at,0});s.handlePointer({88,ui::UiPointerPhase::Up,at,.02});s.update();return true;}
   std::fprintf(stderr,"Convex workflow widget unreachable: %08x\n",editor::widgetId(widget));return false;
 }
 class ConvexMapGeometry final : public runtime::CollisionGeometrySource {

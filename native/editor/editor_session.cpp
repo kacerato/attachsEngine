@@ -3766,6 +3766,12 @@ bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiP
   const auto hover=router_.hitTest(event.position);
   const u32 over=hover.target==UiPointerTarget::Widget?hover.widgetId:0;
   state_.componentReorderTarget=header(over)?(over&0x00ffffffu)+1:0;
+  // Coluna rolável: perto da borda o cartão levantado leva a coluna junto.
+  if(const auto &window=layout_.inspectorScrollWindow;event.phase==UiPointerPhase::Move && !window.isEmpty()) {
+    const float edge=40.f,limit=std::max(0.f,layout_.inspectorScrollContent-window.height);
+    const float step=event.position.y>window.bottom()-edge?14.f:event.position.y<window.y+edge?-14.f:0.f;
+    state_.inspectorScroll=std::clamp(state_.inspectorScroll+step,0.f,limit);
+  }
   if(event.phase==UiPointerPhase::Move && over!=reorderPagerHover_) {
     reorderPagerHover_=over;
     // Mesma aritmética do toque nas setas: parte da página desenhada.
@@ -6453,6 +6459,13 @@ void EditorSession::update() {
   const bool measureColliderUi=state_.colliderTopology||state_.physicsDiagnosticOpen;
   const auto colliderUiStart=measureColliderUi?std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
+  // A coluna encolheu (cartão fechado): a rolagem volta ao limite; outro objeto
+  // no Inspector começa do topo.
+  if(inspectorScrollOwner_!=state_.selection) {inspectorScrollOwner_=state_.selection;state_.inspectorScroll=0;}
+  if(!layout_.inspectorScrollWindow.isEmpty())
+    state_.inspectorScroll=std::clamp(state_.inspectorScroll,0.f,std::max(0.f,layout_.inspectorScrollContent-layout_.inspectorScrollWindow.height));
+  if(!layout_.focusedScrollWindow.isEmpty())
+    state_.focusedInspectorScroll=std::clamp(state_.focusedInspectorScroll,0.f,std::max(0.f,layout_.focusedScrollContent-layout_.focusedScrollWindow.height));
   // The first pass measures current content. Clamp before the final paint,
   // including after resize or changing to shorter contextual content.
   if(state_.animatorOpen&&state_.animatorDrawer>=2)
@@ -6505,6 +6518,13 @@ void EditorSession::update() {
       clipPreview_.drawGui(draw,draw.fontMetrics(),view_.frustum,viewport,state_.surface);
   };
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
+  // A coluna encolheu (cartão fechado): a rolagem volta ao limite; outro objeto
+  // no Inspector começa do topo.
+  if(inspectorScrollOwner_!=state_.selection) {inspectorScrollOwner_=state_.selection;state_.inspectorScroll=0;}
+  if(!layout_.inspectorScrollWindow.isEmpty())
+    state_.inspectorScroll=std::clamp(state_.inspectorScroll,0.f,std::max(0.f,layout_.inspectorScrollContent-layout_.inspectorScrollWindow.height));
+  if(!layout_.focusedScrollWindow.isEmpty())
+    state_.focusedInspectorScroll=std::clamp(state_.focusedInspectorScroll,0.f,std::max(0.f,layout_.focusedScrollContent-layout_.focusedScrollWindow.height));
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
   // altura util so encolhe quando o teclado termina de subir, um ou dois
   // quadros depois do toque, e a contagem de linhas visiveis daquele instante e

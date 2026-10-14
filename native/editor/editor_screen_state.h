@@ -406,6 +406,28 @@ struct EditorScreenState final {
   // Duas rotas do mesmo alvo. Preferência editorial, nunca dado de runtime.
   EditorInspectorSurface inspectorSurface=EditorInspectorSurface::Inspection;
   float componentOverviewScroll=0;
+  // Inspector em coluna rolável (ITsMagic Properties, Unity Inspector): quanto
+  // a coluna desceu, no principal e no focado. Cartões e subseções dobram por
+  // TIPO, como o foldout da Unity, e a lista guarda só o que o autor inverteu:
+  // cartões e subseções abrem por padrão (o cartão Objeto não).
+  float inspectorScroll=0,focusedInspectorScroll=0;
+  std::vector<std::string> inspectorFolded,inspectorSections;
+  static bool listed(const std::vector<std::string> &list,std::string_view key) {
+    for(const auto &item:list) if(item==key) return true;
+    return false;
+  }
+  static void flip(std::vector<std::string> &list,std::string_view key) {
+    for(auto at=list.begin();at!=list.end();++at) if(*at==key) {list.erase(at);return;}
+    list.emplace_back(key);
+  }
+  bool inspectorCardOpen(std::string_view key) const {return (key!="astra.object")!=listed(inspectorFolded,key);}
+  // Toque no cabeçalho: fechado abre e ganha o foco; aberto sem foco só ganha o
+  // foco (gizmo, busca); aberto com foco fecha. Devolve se termina com foco.
+  bool tapInspectorCard(std::string_view key,bool focused) {
+    const bool open=inspectorCardOpen(key);
+    if(!open || focused) flip(inspectorFolded,key);
+    return !(open && focused);
+  }
   // Pesquisa de flags da Unity: estado editorial, sem gravar bits sem consumidor.
   bool inspectorReferenceFlags=false;
   // Diagnósticos da sessão são ferramentas editoriais, fora da cena e do Undo.

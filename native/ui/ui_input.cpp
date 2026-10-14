@@ -1,4 +1,5 @@
 #include "ui/ui_input.h"
+#include <algorithm>
 
 #include <cmath>
 
@@ -13,23 +14,34 @@ float distanceSquared(UiPoint first, UiPoint second) noexcept {
 
 } // namespace
 
-void UiInputRouter::beginFrame() noexcept { regions_.clear(); }
+void UiInputRouter::beginFrame() noexcept { regions_.clear(); clips_.clear(); }
 
-bool UiInputRouter::addRegion(const UiRect &rect, u32 widgetId, float minimumTouchSide) {
+void UiInputRouter::pushClip(const UiRect &rect) {
+  clips_.push_back(clips_.empty() ? rect : intersect(clips_.back(), rect));
+}
+void UiInputRouter::popClip() noexcept { if (!clips_.empty()) clips_.pop_back(); }
+
+bool UiInputRouter::addRegion(const UiRect &source, u32 widgetId, float minimumTouchSide) {
   if (regions_.size() >= kMaximumRegions) return false;
-  if (!isFinite(rect) || rect.isEmpty()) return false;
+  if (!isFinite(source) || source.isEmpty()) return false;
   if (!std::isfinite(minimumTouchSide) || minimumTouchSide < 0.0f) return false;
+  // Fora do recorte nao existe toque; a expansao de alvo minimo tambem para nele.
+  const UiRect rect = clips_.empty() ? source : intersect(source, clips_.back());
+  if (rect.isEmpty()) return false;
   Region region{};
   region.rect = minimumTouchSide > 0.0f ? expandToMinimumTouchTarget(rect, minimumTouchSide) : rect;
+  if (!clips_.empty()) region.rect = intersect(region.rect, clips_.back());
   region.exact = rect;
   region.widgetId = widgetId;
   regions_.push_back(region);
   return true;
 }
 
-bool UiInputRouter::addBlocker(const UiRect &rect) {
+bool UiInputRouter::addBlocker(const UiRect &source) {
   if (regions_.size() >= kMaximumRegions) return false;
-  if (!isFinite(rect) || rect.isEmpty()) return false;
+  if (!isFinite(source) || source.isEmpty()) return false;
+  const UiRect rect = clips_.empty() ? source : intersect(source, clips_.back());
+  if (rect.isEmpty()) return false;
   Region region{};
   region.rect = rect;
   region.exact = rect;
