@@ -404,7 +404,7 @@ bool EditorSession::setProjectDirectory(const char *path) {
   closeImportPreview();state_.importAccept=false;state_.importCancel=false;
   state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
   state_.folderImportRequested=false;state_.waveImportRequested=false;
-  state_.libraryImportRequested=false;state_.searchingLibrary=false;state_.libraryQuery.clear();state_.libraryPackage={};state_.libraryPage=0;
+  state_.libraryImportRequested=false;state_.searchingLibrary=false;state_.libraryQuery.clear();state_.libraryPackage={};state_.libraryScroll=0;
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   runtime::ObjectTags tags;std::string tagError;
   if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
@@ -1903,7 +1903,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   }
   if(edit.purpose==EditorTextPurpose::LibrarySearch) {
     if(text.size()>128||text.find('\0')!=text.npos)return false;
-    state_.libraryQuery=text;state_.libraryPage=0;refreshLibraryRows();close();return true;
+    state_.libraryQuery=text;state_.libraryScroll=0;refreshLibraryRows();close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::PropertySearch ||
      edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch ||
@@ -2206,9 +2206,9 @@ EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
 }
 
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
-  if(guiActive() && !state_.workspaceMenu && gui_.pointer(event)) return true;
+  if(guiActive() && !state_.contextMenu && gui_.pointer(event)) return true;
   if(guiAuthorPointer(event))return true;
-  if(isPlaying() && playScene_.active() && !state_.playPaused && !state_.workspaceMenu) {
+  if(isPlaying() && playScene_.active() && !state_.playPaused && !state_.contextMenu) {
     const auto hit=router_.hitTest(event.position);
     // Native toolbar/inspection keeps priority. A captured game UI drag retains
     // ownership outside its rectangle through Up/Cancel.
@@ -6532,7 +6532,7 @@ void EditorSession::update() {
   list_.setSolidUv(gui_.immediate().whiteUv());
   router_.beginFrame();
   state_.clipGuiPreviewDraw=[this](ui::UiDrawList &draw,const ui::UiRect &viewport) {
-    if(clipPreview_.active()&&!state_.workspaceMenu)
+    if(clipPreview_.active()&&!state_.contextMenu)
       clipPreview_.drawGui(draw,draw.fontMetrics(),view_.frustum,viewport,state_.surface);
   };
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
@@ -6551,7 +6551,7 @@ void EditorSession::update() {
 
   refreshGuiImages();
   if(measureColliderUi)state_.colliderUiMs=ColliderTopology::ms(colliderUiStart);
-  if(state_.guiInspector && !state_.workspaceMenu) {
+  if(state_.guiInspector && !state_.contextMenu) {
     const auto *owner=document_.find(state_.guiSelection.owner);u32 shared=0;
     for(const auto &row:state_.guiRows)if(!row.target.node&&row.target.document==state_.guiSelection.document)++shared;
     auto area=layout_.inspectorPanel;
@@ -6561,13 +6561,13 @@ void EditorSession::update() {
     } else state_.guiSelection.node=gui_.selected();
   }
   drawGuiAuthoring(metrics);
-  if(state_.workspace==EditorWorkspace::Gui && !state_.workspaceMenu)
+  if(state_.workspace==EditorWorkspace::Gui && !state_.contextMenu)
   {
     auto area=layout_.viewport;
     area.height=std::max(0.0f,area.height-state_.surface.height*state_.platformImeFraction);
     gui_.draw(area,state_.surface,list_,guiDeltaSeconds_);
   }
-  if(isPlaying() && playScene_.active() && !state_.playInspect && !state_.workspaceMenu) {
+  if(isPlaying() && playScene_.active() && !state_.playInspect && !state_.contextMenu) {
     auto &sceneGui=playScene_.sceneGui();sceneGui.prepare(playScene_.world(),guiPlayView().frustum,layout_.viewport,state_.surface);
     sceneGui.draw(list_,metrics);
     auto &runtime=playScene_.gui();const auto &canvas=runtime.document().canvas();
@@ -6590,7 +6590,7 @@ void EditorSession::update() {
 
 void EditorSession::drawGuiAuthoring(const ui::UiFontMetrics &metrics) {
   guiAuthorPrepared_=false;
-  if(!state_.guiInspector || state_.workspaceMenu || layout_.viewport.isEmpty())return;
+  if(!state_.guiInspector || state_.contextMenu || layout_.viewport.isEmpty())return;
   const auto *owner=document_.find(state_.guiSelection.owner);
   const auto *value=owner?owner->components.findInstance(state_.guiSelection.component):nullptr;
   if(!value || value->type().id!=scene::UiCanvas::descriptor.id)return;
@@ -6627,7 +6627,7 @@ bool EditorSession::guiAuthorPointer(const ui::UiPointerEvent &event) {
     if(event.phase==UiPointerPhase::Up||event.phase==UiPointerPhase::Cancel)guiAuthorPointers_.erase(captured);
     return true;
   }
-  if(event.phase!=UiPointerPhase::Down || !guiAuthorPrepared_ || !state_.guiInspector || state_.workspaceMenu ||
+  if(event.phase!=UiPointerPhase::Down || !guiAuthorPrepared_ || !state_.guiInspector || state_.contextMenu ||
      state_.workspace!=EditorWorkspace::Scene || !layout_.viewport.contains(event.position) ||
      router_.hitTest(event.position).target==UiPointerTarget::Widget)return false;
   auto point=event.position;float distance=0;
@@ -6652,7 +6652,7 @@ bool EditorSession::selectGuiElement(const EditorGuiTarget &target) {
   setSelection(target.owner);gui_.setPreview(false);gui_.select(target.node);
   state_.guiSelection=target;state_.guiInspector=true;state_.inspectorLocked=0;
   state_.expandedNative=target.component;
-  state_.workspace=EditorWorkspace::Scene;state_.workspaceMenu=false;
+  state_.workspace=EditorWorkspace::Scene;
   state_.inspectorVisible=true;state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
   state_.textureInspector=false;state_.textureManager=false;state_.importPanel=false;
   state_.status="Edicao da fonte UI compartilhada: "+record->path;return true;

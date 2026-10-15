@@ -695,6 +695,12 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       state.creationAsChild=object;state.entityMenu=false;
       break;
     }
+    case EditorWidget::ProjectMenu:
+      // O menu Cena é o mesmo menu de contexto, num nível próprio.
+      state.contextMenu=!(state.contextMenu && state.contextMenuLevel==context_menu_widget::WorkspaceLevel);
+      state.contextMenuLevel=state.contextMenuRootLevel=context_menu_widget::WorkspaceLevel;state.contextMenuScroll=0;
+      state.entityMenu=false;
+      break;
     case EditorWidget::DuplicateSelection: {
       const auto copy=history.duplicateEntity(document,state.selection);
       if(copy) {state.selection=copy;outcome.documentChanged=true;}
@@ -714,8 +720,6 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       state.entityMenu=false;state.inspectorMenu=false;
       break;
     case EditorWidget::SceneChip:
-    case EditorWidget::ProjectMenu: state.workspaceMenu=!state.workspaceMenu;break;
-    case EditorWidget::WorkspaceMenuClose: state.workspaceMenu=false;break;
     case EditorWidget::SaveDocument: state.saveRequested=true; break;
     case EditorWidget::Undo: outcome.documentChanged = history.undo(document); break;
     case EditorWidget::Redo: outcome.documentChanged = history.redo(document); break;
@@ -733,12 +737,12 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       state.playPaused=false;state.playStepRequested=false;
       outcome.requestPlay = state.workspace == EditorWorkspace::Play;
       break;
-    case EditorWidget::TabGui: state.workspaceMenu=false;state.workspace=EditorWorkspace::Gui;break;
-    case EditorWidget::TabScene: state.workspaceMenu=false; state.workspace = EditorWorkspace::Scene; break;
-    case EditorWidget::TabAssets: if(state.assetCount) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Assets;} break;
-    case EditorWidget::TabLighting: state.workspaceMenu=false; state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
+    case EditorWidget::TabGui: state.contextMenu=false;state.workspace=EditorWorkspace::Gui;break;
+    case EditorWidget::TabScene: state.contextMenu=false;state.workspace = EditorWorkspace::Scene; break;
+    case EditorWidget::TabAssets: if(state.assetCount) {state.contextMenu=false;state.workspace = EditorWorkspace::Assets;} break;
+    case EditorWidget::TabLighting: state.contextMenu=false;state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
     case EditorWidget::TabProject:
-      state.workspaceMenu=false;state.workspace=EditorWorkspace::Project;state.propertyPage=0;
+      state.contextMenu=false;state.workspace=EditorWorkspace::Project;state.propertyPage=0;
       state.tagPage=0;state.tagQuery.clear();state.tagPicker=false;state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;
       if(state.projectSection==EditorProjectSection::Water && !waterCreationAvailable(state)) state.projectSection=EditorProjectSection::Layers;
       if(state.projectSection==EditorProjectSection::Water) state.selection=document.root();

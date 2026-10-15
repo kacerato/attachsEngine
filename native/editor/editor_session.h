@@ -372,7 +372,7 @@ public:
   void drawGuiAuthoring(const ui::UiFontMetrics &metrics);
   bool guiAuthorPointer(const ui::UiPointerEvent &event);
   const ui::ImmediateGui &immediateGui() const noexcept { return const_cast<EditorSession *>(this)->gui_.immediate(); }
-  void openGui() { state_.workspace=EditorWorkspace::Gui;state_.workspaceMenu=false; }
+  void openGui() { state_.workspace=EditorWorkspace::Gui; }
   bool guiActive() const noexcept { return state_.workspace==EditorWorkspace::Gui || (state_.workspace==EditorWorkspace::Scene && state_.guiInspector); }
   void guiKey(int imguiKey,bool down) { if(guiActive()) gui_.key(imguiKey,down); }
   void guiWheel(float x,float y) { if(guiActive()) gui_.wheel(x,y); }
@@ -1687,6 +1687,7 @@ private:
   u32 inspectorScrollPointer_ = 0, inspectorWidgetPointer_ = 0;
   EditorEntityId inspectorScrollOwner_ = 0;
   bool handleInspectorScroll(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
+  bool handleLibraryScroll(const ui::UiPointerRouting &routing);
   // Menu de contexto da Hierarquia: abre (+, ⋮, toque longo), navega e rola;
   // as ações tocadas nele seguem pelo caminho normal.
   bool handleContextMenu(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);

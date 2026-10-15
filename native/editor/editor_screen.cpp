@@ -356,7 +356,7 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   const auto button=[&](UiRect rect,UiIcon icon,EditorWidget widget,bool enabled=true,bool active=false) {
     builder.iconButton(rect,icon,widgetId(widget),active,enabled?theme.color.text:theme.color.textFaint);
   };
-  button(takeLeft(content,kActionButton),UiIcon::UiMenu,EditorWidget::ProjectMenu,true,state.workspaceMenu);
+  button(takeLeft(content,kActionButton),UiIcon::UiMenu,EditorWidget::ProjectMenu,true,state.contextMenu&&state.contextMenuLevel==context_menu_widget::WorkspaceLevel);
   takeLeft(content,theme.spacing.tiny);
   button(takeLeft(content,kActionButton),UiIcon::AssetsSave,EditorWidget::SaveDocument);
   takeLeft(content,theme.spacing.small);
@@ -6692,7 +6692,17 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const auto *selected=document?document->find(state.selection):nullptr;
   const bool hasObject=selected&&state.selection!=document->root();
   const u32 level=state.contextMenuLevel;
-  if(level==0) {
+  if(level==cm::WorkspaceLevel) {
+    // Menu Cena: os espaços de trabalho, pelos widgets de sempre.
+    title="Cena";
+    items.push_back({UiIcon::SceneObject,"Voltar à edição",widgetId(EditorWidget::TabScene),state.workspace!=EditorWorkspace::Scene});
+    items.push_back({UiIcon::AssetsImport,"Recursos importados",widgetId(EditorWidget::TabAssets),state.assetCount!=0});
+    items.push_back({UiIcon::AssetsSourcePackage,"Biblioteca de pacotes",widgetId(EditorWidget::LibraryOpen)});
+    items.push_back({UiIcon::LightingSky,"Ambiente da cena",widgetId(EditorWidget::TabLighting)});
+    items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
+    items.push_back({UiIcon::UiInterfaceCanvas,"Interface (UI + ImGui)",widgetId(EditorWidget::TabGui)});
+    items.push_back({UiIcon::UiAutoLayout,"Layout dos painéis",widgetId(EditorWidget::LayoutsOpen)});
+  } else if(level==0) {
     title=hasObject?std::string(selected->name):"Hierarquia";
     items.push_back({UiIcon::SceneObjectAdd,hasObject?"Criar filho":"Criar",cm::id(cm::Create),true,true});
     if(hasObject) {
@@ -6730,7 +6740,7 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   router.addBlocker(state.surface);
   router.addRegion(state.surface,cm::id(cm::Close));
   list.addRect(state.surface,withAlpha(theme.color.voidBlack,.25f));
-  const bool destination=level>=1&&hasObject;
+  const bool destination=level>=1&&level<cm::WorkspaceLevel&&hasObject;
   constexpr float rowHeight=44,headerHeight=44,destinationHeight=40;
   const float width=std::min(290.f,state.surface.width-16);
   const float wanted=headerHeight+(destination?destinationHeight:0)+rowHeight*static_cast<float>(items.size())+8;
@@ -10771,35 +10781,6 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   }
 }
 
-
-void buildWorkspaceMenu(ScreenBuilder &builder) {
-  const auto &state=builder.state;const auto &theme=builder.theme;
-  auto &list=builder.list;auto &router=builder.router;
-  if(state.workspaceMenu) {
-    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const u32 menuRows=7+(state.assetCount?1:0);
-    const bool columns=state.surface.width>=480&&state.surface.height<48.f+48.f*menuRows;
-    const UiRect modal=centred(state.surface,std::min(columns?640.f:340.f,state.surface.width-24),48.f+48.f*(columns?(menuRows+1)/2:menuRows));
-    list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Voltar à edição","Recursos importados","Biblioteca de pacotes","Ambiente da cena","Configurações do projeto","Interface (UI + ImGui)","Layout dos painéis","Fechar"};
-    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::LibraryOpen,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::TabGui,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
-    builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
-    u32 visible=0;const auto items=content;
-    for(u32 i=0;i<std::size(actions);++i) {
-      if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
-      const float width=items.width/(columns?2.f:1.f);
-      UiRect row{items.x+(columns?visible%2:0)*width,items.y+(columns?visible/2:visible)*48.f,width,48};++visible;
-      const auto hit=row;
-      if(actions[i]==EditorWidget::TabGui) {
-        builder.list.addImage(centred(takeLeft(row,32),24,24),static_cast<UiImageId>(UiIcon::UiInterfaceCanvas));
-      }
-      list.pushClip(row);builder.label(row,names[i],theme.color.text,theme.type.body);list.popClip();
-      // The full menu line is the target, including its icon.
-      router.addRegion(hit,widgetId(actions[i]));
-    }
-  }
-}
-
 void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
   router.addBlocker(area);list.addRect(area,theme.color.canvas);area=deflate(area,UiInsets::symmetric(12,6));
@@ -10818,8 +10799,7 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
   constexpr const char *kinds[]{"Todos os tipos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
   builder.label(heading,state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca",theme.color.text,theme.type.cardName);
   if(!state.libraryDiagnostic.empty()) {
-    auto footer=takeBottom(area,48);action(takeLeft(footer,48),"",EditorWidget::LibraryPrevious,UiIcon::UiChevronLeft);
-    action(takeRight(footer,48),"",EditorWidget::LibraryNext,UiIcon::UiChevronRight);
+    auto footer=takeBottom(area,48);
     if(state.libraryConflict) {
       action(takeLeft(footer,footer.width*.5f),"Manter local",EditorWidget::LibraryKeepLocal,UiIcon::AssetsSourceConflict);
       action(footer,"Receber origem",EditorWidget::LibraryReceiveSource,UiIcon::AssetsImport);
@@ -10834,28 +10814,35 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
       list.addImage(centred(takeLeft(title,32),22,22),static_cast<UiImageId>(state.libraryConflict?UiIcon::AssetsSourceConflict:UiIcon::AssetsSourcePackage),theme.color.accent);
       builder.label(title,state.libraryDetailName.c_str(),theme.color.text,theme.type.cardName);
     }
+    // O texto rola pelo dedo, como a coluna do Inspector.
     const auto lines=wrapText(list,state.libraryDiagnostic,area.width,theme.type.body);
-    const auto rows=static_cast<u32>(std::max(1.f,std::floor(area.height/24.f)));
-    if(builder.layout)builder.layout->libraryDiagnosticPages=std::max(1u,static_cast<u32>((lines.size()+rows-1)/rows));
-    const auto page=std::min(state.libraryDiagnosticPage,lines.empty()?0u:static_cast<u32>((lines.size()-1)/rows));
-    list.pushClip(area);for(u32 i=page*rows;i<lines.size()&&i<(page+1)*rows;++i)
-      builder.label(takeTop(area,24),lines[i],theme.color.textDim,theme.type.body);
+    const float total=24.f*static_cast<float>(lines.size());
+    const float offset=std::clamp(state.libraryDiagnosticScroll,0.f,std::max(0.f,total-area.height));
+    if(builder.layout) {builder.layout->libraryScrollWindow=area;builder.layout->libraryScrollContent=total;}
+    list.pushClip(area);UiRect column{area.x,area.y-offset,area.width,total};
+    for(const auto &line:lines) {
+      const auto row=takeTop(column,24);
+      if(row.bottom()>=area.y&&row.y<=area.bottom())builder.label(row,line,theme.color.textDim,theme.type.body);
+    }
     list.popClip();return;
   }
   std::string package="Todos os pacotes";for(const auto &entry:state.libraryPackages)if(entry.id==state.libraryPackage)package=entry.name;
-  auto footer=takeBottom(area,48);const u32 rows=static_cast<u32>(std::max(1.f,std::floor(area.height/56.f)));
-  const u32 pages=std::max(1u,static_cast<u32>((state.libraryRows.size()+rows-1)/rows));const u32 page=std::min(state.libraryPage,pages-1);
-  if(builder.layout)builder.layout->libraryPages=pages;
-  action(takeLeft(footer,48),"",EditorWidget::LibraryPrevious,UiIcon::UiChevronLeft);
-  action(takeRight(footer,48),"",EditorWidget::LibraryNext,UiIcon::UiChevronRight);
-  list.pushClip(footer);builder.label(footer,std::to_string(state.libraryRows.size())+" itens · "+std::to_string(page+1)+"/"+std::to_string(pages)+" · "+package+
+  auto footer=takeBottom(area,48);
+  list.pushClip(footer);builder.label(footer,std::to_string(state.libraryRows.size())+" itens · "+package+
     (state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.textDim,theme.type.caption,UiAlign::Center);list.popClip();
   if(state.libraryRows.empty()) {
     builder.label(area,state.libraryPackages.size()>1?"Nenhum item neste filtro":"Importe uma pasta para preservar fontes e catalogar recursos",theme.color.textDim,theme.type.caption,UiAlign::Center);return;
   }
-  list.pushClip(area);
-  for(u32 i=page*rows;i<state.libraryRows.size()&&i<(page+1)*rows;++i) {
-    const auto &item=state.libraryRows[i];auto row=takeTop(area,56);
+  // Coluna rolável pelo dedo, como a do Inspector: sem páginas, e só as linhas
+  // visíveis recebem região de toque.
+  const float total=56.f*static_cast<float>(state.libraryRows.size());
+  const float offset=std::clamp(state.libraryScroll,0.f,std::max(0.f,total-area.height));
+  if(builder.layout) {builder.layout->libraryScrollWindow=area;builder.layout->libraryScrollContent=total;}
+  list.pushClip(area);router.pushClip(area);
+  UiRect column{area.x,area.y-offset,area.width,total};
+  for(u32 i=0;i<state.libraryRows.size();++i) {
+    const auto &item=state.libraryRows[i];auto row=takeTop(column,56);
+    if(row.bottom()<area.y||row.y>area.bottom())continue;
     const bool registered=item.state==resources::LibraryResolutionState::Registered;
     const bool refused=item.state==resources::LibraryResolutionState::Unsupported||item.state==resources::LibraryResolutionState::MissingDependency||item.state==resources::LibraryResolutionState::MissingOutput;
     list.addRect({row.x,row.y+row.height-1,row.width,1},theme.color.silhouette);
@@ -10876,7 +10863,7 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     list.addImage(centred(details,20,20),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
     router.addRegion({details.x,row.y,48,row.height},widgetId(EditorWidget::LibraryItemDetailsBase)+i);
   }
-  list.popClip();
+  router.popClip();list.popClip();
 }
 
 void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layout,bool debug) {
@@ -10967,12 +10954,13 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     layout.viewport=remaining;
     buildLibraryWorkspace(builder,remaining);
     if(state.backgroundPanel)buildBackgroundTasks(builder,layout);
-    buildWorkspaceMenu(builder);buildPlatformTextField(builder);return layout;
+    if(state.contextMenu && state.document) buildContextMenu(builder,layout);
+    buildPlatformTextField(builder);return layout;
   }
   if(state.workspace==EditorWorkspace::Gui) {
     buildTopBar(builder,layout.topBar);
     layout.viewport=remaining;router.addBlocker(remaining);list.addRect(remaining,theme.color.canvas);
-    buildWorkspaceMenu(builder);
+    if(state.contextMenu && state.document) buildContextMenu(builder,layout);
     return layout;
   }
   if(state.workspace==EditorWorkspace::Code) {
@@ -11482,7 +11470,6 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     auto page=deflate(remaining,UiInsets::all(12));
     buildComponents(builder,page,*state.document->find(prefabTarget));
   }
-  buildWorkspaceMenu(builder);
   // A contextual surface, not a second Inspector implementation. Draw after
   // viewport tools and block their hit regions, but before property pickers and
   // keyboards. Keeping the underlying viewport valid avoids zero-size render

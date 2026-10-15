@@ -574,6 +574,9 @@ namespace context_menu_widget {
 // receitas e as categorias de criação (+ índice). As ações em si usam os
 // widgets de sempre (Duplicar, Renomear, receitas), pelo mesmo caminho.
 enum Code : u32 {Close=1,Back=2,Create=3,AllRecipes=4,Category=0x10};
+// Níveis: 0 ações do objeto, 1 Criar, 2+n receitas da categoria n. O menu
+// Cena (espaços de trabalho) é o mesmo componente num nível próprio.
+inline constexpr u32 WorkspaceLevel=0x100;
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ContextMenuBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ContextMenuBase);}
 } // namespace context_menu_widget

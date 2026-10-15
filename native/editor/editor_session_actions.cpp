@@ -90,6 +90,17 @@ bool EditorSession::handleInspectorScroll(const UiPointerEvent &event,const UiPo
   return true;
 }
 
+// Biblioteca: a lista (ou o diagnóstico) rola pelo arrasto vertical dentro da
+// janela dela; um toque continua chegando à linha.
+bool EditorSession::handleLibraryScroll(const UiPointerRouting &routing) {
+  if(state_.workspace!=EditorWorkspace::Library||!routing.dragging||!layout_.libraryScrollWindow.contains(routing.start)) return false;
+  if(std::abs(routing.totalDelta.y)<std::abs(routing.totalDelta.x)) return false;
+  const float limit=std::max(0.f,layout_.libraryScrollContent-layout_.libraryScrollWindow.height);
+  float &scroll=state_.libraryDiagnostic.empty()?state_.libraryScroll:state_.libraryDiagnosticScroll;
+  scroll=std::clamp(scroll-routing.stepDelta.y,0.f,limit);
+  return true;
+}
+
 EditorEntityId EditorSession::creationParent() const {
   const bool chosen=(state_.creationMenu||state_.contextMenuCreating)&&state_.creationAsChild;
   return chosen&&document_.exists(state_.selection)&&state_.selection!=document_.root()?state_.selection:document_.root();
@@ -105,13 +116,17 @@ bool EditorSession::handleContextMenu(const UiPointerEvent &event,const UiPointe
   if(event.phase==UiPointerPhase::Down) state_.contextMenuCreating=false;
   const auto open=[&](u32 level,UiPoint at) {
     const bool object=document_.exists(state_.selection)&&state_.selection!=document_.root();
-    state_.contextMenu=true;state_.contextMenuLevel=state_.contextMenuRootLevel=object?level:1u;
+    state_.contextMenu=true;state_.contextMenuLevel=state_.contextMenuRootLevel=level==cm::WorkspaceLevel?level:object?level:1u;
     state_.contextMenuAnchor=at;state_.contextMenuScroll=0;
-    state_.creationAsChild=object;state_.entityMenu=false;state_.creationMenu=false;
+    if(level!=cm::WorkspaceLevel)state_.creationAsChild=object;
+    state_.entityMenu=false;state_.creationMenu=false;
   };
   if(!state_.contextMenu) {
-    if(isPlaying()||!routing.tapped||routing.target!=UiPointerTarget::Widget) return false;
+    if(!routing.tapped||routing.target!=UiPointerTarget::Widget) return false;
     const u32 key=routing.widgetId,rows=widgetId(EditorWidget::HierarchyRowBase);
+    // O menu Cena abre em qualquer espaço de trabalho, inclusive no Play.
+    if(key==widgetId(EditorWidget::ProjectMenu)) {open(cm::WorkspaceLevel,routing.position);return true;}
+    if(isPlaying()) return false;
     if(key==widgetId(EditorWidget::HierarchyAdd)) {open(1,routing.position);return true;}
     if(key==widgetId(EditorWidget::HierarchyMenu)) {open(0,routing.position);return true;}
     if(routing.heldSeconds>=ui::kUiLongPressSeconds&&key>=rows&&key<rows+EditorDocument::kMaximumEntities&&!state_.reparentEntity) {
@@ -855,6 +870,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.texturePickerScroll=std::clamp(state_.texturePickerScroll-routing.stepDelta.y,0.f,limit);return true;
     }
   }
+  if(handleLibraryScroll(routing)) return true;
   if(handleInspectorScroll(event,routing)) return true;
   // A aba de componentes usa arraste para navegar, não para reordenar por
   // acidente. A ordem continua disponível pelo menu de cada componente.
@@ -1580,13 +1596,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       }
     }
     if(key==widgetId(EditorWidget::LibraryOpen)) {
-      state_.workspaceMenu=false;if(!isPlaying()){cameraPreview_.close();state_.workspace=EditorWorkspace::Library;refreshLibraryRows();}return true;
+      if(!isPlaying()){cameraPreview_.close();state_.workspace=EditorWorkspace::Library;refreshLibraryRows();}return true;
     }
     if(key==widgetId(EditorWidget::LibraryClose)) {state_.workspace=EditorWorkspace::Scene;return true;}
     if(key==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
     if(key==widgetId(EditorWidget::LibrarySearch)) {state_.searchingLibrary=true;return true;}
-    if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticPage=0;state_.libraryConflict=false;return true;}
-    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%11;state_.libraryPage=0;refreshLibraryRows();return true;}
+    if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticScroll=0;state_.libraryConflict=false;return true;}
+    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%11;state_.libraryScroll=0;refreshLibraryRows();return true;}
     if(key==widgetId(EditorWidget::LibraryReimport)||key==widgetId(EditorWidget::LibraryKeepLocal)||key==widgetId(EditorWidget::LibraryReceiveSource)) {
       const auto id=state_.libraryDetailItem;const auto *item=library_.item(id);if(!item)return true;
       const auto path=item->path;std::string error;
@@ -1594,7 +1610,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         key==widgetId(EditorWidget::LibraryReceiveSource)?resources::UnityReimportPolicy::ReceiveSource:resources::UnityReimportPolicy::RefuseConflict;
       const auto guid=importUnityAsset(path,state_.selection,policy,error);
       state_.libraryConflict=!guid.valid()&&error.find("Manter local ou Receber origem")!=error.npos;
-      state_.libraryDiagnostic=error;state_.libraryDiagnosticPage=0;state_.status=error;
+      state_.libraryDiagnostic=error;state_.libraryDiagnosticScroll=0;state_.status=error;
       return true;
     }
     if(key==widgetId(EditorWidget::LibraryInstantiate)||key==widgetId(EditorWidget::LibraryControllerAssign)) {
@@ -1626,24 +1642,18 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.libraryDiagnostic=item->path+"\nOrigem: "+item->sourceIdentity+"\nSHA-256 original: "+item->sourceHash+"\n"+resolution.diagnostic;
       for(const auto &loss:item->knownLosses)state_.libraryDiagnostic+="\nConversão: "+loss;
       for(const auto dep:item->dependencies){const auto *source=library_.item(dep);state_.libraryDiagnostic+="\nDependência: "+(source?source->path:dep.text()+" (ausente)");}
-      state_.libraryDiagnosticPage=0;return true;
+      state_.libraryDiagnosticScroll=0;return true;
     }
     if(key==widgetId(EditorWidget::LibraryPackages)) {
       usize next=0;for(usize i=0;i<state_.libraryPackages.size();++i)if(state_.libraryPackages[i].id==state_.libraryPackage)next=(i+1)%state_.libraryPackages.size();
       if(!state_.libraryPackages.empty())state_.libraryPackage=state_.libraryPackages[next].id;
-      state_.libraryPage=0;refreshLibraryRows();return true;
-    }
-    if(key==widgetId(EditorWidget::LibraryPrevious)) {auto &page=state_.libraryDiagnostic.empty()?state_.libraryPage:state_.libraryDiagnosticPage;if(page)--page;return true;}
-    if(key==widgetId(EditorWidget::LibraryNext)) {
-      auto &page=state_.libraryDiagnostic.empty()?state_.libraryPage:state_.libraryDiagnosticPage;
-      const auto pages=state_.libraryDiagnostic.empty()?layout_.libraryPages:layout_.libraryDiagnosticPages;
-      page=std::min(page+1,std::max(1u,pages)-1);return true;
+      state_.libraryScroll=0;refreshLibraryRows();return true;
     }
     if(key>=widgetId(EditorWidget::LibraryItemBase)&&key<widgetId(EditorWidget::LibraryItemBase)+resources::LibraryIndex::MaximumItems) {
       const auto row=key-widgetId(EditorWidget::LibraryItemBase);std::string error;
       if(row<state_.libraryRows.size()) {const auto id=state_.libraryRows[row].id;if(!openLibraryItem(id,error)) {
         state_.libraryConflict=error.find("Manter local ou Receber origem")!=error.npos;
-        state_.status=error;state_.libraryDiagnostic=error;state_.libraryDiagnosticPage=0;
+        state_.status=error;state_.libraryDiagnostic=error;state_.libraryDiagnosticScroll=0;
         if(const auto *item=library_.item(id)) {state_.libraryDiagnostic+="\nFonte: "+item->path+"\nIdentidade: "+item->sourceIdentity+"\nSHA-256: "+item->sourceHash;
           for(const auto &loss:item->knownLosses)state_.libraryDiagnostic+="\nLimite: "+loss;
           for(const auto dep:item->dependencies)if(!library_.item(dep))state_.libraryDiagnostic+="\nDependência ausente: "+dep.text();}
@@ -3366,7 +3376,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   }
   // Layouts dos painéis.
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::LayoutsOpen)) {
-    state_.workspaceMenu=false;state_.layoutsPanel=true;return true;
+    state_.layoutsPanel=true;return true;
   }
   if(state_.layoutsPanel && routing.target==UiPointerTarget::Widget) {
     if(!routing.tapped) return true;

@@ -148,8 +148,9 @@ struct EditorScreenState final {
   std::string libraryQuery;
   std::string libraryDiagnostic;
   std::string libraryDetailName;
-  u32 libraryDiagnosticPage=0;
-  u32 libraryPage=0,libraryKind=0;
+  u32 libraryKind=0;
+  // Lista e diagnóstico da Biblioteca rolam pelo dedo (coluna, sem páginas).
+  float libraryScroll=0,libraryDiagnosticScroll=0;
   bool libraryImportRequested=false,searchingLibrary=false;
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
   // recorte da câmera. As áreas seguras entram por `safeArea`.
@@ -862,7 +863,6 @@ struct EditorScreenState final {
   // A ação tocada no menu cria com o destino escolhido nele (raiz ou filho),
   // pelo mesmo caminho da folha de criação.
   bool contextMenuCreating=false;
-  bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationScroll=0;
   std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.

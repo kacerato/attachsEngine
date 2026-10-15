@@ -216,7 +216,7 @@ bool EditorSession::importLibraryPackage(const PreparedLibraryPackage &prepared,
         assets_.serialize(),error,LibraryIndexPath,candidate.serialize())){state_.status=error;return false;}
     library_=std::move(candidate);refreshLibraryRows();state_.status=forward?"Pacote recolocado na biblioteca":"Pacote retirado da biblioteca; fontes e recursos preservados";return true;
   });
-  cameraPreview_.close();files_.rebuildTree();state_.libraryPackage=prepared.package.id;state_.libraryPage=0;state_.workspace=EditorWorkspace::Library;
+  cameraPreview_.close();files_.rebuildTree();state_.libraryPackage=prepared.package.id;state_.libraryScroll=0;state_.workspace=EditorWorkspace::Library;
   refreshLibraryRows();diagnostic=prepared.diagnostic;state_.status=diagnostic;return true;
 }
 void EditorSession::refreshLibraryRows() {
@@ -296,7 +296,7 @@ bool EditorSession::openLibraryItem(resources::AssetGuid id,std::string &diagnos
     state_.libraryCanInstantiate=extension==".prefab";state_.libraryCanAssignController=extension==".controller";state_.libraryCanReimport=true;
     state_.libraryDiagnostic="Recurso nativo pronto: "+assets_.find(guid)->path+"\nFonte: "+sourcePath+"\nIdentidade: "+sourceIdentity;
     if(const auto *current=library_.item(id))for(const auto &loss:current->knownLosses)state_.libraryDiagnostic+="\nConversão: "+loss;
-    state_.libraryDiagnosticPage=0;return true;
+    state_.libraryDiagnosticScroll=0;return true;
   }
   if(resolution.state==resources::LibraryResolutionState::Registered&&resolution.output) {
     EditorFileEntry entry;entry.relativePath=resolution.output->path;entry.name=std::filesystem::path(entry.relativePath).filename().string();

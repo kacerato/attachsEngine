@@ -7,7 +7,8 @@ namespace ae::editor {
 struct EditorScreenLayout final {
   float clipBoneRows=0; // linhas visiveis da arvore de ossos do estudio
   unsigned clipBoneCount=0; // ossos na arvore: limite da rolagem pelo dedo
-  u32 libraryPages=1,libraryDiagnosticPages=1;
+  // Janela rolável da Biblioteca (lista ou diagnóstico) e a altura do conteúdo.
+  ui::UiRect libraryScrollWindow{};float libraryScrollContent=0;
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};
   ui::UiRect colorSliders[5]{};
