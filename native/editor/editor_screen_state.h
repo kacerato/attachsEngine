@@ -332,6 +332,11 @@ struct EditorScreenState final {
   // Timeline filtrada pelo osso selecionado: bindings permitidos (vazio = todos).
   bool clipFilterSelected=false;std::vector<u64> clipFilterBindings;
   bool clipPoseShown=false;u32 clipPosePage=0;
+  // Painel do osso (estúdio): trilha por canal (posição, rotação, escala) do
+  // osso tocado, se há chave no tempo atual e os valores locais da pose vista.
+  u64 clipBoneTracks[3]{};bool clipBoneKeyed[3]{};float clipBoneValues[3][3]{};
+  // Ossos com trilha na camada atual (ponto na árvore).
+  std::vector<EditorEntityId> clipAnimatedBones;
   bool clipPoseAutoKey=true,clipPosePending=false;
   AnimationPoseRecordingPolicy clipPoseRecording;
   u64 clipPoseLocks[4]{};

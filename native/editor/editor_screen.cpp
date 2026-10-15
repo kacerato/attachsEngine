@@ -6702,6 +6702,26 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
     items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
     items.push_back({UiIcon::UiInterfaceCanvas,"Interface (UI + ImGui)",widgetId(EditorWidget::TabGui)});
     items.push_back({UiIcon::UiAutoLayout,"Layout dos painéis",widgetId(EditorWidget::LayoutsOpen)});
+  } else if(level==cm::StudioLevel) {
+    // Menu ⋮ do estúdio: o que não é posar nem tempo, pelos widgets do clipe.
+    namespace cw=clip_widget;
+    title=state.clipAsset?state.clipAsset->name:"Clipe";
+    const bool bone=state.clipPreviewTarget!=0||state.clipTarget!=0;
+    items.push_back({UiIcon::AnimationReferencePose,state.clipPoseShown?"Parar de posar":"Posar",cw::id(cw::Pose)});
+    items.push_back({UiIcon::AnimationDuplicate,"Novo clipe",cw::id(cw::New)});
+    items.push_back({UiIcon::AnimationRotationBranch,"Novo clipe · Euler",cw::id(cw::NewEuler)});
+    items.push_back({UiIcon::AnimationRotationBranch,"Novo clipe · progressivo",cw::id(cw::NewProgressive)});
+    items.push_back({UiIcon::AssetsDocs,"Renomear clipe",cw::id(cw::Name)});
+    items.push_back({UiIcon::AnimationInterval,"Duração",cw::id(cw::Duration)});
+    items.push_back({UiIcon::AnimationLayers,"Camadas",cw::id(cw::Layers)});
+    items.push_back({UiIcon::AnimationCurve,"Curvas",cw::id(cw::Curves)});
+    items.push_back({UiIcon::AnimationEvent,"Eventos e marcadores",cw::id(cw::Cues)});
+    items.push_back({UiIcon::AnimationSkeleton,"Rig",cw::id(cw::StudioTabRig)});
+    items.push_back({UiIcon::ComponentGrounder,"Assistente de IK",cw::id(cw::PoseIkWizard)});
+    items.push_back({UiIcon::ComponentIkTwoBone,"IK permanente nesta ponta",cw::id(cw::PoseIkCreate),bone});
+    items.push_back({UiIcon::ComponentRootMotion,"Root motion",cw::id(cw::PoseRootMotion)});
+    items.push_back({UiIcon::AnimationBake,"Bake da pose final",cw::id(cw::PoseBake)});
+    items.push_back({UiIcon::AnimationBinding,"Exportar GLB",cw::id(cw::PoseExportGlb)});
   } else if(level==0) {
     title=hasObject?std::string(selected->name):"Hierarquia";
     items.push_back({UiIcon::SceneObjectAdd,hasObject?"Criar filho":"Criar",cm::id(cm::Create),true,true});
@@ -6709,6 +6729,8 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
       items.push_back({UiIcon::SceneDuplicate,"Duplicar",widgetId(EditorWidget::DuplicateSelection)});
       items.push_back({UiIcon::AssetsDocs,"Renomear",widgetId(EditorWidget::RenameSelection)});
       items.push_back({UiIcon::EditorFrameObject,"Enquadrar na vista",widgetId(EditorWidget::FrameSelection)});
+      if(state.workspace==EditorWorkspace::Scene)
+        items.push_back({UiIcon::AnimationKey,"Animar",clip_widget::id(clip_widget::Open)});
       items.push_back({UiIcon::UiChevronUp,"Mover acima",widgetId(EditorWidget::MoveEarlier)});
       items.push_back({UiIcon::UiChevronDown,"Mover abaixo",widgetId(EditorWidget::MoveLater)});
       items.push_back({UiIcon::ComponentChildOf,"Mudar pai",widgetId(EditorWidget::ReparentSelection)});
@@ -10927,6 +10949,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   builder.layout=&layout;
   if(state.clipOpen && state.clipAsset) {
     layout=buildAnimationClipScreen(state,theme,list,router);
+    // Menu ⋮ do estúdio: acima do estúdio, abaixo dos teclados que ele abre.
+    if(state.contextMenu && state.document) buildContextMenu(builder,layout);
     buildNumericWindow(builder);buildNameWindow(builder);buildPlatformTextField(builder);
     return layout;
   }

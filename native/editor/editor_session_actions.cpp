@@ -1,6 +1,7 @@
 #include "editor/editor_screen.h"
 #include "resources/model_import.h"
 #include "scene/path.h"
+#include "scene/animation.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_texture_import_screen.h"
 #include "editor/editor_component_visuals.h"
@@ -116,9 +117,9 @@ bool EditorSession::handleContextMenu(const UiPointerEvent &event,const UiPointe
   if(event.phase==UiPointerPhase::Down) state_.contextMenuCreating=false;
   const auto open=[&](u32 level,UiPoint at) {
     const bool object=document_.exists(state_.selection)&&state_.selection!=document_.root();
-    state_.contextMenu=true;state_.contextMenuLevel=state_.contextMenuRootLevel=level==cm::WorkspaceLevel?level:object?level:1u;
+    state_.contextMenu=true;state_.contextMenuLevel=state_.contextMenuRootLevel=level>=cm::WorkspaceLevel?level:object?level:1u;
     state_.contextMenuAnchor=at;state_.contextMenuScroll=0;
-    if(level!=cm::WorkspaceLevel)state_.creationAsChild=object;
+    if(level<cm::WorkspaceLevel)state_.creationAsChild=object;
     state_.entityMenu=false;state_.creationMenu=false;
   };
   if(!state_.contextMenu) {
@@ -126,6 +127,7 @@ bool EditorSession::handleContextMenu(const UiPointerEvent &event,const UiPointe
     const u32 key=routing.widgetId,rows=widgetId(EditorWidget::HierarchyRowBase);
     // O menu Cena abre em qualquer espaço de trabalho, inclusive no Play.
     if(key==widgetId(EditorWidget::ProjectMenu)) {open(cm::WorkspaceLevel,routing.position);return true;}
+    if(key==clip_widget::id(clip_widget::StudioMenu)) {open(cm::StudioLevel,routing.position);return true;}
     if(isPlaying()) return false;
     if(key==widgetId(EditorWidget::HierarchyAdd)) {open(1,routing.position);return true;}
     if(key==widgetId(EditorWidget::HierarchyMenu)) {open(0,routing.position);return true;}
@@ -548,8 +550,15 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
   if(routing.tapped&&routing.widgetId==clip_widget::id(clip_widget::Open)) {
+    // Animar: abre o primeiro clipe do próprio objeto (componente Animação);
+    // sem clipe, cria um e já o toca nele.
     const auto owner=state_.selection?state_.selection:document_.root();std::string error;
-    if(!animationClipAssets_.empty())openAnimationClip(animationClipAssets_.front().guid,owner,error);
+    const auto *entity=document_.find(owner);
+    const auto *animation=entity?static_cast<const scene::Animation*>(entity->components.find(scene::Animation::descriptor)):nullptr;
+    resources::AssetGuid first;
+    if(animation)for(const auto &entry:animation->clips)if(animationClipAsset(entry.asset)) {first=entry.asset;break;}
+    if(first.valid())openAnimationClip(first,owner,error);
+    else if(owner==document_.root()&&!animationClipAssets_.empty())openAnimationClip(animationClipAssets_.front().guid,owner,error);
     else {resources::AssetGuid guid;if(createAnimationClip(owner,2,guid,error)&&(owner==document_.root()||playNewClipOnOwner(owner,guid,error)))openAnimationClip(guid,owner,error);}
     state_.status=error;return true;
   }

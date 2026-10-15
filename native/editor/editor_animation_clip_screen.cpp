@@ -116,16 +116,22 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   layout.topBar=top(area,48);list.addRect(layout.topBar,theme.color.surface);router.addBlocker(layout.topBar);
   auto header=layout.topBar;
   auto close=UiRect{header.right()-44,header.y,44,header.height};header.width-=44;button(close,"",w::Close,true,false,UiIcon::UiClose);
-  button(left(header,header.width>620?110:42),header.width>620?"Objetos":"",w::Targets,true,state.clipAuthoringPicker!=0,UiIcon::AnimationBinding);
-  button(left(header,std::min(210.f,header.width*(state.clipCurves?.26f:.29f))),asset->name,w::Choose,true,state.clipPicker,UiIcon::AssetsAnimation);
+  // Cabeçalho só com ícones: objetos, clipe, desfazer/refazer, enquadrar,
+  // expandir, vista de curvas e o menu ⋮ do estúdio (clipe, camadas, rig,
+  // bake, exportar). Nome, modo de rotação e pose não são decisões de abertura.
+  {auto menu=UiRect{header.right()-44,header.y,44,header.height};header.width-=44;
+   button(menu,"",w::StudioMenu,true,state.contextMenu&&state.contextMenuLevel==context_menu_widget::StudioLevel,UiIcon::EditorAuthorMore);}
+  button(left(header,42),"",w::Targets,true,state.clipAuthoringPicker!=0,UiIcon::AnimationBinding);
+  button(left(header,std::min(220.f,header.width*.3f)),asset->name,w::Choose,true,state.clipPicker,UiIcon::AssetsAnimation);
   button(left(header,42),"",w::Undo,state.canUndo,false,UiIcon::EditorUndo);
   button(left(header,42),"",w::Redo,state.canRedo,false,UiIcon::EditorRedo);
   button(left(header,42),"",w::Frame,true,false,UiIcon::AnimationFrame);
   button(left(header,42),"",w::Expand,true,state.clipExpanded,UiIcon::EditorAuthorFrame);
-  if(header.width>=56)button(left(header,56),state.clipCurves?"Vista":"Nome",state.clipCurves?w::CurveView:w::Name,true,state.clipCurves&&state.clipCurveView);
-  if(state.clipCurves&&header.width>=56)button(left(header,56),"Nome",w::Name);
-  if(header.width>=84)button(left(header,84),"Pose",w::Pose,state.clipTarget!=0&&!state.clipExpanded,state.clipPoseShown,UiIcon::AnimationReferencePose);
-  if(header.width>=52)button(left(header,52),"Novo",w::New);
+  if(state.clipCurves)button(left(header,42),"",w::CurveView,true,state.clipCurveView,UiIcon::AnimationCurveCompare);
+  // Compacto (sem painel lateral): pose e novo clipe continuam no cabeçalho.
+  const bool studioLayout=area.width>=900&&!state.clipExpanded;
+  if(!studioLayout&&header.width>=84)button(left(header,84),"Pose",w::Pose,state.clipTarget!=0&&!state.clipExpanded,state.clipPoseShown,UiIcon::AnimationReferencePose);
+  if(!studioLayout&&header.width>=52)button(left(header,52),"Novo",w::New);
   // Estudio de animacao: com largura, a arvore de ossos fica a esquerda e o
   // inspector (chave, rig, pose) a direita. Viewport e timeline ficam no centro;
   // nada cobre a tela inteira, e tudo opera sobre o mesmo alvo selecionado.
@@ -159,83 +165,76 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
       if(active) {list.addRect(deflate(row,{4,2,4,2}),withAlpha(theme.color.accent,.18f),4);list.addRect({row.x+4,row.y+8,3,row.height-16},theme.color.accent,1.5f);}
       const float indent=12.f+std::min<u32>(depth,10)*12.f;
       list.addImage({row.x+indent,row.y+11,18,18},static_cast<UiImageId>(bone?UiIcon::AnimationSkeleton:UiIcon::AnimationBinding),bone?0xffffffff:withAlpha(0xffffffff,.55f));
-      label({row.x+indent+24,row.y,std::max(0.f,row.width-indent-28),row.height},object->name,active?theme.color.accent:bone?theme.color.text:theme.color.textDim);
+      label({row.x+indent+24,row.y,std::max(0.f,row.width-indent-46),row.height},object->name,active?theme.color.accent:bone?theme.color.text:theme.color.textDim);
+      // Ponto: o osso tem trilha na camada atual.
+      if(std::find(state.clipAnimatedBones.begin(),state.clipAnimatedBones.end(),id)!=state.clipAnimatedBones.end())list.addRect({row.right()-16,row.y+16,8,8},theme.color.accent,4);
       router.addRegion(row,w::id(w::BoneRow+n));
     }
-    auto tabs=top(side,44);list.addRect(tabs,theme.color.silhouette);
-    const char *tabNames[]{"Chave","Rig","Pose","IK"};const UiIcon tabIcons[]{UiIcon::AnimationKey,UiIcon::AnimationSkeleton,UiIcon::AnimationPoseTools,UiIcon::ComponentIkTwoBone};
-    const float tabWidth=tabs.width/4;
-    for(u32 t=0;t<4;++t) {
-      const UiRect tab{tabs.x+tabWidth*t,tabs.y,tabWidth,tabs.height};const bool active=state.clipStudioTab==t;
-      if(active)list.addRect({tab.x+10,tab.bottom()-3,tab.width-20,3},theme.color.accent,1.5f);
-      list.addImage({tab.x+10,tab.y+13,18,18},static_cast<UiImageId>(tabIcons[t]),active?0xffffffff:withAlpha(0xffffffff,.6f));
-      label({tab.x+32,tab.y,tab.width-34,tab.height},tabNames[t],active?theme.color.accent:theme.color.textDim);
-      router.addRegion(tab,w::id(w::StudioTabKey+t));
-    }
-    const auto card=[&](UiRect &column,std::string_view name,std::string value,u32 code,bool enabled,UiIcon icon=UiIcon::None,bool active=false) {
-      auto row=deflate(top(column,52),{8,4,8,4});
-      list.addRect(row,active?withAlpha(theme.color.accent,.16f):enabled?theme.color.raised:theme.color.silhouette,4);
-      if(active)list.addRect({row.x,row.y+6,3,row.height-12},theme.color.accent,1.5f);
-      auto inner=deflate(row,{10,2,10,2});
-      if(icon!=UiIcon::None){list.addImage({inner.x,inner.y+(inner.height-20)*.5f,20,20},static_cast<UiImageId>(icon),enabled?0xffffffff:withAlpha(0xffffffff,.4f));inner.x+=28;inner.width-=28;}
-      list.pushClip(inner);
-      list.addText({inner.x,inner.y,inner.width,inner.height*.45f},name,theme.color.textMuted,theme.type.caption);
-      list.addText({inner.x,inner.y+inner.height*.45f,inner.width,inner.height*.55f},fitTextMiddle(list,value,inner.width,theme.type.body),enabled?theme.color.text:theme.color.textFaint,theme.type.body);
-      list.popClip();
-      if(enabled)router.addRegion(row,w::id(code));
-    };
+    // Painel do osso: o osso tocado, seus canais com valor e botão de chave e
+    // as ferramentas de pose como grade de ícones. O rig abre no lugar dele.
+    const EditorEntityId bone=state.clipPreviewTarget?state.clipPreviewTarget:state.clipTarget;
+    const auto *boneObject=graph&&bone?graph->find(bone):nullptr;
+    const auto *ownerObject=graph?graph->find(state.clipOwner):nullptr;
+    auto panelHeader=top(side,44);list.addRect(panelHeader,theme.color.silhouette);
     if(state.clipStudioTab==1) {
+      button(left(panelHeader,44),"",w::StudioTabKey,true,false,UiIcon::UiChevronLeft);
+      label(panelHeader,"Rig",theme.color.text);
       if(state.rigToolOpen)buildEditorRigScreen(state.rigTool,theme,list,router,side);
-      else label({side.x+12,side.y+8,side.width-24,40},"Selecione um objeto com hierarquia para o rig.",theme.color.textDim);
-    } else if(state.clipStudioTab==3) {
-      if(state.clipIkMode&&state.clipIkPoleSet)card(side,"Direção da dobra","Fixada · toque para seguir a pose",w::PoseIkPoleReset,true,UiIcon::AnimationRotationBranch,true);
-      card(side,"IK de dois ossos",state.clipIkMode?"Arraste o alvo na ponta selecionada":"Desligado",w::PoseIk,state.clipPoseShown,UiIcon::AnimationRetarget,state.clipIkMode);
-      card(side,"Assistente de IK","Mãos, pés, pelve e cabeça pela hierarquia",w::PoseIkWizard,true,UiIcon::ComponentGrounder);
-      card(side,"Fixar ponta no intervalo",state.clipRangeShown?"Intervalo da timeline · chaves FK":"Clipe inteiro · chaves FK",w::PosePin,state.clipPoseShown,UiIcon::ComponentIkOffset);
-      {const auto *parentObject=state.studio&&state.studio->followParent&&state.document?state.document->find(state.studio->followParent):nullptr;
-       card(side,"Seguir pai (Child-Of)",parentObject?std::string("Segue ")+parentObject->name+(state.clipRangeShown?" no intervalo":" do tempo atual ao fim"):"Defina um pai primeiro",w::PoseFollow,state.clipPoseShown&&parentObject,UiIcon::ComponentIkTwoBone);
-       card(side,"Definir como pai",parentObject?std::string("Pai: ")+parentObject->name:"O osso selecionado vira o pai",w::PoseFollowParent,state.clipPoseShown,UiIcon::AnimationBinding,parentObject!=nullptr);}
-      card(side,"IK permanente nesta ponta","Cria alvo e direção na cena; resolve em Play",w::PoseIkCreate,state.clipPreviewTarget!=0||state.clipTarget!=0,UiIcon::ComponentIkTwoBone);
-      {const auto *owner=state.document?state.document->find(state.clipOwner):nullptr;
-       const auto *motion=owner?static_cast<const scene::RootMotion*>(owner->components.find(scene::RootMotion::descriptor)):nullptr;
-       const auto *bone=motion&&state.document?state.document->find(static_cast<EditorEntityId>(motion->bone)):nullptr;
-       card(side,"Root motion",motion?(motion->enabled?std::string("Ativo · osso ")+(bone?bone->name:std::string("ausente"))+" · toque para desligar":"Desligado · toque para ligar"):"O passo do quadril anda com o personagem em Play",
-            w::PoseRootMotion,owner!=nullptr,UiIcon::ComponentRootMotion,motion&&motion->enabled);}
-      {const auto *studio=state.studio;const bool baking=studio&&studio->bake;
-       char progress[96];std::snprintf(progress,sizeof progress,"Bake %.0f%% · toque para cancelar",studio?studio->bakeProgress*100:0.f);
-       card(side,"Bake da pose final",baking?std::string(progress):std::string(state.clipRangeShown?"Intervalo · IK, constraints e root motion viram chaves FK":"Clipe inteiro · IK, constraints e root motion viram chaves FK"),
-            w::PoseBake,state.clipTarget!=0||state.clipOwner!=0,UiIcon::AnimationRecordPose,baking);
-       card(side,"Exportar GLB","Esqueleto e animação · relatório e prova de reimportação em Exportados",w::PoseExportGlb,!baking&&state.clipOwner!=0,UiIcon::AnimationBinding);
-       card(side,"Root motion no bake",studio&&studio->bakeRootToOwner?"Vai para o personagem (trilha do dono)":"Fica no osso (como animado)",w::PoseBakeRoot,!baking,UiIcon::ComponentRootMotion,studio&&studio->bakeRootToOwner);}
-    } else if(state.clipStudioTab==2) {
-      card(side,"Modo pose",state.clipPoseShown?"Ativo · toque um osso no viewport":"Desligado",w::Pose,state.clipTarget!=0,UiIcon::AnimationReferencePose,state.clipPoseShown);
-      card(side,"Espelhar membro para o outro lado",!state.clipRigLoaded?"Publique o rig na aba Rig":state.clipRigMirrorPairs?std::to_string(state.clipRigMirrorPairs)+(state.clipRigMirrorPairs==1?" par":" pares")+" · grava no tempo atual":"Defina pares na aba Rig",w::PoseMirrorRig,state.clipPoseShown&&state.clipRigMirrorPairs>0,UiIcon::AnimationRigMirror);
-      card(side,"Ossos no viewport",state.clipPoseJoints?"Visíveis":"Ocultos",w::PoseJoints,!state.clipPreviewJoints.empty(),UiIcon::AnimationSkeleton,state.clipPoseJoints);
-      card(side,"Salvar pose atual","Entra na biblioteca deste rig",w::PoseLibrarySave,state.clipPoseShown&&state.clipRigLoaded,UiIcon::AnimationRecordPose);
-      card(side,"Fantasma",state.clipGhost?"Quadro anterior (azul) e seguinte (âmbar)":"Desligado",w::PoseGhost,state.clipPoseShown,UiIcon::AnimationFrame,state.clipGhost);
-      card(side,"Valores numéricos",state.clipPoseNumbers?"Abertos":"Fechados",w::PoseNumbers,state.clipPoseShown,UiIcon::AnimationProperty,state.clipPoseNumbers);
-      card(side,"Edição",state.clipPoseIsolated?"Camada isolada":"Resultado combinado",w::PoseIsolate,state.clipPoseShown,UiIcon::AnimationLayers,state.clipPoseIsolated);
-      card(side,"Seleção, espelho e cópia","Ferramentas de pose",w::PoseTools,state.clipPoseShown,UiIcon::AnimationPoseTools,state.clipPoseToolsShown);
-      if(!state.clipPoseLibrary.empty()) {
-        auto heading=top(side,28);label({heading.x+12,heading.y,heading.width-24,heading.height},"Biblioteca de poses · toque aplica como chave",theme.color.textMuted);
-        for(u32 i=0;i<state.clipPoseLibrary.size()&&i<16&&side.height>=52;++i)
-          card(side,"Pose "+std::to_string(i+1),state.clipPoseLibrary[i],w::PoseLibrary+i,state.clipPoseShown,UiIcon::AnimationReferencePose);
-      }
     } else {
-      const resources::AnimationClipTrack *track=asset->track(state.clipTrack);
-      const auto *trackCurve=track&&state.clipComponent<track->curves.size()?&track->curves[state.clipComponent]:nullptr;
-      const resources::AnimationCurveKey *selectedKey=nullptr;if(trackCurve)for(const auto &k:trackCurve->keys)if(k.id==state.clipKey)selectedKey=&k;
-      card(side,"Canal",track?std::string(pathName(*track))+" · "+componentName(*track,state.clipComponent):"Nenhum canal",w::Targets,true,UiIcon::AnimationBinding);
-      card(side,"Auto-key",state.clipPoseAutoKey?"Grava ao soltar o gizmo":"Manual",w::PoseAutoKey,state.clipPoseShown,UiIcon::AnimationAutoKey,state.clipPoseAutoKey);
-      if(state.clipPosePending)card(side,"Pose pendente","Gravar chave no tempo atual",w::PoseRecord,true,UiIcon::AnimationRecordPose,true);
-      card(side,"Copiar pose do osso",state.clipPoseClipboardAvailable?"Copiada · cole em outro quadro":"Rotação/posição no tempo atual",w::PoseCopy,state.clipPoseShown&&track,UiIcon::AssetsCopy);
-      card(side,"Colar pose","No tempo atual · grava com auto-key",w::PosePaste,state.clipPoseShown&&state.clipPoseClipboardAvailable,UiIcon::AnimationKey);
-      if(selectedKey) {
-        const bool progressive=track->rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion;
-        card(side,"Tempo da chave",number(selectedKey->time," s"),w::KeyTime,true,UiIcon::AnimationFrame);
-        card(side,"Valor",number(selectedKey->value),w::KeyValue,!progressive||state.clipComponent!=4,UiIcon::AnimationKey);
-        card(side,"Tangente de saída",tangentName(selectedKey->outgoing),w::Tangent,!progressive||state.clipComponent==4,UiIcon::AnimationTangent);
-      } else label({side.x+16,side.y+8,side.width-32,40},"Toque uma chave na timeline para editar tempo, valor e tangente.",theme.color.textMuted);
+      {auto icon=left(panelHeader,36);list.addImage({icon.x+10,icon.y+13,18,18},static_cast<UiImageId>(UiIcon::AnimationBinding),boneObject?0xffffffff:withAlpha(0xffffffff,.4f));}
+      {auto rig=UiRect{panelHeader.right()-44,panelHeader.y,44,panelHeader.height};panelHeader.width-=44;button(rig,"",w::StudioTabRig,true,false,UiIcon::AnimationSkeleton);}
+      label(panelHeader,boneObject?boneObject->name:ownerObject?ownerObject->name:"",boneObject?theme.color.text:theme.color.textDim);
+      const UiIcon channelIcons[]{UiIcon::EditorMove,UiIcon::EditorRotate,UiIcon::EditorScale};
+      const UiColor axisColors[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+      for(u32 p=0;p<3;++p) {
+        auto row=deflate(top(side,54),{8,5,8,5});
+        const bool has=state.clipBoneTracks[p]!=0,keyed=state.clipBoneKeyed[p];
+        list.addImage({row.x,row.y+(row.height-18)*.5f,18,18},static_cast<UiImageId>(channelIcons[p]),boneObject?(has?0xffffffff:withAlpha(0xffffffff,.45f)):withAlpha(0xffffffff,.25f));
+        row.x+=26;row.width-=26;
+        auto keyButton=UiRect{row.right()-40,row.y,40,row.height};row.width-=46;
+        const float fieldWidth=row.width/3;
+        for(u32 c=0;c<3;++c) {
+          auto field=deflate(left(row,fieldWidth),{2,0,2,0});
+          char text[32];std::snprintf(text,sizeof text,p==1?"%.0f°":"%.2f",double(state.clipBoneValues[p][c]));
+          button(field,text,w::BoneChannel+p*4+c,boneObject!=nullptr,false);
+          list.addRect({field.x+3,field.y+9,3,field.height-18},boneObject?axisColors[c]:withAlpha(axisColors[c],.35f),1.5f);
+        }
+        // Chave: cheia = chave neste tempo; contorno = canal animado sem chave
+        // aqui; apagada = sem canal (tocar cria o canal e a chave).
+        list.addRect(deflate(keyButton,{3,5,3,5}),keyed?withAlpha(theme.color.accent,.22f):theme.color.silhouette,4);
+        if(has&&!keyed)list.addBorder(deflate(keyButton,{3,5,3,5}),withAlpha(theme.color.accent,.6f),1,4);
+        list.addImage({keyButton.x+11,keyButton.y+(keyButton.height-18)*.5f,18,18},static_cast<UiImageId>(UiIcon::AnimationKey),keyed?theme.color.accent:has?0xffffffff:withAlpha(0xffffffff,boneObject?.45f:.25f));
+        if(boneObject)router.addRegion(keyButton,w::id(w::BoneChannel+p*4+3));
+      }
+      // Ferramentas de pose: grade de ícones com legenda curta; estado pela cor.
+      struct Tool {UiIcon icon;const char *name;u32 code;bool enabled,active;};
+      const Tool tools[]{
+        {UiIcon::AnimationAutoKey,"Auto-key",w::PoseAutoKey,true,state.clipPoseAutoKey},
+        {UiIcon::AnimationRigMirror,"Espelhar",w::PoseMirrorRig,state.clipRigMirrorPairs>0,false},
+        {UiIcon::AssetsCopy,"Copiar",w::PoseCopy,boneObject!=nullptr&&state.clipTrack!=0,false},
+        {UiIcon::AnimationKey,"Colar",w::PosePaste,state.clipPoseClipboardAvailable,false},
+        {UiIcon::AnimationReferencePose,"Repouso",w::PoseResetReference,boneObject!=nullptr,false},
+        {UiIcon::AnimationFrame,"Fantasma",w::PoseGhost,true,state.clipGhost},
+        {UiIcon::AnimationSkeleton,"Ossos",w::PoseJoints,!state.clipPreviewJoints.empty(),state.clipPoseJoints},
+        {UiIcon::AnimationRetarget,"IK",w::PoseIk,boneObject!=nullptr,state.clipIkMode},
+        {UiIcon::ComponentIkOffset,"Fixar",w::PosePin,boneObject!=nullptr,false},
+        {UiIcon::AnimationLayers,"Camada",w::PoseIsolate,true,state.clipPoseIsolated},
+        {UiIcon::AnimationSelectionSet,"Seleção",w::PoseTools,true,state.clipPoseToolsShown},
+        {UiIcon::AnimationRecordPose,"Guardar",w::PoseLibrarySave,state.clipRigLoaded,false}};
+      const float cell=side.width/3;
+      for(u32 i=0;i<std::size(tools);i+=3) {
+        auto rowRect=top(side,64);
+        for(u32 j=0;j<3&&i+j<std::size(tools);++j) {
+          const auto &t=tools[i+j];const auto tile=deflate(UiRect{rowRect.x+cell*j,rowRect.y,cell,rowRect.height},{5,4,5,4});
+          list.addRect(tile,t.active?withAlpha(theme.color.accent,.18f):t.enabled?theme.color.raised:theme.color.silhouette,6);
+          list.addImage({tile.x+(tile.width-20)*.5f,tile.y+8,20,20},static_cast<UiImageId>(t.icon),t.active?theme.color.accent:t.enabled?0xffffffff:withAlpha(0xffffffff,.35f));
+          list.pushClip(tile);label({tile.x,tile.y+30,tile.width,24},t.name,t.enabled?theme.color.textDim:theme.color.textFaint,UiAlign::Center);list.popClip();
+          if(t.enabled)router.addRegion(tile,w::id(t.code));
+        }
+      }
+      // Biblioteca de poses deste rig: tocar aplica como chave.
+      for(u32 i=0;i<state.clipPoseLibrary.size()&&i<16&&side.height>=44;++i)
+        button(deflate(top(side,44),{8,3,8,3}),state.clipPoseLibrary[i],w::PoseLibrary+i,boneObject!=nullptr,false,UiIcon::AnimationReferencePose);
     }
   }
   const resources::AnimationClipTrack *selected=asset->track(state.clipTrack);
@@ -439,11 +438,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     router.addRegion(row,w::id(w::Row+visible));visibleRows.push_back({&t,c});++visible;
   }
   layout.clipVisibleRows=std::max(1u,visible);
-  if(!visible&&state.clipFilterSelected)label({canvas.x+8,canvas.y+8,std::max(0.f,canvas.width-16),32},"Este osso ainda não tem chaves · gire, mova ou use IK para criar",theme.color.textDim);
-  if(!selected) {
-    label({canvas.x+8,canvas.y+8,std::max(0.f,canvas.width-16),32},"Camada vazia · Objetos → escolher propriedade",theme.color.textDim);
-    button({canvas.x+8,canvas.y+42,156,42},"Adicionar canal",w::Targets,true,false,UiIcon::AnimationBinding);
-  }
+  if(!selected)button({canvas.x+8,canvas.y+8,156,42},"Adicionar canal",w::Targets,true,false,UiIcon::AnimationBinding);
   if(!canvas.isEmpty()&&curve) {
     const float span=std::max(.0001f,state.clipEnd-state.clipStart);
     const auto xAt=[&](double t){return canvas.x+static_cast<float>((t-state.clipStart)/span*canvas.width);};
@@ -682,9 +677,12 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     }
     const auto *object=state.document?state.document->find(previewTarget):nullptr;
     const UiRect name{column.right()+8,layout.viewport.y+8,std::min(320.f,layout.viewport.width-72),28};
-    list.addRect(name,withAlpha(theme.color.surface,.85f),4);
     const bool warn=!state.clipDiagnostic.empty();
-    label(name,warn?state.clipDiagnostic:object?std::string(object->name)+(targetChannel?"":" · escolha o canal"):"Toque um osso",warn?theme.color.warning:object?theme.color.accent:theme.color.textDim);
+    // Chip só com o nome do osso (ou o aviso); sem osso, nada a dizer.
+    if(warn||object) {
+      list.addRect(name,withAlpha(theme.color.surface,.85f),4);
+      label(name,warn?state.clipDiagnostic:std::string(object->name),warn?theme.color.warning:theme.color.accent);
+    }
     if(state.clipGhost&&state.clipPoseGraph&&state.view) {
       // Fantasma: esqueleto no quadro anterior (azul) e seguinte (ambar).
       list.pushClip(layout.viewport);
