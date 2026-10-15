@@ -26,4 +26,6 @@ Os arquivos extraídos ficam em `build/terrain-packages`, com `manifest.json` po
 
 ## Estado
 
+Atualização em 15/10: APK Astra Dev ARM64 código 75 gerado, assinado e auditado sem ADB. Branch publicada, sem merge na main. Detalhes, hash e limitações de assinatura/páginas de memória em `docs/terrain-apk-2026-10-15.md`. Aceite de execução no aparelho continua pendente.
+
 Bloco 1 concluído: Digger 151, MicroSplat 517, Path Painter 85 arquivos de conteúdo. Bloco 2 implementado no recorte descrito. Bloco 3: build nativo e 9/9 cenários passaram, incluindo sessão nova, colisão Jolt e toque na UI; capturas nativas em dois tamanhos. Sem aparelho ADB, aceite Android permanece pendente. Docs compiladas e 339.399 links internos verificados sem erros; revisão desktop/mobile. Publicadas no commit AstraDocs `4b20eec21290a6bd52247abce7ae1430ec8e4734`, deploy `dpl_ACvqLKijfb4Eozuqr7c4cziVKmih` READY; domínio respondeu HTTP 200 com o guia e aviso de desenvolvimento. Não há nova distribuição APK. Evidências e limites em `docs/terrain-voxel-validation-2026-10-14.md`.

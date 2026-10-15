@@ -2,6 +2,8 @@
 
 Branch `codex/terrain-voxel-generator`, base `7260c5839dcd6c9a3a89db0b3933cce194ac0788`.
 
+Atualização de 15/10: o pedido posterior de gerar APK sem ADB foi atendido; consulte `docs/terrain-apk-2026-10-15.md`. As limitações abaixo registram o aceite original do host em 14/10.
+
 ## Executado
 
 - Extração dos três pacotes em `build/terrain-packages`, 753 arquivos de conteúdo, manifests com hashes e originais preservados. Quatro texturas de Path Painter adaptadas para PNG RGB 256×256; licença fornecida e proveniência em `assets/terrain`.
