@@ -136,6 +136,21 @@ Hipótese visual: gerada por imagem a partir das capturas (ver pasta
 controle desenhado foi confrontado com modelo, serialização e ação antes de
 codificar.
 
+## 6. Estado (15/10/2026)
+
+- E1 entregue (commit 902d28dc): posar por padrão na largura de estúdio,
+  painel do osso com chave por canal, grade de ferramentas, menu ⋮, "Animar",
+  pontos na árvore, textos de estado removidos. Diferenças da hipótese: a
+  linha de chaves-mestras e o toque longo na chave ficam para E2; o compacto
+  (< 900 px) mantém Pose/Novo no cabeçalho por não ter painel lateral.
+- E3 entregue (commit 41216ee1): Importar universal na barra, Biblioteca com
+  trilho/cartões/detalhe. "Recursos importados" (malhas do projeto) ainda é um
+  espaço à parte; a união fica para a próxima rodada.
+- Evidência: capturas do preview do host em `estudio-v2/` (studio-kyle*,
+  library-*); suítes 71/71, 1569/1569, 126/126, 24/24. Sem aparelho (ADB off).
+- E2 e E4 pendentes. O modo `scene-kyle-menu` do preview mostra "Criar" em vez
+  das ações do objeto por um artefato de seleção do preview, não do editor.
+
 Referências: UMotion Pro 1.29p04 manual local (`PoseEditor`, `Animation`,
 `Channels`, `Dopesheet`, `AnimatedPropertiesList`, `Playback`); Unity 6000.0
 https://docs.unity3d.com/6000.0/Documentation/Manual/animeditor-AnimatingAGameObject.html;
