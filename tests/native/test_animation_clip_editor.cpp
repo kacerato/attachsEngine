@@ -550,6 +550,78 @@ AE_TEST(animation_clip_multiple_selection_uses_real_surface_and_atomic_history) 
   captureClipSurface(session,font,icons,"clip-bake-small.ppm");
 }
 
+// E2 do estúdio v2: chaves-mestras, toque longo na chave e pinça na régua.
+AE_TEST(animation_clip_timeline_master_keys_long_press_menu_and_pinch_zoom) {
+  using namespace editor;using namespace ui;using namespace resources;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production visual resources");
+  session.initialize(&font,&icons);session.setSurface({0,0,853,394},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  const auto owner=session.document().createEntity(session.document().root(),EditorEntityKind::Folder,"Palco");
+  AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error),error.c_str());
+  const auto rotation=session.animationClipAsset(guid)->tracks[1].id;
+  AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,1,[&](auto &candidate) {
+    const float a[]{0,.38268343f,0,.92387953f},b[]{0,.70710678f,0,.70710678f};
+    return candidate.putPose(rotation,.5f,a,error)&&candidate.putPose(rotation,1,b,error);
+  },error)&&session.openAnimationClip(guid,owner,error),error.c_str());session.update();
+  const auto strip=clipActionPosition(session,font,clip_widget::MasterKeys);
+  AE_EXPECT_TRUE(strip.x>=0,"master key strip is drawn above the dopesheet");
+  const auto canvas=session.layout().clipCanvas;
+  const auto &screen=session.screen();
+  const auto xAt=[&](float t){return canvas.x+(t-screen.clipStart)/(screen.clipEnd-screen.clipStart)*canvas.width;};
+  // Tocar o quadro 0.5 s na linha de chaves-mestras seleciona as quatro
+  // componentes da pose e leva o cursor até lá.
+  const UiPoint half{xAt(.5f),strip.y};
+  session.handlePointer({0,UiPointerPhase::Down,half,1});session.handlePointer({0,UiPointerPhase::Up,half,1.1});session.update();
+  AE_EXPECT_EQ(screen.clipSelection.size(),4u,"master key selects every key of the frame");
+  AE_EXPECT_TRUE(std::abs(screen.clipTime-.5f)<1e-4f,"master key seeks the frame");
+  // Arrastar a chave-mestra move o quadro inteiro, com histórico atômico.
+  const UiPoint moved{xAt(.75f),strip.y};
+  session.handlePointer({0,UiPointerPhase::Down,half,2});session.handlePointer({0,UiPointerPhase::Move,moved,2.1});session.update();
+  session.handlePointer({0,UiPointerPhase::Up,moved,2.2});session.update();
+  for(const auto &curve:session.animationClipAsset(guid)->track(rotation)->curves) {
+    bool at75=false,at50=false;
+    for(const auto &k:curve.keys) {at75|=std::abs(k.time-.75f)<1e-4f;at50|=std::abs(k.time-.5f)<1e-4f;}
+    AE_EXPECT_TRUE(at75&&!at50,"master drag moves all components of the frame together");
+  }
+  tapClipAction(session,font,clip_widget::Undo);
+  for(const auto &curve:session.animationClipAsset(guid)->track(rotation)->curves) {
+    bool at50=false;for(const auto &k:curve.keys)at50|=std::abs(k.time-.5f)<1e-4f;
+    AE_EXPECT_TRUE(at50,"one undo restores the whole frame");
+  }
+  // Toque longo numa chave da linha abre o menu da chave no ponto tocado.
+  tapClipAction(session,font,clip_widget::RowsNext);
+  const auto rowCanvas=session.layout().clipCanvas;
+  const UiPoint key{rowCanvas.x+(.5f-screen.clipStart)/(screen.clipEnd-screen.clipStart)*rowCanvas.width,rowCanvas.y+13};
+  session.handlePointer({0,UiPointerPhase::Down,key,3});session.handlePointer({0,UiPointerPhase::Up,key,3.7});session.update();
+  AE_EXPECT_TRUE(screen.contextMenu&&screen.contextMenuLevel==context_menu_widget::KeyLevel,"long press on a key opens the key menu");
+  AE_EXPECT_TRUE(screen.clipKey!=0,"the pressed key stays selected under the menu");
+  const auto tangent=clipActionPosition(session,font,clip_widget::Tangent);
+  AE_EXPECT_TRUE(tangent.x>=0,"key menu exposes the tangent action through the router");
+  session.handlePointer({0,UiPointerPhase::Down,tangent,4});session.handlePointer({0,UiPointerPhase::Up,tangent,4.1});session.update();
+  AE_EXPECT_TRUE(!screen.contextMenu&&screen.clipTangentPicker,"menu action runs the clip action and closes the menu");
+  tapClipAction(session,font,clip_widget::Tangent);
+  // Pinça na timeline: afastar os dedos encurta o intervalo visível e não
+  // arrasta a chave sob o primeiro dedo; o dedo que sobra não faz scrub.
+  const auto pinchCanvas=session.layout().clipCanvas;const float before=screen.clipEnd-screen.clipStart;
+  const UiPoint a{pinchCanvas.x+pinchCanvas.width*.4f,pinchCanvas.y+13},b{pinchCanvas.x+pinchCanvas.width*.6f,pinchCanvas.y+13};
+  const auto keysBefore=session.animationClipAsset(guid)->track(rotation)->curves[0].keys;
+  session.handlePointer({0,UiPointerPhase::Down,a,5});session.handlePointer({1,UiPointerPhase::Down,b,5.05});
+  session.handlePointer({1,UiPointerPhase::Move,{b.x+pinchCanvas.width*.3f,b.y},5.1});session.update();
+  AE_EXPECT_TRUE(screen.clipEnd-screen.clipStart<before*.8f,"spreading two fingers zooms the ruler in");
+  AE_EXPECT_TRUE(screen.clipStart>=0&&screen.clipEnd<=2.0001f,"zoomed window stays inside the clip");
+  session.handlePointer({1,UiPointerPhase::Up,{b.x+pinchCanvas.width*.3f,b.y},5.2});
+  session.handlePointer({0,UiPointerPhase::Move,{a.x+40,a.y},5.3});session.update();
+  const float afterSpan=screen.clipEnd-screen.clipStart;
+  session.handlePointer({0,UiPointerPhase::Up,{a.x+40,a.y},5.4});session.update();
+  AE_EXPECT_TRUE(std::abs(screen.clipEnd-screen.clipStart-afterSpan)<1e-5f,"the remaining finger neither zooms nor drags");
+  const auto keysAfter=session.animationClipAsset(guid)->track(rotation)->curves[0].keys;
+  AE_EXPECT_EQ(keysAfter.size(),keysBefore.size(),"pinch never edits keys");
+  for(usize i=0;i<keysAfter.size()&&i<keysBefore.size();++i)AE_EXPECT_TRUE(keysAfter[i].time==keysBefore[i].time,"pinch never moves keys");
+  captureClipSurface(session,font,icons,"clip-master-keys.ppm");
+}
+
 AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_connected) {
   using namespace editor;using namespace ui;
   TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;

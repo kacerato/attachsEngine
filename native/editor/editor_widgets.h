@@ -584,6 +584,9 @@ inline constexpr u32 WorkspaceLevel=0x100;
 inline constexpr u32 StudioLevel=0x200;
 // Importar universal: modelo, pasta de pacote, textura, ambiente, áudio.
 inline constexpr u32 ImportLevel=0x300;
+// Menu da chave (toque longo numa chave da timeline): tempo, valor, tangente,
+// copiar, recortar e excluir, pelos widgets do clipe.
+inline constexpr u32 KeyLevel=0x400;
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ContextMenuBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ContextMenuBase);}
 } // namespace context_menu_widget
@@ -623,7 +626,7 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
-    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,TimeRuler,BoneTree,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,TimeRuler,BoneTree,MasterKeys,
     BoneRow=0xb680,PoseLibrary=0xb6e0,
     // Painel do osso: canal (0 posição, 1 rotação, 2 escala) × (X, Y, Z, chave).
     BoneChannel=0xb6f0,StudioMenu=0xb6fc,

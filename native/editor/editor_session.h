@@ -1852,6 +1852,10 @@ private:
   u64 clipNumberSceneRevision_=0;float clipNumberTime_=0;
   std::vector<resources::AnimationKeyAddress> clipNumberSelection_,clipPressSelection_;
   ui::UiPoint clipPress_{};float clipPressTime_=0,clipPressValue_=0;
+  // Pinça na timeline (zoom da régua) e arrasto pela linha de chaves-mestras.
+  u32 clipSecondPointer_=0;bool clipPinchDone_=false,clipMasterDrag_=false;
+  ui::UiPoint clipPrimaryPosition_{},clipSecondaryPosition_{};
+  float clipPinchDistance_=1,clipPinchSpan_=1,clipPinchAnchor_=0;
   void refreshAnimationClip();
   void frameAnimationClip(bool selectionOnly=false);
   void beginAnimationClipNumber(u32 code,double value);

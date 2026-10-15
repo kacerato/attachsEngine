@@ -978,14 +978,69 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
     }
     return true;
   }
+  // Pinça na timeline (UMotion/Unity: zoom da régua pelo gesto): o segundo
+  // dedo cancela o arrasto em curso e passa a controlar o intervalo visível,
+  // mantendo o tempo sob o ponto médio dos dedos.
+  if(clipPointer_&&!clipSecondPointer_&&event.phase==UiPointerPhase::Down&&event.pointerId+1!=clipPointer_&&
+     (routing.widgetId==w::id(w::Canvas)||routing.widgetId==w::id(w::MasterKeys)||routing.widgetId==w::id(w::TimeRuler))&&!canvas.isEmpty()) {
+    if(clipDrag_) {clipDrag_.reset();clipPreview_.cancel();refreshAnimationClip();}
+    if(state_.clipSelecting) {selectKeys(state_,*asset,clipPressSelection_);state_.clipSelecting=false;}
+    clipHandle_=0;clipSecondPointer_=event.pointerId+1;clipSecondaryPosition_=event.position;
+    clipPinchDistance_=std::max(1.f,std::hypot(clipPrimaryPosition_.x-event.position.x,clipPrimaryPosition_.y-event.position.y));
+    clipPinchSpan_=state_.clipEnd-state_.clipStart;
+    const float midpoint=(clipPrimaryPosition_.x+event.position.x)*.5f;
+    clipPinchAnchor_=state_.clipStart+(midpoint-canvas.x)/std::max(1.f,canvas.width)*clipPinchSpan_;
+    appearanceChanged_=true;return true;
+  }
+  if(clipSecondPointer_) {
+    if(event.phase==UiPointerPhase::Move) {
+      if(event.pointerId+1==clipPointer_)clipPrimaryPosition_=event.position;
+      else if(event.pointerId+1==clipSecondPointer_)clipSecondaryPosition_=event.position;else return true;
+      const float distance=std::max(1.f,std::hypot(clipPrimaryPosition_.x-clipSecondaryPosition_.x,clipPrimaryPosition_.y-clipSecondaryPosition_.y));
+      const float span=std::clamp(clipPinchSpan_*clipPinchDistance_/distance,1.f/asset->displayRate,std::max(asset->duration,1.f/asset->displayRate));
+      const float midpoint=(clipPrimaryPosition_.x+clipSecondaryPosition_.x)*.5f;
+      state_.clipStart=std::clamp(clipPinchAnchor_-(midpoint-canvas.x)/std::max(1.f,canvas.width)*span,0.f,std::max(0.f,asset->duration-span));
+      state_.clipEnd=state_.clipStart+span;appearanceChanged_=true;
+    } else if(event.phase==UiPointerPhase::Up||event.phase==UiPointerPhase::Cancel) {
+      // O dedo que fica não vira arrasto de chave nem scrub: espera o Up dele.
+      const u32 remaining=event.pointerId+1==clipPointer_?clipSecondPointer_:clipPointer_;
+      clipPointer_=remaining;clipSecondPointer_=0;clipPinchDone_=true;
+    }
+    return true;
+  }
   if(clipPointer_&&event.pointerId+1!=clipPointer_)return true;
+  if(clipPinchDone_) {
+    if(event.phase==UiPointerPhase::Up||event.phase==UiPointerPhase::Cancel) {clipPinchDone_=false;clipPointer_=0;clipMasterDrag_=false;}
+    return true;
+  }
   const u32 widgetCode=animator_widget::code(routing.widgetId);
-  if(routing.widgetId==w::id(w::Canvas)||widgetCode==w::HandleIn||widgetCode==w::HandleOut||clipPointer_) {
+  if(routing.widgetId==w::id(w::Canvas)||routing.widgetId==w::id(w::MasterKeys)||widgetCode==w::HandleIn||widgetCode==w::HandleOut||clipPointer_) {
     if(event.phase==UiPointerPhase::Down) {
-      clipPointer_=event.pointerId+1;state_.clipPlaying=false;clipPress_=event.position;
+      clipPointer_=event.pointerId+1;state_.clipPlaying=false;clipPress_=event.position;clipPrimaryPosition_=event.position;
       clipPressSelection_=state_.clipSelection;state_.clipSelecting=false;
       clipHandle_=widgetCode==w::HandleIn?1:widgetCode==w::HandleOut?2:0;
+      clipMasterDrag_=routing.widgetId==w::id(w::MasterKeys);
       if(clipHandle_)return true;
+      if(clipMasterDrag_) {
+        // Chave-mestra (UMotion): o quadro mais próximo reúne todas as chaves
+        // das trilhas da camada naquele tempo; tocar seleciona o quadro
+        // inteiro, arrastar move todas juntas.
+        const auto all=rows(*asset,state_.clipLayer,&state_.clipFilterBindings);
+        float nearest=20,at=0;bool found=false;
+        for(const auto &entry:all)for(const auto &key:asset->track(entry.track)->curves[entry.component].keys) {
+          const float distance=std::abs(xAt(key.time)-event.position.x);
+          if(distance<nearest) {nearest=distance;at=key.time;found=true;}
+        }
+        std::vector<resources::AnimationKeyAddress> keys;state_.clipKey=0;
+        if(found)for(const auto &entry:all)for(const auto &key:asset->track(entry.track)->curves[entry.component].keys) {
+          if(std::abs(key.time-at)>.5f/asset->displayRate)continue;
+          keys.push_back({entry.track,entry.component,key.id});
+          if(!state_.clipKey) {state_.clipPreviewTarget=0;state_.clipTrack=entry.track;state_.clipComponent=entry.component;state_.clipKey=key.id;clipPressTime_=key.time;clipPressValue_=key.value;}
+        }
+        selectKeys(state_,*asset,keys);clipPressSelection_=state_.clipSelection;
+        std::string error;seekAnimationClip(found?at:timeAt(event.position.x),error);state_.clipDiagnostic=error;
+        return true;
+      }
       if(!state_.clipCurves) {
         const auto all=rows(*asset,state_.clipLayer,&state_.clipFilterBindings);const usize row=state_.clipRow+static_cast<usize>(std::max(0.f,event.position.y-canvas.y)/30);
         if(row<all.size()&&row<state_.clipRow+layout_.clipVisibleRows) {state_.clipPreviewTarget=0;state_.clipTrack=all[row].track;state_.clipComponent=all[row].component;}
@@ -1008,7 +1063,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
       } else state_.clipSelection.clear();
       std::string error;seekAnimationClip(state_.clipKey?clipPressTime_:timeAt(event.position.x),error);state_.clipDiagnostic=error;
     } else if(event.phase==UiPointerPhase::Move&&routing.dragging) {
-      std::string error;
+      std::string error;clipPrimaryPosition_=event.position;
       if(state_.clipSelecting) {
         state_.clipSelectionBox={std::min(clipPress_.x,event.position.x),std::min(clipPress_.y,event.position.y),std::abs(event.position.x-clipPress_.x),std::abs(event.position.y-clipPress_.y)};
         auto keys=state_.clipSelectionAdd?clipPressSelection_:std::vector<resources::AnimationKeyAddress>{};
@@ -1027,7 +1082,7 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
       }
       if(state_.clipKey) {
         const auto *live=animationClipAsset(state_.clipGuid);if(!live)return true;
-        const bool multi=state_.clipSelectionMode&&state_.clipSelection.size()>1&&!clipHandle_;
+        const bool multi=(state_.clipSelectionMode||clipMasterDrag_)&&state_.clipSelection.size()>1&&!clipHandle_;
         auto candidate=multi?*live:clipDrag_?*clipDrag_:*live;
         const auto *found=selectedKey(candidate,state_.clipTrack,state_.clipComponent,state_.clipKey);if(!found)return true;
         auto key=*found;
@@ -1077,8 +1132,15 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
           if(!live||!editAnimationClipAsset(draft.guid,draft.revision,[&](auto &candidate){candidate=draft;return true;},error))state_.clipDiagnostic=error;
         }
         clipPreview_.cancel();refreshAnimationClip();appearanceChanged_=true;
+      } else if(event.phase==UiPointerPhase::Up&&!routing.dragging&&routing.heldSeconds>=ui::kUiLongPressSeconds&&state_.clipKey&&!clipMasterDrag_) {
+        // Toque longo na chave (clique direito do Unity/UMotion): menu da chave
+        // no ponto tocado, com as ações do clipe que já existem.
+        namespace cm=context_menu_widget;
+        state_.contextMenu=true;state_.contextMenuLevel=state_.contextMenuRootLevel=cm::KeyLevel;
+        state_.contextMenuAnchor=event.position;state_.contextMenuScroll=0;state_.entityMenu=state_.creationMenu=false;
+        appearanceChanged_=true;
       }
-      clipPointer_=0;clipHandle_=0;
+      clipPointer_=0;clipHandle_=0;clipMasterDrag_=false;
     }
     return true;
   }

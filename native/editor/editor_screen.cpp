@@ -6732,6 +6732,20 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
     items.push_back({UiIcon::ComponentRootMotion,"Root motion",cw::id(cw::PoseRootMotion)});
     items.push_back({UiIcon::AnimationBake,"Bake da pose final",cw::id(cw::PoseBake)});
     items.push_back({UiIcon::AnimationBinding,"Exportar GLB",cw::id(cw::PoseExportGlb)});
+  } else if(level==cm::KeyLevel) {
+    // Menu da chave (toque longo na timeline): as ações do clipe sobre a
+    // chave ou o quadro selecionado, sem cartão de texto.
+    namespace cw=clip_widget;
+    const bool frame=state.clipSelection.size()>1;
+    char heading[48];std::snprintf(heading,sizeof heading,"%s · %.2f s",frame?"Quadro":"Chave",double(state.clipTime));
+    title=heading;
+    items.push_back({UiIcon::AnimationInterval,"Tempo",cw::id(cw::KeyTime),!frame});
+    items.push_back({UiIcon::AnimationKey,"Valor",cw::id(cw::KeyValue),!frame});
+    items.push_back({UiIcon::AnimationTangent,"Tangente",cw::id(cw::Tangent)});
+    items.push_back({UiIcon::AnimationCurve,state.clipCurves?"Dopesheet":"Curva",cw::id(state.clipCurves?cw::Keys:cw::Curves)});
+    items.push_back({UiIcon::AssetsCopy,"Copiar",cw::id(cw::CopyKeys)});
+    items.push_back({UiIcon::AssetsCopy,"Recortar",cw::id(cw::CutKeys)});
+    items.push_back({UiIcon::UiRemove,"Excluir",cw::id(cw::DeleteKey),true,false,true});
   } else if(level==0) {
     title=hasObject?std::string(selected->name):"Hierarquia";
     items.push_back({UiIcon::SceneObjectAdd,hasObject?"Criar filho":"Criar",cm::id(cm::Create),true,true});

@@ -148,7 +148,16 @@ codificar.
   espaço à parte; a união fica para a próxima rodada.
 - Evidência: capturas do preview do host em `estudio-v2/` (studio-kyle*,
   library-*); suítes 71/71, 1569/1569, 126/126, 24/24. Sem aparelho (ADB off).
-- E2 e E4 pendentes. O modo `scene-kyle-menu` do preview mostra "Criar" em vez
+- E2 entregue: linha de chaves-mestras na metade de baixo da régua (um losango
+  por quadro com chave em qualquer trilha da camada; tocar seleciona o quadro
+  inteiro e leva o cursor; arrastar move todas as chaves do quadro com um
+  único passo de histórico; sem chave perto vale como scrub), toque longo numa
+  chave abre o menu de contexto da chave (`KeyLevel`: Tempo, Valor, Tangente,
+  Curva/Dopesheet, Copiar, Recortar, Excluir) e pinça na timeline faz zoom da
+  régua em torno do ponto médio dos dedos, cancelando o arrasto em curso; o
+  dedo que sobra não faz scrub nem arrasta chave. A faixa própria de 24 px foi
+  descartada porque roubava linhas a 394 px e esvaziava o canvas a 300 px.
+- E4 pendente. O modo `scene-kyle-menu` do preview mostra "Criar" em vez
   das ações do objeto por um artefato de seleção do preview, não do editor.
 - Aparelho (code 82–85, projeto "Kyle – Carregar caixa" gerado no host): o
   fluxo Animar → osso → chave por canal → campo → arrasto com auto-key foi
