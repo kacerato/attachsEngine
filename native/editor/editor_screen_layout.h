@@ -9,6 +9,8 @@ struct EditorScreenLayout final {
   unsigned clipBoneCount=0; // ossos na arvore: limite da rolagem pelo dedo
   // Janela rolável da Biblioteca (lista ou diagnóstico) e a altura do conteúdo.
   ui::UiRect libraryScrollWindow{};float libraryScrollContent=0;
+  // Painel de detalhe da Biblioteca (diagnóstico em chips), rolável à parte.
+  ui::UiRect libraryDetailWindow{};float libraryDetailContent=0;
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};
   ui::UiRect colorSliders[5]{};

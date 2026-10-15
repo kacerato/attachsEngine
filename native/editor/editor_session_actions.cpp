@@ -94,10 +94,13 @@ bool EditorSession::handleInspectorScroll(const UiPointerEvent &event,const UiPo
 // Biblioteca: a lista (ou o diagnóstico) rola pelo arrasto vertical dentro da
 // janela dela; um toque continua chegando à linha.
 bool EditorSession::handleLibraryScroll(const UiPointerRouting &routing) {
-  if(state_.workspace!=EditorWorkspace::Library||!routing.dragging||!layout_.libraryScrollWindow.contains(routing.start)) return false;
+  if(state_.workspace!=EditorWorkspace::Library||!routing.dragging) return false;
+  const bool detail=layout_.libraryDetailWindow.contains(routing.start);
+  if(!detail&&!layout_.libraryScrollWindow.contains(routing.start)) return false;
   if(std::abs(routing.totalDelta.y)<std::abs(routing.totalDelta.x)) return false;
-  const float limit=std::max(0.f,layout_.libraryScrollContent-layout_.libraryScrollWindow.height);
-  float &scroll=state_.libraryDiagnostic.empty()?state_.libraryScroll:state_.libraryDiagnosticScroll;
+  const auto &window=detail?layout_.libraryDetailWindow:layout_.libraryScrollWindow;
+  const float limit=std::max(0.f,(detail?layout_.libraryDetailContent:layout_.libraryScrollContent)-window.height);
+  float &scroll=detail?state_.libraryDiagnosticScroll:state_.libraryScroll;
   scroll=std::clamp(scroll-routing.stepDelta.y,0.f,limit);
   return true;
 }
@@ -128,6 +131,7 @@ bool EditorSession::handleContextMenu(const UiPointerEvent &event,const UiPointe
     // O menu Cena abre em qualquer espaço de trabalho, inclusive no Play.
     if(key==widgetId(EditorWidget::ProjectMenu)) {open(cm::WorkspaceLevel,routing.position);return true;}
     if(key==clip_widget::id(clip_widget::StudioMenu)) {open(cm::StudioLevel,routing.position);return true;}
+    if(key==widgetId(EditorWidget::ImportMenu)) {open(cm::ImportLevel,routing.position);return true;}
     if(isPlaying()) return false;
     if(key==widgetId(EditorWidget::HierarchyAdd)) {open(1,routing.position);return true;}
     if(key==widgetId(EditorWidget::HierarchyMenu)) {open(0,routing.position);return true;}
@@ -1610,8 +1614,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::LibraryClose)) {state_.workspace=EditorWorkspace::Scene;return true;}
     if(key==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
     if(key==widgetId(EditorWidget::LibrarySearch)) {state_.searchingLibrary=true;return true;}
-    if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticScroll=0;state_.libraryConflict=false;return true;}
+    if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticScroll=0;state_.libraryConflict=false;state_.libraryDetailItem={};state_.libraryDetailName.clear();return true;}
     if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%11;state_.libraryScroll=0;refreshLibraryRows();return true;}
+    if(key>=widgetId(EditorWidget::LibraryKindBase)&&key<widgetId(EditorWidget::LibraryKindBase)+11) {
+      state_.libraryKind=key-widgetId(EditorWidget::LibraryKindBase);state_.libraryScroll=0;refreshLibraryRows();return true;
+    }
     if(key==widgetId(EditorWidget::LibraryReimport)||key==widgetId(EditorWidget::LibraryKeepLocal)||key==widgetId(EditorWidget::LibraryReceiveSource)) {
       const auto id=state_.libraryDetailItem;const auto *item=library_.item(id);if(!item)return true;
       const auto path=item->path;std::string error;
@@ -2900,6 +2907,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     state_.status="Escolha a pasta do modelo (.gltf com .bin e texturas)";
     return true;
   }
+  // Importar universal (menu da barra superior): os mesmos pedidos que os
+  // painéis levantam, de qualquer espaço de trabalho.
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportTexture)) {state_.textureImportRequested=true;state_.codeFiles=false;return true;}
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportEnvironment)) {state_.environmentImportRequested=true;state_.codeFiles=false;return true;}
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportModel)) {
     // O editor não conhece Android nem o seletor de arquivos: levanta o pedido
     // e quem tem o sistema na mão abre o diálogo e devolve os bytes.

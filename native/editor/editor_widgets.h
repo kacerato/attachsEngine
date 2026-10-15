@@ -11,6 +11,9 @@ enum class EditorWidget : u32 {
   LibraryReimport,LibraryKeepLocal,LibraryReceiveSource,LibraryInstantiate,LibraryControllerAssign,
   LibraryItemBase=0xCD110000u,
   LibraryItemDetailsBase=0xCD140000u,
+  // Trilho de tipos da Biblioteca (+ índice do tipo, 0 = todos) e o botão
+  // universal de importar da barra superior (abre o menu de contexto).
+  LibraryKindBase=0xCD150000u,ImportMenu=0xCD160000u,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
@@ -579,6 +582,8 @@ enum Code : u32 {Close=1,Back=2,Create=3,AllRecipes=4,Category=0x10};
 inline constexpr u32 WorkspaceLevel=0x100;
 // Menu ⋮ do estúdio de animação (clipe, camadas, rig, bake, exportar).
 inline constexpr u32 StudioLevel=0x200;
+// Importar universal: modelo, pasta de pacote, textura, ambiente, áudio.
+inline constexpr u32 ImportLevel=0x300;
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ContextMenuBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ContextMenuBase);}
 } // namespace context_menu_widget

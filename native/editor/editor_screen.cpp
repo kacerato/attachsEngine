@@ -390,6 +390,9 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   right(UiIcon::UiSliders,EditorWidget::QualityOpen,state.qualityPanel);
   if(state.workspace==EditorWorkspace::Scene) right(UiIcon::UiDiagnostics,EditorWidget::DiagnosticDockToggle,state.diagnosticDockOpen);
   if(!playing) right(UiIcon::IdeSearch,EditorWidget::GlobalSearchOpen,state.globalSearch); // Unity 6000.0: busca global na barra.
+  // Importar universal: modelo, pasta de pacote, textura, ambiente e áudio
+  // pelo mesmo menu, de qualquer espaço de trabalho de autoria.
+  if(!playing) right(UiIcon::AssetsImport,EditorWidget::ImportMenu,state.contextMenu&&state.contextMenuLevel==context_menu_widget::ImportLevel);
   // Centro: o Play no meio da barra, e rodando, os controles dele ao lado.
   const float gap=theme.spacing.tiny,playWidth=56,speedWidth=56;
   const float group=playWidth+(playing?3*(kActionButton+gap)+speedWidth+gap:0);
@@ -6702,6 +6705,13 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
     items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
     items.push_back({UiIcon::UiInterfaceCanvas,"Interface (UI + ImGui)",widgetId(EditorWidget::TabGui)});
     items.push_back({UiIcon::UiAutoLayout,"Layout dos painéis",widgetId(EditorWidget::LayoutsOpen)});
+  } else if(level==cm::ImportLevel) {
+    title="Importar";
+    items.push_back({UiIcon::AssetsFileMesh,"Modelo (GLB, FBX)",widgetId(EditorWidget::ImportModel)});
+    items.push_back({UiIcon::AssetsSourcePackage,"Pasta de pacote",widgetId(EditorWidget::LibraryImport)});
+    items.push_back({UiIcon::AssetsTexture,"Textura",widgetId(EditorWidget::ImportTexture)});
+    items.push_back({UiIcon::LightingSky,"Ambiente (HDRI)",widgetId(EditorWidget::ImportEnvironment)});
+    items.push_back({UiIcon::AudioClip,"Áudio",widgetId(EditorWidget::ImportWave)});
   } else if(level==cm::StudioLevel) {
     // Menu ⋮ do estúdio: o que não é posar nem tempo, pelos widgets do clipe.
     namespace cw=clip_widget;
@@ -10803,87 +10813,125 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   }
 }
 
+// Biblioteca como gerenciador: trilho de tipos à esquerda (com contagem),
+// cartões ao centro (ícone do tipo, nome, pacote, selo de estado) e o detalhe
+// à direita com ações em ícone e diagnóstico em chips. Importar é o botão
+// universal da barra superior. Em superfície estreita o detalhe ocupa o lugar
+// dos cartões e os tipos ficam no filtro cíclico.
 void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
-  router.addBlocker(area);list.addRect(area,theme.color.canvas);area=deflate(area,UiInsets::symmetric(12,6));
-  const auto action=[&](UiRect hit,const std::string &text,EditorWidget widget,UiIcon icon) {
-    list.addRect(deflate(hit,UiInsets::all(2)),theme.color.raised,theme.radius.control);
-    list.addImage(centred(takeLeft(hit,32),20,20),static_cast<UiImageId>(icon),theme.color.text);
-    builder.label(hit,text.c_str(),theme.color.text,theme.type.caption);
-    router.addRegion({hit.x-32,hit.y,hit.width+32,hit.height},widgetId(widget));
+  router.addBlocker(area);list.addRect(area,theme.color.canvas);
+  const auto iconButton=[&](UiRect hit,EditorWidget widget,UiIcon icon,bool enabled=true,bool active=false) {
+    list.addRect(deflate(hit,UiInsets::all(4)),active?withAlpha(theme.color.accent,.18f):enabled?theme.color.raised:theme.color.silhouette,theme.radius.control);
+    list.addImage(centred(hit,20,20),static_cast<UiImageId>(icon),active?theme.color.accent:enabled?theme.color.text:theme.color.textFaint);
+    if(enabled)router.addRegion(hit,widgetId(widget));
   };
-  auto heading=takeTop(area,48);
-  action(takeRight(heading,128),"Importar pasta",EditorWidget::LibraryImport,UiIcon::AssetsImport);
-  action(takeLeft(heading,48),"",EditorWidget::LibraryClose,UiIcon::UiArrowLeft);
-  action(takeRight(heading,48),"",EditorWidget::LibrarySearch,UiIcon::AssetsSearch);
-  action(takeRight(heading,48),"",EditorWidget::LibraryKinds,UiIcon::AssetsFilter);
-  action(takeRight(heading,48),"",EditorWidget::LibraryPackages,UiIcon::AssetsSourcePackage);
-  constexpr const char *kinds[]{"Todos os tipos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
-  builder.label(heading,state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca",theme.color.text,theme.type.cardName);
-  if(!state.libraryDiagnostic.empty()) {
-    auto footer=takeBottom(area,48);
-    if(state.libraryConflict) {
-      action(takeLeft(footer,footer.width*.5f),"Manter local",EditorWidget::LibraryKeepLocal,UiIcon::AssetsSourceConflict);
-      action(footer,"Receber origem",EditorWidget::LibraryReceiveSource,UiIcon::AssetsImport);
-    } else {
-      if(state.libraryCanInstantiate)action(takeLeft(footer,144),"Instanciar",EditorWidget::LibraryInstantiate,UiIcon::AssetsSourcePackage);
-      if(state.libraryCanAssignController)action(takeLeft(footer,144),"Vincular",EditorWidget::LibraryControllerAssign,UiIcon::AssetsSourcePackage);
-      if(state.libraryCanReimport)action(takeLeft(footer,144),"Reimportar",EditorWidget::LibraryReimport,UiIcon::AssetsImport);
-      action(footer,"Itens",EditorWidget::LibraryDetailsClose,UiIcon::AssetsList);
-    }
-    if(!state.libraryDetailName.empty()) {
-      auto title=takeTop(area,36);
-      list.addImage(centred(takeLeft(title,32),22,22),static_cast<UiImageId>(state.libraryConflict?UiIcon::AssetsSourceConflict:UiIcon::AssetsSourcePackage),theme.color.accent);
-      builder.label(title,state.libraryDetailName.c_str(),theme.color.text,theme.type.cardName);
-    }
-    // O texto rola pelo dedo, como a coluna do Inspector.
-    const auto lines=wrapText(list,state.libraryDiagnostic,area.width,theme.type.body);
-    const float total=24.f*static_cast<float>(lines.size());
-    const float offset=std::clamp(state.libraryDiagnosticScroll,0.f,std::max(0.f,total-area.height));
-    if(builder.layout) {builder.layout->libraryScrollWindow=area;builder.layout->libraryScrollContent=total;}
-    list.pushClip(area);UiRect column{area.x,area.y-offset,area.width,total};
-    for(const auto &line:lines) {
-      const auto row=takeTop(column,24);
-      if(row.bottom()>=area.y&&row.y<=area.bottom())builder.label(row,line,theme.color.textDim,theme.type.body);
-    }
-    list.popClip();return;
-  }
+  const auto tileButton=[&](UiRect hit,const char *text,u32 widget,UiIcon icon,bool enabled=true) {
+    list.addRect(deflate(hit,UiInsets::all(3)),enabled?theme.color.raised:theme.color.silhouette,theme.radius.control);
+    list.addImage({hit.x+(hit.width-20)*.5f,hit.y+8,20,20},static_cast<UiImageId>(icon),enabled?theme.color.text:theme.color.textFaint);
+    list.pushClip(hit);builder.label({hit.x,hit.y+30,hit.width,22},text,enabled?theme.color.textDim:theme.color.textFaint,theme.type.caption,UiAlign::Center);list.popClip();
+    if(enabled)router.addRegion(hit,widget);
+  };
+  constexpr const char *kinds[]{"Todos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
+  constexpr UiIcon kindIcons[]{UiIcon::AssetsGrid,UiIcon::AssetsFileMesh,UiIcon::AssetsAnimation,UiIcon::AssetsMaterial,UiIcon::AssetsTexture,UiIcon::ScenePrefab,UiIcon::SceneObject,UiIcon::AssetsFile,UiIcon::AssetsDocs,UiIcon::AssetsFile,UiIcon::AnimationController};
+  auto content=deflate(area,UiInsets::symmetric(12,6));
+  auto heading=takeTop(content,48);
+  iconButton(takeLeft(heading,48),EditorWidget::LibraryClose,UiIcon::UiArrowLeft);
+  iconButton(takeRight(heading,48),EditorWidget::LibrarySearch,UiIcon::AssetsSearch,true,!state.libraryQuery.empty());
+  iconButton(takeRight(heading,48),EditorWidget::LibraryPackages,UiIcon::AssetsSourcePackage,true,state.libraryPackage.valid());
+  const bool wide=content.width>=900;
+  if(!wide)iconButton(takeRight(heading,48),EditorWidget::LibraryKinds,UiIcon::AssetsFilter,true,state.libraryKind!=0);
   std::string package="Todos os pacotes";for(const auto &entry:state.libraryPackages)if(entry.id==state.libraryPackage)package=entry.name;
-  auto footer=takeBottom(area,48);
-  list.pushClip(footer);builder.label(footer,std::to_string(state.libraryRows.size())+" itens · "+package+
-    (state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.textDim,theme.type.caption,UiAlign::Center);list.popClip();
-  if(state.libraryRows.empty()) {
-    builder.label(area,state.libraryPackages.size()>1?"Nenhum item neste filtro":"Importe uma pasta para preservar fontes e catalogar recursos",theme.color.textDim,theme.type.caption,UiAlign::Center);return;
+  list.pushClip(heading);builder.label(deflate(heading,UiInsets::symmetric(8,0)),std::string(state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca")+" · "+package+(state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.text,theme.type.cardName);list.popClip();
+  const bool detail=state.libraryDetailItem.valid()&&!state.libraryDetailName.empty();
+  if(wide) {
+    auto rail=takeLeft(content,200);takeLeft(content,8);
+    for(u32 k=0;k<11;++k) {
+      if(k&&!state.libraryKindCounts[k])continue;
+      auto row=takeTop(rail,44);const bool active=state.libraryKind==k;
+      if(active)list.addRect(deflate(row,UiInsets::all(2)),withAlpha(theme.color.accent,.16f),theme.radius.control);
+      list.addImage({row.x+10,row.y+12,20,20},static_cast<UiImageId>(kindIcons[k]),active?theme.color.accent:theme.color.textDim);
+      builder.label({row.x+38,row.y,row.width-84,row.height},kinds[k],active?theme.color.text:theme.color.textDim,theme.type.body);
+      const UiRect badge{row.right()-44,row.y+11,36,22};list.addRect(badge,theme.color.silhouette,11);
+      builder.label(badge,std::to_string(state.libraryKindCounts[k]),theme.color.textDim,theme.type.caption,UiAlign::Center);
+      router.addRegion(row,widgetId(EditorWidget::LibraryKindBase)+k);
+    }
   }
-  // Coluna rolável pelo dedo, como a do Inspector: sem páginas, e só as linhas
-  // visíveis recebem região de toque.
-  const float total=56.f*static_cast<float>(state.libraryRows.size());
-  const float offset=std::clamp(state.libraryScroll,0.f,std::max(0.f,total-area.height));
-  if(builder.layout) {builder.layout->libraryScrollWindow=area;builder.layout->libraryScrollContent=total;}
-  list.pushClip(area);router.pushClip(area);
-  UiRect column{area.x,area.y-offset,area.width,total};
+  if(detail) {
+    UiRect detailRect;
+    if(wide) {detailRect=takeRight(content,320);takeRight(content,8);} else detailRect=content;
+    list.addRect(detailRect,theme.color.surface,theme.radius.card);
+    auto panel=deflate(detailRect,UiInsets::all(10));
+    auto title=takeTop(panel,44);
+    iconButton(takeRight(title,40),EditorWidget::LibraryDetailsClose,UiIcon::UiClose);
+    list.addImage({title.x+4,title.y+10,24,24},static_cast<UiImageId>(state.libraryConflict?UiIcon::AssetsSourceConflict:UiIcon::AssetsSourcePackage),theme.color.accent);
+    list.pushClip(title);builder.label({title.x+36,title.y,std::max(0.f,title.width-36),title.height},fitMiddle(list,state.libraryDetailName,std::max(0.f,title.width-40),theme.type.cardName),theme.color.text,theme.type.cardName);list.popClip();
+    auto actions=takeTop(panel,64);const float w=actions.width/4;
+    if(state.libraryConflict) {
+      tileButton(takeLeft(actions,w*2),"Manter local",widgetId(EditorWidget::LibraryKeepLocal),UiIcon::AssetsSourceConflict);
+      tileButton(actions,"Receber origem",widgetId(EditorWidget::LibraryReceiveSource),UiIcon::AssetsImport);
+    } else {
+      u32 index=0;bool found=false;for(;index<state.libraryRows.size();++index)if(state.libraryRows[index].id==state.libraryDetailItem){found=true;break;}
+      tileButton(takeLeft(actions,w),"Abrir",found?widgetId(EditorWidget::LibraryItemBase)+index:0u,UiIcon::AssetsFolderOpen,found);
+      tileButton(takeLeft(actions,w),"Instanciar",widgetId(EditorWidget::LibraryInstantiate),UiIcon::ScenePrefab,state.libraryCanInstantiate);
+      tileButton(takeLeft(actions,w),"Vincular",widgetId(EditorWidget::LibraryControllerAssign),UiIcon::AnimationController,state.libraryCanAssignController);
+      tileButton(actions,"Reimportar",widgetId(EditorWidget::LibraryReimport),UiIcon::AssetsImport,state.libraryCanReimport);
+    }
+    takeTop(panel,6);
+    // Diagnóstico em chips, uma linha por fato, rolando pelo dedo.
+    std::vector<std::string> lines;{std::string current;for(char c:state.libraryDiagnostic){if(c=='\n'){if(!current.empty())lines.push_back(current);current.clear();}else current.push_back(c);}if(!current.empty())lines.push_back(current);}
+    const float chip=36,total=chip*static_cast<float>(lines.size());
+    const float offset=std::clamp(state.libraryDiagnosticScroll,0.f,std::max(0.f,total-panel.height));
+    if(builder.layout) {builder.layout->libraryDetailWindow=panel;builder.layout->libraryDetailContent=total;}
+    list.pushClip(panel);UiRect column{panel.x,panel.y-offset,panel.width,total};
+    for(const auto &line:lines) {
+      auto row=takeTop(column,chip);if(row.bottom()<panel.y||row.y>panel.bottom())continue;
+      const auto body=deflate(row,UiInsets{0,3,0,3});
+      const bool warn=line.rfind("Conversão",0)==0||line.rfind("Limite",0)==0||line.find("ausente")!=std::string::npos||line.find("recus")!=std::string::npos||line.find("Binding")!=std::string::npos;
+      list.addRect(body,theme.color.silhouette,theme.radius.control);
+      list.addImage({body.x+8,body.y+(body.height-16)*.5f,16,16},static_cast<UiImageId>(warn?UiIcon::UiWarning:UiIcon::UiInfo),warn?theme.color.warning:theme.color.textDim);
+      list.pushClip(body);builder.label({body.x+30,body.y,std::max(0.f,body.width-36),body.height},fitMiddle(list,line,std::max(0.f,body.width-40),theme.type.caption),theme.color.textDim,theme.type.caption);list.popClip();
+    }
+    list.popClip();
+    if(!wide)return;
+  }
+  // Cartões em grade, rolando pelo dedo; só os visíveis recebem toque.
+  const u32 columns=content.width>=560?2u:1u;const float gap=8,cardHeight=72;
+  const float cardWidth=(content.width-gap*float(columns-1))/float(columns);
+  const u32 rows=(static_cast<u32>(state.libraryRows.size())+columns-1)/columns;
+  const float total=(cardHeight+gap)*static_cast<float>(rows);
+  const float offset=std::clamp(state.libraryScroll,0.f,std::max(0.f,total-content.height));
+  if(builder.layout) {builder.layout->libraryScrollWindow=content;builder.layout->libraryScrollContent=total;}
+  if(state.libraryRows.empty()) {
+    // Vazio: só o ícone de importar — o botão universal da barra faz o resto.
+    list.addImage(centred(content,48,48),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.textFaint);
+    return;
+  }
+  list.pushClip(content);router.pushClip(content);
   for(u32 i=0;i<state.libraryRows.size();++i) {
-    const auto &item=state.libraryRows[i];auto row=takeTop(column,56);
-    if(row.bottom()<area.y||row.y>area.bottom())continue;
+    const auto &item=state.libraryRows[i];
+    const UiRect card{content.x+float(i%columns)*(cardWidth+gap),content.y-offset+float(i/columns)*(cardHeight+gap),cardWidth,cardHeight};
+    if(card.bottom()<content.y||card.y>content.bottom())continue;
     const bool registered=item.state==resources::LibraryResolutionState::Registered;
-    const bool refused=item.state==resources::LibraryResolutionState::Unsupported||item.state==resources::LibraryResolutionState::MissingDependency||item.state==resources::LibraryResolutionState::MissingOutput;
-    list.addRect({row.x,row.y+row.height-1,row.width,1},theme.color.silhouette);
-    list.addRect({row.x,row.y+8,3,row.height-16},registered?theme.color.accent:refused?theme.color.textMuted:theme.color.textDim);
-    auto label=deflate(row,UiInsets::symmetric(12,3));const auto details=takeRight(label,48);
-    auto suffix=std::filesystem::path(item.name).extension().string();
-    std::transform(suffix.begin(),suffix.end(),suffix.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
-    const bool texture=item.kind==resources::LibraryItemKind::Texture&&(suffix==".png"||suffix==".jpg"||suffix==".jpeg"||suffix==".ktx2"||suffix==".tga"||suffix==".tif"||suffix==".tiff");
-    const bool model=item.kind==resources::LibraryItemKind::Model&&(suffix==".glb"||suffix==".gltf"||suffix==".fbx");
-    const bool unity=item.kind==resources::LibraryItemKind::Clip||item.kind==resources::LibraryItemKind::Prefab||item.kind==resources::LibraryItemKind::Controller;
-    // Projeto UMotion: aplica clipes, alvos, IK e Filho de ao personagem selecionado.
-    const bool umotion=item.kind==resources::LibraryItemKind::Clip&&suffix==".asset";
-    const char *status=registered?"Abrir":umotion&&!refused?"Aplicar":(texture||model)&&!refused?"Preparar":(item.kind==resources::LibraryItemKind::Material||unity)&&!refused?"Converter":"Diagnóstico";
-    auto statusArea=takeRight(label,96);builder.label(statusArea,status,registered?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::End);
-    builder.label(takeTop(label,26),item.name.c_str(),theme.color.text,theme.type.body);
-    builder.label(label,item.context.c_str(),theme.color.textMuted,theme.type.caption);
-    router.addRegion(row,widgetId(EditorWidget::LibraryItemBase)+i);
-    list.addImage(centred(details,20,20),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
-    router.addRegion({details.x,row.y,48,row.height},widgetId(EditorWidget::LibraryItemDetailsBase)+i);
+    const bool refused=item.state==resources::LibraryResolutionState::Unsupported||item.state==resources::LibraryResolutionState::MissingDependency||
+      item.state==resources::LibraryResolutionState::MissingOutput||item.state==resources::LibraryResolutionState::Incomplete;
+    const bool selected=item.id==state.libraryDetailItem;
+    list.addRect(card,selected?withAlpha(theme.color.accent,.12f):theme.color.surface,theme.radius.card);
+    if(selected)list.addBorder(card,theme.color.accent,1,theme.radius.card);
+    const u32 k=static_cast<u32>(item.kind)+1;
+    list.addRect({card.x+10,card.y+12,48,48},theme.color.silhouette,theme.radius.control);
+    list.addImage({card.x+22,card.y+24,24,24},static_cast<UiImageId>(kindIcons[k<11?k:0]),registered?theme.color.accent:theme.color.text);
+    const UiRect text{card.x+68,card.y+10,std::max(0.f,card.width-68-56),card.height-20};
+    list.pushClip(text);builder.label({text.x,text.y,text.width,26},fitMiddle(list,item.name,text.width,theme.type.body),theme.color.text,theme.type.body);
+    builder.label({text.x,text.y+26,text.width,22},item.context.c_str(),theme.color.textMuted,theme.type.caption);list.popClip();
+    // Selo de estado: pronto (✓), a converter (⤓) ou aviso (⚠).
+    const UiRect badge{card.right()-34,card.y+10,24,24};
+    list.addRect(badge,registered?withAlpha(theme.color.accent,.22f):refused?withAlpha(theme.color.warning,.22f):theme.color.silhouette,12);
+    list.addImage({badge.x+4,badge.y+4,16,16},static_cast<UiImageId>(registered?UiIcon::UiCheck:refused?UiIcon::UiWarning:UiIcon::AssetsImport),registered?theme.color.accent:refused?theme.color.warning:theme.color.textDim);
+    router.addRegion(card,widgetId(EditorWidget::LibraryItemBase)+i);
+    const UiRect details{card.right()-44,card.bottom()-40,40,36};
+    list.addImage(centred(details,18,18),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
+    router.addRegion(details,widgetId(EditorWidget::LibraryItemDetailsBase)+i);
   }
   router.popClip();list.popClip();
 }

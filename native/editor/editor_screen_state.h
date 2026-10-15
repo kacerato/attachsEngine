@@ -149,6 +149,8 @@ struct EditorScreenState final {
   std::string libraryDiagnostic;
   std::string libraryDetailName;
   u32 libraryKind=0;
+  // Itens por tipo (0 = todos) no pacote/busca atuais, para o trilho de tipos.
+  u32 libraryKindCounts[11]{};
   // Lista e diagnóstico da Biblioteca rolam pelo dedo (coluna, sem páginas).
   float libraryScroll=0,libraryDiagnosticScroll=0;
   bool libraryImportRequested=false,searchingLibrary=false;
