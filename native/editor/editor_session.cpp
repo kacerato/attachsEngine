@@ -6480,7 +6480,7 @@ void EditorSession::update() {
   const auto colliderUiStart=measureColliderUi?std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // Estúdio recém-aberto: enquadra o dono na vista do estúdio, agora conhecida.
-  if(clipFrameOnLayout_&&state_.clipOpen&&!layout_.viewport.isEmpty()) {clipFrameOnLayout_=false;frameSubtree(state_.clipOwner);}
+  if(clipFrameOnLayout_&&state_.clipOpen&&!layout_.viewport.isEmpty()) {clipFrameOnLayout_=false;frameAnimationStudio();}
   // A coluna encolheu (cartão fechado): a rolagem volta ao limite; outro objeto
   // no Inspector começa do topo.
   if(inspectorScrollOwner_!=state_.selection) {inspectorScrollOwner_=state_.selection;state_.inspectorScroll=0;}
@@ -6541,7 +6541,7 @@ void EditorSession::update() {
   };
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // Estúdio recém-aberto: enquadra o dono na vista do estúdio, agora conhecida.
-  if(clipFrameOnLayout_&&state_.clipOpen&&!layout_.viewport.isEmpty()) {clipFrameOnLayout_=false;frameSubtree(state_.clipOwner);}
+  if(clipFrameOnLayout_&&state_.clipOpen&&!layout_.viewport.isEmpty()) {clipFrameOnLayout_=false;frameAnimationStudio();}
   // A coluna encolheu (cartão fechado): a rolagem volta ao limite; outro objeto
   // no Inspector começa do topo.
   if(inspectorScrollOwner_!=state_.selection) {inspectorScrollOwner_=state_.selection;state_.inspectorScroll=0;}

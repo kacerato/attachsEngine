@@ -1691,6 +1691,7 @@ private:
   // Estúdio recém-aberto: enquadra o dono do clipe quando a vista do estúdio
   // já existe no layout, não na vista da cena.
   bool clipFrameOnLayout_=false;
+  void frameAnimationStudio();
   // Menu de contexto da Hierarquia: abre (+, ⋮, toque longo), navega e rola;
   // as ações tocadas nele seguem pelo caminho normal.
   bool handleContextMenu(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
