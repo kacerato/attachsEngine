@@ -139,7 +139,7 @@ bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &c
 
 void EditorSession::beginAnimatorNumber(u32 code,double current) {
   state_.numericField=w::id(code);state_.numericEntity=state_.animatorEntity;state_.numericInstance=0;state_.numericProperty.clear();
-  state_.numericCurrent=current;std::snprintf(state_.numericText,sizeof state_.numericText,"%g",current);state_.numericError=false;
+  state_.numericCurrent=current;std::snprintf(state_.numericText,sizeof state_.numericText,"%.6g",std::abs(current)<1e-6?0.0:current);state_.numericError=false;
 }
 void EditorSession::beginAnimatorName(u32 code,const std::string &current) {
   state_.editingAnimatorName=true;state_.animatorNameField=code;

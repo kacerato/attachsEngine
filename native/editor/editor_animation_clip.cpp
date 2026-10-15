@@ -247,8 +247,9 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   state_.workspace=EditorWorkspace::Scene;state_.animatorOpen=false;state_.tool=EditorGizmoMode::Select;
   clipEpoch_=sceneEpoch_;state_.clipDiagnostic=previewDiagnostic;appearanceChanged_=true;refreshAnimationClip();frameAnimationClip();
   // O estúdio é sobre este personagem: a vista abre com ele inteiro na tela,
-  // onde quer que a câmera da cena tenha ficado.
-  frameSubtree(owner);
+  // onde quer que a câmera da cena tenha ficado — medido na vista do estúdio,
+  // que só existe depois do próximo layout.
+  clipFrameOnLayout_=true;
   return true;
 }
 void EditorSession::closeAnimationClip() {
@@ -703,6 +704,7 @@ void EditorSession::beginAnimationClipNumber(u32 code,double value) {
   clipNumberCues_=state_.clipCueSelection;
   beginAnimatorNumber(code,value);
   if(code==w::CueTime||code==w::CueTag||code==w::CueValue)
+    // Código/tempo de evento: inteiro exato, todos os dígitos.
     std::snprintf(state_.numericText,sizeof state_.numericText,"%.17g",value);
   state_.numericEntity=state_.clipOwner;
 }

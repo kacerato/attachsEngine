@@ -1688,6 +1688,9 @@ private:
   EditorEntityId inspectorScrollOwner_ = 0;
   bool handleInspectorScroll(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   bool handleLibraryScroll(const ui::UiPointerRouting &routing);
+  // Estúdio recém-aberto: enquadra o dono do clipe quando a vista do estúdio
+  // já existe no layout, não na vista da cena.
+  bool clipFrameOnLayout_=false;
   // Menu de contexto da Hierarquia: abre (+, ⋮, toque longo), navega e rola;
   // as ações tocadas nele seguem pelo caminho normal.
   bool handleContextMenu(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
