@@ -6786,7 +6786,8 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   router.addBlocker(state.surface);
   router.addRegion(state.surface,cm::id(cm::Close));
   list.addRect(state.surface,withAlpha(theme.color.voidBlack,.25f));
-  const bool destination=level>=1&&level<cm::WorkspaceLevel&&hasObject;
+  // Receitas de Personagem agem sobre o personagem, não criam na raiz/filho.
+  const bool destination=level>=1&&level<cm::WorkspaceLevel&&hasObject&&level!=2+kCharacterCreationCategory;
   constexpr float rowHeight=44,headerHeight=44,destinationHeight=40;
   const float width=std::min(290.f,state.surface.width-16);
   const float wanted=headerHeight+(destination?destinationHeight:0)+rowHeight*static_cast<float>(items.size())+8;

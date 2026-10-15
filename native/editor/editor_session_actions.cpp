@@ -19,6 +19,7 @@
 #include "renderer/primitive_geometry.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
+#include "editor/editor_studio_tools.h"
 #include "editor/editor_texture_history.h"
 #include "editor/editor_property_tween.h"
 #include "scene/property_tween.h"
@@ -3274,6 +3275,18 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::CharacterConversionBack)) {state_.characterConversionTarget=0;state_.propertyPage=0;return true;}
+    if(key>=widgetId(EditorWidget::CharacterRecipeBase)&&key<widgetId(EditorWidget::CharacterRecipeEnd)) {
+      // Criar › Personagem: a receita age sobre o personagem da seleção e
+      // fecha o menu; o resumo ou o erro vai para a barra de estado.
+      state_.creationMenu=false;
+      const auto owner=EditorStudio::characterOf(document_,state_.selection);
+      const auto recipe=static_cast<EditorStudio::CharacterRecipe>(1+key-widgetId(EditorWidget::CharacterRecipeBase));
+      std::string summary,error;
+      if(!owner)state_.status="Selecione um personagem com esqueleto";
+      else if(EditorStudio::setupCharacter(*this,owner,recipe,summary,error)) {state_.status=summary;state_.selection=owner;}
+      else state_.status=error;
+      return true;
+    }
     if(key==widgetId(EditorWidget::CharacterConversionApply)) {
       if(state_.characterConversionTarget!=state_.selection) {state_.status="Seleção mudou; abra a conversão novamente";return true;}
       const auto result=convertToCharacter(state_.selection);

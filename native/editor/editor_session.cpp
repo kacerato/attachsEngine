@@ -6318,6 +6318,7 @@ void EditorSession::update() {
   if(inputCapture_ && !validateInputCapture()) cancelInputBindingCapture();
   refreshScriptInspection();
   state_.document=playInspecting()?&playScene_.document():&document_;
+  state_.characterRecipeTarget=isPlaying()?0:EditorStudio::characterOf(document_,state_.selection);
   state_.characterRuntime=playInspecting()&&playScene_.active()?&playScene_.physics():nullptr;
   state_.characterWorld=playInspecting()&&playScene_.active()?&playScene_.world():nullptr;
   state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;

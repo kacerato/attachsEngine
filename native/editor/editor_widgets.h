@@ -25,6 +25,9 @@ enum class EditorWidget : u32 {
   GuiCanvasEdit = 0xDB000001u,
   CharacterConversionOpen=0xDB000010u,CharacterConversionApply,CharacterConversionBack,
   SceneTemplatePrevious=0xDB000019u,SceneTemplateNext,
+  // Criar › Personagem: receitas sobre o personagem selecionado
+  // (EditorStudio::CharacterRecipe, a partir de LookAt).
+  CharacterRecipeBase=0xDB000040u,CharacterRecipeEnd=0xDB000046u,
   MotorSetupOpen=0xDB000020u,MotorSetupApply,MotorSetupBack,MotorSetupPreserve,MotorSetupFit,MotorSetupConvex,
   MotorSetupDecompose,MotorBakeStart,MotorBakeCancel,MotorBakeBudgetLow,MotorBakeBudgetMedium,MotorBakeBudgetHigh,
   MotorBakePrevious,MotorBakeNext,MotorBakeSourcesOpen,MotorBakeSourcesDone,MotorBakeSourcesObject,MotorBakeSourcesHierarchy,

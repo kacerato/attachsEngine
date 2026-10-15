@@ -13,7 +13,12 @@
 #include "runtime/transform_math.h"
 #include "core/rotation_math.h"
 #include "scene/ik_constraints.h"
+#include "scene/ik_effects.h"
+#include "scene/animation.h"
+#include "scene/animator.h"
+#include "scene/skinned_mesh.h"
 #include "scene/root_motion.h"
+#include "editor/editor_humanoid_bones.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -60,6 +65,52 @@ std::array<float,4> quaternionOf(const runtime::Transform &t) {float q[4];runtim
 } // namespace
 
 bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &summary,std::string &error) {
+  return setupCharacter(s,owner,CharacterRecipe::All,summary,error);
+}
+
+// Personagem da seleção: o ancestral (ou ela mesma) que carrega a animação,
+// o Animator ou um sistema de corpo; senão o objeto logo abaixo da raiz que
+// tem esqueleto na subárvore. Sem seleção, o único esqueleto da cena.
+namespace {
+bool hasSkeleton(const runtime::SceneGraph &doc,EditorEntityId id) {
+  std::vector<EditorEntityId> ids;doc.collectSubtree(id,ids);
+  if(ids.size()<4)return false;
+  for(const auto e:ids) {
+    const auto *o=doc.find(e);if(!o)continue;
+    if(o->components.find(scene::SkinnedMesh::descriptor))return true;
+    u32 depth=0;for(const auto *p=o;p&&p->id!=id;p=doc.find(p->parent))++depth;
+    if(depth>=3&&doc.childrenOf(e).empty())return true;
+  }
+  return false;
+}
+bool ownsBody(const EditorEntity &e) {
+  return e.components.find(scene::Animation::descriptor)||e.components.find(scene::Animator::descriptor)||
+         e.components.find(scene::GrounderBody::descriptor)||e.components.find(scene::FullBodyIk::descriptor)||
+         e.components.find(scene::InteractionSystem::descriptor)||e.components.find(scene::RootMotion::descriptor);
+}
+} // namespace
+
+EditorEntityId EditorStudio::characterOf(const runtime::SceneGraph &doc,EditorEntityId selection) {
+  if(selection&&selection!=doc.root()&&doc.exists(selection)) {
+    EditorEntityId top=0;
+    for(const auto *o=doc.find(selection);o&&o->id!=doc.root();o=doc.find(o->parent)) {
+      if(ownsBody(*o))return o->id;
+      top=o->id;
+    }
+    if(hasSkeleton(doc,selection))return selection;
+    if(top&&hasSkeleton(doc,top))return top;
+    return 0;
+  }
+  EditorEntityId only=0;
+  for(const auto id:doc.childrenOf(doc.root())) {
+    if(!hasSkeleton(doc,id))continue;
+    if(only)return 0;
+    only=id;
+  }
+  return only;
+}
+
+bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,CharacterRecipe recipe,std::string &summary,std::string &error) {
   summary.clear();error.clear();
   if(s.isPlaying()||s.history_.isOpen()) {error="Pare o Play e conclua a edição";return false;}
   auto &doc=s.document_;
@@ -114,8 +165,18 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
     head=top;(void)highest;
   }
   if(hands.empty()&&feet.empty()&&!head) {error="Nenhuma mão, pé ou cabeça encontrada pelos nomes nem pela estrutura do esqueleto";return false;}
-  if(!s.history_.begin("Assistente de IK")) {error="Conclua a edição em andamento";return false;}
-  bool ok=true;u32 limbs=0,grounded=0,looks=0;
+  // Receitas do menu Criar › Personagem: cada uma monta só a sua parte; o
+  // assistente monta membros, pés e olhar de uma vez.
+  const bool all=recipe==CharacterRecipe::All;
+  const bool wantHands=all||recipe==CharacterRecipe::Hands,wantFeet=all||recipe==CharacterRecipe::Ground,wantLook=all||recipe==CharacterRecipe::LookAt;
+  const bool wantAim=recipe==CharacterRecipe::Aim,wantBody=recipe==CharacterRecipe::FullBody,wantCarry=recipe==CharacterRecipe::Carry;
+  if((wantHands||wantAim)&&!all&&hands.empty()) {error="Nenhuma mão encontrada pelos nomes nem pela estrutura";return false;}
+  if(wantFeet&&!all&&feet.empty()) {error="Nenhum pé encontrado pelos nomes nem pela estrutura";return false;}
+  if(wantLook&&!all&&!head) {error="Nenhuma cabeça encontrada pelos nomes nem pela estrutura";return false;}
+  if(wantBody&&(!pelvis||hands.empty()||feet.empty())) {error="Corpo inteiro precisa de pelve, mãos e pés reconhecíveis";return false;}
+  static constexpr const char *labels[]{"Assistente de IK","Olhar para alvo","Mirar com as mãos","Mãos ao alvo","Pés no chão","Corpo inteiro","Carregar caixa"};
+  if(!s.history_.begin(labels[std::min<u32>(static_cast<u32>(recipe),6)])) {error="Conclua a edição em andamento";return false;}
+  bool ok=true;u32 limbs=0,grounded=0,looks=0,aims=0;
   const auto place=[&](EditorEntityId id,const float world[16]) {
     float parent[16];runtime::Transform local;
     return runtime::parentWorldMatrix(doc,id,parent)&&runtime::localTransformForWorld(world,parent,local)&&s.history_.setTransform(doc,id,local);
@@ -124,7 +185,7 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
     const auto *e=doc.find(tip);const auto *m=e?doc.find(e->parent):nullptr;const auto *r=m?doc.find(m->parent):nullptr;
     return r&&m->id!=owner&&r->id!=doc.root();
   };
-  for(const auto tip:hands) {
+  if(wantHands)for(const auto tip:hands) {
     if(!ok||!chainOk(tip)||doc.find(tip)->components.find(scene::TwoBoneIk::descriptor))continue;
     float tipWorld[16];runtime::worldMatrix(doc,tip,tipWorld);
     const auto target=s.history_.createEntity(doc,owner,EditorEntityKind::Folder,"Alvo IK · "+std::string(doc.find(tip)->name));
@@ -134,16 +195,16 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
       ok=ik;if(ok){ik->target=target;ok=s.history_.applyValues(doc,tip,values);}}
     if(ok)++limbs;
   }
-  for(const auto foot:feet) {
+  if(wantFeet)for(const auto foot:feet) {
     if(!ok||!chainOk(foot)||doc.find(foot)->components.find(scene::FootGrounding::descriptor))continue;
     auto values=*doc.find(foot);ok=values.components.add(scene::FootGrounding::descriptor)&&s.history_.applyValues(doc,foot,values);
     if(ok)++grounded;
   }
-  if(ok&&grounded&&pelvis&&!doc.find(owner)->components.find(scene::GrounderBody::descriptor)) {
+  if(wantFeet&&ok&&grounded&&pelvis&&!doc.find(owner)->components.find(scene::GrounderBody::descriptor)) {
     auto values=*doc.find(owner);auto *g=static_cast<scene::GrounderBody*>(values.components.add(scene::GrounderBody::descriptor));
     ok=g;if(ok){g->pelvis=pelvis;ok=s.history_.applyValues(doc,owner,values);}
   }
-  if(ok&&head&&!doc.find(head)->components.find(scene::LookAtIk::descriptor)) {
+  if(wantLook&&ok&&head&&!doc.find(head)->components.find(scene::LookAtIk::descriptor)) {
     float headWorld[16];runtime::worldMatrix(doc,head,headWorld);
     const auto target=s.history_.createEntity(doc,owner,EditorEntityKind::Folder,"Olhar · "+std::string(doc.find(head)->name));
     float forward[3];runtime::ikAxisWorld(headWorld,2,forward);
@@ -153,9 +214,56 @@ bool EditorStudio::setupIk(EditorSession &s,EditorEntityId owner,std::string &su
       ok=look;if(ok){look->target=target;look->chainLength=3;ok=s.history_.applyValues(doc,head,values);}}
     if(ok)++looks;
   }
+  // Mirar (Final IK AimIK, Unity MultiAimConstraint): a mão aponta o eixo +Z
+  // para um alvo criado 1,5 m à frente dela, girando antebraço e braço.
+  if(wantAim)for(const auto tip:hands) {
+    if(!ok||!chainOk(tip)||doc.find(tip)->components.find(scene::AimIk::descriptor))continue;
+    float tipWorld[16];runtime::worldMatrix(doc,tip,tipWorld);
+    const auto target=s.history_.createEntity(doc,owner,EditorEntityKind::Folder,"Mira · "+std::string(doc.find(tip)->name));
+    float forward[3];runtime::ikAxisWorld(tipWorld,2,forward);
+    float targetWorld[16]{1,0,0,0,0,1,0,0,0,0,1,0,tipWorld[12]+forward[0]*1.5f,tipWorld[13]+forward[1]*1.5f,tipWorld[14]+forward[2]*1.5f,1};
+    ok=target&&place(target,targetWorld);
+    if(ok) {auto values=*doc.find(tip);auto *aim=static_cast<scene::AimIk*>(values.components.add(scene::AimIk::descriptor));
+      ok=aim;if(ok){aim->target=target;aim->chainLength=2;ok=s.history_.applyValues(doc,tip,values);}}
+    if(ok)++aims;
+  }
+  // Corpo inteiro (Final IK FullBodyBipedIK): pelve, peito e até quatro
+  // pontas, cada uma com o seu alvo criado onde a ponta está agora.
+  u32 bodyTips=0;
+  if(wantBody&&ok&&!doc.find(owner)->components.find(scene::FullBodyIk::descriptor)) {
+    auto values=*doc.find(owner);auto *body=static_cast<scene::FullBodyIk*>(values.components.add(scene::FullBodyIk::descriptor));
+    ok=body;
+    if(ok) {
+      body->pelvis=pelvis;body->chest=findHumanoidBones(doc,owner).chest;
+      std::vector<EditorEntityId> tips;for(const auto h:hands)if(tips.size()<2)tips.push_back(h);for(const auto f:feet)if(tips.size()<4)tips.push_back(f);
+      for(const auto tip:tips) {
+        if(!ok)break;
+        float tipWorld[16];runtime::worldMatrix(doc,tip,tipWorld);
+        const auto target=s.history_.createEntity(doc,owner,EditorEntityKind::Folder,"Alvo · "+std::string(doc.find(tip)->name));
+        float targetWorld[16]{1,0,0,0,0,1,0,0,0,0,1,0,tipWorld[12],tipWorld[13],tipWorld[14],1};
+        ok=target&&place(target,targetWorld);
+        if(ok) {body->tips[bodyTips]=tip;body->targets[bodyTips]=target;++bodyTips;}
+      }
+      if(ok)ok=bodyTips>0&&s.history_.applyValues(doc,owner,values);
+    }
+  }
+  // Carregar caixa: mesa, caixa com pegadas e sistema de interação, como no
+  // modelo de cena; vive numa pasta ao lado do personagem.
+  if(wantCarry&&ok) {
+    const auto *o=doc.find(owner);
+    const auto group=s.history_.createEntity(doc,o&&o->parent?o->parent:doc.root(),EditorEntityKind::Folder,"Carregar caixa");
+    std::string carryError;ok=group&&s.addCarrySetupInTransaction(owner,group,carryError);
+    if(!ok&&!carryError.empty())error=carryError;
+  }
   s.history_.end();
-  if(!ok) {s.history_.undo(doc);error="O assistente não conseguiu criar todos os componentes; nada foi alterado";return false;}
-  summary=std::string(structural?"Pela estrutura · ":"")+std::to_string(limbs)+" membros com IK · "+std::to_string(grounded)+" pés no chão"+(grounded&&pelvis?" + pelve":"")+(looks?" · cabeça olha um alvo":"");
+  if(!ok) {s.history_.undo(doc);if(error.empty())error="Não foi possível criar todos os componentes; nada foi alterado";return false;}
+  if(recipe==CharacterRecipe::LookAt)summary="Cabeça olha o alvo · mova o alvo e dê Play";
+  else if(recipe==CharacterRecipe::Aim)summary=std::to_string(aims)+(aims==1?" mão mira o alvo":" mãos miram os alvos");
+  else if(recipe==CharacterRecipe::Hands)summary=std::to_string(limbs)+(limbs==1?" mão vai ao alvo":" mãos vão aos alvos");
+  else if(recipe==CharacterRecipe::Ground)summary=std::to_string(grounded)+" pés no chão"+(pelvis?" + pelve":"");
+  else if(recipe==CharacterRecipe::FullBody)summary="Corpo inteiro com "+std::to_string(bodyTips)+" alvos";
+  else if(recipe==CharacterRecipe::Carry)summary="Mesa, caixa e interação criadas · dê Play";
+  else summary=std::string(structural?"Pela estrutura · ":"")+std::to_string(limbs)+" membros com IK · "+std::to_string(grounded)+" pés no chão"+(grounded&&pelvis?" + pelve":"")+(looks?" · cabeça olha um alvo":"");
   return true;
 }
 

@@ -157,8 +157,39 @@ codificar.
   régua em torno do ponto médio dos dedos, cancelando o arrasto em curso; o
   dedo que sobra não faz scrub nem arrasta chave. A faixa própria de 24 px foi
   descartada porque roubava linhas a 394 px e esvaziava o canvas a 300 px.
-- E4 pendente. O modo `scene-kyle-menu` do preview mostra "Criar" em vez
-  das ações do objeto por um artefato de seleção do preview, não do editor.
+- O modo `scene-kyle-menu` do preview mostra "Criar" em vez das ações do
+  objeto por um artefato de seleção do preview, não do editor.
+
+## 7. E4 — plugins pelo filtro "só entra o que tem fluxo completo no editor"
+
+Levantamento sobre o código (15/10/2026), não sobre a lista de 11/10:
+
+| Origem | O que existe | Fluxo no editor | Decisão |
+|---|---|---|---|
+| UMotion 1.29 (N01/N02) | dopesheet, curvas, camadas, cues, pose, auto-key, chaves-mestras, menu da chave, pinça, biblioteca de poses, espelho, IK no estúdio, Fixar, Seguir, root motion, bake, GLB | completo pelo estúdio v2 | nada a acrescentar agora; "exibição de ossos" e "editar em Play" são cosméticos ou avançados e ficam fora |
+| Final IK 2.2 | 30 componentes (`astra.ik.*`: two_bone, chain, fabrik_root, look_at, aim, rotation_limit, grounder, foot_grounding, full_body, body_by_targets, finger_curl, hand_poser, offset, twist_relaxer, hit_reaction, recoil, inertia, amplifier, body_tilt, penetration_avoidance, socket, interaction_*) | só pelo Inspector › + (ossos manuais, salvo Interação, Corpo inteiro, Grounder e Apoio do pé); o assistente que monta tudo fica escondido no ⋮ do estúdio; os modelos de cena prontos só servem o manequim | **lacuna real**: não havia caminho de criação sobre o personagem do usuário |
+| BoZo 2.2 | nada nativo (só inventário) | — | fora: exige modelo/runtime modular (N05/N07/N10/N11), não é lacuna de fluxo |
+| POLYGON Icons 1.01 | 520 FBX decodificados; galeria offline | Importar › Pasta de pacote → Biblioteca › Modelos → Na cena | fluxo existe pela Biblioteca v2; galeria própria não entra |
+| VRIK | — | exige rastreamento XR | fora |
+
+Entregue: categoria **Personagem** no menu Criar (e no "+" da Hierarquia) com
+receitas sobre o personagem da seleção, resolvido pelo ancestral que carrega
+animação/Animator/sistema de corpo ou pelo objeto abaixo da raiz com esqueleto
+(sem seleção, o único esqueleto da cena): **Olhar para alvo** (LookAt na cabeça,
+alvo 2 m à frente), **Mirar com as mãos** (Aim em cada mão, alvo 1,5 m no +Z da
+mão), **Mãos ao alvo** (IK de dois ossos com alvo onde a mão está), **Pés no
+chão** (Apoio do pé por pé + Grounder com a pelve), **Corpo inteiro** (pelve,
+peito e até quatro pontas com alvos) e **Carregar caixa** (mesa, caixa com
+pegadas e interação, o mesmo do modelo de cena, numa pasta ao lado do
+personagem). Cada receita é um passo de Desfazer; a categoria fica desligada
+sem personagem; o assistente completo continua no estúdio.
+
+Referências: Unity Animation Rigging 1.3 (TwoBoneIKConstraint, MultiAimConstraint,
+Rig Builder) https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.3/manual/ConstraintComponents.html;
+Final IK 2.2 (LookAtIK, AimIK, LimbIK, Grounder, FullBodyBipedIK, InteractionSystem),
+scripts locais em `analise-plugins`; Godot 4.3 SkeletonIK3D
+https://docs.godotengine.org/en/4.3/classes/class_skeletonik3d.html e LookAtModifier3D
+https://docs.godotengine.org/en/4.3/classes/class_lookatmodifier3d.html.
 - Aparelho (code 82–85, projeto "Kyle – Carregar caixa" gerado no host): o
   fluxo Animar → osso → chave por canal → campo → arrasto com auto-key foi
   conferido; enquadramento de abertura passou a usar os ossos (ef01c9a0) e os

@@ -11,6 +11,15 @@ struct EditorStudio {
   // Assistente de IK: membros (maos/pes/patas), cabeca e chao a partir da
   // hierarquia real; cria componentes permanentes e devolve o resumo.
   static bool setupIk(EditorSession &,EditorEntityId owner,std::string &summary,std::string &error);
+  // Receitas de Criar › Personagem sobre o personagem do usuário (Unity
+  // Animation Rigging: MultiAim/TwoBoneIK/constraints sobre o rig; Godot
+  // SkeletonIK3D sob o Skeleton3D): cada uma cria os componentes e os alvos
+  // numa única operação de histórico, com os ossos detectados pelo nome ou
+  // pela estrutura. `All` é o assistente de IK do estúdio.
+  enum class CharacterRecipe : u32 {All,LookAt,Aim,Hands,Ground,FullBody,Carry,Count};
+  static bool setupCharacter(EditorSession &,EditorEntityId owner,CharacterRecipe recipe,std::string &summary,std::string &error);
+  // Personagem da seleção (ou o único da cena sem seleção); 0 quando não há.
+  static EditorEntityId characterOf(const runtime::SceneGraph &document,EditorEntityId selection);
   // Fixa a ponta selecionada no lugar onde esta agora, de `start` a `end`:
   // a cadeia de dois ossos e resolvida por quadro e gravada como chaves FK.
   static bool pinTip(EditorSession &,EditorEntityId tip,float start,float end,std::string &summary,std::string &error);

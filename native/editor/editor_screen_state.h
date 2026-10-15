@@ -831,6 +831,9 @@ struct EditorScreenState final {
   float platformImeFraction = 0.0f;
   bool entityMenu = false;
   EditorEntityId characterConversionTarget=0;
+  // Personagem que as receitas de Criar › Personagem vão usar (da seleção ou
+  // o único da cena); 0 desliga a categoria.
+  EditorEntityId characterRecipeTarget=0;
   std::string characterConversionError;
   float characterConversionRadius=0,characterConversionHeight=0;
   EditorEntityId motorSetupTarget=0;
