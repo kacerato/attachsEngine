@@ -2249,6 +2249,20 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/interaction-grip": {
+      "category": "component",
+      "name": "interaction-grip",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "component/interaction-trigger": {
+      "category": "component",
+      "name": "interaction-trigger",
+      "dark_ui_ready": true,
+      "generation": "ik-components-v1",
+      "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
     }
   },
   "unmapped": []

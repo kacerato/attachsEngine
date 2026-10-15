@@ -77,6 +77,15 @@ child_of += [("poly", [(18, 7), (26, 7), (26, 15), (18, 15)])] + arrow((7, 13), 
 
 socket = chain([(5, 27), (12, 17)]) + [("poly", [(12, 11), (22, 11), (22, 21), (12, 21)])] + [("poly", mark.bar((22, 16), (29, 16), 2.2))] + [("circle", ((26, 6), 2.6))]
 
+# Pivo de pegada: a caixa gira sobre o pivo (circulo embaixo) para a pegada
+# encarar a mao que chega (braco a esquerda, seta do giro).
+interaction_grip = [("poly", [(13, 6), (25, 6), (25, 18), (13, 18)])] + [("circle", ((19, 24), 3.2))] + [("poly", mark.bar((19, 18), (19, 24), 1.6))]
+interaction_grip += chain([(4, 29), (7, 21)], 2.4, 2.2) + arrow((5, 14), (11, 9), 1.6)
+# Gatilho de interacao: o personagem entra na faixa (cone a frente do objeto)
+# e a interacao comeca sozinha.
+interaction_trigger = chain([(6, 28), (9, 19), (12, 13)]) + [("circle", ((13, 9), 2.6))]
+interaction_trigger += [("poly", [(23, 5), (30, 5), (30, 12), (23, 12)])] + [("poly", mark.bar((15, 12), (22, 7), 1.4)), ("poly", mark.bar((15, 15), (22, 15), 1.4)), ("poly", mark.bar((15, 18), (22, 23), 1.4))]
+
 named = root / "assets/astra-visual/icons/named"
 catalog = named / "catalog.json"
 data = json.loads(catalog.read_text(encoding="utf-8"))
@@ -87,7 +96,8 @@ for name, geometry in (("ik-two-bone", two_bone), ("ik-chain", ik_chain), ("foot
                        ("body-tilt", body_tilt), ("hand-poser", hand_poser), ("penetration-avoidance", penetration),
                        ("interaction-object", interaction_object), ("interaction-system", interaction_system),
                        ("full-body-ik", full_body), ("fabrik-root", fabrik_root), ("body-by-targets", body_by_targets), ("root-motion", root_motion), ("socket", socket),
-                       ("interaction-carry", interaction_carry), ("child-of", child_of)):
+                       ("interaction-carry", interaction_carry), ("child-of", child_of),
+                       ("interaction-grip", interaction_grip), ("interaction-trigger", interaction_trigger)):
     mark.render(geometry).save(named / f"component/{name}.png")
     data["icons"][f"component/{name}"] = dict(category="component", name=name, dark_ui_ready=True,
                                                generation="ik-components-v1",

@@ -582,6 +582,40 @@
    "apiName": "InteractionSystem"
   },
   {
+   "type": "InteractionGrip",
+   "name": "Pivô de pegada",
+   "description": "Gira o objeto sobre este pivô para a pegada encarar a mão",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/interaction-grip",
+   "searchTerms": "Interaction Target Pivô Pegada Torção Girar Mão",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.0/manual/xr-grab-interactable.html",
+   "apiName": "InteractionGrip"
+  },
+  {
+   "type": "InteractionTrigger",
+   "name": "Gatilho de interação",
+   "description": "Faixa à frente do objeto: o personagem dentro dela interage",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_ik.h",
+   "invalidates": {
+    "cpp": "Invalidate::Transform"
+   },
+   "subfamily": "IK",
+   "icon": "component/interaction-trigger",
+   "searchTerms": "Interaction Trigger Gatilho Faixa Alcance Automático",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.0/manual/xr-direct-interactor.html",
+   "apiName": "InteractionTrigger"
+  },
+  {
    "type": "FullBodyIk",
    "name": "IK de corpo inteiro",
    "description": "Puxa a pelve para alcançar alvos e resolve os membros",

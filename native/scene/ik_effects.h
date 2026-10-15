@@ -122,18 +122,45 @@ public:
   // Inicio sem script: com mao e objeto escolhidos, a interacao comeca no Play.
   // Corpo: com Pelve, o corpo agacha quando a pegada fica alem do braco; com
   // Peito, o tronco se inclina para ela. Segunda mao ao iniciar: duas maos.
-  u64 autoEffector=0,autoObject=0,autoSecond=0,pelvis=0,chest=0;bool enabled=true;float speed=1,limbBones=2,crouch=.5f,lean=.5f;
+  // Olhar: com um objeto que tem Look At (a cabeca), ele olha a pegada
+  // enquanto a mao vai ate ela e volta ao soltar (Final IK InteractionLookAt).
+  u64 autoEffector=0,autoObject=0,autoSecond=0,pelvis=0,chest=0,lookAt=0;bool enabled=true;float speed=1,limbBones=2,crouch=.5f,lean=.5f,lookSpeed=2,lookTurn=6;
   AE_FX_VALUE(InteractionSystem)
-  bool valid() const override {return ikReference(autoEffector)&&ikReference(autoObject)&&ikReference(autoSecond)&&ikReference(pelvis)&&ikReference(chest)&&ikNumbersValid(*this);}
-  void write(std::ostream &out) const override {out<<enabled<<' '<<speed<<' '<<limbBones<<' '<<autoEffector<<' '<<autoObject<<' '<<autoSecond<<' '<<pelvis<<' '<<chest<<' '<<crouch<<' '<<lean;}
+  bool valid() const override {return ikReference(autoEffector)&&ikReference(autoObject)&&ikReference(autoSecond)&&ikReference(pelvis)&&ikReference(chest)&&ikReference(lookAt)&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<enabled<<' '<<speed<<' '<<limbBones<<' '<<autoEffector<<' '<<autoObject<<' '<<autoSecond<<' '<<pelvis<<' '<<chest<<' '<<crouch<<' '<<lean<<' '<<lookAt<<' '<<lookSpeed<<' '<<lookTurn;}
   bool read(std::istream &in,u32 version) override {
-    if(version<1||version>4||!(in>>enabled>>speed))return false;
-    limbBones=2;autoEffector=autoObject=autoSecond=pelvis=chest=0;crouch=.5f;lean=.5f;
+    if(version<1||version>5||!(in>>enabled>>speed))return false;
+    limbBones=2;autoEffector=autoObject=autoSecond=pelvis=chest=lookAt=0;crouch=.5f;lean=.5f;lookSpeed=2;lookTurn=6;
     if(version>=2&&!(in>>limbBones))return false;
     if(version>=3&&!(in>>autoEffector>>autoObject))return false;
     if(version>=4&&!(in>>autoSecond>>pelvis>>chest>>crouch>>lean))return false;
+    if(version>=5&&!(in>>lookAt>>lookSpeed>>lookTurn))return false;
     return valid();
   }
+};
+// Pivo de pegada (Final IK InteractionTarget, refeito): este objeto gira sobre
+// si para a pegada (descendente) encarar a mao que chega, uma vez no inicio ou
+// durante toda a interacao. Torcao: so em volta do eixo; balanco: qualquer
+// eixo; completa: a pegada copia a rotacao da mao.
+class InteractionGrip final : public ComponentValue {
+public:
+  u64 grip=0;bool enabled=true,rotateOnce=true;u32 mode=0,axis=1;float twistWeight=1,swingWeight=0,fullWeight=1;
+  AE_FX_VALUE(InteractionGrip)
+  bool valid() const override {return ikReference(grip)&&mode<=1&&axis<=5&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<grip<<' '<<enabled<<' '<<rotateOnce<<' '<<mode<<' '<<axis<<' '<<twistWeight<<' '<<swingWeight<<' '<<fullWeight;}
+  bool read(std::istream &in,u32 version) override {return version==1&&(in>>grip>>enabled>>rotateOnce>>mode>>axis>>twistWeight>>swingWeight>>fullWeight)&&valid();}
+};
+// Gatilho de interacao (Final IK InteractionTrigger, refeito): faixa a frente
+// do objeto (raio, angulo maximo, deslocamento, orbita). O personagem com
+// Sistema de interacao dentro dela gera o evento `entered`; com Automatico, a
+// interacao comeca sozinha com a mao escolhida; `left` ao sair.
+class InteractionTrigger final : public ComponentValue {
+public:
+  u64 object=0;bool enabled=true,automatic=true,orbit=false,fixUp=true;u32 hands=0;float radius=.5f,maxAngle=45,offsetX=0,offsetZ=0,angleOffset=0;
+  AE_FX_VALUE(InteractionTrigger)
+  bool valid() const override {return ikReference(object)&&hands<=2&&ikNumbersValid(*this);}
+  void write(std::ostream &out) const override {out<<object<<' '<<enabled<<' '<<automatic<<' '<<orbit<<' '<<fixUp<<' '<<hands<<' '<<radius<<' '<<maxAngle<<' '<<offsetX<<' '<<offsetZ<<' '<<angleOffset;}
+  bool read(std::istream &in,u32 version) override {return version==1&&(in>>object>>enabled>>automatic>>orbit>>fixUp>>hands>>radius>>maxAngle>>offsetX>>offsetZ>>angleOffset)&&valid();}
 };
 // Corpo inteiro: ate quatro pontas com alvo; quando um alvo esta alem do
 // alcance do membro, a pelve e puxada na direcao dele (limitada) e os membros
@@ -289,28 +316,64 @@ inline constexpr std::array<ComponentObjectReference,4> interactionObjectReferen
   AE_FX_REF(InteractionObject,"hold_point","Ponto de carregar",holdPoint,OtherNonDescendant,"Fica na mão","Carregar")}};
 inline const ComponentType InteractionObject::descriptor{"astra.ik.interaction_object",2,AE_FX_MAKE(InteractionObject),interactionObjectNumbers,interactionObjectBooleans,{},nullptr,false,interactionObjectReferences};
 
-inline constexpr std::array<ComponentNumber,4> interactionSystemNumbers{{AE_FX_NUM(InteractionSystem,"speed","Velocidade",speed,.1f,5,.05f,"Interação",""),
+inline constexpr std::array<ComponentNumber,6> interactionSystemNumbers{{AE_FX_NUM(InteractionSystem,"speed","Velocidade",speed,.1f,5,.05f,"Interação",""),
   AE_FX_NUM(InteractionSystem,"limb_bones","Ossos do braço",limbBones,2,8,1,"Interação","ossos"),
   AE_FX_NUM(InteractionSystem,"crouch","Agachar até",crouch,0,2,.01f,"Corpo","m"),
-  AE_FX_NUM(InteractionSystem,"lean","Inclinar o tronco",lean,0,1,.01f,"Corpo","")}};
+  AE_FX_NUM(InteractionSystem,"lean","Inclinar o tronco",lean,0,1,.01f,"Corpo",""),
+  AE_FX_NUM(InteractionSystem,"look_speed","Entrada do olhar",lookSpeed,.1f,20,.1f,"Olhar","/s"),
+  AE_FX_NUM(InteractionSystem,"look_turn","Giro do olhar",lookTurn,.5f,60,.5f,"Olhar","/s")}};
 inline constexpr std::array<ComponentBoolean,1> interactionSystemBooleans{{AE_FX_BOOL(InteractionSystem,"enabled","Ativo",enabled,"Interação")}};
-inline constexpr std::array<ComponentObjectReference,5> interactionSystemReferences{{
+inline constexpr std::array<ComponentObjectReference,6> interactionSystemReferences{{
   AE_FX_REF(InteractionSystem,"auto_effector","Mão ao iniciar",autoEffector,Descendant,"Sem início automático","Início sem script"),
   AE_FX_REF(InteractionSystem,"auto_object","Objeto ao iniciar",autoObject,OtherNonDescendant,"Sem objeto","Início sem script"),
   AE_FX_REF(InteractionSystem,"auto_second","Segunda mão ao iniciar",autoSecond,Descendant,"Uma mão","Início sem script"),
   AE_FX_REF(InteractionSystem,"pelvis","Pelve",pelvis,Descendant,"Sem agachar","Corpo"),
-  AE_FX_REF(InteractionSystem,"chest","Peito",chest,Descendant,"Sem inclinar","Corpo")}};
+  AE_FX_REF(InteractionSystem,"chest","Peito",chest,Descendant,"Sem inclinar","Corpo"),
+  AE_FX_REF(InteractionSystem,"look_at","Olhar com",lookAt,Descendant,"Sem olhar","Olhar")}};
 inline constexpr std::array<ComponentParameter,2> interactionStartParameters{{{"effector","Mão",ComponentValueKind::Object},{"object","Objeto",ComponentValueKind::Object}}};
 inline constexpr std::array<ComponentParameter,1> interactionStopParameters{{{"effector","Mão",ComponentValueKind::Object}}};
-inline constexpr std::array<ComponentMethod,2> interactionSystemMethods{{
+inline constexpr std::array<ComponentMethod,3> interactionSystemMethods{{
   {"start","Interagir","Leva a mão até o Objeto interagível; falso se a mão ou o objeto não servem",interactionStartParameters,ComponentValueKind::Boolean},
-  {"stop","Soltar","Devolve a mão à animação e larga o objeto pego",interactionStopParameters}}};
+  {"stop","Soltar","Devolve a mão à animação e larga o objeto pego",interactionStopParameters},
+  {"trigger","Interagir pelo gatilho","Começa a interação do Gatilho de interação mais próximo em que o personagem está; falso se não há nenhum",{},ComponentValueKind::Boolean}}};
 inline constexpr std::array<ComponentParameter,2> interactionEventPayload{{{"effector","Mão",ComponentValueKind::Object},{"object","Objeto",ComponentValueKind::Object}}};
-inline constexpr std::array<ComponentEvent,3> interactionSystemEvents{{
+inline constexpr std::array<ComponentEvent,5> interactionSystemEvents{{
   {"reached","Alcançou","A mão chegou ao ponto de pegada",interactionEventPayload},
   {"picked","Levantou","A última mão chegou e o objeto sobe ao ponto de carregar",interactionEventPayload},
-  {"released","Soltou","A mão voltou à animação",interactionEventPayload}}};
-inline const ComponentType InteractionSystem::descriptor{"astra.ik.interaction_system",4,AE_FX_MAKE(InteractionSystem),interactionSystemNumbers,interactionSystemBooleans,{},nullptr,false,interactionSystemReferences,{},{},{},{},{},interactionSystemMethods,interactionSystemEvents};
+  {"released","Soltou","A mão voltou à animação",interactionEventPayload},
+  {"entered","Entrou no gatilho","O personagem entrou na faixa de um Gatilho de interação (Objeto = o gatilho)",interactionEventPayload},
+  {"left","Saiu do gatilho","O personagem saiu da faixa do gatilho",interactionEventPayload}}};
+inline const ComponentType InteractionSystem::descriptor{"astra.ik.interaction_system",5,AE_FX_MAKE(InteractionSystem),interactionSystemNumbers,interactionSystemBooleans,{},nullptr,false,interactionSystemReferences,{},{},{},{},{},interactionSystemMethods,interactionSystemEvents};
+
+inline constexpr std::array<ComponentEnumOption,2> interactionGripModes{{{0,"Torção e balanço"},{1,"Rotação completa"}}};
+inline bool interactionGripTwist(const ComponentValue &v){return static_cast<const InteractionGrip&>(v).mode==0;}
+inline bool interactionGripFull(const ComponentValue &v){return static_cast<const InteractionGrip&>(v).mode==1;}
+inline constexpr std::array<ComponentNumber,3> interactionGripNumbers{{
+  ComponentNumber{"Peso da torção",0,1,.01f,[](const ComponentValue&v)->const float&{return static_cast<const InteractionGrip&>(v).twistWeight;},[](ComponentValue&v){return &static_cast<InteractionGrip&>(v).twistWeight;},"twist_weight",{"Giro","",nullptr,interactionGripTwist},true},
+  ComponentNumber{"Peso do balanço",0,1,.01f,[](const ComponentValue&v)->const float&{return static_cast<const InteractionGrip&>(v).swingWeight;},[](ComponentValue&v){return &static_cast<InteractionGrip&>(v).swingWeight;},"swing_weight",{"Giro","",nullptr,interactionGripTwist},true},
+  ComponentNumber{"Peso da rotação",0,1,.01f,[](const ComponentValue&v)->const float&{return static_cast<const InteractionGrip&>(v).fullWeight;},[](ComponentValue&v){return &static_cast<InteractionGrip&>(v).fullWeight;},"full_weight",{"Giro","",nullptr,interactionGripFull},true}}};
+inline constexpr std::array<ComponentBoolean,2> interactionGripBooleans{{AE_FX_BOOL(InteractionGrip,"enabled","Ativo",enabled,"Giro"),
+  AE_FX_BOOL(InteractionGrip,"rotate_once","Girar uma vez",rotateOnce,"Giro")}};
+inline constexpr std::array<ComponentEnum,2> interactionGripEnums{{AE_FX_ENUM(InteractionGrip,"mode","Modo",interactionGripModes,mode,"Giro"),
+  AE_FX_ENUM(InteractionGrip,"axis","Eixo da torção",ikAxisOptions,axis,"Giro")}};
+inline constexpr std::array<ComponentObjectReference,1> interactionGripReferences{{
+  AE_FX_REF(InteractionGrip,"grip","Pegada",grip,Descendant,"A pegada do Objeto interagível","Giro")}};
+inline const ComponentType InteractionGrip::descriptor{"astra.ik.interaction_grip",1,AE_FX_MAKE(InteractionGrip),interactionGripNumbers,interactionGripBooleans,interactionGripEnums,nullptr,false,interactionGripReferences};
+
+inline constexpr std::array<ComponentEnumOption,3> interactionTriggerHands{{{0,"Mão ao iniciar"},{1,"Segunda mão ao iniciar"},{2,"As duas"}}};
+inline constexpr std::array<ComponentNumber,5> interactionTriggerNumbers{{AE_FX_NUM(InteractionTrigger,"radius","Raio",radius,.05f,10,.05f,"Faixa","m"),
+  AE_FX_NUM(InteractionTrigger,"max_angle","Ângulo máximo",maxAngle,1,180,1,"Faixa","graus"),
+  AE_FX_NUM(InteractionTrigger,"offset_x","Deslocamento lateral",offsetX,-5,5,.05f,"Faixa","m"),
+  AE_FX_NUM(InteractionTrigger,"offset_z","Deslocamento à frente",offsetZ,-5,5,.05f,"Faixa","m"),
+  AE_FX_NUM(InteractionTrigger,"angle_offset","Giro da direção",angleOffset,-180,180,1,"Faixa","graus")}};
+inline constexpr std::array<ComponentBoolean,4> interactionTriggerBooleans{{AE_FX_BOOL(InteractionTrigger,"enabled","Ativo",enabled,"Gatilho"),
+  AE_FX_BOOL(InteractionTrigger,"automatic","Automático",automatic,"Gatilho"),
+  AE_FX_BOOL(InteractionTrigger,"orbit","Em volta do objeto",orbit,"Faixa"),
+  AE_FX_BOOL(InteractionTrigger,"fix_up","Cima fixo",fixUp,"Faixa")}};
+inline constexpr std::array<ComponentEnum,1> interactionTriggerEnums{{AE_FX_ENUM(InteractionTrigger,"hands","Mãos",interactionTriggerHands,hands,"Gatilho")}};
+inline constexpr std::array<ComponentObjectReference,1> interactionTriggerReferences{{
+  AE_FX_REF(InteractionTrigger,"interactable","Objeto interagível",object,Any,"Este objeto","Gatilho")}};
+inline const ComponentType InteractionTrigger::descriptor{"astra.ik.interaction_trigger",1,AE_FX_MAKE(InteractionTrigger),interactionTriggerNumbers,interactionTriggerBooleans,interactionTriggerEnums,nullptr,false,interactionTriggerReferences};
 
 inline constexpr std::array<ComponentNumber,5> fullBodyNumbers{{AE_FX_NUM(FullBodyIk,"weight","Peso",weight,0,1,.01f,"Influência",""),
   AE_FX_NUM(FullBodyIk,"body_pull","Puxar o corpo",bodyPull,0,1,.01f,"Corpo",""),AE_FX_NUM(FullBodyIk,"max_body_offset","Deslocamento máximo da pelve",maxBodyOffset,0,3,.01f,"Corpo","m"),

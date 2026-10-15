@@ -344,6 +344,77 @@ AE_TEST(ik_interaction_reaches_picks_up_and_releases_with_events) {
   AE_EXPECT_TRUE(!events.empty()&&std::string(events.back().id)=="released","released event");
 }
 
+// Final IK 2.2, InteractionTarget: a pegada gira sobre o pivo para encarar a
+// mao (objeto simetrico pego de qualquer lado). Referencia oficial: XRI 3.0
+// XRGrabInteractable (attach transform, match attach rotation).
+AE_TEST(ik_interaction_grip_turns_the_pivot_so_the_grip_faces_the_hand) {
+  Leg leg;addComponent<scene::InteractionSystem>(leg.g,leg.owner);
+  const auto prop=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Caneca");
+  Transform at;at.position[0]=.6f;at.position[1]=.6f;leg.g.setTransform(prop,at);
+  const auto grip=leg.g.createEntity(prop,ObjectKind::Folder,"Asa");
+  Transform g;g.position[0]=.3f;leg.g.setTransform(grip,g);
+  auto *object=addComponent<scene::InteractionObject>(leg.g,prop);object->grip=grip;object->reachTime=.2f;
+  auto *pivot=addComponent<scene::InteractionGrip>(leg.g,prop);pivot->grip=grip;pivot->axis=1;pivot->twistWeight=1;
+  GameWorld world;world.load(leg.g);SceneIk ik;step(world,ik);
+  float before[16];worldMatrix(world.graph(),grip,before);
+  AE_EXPECT_TRUE(before[12]>.8f,"the handle starts pointing away from the hand (+X)");
+  bool started=false;AE_EXPECT_TRUE(ik.interactionStart(world,leg.owner,leg.foot,prop,started)==WorldStatus::Ok&&started,"start");
+  step(world,ik);
+  float after[16],hand[16],propWorld[16];worldMatrix(world.graph(),grip,after);worldMatrix(world.graph(),leg.foot,hand);worldMatrix(world.graph(),prop,propWorld);
+  const float tangent[2]{after[12]-propWorld[12],after[14]-propWorld[14]},toHand[2]{hand[12]-propWorld[12],hand[14]-propWorld[14]};
+  const float cosine=(tangent[0]*toHand[0]+tangent[1]*toHand[1])/(std::hypot(tangent[0],tangent[1])*std::hypot(toHand[0],toHand[1]));
+  AE_EXPECT_TRUE(cosine>.95f,"the handle now points at the hand around the Y pivot");
+  AE_EXPECT_TRUE(std::abs(propWorld[13]-.6f)<1e-4f,"twist keeps the object in place");
+  step(world,ik,12);
+  float later[16];worldMatrix(world.graph(),grip,later);
+  AE_EXPECT_TRUE(std::abs(later[12]-after[12])<.3f,"rotate once: the pivot does not keep chasing the hand");
+}
+
+// Final IK 2.2, InteractionTrigger: faixa (raio + angulo) a frente do objeto;
+// o personagem dentro dela dispara a interacao. Referencia oficial: XRI 3.0
+// XR Direct Interactor (selecao por proximidade).
+AE_TEST(ik_interaction_trigger_fires_when_the_character_is_in_range) {
+  Leg leg;auto *system=addComponent<scene::InteractionSystem>(leg.g,leg.owner);system->autoEffector=leg.foot;
+  const auto prop=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Alavanca");
+  Transform at;at.position[0]=.3f;at.position[1]=.6f;at.position[2]=.2f;leg.g.setTransform(prop,at);
+  auto *object=addComponent<scene::InteractionObject>(leg.g,prop);object->reachTime=.2f;
+  auto *trigger=addComponent<scene::InteractionTrigger>(leg.g,prop);trigger->radius=.5f;trigger->maxAngle=180;trigger->automatic=false;
+  GameWorld world;world.load(leg.g);SceneIk ik;
+  std::vector<SceneIk::Event> events;
+  for(u32 i=0;i<3;++i) {step(world,ik);for(auto &e:ik.takeEvents())events.push_back(e);}
+  AE_EXPECT_TRUE(events.size()==1&&std::string(events.front().id)=="entered"&&events.front().object==prop,"entering the range raises one event and nothing else");
+  bool started=false;AE_EXPECT_TRUE(ik.interactionTrigger(world,leg.owner,started)==WorldStatus::Ok&&started,"trigger starts the interaction with the auto hand");
+  for(u32 i=0;i<14;++i) {step(world,ik);for(auto &e:ik.takeEvents())events.push_back(e);}
+  AE_EXPECT_TRUE(std::string(events.back().id)=="reached"&&events.back().effector==leg.foot,"the hand reaches the lever");
+  // Fora da faixa: nada dispara e o gatilho avisa que saiu.
+  trigger->radius=.1f;
+  Leg far;auto *system2=addComponent<scene::InteractionSystem>(far.g,far.owner);system2->autoEffector=far.foot;
+  const auto prop2=far.g.createEntity(far.g.root(),ObjectKind::Folder,"Longe");Transform away;away.position[0]=3;far.g.setTransform(prop2,away);
+  addComponent<scene::InteractionObject>(far.g,prop2);auto *t2=addComponent<scene::InteractionTrigger>(far.g,prop2);t2->radius=.5f;t2->automatic=true;
+  GameWorld world2;world2.load(far.g);SceneIk ik2;step(world2,ik2,3);
+  AE_EXPECT_TRUE(ik2.takeEvents().empty(),"out of range: no event, no interaction");
+  bool started2=true;AE_EXPECT_TRUE(ik2.interactionTrigger(world2,far.owner,started2)==WorldStatus::Ok&&!started2,"manual trigger out of range refuses");
+}
+
+// Final IK 2.2, InteractionLookAt: a cabeca olha o objeto enquanto a mao vai
+// ate ele e volta depois. Referencia oficial: Godot 4.3 LookAtModifier3D.
+AE_TEST(ik_interaction_look_at_turns_the_head_while_reaching) {
+  Spine s;auto *system=addComponent<scene::InteractionSystem>(s.g,s.owner);system->lookAt=s.head;system->lookSpeed=8;system->lookTurn=30;
+  auto *look=addComponent<scene::LookAtIk>(s.g,s.head);look->target=0;look->chainLength=1;look->headWeight=1;look->axis=2;
+  const auto prop=s.g.createEntity(s.g.root(),ObjectKind::Folder,"Copo");Transform at;at.position[0]=2;at.position[1]=2;s.g.setTransform(prop,at);
+  auto *object=addComponent<scene::InteractionObject>(s.g,prop);object->reachTime=1;object->releaseTime=.1f;
+  GameWorld world;world.load(s.g);SceneIk ik;step(world,ik);
+  AE_EXPECT_TRUE(ik.diagnostics().empty(),"look-at without a target waits for the interaction instead of complaining");
+  float head[16];worldMatrix(world.graph(),s.head,head);
+  AE_EXPECT_TRUE(std::abs(head[8])<1e-3f,"head starts looking forward");
+  bool started=false;AE_EXPECT_TRUE(ik.interactionStart(world,s.owner,s.head,prop,started)==WorldStatus::Ok&&started,"start");
+  step(world,ik,20);worldMatrix(world.graph(),s.head,head);
+  AE_EXPECT_TRUE(head[8]>.5f,"while reaching, the head turns toward the object");
+  AE_EXPECT_TRUE(ik.interactionStop(world,s.owner,s.head)==WorldStatus::Ok,"stop");
+  step(world,ik,60);worldMatrix(world.graph(),s.head,head);
+  AE_EXPECT_TRUE(std::abs(head[8])<.1f,"after release the look-at fades out and the head returns");
+}
+
 AE_TEST(ik_full_body_pulls_pelvis_to_reach_far_targets) {
   Leg leg;
   const auto far=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Longe");Transform t;t.position[1]=-.5f;leg.g.setTransform(far,t);
