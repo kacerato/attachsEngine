@@ -106,7 +106,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,84> bindings{{
+const std::array<ComponentMethodBinding,85> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -227,6 +227,11 @@ const std::array<ComponentMethodBinding,84> bindings{{
   {&scene::InteractionSystem::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     if(!s.ik||!s.world) return WorldStatus::NotRunning;
     return s.ik->interactionStop(*s.world,h.object.id,static_cast<ObjectId>(a[0].object));}},
+  {&scene::InteractionSystem::descriptor,"trigger",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.ik||!s.world) return WorldStatus::NotRunning;
+    bool started=false;const auto status=s.ik->interactionTrigger(*s.world,h.object.id,started);
+    if(status==WorldStatus::Ok) r=Value::makeBoolean(started);
+    return status;}},
   {&scene::PathFollow::descriptor,"restart",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,0,r);}},
   {&scene::PathFollow::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,1,r);}},
   {&scene::PathFollow::descriptor,"progress",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return pathOperation(s,h,2,r);}},

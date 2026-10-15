@@ -95,22 +95,29 @@ bool AnimationClipPreview::begin(const runtime::SceneGraph &scene,runtime::Objec
     };
     if(!runtime::readAnimationPropertyTarget(scene,target,address,resolver,value,error))return false;
   }
+  // Como a Unity (caminho "Missing!") e o Play, um nó animado que não existe
+  // sob a raiz fica de fora e é listado; só um clipe sem nenhum alvo é recusado.
+  std::vector<std::string> missing;u32 resolved=0;
   for(const auto &channel:source.clips.front().channels) {
     if(channel.node>=targets.size()||!targets[channel.node]) {
-      error="Binding ausente ou ambíguo no preview: "+(channel.node<source.nodePaths.size()?source.nodePaths[channel.node]:std::to_string(channel.node));return false;
+      auto path=channel.node<source.nodePaths.size()?source.nodePaths[channel.node]:std::to_string(channel.node);
+      if(std::find(missing.begin(),missing.end(),path)==missing.end())missing.push_back(std::move(path));
+      continue;
     }
+    ++resolved;
     if(channel.path==resources::AnimationPath::Weights&&
        !scene.find(targets[channel.node])->components.find(scene::SkinnedMesh::descriptor)) {
       error="Canal de morph exige Malha com skin no objeto: "+source.nodePaths[channel.node];return false;
     }
   }
+  if(!resolved&&!missing.empty()) {error="Nenhum nó animado existe sob a raiz do preview: "+missing.front();return false;}
   // A new failed begin preserves the current preview. No source state is ever
   // touched, including Animation.playAutomatically and morph weight vectors.
   auto posed=scene;std::vector<runtime::ObjectId> ids;posed.collectSubtree(posed.root(),ids);
   for(const auto id:ids)if(auto *components=posed.editComponents(id))
     for(usize i=0;i<components->size();++i)if(const auto *value=components->at(i);&value->type()==&scene::Animation::descriptor)
       static_cast<scene::Animation*>(components->editInstance(value->instanceId()))->playAutomatically=false;
-  sampler_.reset();scene_=std::move(posed);source_=std::move(source);owner_=owner;
+  sampler_.reset();scene_=std::move(posed);source_=std::move(source);owner_=owner;missing_=std::move(missing);
   sceneRevision_=scene.revision();clipRevision_=clip.revision;time_=0;sampler_.begin(scene_,*this);
   gui_=std::move(preparedGui);
   sampler_.setPropertyGuiResolver([this](runtime::ObjectId object,u64 component,resources::AssetGuid)->ui::GuiRuntime* {
@@ -160,7 +167,7 @@ bool AnimationClipPreview::overridePose(runtime::ObjectId target,resources::Anim
   return true;
 }
 void AnimationClipPreview::cancel() {
-  sampler_.reset();scene_.reset();source_={};gui_.clear();owner_=runtime::kInvalidObject;time_=0;sceneRevision_=0;clipRevision_=0;
+  sampler_.reset();scene_.reset();source_={};gui_.clear();missing_.clear();owner_=runtime::kInvalidObject;time_=0;sceneRevision_=0;clipRevision_=0;
 }
 const ui::GuiDocument *AnimationClipPreview::guiDocument(runtime::ObjectId object,u64 component) const {
   const auto found=gui_.find({object,component});return found==gui_.end()?nullptr:&found->second->document();

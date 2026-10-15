@@ -12,6 +12,7 @@ WorldStatus SceneIk::hitFront(GameWorld &world,ObjectId object,float force) {ret
 WorldStatus SceneIk::fire(GameWorld &world,ObjectId object,float magnitude) {return solver_->fire(world,object,magnitude);}
 WorldStatus SceneIk::interactionStart(GameWorld &world,ObjectId system,ObjectId effector,ObjectId object,bool &started) {return solver_->interactionStart(world,system,effector,object,started);}
 WorldStatus SceneIk::interactionStop(GameWorld &world,ObjectId system,ObjectId effector) {return solver_->interactionStop(world,system,effector);}
+WorldStatus SceneIk::interactionTrigger(GameWorld &world,ObjectId system,bool &started) {return solver_->interactionTrigger(world,system,started);}
 void SceneIk::collision(GameWorld &world,ObjectId object,const float normal[3]) {solver_->collision(world,object,normal);}
 std::vector<SceneIkTypes::Event> SceneIk::takeEvents() {return solver_->takeEvents();}
 void SceneIk::setBodyMover(BodyMover mover) {solver_->setBodyMover(std::move(mover));}

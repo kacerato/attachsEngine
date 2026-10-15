@@ -25,6 +25,7 @@ public:
   void reset() {
     limitRest_.clear();cache_.clear();diagnostics_.clear();candidates_.clear();knownRevision_=0;knownWorld_=0;
     impulses_.clear();autoStarted_.clear();springs_.clear();tilts_.clear();ampRest_.clear();interactions_.clear();holds_.clear();events_.clear();lastTime_=-1;footLocks_.clear();
+    looks_.clear();inRange_.clear();
   }
 
   bool advance(GameWorld &world,const GroundQuery &ground={}) {
@@ -92,6 +93,7 @@ public:
       interactionStart(world,id,static_cast<ObjectId>(c.autoEffector),static_cast<ObjectId>(c.autoObject),started);
       if(c.autoSecond)interactionStart(world,id,static_cast<ObjectId>(c.autoSecond),static_cast<ObjectId>(c.autoObject),started);
     });
+    triggers(world);
     interactions(world,touched);
     each(scene::HandPoser::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::HandPoser&>(v);if(c.enabled&&c.weight>0)poser(world,id,c,touched);});
     each(scene::AimIk::descriptor,[&](ObjectId id,const scene::ComponentValue &v){const auto &c=static_cast<const scene::AimIk&>(v);if(c.enabled&&c.weight>0)aim(world,id,c,touched);});
@@ -123,13 +125,14 @@ private:
     for(const auto &n:value.type().numbers)if(n.id=="priority")return n.read(value);
     return 0;
   }
-  static std::array<const scene::ComponentType*,23> types() {
+  static std::array<const scene::ComponentType*,25> types() {
     return {&scene::TwoBoneIk::descriptor,&scene::ChainIk::descriptor,&scene::FootGrounding::descriptor,&scene::LookAtIk::descriptor,
             &scene::AimIk::descriptor,&scene::RotationLimit::descriptor,&scene::GrounderBody::descriptor,&scene::FingerCurl::descriptor,
             &scene::IkOffset::descriptor,&scene::TwistRelaxer::descriptor,&scene::HitReaction::descriptor,&scene::Recoil::descriptor,
             &scene::Inertia::descriptor,&scene::Amplifier::descriptor,&scene::BodyTilt::descriptor,&scene::HandPoser::descriptor,
             &scene::PenetrationAvoidance::descriptor,&scene::InteractionSystem::descriptor,&scene::FullBodyIk::descriptor,
-            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor,&scene::Socket::descriptor,&scene::ChildOf::descriptor};
+            &scene::FabrikRoot::descriptor,&scene::BodyByTargets::descriptor,&scene::Socket::descriptor,&scene::ChildOf::descriptor,
+            &scene::InteractionGrip::descriptor,&scene::InteractionTrigger::descriptor};
   }
   struct Cache {Transform input{},output{};};
   std::map<ObjectId,Cache> cache_;
@@ -523,7 +526,20 @@ private:
     }
   }
   void lookAt(GameWorld &world,ObjectId id,const scene::LookAtIk &c,std::map<ObjectId,bool> &touched) {
-    float target[3];if(!targetPosition(world,c.target,target)) {diagnostics_.push_back({id,Issue::MissingTarget});return;}
+    // Olhar de uma interacao (Sistema de interacao, "Olhar com"): substitui o
+    // alvo quando nao ha um, ou mistura com ele pelo peso que sobe e desce.
+    float target[3];const bool own=targetPosition(world,c.target,target);
+    const auto look=looks_.find(id);const bool driven=look!=looks_.end()&&look->second.weight>0;
+    float weight=c.weight;
+    if(driven) {
+      const float w=smooth(look->second.weight);
+      if(own)for(u32 i=0;i<3;++i)target[i]+=(look->second.position[i]-target[i])*w;
+      else {std::copy(look->second.position,look->second.position+3,target);weight*=w;}
+    } else if(!own) {
+      // Sem alvo proprio e sem interacao: o Look At espera, nao reclama.
+      if(c.target)diagnostics_.push_back({id,Issue::MissingTarget});
+      return;
+    }
     std::vector<ObjectId> chain;
     const u32 body=static_cast<u32>(c.chainLength)>1?static_cast<u32>(c.chainLength)-1:0;
     if(!ancestors(world.graph(),id,body,chain)) {diagnostics_.push_back({id,Issue::ShortChain});return;}
@@ -541,7 +557,7 @@ private:
       if(len<1e-6f)return;
       const float angle=std::acos(std::clamp(dotValue/len,-1.f,1.f))*180/3.14159265f;
       const float allowed=angle>c.clampAngle&&angle>0?c.clampAngle/angle:1.f;
-      float r[9];ikWeightedFromTo(forward,desired,std::clamp(share*c.weight*allowed,0.f,1.f),-1,r);
+      float r[9];ikWeightedFromTo(forward,desired,std::clamp(share*weight*allowed,0.f,1.f),-1,r);
       float next[16];ikRotateWorld(bone,r,next);
       if(!writeWorld(world,chain[k],next)) {diagnostics_.push_back({id,Issue::InvalidPose});return;}
     }
@@ -669,9 +685,168 @@ public:
     }
     return WorldStatus::Ok;
   }
+  // Gatilho de interacao mais proximo (menor erro de posicao/angulo) em que o
+  // personagem esta: comeca a interacao com as maos que ele escolhe.
+  WorldStatus interactionTrigger(GameWorld &world,ObjectId system,bool &started) {
+    started=false;
+    if(!world.running())return WorldStatus::NotRunning;
+    const auto *s=component<scene::InteractionSystem>(world,system);if(!s)return WorldStatus::ComponentMissing;
+    if(!s->enabled)return WorldStatus::Ok;
+    ObjectId best=0;const scene::InteractionTrigger *bestTrigger=nullptr;float bestError=1e9f;
+    for(const auto triggerId:candidates_) {
+      const auto *t=component<scene::InteractionTrigger>(world,triggerId);if(!t||!t->enabled)continue;
+      float error=0;if(!triggerInRange(world,triggerId,*t,system,error))continue;
+      if(error<bestError) {bestError=error;best=triggerId;bestTrigger=t;}
+    }
+    if(best)startTrigger(world,best,*bestTrigger,system,started);
+    return WorldStatus::Ok;
+  }
   std::vector<Event> takeEvents() {std::vector<Event> out;out.swap(events_);return out;}
   void setBodyMover(BodyMover mover) {mover_=std::move(mover);}
 private:
+  struct Interaction;
+  static float dot3f(const float a[3],const float b[3]) {return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+  static void cross3f(const float a[3],const float b[3],float o[3]) {o[0]=a[1]*b[2]-a[2]*b[1];o[1]=a[2]*b[0]-a[0]*b[2];o[2]=a[0]*b[1]-a[1]*b[0];}
+  static bool normalize3f(float v[3]) {const float n=length3(v);if(n<1e-6f)return false;for(u32 i=0;i<3;++i)v[i]/=n;return true;}
+  // Rodrigues: gira v em volta do eixo unitario por `degrees`.
+  static void rotateAxisf(const float v[3],const float axis[3],float degrees,float o[3]) {
+    const float a=degrees*3.14159265f/180,c=std::cos(a),s=std::sin(a);float k[3];cross3f(axis,v,k);const float d=dot3f(axis,v);
+    for(u32 i=0;i<3;++i)o[i]=v[i]*c+k[i]*s+axis[i]*d*(1-c);
+  }
+  static void quaternionMatrix3(const float q[4],float r[9]) {
+    const float x=q[0],y=q[1],z=q[2],w=q[3];
+    r[0]=1-2*(y*y+z*z);r[1]=2*(x*y-z*w);r[2]=2*(x*z+y*w);
+    r[3]=2*(x*y+z*w);r[4]=1-2*(x*x+z*z);r[5]=2*(y*z-x*w);
+    r[6]=2*(x*z-y*w);r[7]=2*(y*z+x*w);r[8]=1-2*(x*x+y*y);
+  }
+  // Faixa do gatilho (Final IK InteractionTrigger.CharacterPosition, refeita):
+  // posicao do personagem no plano do gatilho dentro do raio (ou do anel, em
+  // orbita) e a frente dele dentro do angulo maximo em relacao a direcao
+  // esperada. `error` cresce com o desvio angular (0..180).
+  bool triggerInRange(GameWorld &world,ObjectId triggerId,const scene::InteractionTrigger &t,ObjectId systemId,float &error) {
+    error=180;if(t.radius<=0||t.maxAngle<=0)return false;
+    float tm[16],cm[16];if(!worldMatrix(world.graph(),triggerId,tm)||!worldMatrix(world.graph(),systemId,cm))return false;
+    float forward[3]{tm[8],tm[9],tm[10]},up[3]{0,1,0},right[3];
+    if(t.fixUp)forward[1]=0;else {up[0]=tm[4];up[1]=tm[5];up[2]=tm[6];}
+    if(!normalize3f(forward)||!normalize3f(up))return false;
+    cross3f(up,forward,right);if(!normalize3f(right))return false;cross3f(right,up,forward);normalize3f(forward);
+    float position[3],origin[3],toCharacter[3];
+    for(u32 i=0;i<3;++i) {position[i]=tm[12+i]+right[i]*t.offsetX+forward[i]*t.offsetZ;origin[i]=t.orbit?tm[12+i]:position[i];toCharacter[i]=cm[12+i]-origin[i];}
+    const float h=dot3f(toCharacter,up);for(u32 i=0;i<3;++i)toCharacter[i]-=up[i]*h;
+    const float dist=length3(toCharacter);
+    if(t.orbit) {const float ring=std::hypot(t.offsetX,t.offsetZ);if(dist<ring-t.radius||dist>ring+t.radius)return false;}
+    else if(dist>t.radius)return false;
+    float d[3];rotateAxisf(forward,up,t.angleOffset,d);
+    if(t.orbit&&dist>1e-6f) {
+      float toPosition[3];for(u32 i=0;i<3;++i)toPosition[i]=position[i]-tm[12+i];
+      const float hp=dot3f(toPosition,up);for(u32 i=0;i<3;++i)toPosition[i]-=up[i]*hp;
+      if(!normalize3f(toPosition))std::copy(forward,forward+3,toPosition);
+      float c[3];cross3f(toPosition,toCharacter,c);
+      const float a=std::atan2(dot3f(c,up),dot3f(toPosition,toCharacter))*57.29578f;
+      float rotated[3];rotateAxisf(d,up,a,rotated);std::copy(rotated,rotated+3,d);
+    }
+    float characterForward[3]{cm[8],cm[9],cm[10]};const float hf=dot3f(characterForward,up);for(u32 i=0;i<3;++i)characterForward[i]-=up[i]*hf;
+    if(!normalize3f(characterForward)||!normalize3f(d))return false;
+    const float angle=std::acos(std::clamp(dot3f(d,characterForward),-1.f,1.f))*57.29578f;
+    if(angle>t.maxAngle)return false;
+    error=angle/t.maxAngle*180;return true;
+  }
+  bool startTrigger(GameWorld &world,ObjectId triggerId,const scene::InteractionTrigger &t,ObjectId systemId,bool &started) {
+    const auto *s=component<scene::InteractionSystem>(world,systemId);if(!s)return false;
+    const ObjectId object=t.object?static_cast<ObjectId>(t.object):triggerId;
+    const ObjectId first=t.hands==1?static_cast<ObjectId>(s->autoSecond):static_cast<ObjectId>(s->autoEffector);
+    const ObjectId second=t.hands==2?static_cast<ObjectId>(s->autoSecond):0;
+    if(!first) {diagnostics_.push_back({systemId,Issue::NotInteractable});return false;}
+    for(const auto &e:interactions_)if(e.system==systemId&&e.object==object&&e.phase<2)return false;
+    bool a=false,b=false;interactionStart(world,systemId,first,object,a);
+    if(second)interactionStart(world,systemId,second,object,b);
+    started=a||b;return started;
+  }
+  // Gatilhos: entrada e saida da faixa viram eventos; Automatico comeca a
+  // interacao ao entrar.
+  void triggers(GameWorld &world) {
+    std::set<std::pair<ObjectId,ObjectId>> now;
+    for(const auto triggerId:candidates_) {
+      const auto *t=component<scene::InteractionTrigger>(world,triggerId);if(!t||!t->enabled)continue;
+      for(const auto systemId:candidates_) {
+        const auto *s=component<scene::InteractionSystem>(world,systemId);if(!s||!s->enabled)continue;
+        float error=0;if(!triggerInRange(world,triggerId,*t,systemId,error))continue;
+        now.insert({triggerId,systemId});
+        if(inRange_.count({triggerId,systemId}))continue;
+        events_.push_back({systemId,"entered",0,triggerId});
+        if(t->automatic) {bool started=false;startTrigger(world,triggerId,*t,systemId,started);}
+      }
+    }
+    for(const auto &pair:inRange_)if(!now.count(pair))events_.push_back({pair.second,"left",0,pair.first});
+    inRange_.swap(now);
+  }
+  // Pivo de pegada: o dono do componente gira para a pegada encarar a mao.
+  void turnGrip(GameWorld &world,Interaction &e,const scene::InteractionObject &object,std::map<ObjectId,bool> &touched) {
+    const u64 chosen=e.second&&object.secondGrip?object.secondGrip:object.grip;
+    const ObjectId gripId=chosen&&world.graph().find(static_cast<ObjectId>(chosen))?static_cast<ObjectId>(chosen):e.object;
+    for(const auto pivot:candidates_) {
+      const auto *c=component<scene::InteractionGrip>(world,pivot);if(!c||!c->enabled)continue;
+      const bool under=gripId==pivot||world.graph().isDescendantOf(gripId,pivot);
+      const ObjectId own=c->grip?static_cast<ObjectId>(c->grip):(under?gripId:0);
+      if(own!=gripId||!under||(c->rotateOnce&&e.gripTurned))continue;
+      float pivotWorld[16],gripWorld[16],hand[16];
+      if(!worldMatrix(world.graph(),pivot,pivotWorld)||!worldMatrix(world.graph(),gripId,gripWorld)||!worldMatrix(world.graph(),e.effector,hand))continue;
+      if(!c->rotateOnce)beginBone(world,pivot,touched);
+      e.gripTurned=true;float r[9];bool ok=true;
+      if(c->mode==1) {
+        // Rotacao completa: a pegada passa a ter a orientacao da mao.
+        float gq[4],hq[4];if(!rotate_plane::basisQuaternion(gripWorld,gq)||!rotate_plane::basisQuaternion(hand,hq))continue;
+        const float gc[4]{-gq[0],-gq[1],-gq[2],gq[3]},identity[4]{0,0,0,1};float delta[4],q[4];quatMul(hq,gc,delta);
+        if(!interpolateRotationArc(identity,delta,std::clamp(c->fullWeight,0.f,1.f),q))continue;
+        quaternionMatrix3(q,r);ok=rotateBone(world,pivot,r);
+      } else {
+        const float tangent[3]{gripWorld[12]-pivotWorld[12],gripWorld[13]-pivotWorld[13],gripWorld[14]-pivotWorld[14]};
+        const float direction[3]{hand[12]-pivotWorld[12],hand[13]-pivotWorld[13],hand[14]-pivotWorld[14]};
+        if(c->twistWeight>0) {
+          // Torcao: so em volta do eixo, com os dois vetores no plano dele.
+          float axis[3];ikAxisWorld(pivotWorld,c->axis,axis);
+          if(normalize3f(axis)) {
+            float t[3],d[3];const float td=dot3f(tangent,axis),dd=dot3f(direction,axis);
+            for(u32 i=0;i<3;++i) {t[i]=tangent[i]-axis[i]*td;d[i]=direction[i]-axis[i]*dd;}
+            if(length3(t)>1e-6f&&length3(d)>1e-6f) {ikWeightedFromTo(t,d,c->twistWeight,-1,r);ok=rotateBone(world,pivot,r);}
+          }
+        }
+        if(ok&&c->swingWeight>0&&worldMatrix(world.graph(),pivot,pivotWorld)&&worldMatrix(world.graph(),gripId,gripWorld)) {
+          const float t2[3]{gripWorld[12]-pivotWorld[12],gripWorld[13]-pivotWorld[13],gripWorld[14]-pivotWorld[14]};
+          const float d2[3]{hand[12]-pivotWorld[12],hand[13]-pivotWorld[13],hand[14]-pivotWorld[14]};
+          if(length3(t2)>1e-6f&&length3(d2)>1e-6f) {ikWeightedFromTo(t2,d2,c->swingWeight,-1,r);ok=rotateBone(world,pivot,r);}
+        }
+      }
+      if(!ok)diagnostics_.push_back({pivot,Issue::InvalidPose});
+      // Girar uma vez: a pose nova e definitiva, nao volta no fim do quadro.
+      if(c->rotateOnce)cache_.erase(pivot);
+    }
+  }
+  // Olhar: o peso sobe enquanto uma mao vai ate a pegada e desce quando nao
+  // ha mais interacao em curso; o alvo desliza ate a pegada.
+  void driveLook(GameWorld &world) {
+    std::map<ObjectId,std::pair<ObjectId,std::array<float,3>>> wanted;
+    for(const auto &e:interactions_) {
+      if(e.phase>=2)continue;
+      const auto *system=component<scene::InteractionSystem>(world,e.system);const auto *object=component<scene::InteractionObject>(world,e.object);
+      if(!system||!object||!system->lookAt||!world.graph().find(static_cast<ObjectId>(system->lookAt)))continue;
+      float target[3];if(!gripPosition(world,e,*object,target))continue;
+      wanted[static_cast<ObjectId>(system->lookAt)]={e.system,{target[0],target[1],target[2]}};
+    }
+    for(const auto &[look,entry]:wanted) {
+      auto &state=looks_[look];state.system=entry.first;
+      const auto *system=component<scene::InteractionSystem>(world,entry.first);const float speed=system?system->lookSpeed:2,turn=system?system->lookTurn:6;
+      if(!state.valid) {std::copy(entry.second.begin(),entry.second.end(),state.position);state.valid=true;}
+      else {const float k=std::min(1.f,turn*dt_);for(u32 i=0;i<3;++i)state.position[i]+=(entry.second[i]-state.position[i])*k;}
+      state.weight=std::min(1.f,state.weight+speed*dt_);
+    }
+    for(auto it=looks_.begin();it!=looks_.end();) {
+      if(wanted.count(it->first)) {++it;continue;}
+      const auto *system=component<scene::InteractionSystem>(world,it->second.system);
+      it->second.weight-=(system?system->lookSpeed:2)*dt_;
+      if(it->second.weight<=0)it=looks_.erase(it);else ++it;
+    }
+  }
   struct Impulse {ObjectId id=0;bool recoil=false;float direction[3]{},magnitude=1,time=0,duration=.3f;};
   struct Spring {float position[3]{},velocity[3]{};};
   struct Tilt {float yaw=0,angle=0;};
@@ -679,7 +854,13 @@ private:
   // Objeto com corpo fisico: em vez de mudar de pai, vira cinematico e segue a
   // mao pela pose relativa capturada na pegada (physical); volta ao movimento
   // original ao soltar.
-  struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0,originalMotion=2;float time=0,weight=0,releaseFrom=1;bool held=false,physical=false,second=false;float offset[16]{};};
+  struct Interaction {ObjectId system=0,effector=0,object=0,originalParent=0;u32 phase=0,originalMotion=2;float time=0,weight=0,releaseFrom=1;bool held=false,physical=false,second=false,gripTurned=false;float offset[16]{};};
+  // Olhar de uma interacao por objeto com Look At: peso que sobe/desce e alvo
+  // que desliza ate a pegada.
+  struct LookState {ObjectId system=0;float weight=0,position[3]{};bool valid=false;};
+  std::map<ObjectId,LookState> looks_;
+  // Pares (gatilho, sistema) cujo personagem esta na faixa neste quadro.
+  std::set<std::pair<ObjectId,ObjectId>> inRange_;
   // Objeto carregado (Ponto de carregar): filho do personagem, sobe da pose
   // da pegada ate o ponto; as maos seguem presas as pegadas.
   struct Hold {ObjectId system=0,object=0,originalParent=0;u32 originalMotion=2;float time=0;bool physical=false;Transform start;};
@@ -1135,6 +1316,7 @@ private:
       const auto *system=component<scene::InteractionSystem>(world,e.system);
       const auto *object=component<scene::InteractionObject>(world,e.object);
       if(!system||!object||!world.graph().find(e.effector)) {it=interactions_.erase(it);continue;}
+      if(e.phase<2&&!e.held)turnGrip(world,e,*object,touched);
       const float step=dt_*system->speed;
       bool reachedNow=false;
       if(e.phase==0) {
@@ -1173,6 +1355,7 @@ private:
       }
       ++it;
     }
+    driveLook(world);
   }
   void poseHierarchy(GameWorld &world,ObjectId target,ObjectId reference,float weight,bool includeSelf,std::map<ObjectId,bool> &touched,u32 depth=0) {
     const auto &g=world.graph();

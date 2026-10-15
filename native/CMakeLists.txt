@@ -500,6 +500,7 @@ add_library(aether_assets STATIC
   resources/unity_yaml.cpp
   resources/unity_subassets.cpp
   resources/unity_animation_import.cpp
+  resources/unity_humanoid.cpp
   resources/umotion_project.cpp
   resources/unity_animation_merge.cpp
   resources/unity_controller_import.cpp
@@ -1166,7 +1167,7 @@ if(NOT ANDROID)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
-  add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp)
+  add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp ../tests/native/test_unity_humanoid.cpp)
   add_executable(aether_rig_authoring_tests ../tests/native/family_base_main.cpp ../tests/native/test_rig_authoring.cpp)
   target_include_directories(aether_rig_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_rig_authoring_tests PRIVATE aether_core aether_assets aether_runtime)

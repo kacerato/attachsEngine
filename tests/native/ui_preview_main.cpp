@@ -52,6 +52,9 @@
 #include "scene/path.h"
 #include "scene/path_follow.h"
 #include "ui_software_raster.h"
+#include "kyle_carry_project_fixture.h"
+#include "core/sha256.h"
+#include "editor/editor_library.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -1096,7 +1099,8 @@ int main(int argc, char **argv) {
   editor::EditorEntityId selection = editor::kInvalidEntity;
   // No synthetic scene. An optional repository-relative AEMAP uses the same
   // import contract as Android, so every hierarchy row has package geometry.
-  if(argc>5) {
+  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4]).starts_with("library-"));
+  if(argc>5&&!kylePreview) {
     std::vector<u8> bytes;renderer::MapPackageView package;
     if(!readAsset(argv[5],bytes) || !renderer::decodeMapPackage(bytes,package) ||
        !map.import(document,package.draws,package.materials)) {
@@ -1114,6 +1118,93 @@ int main(int argc, char **argv) {
   editor::EditorConsole console;
   editor::EditorCodeWorkspace code;
   editor::EditorValueLibraries swatches;
+  // Estúdio de animação sobre o Robot Kyle real, pelo fluxo de toque: menu do
+  // objeto → Animar → osso na árvore. Modos: studio-kyle (estúdio aberto),
+  // studio-kyle-bone (osso selecionado), studio-kyle-menu (menu ⋮ aberto),
+  // scene-kyle-menu (menu de contexto do Kyle na cena).
+  if(argc>5 && (std::string(argv[4]).starts_with("studio-kyle") || std::string(argv[4])=="scene-kyle-menu")) {
+    namespace fs=std::filesystem;const std::string mode=argv[4];
+    const auto out=fs::temp_directory_path()/("astra-studio-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    // A sessão vive até o fim: o estado copiado aponta para recursos dela.
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    static test::KyleStage stage;
+    if(const int code=stage.open(fs::absolute(argv[5]),out,*session)) {std::fprintf(stderr,"kyle: %d\n",code);return 1;}
+    session->setSurface({0,0,float(width),float(height)},{});
+    session->setSelection(stage.kyle);session->update();
+    std::fprintf(stderr,"kyle=%u selecao=%u\n",unsigned(stage.kyle),unsigned(session->screen().selection));
+    const auto tap=[&](u32 widget,bool longPress=false) {
+      session->update();ui::UiInputRouter routes;ui::UiDrawList draw;draw.begin(session->screen().surface,font.metrics(ui::UiFontWeight::Regular));
+      editor::buildEditorScreen(session->screen(),ui::defaultTheme(),draw,routes);
+      for(float y=2;y<height;y+=4)for(float x=2;x<width;x+=4) {
+        const auto hit=routes.route({99,ui::UiPointerPhase::Down,{x,y},0});routes.route({99,ui::UiPointerPhase::Up,{x,y},0});
+        if(hit.target==ui::UiPointerTarget::Widget && hit.widgetId==widget) {
+          session->handlePointer({77,ui::UiPointerPhase::Down,{x,y},0});
+          if(longPress)session->handlePointer({77,ui::UiPointerPhase::Move,{x,y},1.0});
+          session->handlePointer({77,ui::UiPointerPhase::Up,{x,y},longPress?1.0:0});session->update();return true;
+        }
+      }
+      std::fprintf(stderr,"widget %08x ausente\n",widget);return false;
+    };
+    if(!tap(editor::widgetId(editor::EditorWidget::HierarchyMenu)))return 1;
+    if(mode!="scene-kyle-menu") {
+      if(!tap(editor::clip_widget::id(editor::clip_widget::Open)))return 1;
+      if(mode=="studio-kyle-bone"||mode=="studio-kyle-menu") tap(editor::clip_widget::id(editor::clip_widget::BoneRow+5));
+      if(mode=="studio-kyle-menu") tap(editor::clip_widget::id(editor::clip_widget::StudioMenu));
+    }
+    session->update();state=session->screen();
+    // O main aponta state.document para o documento local: ele vira uma cópia
+    // do da sessão, com os mesmos ids, para hierarquia, inspector e menu.
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+  }
+  // Biblioteca sobre o pacote UMotion real (argv[5] = pasta UMotionExamples):
+  // library-umotion (gerenciador), library-umotion-detail (detalhe de um clipe),
+  // library-import-menu (menu universal de importar na barra superior).
+  if(argc>5 && std::string(argv[4]).starts_with("library-")) {
+    namespace fs=std::filesystem;const std::string mode=argv[4];const fs::path source=fs::absolute(argv[5]);
+    const auto project=fs::temp_directory_path()/("astra-library-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    fs::create_directories(project/"scenes");
+    if(!session->setProjectDirectory(project.string().c_str())) {std::fprintf(stderr,"projeto\n");return 1;}
+    std::vector<editor::LibrarySourceFile> files;
+    const auto add=[&](const fs::path &from,const std::string &relative) {
+      std::vector<u8> bytes;if(!editor::EditorImportTransaction::read(from,bytes))return false;
+      const auto target=project/".astra/import-staging/umotion"/relative;fs::create_directories(target.parent_path());
+      if(!editor::EditorImportTransaction::write(target,bytes))return false;
+      files.push_back({relative,Sha256::hex(bytes),bytes.size(),{}});return true;
+    };
+    std::error_code ec;
+    for(const char *folder:{"Exported Animations","Miscellaneous/Robot Kyle/Model","Miscellaneous/Robot Kyle/Materials","Materials"}) {
+      const auto dir=source/folder;if(!fs::is_directory(dir,ec))continue;
+      for(const auto &entry:fs::directory_iterator(dir,ec))if(entry.is_regular_file())add(entry.path(),std::string(folder)+"/"+entry.path().filename().string());
+    }
+    std::string error;auto package=editor::prepareLibraryPackage(project.string(),".astra/import-staging/umotion","UMotion Pro",files);
+    if(!package.accepted||!session->importLibraryPackage(package,error)) {std::fprintf(stderr,"pacote: %s %s\n",package.diagnostic.c_str(),error.c_str());return 1;}
+    session->update();
+    const auto tap=[&](u32 widget) {
+      session->update();ui::UiInputRouter routes;ui::UiDrawList draw;draw.begin(session->screen().surface,font.metrics(ui::UiFontWeight::Regular));
+      editor::buildEditorScreen(session->screen(),ui::defaultTheme(),draw,routes);
+      for(float y=2;y<height;y+=4)for(float x=2;x<width;x+=4) {
+        const auto hit=routes.route({99,ui::UiPointerPhase::Down,{x,y},0});routes.route({99,ui::UiPointerPhase::Up,{x,y},0});
+        if(hit.target==ui::UiPointerTarget::Widget && hit.widgetId==widget) {
+          session->handlePointer({77,ui::UiPointerPhase::Down,{x,y},0});session->handlePointer({77,ui::UiPointerPhase::Up,{x,y},0});session->update();return true;
+        }
+      }
+      std::fprintf(stderr,"widget %08x ausente\n",widget);return false;
+    };
+    if(mode=="library-import-menu") {tap(editor::widgetId(editor::EditorWidget::ImportMenu));}
+    else {
+      if(!tap(editor::widgetId(editor::EditorWidget::ProjectMenu))||!tap(editor::widgetId(editor::EditorWidget::LibraryOpen)))return 1;
+      if(mode=="library-umotion-detail") {
+        // Detalhe do primeiro clipe (.anim): tipo Clipes no trilho, depois o "i".
+        tap(editor::widgetId(editor::EditorWidget::LibraryKindBase)+2);
+        tap(editor::widgetId(editor::EditorWidget::LibraryItemDetailsBase));
+      }
+    }
+    session->update();state=session->screen();
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+  }
   if(argc>4 && std::string(argv[4]).starts_with("recipe-")) {
     namespace fs=std::filesystem;const auto path=fs::temp_directory_path()/("astra-recipe-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     if(!fs::create_directory(path))return 1;

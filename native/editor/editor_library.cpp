@@ -216,19 +216,22 @@ bool EditorSession::importLibraryPackage(const PreparedLibraryPackage &prepared,
         assets_.serialize(),error,LibraryIndexPath,candidate.serialize())){state_.status=error;return false;}
     library_=std::move(candidate);refreshLibraryRows();state_.status=forward?"Pacote recolocado na biblioteca":"Pacote retirado da biblioteca; fontes e recursos preservados";return true;
   });
-  cameraPreview_.close();files_.rebuildTree();state_.libraryPackage=prepared.package.id;state_.libraryPage=0;state_.workspace=EditorWorkspace::Library;
+  cameraPreview_.close();files_.rebuildTree();state_.libraryPackage=prepared.package.id;state_.libraryScroll=0;state_.workspace=EditorWorkspace::Library;
   refreshLibraryRows();diagnostic=prepared.diagnostic;state_.status=diagnostic;return true;
 }
 void EditorSession::refreshLibraryRows() {
   state_.libraryRows.clear();state_.libraryPackages.clear();
   state_.libraryPackages.push_back({{},"Todos os pacotes"});
+  std::fill(std::begin(state_.libraryKindCounts),std::end(state_.libraryKindCounts),0u);
   const auto query=lower(state_.libraryQuery);
   for(const auto &package:library_.packages()) {
     state_.libraryPackages.push_back({package.id,package.name});
     if(state_.libraryPackage.valid()&&state_.libraryPackage!=package.id)continue;
     for(const auto &item:package.items) {
-      if(state_.libraryKind&&state_.libraryKind!=static_cast<u32>(item.kind)+1)continue;
       if(!query.empty()&&lower(item.path+" "+package.name).find(query)==std::string::npos)continue;
+      // Contagem por tipo antes do filtro de tipo: o trilho mostra o total.
+      ++state_.libraryKindCounts[0];if(static_cast<u32>(item.kind)+1<11)++state_.libraryKindCounts[static_cast<u32>(item.kind)+1];
+      if(state_.libraryKind&&state_.libraryKind!=static_cast<u32>(item.kind)+1)continue;
       auto resolved=library_.resolve(item.id,assets_);const auto slash=item.path.rfind('/');
       std::filesystem::path sourcePath;std::error_code ec;
       if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),item.path,sourcePath)||!std::filesystem::exists(sourcePath,ec)||ec) {
@@ -296,7 +299,7 @@ bool EditorSession::openLibraryItem(resources::AssetGuid id,std::string &diagnos
     state_.libraryCanInstantiate=extension==".prefab";state_.libraryCanAssignController=extension==".controller";state_.libraryCanReimport=true;
     state_.libraryDiagnostic="Recurso nativo pronto: "+assets_.find(guid)->path+"\nFonte: "+sourcePath+"\nIdentidade: "+sourceIdentity;
     if(const auto *current=library_.item(id))for(const auto &loss:current->knownLosses)state_.libraryDiagnostic+="\nConversão: "+loss;
-    state_.libraryDiagnosticPage=0;return true;
+    state_.libraryDiagnosticScroll=0;return true;
   }
   if(resolution.state==resources::LibraryResolutionState::Registered&&resolution.output) {
     EditorFileEntry entry;entry.relativePath=resolution.output->path;entry.name=std::filesystem::path(entry.relativePath).filename().string();

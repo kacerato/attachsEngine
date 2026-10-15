@@ -5,8 +5,14 @@
 #include "resources/unity_controller_import.h"
 #include "resources/unity_import_recipe.h"
 #include "resources/unity_subassets.h"
+#include "runtime/transform_math.h"
 #include "runtime/unity_prefab.h"
+#include "scene/import_link.h"
+#include "scene/prefab_link.h"
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <memory>
@@ -294,7 +300,123 @@ AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string 
         if(found)morphs.push_back(std::move(binding));
       }
     }
-    UnityAnimationImport imported;if(!convertUnityAnimation(document,record.guid,metadata.guid,recipe.sourceHash,morphs,imported,error))return {};
+    // Modelo importado de FBX sob o dono (sem prefab convertido): a Unity o vê
+    // com X espelhado, então as curvas de Transform espelham X; senão Z.
+    UnityHandedness handedness=UnityHandedness::MirrorZ;
+    if(owner&&session.document_.exists(owner)&&!scene::prefabLink(session.document_.find(owner)->components)) {
+      std::vector<EditorEntityId> objects;session.document_.collectSubtree(owner,objects);
+      for(const auto id:objects)if(const auto *object=session.document_.find(id);object&&scene::importLink(object->components))
+        {handedness=UnityHandedness::MirrorX;break;}
+    }
+    // Humanoid: o personagem alvo em descanso, o mapeamento do Avatar da Unity
+    // e a pose em T dele (humanDescription do .meta do modelo), com reserva
+    // pelos nomes padrão.
+    UnityHumanoidTarget humanoid;bool humanoidReady=false;
+    if(owner&&session.document_.exists(owner)) {
+      std::vector<EditorEntityId> objects;session.document_.collectSubtree(owner,objects);
+      std::map<std::string,i32> avatar;
+      struct Tpose {float position[3]{},rotation[4]{0,0,0,1};};std::map<std::string,Tpose> tpose;
+      const auto number=[](std::string_view content,std::string_view key,float &out) {
+        const auto at=content.find(key);if(at==std::string_view::npos)return false;
+        out=std::strtof(std::string(content.substr(at+key.size(),24)).c_str(),nullptr);return std::isfinite(out);
+      };
+      const auto parseSkeleton=[&](const std::string &text) {
+        const auto description=text.find("humanDescription:");if(description==std::string::npos)return;
+        const auto skeleton=text.find("\n    skeleton:",description);if(skeleton==std::string::npos)return;
+        std::string bone;usize at=text.find('\n',skeleton+1);
+        while(at!=std::string::npos&&at+1<text.size()) {
+          const auto end=text.find('\n',at+1);
+          std::string_view line(text.data()+at+1,(end==std::string::npos?text.size():end)-at-1);
+          while(!line.empty()&&(line.back()=='\r'||line.back()==' '))line.remove_suffix(1);
+          const auto first=line.find_first_not_of(' ');
+          if(first!=std::string_view::npos&&first<=4&&!line.substr(first).starts_with("- "))break;
+          if(first!=std::string_view::npos) {
+            auto content=line.substr(first);if(content.starts_with("- "))content.remove_prefix(2);
+            if(content.starts_with("name: "))bone=std::string(content.substr(6));
+            else if(!bone.empty()&&content.starts_with("position: ")) {
+              auto &pose=tpose[bone];number(content,"x: ",pose.position[0]);number(content,"y: ",pose.position[1]);number(content,"z: ",pose.position[2]);
+            } else if(!bone.empty()&&content.starts_with("rotation: ")) {
+              auto &pose=tpose[bone];
+              number(content,"x: ",pose.rotation[0]);number(content,"y: ",pose.rotation[1]);number(content,"z: ",pose.rotation[2]);number(content,"w: ",pose.rotation[3]);
+            }
+          }
+          at=end;
+        }
+      };
+      const auto parseAvatar=[&](const std::string &text) {
+        const auto description=text.find("humanDescription:");if(description==std::string::npos)return;
+        const auto human=text.find("human:",description);if(human==std::string::npos)return;
+        std::string bone;usize at=text.find('\n',human);
+        while(at!=std::string::npos&&at+1<text.size()) {
+          const auto end=text.find('\n',at+1);
+          std::string_view line(text.data()+at+1,(end==std::string::npos?text.size():end)-at-1);
+          while(!line.empty()&&(line.back()=='\r'||line.back()==' '))line.remove_suffix(1);
+          const auto first=line.find_first_not_of(' ');
+          if(first!=std::string_view::npos&&first<=4&&line.substr(first)!="human:"&&!line.substr(first).starts_with("- "))break;
+          if(first!=std::string_view::npos) {
+            auto content=line.substr(first);if(content.starts_with("- "))content.remove_prefix(2);
+            if(content.starts_with("boneName: "))bone=std::string(content.substr(10));
+            else if(content.starts_with("humanName: ")&&!bone.empty()) {
+              if(const auto index=unityHumanBoneIndex(content.substr(11));index>=0)avatar[bone]=index;
+              bone.clear();
+            }
+          }
+          at=end;
+        }
+      };
+      // O .meta da fonte do modelo: ao lado do arquivo de origem, ou na Biblioteca.
+      for(const auto id:objects)if(const auto *object=session.document_.find(id))if(const auto *link=scene::importLink(object->components)) {
+        if(const auto *source=session.assets_.find(link->source)) {
+          const auto fileName=std::filesystem::path(source->source.empty()?source->path:source->source).filename().string();
+          std::vector<std::string> candidates{source->source+".meta",source->path+".meta"};
+          for(const auto &package:session.library_.packages())for(const auto &item:package.items)
+            if(std::filesystem::path(item.path).filename().string()==fileName)candidates.push_back(item.path+".meta");
+          for(const auto &candidate:candidates) {
+            std::string text;
+            if(candidate.size()>5&&read(root,candidate,text,8u<<20)) {parseAvatar(text);if(!avatar.empty()){parseSkeleton(text);break;}}
+          }
+        }
+        break;
+      }
+      // Reserva: o nome humano da Unity ou o padrão Mixamo no nome do osso.
+      const auto key=[](std::string_view name) {
+        std::string out;if(const auto colon=name.rfind(':');colon!=std::string_view::npos)name.remove_prefix(colon+1);
+        for(const char c:name)if(std::isalnum(static_cast<unsigned char>(c)))out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        return out;
+      };
+      std::map<std::string,i32> names;
+      for(u32 bone=0;bone<UnityHumanBoneCount;++bone)names[key(unityHumanBoneName(bone))]=static_cast<i32>(bone);
+      for(const auto &[alias,bone]:std::initializer_list<std::pair<const char*,i32>>{{"leftupleg",1},{"rightupleg",2},{"leftleg",3},{"rightleg",4},
+          {"spine1",8},{"spine2",54},{"leftarm",13},{"rightarm",14},{"leftforearm",15},{"rightforearm",16},{"lefttoebase",19},{"righttoebase",20}})
+        names[alias]=bone;
+      std::map<EditorEntityId,i32> index;
+      for(const auto id:objects) {
+        const auto *object=session.document_.find(id);if(!object)continue;
+        UnityHumanoidTarget::Node node;node.parent=id==owner?-1:(index.count(object->parent)?index[object->parent]:-1);
+        if(id!=owner&&node.parent<0)continue;
+        if(id!=owner) {
+          if(!avatar.empty()) {if(const auto found=avatar.find(object->name);found!=avatar.end())node.human=found->second;}
+          else if(const auto found=names.find(key(object->name));found!=names.end())node.human=found->second;
+        }
+        for(u32 c=0;c<3;++c){node.translation[c]=object->transform.position[c];node.scale[c]=object->transform.scale[c];}
+        runtime::transformRotationQuaternion(object->transform,node.rotation);
+        // Pose em T do Avatar (coordenadas da Unity) no espelhamento do alvo.
+        if(id!=owner)if(const auto found=tpose.find(object->name);found!=tpose.end()) {
+          const auto &p=found->second.position;const auto &q=found->second.rotation;node.hasTpose=true;
+          const bool mirrorX=handedness==UnityHandedness::MirrorX;
+          node.tposeTranslation[0]=mirrorX?-p[0]:p[0];node.tposeTranslation[1]=p[1];node.tposeTranslation[2]=mirrorX?p[2]:-p[2];
+          node.tposeRotation[0]=mirrorX?q[0]:-q[0];node.tposeRotation[1]=-q[1];node.tposeRotation[2]=mirrorX?-q[2]:q[2];node.tposeRotation[3]=q[3];
+        }
+        if(node.human>=0) {
+          for(const auto &other:humanoid.nodes)if(other.human==node.human){node.human=-1;break;}
+          if(node.human>=0&&!animationPoseTargetPath(session.document_,owner,id,node.path,error))return {};
+        }
+        index[id]=static_cast<i32>(humanoid.nodes.size());humanoid.nodes.push_back(std::move(node));
+      }
+      for(const auto &node:humanoid.nodes)if(node.human==0)humanoidReady=true;
+    }
+    UnityAnimationImport imported;
+    if(!convertUnityAnimation(document,record.guid,metadata.guid,recipe.sourceHash,morphs,humanoidReady?&humanoid:nullptr,imported,error,handedness))return {};
     auto value=imported.clip;recipe.fileId=imported.fileId;recipe.loop=imported.loop;recipe.transformations=imported.transformations;
     if(existing) {
       AnimationClipAsset previous,current,merged,next;UnityAnimationMergeReport report;

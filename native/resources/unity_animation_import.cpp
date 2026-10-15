@@ -44,8 +44,9 @@ bool curves(const Node &curve,u32 dimensions,std::vector<AnimationCurve> &out,us
       double value=0,in=0,away=0,wi=1.0/3,wo=1.0/3;
       if(!component(source,"value",c,dimensions,value)||!component(source,"inSlope",c,dimensions,in,true)||
          !component(source,"outSlope",c,dimensions,away,true))return fail(error,"Valor ou tangente Unity inválido.");
-      if(const auto *weight=source.get("inWeight");weight&&!weight->number(wi))return fail(error,"Peso de tangente Unity inválido.");
-      if(const auto *weight=source.get("outWeight");weight&&!weight->number(wo))return fail(error,"Peso de tangente Unity inválido.");
+      // Curvas de vetor (serializedVersion 3) guardam um peso por componente.
+      if(source.get("inWeight")&&!component(source,"inWeight",c,dimensions,wi))return fail(error,"Peso de tangente Unity inválido.");
+      if(source.get("outWeight")&&!component(source,"outWeight",c,dimensions,wo))return fail(error,"Peso de tangente Unity inválido.");
       AnimationCurveKey key;key.time=seconds;key.value=static_cast<float>(value);key.broken=true;
       key.incoming=std::isinf(in)?AnimationTangentMode::Constant:AnimationTangentMode::Free;
       key.outgoing=std::isinf(away)?AnimationTangentMode::Constant:AnimationTangentMode::Free;
@@ -69,7 +70,7 @@ struct Track {AnimationPath path;std::string binding;std::vector<AnimationCurve>
 }
 bool convertUnityAnimation(const UnityYamlDocument &document,AssetGuid nativeGuid,AssetGuid unityGuid,
     std::string_view sourceHash,std::span<const UnityAnimationMorphBinding> morphs,
-    UnityAnimationImport &out,std::string &diagnostic) {
+    const UnityHumanoidTarget *humanoid,UnityAnimationImport &out,std::string &diagnostic,UnityHandedness handedness) {
   const UnityYamlObject *source=nullptr;
   if(document.objects.size()!=1)return fail(diagnostic,"AnimationClip exige um único objeto completo; objetos adicionais não serão descartados.");
   for(const auto &object:document.objects)if(object.classId==74) {if(source)return fail(diagnostic,"Mais de um AnimationClip no documento; escolha o fileID explicitamente.");source=&object;}
@@ -78,8 +79,10 @@ bool convertUnityAnimation(const UnityYamlDocument &document,AssetGuid nativeGui
   for(const char *name:{"m_Compressed","m_HasMotionFloatCurves"}) {
     bool value=false;if(const auto *entry=node.get(name);entry&&!entry->boolean(value))return fail(diagnostic,"Flag de AnimationClip Unity inválida: "+std::string(name));
   }
-  i64 wrap=0;
-  if(const auto *entry=node.get("m_WrapMode");entry&&(!entry->integer(wrap)||wrap!=0))
+  // m_WrapMode só governa clipes legados (componente Animation); num clipe
+  // Mecanim a Unity o ignora e o laço vem de m_LoopTime.
+  i64 wrap=0;const bool legacy=enabled(node,"m_Legacy");
+  if(const auto *entry=node.get("m_WrapMode");entry&&(!entry->integer(wrap)||(legacy&&wrap!=0)))
     return fail(diagnostic,"WrapMode legado Unity exige configuração explícita; use LoopTime no clipe de origem.");
   if(enabled(node,"m_Compressed")||nonempty(node,"m_CompressedRotationCurves"))return fail(diagnostic,"AnimationClip Unity comprimido exige decodificação específica; fonte preservada.");
   if(nonempty(node,"m_PPtrCurves"))return fail(diagnostic,"Curvas de referência Unity não possuem mapa de recurso nativo nesta conversão.");
@@ -95,20 +98,41 @@ bool convertUnityAnimation(const UnityYamlDocument &document,AssetGuid nativeGui
       Track track;track.path=path;const auto *curve=entry.get("curve");
       if(!scalar(entry,"path",track.binding)||!curve||!curves(*curve,dimensions,track.curves,total,diagnostic))return false;
       track.binding=migrateAnimationBindingPath(track.binding);
-      // Unity left-handed +Z to native right-handed coordinates, H=diag(1,1,-1).
-      if(path==AnimationPath::Translation)multiply(track.curves[2],-1);
-      if(path==AnimationPath::Rotation){multiply(track.curves[0],-1);multiply(track.curves[1],-1);}
+      // Unity left-handed to native right-handed coordinates: H=diag(1,1,-1)
+      // for converted scenes/prefabs, H=diag(-1,1,1) for FBX-imported models.
+      if(handedness==UnityHandedness::MirrorZ) {
+        if(path==AnimationPath::Translation)multiply(track.curves[2],-1);
+        if(path==AnimationPath::Rotation){multiply(track.curves[0],-1);multiply(track.curves[1],-1);}
+      } else {
+        if(path==AnimationPath::Translation)multiply(track.curves[0],-1);
+        if(path==AnimationPath::Rotation){multiply(track.curves[1],-1);multiply(track.curves[2],-1);}
+      }
       tracks.push_back(std::move(track));
     }
   }
   const auto *floats=node.get("m_FloatCurves");std::map<std::string,usize> morphTracks;
   std::set<std::pair<std::string,usize>> morphChannels;
+  // Humanoid (classID 95 do Animator): músculos e corpo, convertidos no fim
+  // para o esqueleto do personagem alvo (unity_humanoid.cpp).
+  UnityHumanoidCurves human;std::set<std::string> humanIgnored;
   if(floats&&!floats->empty()) {
     if(floats->kind!=Node::Kind::Sequence)return fail(diagnostic,"Coleção de curvas escalares Unity inválida.");
     for(const auto &entry:floats->elements) {
       i64 classId=0;std::string attribute,path;
       if(!integer(entry,"classID",classId)||!scalar(entry,"attribute",attribute)||!scalar(entry,"path",path))return fail(diagnostic,"Binding de curva Unity inválido.");
-      if(classId==95)return fail(diagnostic,"Curva Humanoid/músculo '"+attribute+"' exige Avatar e retarget semântico; não equivale a Transform.");
+      if(classId==95) {
+        const auto address=unityHumanoidAttribute(attribute);
+        if(address.kind==UnityHumanoidAttribute::Kind::None)return fail(diagnostic,"Curva Humanoid sem correspondência: '"+attribute+"'.");
+        if(address.kind==UnityHumanoidAttribute::Kind::Ignored){humanIgnored.insert(attribute);continue;}
+        const auto *curve=entry.get("curve");std::vector<AnimationCurve> converted;
+        if(!curve||!curves(*curve,1,converted,total,diagnostic))return false;
+        if(address.kind==UnityHumanoidAttribute::Kind::Muscle) {
+          if(human.present[address.bone][address.axis])return fail(diagnostic,"Músculo Humanoid duplicado: "+attribute);
+          human.muscles[address.bone][address.axis]=std::move(converted.front());human.present[address.bone][address.axis]=true;++human.muscleCurves;
+        } else if(address.kind==UnityHumanoidAttribute::Kind::RootT) {human.rootT[address.axis]=std::move(converted.front());human.hasRootT=true;}
+        else {human.rootQ[address.axis]=std::move(converted.front());human.hasRootQ=true;}
+        continue;
+      }
       if(classId!=137||!attribute.starts_with("blendShape."))return fail(diagnostic,"Propriedade Unity sem correspondência: classID "+std::to_string(classId)+" · "+attribute);
       const auto *script=entry.get("script");UnityObjectReference reference;
       if(script&&(!unityObjectReference(*script,reference)||reference.fileId))return fail(diagnostic,"Curva de script Unity não é um blendShape nativo.");
@@ -134,7 +158,10 @@ bool convertUnityAnimation(const UnityYamlDocument &document,AssetGuid nativeGui
       multiply(converted.front(),.01f);tracks[at->second].curves[selected]=std::move(converted.front());
     }
   }
-  if(tracks.empty())return fail(diagnostic,"AnimationClip sem canais nativos; fonte permanece disponível, sem clipe vazio artificial.");
+  const bool humanoidClip=human.muscleCurves||human.hasRootT||human.hasRootQ;
+  if(humanoidClip&&!humanoid)
+    return fail(diagnostic,"Clipe Humanoid (músculos): escolha o personagem com Avatar Humanoid antes de aplicar; a conversão usa o mapeamento e a pose em T dele.");
+  if(tracks.empty()&&!humanoidClip)return fail(diagnostic,"AnimationClip sem canais nativos; fonte permanece disponível, sem clipe vazio artificial.");
   UnityAnimationImport candidate;candidate.fileId=source->fileId;candidate.unityGuid=unityGuid;candidate.sourceHash=sourceHash;
   // A Unity file GUID is not an Astra registered FBX source. Store provenance
   // in the result/registry recipe; do not invent a runtime source dependency.
@@ -174,11 +201,26 @@ bool convertUnityAnimation(const UnityYamlDocument &document,AssetGuid nativeGui
     }
     candidate.loop=enabled(*settings,"m_LoopTime");clip.duration=static_cast<float>(stop);
   }
+  UnityHumanoidReport humanReport;
+  if(humanoidClip) {
+    // Duração: o recorte da Unity ou a última chave das curvas Humanoid.
+    float duration=clip.duration;
+    const auto last=[&](const AnimationCurve &c){if(!c.keys.empty())duration=std::max(duration,c.keys.back().time);};
+    for(const auto &bone:human.muscles)for(const auto &c:bone)last(c);
+    for(const auto &c:human.rootT)last(c);
+    for(const auto &c:human.rootQ)last(c);
+    if(!appendUnityHumanoidTracks(human,*humanoid,duration,clip.displayRate,clip,humanReport,diagnostic))return false;
+  }
   if(!clip.valid(&diagnostic))return false;
-  candidate.transformations={"Unity LH para Astra RH: posição Z e quaternion X/Y invertidos; metros preservados.",
+  candidate.transformations={handedness==UnityHandedness::MirrorZ?
+      "Unity LH para Astra RH: posição Z e quaternion X/Y invertidos; metros preservados.":
+      "Unity LH para o modelo FBX (X espelhado): posição X e quaternion Y/Z invertidos; metros preservados.",
       "Curvas Bezier: tempos, valores, tangentes e pesos preservados; modos editoriais convertidos em tangentes Free/Constant.",
       "Curvas editoriais duplicadas não executadas; somente m_Position/Rotation/Scale/FloatCurves alimentam o clipe nativo."};
   if(!morphTracks.empty())candidate.transformations.push_back("blendShape por nome exato da malha selecionada; percentual Unity convertido para peso 0..1; defaults não animados preservados.");
+  for(auto &note:humanReport.notes)candidate.transformations.push_back(std::move(note));
+  if(!humanIgnored.empty())candidate.transformations.push_back("Humanoid: "+std::to_string(humanIgnored.size())+
+      " curvas de IK/Motion/TDOF fora da pose (o passo de IK da Unity é opcional por estado).");
   out=std::move(candidate);diagnostic.clear();return true;
 }
 } // namespace ae::resources

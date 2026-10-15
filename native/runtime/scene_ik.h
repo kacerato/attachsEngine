@@ -49,6 +49,8 @@ public:
   WorldStatus fire(GameWorld &world,ObjectId object,float magnitude);
   WorldStatus interactionStart(GameWorld &world,ObjectId system,ObjectId effector,ObjectId object,bool &started);
   WorldStatus interactionStop(GameWorld &world,ObjectId system,ObjectId effector);
+  // Comeca a interacao do Gatilho de interacao em que o personagem esta.
+  WorldStatus interactionTrigger(GameWorld &world,ObjectId system,bool &started);
   void collision(GameWorld &world,ObjectId object,const float normal[3]);
   std::vector<Event> takeEvents();
   // Sem mover, objetos com corpo fisico nao podem ser carregados (diagnostico).

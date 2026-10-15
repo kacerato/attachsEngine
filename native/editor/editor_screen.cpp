@@ -356,7 +356,7 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   const auto button=[&](UiRect rect,UiIcon icon,EditorWidget widget,bool enabled=true,bool active=false) {
     builder.iconButton(rect,icon,widgetId(widget),active,enabled?theme.color.text:theme.color.textFaint);
   };
-  button(takeLeft(content,kActionButton),UiIcon::UiMenu,EditorWidget::ProjectMenu,true,state.workspaceMenu);
+  button(takeLeft(content,kActionButton),UiIcon::UiMenu,EditorWidget::ProjectMenu,true,state.contextMenu&&state.contextMenuLevel==context_menu_widget::WorkspaceLevel);
   takeLeft(content,theme.spacing.tiny);
   button(takeLeft(content,kActionButton),UiIcon::AssetsSave,EditorWidget::SaveDocument);
   takeLeft(content,theme.spacing.small);
@@ -390,6 +390,9 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   right(UiIcon::UiSliders,EditorWidget::QualityOpen,state.qualityPanel);
   if(state.workspace==EditorWorkspace::Scene) right(UiIcon::UiDiagnostics,EditorWidget::DiagnosticDockToggle,state.diagnosticDockOpen);
   if(!playing) right(UiIcon::IdeSearch,EditorWidget::GlobalSearchOpen,state.globalSearch); // Unity 6000.0: busca global na barra.
+  // Importar universal: modelo, pasta de pacote, textura, ambiente e áudio
+  // pelo mesmo menu, de qualquer espaço de trabalho de autoria.
+  if(!playing) right(UiIcon::AssetsImport,EditorWidget::ImportMenu,state.contextMenu&&state.contextMenuLevel==context_menu_widget::ImportLevel);
   // Centro: o Play no meio da barra, e rodando, os controles dele ao lado.
   const float gap=theme.spacing.tiny,playWidth=56,speedWidth=56;
   const float group=playWidth+(playing?3*(kActionButton+gap)+speedWidth+gap:0);
@@ -6693,13 +6696,52 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   const auto *selected=document?document->find(state.selection):nullptr;
   const bool hasObject=selected&&state.selection!=document->root();
   const u32 level=state.contextMenuLevel;
-  if(level==0) {
+  if(level==cm::WorkspaceLevel) {
+    // Menu Cena: os espaços de trabalho, pelos widgets de sempre.
+    title="Cena";
+    items.push_back({UiIcon::SceneObject,"Voltar à edição",widgetId(EditorWidget::TabScene),state.workspace!=EditorWorkspace::Scene});
+    items.push_back({UiIcon::AssetsImport,"Recursos importados",widgetId(EditorWidget::TabAssets),state.assetCount!=0});
+    items.push_back({UiIcon::AssetsSourcePackage,"Biblioteca de pacotes",widgetId(EditorWidget::LibraryOpen)});
+    items.push_back({UiIcon::LightingSky,"Ambiente da cena",widgetId(EditorWidget::TabLighting)});
+    items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
+    items.push_back({UiIcon::UiInterfaceCanvas,"Interface (UI + ImGui)",widgetId(EditorWidget::TabGui)});
+    items.push_back({UiIcon::UiAutoLayout,"Layout dos painéis",widgetId(EditorWidget::LayoutsOpen)});
+  } else if(level==cm::ImportLevel) {
+    title="Importar";
+    items.push_back({UiIcon::AssetsFileMesh,"Modelo (GLB, FBX)",widgetId(EditorWidget::ImportModel)});
+    items.push_back({UiIcon::AssetsSourcePackage,"Pasta de pacote",widgetId(EditorWidget::LibraryImport)});
+    items.push_back({UiIcon::AssetsTexture,"Textura",widgetId(EditorWidget::ImportTexture)});
+    items.push_back({UiIcon::LightingSky,"Ambiente (HDRI)",widgetId(EditorWidget::ImportEnvironment)});
+    items.push_back({UiIcon::AudioClip,"Áudio",widgetId(EditorWidget::ImportWave)});
+  } else if(level==cm::StudioLevel) {
+    // Menu ⋮ do estúdio: o que não é posar nem tempo, pelos widgets do clipe.
+    namespace cw=clip_widget;
+    title=state.clipAsset?state.clipAsset->name:"Clipe";
+    const bool bone=state.clipPreviewTarget!=0||state.clipTarget!=0;
+    items.push_back({UiIcon::AnimationReferencePose,state.clipPoseShown?"Parar de posar":"Posar",cw::id(cw::Pose)});
+    items.push_back({UiIcon::AnimationDuplicate,"Novo clipe",cw::id(cw::New)});
+    items.push_back({UiIcon::AnimationRotationBranch,"Novo clipe · Euler",cw::id(cw::NewEuler)});
+    items.push_back({UiIcon::AnimationRotationBranch,"Novo clipe · progressivo",cw::id(cw::NewProgressive)});
+    items.push_back({UiIcon::AssetsDocs,"Renomear clipe",cw::id(cw::Name)});
+    items.push_back({UiIcon::AnimationInterval,"Duração",cw::id(cw::Duration)});
+    items.push_back({UiIcon::AnimationLayers,"Camadas",cw::id(cw::Layers)});
+    items.push_back({UiIcon::AnimationCurve,"Curvas",cw::id(cw::Curves)});
+    items.push_back({UiIcon::AnimationEvent,"Eventos e marcadores",cw::id(cw::Cues)});
+    items.push_back({UiIcon::AnimationSkeleton,"Rig",cw::id(cw::StudioTabRig)});
+    items.push_back({UiIcon::ComponentGrounder,"Assistente de IK",cw::id(cw::PoseIkWizard)});
+    items.push_back({UiIcon::ComponentIkTwoBone,"IK permanente nesta ponta",cw::id(cw::PoseIkCreate),bone});
+    items.push_back({UiIcon::ComponentRootMotion,"Root motion",cw::id(cw::PoseRootMotion)});
+    items.push_back({UiIcon::AnimationBake,"Bake da pose final",cw::id(cw::PoseBake)});
+    items.push_back({UiIcon::AnimationBinding,"Exportar GLB",cw::id(cw::PoseExportGlb)});
+  } else if(level==0) {
     title=hasObject?std::string(selected->name):"Hierarquia";
     items.push_back({UiIcon::SceneObjectAdd,hasObject?"Criar filho":"Criar",cm::id(cm::Create),true,true});
     if(hasObject) {
       items.push_back({UiIcon::SceneDuplicate,"Duplicar",widgetId(EditorWidget::DuplicateSelection)});
       items.push_back({UiIcon::AssetsDocs,"Renomear",widgetId(EditorWidget::RenameSelection)});
       items.push_back({UiIcon::EditorFrameObject,"Enquadrar na vista",widgetId(EditorWidget::FrameSelection)});
+      if(state.workspace==EditorWorkspace::Scene)
+        items.push_back({UiIcon::AnimationKey,"Animar",clip_widget::id(clip_widget::Open)});
       items.push_back({UiIcon::UiChevronUp,"Mover acima",widgetId(EditorWidget::MoveEarlier)});
       items.push_back({UiIcon::UiChevronDown,"Mover abaixo",widgetId(EditorWidget::MoveLater)});
       items.push_back({UiIcon::ComponentChildOf,"Mudar pai",widgetId(EditorWidget::ReparentSelection)});
@@ -6731,7 +6773,7 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   router.addBlocker(state.surface);
   router.addRegion(state.surface,cm::id(cm::Close));
   list.addRect(state.surface,withAlpha(theme.color.voidBlack,.25f));
-  const bool destination=level>=1&&hasObject;
+  const bool destination=level>=1&&level<cm::WorkspaceLevel&&hasObject;
   constexpr float rowHeight=44,headerHeight=44,destinationHeight=40;
   const float width=std::min(290.f,state.surface.width-16);
   const float wanted=headerHeight+(destination?destinationHeight:0)+rowHeight*static_cast<float>(items.size())+8;
@@ -10787,112 +10829,127 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   }
 }
 
-
-void buildWorkspaceMenu(ScreenBuilder &builder) {
-  const auto &state=builder.state;const auto &theme=builder.theme;
-  auto &list=builder.list;auto &router=builder.router;
-  if(state.workspaceMenu) {
-    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const u32 menuRows=7+(state.assetCount?1:0);
-    const bool columns=state.surface.width>=480&&state.surface.height<48.f+48.f*menuRows;
-    const UiRect modal=centred(state.surface,std::min(columns?640.f:340.f,state.surface.width-24),48.f+48.f*(columns?(menuRows+1)/2:menuRows));
-    list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Voltar à edição","Recursos importados","Biblioteca de pacotes","Ambiente da cena","Configurações do projeto","Interface (UI + ImGui)","Layout dos painéis","Fechar"};
-    const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::LibraryOpen,EditorWidget::TabLighting,EditorWidget::TabProject,EditorWidget::TabGui,EditorWidget::LayoutsOpen,EditorWidget::WorkspaceMenuClose};
-    builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
-    u32 visible=0;const auto items=content;
-    for(u32 i=0;i<std::size(actions);++i) {
-      if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
-      const float width=items.width/(columns?2.f:1.f);
-      UiRect row{items.x+(columns?visible%2:0)*width,items.y+(columns?visible/2:visible)*48.f,width,48};++visible;
-      const auto hit=row;
-      if(actions[i]==EditorWidget::TabGui) {
-        builder.list.addImage(centred(takeLeft(row,32),24,24),static_cast<UiImageId>(UiIcon::UiInterfaceCanvas));
-      }
-      list.pushClip(row);builder.label(row,names[i],theme.color.text,theme.type.body);list.popClip();
-      // The full menu line is the target, including its icon.
-      router.addRegion(hit,widgetId(actions[i]));
-    }
-  }
-}
-
+// Biblioteca como gerenciador: trilho de tipos à esquerda (com contagem),
+// cartões ao centro (ícone do tipo, nome, pacote, selo de estado) e o detalhe
+// à direita com ações em ícone e diagnóstico em chips. Importar é o botão
+// universal da barra superior. Em superfície estreita o detalhe ocupa o lugar
+// dos cartões e os tipos ficam no filtro cíclico.
 void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
-  router.addBlocker(area);list.addRect(area,theme.color.canvas);area=deflate(area,UiInsets::symmetric(12,6));
-  const auto action=[&](UiRect hit,const std::string &text,EditorWidget widget,UiIcon icon) {
-    list.addRect(deflate(hit,UiInsets::all(2)),theme.color.raised,theme.radius.control);
-    list.addImage(centred(takeLeft(hit,32),20,20),static_cast<UiImageId>(icon),theme.color.text);
-    builder.label(hit,text.c_str(),theme.color.text,theme.type.caption);
-    router.addRegion({hit.x-32,hit.y,hit.width+32,hit.height},widgetId(widget));
+  router.addBlocker(area);list.addRect(area,theme.color.canvas);
+  const auto iconButton=[&](UiRect hit,EditorWidget widget,UiIcon icon,bool enabled=true,bool active=false) {
+    list.addRect(deflate(hit,UiInsets::all(4)),active?withAlpha(theme.color.accent,.18f):enabled?theme.color.raised:theme.color.silhouette,theme.radius.control);
+    list.addImage(centred(hit,20,20),static_cast<UiImageId>(icon),active?theme.color.accent:enabled?theme.color.text:theme.color.textFaint);
+    if(enabled)router.addRegion(hit,widgetId(widget));
   };
-  auto heading=takeTop(area,48);
-  action(takeRight(heading,128),"Importar pasta",EditorWidget::LibraryImport,UiIcon::AssetsImport);
-  action(takeLeft(heading,48),"",EditorWidget::LibraryClose,UiIcon::UiArrowLeft);
-  action(takeRight(heading,48),"",EditorWidget::LibrarySearch,UiIcon::AssetsSearch);
-  action(takeRight(heading,48),"",EditorWidget::LibraryKinds,UiIcon::AssetsFilter);
-  action(takeRight(heading,48),"",EditorWidget::LibraryPackages,UiIcon::AssetsSourcePackage);
-  constexpr const char *kinds[]{"Todos os tipos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
-  builder.label(heading,state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca",theme.color.text,theme.type.cardName);
-  if(!state.libraryDiagnostic.empty()) {
-    auto footer=takeBottom(area,48);action(takeLeft(footer,48),"",EditorWidget::LibraryPrevious,UiIcon::UiChevronLeft);
-    action(takeRight(footer,48),"",EditorWidget::LibraryNext,UiIcon::UiChevronRight);
-    if(state.libraryConflict) {
-      action(takeLeft(footer,footer.width*.5f),"Manter local",EditorWidget::LibraryKeepLocal,UiIcon::AssetsSourceConflict);
-      action(footer,"Receber origem",EditorWidget::LibraryReceiveSource,UiIcon::AssetsImport);
-    } else {
-      if(state.libraryCanInstantiate)action(takeLeft(footer,144),"Instanciar",EditorWidget::LibraryInstantiate,UiIcon::AssetsSourcePackage);
-      if(state.libraryCanAssignController)action(takeLeft(footer,144),"Vincular",EditorWidget::LibraryControllerAssign,UiIcon::AssetsSourcePackage);
-      if(state.libraryCanReimport)action(takeLeft(footer,144),"Reimportar",EditorWidget::LibraryReimport,UiIcon::AssetsImport);
-      action(footer,"Itens",EditorWidget::LibraryDetailsClose,UiIcon::AssetsList);
-    }
-    if(!state.libraryDetailName.empty()) {
-      auto title=takeTop(area,36);
-      list.addImage(centred(takeLeft(title,32),22,22),static_cast<UiImageId>(state.libraryConflict?UiIcon::AssetsSourceConflict:UiIcon::AssetsSourcePackage),theme.color.accent);
-      builder.label(title,state.libraryDetailName.c_str(),theme.color.text,theme.type.cardName);
-    }
-    const auto lines=wrapText(list,state.libraryDiagnostic,area.width,theme.type.body);
-    const auto rows=static_cast<u32>(std::max(1.f,std::floor(area.height/24.f)));
-    if(builder.layout)builder.layout->libraryDiagnosticPages=std::max(1u,static_cast<u32>((lines.size()+rows-1)/rows));
-    const auto page=std::min(state.libraryDiagnosticPage,lines.empty()?0u:static_cast<u32>((lines.size()-1)/rows));
-    list.pushClip(area);for(u32 i=page*rows;i<lines.size()&&i<(page+1)*rows;++i)
-      builder.label(takeTop(area,24),lines[i],theme.color.textDim,theme.type.body);
-    list.popClip();return;
-  }
+  const auto tileButton=[&](UiRect hit,const char *text,u32 widget,UiIcon icon,bool enabled=true) {
+    list.addRect(deflate(hit,UiInsets::all(3)),enabled?theme.color.raised:theme.color.silhouette,theme.radius.control);
+    list.addImage({hit.x+(hit.width-20)*.5f,hit.y+8,20,20},static_cast<UiImageId>(icon),enabled?theme.color.text:theme.color.textFaint);
+    list.pushClip(hit);builder.label({hit.x,hit.y+30,hit.width,22},text,enabled?theme.color.textDim:theme.color.textFaint,theme.type.caption,UiAlign::Center);list.popClip();
+    if(enabled)router.addRegion(hit,widget);
+  };
+  constexpr const char *kinds[]{"Todos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
+  constexpr UiIcon kindIcons[]{UiIcon::AssetsGrid,UiIcon::AssetsFileMesh,UiIcon::AssetsAnimation,UiIcon::AssetsMaterial,UiIcon::AssetsTexture,UiIcon::ScenePrefab,UiIcon::SceneObject,UiIcon::AssetsFile,UiIcon::AssetsDocs,UiIcon::AssetsFile,UiIcon::AnimationController};
+  auto content=deflate(area,UiInsets::symmetric(12,6));
+  auto heading=takeTop(content,48);
+  iconButton(takeLeft(heading,48),EditorWidget::LibraryClose,UiIcon::UiArrowLeft);
+  iconButton(takeRight(heading,48),EditorWidget::LibrarySearch,UiIcon::AssetsSearch,true,!state.libraryQuery.empty());
+  iconButton(takeRight(heading,48),EditorWidget::LibraryPackages,UiIcon::AssetsSourcePackage,true,state.libraryPackage.valid());
+  const bool wide=content.width>=900;
+  if(!wide)iconButton(takeRight(heading,48),EditorWidget::LibraryKinds,UiIcon::AssetsFilter,true,state.libraryKind!=0);
   std::string package="Todos os pacotes";for(const auto &entry:state.libraryPackages)if(entry.id==state.libraryPackage)package=entry.name;
-  auto footer=takeBottom(area,48);const u32 rows=static_cast<u32>(std::max(1.f,std::floor(area.height/56.f)));
-  const u32 pages=std::max(1u,static_cast<u32>((state.libraryRows.size()+rows-1)/rows));const u32 page=std::min(state.libraryPage,pages-1);
-  if(builder.layout)builder.layout->libraryPages=pages;
-  action(takeLeft(footer,48),"",EditorWidget::LibraryPrevious,UiIcon::UiChevronLeft);
-  action(takeRight(footer,48),"",EditorWidget::LibraryNext,UiIcon::UiChevronRight);
-  list.pushClip(footer);builder.label(footer,std::to_string(state.libraryRows.size())+" itens · "+std::to_string(page+1)+"/"+std::to_string(pages)+" · "+package+
-    (state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.textDim,theme.type.caption,UiAlign::Center);list.popClip();
+  list.pushClip(heading);builder.label(deflate(heading,UiInsets::symmetric(8,0)),std::string(state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca")+" · "+package+(state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.text,theme.type.cardName);list.popClip();
+  const bool detail=state.libraryDetailItem.valid()&&!state.libraryDetailName.empty();
+  if(wide) {
+    auto rail=takeLeft(content,200);takeLeft(content,8);
+    for(u32 k=0;k<11;++k) {
+      if(k&&!state.libraryKindCounts[k])continue;
+      auto row=takeTop(rail,44);const bool active=state.libraryKind==k;
+      if(active)list.addRect(deflate(row,UiInsets::all(2)),withAlpha(theme.color.accent,.16f),theme.radius.control);
+      list.addImage({row.x+10,row.y+12,20,20},static_cast<UiImageId>(kindIcons[k]),active?theme.color.accent:theme.color.textDim);
+      builder.label({row.x+38,row.y,row.width-84,row.height},kinds[k],active?theme.color.text:theme.color.textDim,theme.type.body);
+      const UiRect badge{row.right()-44,row.y+11,36,22};list.addRect(badge,theme.color.silhouette,11);
+      builder.label(badge,std::to_string(state.libraryKindCounts[k]),theme.color.textDim,theme.type.caption,UiAlign::Center);
+      router.addRegion(row,widgetId(EditorWidget::LibraryKindBase)+k);
+    }
+  }
+  if(detail) {
+    UiRect detailRect;
+    if(wide) {detailRect=takeRight(content,320);takeRight(content,8);} else detailRect=content;
+    list.addRect(detailRect,theme.color.surface,theme.radius.card);
+    auto panel=deflate(detailRect,UiInsets::all(10));
+    auto title=takeTop(panel,44);
+    iconButton(takeRight(title,40),EditorWidget::LibraryDetailsClose,UiIcon::UiClose);
+    list.addImage({title.x+4,title.y+10,24,24},static_cast<UiImageId>(state.libraryConflict?UiIcon::AssetsSourceConflict:UiIcon::AssetsSourcePackage),theme.color.accent);
+    list.pushClip(title);builder.label({title.x+36,title.y,std::max(0.f,title.width-36),title.height},fitMiddle(list,state.libraryDetailName,std::max(0.f,title.width-40),theme.type.cardName),theme.color.text,theme.type.cardName);list.popClip();
+    auto actions=takeTop(panel,64);const float w=actions.width/4;
+    if(state.libraryConflict) {
+      tileButton(takeLeft(actions,w*2),"Manter local",widgetId(EditorWidget::LibraryKeepLocal),UiIcon::AssetsSourceConflict);
+      tileButton(actions,"Receber origem",widgetId(EditorWidget::LibraryReceiveSource),UiIcon::AssetsImport);
+    } else {
+      u32 index=0;bool found=false;for(;index<state.libraryRows.size();++index)if(state.libraryRows[index].id==state.libraryDetailItem){found=true;break;}
+      tileButton(takeLeft(actions,w),"Abrir",found?widgetId(EditorWidget::LibraryItemBase)+index:0u,UiIcon::AssetsFolderOpen,found);
+      tileButton(takeLeft(actions,w),"Instanciar",widgetId(EditorWidget::LibraryInstantiate),UiIcon::ScenePrefab,state.libraryCanInstantiate);
+      tileButton(takeLeft(actions,w),"Vincular",widgetId(EditorWidget::LibraryControllerAssign),UiIcon::AnimationController,state.libraryCanAssignController);
+      tileButton(actions,"Reimportar",widgetId(EditorWidget::LibraryReimport),UiIcon::AssetsImport,state.libraryCanReimport);
+    }
+    takeTop(panel,6);
+    // Diagnóstico em chips, uma linha por fato, rolando pelo dedo.
+    std::vector<std::string> lines;{std::string current;for(char c:state.libraryDiagnostic){if(c=='\n'){if(!current.empty())lines.push_back(current);current.clear();}else current.push_back(c);}if(!current.empty())lines.push_back(current);}
+    const float chip=36,total=chip*static_cast<float>(lines.size());
+    const float offset=std::clamp(state.libraryDiagnosticScroll,0.f,std::max(0.f,total-panel.height));
+    if(builder.layout) {builder.layout->libraryDetailWindow=panel;builder.layout->libraryDetailContent=total;}
+    list.pushClip(panel);UiRect column{panel.x,panel.y-offset,panel.width,total};
+    for(const auto &line:lines) {
+      auto row=takeTop(column,chip);if(row.bottom()<panel.y||row.y>panel.bottom())continue;
+      const auto body=deflate(row,UiInsets{0,3,0,3});
+      const bool warn=line.rfind("Conversão",0)==0||line.rfind("Limite",0)==0||line.find("ausente")!=std::string::npos||line.find("recus")!=std::string::npos||line.find("Binding")!=std::string::npos;
+      list.addRect(body,theme.color.silhouette,theme.radius.control);
+      list.addImage({body.x+8,body.y+(body.height-16)*.5f,16,16},static_cast<UiImageId>(warn?UiIcon::UiWarning:UiIcon::UiInfo),warn?theme.color.warning:theme.color.textDim);
+      list.pushClip(body);builder.label({body.x+30,body.y,std::max(0.f,body.width-36),body.height},fitMiddle(list,line,std::max(0.f,body.width-40),theme.type.caption),theme.color.textDim,theme.type.caption);list.popClip();
+    }
+    list.popClip();
+    if(!wide)return;
+  }
+  // Cartões em grade, rolando pelo dedo; só os visíveis recebem toque.
+  const u32 columns=content.width>=560?2u:1u;const float gap=8,cardHeight=72;
+  const float cardWidth=(content.width-gap*float(columns-1))/float(columns);
+  const u32 rows=(static_cast<u32>(state.libraryRows.size())+columns-1)/columns;
+  const float total=(cardHeight+gap)*static_cast<float>(rows);
+  const float offset=std::clamp(state.libraryScroll,0.f,std::max(0.f,total-content.height));
+  if(builder.layout) {builder.layout->libraryScrollWindow=content;builder.layout->libraryScrollContent=total;}
   if(state.libraryRows.empty()) {
-    builder.label(area,state.libraryPackages.size()>1?"Nenhum item neste filtro":"Importe uma pasta para preservar fontes e catalogar recursos",theme.color.textDim,theme.type.caption,UiAlign::Center);return;
+    // Vazio: só o ícone de importar — o botão universal da barra faz o resto.
+    list.addImage(centred(content,48,48),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.textFaint);
+    return;
   }
-  list.pushClip(area);
-  for(u32 i=page*rows;i<state.libraryRows.size()&&i<(page+1)*rows;++i) {
-    const auto &item=state.libraryRows[i];auto row=takeTop(area,56);
+  list.pushClip(content);router.pushClip(content);
+  for(u32 i=0;i<state.libraryRows.size();++i) {
+    const auto &item=state.libraryRows[i];
+    const UiRect card{content.x+float(i%columns)*(cardWidth+gap),content.y-offset+float(i/columns)*(cardHeight+gap),cardWidth,cardHeight};
+    if(card.bottom()<content.y||card.y>content.bottom())continue;
     const bool registered=item.state==resources::LibraryResolutionState::Registered;
-    const bool refused=item.state==resources::LibraryResolutionState::Unsupported||item.state==resources::LibraryResolutionState::MissingDependency||item.state==resources::LibraryResolutionState::MissingOutput;
-    list.addRect({row.x,row.y+row.height-1,row.width,1},theme.color.silhouette);
-    list.addRect({row.x,row.y+8,3,row.height-16},registered?theme.color.accent:refused?theme.color.textMuted:theme.color.textDim);
-    auto label=deflate(row,UiInsets::symmetric(12,3));const auto details=takeRight(label,48);
-    auto suffix=std::filesystem::path(item.name).extension().string();
-    std::transform(suffix.begin(),suffix.end(),suffix.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
-    const bool texture=item.kind==resources::LibraryItemKind::Texture&&(suffix==".png"||suffix==".jpg"||suffix==".jpeg"||suffix==".ktx2"||suffix==".tga"||suffix==".tif"||suffix==".tiff");
-    const bool model=item.kind==resources::LibraryItemKind::Model&&(suffix==".glb"||suffix==".gltf"||suffix==".fbx");
-    const bool unity=item.kind==resources::LibraryItemKind::Clip||item.kind==resources::LibraryItemKind::Prefab||item.kind==resources::LibraryItemKind::Controller;
-    // Projeto UMotion: aplica clipes, alvos, IK e Filho de ao personagem selecionado.
-    const bool umotion=item.kind==resources::LibraryItemKind::Clip&&suffix==".asset";
-    const char *status=registered?"Abrir":umotion&&!refused?"Aplicar":(texture||model)&&!refused?"Preparar":(item.kind==resources::LibraryItemKind::Material||unity)&&!refused?"Converter":"Diagnóstico";
-    auto statusArea=takeRight(label,96);builder.label(statusArea,status,registered?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::End);
-    builder.label(takeTop(label,26),item.name.c_str(),theme.color.text,theme.type.body);
-    builder.label(label,item.context.c_str(),theme.color.textMuted,theme.type.caption);
-    router.addRegion(row,widgetId(EditorWidget::LibraryItemBase)+i);
-    list.addImage(centred(details,20,20),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
-    router.addRegion({details.x,row.y,48,row.height},widgetId(EditorWidget::LibraryItemDetailsBase)+i);
+    const bool refused=item.state==resources::LibraryResolutionState::Unsupported||item.state==resources::LibraryResolutionState::MissingDependency||
+      item.state==resources::LibraryResolutionState::MissingOutput||item.state==resources::LibraryResolutionState::Incomplete;
+    const bool selected=item.id==state.libraryDetailItem;
+    list.addRect(card,selected?withAlpha(theme.color.accent,.12f):theme.color.surface,theme.radius.card);
+    if(selected)list.addBorder(card,theme.color.accent,1,theme.radius.card);
+    const u32 k=static_cast<u32>(item.kind)+1;
+    list.addRect({card.x+10,card.y+12,48,48},theme.color.silhouette,theme.radius.control);
+    list.addImage({card.x+22,card.y+24,24,24},static_cast<UiImageId>(kindIcons[k<11?k:0]),registered?theme.color.accent:theme.color.text);
+    const UiRect text{card.x+68,card.y+10,std::max(0.f,card.width-68-56),card.height-20};
+    list.pushClip(text);builder.label({text.x,text.y,text.width,26},fitMiddle(list,item.name,text.width,theme.type.body),theme.color.text,theme.type.body);
+    builder.label({text.x,text.y+26,text.width,22},item.context.c_str(),theme.color.textMuted,theme.type.caption);list.popClip();
+    // Selo de estado: pronto (✓), a converter (⤓) ou aviso (⚠).
+    const UiRect badge{card.right()-34,card.y+10,24,24};
+    list.addRect(badge,registered?withAlpha(theme.color.accent,.22f):refused?withAlpha(theme.color.warning,.22f):theme.color.silhouette,12);
+    list.addImage({badge.x+4,badge.y+4,16,16},static_cast<UiImageId>(registered?UiIcon::UiCheck:refused?UiIcon::UiWarning:UiIcon::AssetsImport),registered?theme.color.accent:refused?theme.color.warning:theme.color.textDim);
+    router.addRegion(card,widgetId(EditorWidget::LibraryItemBase)+i);
+    const UiRect details{card.right()-44,card.bottom()-40,40,36};
+    list.addImage(centred(details,18,18),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
+    router.addRegion(details,widgetId(EditorWidget::LibraryItemDetailsBase)+i);
   }
-  list.popClip();
+  router.popClip();list.popClip();
 }
 
 void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layout,bool debug) {
@@ -10956,6 +11013,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   builder.layout=&layout;
   if(state.clipOpen && state.clipAsset) {
     layout=buildAnimationClipScreen(state,theme,list,router);
+    // Menu ⋮ do estúdio: acima do estúdio, abaixo dos teclados que ele abre.
+    if(state.contextMenu && state.document) buildContextMenu(builder,layout);
     buildNumericWindow(builder);buildNameWindow(builder);buildPlatformTextField(builder);
     return layout;
   }
@@ -10983,12 +11042,13 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     layout.viewport=remaining;
     buildLibraryWorkspace(builder,remaining);
     if(state.backgroundPanel)buildBackgroundTasks(builder,layout);
-    buildWorkspaceMenu(builder);buildPlatformTextField(builder);return layout;
+    if(state.contextMenu && state.document) buildContextMenu(builder,layout);
+    buildPlatformTextField(builder);return layout;
   }
   if(state.workspace==EditorWorkspace::Gui) {
     buildTopBar(builder,layout.topBar);
     layout.viewport=remaining;router.addBlocker(remaining);list.addRect(remaining,theme.color.canvas);
-    buildWorkspaceMenu(builder);
+    if(state.contextMenu && state.document) buildContextMenu(builder,layout);
     return layout;
   }
   if(state.workspace==EditorWorkspace::Code) {
@@ -11500,7 +11560,6 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     auto page=deflate(remaining,UiInsets::all(12));
     buildComponents(builder,page,*state.document->find(prefabTarget));
   }
-  buildWorkspaceMenu(builder);
   // A contextual surface, not a second Inspector implementation. Draw after
   // viewport tools and block their hit regions, but before property pickers and
   // keyboards. Keeping the underlying viewport valid avoids zero-size render

@@ -1015,7 +1015,9 @@ u32 recipeWidget(std::string_view id) {
   return creationWidget(index);
 }
 void tapWidget(Fixture &fixture,u32 widget) {
-  if((widget==widgetId(EditorWidget::TabAssets) || widget==widgetId(EditorWidget::TabProject) || widget==widgetId(EditorWidget::TabLighting)) && !fixture.session.screen().workspaceMenu)
+  // Os espaços de trabalho moram no menu Cena (menu de contexto, nível próprio).
+  if((widget==widgetId(EditorWidget::TabAssets) || widget==widgetId(EditorWidget::TabProject) || widget==widgetId(EditorWidget::TabLighting)) &&
+     !(fixture.session.screen().contextMenu && fixture.session.screen().contextMenuLevel==context_menu_widget::WorkspaceLevel))
     tapWidget(fixture,widgetId(EditorWidget::ProjectMenu));
   // Menu de contexto aberto: a receita mora no submenu da categoria dela, e a
   // lista rola pelo dedo até ela aparecer.
@@ -4224,8 +4226,9 @@ AE_TEST(panel_layouts_apply_save_delete_and_restore_with_project) {
   f.session.update();
   const auto &state=f.session.screen();
   tapWidget(f,widgetId(EditorWidget::ProjectMenu));
+  AE_EXPECT_TRUE(state.contextMenu && state.contextMenuLevel==context_menu_widget::WorkspaceLevel,"o menu Cena é o menu de contexto universal");
   tapWidget(f,widgetId(EditorWidget::LayoutsOpen));
-  AE_EXPECT_TRUE(state.layoutsPanel && !state.workspaceMenu,"painel de layouts pelo menu Cena");
+  AE_EXPECT_TRUE(state.layoutsPanel && !state.contextMenu,"painel de layouts pelo menu Cena");
   // "Só a cena" esconde os dois painéis; "Autoria" alarga o Inspector.
   tapWidget(f,widgetId(EditorWidget::LayoutBuiltinBase)+4);
   AE_EXPECT_TRUE(!state.hierarchyVisible && !state.inspectorVisible,"só a cena");

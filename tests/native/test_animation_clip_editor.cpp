@@ -352,8 +352,16 @@ AE_TEST(animation_clip_preview_seek_cancel_and_failure_never_modify_source_docum
   const auto pose=preview.scene().find(target)->transform;
   AE_EXPECT_TRUE(!preview.seek(std::numeric_limits<float>::quiet_NaN(),error),"invalid seek");
   AE_EXPECT_EQ(preview.scene().find(target)->transform.position[0],pose.position[0],"invalid seek preserves last pose");
-  auto bad=asset;bad.bindings[1].path="Ausente/Junta";
-  AE_EXPECT_TRUE(!preview.begin(original,owner,bad,error)&&preview.active(),"failed binding retains current preview");
+  auto partial=asset;resources::AnimationClipBinding absent;absent.path="Ausente/Caixa";absent.name="Caixa";
+  const float box[]{0,1,0};u64 boxTrack=0;
+  AE_EXPECT_TRUE(partial.addTrack(absent,resources::AnimationPath::Translation,resources::AnimationRotationMode::Quaternion,box,boxTrack,error),error.c_str());
+  editor::AnimationClipPreview partialPreview;
+  AE_EXPECT_TRUE(partialPreview.begin(original,owner,partial,error)&&partialPreview.seek(1,error),error.c_str());
+  AE_EXPECT_TRUE(partialPreview.missingBindings().size()==1&&partialPreview.missingBindings().front()=="Ausente/Caixa",
+                 "a missing node is skipped and listed, like Unity and Play");
+  AE_EXPECT_TRUE(std::abs(partialPreview.scene().find(target)->transform.position[0]-2)<1e-5,"the nodes that exist still play");
+  auto bad=asset;for(auto &binding:bad.bindings)binding.path="Ausente/"+binding.path;
+  AE_EXPECT_TRUE(!preview.begin(original,owner,bad,error)&&preview.active(),"a clip with no node under the root retains current preview");
   AE_EXPECT_EQ(preview.time(),.5f,"failed begin retains time");
   AE_EXPECT_EQ(editor::serializeEditorDocument(original,0),before,"no source state, morph weight, ID or component changed");
   preview.cancel();AE_EXPECT_TRUE(!preview.active(),"cancel destroys evaluated scene");
@@ -635,7 +643,7 @@ AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_conne
     tap(clip_widget::Keys);capture("clip-keys.ppm");
     tap(clip_widget::Curves);capture("clip-curves.ppm");
   }
-  tap(clip_widget::New);tap(clip_widget::NewEuler);
+  tap(clip_widget::StudioMenu);tap(clip_widget::NewEuler);
   const auto eulerGuid=session.screen().clipGuid;const auto *euler=session.animationClipAsset(eulerGuid);
   AE_EXPECT_TRUE(eulerGuid!=guid&&euler&&euler->tracks[1].rotationMode==resources::AnimationRotationMode::Euler,"mode creation is reachable through real UI");
   AE_EXPECT_TRUE(session.editAnimationClipAsset(eulerGuid,euler->revision,[&](auto &candidate) {
@@ -643,7 +651,7 @@ AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_conne
     return candidate.putKey(candidate.tracks[1].id,1,key,id,error);
   },error)&&session.seekAnimationClip(.25f,error),error.c_str());session.update();
   AE_EXPECT_TRUE(std::abs(session.evaluatedEditorScene().find(owner)->transform.rotationDegrees[1]-90)<.01,"Euler turns reach actual preview compositor");
-  tap(clip_widget::New);tap(clip_widget::NewProgressive);
+  tap(clip_widget::StudioMenu);tap(clip_widget::NewProgressive);
   const auto *progress=session.animationClipAsset(session.screen().clipGuid);
   AE_EXPECT_TRUE(progress&&progress->tracks[1].rotationMode==resources::AnimationRotationMode::ProgressiveQuaternion&&progress->tracks[1].curves.size()==5,"progressive mode creates pose and speed data");
   const auto progressiveGuid=progress->guid;
@@ -654,7 +662,7 @@ AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_conne
     AE_EXPECT_TRUE(animation&&animation->clip==progressiveGuid&&animation->playAutomatically,"new clip from the studio becomes the owner's default clip");
   }
   const auto sceneAfterNew=serializeEditorDocument(doc,0);
-  tap(clip_widget::Name);auto name=session.pendingTextEdit();
+  tap(clip_widget::StudioMenu);tap(clip_widget::Name);auto name=session.pendingTextEdit();
   AE_EXPECT_TRUE(session.completeTextEdit(name,"Mecanismo universal",true),"rename commits through the real text flow");session.update();
   AE_EXPECT_EQ(session.animationClipAsset(progressiveGuid)->name,std::string("Mecanismo universal"),"name persists in resource and catalog");
   tap(clip_widget::Targets);capture("clip-targets.ppm");tap(clip_widget::TargetChoice);capture("clip-properties.ppm");tap(clip_widget::PropertyChoice+4);
@@ -1625,7 +1633,6 @@ AE_TEST(animation_studio_docks_bone_tree_and_inspector_beside_viewport) {
   captureClipSurface(session,font,icons,"studio-1386.ppm");
   tap(clip_widget::id(clip_widget::BoneRow+2),"tap Coluna in bone tree");
   AE_EXPECT_EQ(session.screen().clipPreviewTarget?session.screen().clipPreviewTarget:session.screen().clipTarget,spine,"tree selects the same target as viewport picking");
-  tap(clip_widget::id(clip_widget::StudioTabPose),"pose tab");
   captureClipSurface(session,font,icons,"studio-pose-1386.ppm");
   tap(clip_widget::id(clip_widget::StudioTabRig),"rig tab");
   AE_EXPECT_TRUE(session.screen().rigToolOpen,"rig sheet docks in the animation inspector");
@@ -1742,8 +1749,7 @@ AE_TEST(animation_studio_mirror_pose_uses_published_rig_pairs_and_records_keys) 
   AE_EXPECT_TRUE(session.screen().rigTool.status.find("1 pares")!=std::string::npos,session.screen().rigTool.status.c_str());
   tap(static_cast<u32>(RigToolAction::Confirm),"publish rig");
   AE_EXPECT_EQ(session.screen().clipRigMirrorPairs,1u,"studio sees the published mirror pair");
-  tap(clip_widget::id(clip_widget::StudioTabPose),"pose tab");
-  tap(clip_widget::id(clip_widget::Pose),"pose mode");
+  tap(clip_widget::id(clip_widget::StudioTabKey),"back to the bone panel");
   tap(clip_widget::id(clip_widget::BoneRow+1),"select Ombro.L");
   tap(clip_widget::id(clip_widget::PoseRotate),"rotate tool");
   const float q[4]{0,0,.3826834f,.9238795f};
@@ -1796,8 +1802,7 @@ AE_TEST(animation_studio_transfers_clip_to_another_character_with_different_rest
   tap(clip_widget::id(clip_widget::StudioTabRig),"rig tab");
   tap(static_cast<u32>(RigToolAction::CaptureRig),"capture source rig");
   tap(static_cast<u32>(RigToolAction::Confirm),"publish source rig");
-  tap(clip_widget::id(clip_widget::StudioTabPose),"pose tab");
-  tap(clip_widget::id(clip_widget::Pose),"pose mode");
+  tap(clip_widget::id(clip_widget::StudioTabKey),"back to the bone panel");
   tap(clip_widget::id(clip_widget::BoneRow+2),"select leg");
   tap(clip_widget::id(clip_widget::PoseRotate),"rotate tool");
   const float q[4]{.3826834f,0,0,.9238795f};

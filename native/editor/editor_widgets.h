@@ -21,6 +21,9 @@ enum class EditorWidget : u32 {
   LibraryReimport,LibraryKeepLocal,LibraryReceiveSource,LibraryInstantiate,LibraryControllerAssign,
   LibraryItemBase=0xCD110000u,
   LibraryItemDetailsBase=0xCD140000u,
+  // Trilho de tipos da Biblioteca (+ índice do tipo, 0 = todos) e o botão
+  // universal de importar da barra superior (abre o menu de contexto).
+  LibraryKindBase=0xCD150000u,ImportMenu=0xCD160000u,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
@@ -584,6 +587,13 @@ namespace context_menu_widget {
 // receitas e as categorias de criação (+ índice). As ações em si usam os
 // widgets de sempre (Duplicar, Renomear, receitas), pelo mesmo caminho.
 enum Code : u32 {Close=1,Back=2,Create=3,AllRecipes=4,Category=0x10};
+// Níveis: 0 ações do objeto, 1 Criar, 2+n receitas da categoria n. O menu
+// Cena (espaços de trabalho) é o mesmo componente num nível próprio.
+inline constexpr u32 WorkspaceLevel=0x100;
+// Menu ⋮ do estúdio de animação (clipe, camadas, rig, bake, exportar).
+inline constexpr u32 StudioLevel=0x200;
+// Importar universal: modelo, pasta de pacote, textura, ambiente, áudio.
+inline constexpr u32 ImportLevel=0x300;
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ContextMenuBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ContextMenuBase);}
 } // namespace context_menu_widget
@@ -625,6 +635,8 @@ enum : u32 {
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
     StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,TimeRuler,BoneTree,
     BoneRow=0xb680,PoseLibrary=0xb6e0,
+    // Painel do osso: canal (0 posição, 1 rotação, 2 escala) × (X, Y, Z, chave).
+    BoneChannel=0xb6f0,StudioMenu=0xb6fc,
     PoseLock=0xb540,
     PoseGizmo=0xb500
 };

@@ -149,8 +149,11 @@ struct EditorScreenState final {
   std::string libraryQuery;
   std::string libraryDiagnostic;
   std::string libraryDetailName;
-  u32 libraryDiagnosticPage=0;
-  u32 libraryPage=0,libraryKind=0;
+  u32 libraryKind=0;
+  // Itens por tipo (0 = todos) no pacote/busca atuais, para o trilho de tipos.
+  u32 libraryKindCounts[11]{};
+  // Lista e diagnóstico da Biblioteca rolam pelo dedo (coluna, sem páginas).
+  float libraryScroll=0,libraryDiagnosticScroll=0;
   bool libraryImportRequested=false,searchingLibrary=false;
   // Superfície inteira em pixels lógicos (dp), incluindo o que fica sob o
   // recorte da câmera. As áreas seguras entram por `safeArea`.
@@ -332,6 +335,11 @@ struct EditorScreenState final {
   // Timeline filtrada pelo osso selecionado: bindings permitidos (vazio = todos).
   bool clipFilterSelected=false;std::vector<u64> clipFilterBindings;
   bool clipPoseShown=false;u32 clipPosePage=0;
+  // Painel do osso (estúdio): trilha por canal (posição, rotação, escala) do
+  // osso tocado, se há chave no tempo atual e os valores locais da pose vista.
+  u64 clipBoneTracks[3]{};bool clipBoneKeyed[3]{};float clipBoneValues[3][3]{};
+  // Ossos com trilha na camada atual (ponto na árvore).
+  std::vector<EditorEntityId> clipAnimatedBones;
   bool clipPoseAutoKey=true,clipPosePending=false;
   AnimationPoseRecordingPolicy clipPoseRecording;
   u64 clipPoseLocks[4]{};
@@ -863,7 +871,6 @@ struct EditorScreenState final {
   // A ação tocada no menu cria com o destino escolhido nele (raiz ou filho),
   // pelo mesmo caminho da folha de criação.
   bool contextMenuCreating=false;
-  bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationScroll=0;
   std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.

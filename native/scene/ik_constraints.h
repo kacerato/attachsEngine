@@ -278,11 +278,12 @@ inline const ComponentType AimIk::descriptor{"astra.ik.aim",2,[]()->std::unique_
 
 inline constexpr std::array<ComponentEnumOption,3> rotationLimitKinds{{{0,"Livre"},{1,"Dobradiça"},{2,"Cone e torção"}}};
 inline constexpr std::array<ComponentEnumOption,3> rotationLimitAxes{{{0,"X"},{1,"Y"},{2,"Z"}}};
+inline bool rotationLimitActive(const ComponentValue &v){return static_cast<const RotationLimit&>(v).kind!=0;}
 inline bool rotationLimitHinge(const ComponentValue &v){return static_cast<const RotationLimit&>(v).kind==1;}
 inline bool rotationLimitCone(const ComponentValue &v){return static_cast<const RotationLimit&>(v).kind==2;}
 inline const std::array<ComponentNumber,3> rotationLimitNumbers{{
-  ComponentNumber{"Mínimo",-180,180,1,[](const ComponentValue&v)->const float&{return static_cast<const RotationLimit&>(v).minimum;},[](ComponentValue&v){return &static_cast<RotationLimit&>(v).minimum;},"minimum",{"Limite","graus",nullptr,rotationLimitHinge}},
-  ComponentNumber{"Máximo",-180,180,1,[](const ComponentValue&v)->const float&{return static_cast<const RotationLimit&>(v).maximum;},[](ComponentValue&v){return &static_cast<RotationLimit&>(v).maximum;},"maximum",{"Limite","graus",nullptr,rotationLimitHinge}},
+  ComponentNumber{"Mínimo",-180,180,1,[](const ComponentValue&v)->const float&{return static_cast<const RotationLimit&>(v).minimum;},[](ComponentValue&v){return &static_cast<RotationLimit&>(v).minimum;},"minimum",{"Limite","graus",nullptr,rotationLimitActive}},
+  ComponentNumber{"Máximo",-180,180,1,[](const ComponentValue&v)->const float&{return static_cast<const RotationLimit&>(v).maximum;},[](ComponentValue&v){return &static_cast<RotationLimit&>(v).maximum;},"maximum",{"Limite","graus",nullptr,rotationLimitActive}},
   ComponentNumber{"Cone",0,180,1,[](const ComponentValue&v)->const float&{return static_cast<const RotationLimit&>(v).cone;},[](ComponentValue&v){return &static_cast<RotationLimit&>(v).cone;},"cone",{"Limite","graus",nullptr,rotationLimitCone}}}};
 inline constexpr std::array<ComponentBoolean,1> rotationLimitBooleans{{AE_IK_BOOL(RotationLimit,"enabled","Ativo",enabled,"Limite")}};
 inline constexpr std::array<ComponentEnum,2> rotationLimitEnums{{AE_IK_ENUM(RotationLimit,"kind","Tipo",rotationLimitKinds,kind,"Limite"),AE_IK_ENUM(RotationLimit,"axis","Eixo",rotationLimitAxes,axis,"Limite")}};

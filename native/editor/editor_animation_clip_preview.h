@@ -36,12 +36,15 @@ public:
   u64 sceneRevision() const {return sceneRevision_;}
   u32 clipRevision() const {return clipRevision_;}
   resources::AssetGuid clip() const {return source_.clipIds.empty()?resources::AssetGuid{}:source_.clipIds.front();}
+  // Caminhos do clipe sem nó sob a raiz; os canais deles não tocam a pose.
+  const std::vector<std::string> &missingBindings() const {return missing_;}
 private:
   bool findClip(const resources::AssetGuid &guid,runtime::AnimationClipView &out) const override;
   runtime::SceneGraph scene_;
   runtime::SourceAnimations source_;
   runtime::SceneAnimator sampler_;
   runtime::ObjectId owner_=runtime::kInvalidObject;
+  std::vector<std::string> missing_;
   u64 sceneRevision_=0;
   u32 clipRevision_=0;
   float time_=0;

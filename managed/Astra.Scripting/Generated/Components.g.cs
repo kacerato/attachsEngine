@@ -1325,6 +1325,8 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         InteracaoMaoAlcancou = 34,
         InteracaoMaoSoltou = 35,
         InteracaoObjetoLevantado = 36,
+        InteracaoEntrouNoGatilho = 37,
+        InteracaoSaiuDoGatilho = 38,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -2699,6 +2701,20 @@ public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
         get => Component.GetFloat("lean");
         set => Component.SetFloat("lean", value);
     }
+    /// <summary>Entrada do olhar (/s)</summary>
+    /// <remarks>Faixa válida: 0.1 a 20.</remarks>
+    public float LookSpeed
+    {
+        get => Component.GetFloat("look_speed");
+        set => Component.SetFloat("look_speed", value);
+    }
+    /// <summary>Giro do olhar (/s)</summary>
+    /// <remarks>Faixa válida: 0.5 a 60.</remarks>
+    public float LookTurn
+    {
+        get => Component.GetFloat("look_turn");
+        set => Component.SetFloat("look_turn", value);
+    }
     /// <summary>Ativo</summary>
     public bool Enabled
     {
@@ -2735,18 +2751,211 @@ public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
         get => Component.GetReference("chest");
         set => Component.SetReference("chest", value);
     }
+    /// <summary>Olhar com</summary>
+    public ObjectReference LookAt
+    {
+        get => Component.GetReference("look_at");
+        set => Component.SetReference("look_at", value);
+    }
     /// <summary>Interagir. Leva a mão até o Objeto interagível; falso se a mão ou o objeto não servem</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public bool Start(ObjectReference effector, ObjectReference @object) => Component.Invoke("start", ComponentValue.Object(effector), ComponentValue.Object(@object)).AsBoolean();
     /// <summary>Soltar. Devolve a mão à animação e larga o objeto pego</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public void Stop(ObjectReference effector) => Component.Invoke("stop", ComponentValue.Object(effector));
+    /// <summary>Interagir pelo gatilho. Começa a interação do Gatilho de interação mais próximo em que o personagem está; falso se não há nenhum</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool Trigger() => Component.Invoke("trigger").AsBoolean();
     /// <summary>Alcançou. A mão chegou ao ponto de pegada. Payload: Mão: objeto, Objeto: objeto</summary>
     public ComponentSubscription OnReached(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "reached", handler);
     /// <summary>Levantou. A última mão chegou e o objeto sobe ao ponto de carregar. Payload: Mão: objeto, Objeto: objeto</summary>
     public ComponentSubscription OnPicked(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "picked", handler);
     /// <summary>Soltou. A mão voltou à animação. Payload: Mão: objeto, Objeto: objeto</summary>
     public ComponentSubscription OnReleased(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "released", handler);
+    /// <summary>Entrou no gatilho. O personagem entrou na faixa de um Gatilho de interação (Objeto = o gatilho). Payload: Mão: objeto, Objeto: objeto</summary>
+    public ComponentSubscription OnEntered(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "entered", handler);
+    /// <summary>Saiu do gatilho. O personagem saiu da faixa do gatilho. Payload: Mão: objeto, Objeto: objeto</summary>
+    public ComponentSubscription OnLeft(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "left", handler);
+}
+
+/// <summary>Pivô de pegada: Gira o objeto sobre este pivô para a pegada encarar a mão. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.0/manual/xr-grab-interactable.html</remarks>
+public readonly struct InteractionGrip : IComponentFacade<InteractionGrip>
+{
+    public static string TypeId => "astra.ik.interaction_grip";
+    public static InteractionGrip Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public InteractionGrip(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Peso da torção</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float TwistWeight
+    {
+        get => Component.GetFloat("twist_weight");
+        set => Component.SetFloat("twist_weight", value);
+    }
+    /// <summary>Peso do balanço</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SwingWeight
+    {
+        get => Component.GetFloat("swing_weight");
+        set => Component.SetFloat("swing_weight", value);
+    }
+    /// <summary>Peso da rotação</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float FullWeight
+    {
+        get => Component.GetFloat("full_weight");
+        set => Component.SetFloat("full_weight", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Girar uma vez</summary>
+    public bool RotateOnce
+    {
+        get => Component.GetBool("rotate_once");
+        set => Component.SetBool("rotate_once", value);
+    }
+    public enum ModeOption : uint
+    {
+        TorcaoEBalanco = 0,
+        RotacaoCompleta = 1,
+    }
+    /// <summary>Modo</summary>
+    public ModeOption Mode
+    {
+        get => (ModeOption)Component.GetEnum("mode");
+        set => Component.SetEnum("mode", (uint)value);
+    }
+    public enum AxisOption : uint
+    {
+        X = 0,
+        Y = 1,
+        Z = 2,
+        X3 = 3,
+        Y4 = 4,
+        Z5 = 5,
+    }
+    /// <summary>Eixo da torção</summary>
+    public AxisOption Axis
+    {
+        get => (AxisOption)Component.GetEnum("axis");
+        set => Component.SetEnum("axis", (uint)value);
+    }
+    /// <summary>Pegada</summary>
+    public ObjectReference Grip
+    {
+        get => Component.GetReference("grip");
+        set => Component.SetReference("grip", value);
+    }
+}
+
+/// <summary>Gatilho de interação: Faixa à frente do objeto: o personagem dentro dela interage. Família Lógica · IK.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.0/manual/xr-direct-interactor.html</remarks>
+public readonly struct InteractionTrigger : IComponentFacade<InteractionTrigger>
+{
+    public static string TypeId => "astra.ik.interaction_trigger";
+    public static InteractionTrigger Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public InteractionTrigger(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Raio (m)</summary>
+    /// <remarks>Faixa válida: 0.05 a 10.</remarks>
+    public float Radius
+    {
+        get => Component.GetFloat("radius");
+        set => Component.SetFloat("radius", value);
+    }
+    /// <summary>Ângulo máximo (graus)</summary>
+    /// <remarks>Faixa válida: 1 a 180.</remarks>
+    public float MaxAngle
+    {
+        get => Component.GetFloat("max_angle");
+        set => Component.SetFloat("max_angle", value);
+    }
+    /// <summary>Deslocamento lateral (m)</summary>
+    /// <remarks>Faixa válida: -5 a 5.</remarks>
+    public float OffsetX
+    {
+        get => Component.GetFloat("offset_x");
+        set => Component.SetFloat("offset_x", value);
+    }
+    /// <summary>Deslocamento à frente (m)</summary>
+    /// <remarks>Faixa válida: -5 a 5.</remarks>
+    public float OffsetZ
+    {
+        get => Component.GetFloat("offset_z");
+        set => Component.SetFloat("offset_z", value);
+    }
+    /// <summary>Giro da direção (graus)</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float AngleOffset
+    {
+        get => Component.GetFloat("angle_offset");
+        set => Component.SetFloat("angle_offset", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Automático</summary>
+    public bool Automatic
+    {
+        get => Component.GetBool("automatic");
+        set => Component.SetBool("automatic", value);
+    }
+    /// <summary>Em volta do objeto</summary>
+    public bool Orbit
+    {
+        get => Component.GetBool("orbit");
+        set => Component.SetBool("orbit", value);
+    }
+    /// <summary>Cima fixo</summary>
+    public bool FixUp
+    {
+        get => Component.GetBool("fix_up");
+        set => Component.SetBool("fix_up", value);
+    }
+    public enum HandsOption : uint
+    {
+        MaoAoIniciar = 0,
+        SegundaMaoAoIniciar = 1,
+        AsDuas = 2,
+    }
+    /// <summary>Mãos</summary>
+    public HandsOption Hands
+    {
+        get => (HandsOption)Component.GetEnum("hands");
+        set => Component.SetEnum("hands", (uint)value);
+    }
+    /// <summary>Objeto interagível</summary>
+    public ObjectReference Interactable
+    {
+        get => Component.GetReference("interactable");
+        set => Component.SetReference("interactable", value);
+    }
 }
 
 /// <summary>IK de corpo inteiro: Puxa a pelve para alcançar alvos e resolve os membros. Família Lógica · IK.</summary>

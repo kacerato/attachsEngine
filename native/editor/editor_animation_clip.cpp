@@ -209,6 +209,10 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   clipPoseDraft_.reset();state_.clipPosePending=false;state_.clipPoseIsolated=false;clipPoseGizmo_={};state_.clipPoseAxis=EditorGizmoHandle::None;
   std::string previewDiagnostic;
   if(!clipPreview_.begin(document_,owner,*asset,previewDiagnostic)||!clipPreview_.seek(0,previewDiagnostic))clipPreview_.cancel();
+  else if(const auto &missing=clipPreview_.missingBindings();!missing.empty()) {
+    previewDiagnostic="Fora do personagem, ignorado como na Unity: "+missing.front();
+    if(missing.size()>1)previewDiagnostic+=" e mais "+std::to_string(missing.size()-1);
+  }
   state_.clipLayer=0;state_.clipLayersShown=state_.clipLayerPicker=false;
   state_.clipOpen=true;state_.clipGuid=guid;state_.clipOwner=owner;state_.clipTime=0;
   // Rig publicado desta raiz entra junto: limites, espelho e poses ficam ativos.
@@ -222,7 +226,9 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   state_.clipPlaying=false;state_.clipPicker=false;state_.clipNewPicker=false;state_.clipTangentPicker=false;state_.clipRow=0;state_.clipPage=0;
   state_.clipImportedPicker=false;state_.clipSourceEntries.clear();
   state_.clipModeSide=0;
-  state_.clipAuthoringPicker=0;state_.clipTargetPage=0;state_.clipTargetBranch=owner;state_.clipTargetNode=owner;state_.clipPoseShown=false;
+  // Posar é o estado normal do estúdio (largura de estúdio): abrir, tocar um
+  // osso e arrastar. No compacto a timeline manda e a pose liga pelo botão.
+  state_.clipAuthoringPicker=0;state_.clipTargetPage=0;state_.clipTargetBranch=owner;state_.clipTargetNode=owner;state_.clipPoseShown=state_.surface.width>=900;
   state_.clipPreviewTarget=0;state_.clipPoseNumbers=false;state_.clipPoseJoints=true;state_.clipPreviewExpanded=false;
   state_.clipPoseToolsShown=false;state_.clipPoseToolsPage=0;state_.clipPoseWorldSpace=false;
   state_.clipPoseSelection={owner};state_.clipPoseSelectionAdd=state_.clipPoseSelectionEmpty=state_.clipPoseSelectionIsolated=false;state_.clipPoseSetPage=0;
@@ -239,7 +245,11 @@ bool EditorSession::openAnimationClip(resources::AssetGuid guid,EditorEntityId o
   // otherwise orbit changes the editor camera while the image stays frozen.
   state_.cameraViewEntity=0;state_.cameraPiloting=false;
   state_.workspace=EditorWorkspace::Scene;state_.animatorOpen=false;state_.tool=EditorGizmoMode::Select;
-  clipEpoch_=sceneEpoch_;state_.clipDiagnostic=previewDiagnostic;appearanceChanged_=true;refreshAnimationClip();frameAnimationClip();return true;
+  clipEpoch_=sceneEpoch_;state_.clipDiagnostic=previewDiagnostic;appearanceChanged_=true;refreshAnimationClip();frameAnimationClip();
+  // O estúdio é sobre este personagem: a vista abre com ele inteiro na tela,
+  // onde quer que a câmera da cena tenha ficado.
+  frameSubtree(owner);
+  return true;
 }
 void EditorSession::closeAnimationClip() {
   clipDriverDraft_.reset();state_.clipDriverDraft=nullptr;state_.clipDriversShown=false;
@@ -389,6 +399,34 @@ void EditorSession::refreshAnimationClip() {
   state_.clipTarget=0;state_.clipPoseCount=0;
   if(!document_.exists(state_.clipTargetBranch)||(state_.clipTargetBranch!=state_.clipOwner&&!document_.isDescendantOf(state_.clipTargetBranch,state_.clipOwner))) {state_.clipTargetBranch=state_.clipOwner;state_.clipTargetPage=0;state_.clipAuthoringPicker=state_.clipAuthoringPicker?1:0;}
   refreshAnimationDrivers();
+  // Painel do osso e pontos da árvore: com ou sem canal selecionado, o osso
+  // tocado mostra suas trilhas por canal (posição, rotação, escala), se há
+  // chave no tempo atual e os valores locais da pose vista.
+  {
+    runtime::SourceAnimations all;all.source=asset->source.valid()?asset->source:asset->guid;
+    for(const auto &binding:asset->bindings) {all.nodes.push_back(binding.sourceNode);all.nodeNames.push_back(binding.name);all.nodePaths.push_back(binding.path);}
+    std::vector<runtime::ObjectId> resolved;runtime::resolveAnimationTargets(document_,state_.clipOwner,all,resolved);
+    const auto targetOf=[&](u64 binding)->EditorEntityId{for(usize i=0;i<asset->bindings.size()&&i<resolved.size();++i)if(asset->bindings[i].id==binding)return resolved[i];return 0;};
+    const EditorEntityId bone=state_.clipPreviewTarget?state_.clipPreviewTarget:track?targetOf(track->binding):0;
+    state_.clipAnimatedBones.clear();
+    for(u32 p=0;p<3;++p) {state_.clipBoneTracks[p]=0;state_.clipBoneKeyed[p]=false;}
+    for(const auto &t:asset->tracks) {
+      if(t.layer!=state_.clipLayer)continue;
+      const auto id=targetOf(t.binding);if(!id)continue;
+      if(std::find(state_.clipAnimatedBones.begin(),state_.clipAnimatedBones.end(),id)==state_.clipAnimatedBones.end())state_.clipAnimatedBones.push_back(id);
+      if(id!=bone||t.path==resources::AnimationPath::Weights)continue;
+      const u32 p=t.path==resources::AnimationPath::Translation?0:t.path==resources::AnimationPath::Rotation?1:2;
+      if(state_.clipBoneTracks[p])continue;
+      state_.clipBoneTracks[p]=t.id;
+      for(const auto &curve:t.curves)for(const auto &k:curve.keys)if(std::abs(k.time-state_.clipTime)<1e-4f)state_.clipBoneKeyed[p]=true;
+    }
+    const auto *posed=bone?(clipPreview_.active()?clipPreview_.scene().find(bone):document_.find(bone)):nullptr;
+    for(u32 c=0;c<3;++c) {
+      state_.clipBoneValues[0][c]=posed?posed->transform.position[c]:0.f;
+      state_.clipBoneValues[1][c]=posed?posed->transform.rotationDegrees[c]:0.f;
+      state_.clipBoneValues[2][c]=posed?posed->transform.scale[c]:1.f;
+    }
+  }
   if(!track)return;
   if(track->path==resources::AnimationPath::Weights&&track->weightCount<64)
     state_.clipPoseLocks[static_cast<u32>(track->path)]&=(u64(1)<<track->weightCount)-1;
@@ -1489,6 +1527,25 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
       const auto all=rows(*state_.clipAsset,state_.clipLayer,&state_.clipFilterBindings);for(usize i=0;i<all.size();++i)if(all[i].track==id) {state_.clipRow=static_cast<u32>(i);break;}frameAnimationClip();
     }
     state_.clipDiagnostic=error;
+  } else if(code>=w::BoneChannel&&code<w::BoneChannel+12) {
+    // Painel do osso: X/Y/Z editam o valor do canal; a chave grava a propriedade
+    // inteira no tempo atual com o valor visto. Sem trilha, ela é criada.
+    const u32 pathIndex=(code-w::BoneChannel)/4,component=(code-w::BoneChannel)%4;
+    const EditorEntityId bone=state_.clipPreviewTarget?state_.clipPreviewTarget:state_.clipTarget;
+    const auto path=pathIndex==0?resources::AnimationPath::Translation:pathIndex==1?resources::AnimationPath::Rotation:resources::AnimationPath::Scale;
+    u64 id=state_.clipBoneTracks[pathIndex];const auto *live=animationClipAsset(state_.clipGuid);
+    if(bone&&!id&&live&&!addAnimationClipTrack(live->guid,live->revision,state_.clipOwner,bone,path,resources::AnimationRotationMode::Quaternion,id,error))id=0;
+    if(bone&&id) {
+      state_.clipPreviewTarget=bone;state_.clipTargetNode=bone;state_.clipTrack=id;state_.clipComponent=component<3?component:0;state_.clipKey=0;state_.clipAuthoringPicker=0;refreshAnimationClip();
+      const auto all=rows(*state_.clipAsset,state_.clipLayer,&state_.clipFilterBindings);for(usize i=0;i<all.size();++i)if(all[i].track==id) {state_.clipRow=static_cast<u32>(i);break;}
+      if(component<3)beginAnimationClipNumber(w::PoseValue+component,state_.clipPoseValues[component]);
+      else {
+        u64 keyId=0;const auto *track=state_.clipAsset?state_.clipAsset->track(id):nullptr;const u32 count=track?track->components():0;
+        change([&](auto &candidate){for(u32 c=0;c<count;++c){u64 k=0;if(!candidate.splitKey(id,c,state_.clipTime,k,error))return false;if(!c)keyId=k;}return true;});
+        state_.clipKey=keyId;
+      }
+    }
+    state_.clipDiagnostic=error;
   } else if(code==w::Pose) {
     state_.clipPoseShown=!state_.clipPoseShown;state_.clipAuthoringPicker=0;
     if(!state_.clipPoseShown) {
@@ -1527,8 +1584,10 @@ bool EditorSession::handleAnimationClip(const ui::UiPointerEvent &event,const ui
         state_.clipDiagnostic=error;
       }
     } else if(i<animationClipAssets_.size()) {const auto guid=animationClipAssets_[i].guid;openAnimationClip(guid,state_.clipOwner,error);state_.clipDiagnostic=error;}
-  } else if(code==w::New) {state_.clipBakeShown=false;state_.clipNewPicker=!state_.clipNewPicker;state_.clipPicker=false;state_.clipTangentPicker=false;state_.clipModeSide=0;state_.clipAuthoringPicker=0;
-  } else if(code==w::NewQuaternion||code==w::NewEuler||code==w::NewProgressive) {
+  } else if(code==w::New||code==w::NewQuaternion||code==w::NewEuler||code==w::NewProgressive) {
+    // Novo clipe sem formulário: quaternion e 2 s por padrão; Euler e
+    // progressivo ficam no menu ⋮ do estúdio.
+    state_.clipNewPicker=state_.clipPicker=false;
     const auto mode=code==w::NewEuler?resources::AnimationRotationMode::Euler:code==w::NewProgressive?resources::AnimationRotationMode::ProgressiveQuaternion:resources::AnimationRotationMode::Quaternion;
     resources::AssetGuid guid;if(createAnimationClip(state_.clipOwner,2,guid,error,mode)&&playNewClipOnOwner(state_.clipOwner,guid,error))openAnimationClip(guid,state_.clipOwner,error);state_.clipDiagnostic=error;
   } else if(code==w::Time||code==w::Duration)beginAnimationClipNumber(code,code==w::Time?state_.clipTime:asset->duration);
