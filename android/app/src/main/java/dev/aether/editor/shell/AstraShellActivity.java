@@ -81,10 +81,6 @@ public final class AstraShellActivity extends Activity implements ShellView.List
     @Override public void onProjectPicked(Project project) {
         beginOpening(project);
     }
-    @Override public void onProjectExport(Project project) {
-        startActivity(new Intent(this,dev.aether.editor.GameExportActivity.class)
-            .putExtra("astra.project_path",project.path).putExtra("astra.project_name",project.name));
-    }
 
     /**
      * R1: a tela de carregamento cobre a troca de Activity pelo tempo que ela
