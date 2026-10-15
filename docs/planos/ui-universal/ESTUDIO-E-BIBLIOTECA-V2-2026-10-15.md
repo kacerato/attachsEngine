@@ -150,6 +150,14 @@ codificar.
   library-*); suítes 71/71, 1569/1569, 126/126, 24/24. Sem aparelho (ADB off).
 - E2 e E4 pendentes. O modo `scene-kyle-menu` do preview mostra "Criar" em vez
   das ações do objeto por um artefato de seleção do preview, não do editor.
+- Aparelho (code 82–85, projeto "Kyle – Carregar caixa" gerado no host): o
+  fluxo Animar → osso → chave por canal → campo → arrasto com auto-key foi
+  conferido; enquadramento de abertura passou a usar os ossos (ef01c9a0) e os
+  campos deixaram de mostrar ruído (5acdf468). Capturas `build/device-rig/v82_*`,
+  `v84_*`, `v85_*`.
+- Aberto: nesse projeto gerado no host a malha do Kyle não é desenhada no
+  estúdio (só ossos, mesa e caixa); na cena e no Kyle Tutorial importado pelo
+  app ela aparece. Verificar o preview com o GLB importado pelo próprio app.
 
 Referências: UMotion Pro 1.29p04 manual local (`PoseEditor`, `Animation`,
 `Channels`, `Dopesheet`, `AnimatedPropertiesList`, `Playback`); Unity 6000.0
