@@ -143,6 +143,7 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     from("../../native/third_party/godot_agx/LICENSE.txt") { into("licenses/godot_agx") }
     from("../../native/third_party/fidelityfx_fsr1/LICENSE.txt") { into("licenses/fidelityfx_fsr1") }
     from("../../native/third_party/recastnavigation/License.txt") { into("licenses/recastnavigation") }
+    from("../../assets/terrain") { include("LICENSE-supplied.txt", "manifest.json"); into("licenses/terrain") }
     if (includeLegacyDemos) {
     inputs.file("../../samples/material-preview/manifest.json")
     inputs.file("../../samples/dirt-road/manifest.json")
@@ -398,7 +399,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":export-core"))
     implementation("androidx.games:games-frame-pacing:2.1.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
