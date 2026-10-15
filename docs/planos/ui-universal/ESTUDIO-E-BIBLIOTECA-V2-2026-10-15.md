@@ -155,9 +155,15 @@ codificar.
   conferido; enquadramento de abertura passou a usar os ossos (ef01c9a0) e os
   campos deixaram de mostrar ruído (5acdf468). Capturas `build/device-rig/v82_*`,
   `v84_*`, `v85_*`.
-- Aberto: nesse projeto gerado no host a malha do Kyle não é desenhada no
-  estúdio (só ossos, mesa e caixa); na cena e no Kyle Tutorial importado pelo
-  app ela aparece. Verificar o preview com o GLB importado pelo próprio app.
+- Fechado (code 86): a malha do Kyle não aparecia nem no estúdio nem na cena
+  desse projeto. Causa: a cópia para o aparelho foi feita com `*`, que não
+  inclui `.astra/` (registro `assets.astra` + `imports/<guid>.nodes`); sem o
+  registro o guid do GLB referenciado por `astra.import.link` não resolve e o
+  app recriou o registro só com o clipe. Enviado o `.astra` e o registro
+  fundido (malha + clipe): cena e estúdio desenham o robô (`v86_scene2`,
+  `v86_studio2`). Não é defeito do editor; fica a lacuna de produto: um
+  projeto copiado sem `.astra` perde as malhas em silêncio — a Biblioteca
+  deveria acusar "origem sem registro" no cartão do modelo (próxima rodada).
 
 Referências: UMotion Pro 1.29p04 manual local (`PoseEditor`, `Animation`,
 `Channels`, `Dopesheet`, `AnimatedPropertiesList`, `Playback`); Unity 6000.0
