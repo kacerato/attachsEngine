@@ -1926,7 +1926,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
     const auto terrainBase=widgetId(EditorWidget::TerrainNumberBase);
-    if(edit.field>=terrainBase&&edit.field<terrainBase+16) {
+    if(edit.field>=terrainBase&&edit.field<terrainBase+20) {
       NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
       if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(edit.field-terrainBase,number)) {
         state_.numericError=true;state_.status=reason.empty()?"Valor de terreno fora do limite":reason;return false;
@@ -3819,6 +3819,8 @@ bool EditorSession::handleComponentReorder(const UiPointerEvent &event,const UiP
 }
 
 void EditorSession::cancelPointers() {
+  terrainGestureActive_=false;terrainGestureStrokes_.clear();
+  state_.terrainCursorVisible=false;clearTerrainPreview();
   if(clipPoseGizmo_.active) {
     clipPoseGizmo_={};clipPoseBeforeDrag_.reset();state_.clipPoseAxis=EditorGizmoHandle::None;
     cancelAnimationClipPose();refreshAnimationClip();appearanceChanged_=true;
@@ -4052,7 +4054,7 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
 // que voltou. Um caminho só, usado pela importação e pela reidratação: eram
 // duas cópias desta sequência que deixavam uma delas para trás.
 bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
-                                    usize *outPrimitives) {
+                                    usize *outPrimitives, bool transient) {
   if(!publishGeometry_) { diagnostic="Este ambiente não publica geometria importada."; return false; }
   PublishedGeometry published;
   // R2: o orçamento agregado reduz a residência antes de subir. As fontes (e o
@@ -4140,7 +4142,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
     for(u32 axis=0;axis<3;++axis) pivots.push_back(published.draws[i].boundsCenter[axis]);
   pivots.insert(pivots.end(),library.pivots.begin(),library.pivots.end());
   if(pivots.size()!=published.draws.size()*3) { diagnostic="Pacote publicado inconsistente."; return false; }
-  cancelPointers();
+  if(!transient) cancelPointers();
   if(!mapScene_.adoptPackage(document_,published.draws,published.materials,published.vertices,
                              published.indices,identities,packageFingerprint_,pivots,names)) {
     diagnostic="O editor recusou o pacote publicado.";return false;

@@ -2261,6 +2261,90 @@
     },
     "terrain/layers": {
       "source": "vector/terrain/layers.svg"
+    },
+    "terrain/solid-base": {
+      "source": "vector/terrain/solid-base.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/surface": {
+      "source": "vector/terrain/surface.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/manage": {
+      "source": "vector/terrain/manage.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/edit": {
+      "source": "vector/terrain/edit.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/noise": {
+      "source": "vector/terrain/noise.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/terrace": {
+      "source": "vector/terrain/terrace.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/restore": {
+      "source": "vector/terrain/restore.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/sharpen": {
+      "source": "vector/terrain/sharpen.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/hole": {
+      "source": "vector/terrain/hole.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/sample-grass": {
+      "raster": "../../../terrain/layer-0.png",
+      "dark_ui_ready": true,
+      "source": "assets/terrain/SOURCES.md"
+    },
+    "terrain/sample-rock": {
+      "raster": "../../../terrain/layer-1.png",
+      "dark_ui_ready": true,
+      "source": "assets/terrain/SOURCES.md"
+    },
+    "terrain/sample-soil": {
+      "raster": "../../../terrain/layer-2.png",
+      "dark_ui_ready": true,
+      "source": "assets/terrain/SOURCES.md"
+    },
+    "terrain/sample-path": {
+      "raster": "../../../terrain/layer-3.png",
+      "dark_ui_ready": true,
+      "source": "assets/terrain/SOURCES.md"
+    },
+    "terrain/raise": {
+      "source": "vector/terrain/raise.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/lower": {
+      "source": "vector/terrain/lower.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/flatten": {
+      "source": "vector/terrain/flatten.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/smooth": {
+      "source": "vector/terrain/smooth.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/dig": {
+      "source": "vector/terrain/dig.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/paint": {
+      "source": "vector/terrain/paint.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "terrain/path": {
+      "source": "vector/terrain/path.svg",
+      "generator": "tools/generate-terrain-authoring-icons.py"
     }
   },
   "unmapped": []

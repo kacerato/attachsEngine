@@ -5,8 +5,10 @@
 #include "editor/editor_theme.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
+#include "renderer/authoring_texture.h"
 #include "resources/gltf_import.h"
 #include "resources/terrain_asset.h"
+#include "resources/terrain_textures.generated.h"
 #include "scene/collider.h"
 #include "scene/import_link.h"
 #include "scene/mesh_renderer.h"
@@ -16,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <thread>
 
 using namespace ae;
@@ -131,6 +134,117 @@ AE_TEST(terrain_all_modes_export_and_import_real_parser) {
                        "finite unit normals");
       }
   }
+}
+AE_TEST(terrain_revision3_brush_shape_falloff_rotation_and_serialization) {
+  resources::TerrainRecipe r;
+  r.blendedSurface=true;r.macroVariation=.7f;
+  resources::TerrainStroke stroke;
+  stroke.shape=resources::TerrainBrushShape::Box;stroke.radius=4;stroke.aspect=2;
+  stroke.rotation=90;stroke.hardness=.6f;stroke.gesture=17;
+  r.strokes.push_back(stroke);
+  resources::TerrainRecipe loaded;std::string error;
+  AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(resources::serializeTerrainRecipe(r),loaded,error),error.c_str());
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(loaded),resources::serializeTerrainRecipe(r),"all brush and surface properties roundtrip");
+  AE_EXPECT_TRUE(resources::terrainBrushDistance(stroke,0,0,6,false)<1,"rotated long axis follows viewport footprint");
+  AE_EXPECT_TRUE(resources::terrainBrushDistance(stroke,6,0,0,false)>1,"rotated short axis clips footprint");
+  AE_EXPECT_EQ(resources::terrainBrushWeight(stroke,.5f),1.f,"hardness keeps a fully influenced core");
+  AE_EXPECT_TRUE(resources::terrainBrushWeight(stroke,.9f)<.5f,"falloff softens edge");
+  stroke.shape=resources::TerrainBrushShape::Hemisphere;
+  AE_EXPECT_TRUE(resources::terrainBrushDistance(stroke,0,-1,0,true)>1,"half sphere rejects lower half");
+  stroke.shape=resources::TerrainBrushShape::Cone;
+  AE_EXPECT_TRUE(resources::terrainBrushDistance(stroke,0,2,0,true)<1,"cone includes central mass");
+  AE_EXPECT_TRUE(resources::terrainBrushDistance(stroke,0,7,3,true)>1,"cone narrows toward tip");
+  AE_EXPECT_TRUE(resources::deserializeTerrainRecipe("AETERRAIN2 0 1337 16 24 4 64 16 4 3 4 0 1 1 8 0",loaded,error),error.c_str());
+  AE_EXPECT_TRUE(!loaded.blendedSurface && loaded.solidBase,"v2 preserves legacy material and structure");
+}
+
+AE_TEST(terrain_revision3_sculpt_operations_have_real_effect_and_restore) {
+  resources::TerrainRecipe r;r.cells=16;
+  resources::TerrainMesh original,changed,restored;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,original,error),error.c_str());
+  for(auto tool:{resources::TerrainTool::Noise,resources::TerrainTool::Terrace,resources::TerrainTool::Sharpen}) {
+    r.strokes={{tool,0,0,0,40,2,0}};
+    AE_EXPECT_TRUE(resources::generateTerrain(r,changed,error),error.c_str());
+    AE_EXPECT_TRUE(digest(original)!=digest(changed),"new sculpt operation changes actual mesh");
+    r.strokes.push_back({resources::TerrainTool::Restore,0,0,0,2048,128,0});
+    AE_EXPECT_TRUE(resources::generateTerrain(r,restored,error),error.c_str());
+    AE_EXPECT_EQ(digest(original),digest(restored),"restore returns procedural geometry and natural weights");
+  }
+}
+
+AE_TEST(terrain_revision3_hole_closes_solid_rim_and_restores) {
+  resources::TerrainRecipe r;r.cells=16;r.height=0;r.solidBase=true;
+  resources::TerrainMesh initial,hole,restored;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,initial,error),error.c_str());
+  r.strokes={{resources::TerrainTool::Hole,0,0,0,14,1,0}};
+  AE_EXPECT_TRUE(resources::generateTerrain(r,hole,error),error.c_str());
+  AE_EXPECT_TRUE(digest(hole)!=digest(initial),"hole removes roof and floor cells");
+  using Point=std::array<float,3>;using Edge=std::pair<Point,Point>;
+  std::map<Edge,u32> edges;
+  for(const auto &part:hole.parts)for(usize t=0;t<part.vertices.size();t+=3)
+    for(u32 j=0;j<3;++j) {
+      const auto *p=part.vertices[t+j].position,*q=part.vertices[t+(j+1)%3].position;
+      Point a{p[0],p[1],p[2]},b{q[0],q[1],q[2]};++edges[a<b?Edge{a,b}:Edge{b,a}];
+    }
+  for(const auto &[edge,count]:edges){(void)edge;AE_EXPECT_EQ(count,2u,"hole rim has no open boundary");}
+  r.strokes.push_back({resources::TerrainTool::Restore,0,0,0,2048,128,0});
+  AE_EXPECT_TRUE(resources::generateTerrain(r,restored,error),error.c_str());
+  AE_EXPECT_EQ(digest(restored),digest(initial),"restoring fills hole and removes its interior walls");
+  r.mode=resources::TerrainMode::SmoothVoxel;
+  AE_EXPECT_TRUE(!resources::validTerrainRecipe(r,error),"unsupported heightfield-only tool is refused in volume");
+}
+AE_TEST(terrain_revision3_volume_shapes_hardness_and_local_restore) {
+  resources::TerrainRecipe r;r.mode=resources::TerrainMode::SmoothVoxel;
+  r.size=32;r.cells=24;r.verticalCells=32;r.height=0;r.base=8;
+  resources::TerrainMesh mesh;std::string error;
+  std::vector<std::string> signatures;
+  for(u32 shape=0;shape<4;++shape) {
+    r.strokes={{resources::TerrainTool::Dig,0,7,0,6,1,0}};
+    r.strokes[0].shape=resources::TerrainBrushShape(shape);
+    AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+    auto hash=digest(mesh);
+    AE_EXPECT_TRUE(std::find(signatures.begin(),signatures.end(),hash)==signatures.end(),"each volume shape changes the actual cavity");
+    signatures.push_back(hash);
+  }
+  r.strokes[0].shape=resources::TerrainBrushShape::Circle;
+  r.strokes[0].hardness=1;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+  AE_EXPECT_TRUE(digest(mesh)!=signatures[0],"hardness changes voxel influence rather than only its cursor");
+  r.strokes={{resources::TerrainTool::Raise,0,0,0,20,3,0}};
+  AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+  auto original=digest(mesh);
+  r.strokes.push_back({resources::TerrainTool::Restore,0,-100,0,1,1,0});
+  AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+  AE_EXPECT_EQ(digest(mesh),original,"restore outside volume does not reset the entire height column");
+}
+
+AE_TEST(terrain_revision3_blended_weights_and_material_bindings_survive_import) {
+  resources::TerrainRecipe r;r.cells=16;r.height=0;
+  r.strokes={{resources::TerrainTool::Paint,0,4,0,20,.5f,3}};
+  resources::TerrainMesh mesh;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+  bool blended=false,unpainted=false;
+  for(const auto &part:mesh.parts)for(const auto &v:part.vertices) {
+    float sum=0;for(float w:v.weights){AE_EXPECT_TRUE(w>=0&&w<=1,"finite normalized channel");sum+=w;}
+    AE_EXPECT_TRUE(std::abs(sum-1)<1e-5f,"splat weights preserve energy");
+    blended|=v.weights[3]>0&&v.weights[3]<.51f;unpainted|=v.weights[3]==0;
+  }
+  AE_EXPECT_TRUE(blended&&unpainted,"soft painting has mixed border and untouched exterior");
+  const std::array<std::vector<u8>,4> textures{{
+    {std::begin(resources::terrainTexture0),std::end(resources::terrainTexture0)},
+    {std::begin(resources::terrainTexture1),std::end(resources::terrainTexture1)},
+    {std::begin(resources::terrainTexture2),std::end(resources::terrainTexture2)},
+    {std::begin(resources::terrainTexture3),std::end(resources::terrainTexture3)}}};
+  std::vector<u8> bytes;resources::GltfImport imported;
+  AE_EXPECT_TRUE(resources::writeTerrainGlb(r,mesh,textures,bytes,error),error.c_str());
+  AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},imported),imported.diagnostic.c_str());
+  for(const auto &draw:imported.draws) {
+    const auto &material=imported.materials[draw.materialIndex];
+    AE_EXPECT_TRUE(material.flags&renderer::MapMaterialTerrain,"terrain shader contract survives GLB loader");
+    AE_EXPECT_TRUE(!(material.flags&renderer::MapMaterialNormalMap),"rock albedo is not interpreted as a normal map");
+  }
+  AE_EXPECT_TRUE(imported.textures.size()>=4,"all four layers decoded");
+  for(const auto &texture:imported.textures)AE_EXPECT_TRUE(texture&&texture->srgb,"all terrain layer bindings decode as sRGB albedo");
 }
 AE_TEST(terrain_sculpt_paint_and_dig_change_geometry) {
   resources::TerrainRecipe r;
@@ -456,4 +570,193 @@ AE_TEST(terrain_path_is_continuous_and_zero_opacity_preserves_volume) {
   r.strokes.push_back({resources::TerrainTool::Dig, 0, 4, 0, 8, 0, 0});
   AE_EXPECT_TRUE(resources::generateTerrain(r, mesh, error), error.c_str());
   AE_EXPECT_EQ(digest(mesh), before, "zero opacity dig is a no-op");
+}
+
+AE_TEST(terrain_solid_heightfield_is_closed_across_chunks) {
+  resources::TerrainRecipe r;
+  r.solidBase = true;
+  r.baseDepth = 6;
+  r.island = true;
+  r.strokes = {{resources::TerrainTool::Lower, 0, 0, 0, 12, 32, 0},
+               {resources::TerrainTool::Paint, 0, 0, 0, 128, 1, 3}};
+  resources::TerrainMesh mesh;
+  std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r, mesh, error), error.c_str());
+  AE_EXPECT_EQ(mesh.chunks, 4u, "same four chunks include floor and perimeter");
+  AE_EXPECT_EQ(mesh.triangles, 4 * r.cells * r.cells + 8 * r.cells,
+               "only top, bottom and outer perimeter; no internal walls");
+  using Point = std::array<float, 3>;
+  using Edge = std::pair<Point, Point>;
+  std::map<Edge, std::pair<u32, i32>> edges;
+  float minimumTop = std::numeric_limits<float>::max();
+  float minimumBottom = minimumTop, maximumBottom = -minimumTop;
+  double volume = 0;
+  u32 floorTriangles = 0, wallTriangles = 0;
+  for (const auto &part : mesh.parts) {
+    AE_EXPECT_EQ(part.y, 0u, "stable heightfield chunk coordinates");
+    for (usize i = 0; i < part.vertices.size(); i += 3) {
+      const auto *triangle = part.vertices.data() + i;
+      for (usize j = 0; j < 3; ++j) {
+        const auto &v = triangle[j];
+        const auto &next = triangle[(j + 1) % 3];
+        Point a{v.position[0], v.position[1], v.position[2]};
+        Point b{next.position[0], next.position[1], next.position[2]};
+        const bool forward = a < b;
+        auto &edge = edges[forward ? Edge{a, b} : Edge{b, a}];
+        ++edge.first;
+        edge.second += forward ? 1 : -1;
+        const float length = v.normal[0] * v.normal[0] +
+                             v.normal[1] * v.normal[1] +
+                             v.normal[2] * v.normal[2];
+        AE_EXPECT_TRUE(std::abs(length - 1) < .0001f,
+                       "solid shell has finite unit normals");
+        AE_EXPECT_TRUE(std::isfinite(v.uv[0]) && std::isfinite(v.uv[1]),
+                       "solid shell has finite projected texture coordinates");
+        if (v.normal[1] > 0)
+          minimumTop = std::min(minimumTop, v.position[1]);
+        else if (v.normal[1] == -1) {
+          minimumBottom = std::min(minimumBottom, v.position[1]);
+          maximumBottom = std::max(maximumBottom, v.position[1]);
+        }
+      }
+      if (triangle[0].normal[1] == -1) {
+        ++floorTriangles;
+        AE_EXPECT_EQ(part.layer, 1u, "floor stays rock when surface is painted");
+      } else if (triangle[0].normal[1] == 0) {
+        ++wallTriangles;
+        AE_EXPECT_EQ(part.layer, 1u, "wall stays rock when surface is painted");
+        for (usize j = 0; j < 3; ++j) {
+          const auto &v = triangle[j];
+          const float coordinate = v.normal[0] != 0 ? v.position[0]
+                                                    : v.position[2];
+          const float outward = v.normal[0] != 0 ? v.normal[0] : v.normal[2];
+          AE_EXPECT_EQ(coordinate, outward * r.size * .5f,
+                       "walls are outward facing at the footprint edge");
+        }
+      }
+      const auto *a = triangle[0].position, *b = triangle[1].position,
+                 *c = triangle[2].position;
+      volume += (double(a[0]) * (double(b[1]) * c[2] - double(b[2]) * c[1]) +
+                 double(a[1]) * (double(b[2]) * c[0] - double(b[0]) * c[2]) +
+                 double(a[2]) * (double(b[0]) * c[1] - double(b[1]) * c[0])) /
+                6;
+    }
+  }
+  for (const auto &[edge, count] : edges) {
+    (void)edge;
+    AE_EXPECT_EQ(count.first, 2u, "each edge is shared by exactly two faces");
+    AE_EXPECT_EQ(count.second, 0, "shared edges have opposite winding");
+  }
+  AE_EXPECT_EQ(minimumBottom, maximumBottom, "underside is a horizontal plane");
+  AE_EXPECT_TRUE(std::abs(minimumTop - minimumBottom - r.baseDepth) < .0001f,
+                 "minimum thickness follows the lowest sculpted point");
+  AE_EXPECT_EQ(floorTriangles, 2 * r.cells * r.cells, "complete planar floor");
+  AE_EXPECT_EQ(wallTriangles, 8 * r.cells, "four closed outer walls");
+  AE_EXPECT_TRUE(volume > 0, "solid triangle winding encloses positive volume");
+}
+
+AE_TEST(terrain_solid_recipe_migrates_legacy_and_roundtrips_glb) {
+  resources::TerrainRecipe r;
+  r.solidBase = true;
+  r.baseDepth = 19;
+  std::string error;
+  const std::string legacy =
+      "AETERRAIN1 0 1337 32 24 4 64 16 4 3 4 0 1 1 0 0 0 0 4 1 0";
+  AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(legacy, r, error),
+                 error.c_str());
+  AE_EXPECT_TRUE(!r.solidBase, "legacy geometry stays an open surface");
+  AE_EXPECT_EQ(r.baseDepth, 8.f, "legacy recipe receives unused depth default");
+  AE_EXPECT_EQ(r.strokes.size(), usize(1), "legacy edits are preserved");
+  resources::TerrainMesh surface, solid;
+  AE_EXPECT_TRUE(resources::generateTerrain(r, surface, error), error.c_str());
+  AE_EXPECT_EQ(surface.triangles, 2 * r.cells * r.cells,
+               "legacy remesh does not acquire a base");
+  r.solidBase = true;
+  r.baseDepth = 12.5f;
+  AE_EXPECT_TRUE(resources::generateTerrain(r, solid, error), error.c_str());
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(resources::writeTerrainGlb(r, solid, {}, bytes, error),
+                 error.c_str());
+  resources::GltfImport imported;
+  AE_EXPECT_TRUE(resources::importGlb(bytes, {}, {}, imported),
+                 imported.diagnostic.c_str());
+  resources::TerrainRecipe loaded;
+  AE_EXPECT_TRUE(resources::terrainRecipeFromGlb(bytes, loaded, error),
+                 error.c_str());
+  AE_EXPECT_TRUE(loaded.solidBase, "GLB carries the solid shape option");
+  AE_EXPECT_EQ(loaded.baseDepth, 12.5f, "GLB carries the thickness");
+  resources::TerrainMesh regenerated;
+  AE_EXPECT_TRUE(resources::generateTerrain(loaded, regenerated, error),
+                 error.c_str());
+  AE_EXPECT_EQ(digest(solid), digest(regenerated), "solid reopen is deterministic");
+  const auto before = resources::serializeTerrainRecipe(loaded);
+  AE_EXPECT_TRUE(!resources::deserializeTerrainRecipe(
+                     "AETERRAIN2 0 1337 32 24 4 64 16 4 3 4 0 1 1", loaded,
+                     error),
+                 "truncated new fields are rejected");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(loaded), before,
+               "invalid recipe leaves prior state untouched");
+}
+
+AE_TEST(terrain_solid_depth_limits_budget_and_cancel_are_atomic) {
+  resources::TerrainRecipe r;
+  r.solidBase = true;
+  resources::TerrainMesh mesh;
+  mesh.triangles = 123;
+  std::string error;
+  for (float invalid : {0.f, -.1f, 512.1f,
+                        std::numeric_limits<float>::infinity(),
+                        std::numeric_limits<float>::quiet_NaN()}) {
+    r.baseDepth = invalid;
+    AE_EXPECT_TRUE(!resources::generateTerrain(r, mesh, error),
+                   "invalid thickness rejected");
+    AE_EXPECT_EQ(mesh.triangles, 123u, "bad thickness leaves mesh untouched");
+  }
+  r.baseDepth = .1f;
+  r.cells = 128;
+  u32 callbacks = 0;
+  AE_EXPECT_TRUE(!resources::generateTerrain(r, mesh, error, [&](float) {
+                   return ++callbacks < 3;
+                 }),
+                 "cancel stops partial multi-chunk generation");
+  AE_EXPECT_EQ(mesh.triangles, 123u, "partial solid result is never published");
+  AE_EXPECT_TRUE(resources::generateTerrain(r, mesh, error), error.c_str());
+  AE_EXPECT_EQ(mesh.triangles, 66560u, "maximum heightfield is within budget");
+  AE_EXPECT_EQ(mesh.chunks, 64u, "maximum resolution retains chunk layout");
+  r.baseDepth = 512;
+  r.cells = 8;
+  AE_EXPECT_TRUE(resources::generateTerrain(r, mesh, error), error.c_str());
+}
+
+AE_TEST(terrain_solid_editor_reopen_and_side_bottom_collision) {
+  TerrainFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture ready");
+  resources::TerrainRecipe r;
+  r.cells = 32;
+  r.height = 0;
+  r.base = 4;
+  r.solidBase = true;
+  r.baseDepth = 8;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(r, error), error.c_str());
+  const auto root = f.session.screen().terrainTarget;
+  const auto saved = f.path / "solid.aescene";
+  AE_EXPECT_TRUE(f.session.save(saved.string().c_str(), 0), "save solid scene");
+  AE_EXPECT_TRUE(f.session.load(saved.string().c_str(), 0), "reload solid scene");
+  AE_EXPECT_TRUE(f.session.openTerrain(root), "reopen solid properties");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.solidBase,
+                 "solid setting survives save and load");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.baseDepth, 8.f,
+               "thickness survives save and load");
+  editor::EditorPlayScene play;
+  AE_EXPECT_TRUE(play.start(f.session.document(), f.session.mapScene()),
+                 "runtime accepts solid mesh");
+  runtime::QueryHit hit;
+  const float sideOrigin[]{100, 0, 10}, sideDirection[]{-200, 0, 0};
+  AE_EXPECT_TRUE(play.physics().rayCast(sideOrigin, sideDirection, {}, hit),
+                 "Jolt collides with the outside wall");
+  const float bottomOrigin[]{10, -100, 10}, bottomDirection[]{0, 200, 0};
+  AE_EXPECT_TRUE(play.physics().rayCast(bottomOrigin, bottomDirection, {}, hit),
+                 "Jolt collides with the underside");
+  play.stop();
 }

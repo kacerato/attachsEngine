@@ -136,6 +136,7 @@ public:
                              const EditorRay &ray,const float pose[16],float &distance) const;
   bool pickGeometry(const runtime::SceneGraph &document, EditorEntityId id, EditorPickCandidate &out) const;
   bool pickSlotGeometry(const runtime::SceneGraph &document, EditorEntityId id, u32 slot, EditorPickCandidate &out) const;
+  bool pickResourceGeometry(u32 index,const float world[16],EditorPickCandidate &out) const;
   // Materiais do projeto (MaterialAsset) disponíveis para resolver slots. Trocar
   // a biblioteca não toca geometria: o próximo `extract` já usa os valores.
   struct SharedMaterial {

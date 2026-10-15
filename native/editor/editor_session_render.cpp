@@ -1,4 +1,5 @@
 #include "editor/editor_session.h"
+#include "scene/import_link.h"
 
 namespace ae::editor {
 
@@ -65,6 +66,26 @@ bool EditorSession::loadAssets(std::string_view text) {
 bool EditorSession::extractMap(std::vector<renderer::MapDrawState> &out) const {
   const auto &graph=evaluatedEditorScene();
   if(!mapScene_.extract(graph, out)) return false;
+  if(terrainPreviewCount_ && terrainPreviewEpoch_==sceneEpoch_ && !isPlaying()) {
+    float world[16];
+    if(editorWorldMatrix(document_,state_.terrainTarget,world)) {
+      for(auto &draw:out) {
+        auto id=static_cast<EditorEntityId>(draw.objectId);
+        const auto *object=document_.find(id);
+        const auto *link=object?scene::importLink(object->components):nullptr;
+        if(!link || link->root || link->source!=terrainSource_)continue;
+        for(usize depth=0;id && depth<document_.entityCount();++depth) {
+          if(id==state_.terrainTarget) {draw.visible=false;break;}
+          const auto *entity=document_.find(id);id=entity?entity->parent:0;
+        }
+      }
+      for(u32 i=0;i<terrainPreviewCount_;++i) if(const auto *source=mapScene_.asset(terrainPreviewFirst_+i)) {
+        renderer::MapDrawState draw{};draw.objectId=state_.terrainTarget;
+        draw.sourceDrawIndex=terrainPreviewFirst_+i;
+        if(renderer::prepareMapDrawUpdate(u32(out.size()),*source,world,source->boundsCenter,source->boundsRadius,draw.pose))out.push_back(draw);
+      }
+    }
+  }
   applyLodGroups(graph, out);
   if(state_.clipOpen&&state_.clipPoseSelectionIsolated&&!isPlaying())for(auto &draw:out)
     if(!animationPoseSelectionVisible(draw.objectId))draw.visible=false;

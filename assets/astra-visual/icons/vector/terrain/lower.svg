@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Lower terrain</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="12,76 35,68 61,68 84,76"/>
+    <polyline points="48,16 48,60"/>
+    <polyline points="29,41 48,60 67,41"/>
+  </g>
+</svg>

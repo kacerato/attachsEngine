@@ -1611,7 +1611,8 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       !state.multiSelect && state.selectionSet.size()<=1 && !state.guiSelection.valid() && expandedVisual &&
       &expandedVisual->type()==&scene::Collider::descriptor;
   if (entity != nullptr && !state.guiSelection.valid() && state.tool != EditorGizmoMode::Select &&
-      state.workspace == EditorWorkspace::Scene && !state.cameraViewEntity && !colliderEditing && !(waterRoute(*entity).count && state.waterTab==1)) {
+      state.workspace == EditorWorkspace::Scene && !state.cameraViewEntity && !colliderEditing &&
+      !state.terrainOpen && !(waterRoute(*entity).count && state.waterTab==1)) {
     EditorGizmoSettings settings{};
     settings.screenLengthPixels = 72.0f;
     float world[16];
@@ -9166,6 +9167,21 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Environment);
     return;
   }
+  if(builder.state.terrainInspectorRoot && !onlyComponent && !builder.focusedWindow &&
+     !builder.multiEdit && builder.state.workspace==EditorWorkspace::Scene) {
+    // Unity 6 Terrain Inspector: authoring belongs to the selected object, so
+    // closing the tool or reopening a scene must not hide its editing entry.
+    auto card=takeTop(content,60);takeTop(content,6);
+    const auto hit=card;
+    builder.list.addRect(card,withAlpha(theme.color.accent,.13f),theme.radius.control);
+    card=deflate(card,UiInsets::all(6));
+    builder.list.addImage(centred(takeLeft(card,28),20,20),static_cast<UiImageId>(UiIcon::TerrainEdit),theme.color.accent);
+    builder.label(takeRight(card,16),">",theme.color.accent,theme.type.body,UiAlign::Center);
+    builder.label(takeTop(card,24),"Editar terreno",theme.color.accent,theme.type.caption);
+    builder.label(card,builder.state.terrainInspectorRoot==target?"Gerador, pincéis e camadas":"Editar terreno de origem",
+                  theme.color.textDim,theme.type.label);
+    if(!builder.state.terrainBusy) builder.router.addRegion(hit,widgetId(EditorWidget::TerrainEditSelection));
+  }
   if(builder.state.inspectorSurface==EditorInspectorSurface::Components && !onlyComponent && !builder.focusedWindow) {
     if(builder.state.addingComponent && builder.state.componentSelection==entity->id) {
       buildComponents(builder,content,*entity,addInHeader);return;
@@ -9219,7 +9235,7 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.list.addImage(centred(takeLeft(row,24),16,16),static_cast<UiImageId>(UiIcon::ScenePrefab),theme.color.accent);
     builder.label(row,record?record->path:"Fonte de prefab ausente",record?theme.color.textDim:theme.color.warning,theme.type.caption);
   }
-  if(!builder.multiEdit&&builder.state.workspace==EditorWorkspace::Scene&&!builder.focusedWindow&&!builder.state.document->childrenOf(target).empty()) {
+  if(!builder.state.terrainInspectorRoot&&!builder.multiEdit&&builder.state.workspace==EditorWorkspace::Scene&&!builder.focusedWindow&&!builder.state.document->childrenOf(target).empty()) {
     // Hierarquia articulada: entrada contextual do rig, mesma altura das linhas.
     auto row=takeTop(content,44);builder.router.addRegion(row,static_cast<u32>(RigToolAction::Open));
     builder.label(takeRight(row,20),">",theme.color.accent,theme.type.caption,UiAlign::Center);
@@ -11021,6 +11037,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
         (state.compactPanel == EditorScreenState::CompactPanel::Inspector||(state.rigToolOpen&&state.workspace==EditorWorkspace::Scene))
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
   }
+  if(state.terrainOpen && state.workspace==EditorWorkspace::Scene)hierarchyWidth=inspectorWidth=0;
   const float splitters = (hierarchyWidth > 0.0f ? kSplitterWidth : 0.0f) +
                           (inspectorWidth > 0.0f ? kSplitterWidth : 0.0f);
   const float overflow = hierarchyWidth + inspectorWidth + splitters + kViewportMinimum - available;
@@ -11070,6 +11087,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       layout.diagnosticDock=takeBottom(body,std::min(212.0f,body.height*.32f));
     }
   }
+  if(state.terrainOpen && state.workspace==EditorWorkspace::Scene)body.width=std::max(0.f,terrainPanelRect(state).x-body.x);
   layout.viewport = body;
 
   // O bloqueio ANTES dos controles da barra. O roteador testa da última região
@@ -11109,7 +11127,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addBlocker(banner);
     }
   }
-  if (state.workspace == EditorWorkspace::Scene) buildToolRail(builder, layout.viewport, compact);
+  if (state.workspace == EditorWorkspace::Scene && !state.terrainOpen) buildToolRail(builder, layout.viewport, compact);
   if (!layout.hierarchyPanel.isEmpty())
     layout.hierarchyRowCount =
         buildHierarchy(builder, layout.hierarchyPanel, layout.hierarchyVisibleRows);
@@ -11140,25 +11158,25 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     }
   }
   if(!playing) {
-  if (!compact && !state.status.empty())
+  if (!compact && !state.terrainOpen && !state.status.empty())
     builder.label({layout.viewport.x+8,layout.viewport.bottom()-26,layout.viewport.width-160,24},
                   state.status.c_str(),theme.color.text,theme.type.caption);
-  builder.iconButton(corner, UiIcon::EditorAuthorFrame, widgetId(EditorWidget::Fullscreen));
-  if(state.workspace==EditorWorkspace::Scene&&layout.viewport.height>110) {
+  if(!state.terrainOpen) builder.iconButton(corner, UiIcon::EditorAuthorFrame, widgetId(EditorWidget::Fullscreen));
+  if(!state.terrainOpen && state.workspace==EditorWorkspace::Scene&&layout.viewport.height>110) {
     builder.iconButton({layout.viewport.right()-48,layout.viewport.y+56,40,40},UiIcon::AssetsAnimation,clip_widget::id(clip_widget::Open));
   }
-  builder.iconButton({layout.viewport.right() - kCornerButton * 2.0f - theme.spacing.small * 2.0f,
+  if(!state.terrainOpen) builder.iconButton({layout.viewport.right() - kCornerButton * 2.0f - theme.spacing.small * 2.0f,
                       corner.y, kCornerButton, kCornerButton},
                      UiIcon::EditorAuthorGrid, widgetId(EditorWidget::ViewModeSolid), state.showGrid);
-  builder.iconButton({layout.viewport.x + 8.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
+  if(!state.terrainOpen) builder.iconButton({layout.viewport.x + 8.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::EditorAuthorCamera, widgetId(EditorWidget::FrameSelection));
-  builder.iconButton({layout.viewport.x + 56.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
+  if(!state.terrainOpen) builder.iconButton({layout.viewport.x + 56.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::EditorAuthorFrame, widgetId(EditorWidget::FrameAll));
   // Vistas salvas: o enquadramento é o que torna duas medições comparáveis, e
   // por isso fica ao lado dos controles de câmera, não escondido num menu.
   // Fica DEPOIS de Lighting/Effects (+104..+220): no mesmo lugar, o botão de
   // Lighting cobria este e ele não aparecia no aparelho.
-  if(layout.viewport.width>=324.f) {
+  if(!state.terrainOpen && layout.viewport.width>=324.f) {
   builder.iconButton({layout.viewport.x + 228.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
   // Unity 6 põe as camadas visíveis nas View Options do Scene view; o olho
@@ -11169,7 +11187,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);
-  if(compact) {
+  if(compact && !state.terrainOpen) {
     const float panelX=std::min(104.f,std::max(8.f,layout.viewport.width-48.f));
     const UiRect button{layout.viewport.x+panelX,layout.viewport.y+56,std::min(100.f,layout.viewport.width-panelX-8.f),40};
     list.addRect(button,theme.color.raised,theme.radius.control);
@@ -11184,7 +11202,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     // Secondary scene options belong to the full viewport. An authoring panel
     // must never be painted over or receive their hit regions in portrait.
     if(layout.viewport.width>=324.f) {
-    const float optionsX=layout.viewport.x+104.0f;
+    const float optionsX=layout.viewport.x+(state.terrainOpen?8.f:104.0f);
     const UiRect lighting{optionsX,layout.viewport.y+8.0f,40.0f,40.0f};
     const UiRect effects{optionsX+48.0f,layout.viewport.y+8.0f,40.0f,40.0f};
     const UiRect effectsMenu{optionsX+88.0f,layout.viewport.y+8.0f,28.0f,40.0f};
@@ -11281,7 +11299,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     const float width=std::min(64.0f,(layout.viewport.width-(compact&&!narrowViewport?112:16))/3);
     for(u32 i=0;i<3;++i) {
       const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-(narrowViewport?88:compact?44:76),width-2,narrowViewport?40.f:36.f};
-      const bool active=static_cast<u32>(state.navigation)==i;
+      const bool active=static_cast<u32>(state.navigation)==i && !(state.terrainOpen&&state.terrainBrushArmed);
       list.addRect(cell,active?theme.color.accent:theme.color.raised,theme.radius.control);
       list.addImage(centred(cell,20.0f,20.0f),static_cast<UiImageId>(icons[i]),active?theme.color.accentInk:theme.color.text);
       router.addRegion(cell,widgetId(actions[i]));
@@ -11529,9 +11547,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // desenhado antes, fica por baixo dele.
   if(state.curveField) buildCurveEditor(builder,layout);
   if(state.terrainOpen) {
-    auto panel=layout.inspectorPanel;
-    if(panel.width<260||panel.height<240) panel={state.surface.right()-std::min(330.f,state.surface.width*.52f),layout.topBar.bottom(),std::min(330.f,state.surface.width*.52f),state.surface.bottom()-layout.topBar.bottom()-24};
-    buildTerrainSurface(state,theme,list,router,panel);
+    buildTerrainViewport(state,theme,list,router,layout.viewport);
+    buildTerrainSurface(state,theme,list,router,terrainPanelRect(state));
   }
   buildNumericWindow(builder);
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);

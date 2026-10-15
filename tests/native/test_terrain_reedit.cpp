@@ -1,0 +1,630 @@
+#include "editor/editor_import_transaction.h"
+#include "editor/editor_screen.h"
+#include "editor/editor_session.h"
+#include "editor/editor_theme.h"
+#include "harness.h"
+#include "renderer/authoring_geometry.h"
+#include "scene/import_link.h"
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <filesystem>
+#include <thread>
+
+using namespace ae;
+namespace {
+struct ReeditFixture {
+  editor::EditorSession session;
+  ui::UiFont font;
+  ui::UiIconAtlas icons;
+  std::vector<u8> vertices;
+  std::vector<u32> indices;
+  std::vector<renderer::MapDrawRecord> draws;
+  std::vector<renderer::MapMaterialRecord> materials;
+  std::filesystem::path path;
+  bool ready = false;
+  ReeditFixture() {
+    path = std::filesystem::temp_directory_path() /
+           ("astra-terrain-reedit-" + std::to_string(
+             std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directory(path);
+    renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials);
+    session.importMap(draws, materials, false, vertices, indices, 0);
+    session.setGeometryPublisher(
+        [this](std::span<const u8> v, std::span<const u32> i,
+               std::span<const renderer::MapDrawRecord> d,
+               std::span<const renderer::MapMaterialRecord> m,
+               std::span<const renderer::SharedAuthoringTexture>,
+               editor::EditorSession::PublishedGeometry &out) {
+          vertices.clear(); indices.clear(); draws.clear(); materials.clear();
+          renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials);
+          const auto vb = u32(vertices.size() / renderer::MapVertexStride);
+          const auto ib = u32(indices.size()), mb = u32(materials.size());
+          vertices.insert(vertices.end(), v.begin(), v.end());
+          indices.insert(indices.end(), i.begin(), i.end());
+          materials.insert(materials.end(), m.begin(), m.end());
+          for (auto draw : d) {
+            draw.vertexOffset += vb; draw.firstIndex += ib; draw.materialIndex += mb;
+            draw.lodGroupId = u32(draws.size()); draws.push_back(draw);
+          }
+          out = {draws, materials, vertices, indices};
+          return true;
+        });
+    std::vector<u8> fontBytes, iconBytes;
+    ready = editor::EditorImportTransaction::read("assets/astra-visual/ui/astra-ui-font.aeuf", fontBytes) &&
+            editor::EditorImportTransaction::read("assets/astra-visual/ui/astra-ui-icons.aeui", iconBytes) &&
+            font.load(fontBytes) && icons.load(iconBytes);
+    session.initialize(&font, &icons);
+    ready = ready && session.setProjectDirectory(path.string().c_str()) && session.openTerrain();
+  }
+  ~ReeditFixture() {
+    std::error_code error;
+    std::filesystem::remove_all(path, error);
+  }
+  void action(editor::EditorWidget widget) {
+    ui::UiPointerRouting routing;
+    routing.tapped = true;
+    routing.widgetId = editor::widgetId(widget);
+    session.handleTerrainInput({}, routing);
+  }
+  bool tapInspectorEdit(float width, float height) {
+    session.setSurface({0, 0, width, height}, {});
+    session.update();
+    if (session.layout().inspectorPanel.isEmpty()) {
+      if (!tapWidget(editor::widgetId(editor::EditorWidget::CompactPanelMenu)) ||
+          !tapWidget(editor::widgetId(editor::EditorWidget::InspectorToggle))) return false;
+      session.update();
+    }
+    ui::UiDrawList list;
+    list.begin(session.screen().surface, font.metrics(ui::UiFontWeight::Regular));
+    ui::UiInputRouter router;
+    router.beginFrame();
+    editor::buildEditorScreen(session.screen(), editor::editorTheme(), list, router);
+    for (float y = 2; y < height; y += 4)
+      for (float x = 2; x < width; x += 4)
+        if (router.hitTest({x,y}).widgetId == editor::widgetId(editor::EditorWidget::TerrainEditSelection)) {
+          session.handlePointer({11, ui::UiPointerPhase::Down, {x,y}, 1});
+          session.handlePointer({11, ui::UiPointerPhase::Up, {x,y}, 1.1});
+          return session.screen().terrainOpen;
+        }
+    return false;
+  }
+  bool brushPoints(ui::UiPoint &from, ui::UiPoint &to) {
+    session.setSurface({0, 0, 1280, 720}, {});
+    session.update();
+    ui::UiDrawList list;
+    list.begin(session.screen().surface, font.metrics(ui::UiFontWeight::Regular));
+    ui::UiInputRouter router;
+    router.beginFrame();
+    editor::buildEditorScreen(session.screen(), editor::editorTheme(), list, router);
+    const auto candidates = session.pickCandidates();
+    const auto root = session.screen().terrainTarget;
+    const auto source = scene::importLink(session.document().find(root)->components)->source;
+    bool found = false;
+    for (float y = 4; y < 720; y += 12)
+      for (float x = 4; x < 1280; x += 12) {
+        if (router.hitTest({x,y}).target != ui::UiPointerTarget::Viewport) continue;
+        const auto hit = editor::pickNearest(candidates, editor::screenPointToRay(session.view(), {x,y}), 0, true);
+        const auto *object = hit.hit ? session.document().find(hit.id) : nullptr;
+        const auto *link = object ? scene::importLink(object->components) : nullptr;
+        if (!link || link->source != source) continue;
+        if (!found) {from = {x,y}; found = true;}
+        if ((from.x-x)*(from.x-x)+(from.y-y)*(from.y-y) >= 80*80) {to = {x,y}; return true;}
+      }
+    return false;
+  }
+  bool finishGeneration() {
+    for (u32 i = 0; i < 5000 && session.screen().terrainBusy; ++i) {
+      session.refreshTerrainJob();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return !session.screen().terrainBusy;
+  }
+  bool widgetPoint(u32 widget, ui::UiPoint &point, bool terrainOnly = false) {
+    session.update();
+    ui::UiDrawList list;
+    list.begin(session.screen().surface, font.metrics(ui::UiFontWeight::Regular));
+    ui::UiInputRouter router;
+    router.beginFrame();
+    editor::buildEditorScreen(session.screen(), editor::editorTheme(), list, router);
+    const auto terrainPanel = editor::terrainPanelRect(session.screen());
+    for (float y = 2; y < session.screen().surface.height; y += 4)
+      for (float x = 2; x < session.screen().surface.width; x += 4)
+        if ((!terrainOnly || terrainPanel.contains({x,y})) &&
+            router.hitTest({x,y}).widgetId == widget) {
+          point = {x,y};
+          return true;
+        }
+    return false;
+  }
+  bool tapWidget(u32 widget, bool terrainOnly = false) {
+    ui::UiPoint point;
+    if (!widgetPoint(widget, point, terrainOnly)) return false;
+    session.handlePointer({12, ui::UiPointerPhase::Down, point, 1});
+    session.handlePointer({12, ui::UiPointerPhase::Up, point, 1.1});
+    return true;
+  }
+  bool scrollTerrain(float distance) {
+    ui::UiPoint point;
+    if (!widgetPoint(editor::widgetId(editor::EditorWidget::TerrainScroll), point, true)) return false;
+    const ui::UiPoint end{point.x, point.y-distance};
+    session.handlePointer({13, ui::UiPointerPhase::Down, point, 2});
+    session.handlePointer({13, ui::UiPointerPhase::Move, end, 2.2});
+    session.handlePointer({13, ui::UiPointerPhase::Up, end, 2.3});
+    session.update();
+    return session.screen().terrainScroll > 0;
+  }
+};
+} // namespace
+
+AE_TEST(terrain_reedit_inspector_touch_for_root_and_chunks_all_modes) {
+  for (u32 mode = 0; mode < 3; ++mode) {
+    ReeditFixture f;
+    AE_EXPECT_TRUE(f.ready, "reedit fixture initialized");
+    resources::TerrainRecipe recipe;
+    recipe.mode = resources::TerrainMode(mode);
+    recipe.cells = recipe.verticalCells = 16;
+    recipe.seed = 340 + mode;
+    recipe.strokes.push_back({resources::TerrainTool::Raise, 0, 0, 0, 12, 2, 0});
+    std::string error;
+    AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+    const auto root = f.session.screen().terrainTarget;
+    const auto chunks = f.session.document().childrenOf(root);
+    AE_EXPECT_TRUE(!chunks.empty(), "terrain has selectable chunks");
+    const auto objects = f.session.document().entityCount();
+    for (const auto selected : {root, chunks.front()}) {
+      f.action(editor::EditorWidget::TerrainClose);
+      f.session.setSelection(selected);
+      f.session.refreshTerrainJob();
+      AE_EXPECT_EQ(f.session.screen().terrainInspectorRoot, root, "inspector resolves terrain owner");
+      AE_EXPECT_TRUE(f.tapInspectorEdit(655, 300), "real touch reopens editor from phone inspector");
+      AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "context edits existing root");
+      AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),
+                   resources::serializeTerrainRecipe(recipe), "exact original recipe loaded");
+      AE_EXPECT_EQ(f.session.document().entityCount(), objects, "opening never duplicates terrain");
+    }
+    auto edited = f.session.screen().terrainDraft;
+    edited.strokes.push_back({resources::TerrainTool::Lower, 4, 0, 4, 6, 1, 0});
+    AE_EXPECT_TRUE(f.session.applyTerrain(edited, error), error.c_str());
+    AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "apply after reedit preserves root");
+    AE_EXPECT_TRUE(f.session.history().undo(f.session.document()), "reedit remains undoable");
+    f.session.refreshTerrainJob();
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(), recipe.strokes.size(), "undo refreshes recipe");
+    AE_EXPECT_TRUE(f.session.history().redo(f.session.document()), "reedit remains redoable");
+    f.session.refreshTerrainJob();
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(), edited.strokes.size(), "redo refreshes recipe");
+  }
+}
+
+AE_TEST(terrain_manage_touch_undo_redo_keeps_controls_and_brush_context) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  resources::TerrainRecipe original;
+  original.cells = 16;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(original, error), error.c_str());
+  const auto root = f.session.screen().terrainTarget;
+  auto edited = original;
+  edited.seed += 1;
+  edited.strokes.push_back({resources::TerrainTool::Raise, 0, 0, 0, 8, 2, 0});
+  AE_EXPECT_TRUE(f.session.applyTerrain(edited, error), error.c_str());
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(9, 7) && f.session.setTerrainNumber(10, 2.25) &&
+                 f.session.setTerrainNumber(11, 5) && f.session.setTerrainNumber(12, 9) &&
+                 f.session.setTerrainNumber(13, -4), "configure precision brush");
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainLayerBase)+3));
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+
+                               u32(resources::TerrainTool::Flatten)));
+  f.action(editor::EditorWidget::TerrainSculpt);
+  const auto brush = f.session.screen().terrainBrush;
+  f.session.setSurface({0, 0, 655, 300}, {});
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainTabBase)+3, true),
+                 "phone touch opens Manage");
+  AE_EXPECT_TRUE(f.scrollTerrain(28), "phone touch scrolls Manage content");
+  const auto scroll = f.session.screen().terrainScroll;
+  ui::UiPoint savePoint;
+  AE_EXPECT_TRUE(f.widgetPoint(editor::widgetId(editor::EditorWidget::TerrainSave), savePoint, true),
+                 "save is visible before Undo");
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::Undo), true),
+                 "touch Undo inside Manage, not toolbar");
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().terrainTab, 3u, "Undo leaves Manage selected");
+  AE_EXPECT_EQ(f.session.screen().terrainScroll, scroll, "Undo keeps the scrolled control positions");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),
+               resources::serializeTerrainRecipe(original), "Undo reloads the original recipe");
+  AE_EXPECT_EQ(f.session.screen().terrainAppliedRecipe, resources::serializeTerrainRecipe(original),
+               "Undo updates the applied recipe used by Save");
+  AE_EXPECT_TRUE(!f.session.screen().terrainBrushArmed, "Undo disarms painting on a replaced source");
+  ui::UiPoint saveAfterUndo;
+  AE_EXPECT_TRUE(f.widgetPoint(editor::widgetId(editor::EditorWidget::TerrainSave), saveAfterUndo, true),
+                 "Save remains visible after Undo");
+  AE_EXPECT_TRUE(savePoint.x == saveAfterUndo.x && savePoint.y == saveAfterUndo.y,
+                 "the next finger position still addresses Save");
+  f.session.handlePointer({41, ui::UiPointerPhase::Down, savePoint, 3});
+  f.session.handlePointer({41, ui::UiPointerPhase::Up, savePoint, 3.1});
+  AE_EXPECT_TRUE(f.session.screen().saveRequested, "same-position touch requests scene save");
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::Redo), true),
+                 "touch Redo inside the same Manage panel");
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().terrainTab, 3u, "Redo leaves Manage selected");
+  AE_EXPECT_EQ(f.session.screen().terrainScroll, scroll, "Redo keeps scroll");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),
+               resources::serializeTerrainRecipe(edited), "Redo reloads the edited recipe");
+  const auto &restored = f.session.screen().terrainBrush;
+  AE_EXPECT_TRUE(restored.tool == brush.tool && restored.x == brush.x && restored.y == brush.y &&
+                 restored.z == brush.z && restored.radius == brush.radius &&
+                 restored.strength == brush.strength && restored.layer == brush.layer,
+                 "Undo/Redo keep the selected tool and every configured brush value");
+
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainTabBase)+1, true) &&
+                 f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainSectionBase)+1, true),
+                 "touch opens brush Precision subsection");
+  AE_EXPECT_TRUE(f.scrollTerrain(24), "scroll precision controls");
+  const auto precisionScroll = f.session.screen().terrainScroll;
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()), "Undo while precision is open");
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().terrainTab, 1u, "Undo retains brush tab");
+  AE_EXPECT_EQ(f.session.screen().terrainSection, 1u, "Undo retains precision subsection");
+  AE_EXPECT_EQ(f.session.screen().terrainScroll, precisionScroll, "Undo retains precision scroll");
+  f.action(editor::EditorWidget::TerrainClose);
+  f.session.setSelection(root);
+  AE_EXPECT_TRUE(f.tapInspectorEdit(655, 300), "explicit Inspector reopening remains available");
+  AE_EXPECT_EQ(f.session.screen().terrainTab, 1u, "explicit Inspector opening selects brush tab");
+  AE_EXPECT_EQ(f.session.screen().terrainSection, 0u, "explicit Inspector opening starts in tools");
+}
+
+AE_TEST(terrain_failed_history_reload_is_cached_and_explicit_reopen_recovers) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  resources::TerrainRecipe original;
+  original.cells = 16;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(original, error), error.c_str());
+  const auto root = f.session.screen().terrainTarget;
+  const auto originalSource = scene::importLink(f.session.document().find(root)->components)->source;
+  const auto originalPath = f.path / f.session.assets().find(originalSource)->path;
+  AE_EXPECT_TRUE(f.session.openTerrain(root), "cache the valid original source");
+  auto edited = original;
+  edited.seed += 1;
+  AE_EXPECT_TRUE(f.session.applyTerrain(edited, error), error.c_str());
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(3, 27), "keep an unapplied draft to protect on read failure");
+  const auto draft = resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  const auto applied = f.session.screen().terrainAppliedRecipe;
+  std::vector<u8> sourceBytes;
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::read(originalPath, sourceBytes), "save valid source bytes");
+  const std::vector<u8> corrupt{0, 1, 2, 3};
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::write(originalPath, corrupt), "simulate corrupt old revision");
+  f.action(editor::EditorWidget::TerrainSculpt);
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()), "Undo selects the corrupt revision");
+  f.session.refreshTerrainJob();
+  AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "failed reload keeps target");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), draft,
+               "failed reload preserves unapplied draft");
+  AE_EXPECT_EQ(f.session.screen().terrainAppliedRecipe, applied, "failure does not pretend draft is loaded");
+  AE_EXPECT_TRUE(!f.session.screen().terrainBrushArmed, "failed reload disarms brush");
+  AE_EXPECT_TRUE(f.session.screen().terrainMessage.find("indisponível") != std::string::npos,
+                 "failure explains explicit recovery");
+  for (const auto control : {editor::EditorWidget::TerrainSculpt, editor::EditorWidget::TerrainStamp,
+                             editor::EditorWidget::TerrainGenerate}) f.action(control);
+  f.session.startTerrainJob();
+  AE_EXPECT_TRUE(!f.session.screen().terrainBrushArmed && !f.session.screen().terrainBusy,
+                 "stale recipe cannot paint or start generation");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), draft,
+               "refused stamp does not append to the preserved draft");
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::write(originalPath, sourceBytes), "restore file without registry change");
+  for (u32 frame = 0; frame < 12; ++frame) f.session.refreshTerrainJob();
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), draft,
+               "restored file is not retried on every frame after failure");
+  f.session.setSurface({0, 0, 1280, 720}, {});
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainTabBase)+3, true) &&
+                 f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainLoad), true),
+                 "explicit Manage reopening retries the recovered source through UI");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),
+               resources::serializeTerrainRecipe(original), "explicit retry loads the restored original recipe");
+  AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "recovery edits the existing root");
+  f.action(editor::EditorWidget::TerrainSculpt);
+  AE_EXPECT_TRUE(f.session.screen().terrainBrushArmed, "successful recovery permits painting again");
+}
+
+AE_TEST(terrain_reedit_renamed_source_scene_reload_and_failed_open_are_safe) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells = 16;
+  recipe.seed = 872;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+  const auto root = f.session.screen().terrainTarget;
+  const auto source = scene::importLink(f.session.document().find(root)->components)->source;
+  auto registry = f.session.assets();
+  const auto oldPath = registry.find(source)->path;
+  std::filesystem::create_directory(f.path / "Paisagem");
+  const std::string newPath = "Paisagem/Montanhas.glb";
+  std::filesystem::rename(f.path / oldPath, f.path / newPath);
+  AE_EXPECT_TRUE(registry.setPath(source, newPath), "rename registered asset");
+  AE_EXPECT_TRUE(f.session.loadAssets(registry.serialize()), "publish renamed registry");
+  AE_EXPECT_EQ(f.session.terrainRoot(root), root, "authoring discovery survives source rename");
+  f.session.history().begin("Attachment");
+  const auto child = f.session.history().createEntity(f.session.document(), root, editor::EditorEntityKind::Folder, "Anexo");
+  f.session.history().end();
+  AE_EXPECT_TRUE(child != 0, "attached object created");
+  const auto saved = f.path / "scene.aescene";
+  AE_EXPECT_TRUE(f.session.save(saved.string().c_str(), 0) && f.session.load(saved.string().c_str(), 0), "scene save and reopen");
+  f.action(editor::EditorWidget::TerrainClose);
+  f.session.setSelection(child);
+  f.action(editor::EditorWidget::TerrainOpen);
+  AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "main entry resumes selected terrain through attachment");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.seed, recipe.seed, "reopened persisted recipe");
+  const auto before = resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  std::filesystem::rename(f.path / newPath, f.path / "temporary.glb");
+  AE_EXPECT_TRUE(!f.session.openTerrain(root), "missing source refuses edit");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), before, "failure preserves draft");
+  AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "failure preserves target");
+  std::filesystem::rename(f.path / "temporary.glb", f.path / newPath);
+  AE_EXPECT_TRUE(f.session.openTerrain(child), "restored source reopens through attachment");
+  f.action(editor::EditorWidget::TerrainNew);
+  AE_EXPECT_EQ(f.session.screen().terrainTarget, 0u, "explicit New starts independent draft");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.solidBase, "new terrain defaults to a solid base");
+}
+
+AE_TEST(terrain_brush_touch_drag_is_one_edit_and_cancel_or_limit_preserves_recipe) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells = 16;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(9, 1), "small brush for spaced samples");
+  f.action(editor::EditorWidget::TerrainSculpt);
+  ui::UiPoint from, to;
+  AE_EXPECT_TRUE(f.brushPoints(from, to), "visible terrain exposes two real touch points");
+  const auto undoBefore = f.session.history().undoDepth();
+  const auto saved = resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  f.session.handlePointer({21, ui::UiPointerPhase::Down, from, 2});
+  f.session.handlePointer({21, ui::UiPointerPhase::Move, to, 2.2});
+  AE_EXPECT_TRUE(!f.session.screen().terrainBusy, "drag does not rebuild per move");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), saved, "draft unchanged before release");
+  f.session.handlePointer({21, ui::UiPointerPhase::Cancel, to, 2.3});
+  AE_EXPECT_TRUE(!f.session.screen().terrainBusy, "cancel does not launch generation");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), saved, "cancel discards all pending samples");
+  f.session.handlePointer({22, ui::UiPointerPhase::Down, from, 3});
+  f.session.handlePointer({22, ui::UiPointerPhase::Move, to, 3.2});
+  f.session.handlePointer({22, ui::UiPointerPhase::Up, to, 3.3});
+  AE_EXPECT_TRUE(f.session.screen().terrainBusy, "viewport release launches generation without widget tapped");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.strokes.size() > 1, "drag emits spaced brush samples");
+  AE_EXPECT_TRUE(f.finishGeneration(), "stroke generation completes");
+  AE_EXPECT_EQ(f.session.history().undoDepth(), undoBefore+1, "whole gesture is one undo step");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()), "undo whole stroke");
+  f.session.refreshTerrainJob();
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), saved, "undo restores pre-drag recipe");
+
+  recipe.strokes.resize(4096);
+  for (auto &stroke : recipe.strokes) stroke.strength = 0;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+  f.action(editor::EditorWidget::TerrainSculpt);
+  AE_EXPECT_TRUE(f.brushPoints(from, to), "terrain remains touchable at recipe limit");
+  const auto full = resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  f.session.handlePointer({23, ui::UiPointerPhase::Down, from, 4});
+  f.session.handlePointer({23, ui::UiPointerPhase::Up, from, 4.1});
+  AE_EXPECT_TRUE(!f.session.screen().terrainBusy, "full recipe refuses generation");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), full, "over-budget gesture is atomic");
+  AE_EXPECT_TRUE(f.session.screen().terrainMessage.find("4096") != std::string::npos, "limit has explicit feedback");
+}
+
+AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells=16;recipe.height=0;recipe.base=4;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  const auto source=scene::importLink(f.session.document().find(root)->components)->source;
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(resources::TerrainTool::Raise)));
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(9,16) && f.session.setTerrainNumber(10,3),"configure brush");
+  ui::UiPoint from,to;
+  AE_EXPECT_TRUE(f.brushPoints(from,to),"pickable terrain");
+  const auto revision=f.session.document().revision();
+  const auto undo=f.session.history().undoDepth();
+  const auto registry=f.session.assets().serialize();
+  const auto serialized=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  const auto files=[&] {
+    usize count=0;
+    for(const auto &entry:std::filesystem::recursive_directory_iterator(f.path)) {
+      if(entry.is_regular_file())++count;
+    }
+    return count;
+  };
+  const auto filesBefore=files();
+  const auto publishedDraws=f.draws.size();
+  f.session.handlePointer({25,ui::UiPointerPhase::Down,from,5});
+  f.session.handlePointer({25,ui::UiPointerPhase::Move,to,5.1});
+  for(u32 i=0;i<5000 && !f.session.screen().terrainLivePreview;++i) {
+    f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  AE_EXPECT_TRUE(f.session.screen().terrainLivePreview,f.session.screen().terrainMessage.c_str());
+  for(u32 i=0;i<5000 && f.session.screen().terrainPreviewUpdates<2;++i) {
+    f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewUpdates>=2,"coalesced drag publishes newer geometry while gesture remains captured");
+  AE_EXPECT_TRUE(f.session.screen().terrainCursorVisible && f.session.screen().terrainCursorLines.size()>=96,
+                 "surface cursor includes outer boundary and falloff ring");
+  AE_EXPECT_TRUE(f.draws.size()>publishedDraws,"live preview publishes additional real mesh draws");
+  std::vector<renderer::MapDrawState> visible;
+  AE_EXPECT_TRUE(f.session.extractMap(visible),"extract live scene");
+  bool previewVisible=false,raised=false;
+  for(const auto &draw:visible)if(draw.visible && draw.objectId==root && draw.sourceDrawIndex>=publishedDraws) {
+    previewVisible=true;
+    const auto &mesh=f.draws[draw.sourceDrawIndex];
+    for(u32 i=0;i<mesh.indexCount;++i) {
+      float p[3];std::memcpy(p,f.vertices.data()+(mesh.vertexOffset+f.indices[mesh.firstIndex+i])*renderer::MapVertexStride,sizeof(p));
+      raised|=p[1]>recipe.base+.05f;
+    }
+  }
+  AE_EXPECT_TRUE(previewVisible && raised,"render extraction exposes raised geometry while pointer is down");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"preview cannot mutate document revision");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),undo,"preview cannot add Undo steps");
+  AE_EXPECT_EQ(f.session.assets().serialize(),registry,"preview cannot register resources");
+  AE_EXPECT_EQ(files(),filesBefore,"preview cannot create files");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),serialized,"preview keeps draft immutable");
+  AE_EXPECT_EQ(scene::importLink(f.session.document().find(root)->components)->source,source,"preview keeps source link");
+  f.session.handlePointer({25,ui::UiPointerPhase::Cancel,to,5.2});
+  f.session.refreshTerrainJob();
+  AE_EXPECT_TRUE(!f.session.screen().terrainLivePreview && !f.session.screen().terrainCursorVisible,"cancel clears preview and cursor");
+  AE_EXPECT_EQ(f.draws.size(),publishedDraws,"cancel restores original render package immediately");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"cancel preserves document");
+  AE_EXPECT_EQ(f.session.assets().serialize(),registry,"cancel preserves registry");
+}
+
+AE_TEST(terrain_open_from_geometry_context_dismisses_creation_overlay) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  f.action(editor::EditorWidget::TerrainClose);
+  f.session.setSelection(f.session.document().root());
+  f.session.setSurface({0, 0, 1280, 720}, {});
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::HierarchyAdd)), "open real Create context menu");
+  AE_EXPECT_TRUE(f.session.screen().contextMenu, "context is visible");
+  AE_EXPECT_TRUE(f.tapWidget(editor::context_menu_widget::id(editor::context_menu_widget::Category+1)), "open Geometry category");
+  bool opened = false;
+  for (u32 page = 0; page < 12 && !opened; ++page) {
+    opened = f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainOpen));
+    if (!opened) {
+      const auto window = f.session.layout().contextMenuWindow;
+      const ui::UiPoint down{window.x+window.width*.5f,window.bottom()-12};
+      const ui::UiPoint up{down.x,window.y+12};
+      f.session.handlePointer({13, ui::UiPointerPhase::Down, down, 2});
+      f.session.handlePointer({13, ui::UiPointerPhase::Move, up, 2.2});
+      f.session.handlePointer({13, ui::UiPointerPhase::Up, up, 2.3});
+    }
+  }
+  AE_EXPECT_TRUE(opened && f.session.screen().terrainOpen, "context action opens real terrain editor");
+  AE_EXPECT_TRUE(!f.session.screen().contextMenu && !f.session.screen().contextMenuCreating && !f.session.screen().creationMenu,
+                 "all creation overlays close before terrain authoring");
+}
+
+AE_TEST(terrain_flatten_and_path_viewport_keep_configured_level_and_change_surface) {
+  for (const auto tool : {resources::TerrainTool::Flatten, resources::TerrainTool::Path}) {
+    ReeditFixture f;
+    AE_EXPECT_TRUE(f.ready, "fixture initialized");
+    resources::TerrainRecipe recipe;
+    recipe.cells = 16;
+    recipe.height = 0;
+    recipe.base = 2;
+    std::string error;
+    AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+    f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(tool)));
+    constexpr float targetLevel = 18;
+    AE_EXPECT_TRUE(f.session.setTerrainNumber(9, 24) && f.session.setTerrainNumber(10, 128) &&
+                   f.session.setTerrainNumber(12, targetLevel), "configure radius, strength and precise level");
+    f.action(editor::EditorWidget::TerrainSculpt);
+    ui::UiPoint from, to;
+    AE_EXPECT_TRUE(f.brushPoints(from, to), "flat starting terrain has visible brush targets");
+    f.session.handlePointer({31, ui::UiPointerPhase::Down, from, 2});
+    f.session.handlePointer({31, ui::UiPointerPhase::Move, to, 2.2});
+    f.session.handlePointer({31, ui::UiPointerPhase::Up, to, 2.3});
+    AE_EXPECT_TRUE(f.session.screen().terrainBusy, "level brush commits from the viewport");
+    AE_EXPECT_TRUE(f.finishGeneration(), "level brush generation completes");
+    const auto &edited = f.session.screen().terrainDraft;
+    AE_EXPECT_TRUE(!edited.strokes.empty(), "level gesture produced authoring samples");
+    AE_EXPECT_EQ(f.session.screen().terrainBrush.y, targetLevel, "precision control keeps configured level");
+    for (const auto &stroke : edited.strokes)
+      AE_EXPECT_EQ(stroke.y, targetLevel, "sample uses configured level instead of picked surface height");
+
+    // Query the published picking geometry, not a separately generated copy.
+    // Move slightly inside the perimeter so an edge tap cannot cause a border
+    // precision miss. The wide, strong brush flattens these vertices completely.
+    const auto &stroke = edited.strokes.front();
+    editor::EditorRay ray;
+    ray.origin[0] = std::clamp(stroke.x, -28.f, 28.f);
+    ray.origin[1] = 100;
+    ray.origin[2] = std::clamp(stroke.z, -28.f, 28.f);
+    ray.direction[1] = -1;
+    ray.valid = true;
+    ray.maximumDistance = 200;
+    const auto hit = editor::pickNearest(f.session.pickCandidates(), ray, 0, true);
+    AE_EXPECT_TRUE(hit.hit, "published terrain remains pickable after level edit");
+    AE_EXPECT_TRUE(std::abs((100-hit.distance)-targetLevel) < .01f,
+                   "published surface reaches configured target level");
+  }
+}
+
+AE_TEST(terrain_open_heightfield_normalizes_volume_only_brushes) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells = recipe.verticalCells = 16;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+  const auto heightfield = f.session.screen().terrainTarget;
+  f.action(editor::EditorWidget::TerrainNew);
+  recipe.mode = resources::TerrainMode::SmoothVoxel;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+  const auto voxel = f.session.screen().terrainTarget;
+  for (const auto tool : {resources::TerrainTool::Dig, resources::TerrainTool::Add}) {
+    AE_EXPECT_TRUE(f.session.openTerrain(voxel), "open editable voxel");
+    f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(tool)));
+    AE_EXPECT_EQ(f.session.screen().terrainBrush.tool, tool, "voxel accepts volume brush");
+    AE_EXPECT_TRUE(f.session.openTerrain(heightfield), "open existing heightfield");
+    AE_EXPECT_EQ(f.session.screen().terrainBrush.tool, resources::TerrainTool::Raise,
+                 "heightfield replaces incompatible brush with Raise");
+  }
+  AE_EXPECT_TRUE(f.session.openTerrain(voxel), "reopen voxel before New");
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(resources::TerrainTool::Dig)));
+  f.action(editor::EditorWidget::TerrainNew);
+  AE_EXPECT_EQ(f.session.screen().terrainBrush.tool, resources::TerrainTool::Raise,
+               "new heightfield also resets incompatible brush");
+}
+
+AE_TEST(terrain_new_revision_budget_refuses_growth_and_reuses_existing_hash) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready, "fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells = 8;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), error.c_str());
+  const auto root = f.session.screen().terrainTarget;
+  const auto source = scene::importLink(f.session.document().find(root)->components)->source;
+
+  resources::TerrainMesh mesh;
+  std::vector<u8> bytes;
+  resources::GltfImport library;
+  AE_EXPECT_TRUE(resources::generateTerrain(recipe, mesh, error) &&
+                 resources::writeTerrainGlb(recipe, mesh, {}, bytes, error) &&
+                 resources::importGlb(bytes, {}, {}, library), "prepare real lightweight geometry library");
+  const auto draw = library.draws.front();
+  const auto node = library.nodes.front();
+  library.draws.assign(4096, draw);
+  library.nodes.assign(4096, node);
+  library.names.resize(4096);
+  library.drawNodes.resize(4096);
+  library.drawSkins.assign(4096, -1);
+  library.drawMorphs.assign(4096, -1);
+  library.keys.clear();
+  for (u32 i = 0; i < 4096; ++i) {
+    library.drawNodes[i] = i;
+    library.nodes[i].name = library.names[i] = "Budget mesh " + std::to_string(i);
+    library.nodes[i].parent = -1;
+  }
+  editor::EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(f.session.publishModel(library, std::string(64, 'b'), "Budget/library.glb", report), report.diagnostic.c_str());
+  f.session.refreshTerrainBudget();
+  AE_EXPECT_TRUE(f.session.screen().terrainRetainedDraws > editor::EditorScreenState::TerrainRetainedDrawLimit,
+                 "real loaded library reaches aggregate draw budget");
+  AE_EXPECT_TRUE(f.session.screen().terrainRetainedBytesKnown && f.session.screen().terrainRetainedBytes > 0 &&
+                 f.session.screen().terrainRetainedBytes < editor::EditorScreenState::TerrainRetainedByteLimit,
+                 "retained CPU payload is measured independently of draw count");
+  const auto registry = f.session.assets().serialize();
+  const auto objects = f.session.document().entityCount();
+  const auto undo = f.session.history().undoDepth();
+  auto changed = recipe;
+  ++changed.seed;
+  AE_EXPECT_TRUE(!f.session.applyTerrain(changed, error), "new terrain revision refuses aggregate over-budget growth");
+  AE_EXPECT_TRUE(error.find("128 MiB") != std::string::npos && error.find("4096") != std::string::npos,
+                 "refusal explains both retention limits");
+  AE_EXPECT_EQ(f.session.assets().serialize(), registry, "refusal does not register a new source");
+  AE_EXPECT_EQ(f.session.document().entityCount(), objects, "refusal preserves scene objects");
+  AE_EXPECT_EQ(f.session.history().undoDepth(), undo, "refusal preserves Undo history");
+  AE_EXPECT_EQ(scene::importLink(f.session.document().find(root)->components)->source, source,
+               "refusal preserves current terrain geometry revision");
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), "existing immutable hash remains usable above budget");
+  AE_EXPECT_EQ(f.session.assets().serialize(), registry, "existing hash adds no retained source");
+}

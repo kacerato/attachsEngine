@@ -43,6 +43,7 @@ const int PUNCTUAL_LIGHT_LIMIT=8;
 #include "impostor_view.glsl"
 #include "material_uv_transform.glsl"
 #include "world_uv.glsl"
+#include "terrain_surface.glsl"
 highp vec2 selectedUv(uint slot) {
   uint set=(frame.materialFlags.y>>(slot*2))&3u;
   return aetherTransformUv(slot,set==2u?aetherWorldUv(vPosition,vNormal):set==1u?vUv1:vUv0);
@@ -253,11 +254,12 @@ void main() {
         vec2(textureSize(BASE_MAP,0)),frame.materialFlags.y>>16u,
         float(textureQueryLevels(BASE_MAP)-1));
   }
-  mediump vec4 baseSample=impostor?
+  bool terrain=(flags&524288u)!=0u;
+  mediump vec4 baseSample=terrain?terrainSurface():impostor?
       textureGrad(BASE_MAP,impostorUv,impostorDx,impostorDy):texture(BASE_MAP,selectedUv(0));
   // R4: origem do alfa do material, antes do corte (igual à cobertura e à sombra).
   if(!impostor) baseSample.a=aetherAlphaFromSource(baseSample);
-  mediump vec4 vertexColor=impostor?vec4(vColor.rgb,1.0):vColor;
+  mediump vec4 vertexColor=terrain?vec4(1):impostor?vec4(vColor.rgb,1.0):vColor;
   mediump vec4 base=baseSample*frame.baseColorFactor*vertexColor;
   // O depth-only de coverage já descartou estes texels, mas discard no shader
   // impede early-Z em parte dos drivers tile-based. Reaplicar o mesmo cutoff

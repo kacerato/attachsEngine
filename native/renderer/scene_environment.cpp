@@ -135,7 +135,7 @@ SceneEnvironment defaultSceneViewEnvironment() {
   result.exposureEv=-0.15f;
   result.bloomThreshold=1.15f;
   result.bloomIntensity=0.08f;
-  result.contrast=1.06f;
+  result.contrast=1.0f;
   result.saturation=1.04f;
   result.vignetteIntensity=0.08f;
   result.ambientOcclusionRadius=0.85f;

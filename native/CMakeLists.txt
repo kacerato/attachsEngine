@@ -1085,7 +1085,8 @@ if(NOT ANDROID)
     target_compile_options(aether_fields50_tests PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
-  add_executable(aether_terrain_tests ../tests/native/family_base_main.cpp ../tests/native/test_terrain.cpp)
+  add_executable(aether_terrain_tests ../tests/native/family_base_main.cpp ../tests/native/test_terrain.cpp
+    ../tests/native/test_terrain_reedit.cpp ../tests/native/test_terrain_ui.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
   add_executable(aether_gui_tests ../tests/native/family_base_main.cpp ../tests/native/test_gui.cpp ../tests/native/test_gui_expansion.cpp

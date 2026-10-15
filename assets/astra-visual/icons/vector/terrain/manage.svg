@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Manage terrain chunks</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="10,27 27,18 44,27 27,36 10,27"/>
+    <polyline points="10,27 10,38 27,47 44,38 44,27"/>
+    <polyline points="27,36 27,47"/>
+    <polyline points="52,27 69,18 86,27 69,36 52,27"/>
+    <polyline points="52,27 52,38 69,47 86,38 86,27"/>
+    <polyline points="69,36 69,47"/>
+    <polyline points="10,62 27,53 44,62 27,71 10,62"/>
+    <polyline points="10,62 10,73 27,82 44,73 44,62"/>
+    <polyline points="27,71 27,82"/>
+    <polyline points="52,62 69,53 86,62 69,71 52,62"/>
+    <polyline points="52,62 52,73 69,82 86,73 86,62"/>
+    <polyline points="69,71 69,82"/>
+  </g>
+</svg>

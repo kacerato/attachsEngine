@@ -151,14 +151,39 @@ public:
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
   bool openTerrain(EditorEntityId target=0);
+  EditorEntityId terrainRoot(EditorEntityId target);
+  void refreshTerrainBudget();
   bool applyTerrain(const resources::TerrainRecipe &,std::string &error);
   bool setTerrainNumber(u32 field,double number);
   bool handleTerrainInput(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
   void refreshTerrainJob();
   void startTerrainJob();
+  void queueTerrainPreview();
+  void refreshTerrainPreview();
+  void clearTerrainPreview(bool restore=true);
+  bool publishTerrainPreview(const resources::TerrainMesh &,std::string &);
+  struct TerrainPreviewJob;
+  std::shared_ptr<TerrainPreviewJob> terrainPreviewJob_;
+  u32 terrainPreviewFirst_=0,terrainPreviewCount_=0;
+  usize terrainPreviewSamples_=0;
+  u64 terrainPreviewEpoch_=0;
   struct TerrainJob;
   std::shared_ptr<TerrainJob> terrainJob_;
   resources::AssetGuid terrainSource_{};
+  struct TerrainSourceAccess {
+    resources::AssetGuid source;
+    std::string path, hash;
+    bool editable=false;
+  };
+  std::string terrainAccessProject_;
+  std::vector<TerrainSourceAccess> terrainAccess_;
+  bool terrainGestureActive_=false,terrainGestureOverflow_=false,terrainGestureConnected_=false;
+  u32 terrainGesturePointer_=0;
+  u64 terrainGestureRevision_=0;
+  EditorEntityId terrainGestureTarget_=0;
+  resources::TerrainStroke terrainGestureBrush_;
+  std::string terrainGestureRecipe_;
+  std::vector<resources::TerrainStroke> terrainGestureStrokes_;
   bool publishTerrain(const resources::TerrainRecipe &,const resources::TerrainMesh &,
                       const std::vector<u8> &,const resources::GltfImport &,std::string &);
   // Clip authoring operations are independent of the animation panel. They
@@ -1326,7 +1351,7 @@ private:
   static ImportedLibrary flattenSources(const std::vector<ImportedSource> &sources);
   // Sobe a biblioteca ao consumidor gráfico e adota o pacote que voltou.
   bool publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
-                       usize *outPrimitives = nullptr);
+                       usize *outPrimitives = nullptr, bool transient=false);
   // Uma fonte validada e posta no candidato, ainda sem publicar. A reconciliação
   // precisa do pacote adotado (slots), então acontece depois, em outra fase.
   struct StagedSource {

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Terrain surface mesh</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="8,48 48,24 88,48 48,72 8,48"/>
+    <polyline points="21,40 61,64"/>
+    <polyline points="35,32 75,56"/>
+    <polyline points="21,56 61,32"/>
+    <polyline points="35,64 75,40"/>
+  </g>
+</svg>

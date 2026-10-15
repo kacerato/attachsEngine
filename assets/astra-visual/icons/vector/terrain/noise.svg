@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Terrain noise</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="8,74 23,42 36,58 51,18 64,48 75,36 88,74"/>
+    <polyline points="18,83 78,83"/>
+  </g>
+</svg>

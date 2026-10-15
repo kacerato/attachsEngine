@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Dig volume</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="12,48 27,48 35,70 61,70 69,48 84,48"/>
+    <polyline points="48,12 48,52"/>
+    <polyline points="34,38 48,52 62,38"/>
+  </g>
+</svg>

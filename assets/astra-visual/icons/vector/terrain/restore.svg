@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Restore terrain</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="19,34 19,14 40,14"/>
+    <polyline points="20,15 53,15 77,36 81,62 63,82 35,82 17,67"/>
+    <polyline points="30,63 44,43 57,61 66,53"/>
+  </g>
+</svg>

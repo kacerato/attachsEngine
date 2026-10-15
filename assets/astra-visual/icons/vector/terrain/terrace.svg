@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Terrain terraces</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="10,80 30,80 30,60 50,60 50,40 70,40 70,20 87,20"/>
+    <polyline points="10,89 87,89"/>
+  </g>
+</svg>

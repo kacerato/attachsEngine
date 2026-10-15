@@ -68,6 +68,10 @@ inline constexpr u32 MapMaterialOcclusionInMetallicRoughness = 1u << 14;
 // o renderer pode descartar a face de trás. Sem esta flag nada é descartado --
 // primitivas internas e pacotes antigos não garantem a ordem.
 inline constexpr u32 MapMaterialCullBackFaces = 1u << 15;
+// Terrain surface v1: four sRGB layer textures, COLOR_0 normalized splat
+// weights, UV0=local XZ/scale, UV1=(local Y/scale, macro variation).
+// Bits 16..18 are primitive authoring identity; never reuse them here.
+inline constexpr u32 MapMaterialTerrain = 1u << 19;
 
 struct MapTextureRecord {
   // Pacotes antigos usam bits 0/1 (filtro único e mip linear). Pacotes novos

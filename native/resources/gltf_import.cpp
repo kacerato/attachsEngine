@@ -991,6 +991,15 @@ struct Importer {
         if (const auto *normal = json->member(source, "normalTexture"); normal && normal->kind == Kind::Object)
           target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
       assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap, i);
+      if (const auto *extras=json->member(source,"extras");extras &&
+          json->number(*extras,"astraTerrainSurface",0)==1) {
+        const char *layers[]{"grassTexture","rockTexture","soilTexture","pathTexture"};
+        for(u32 layer=0;layer<4;++layer)
+          if(!assignTexture(root,*extras,layers[layer],true,layer,target,0,i))
+            return fail("Camada da superfície de terreno ausente.");
+        target.flags &= ~(renderer::MapMaterialNormalMap|renderer::MapMaterialMetallicRoughnessMap|renderer::MapMaterialEmissiveMap);
+        target.flags |= renderer::MapMaterialTerrain;
+      }
       // Oclusão (R4): o quadro de material não tem um quinto slot de textura.
       // Entra só quando é a MESMA textura e o MESMO UV do metálico/rugosidade
       // (ORM, canal R), sem transformação e com força 1 -- o caso em que ler o

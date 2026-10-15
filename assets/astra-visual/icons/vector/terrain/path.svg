@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Terrain path</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16,86 20,69 47,54 55,43 37,31 44,13"/>
+    <polyline points="45,86 51,71 75,57 79,41 63,28 70,13"/>
+  </g>
+</svg>

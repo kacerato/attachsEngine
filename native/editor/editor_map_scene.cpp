@@ -407,6 +407,14 @@ bool EditorMapScene::intersectColliderMesh(std::span<const u32> slots,bool conve
 bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
   return pickSlotGeometry(document,id,0,out);
 }
+bool EditorMapScene::pickResourceGeometry(u32 index,const float world[16],EditorPickCandidate &out) const {
+  if(index>=source_.size() || !pickGeometry_)return false;
+  const auto &source=source_[index];renderer::MapDrawUpdate pose;
+  if(!renderer::prepareMapDrawUpdate(index,source,world,source.boundsCenter,source.boundsRadius,pose))return false;
+  std::copy_n(world,16,out.model);std::copy_n(pose.draw.boundsCenter,3,out.center);
+  out.radius=pose.draw.boundsRadius;out.resolve=[this,index]{return pickMesh(index);};
+  return true;
+}
 bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,EditorEntityId id,u32 slot,EditorPickCandidate &out) const {
   const auto *entity=document.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
