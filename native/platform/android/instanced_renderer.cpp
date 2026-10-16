@@ -5130,9 +5130,10 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // topologia velha.
   registerAuthoringTextures();
   __android_log_print(ANDROID_LOG_INFO,LogTag,
-      "[Import] texturas importadas: %zu publicadas (%u reaproveitadas, %u enviadas), %zu slots bindless; geometria %s.",
+      "[Import] texturas importadas: %zu publicadas (%u reaproveitadas, %u enviadas), %zu slots bindless; geometria %s, %llu bytes em %u faixas.",
       textures.size(),dirtRoadResources_.lastReusedTextures(),dirtRoadResources_.lastUploadedTextures(),
-      authoringTextureSlots_.size(),dirtRoadResources_.lastGeometryReused()?"reaproveitada":"enviada");
+      authoringTextureSlots_.size(),dirtRoadResources_.lastGeometryReused()?"reaproveitada":"enviada",
+      static_cast<unsigned long long>(dirtRoadResources_.lastGeometryUploadBytes()),dirtRoadResources_.lastGeometryUploadRanges());
   pendingScene_.clear();pendingMapPoseCount_=0;pendingMapTransformChanged_=false;
   pendingAuthoredStateValid_=false;
   authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredDrawIdentities_.clear();authoredUvTransformEntries_.clear();

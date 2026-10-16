@@ -2,6 +2,8 @@
 
 Branch `codex/terrain-voxel-generator`. Continuação autorizada em 15/10/2026, sem merge na main.
 
+**Direção de 16/10/2026:** o proprietário suspendeu o uso de ADB e solicitou primeiro a auditoria direta dos cinco plugins. O escopo detalhado está na [matriz de 71 itens](../auditoria-terreno-2026-10-16/auditoria.md), com inventário, propriedades, assets, transições e três blocos de execução. Essa auditoria substitui o universo de apenas três plugins; não marca a implementação ampliada como concluída.
+
 1. **Reeditar e dar volume.** Ação contextual no Inspector da raiz/chunks, recuperação de receita e fechamento do menu de criação. Terreno por altura com superfície ou base sólida, fundo plano e espessura persistida. Preservar receitas anteriores.
 2. **Autoria por toque.** Forma, Pincel, Camadas e Gerir; propriedades agrupadas, seleção direta dos modos, predefinições de relevo, rolagem e ajustes numéricos rápidos. Corrigir toque/arraste do pincel, acesso a XYZ, desfazer/refazer, aplicar/reverter e salvar. Novos ícones no atlas real.
 3. **Validar e entregar.** Testes nativos de geometria/receitas/UI e fluxo Android nos três modos: criar, editar, pintar/esculpir, desfazer/refazer, salvar e reabrir. Corrigir falhas, compilar/instalar APK Dev preservando dados, capturar resultado, publicar branch e nota nova no AstraDocs com evidência e limites reais.

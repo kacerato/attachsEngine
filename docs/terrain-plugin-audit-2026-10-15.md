@@ -1,5 +1,7 @@
 # Auditoria dos pacotes de terreno fornecidos
 
+> Histórico de três pacotes. A auditoria de 16/10/2026 amplia o universo para cinco, inclui os oito subpacotes ATG e detalha 71 itens de implementação: [auditoria atual](auditoria-terreno-2026-10-16/auditoria.md). A cobertura abaixo permanece como evidência da revisão anterior, não como port completo.
+
 Data: 15/10/2026. Esta matriz separa extração, estudo e implementação. Código de Unity/C# ou shader de Unity não é um plugin carregável diretamente no renderer C++/Vulkan da Astra. A equivalência exige consumidor, persistência, UI e teste próprios. **Extração não significa port completo.**
 
 ## Universo físico verificado

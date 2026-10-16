@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Independent brush axes</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="46,48 46,12"/>
+    <polyline points="46,48 82,67"/>
+    <polyline points="46,48 13,71"/>
+    <polyline points="37,23 46,12 55,23"/>
+    <polyline points="70,64 82,67 79,55"/>
+    <polyline points="25,67 13,71 17,58"/>
+  </g>
+</svg>

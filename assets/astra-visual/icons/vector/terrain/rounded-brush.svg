@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Rounded volume brush</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="20,16 76,16 84,24 84,72 76,80 20,80 12,72 12,24 20,16"/>
+    <polyline points="30,34 66,34 66,62 30,62 30,34"/>
+  </g>
+</svg>

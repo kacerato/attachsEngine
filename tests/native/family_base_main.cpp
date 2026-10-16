@@ -1,6 +1,7 @@
 #include "harness.h"
 #include <cstring>
 int main(int argc,char **argv){
+ std::setvbuf(stdout,nullptr,_IONBF,0);
  unsigned failed=0,total=0;
  for(const auto &t:ae::test::registry()){
   if(argc>1&&!std::strstr(t.name,argv[1]))continue;

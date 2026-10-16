@@ -1,0 +1,2250 @@
+{
+  "packages": [
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_HDRP_10.1.unitypackage",
+      "sha256": "589d030975dcacd1d69e28de4c35e7d47184a130693b9a16f1effbdf63338ba0",
+      "files": 29,
+      "types": {
+        ".asset": 3,
+        ".hlsl": 3,
+        ".lighting": 1,
+        ".mat": 7,
+        ".pdf": 1,
+        ".prefab": 5,
+        ".psd": 5,
+        ".shadergraph": 3,
+        ".unity": 1
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_URP_GrassDisplacement.unitypackage",
+      "sha256": "786f4da7a1aaa10f5b152f75e35e68c311b2b9011d3d6dda2c9012c1f5798647",
+      "files": 38,
+      "types": {
+        ".anim": 1,
+        ".asset": 2,
+        ".controller": 1,
+        ".cs": 8,
+        ".exr": 1,
+        ".mat": 13,
+        ".prefab": 5,
+        ".psd": 2,
+        ".shader": 3,
+        ".unity": 2
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_URP_12.1_Shaders.unitypackage",
+      "sha256": "266cb8a4dea535507a04fb5cbba2080764d2fb33c1d81886a36620601fb1599d",
+      "files": 86,
+      "types": {
+        ".anim": 1,
+        ".asset": 3,
+        ".controller": 1,
+        ".cs": 8,
+        ".exr": 1,
+        ".hlsl": 23,
+        ".mat": 23,
+        ".pdf": 1,
+        ".prefab": 10,
+        ".psd": 2,
+        ".shader": 6,
+        ".terrainlayer": 3,
+        ".unity": 4
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_URP_7.2_Support.unitypackage",
+      "sha256": "2ffc69c4661beef1f054e8597ffa26b25cd9d53ed56ac091f60be6f27b0b1e15",
+      "files": 43,
+      "types": {
+        ".asset": 2,
+        ".cs": 2,
+        ".exr": 1,
+        ".fbx": 2,
+        ".hlsl": 5,
+        ".mat": 15,
+        ".prefab": 2,
+        ".psd": 4,
+        ".shader": 3,
+        ".terrainlayer": 5,
+        ".unity": 2
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_URP_10_Shaders.unitypackage",
+      "sha256": "7c8692debf300800dd0c908e2ff559f38dcad179280f3bd53375b084201e4877",
+      "files": 8,
+      "types": {
+        ".hlsl": 5,
+        ".shader": 3
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_URP_7.1.7_Support.unitypackage",
+      "sha256": "dc02d7260747fc8319c8bf2a95887355f5ec5de43aa6356f8e945efc7aa900c2",
+      "files": 39,
+      "types": {
+        ".asset": 2,
+        ".exr": 1,
+        ".fbx": 2,
+        ".hlsl": 5,
+        ".mat": 13,
+        ".prefab": 2,
+        ".psd": 4,
+        ".shader": 3,
+        ".terrainlayer": 5,
+        ".unity": 2
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_HDRP_12.1.unitypackage",
+      "sha256": "73bdffeb62ebed900cc40104d24b785062a9ef2ab0011036db4e0f692efd391f",
+      "files": 63,
+      "types": {
+        ".asset": 4,
+        ".cs": 11,
+        ".exr": 1,
+        ".fbx": 5,
+        ".hlsl": 3,
+        ".lighting": 1,
+        ".mat": 13,
+        ".pdf": 1,
+        ".prefab": 10,
+        ".psd": 8,
+        ".shadergraph": 3,
+        ".tif": 2,
+        ".unity": 1
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage > ATG_URP_11_Shaders.unitypackage",
+      "sha256": "5c22310bbeda064cde11ccc1c3b46e7805f82dd56ec330ef452429d1a8f72ff0",
+      "files": 8,
+      "types": {
+        ".hlsl": 5,
+        ".shader": 3
+      }
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "container": "Advanced Terrain Grass_v1.4.unitypackage",
+      "sha256": "2e03dd0c01bceba273e58d214c3d343178a7b4d856ffe0cadd5064bcb3bcfe3d",
+      "files": 173,
+      "types": {
+        ".asset": 8,
+        ".cginc": 9,
+        ".compute": 2,
+        ".controller": 1,
+        ".cs": 14,
+        ".fbx": 13,
+        ".mat": 23,
+        ".pdf": 2,
+        ".png": 2,
+        ".prefab": 12,
+        ".psd": 33,
+        ".shader": 17,
+        ".terrainlayer": 3,
+        ".tif": 4,
+        ".txt": 12,
+        ".unity": 5,
+        ".unitypackage": 8,
+        ".url": 5
+      }
+    },
+    {
+      "plugin": "Digger - Terrain Caves Overhangs v6.0",
+      "container": "Digger - Terrain Caves Overhangs v6.0.unitypackage",
+      "sha256": "631043f48ba822281cbf3e323a9b968cc184fe8f719410c77877b77d101b6d85",
+      "files": 151,
+      "types": {
+        ".asmdef": 2,
+        ".asset": 1,
+        ".cginc": 2,
+        ".cs": 73,
+        ".hlsl": 11,
+        ".lighting": 1,
+        ".mat": 3,
+        ".obj": 2,
+        ".png": 17,
+        ".prefab": 15,
+        ".shader": 14,
+        ".terrainlayer": 7,
+        ".txt": 2,
+        ".unity": 1
+      }
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "container": "MapMagic 2 Bundle v2.1.11.unitypackage",
+      "sha256": "012dc204d485b5837f3e6e81bc21360699ff269ae9f7957f96f6944f4f6655ee",
+      "files": 1220,
+      "types": {
+        "": 2,
+        ".asmdef": 9,
+        ".asmref": 35,
+        ".asset": 76,
+        ".cginc": 3,
+        ".cs": 225,
+        ".dll": 2,
+        ".fbx": 26,
+        ".lighting": 3,
+        ".mat": 14,
+        ".pdf": 5,
+        ".plist": 1,
+        ".png": 685,
+        ".prefab": 28,
+        ".raw": 11,
+        ".shader": 26,
+        ".solid": 1,
+        ".stackdump": 1,
+        ".terrainlayer": 15,
+        ".tif": 36,
+        ".txt": 1,
+        ".unity": 15
+      }
+    },
+    {
+      "plugin": "MicroSplat - Terrain Collection v3.9.41",
+      "container": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "files": 517,
+      "types": {
+        ".asmdef": 2,
+        ".asmref": 20,
+        ".asset": 52,
+        ".cs": 53,
+        ".exr": 1,
+        ".json": 11,
+        ".mat": 15,
+        ".pdf": 39,
+        ".png": 151,
+        ".shader": 34,
+        ".terrainlayer": 9,
+        ".tga": 24,
+        ".txt": 95,
+        ".unity": 11
+      }
+    },
+    {
+      "plugin": "Path Painter II v2.1.10",
+      "container": "Path Painter II v2.1.10.unitypackage",
+      "sha256": "a5d6427d7aa9a3b6cba50b8e05a62d3d35b991c841796633893ca9b80824544a",
+      "files": 85,
+      "types": {
+        ".asset": 10,
+        ".cs": 1,
+        ".dll": 4,
+        ".pdf": 1,
+        ".png": 42,
+        ".psd": 4,
+        ".shader": 3,
+        ".terrainlayer": 16,
+        ".txt": 1,
+        ".unity": 1,
+        ".xml": 2
+      }
+    }
+  ],
+  "nested": [
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_HDRP_10.1.unitypackage",
+      "sha256": "589d030975dcacd1d69e28de4c35e7d47184a130693b9a16f1effbdf63338ba0"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_URP_GrassDisplacement.unitypackage",
+      "sha256": "786f4da7a1aaa10f5b152f75e35e68c311b2b9011d3d6dda2c9012c1f5798647"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_URP_12.1_Shaders.unitypackage",
+      "sha256": "266cb8a4dea535507a04fb5cbba2080764d2fb33c1d81886a36620601fb1599d"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_URP_7.2_Support.unitypackage",
+      "sha256": "2ffc69c4661beef1f054e8597ffa26b25cd9d53ed56ac091f60be6f27b0b1e15"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_URP_10_Shaders.unitypackage",
+      "sha256": "7c8692debf300800dd0c908e2ff559f38dcad179280f3bd53375b084201e4877"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_URP_7.1.7_Support.unitypackage",
+      "sha256": "dc02d7260747fc8319c8bf2a95887355f5ec5de43aa6356f8e945efc7aa900c2"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_HDRP_12.1.unitypackage",
+      "sha256": "73bdffeb62ebed900cc40104d24b785062a9ef2ab0011036db4e0f692efd391f"
+    },
+    {
+      "plugin": "Advanced Terrain Grass v1.4",
+      "parent": "Advanced Terrain Grass_v1.4.unitypackage",
+      "path": "Assets/AdvancedTerrainGrass/ATG_URP_11_Shaders.unitypackage",
+      "sha256": "5c22310bbeda064cde11ccc1c3b46e7805f82dd56ec330ef452429d1a8f72ff0"
+    }
+  ],
+  "nodes": [
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsInitial.cs",
+      "line": 14,
+      "cls": "Positions200",
+      "name": "Positions",
+      "menu": "Objects/Initial",
+      "attributes": "menu=\"Objects/Initial\", name =\"Positions\", iconName=\"GeneratorIcons/Position\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Scatter\"",
+      "fields": [
+        "public Vector3[] positions= new Vector3[1];"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsInitial.cs",
+      "line": 37,
+      "cls": "Scatter200",
+      "name": "Scatter",
+      "menu": "Objects/Initial",
+      "attributes": "menu=\"Objects/Initial\", name =\"Scatter\", iconName=\"GeneratorIcons/Scatter\", disengageable = true, advancedOptions = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Scatter\"",
+      "fields": [
+        "[Val(\"Seed\")]\t\t\tpublic int seed = 12345;",
+        "[Val(\"Density\")]\t\tpublic float density = 10;",
+        "[Val(\"Uniformity\")]\t\tpublic float uniformity = 0.1f;",
+        "[Val(\"Relax\", \"Advanced\")]\tpublic float relax = 0.5f;",
+        "[Val(\"Add.Margin\", \"Advanced\")]\tpublic float additionalMargins = 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsInitial.cs",
+      "line": 92,
+      "cls": "Random207",
+      "name": "Random",
+      "menu": "Objects/Initial",
+      "attributes": "menu=\"Objects/Initial\", name =\"Random\", iconName=\"GeneratorIcons/Random\", disengageable = true, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Scatter\"",
+      "fields": [
+        "[Val(\"Seed\")]\t\t\tpublic int seed = 12345;",
+        "[Val(\"Density\")]\t\tpublic float density = 10;",
+        "[Val(\"Uniformity\")]\t\tpublic float uniformity = 0.1f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsInitial.cs",
+      "line": 169,
+      "cls": "Random200",
+      "name": "Random",
+      "menu": "",
+      "attributes": "menu=null, name =\"Random\", iconName=\"GeneratorIcons/Random\", disengageable = true, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Scatter\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsInitial.cs",
+      "line": 179,
+      "cls": "GetByTag211",
+      "name": "Get by Tag",
+      "menu": "Objects/Initial",
+      "attributes": "menu = \"Objects/Initial\", name = \"Get by Tag\", iconName = \"GeneratorIcons/Position\", disengageable = true, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/GetByTag\"",
+      "fields": [
+        "public string tag;",
+        "[Val(\"Add.Margin\", \"Advanced\")] public float additionalMargins = 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 17,
+      "cls": "Curve200",
+      "name": "Curve",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Curve\", iconName=\"GeneratorIcons/Curve\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Curve\"",
+      "fields": [
+        "public Curve curve = new Curve( new Vector2(0,0), new Vector2(1,1) );",
+        "[NonSerialized] public float[] histogram = null;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 97,
+      "cls": "Levels200",
+      "name": "Levels",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Levels\", iconName=\"GeneratorIcons/Levels\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Levels\"",
+      "fields": [
+        "public float inMin = 0;",
+        "public float inMax = 1;",
+        "public float gamma = 1f;",
+        "public float outMin = 0;",
+        "public float outMax = 1;",
+        "[NonSerialized] public float[] histogram = null;",
+        "public bool guiParams = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 140,
+      "cls": "Contrast200",
+      "name": "Contrast",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Contrast\", iconName=\"GeneratorIcons/Contrast\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Contrast\"",
+      "fields": [
+        "[Val(name=\"Intensity\")] public float brightness = 0f;",
+        "[Val(name=\"Contrast\")] public float contrast = 1f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 173,
+      "cls": "UnityCurve200",
+      "name": "Unity Curve",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Unity Curve\", iconName=\"GeneratorIcons/UnityCurve\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/UnityCurve\"",
+      "fields": [
+        "public AnimationCurve curve = new AnimationCurve( new Keyframe[] { new Keyframe(0,0,1,1), new Keyframe(1,1,1,1) } );",
+        "public Vector2 min = new Vector2(0,0);",
+        "public Vector2 max = new Vector2(1,1);"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 212,
+      "cls": "Mask200",
+      "name": "Mask",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Mask\", iconName=\"GeneratorIcons/MapMask\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/MapMask\"",
+      "fields": [
+        "[Val(\"Invert\")]\tpublic bool invert = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 246,
+      "cls": "Blend200",
+      "name": "Blend",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Blend\", iconName=\"GeneratorIcons/Blend\", disengageable = true, colorType = typeof(MatrixWorld), helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Blend\"",
+      "fields": [
+        "public BlendAlgorithm algorithm = BlendAlgorithm.add;",
+        "public float opacity = 1;",
+        "public bool guiExpanded = false;",
+        "public Layer[] layers = new Layer[] { new Layer(), new Layer() };",
+        "public Layer[] Layers => layers;",
+        "public enum BlendAlgorithm {"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 326,
+      "cls": "Normalize200",
+      "name": "Normalize",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Normalize\", disengageable = true, iconName=\"GeneratorIcons/Normalize\", drawInlets = false, drawOutlet = false, colorType = typeof(MatrixWorld), helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Normalize\"",
+      "fields": [
+        "public float Opacity { get; set; }",
+        "public Generator Gen { get; private set; }",
+        "public ulong id;",
+        "public ulong Id { get{return id;} set{id=value;} }",
+        "public ulong LinkedOutletId { get; set; }",
+        "public ulong LinkedGenId { get; set; }",
+        "public NormalizeLayer[] layers = new NormalizeLayer[0];",
+        "public NormalizeLayer[] Layers => layers;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 406,
+      "cls": "Blur200",
+      "name": "Blur",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Blur\", iconName=\"GeneratorIcons/Blur\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Blur\"",
+      "fields": [
+        "[Val(\"Downsample\")] public float downsample = 10f;",
+        "[Val(\"Blur\")] public float blur = 3f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 435,
+      "cls": "Cavity200",
+      "name": "Cavity",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Cavity\", iconName=\"GeneratorIcons/Cavity\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Cavity\"",
+      "fields": [
+        "public enum CavityType { Convex=0, Concave=1, Both=2 }",
+        "[Val(\"Type\")]\t\tpublic CavityType type = CavityType.Convex;",
+        "[Val(\"Intensity\")]\tpublic float intensity = 3;",
+        "[Val(\"Spread\")]\t\tpublic float spread = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 501,
+      "cls": "Slope200",
+      "name": "Slope",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Slope\", iconName=\"GeneratorIcons/Slope\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Slope\"",
+      "fields": [
+        "[Val(\"From\")]\t\t\tpublic float from = 30;",
+        "[Val(\"To\")]\t\t\t\tpublic float to = 90;",
+        "[Val(\"Smooth Range\")]\tpublic float range = 30f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 564,
+      "cls": "Selector200",
+      "name": "Selector",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Selector\", iconName=\"GeneratorIcons/Selector\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Selector\"",
+      "fields": [
+        "public enum RangeDet { Transition, MinMax}",
+        "public RangeDet rangeDet = RangeDet.Transition;",
+        "public enum Units { Map, World }",
+        "public Units units = Units.Map;",
+        "public Vector2 from = new Vector2(0.4f, 0.6f);",
+        "public Vector2 to = new Vector2(1f, 1f);"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 603,
+      "cls": "Terrace200",
+      "name": "Terrace",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Terrace\", iconName=\"GeneratorIcons/Terrace\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Terrace\"",
+      "fields": [
+        "[Val(\"Seed\")]\t\t public int seed = 12345;",
+        "[Val(\"Num\")]\t\t public int num = 10;",
+        "[Val(\"Uniformity\")] public float uniformity = 0.5f;",
+        "[Val(\"Steepness\")]\t public float steepness = 0.5f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 657,
+      "cls": "Direction210",
+      "name": "Direction",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Direction\", iconName=\"GeneratorIcons/Direction\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Direction\"",
+      "fields": [
+        "[Val(\"Hor Angle\", min=-360, max=360)] public float horAngle = 0;",
+        "[Val(\"Vert Angle\", min=-89.99f, max=89.99f)] public float vertAngle = 0;",
+        "[Val(\"Intensity\", min =0)] public float intensity = 1;",
+        "[Val(\"Wrapping\", min=-1, max=1)] public float wrapping = 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 691,
+      "cls": "Ledge210",
+      "name": "Ledge",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Ledge\", iconName=\"GeneratorIcons/Ledge\", disengageable = true, advancedOptions = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Ledge\"",
+      "fields": [
+        "[Val(\"Level\")]\t\tpublic float level = 50;",
+        "[Val(\"Contour Blur\")]\tpublic float contourBlur = 3;",
+        "[Val(\"Height\")]\t\tpublic float height = 10;",
+        "[Val(\"Steep\")]\t\tpublic float steep = 30;",
+        "[Val(\"Top Shoulder\", \"Advanced\")]\tpublic float topShoulder = 2f;",
+        "[Val(\"Bottom Shoulder\", \"Advanced\")]\tpublic float bottomShoulder = 2f;",
+        "[Val(\"Smooth\", \"Advanced\")]\tpublic bool smooth = true;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 866,
+      "cls": "Beach210",
+      "name": "Beach",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Beach\", iconName=\"GeneratorIcons/Beach\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Beach\"",
+      "fields": [
+        "[Val(\"Level\")]\tpublic float level = 50;",
+        "[Val(\"Contour Relax\")]\tpublic float relax = 100;",
+        "[Val(\"Size\")]\tpublic float size = 40;",
+        "[Val(\"Height\")]\tpublic float height = 5;",
+        "[Val(\"Sand Tex Blur\")]\tpublic float sandBlur = 5f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 1034,
+      "cls": "Erosion200",
+      "name": "Erosion",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Erosion\", iconName=\"GeneratorIcons/Erosion\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Erision\"",
+      "fields": [
+        "[Val(\"Iterations\")]\t\t public int iterations = 3;",
+        "[Val(\"Durability\")] public float terrainDurability=0.9f;",
+        "public float erosionAmount=1f;",
+        "[Val(\"Sediment\")]\t public float sedimentAmount=0.75f;",
+        "[Val(\"Fluidity\")]\tpublic int fluidityIterations=3;",
+        "[Val(\"Relax\")]\t\tpublic float relax=0.0f;",
+        "public float Complexity {get{ return iterations*2; }}"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 1132,
+      "cls": "Sediment210",
+      "name": "Sediment",
+      "menu": "Map/Modifiers",
+      "attributes": "menu=\"Map/Modifiers\", name =\"Sediment\", iconName=\"GeneratorIcons/Sediment\", disengageable = true, colorType = typeof(MatrixWorld), helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Sediment\"",
+      "fields": [
+        "[Val(\"Cliff\")]\tpublic float cliffIntensity = 1f;",
+        "[Val(\"Sediment\")] public float sedimentIntensity = 1f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixModifiers.cs",
+      "line": 1199,
+      "cls": "Parallax210",
+      "name": "Parallax",
+      "menu": "Map/Modifiers",
+      "attributes": "menu = \"Map/Modifiers\", name = \"Parallax\", section=2, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/Parallax\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Parallax\"",
+      "fields": [
+        "[Val(\"Offset\")] public Vector2D offset;",
+        "public enum Interpolation { None, Always, OnTransitions }",
+        "[Val(\"Interpolation\")] public Interpolation interpolation = Interpolation.Always;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/CTS/CTSOutput.cs",
+      "line": 16,
+      "cls": "CTSOutput200",
+      "name": "CTS",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"CTS\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "public string[] guiTextureNames = null;",
+        "public CTSProfile profile;",
+        "public Color[][] textureColors;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/VegetationStudio/Placeholders/VSProMapsPlaceholder.cs",
+      "line": 18,
+      "cls": "VSProMapsOut",
+      "name": "VS Pro Maps",
+      "menu": "",
+      "attributes": "name = \"VS Pro Maps\", section =2, drawButtons = false, colorType = typeof(MatrixWorld)",
+      "fields": [
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public float density = 0.5f;",
+        "public int maskGroup = 0;",
+        "public int textureChannel = 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesPortals.cs",
+      "line": 12,
+      "cls": "SplinePortalEnter",
+      "name": "Enter",
+      "menu": "Spline/Portals",
+      "attributes": "menu = \"Spline/Portals\", name = \"Enter\", iconName = \"GeneratorIcons/PortalIn\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesPortals.cs",
+      "line": 15,
+      "cls": "SplinePortalExit",
+      "name": "Exit",
+      "menu": "Spline/Portals",
+      "attributes": "menu = \"Spline/Portals\", name =\"Exit\", iconName = \"GeneratorIcons/PortalOut\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Placeholders.cs",
+      "line": 102,
+      "cls": "InletOutletPlaceholder",
+      "name": "Unknown",
+      "menu": "",
+      "attributes": "name = \"Unknown\", iconName=\"GeneratorIcons/Generator\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Placeholders.cs",
+      "line": 105,
+      "cls": "InletPlaceholder",
+      "name": "Unknown",
+      "menu": "",
+      "attributes": "name = \"Unknown\", iconName=\"GeneratorIcons/Generator\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Placeholders.cs",
+      "line": 108,
+      "cls": "OutletPlaceholder",
+      "name": "Unknown",
+      "menu": "",
+      "attributes": "name = \"Unknown\", iconName=\"GeneratorIcons/Generator\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Placeholders.cs",
+      "line": 111,
+      "cls": "Placeholder",
+      "name": "Unknown",
+      "menu": "",
+      "attributes": "name = \"Unknown\", iconName=\"GeneratorIcons/Generator\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/HeightOut.cs",
+      "line": 24,
+      "cls": "HeightOutput200",
+      "name": "Height",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"Height\", section=2, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/HeightOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Height\"",
+      "fields": [
+        "public OutputLevel outputLevel = OutputLevel.Draft | OutputLevel.Main;",
+        "public enum Interpolation { None, Smooth, Scale2X, Scale4X };",
+        "public enum ApplyType { SetHeights, SetHeightsDelayLOD, TextureToHeightmap }",
+        "public bool guiApplyType = false;",
+        "public float[,] heights2D;",
+        "public float height;",
+        "public Coord offset;",
+        "public int Resolution {get{ return heights2D.GetLength(0); }}",
+        "public float[][,] heights2DSplits;",
+        "public float height;",
+        "public int res;",
+        "public int margins;",
+        "public int splitSize;",
+        "public float height;",
+        "public byte[] texBytes;",
+        "public int Resolution {get{ return (int)Mathf.Sqrt(texBytes.Length/4); }}"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/VegetationStudio/Runtime/VSProMapsOut.cs",
+      "line": 24,
+      "cls": "VSProMapsOut",
+      "name": "VS Pro Maps",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"VS Pro Maps\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Grass\"",
+      "fields": [
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public float density = 0.5f;",
+        "public int maskGroup = 0;",
+        "public int textureChannel = 0;",
+        "public VegetationSystemPro srcSystem;",
+        "public VegetationPackagePro package;",
+        "public Color[][] colors;",
+        "public int[] maskGroupNums;",
+        "public bool copyVS;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/HeightInOut.cs",
+      "line": 20,
+      "cls": "BrushReadHeight206",
+      "name": "Height",
+      "menu": "Brush/Input",
+      "attributes": "menu = \"Brush/Input\", name = \"Height\", section=2, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/BrushHeightIn\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/HeightInOut\"",
+      "fields": [
+        "public string Name { get => \"Height\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/HeightInOut.cs",
+      "line": 104,
+      "cls": "BrushWriteHeight206",
+      "name": "Height",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Height\", section=2, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/BrushHeightOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/HeightInOut\"",
+      "fields": [
+        "public string Name { get => \"Height\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 16,
+      "cls": "Curve200",
+      "name": "Curve",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Curve\", iconName=\"GeneratorIcons/Curve\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Curve\"",
+      "fields": [
+        "public Curve curve = new Curve( new Vector2(0,0), new Vector2(1,1) );"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 45,
+      "cls": "Levels200",
+      "name": "Levels",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Levels\", iconName=\"GeneratorIcons/Levels\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Levels\"",
+      "fields": [
+        "public float inMin = 0;",
+        "public float inMax = 1;",
+        "public float gamma = 1f;",
+        "public float outMin = 0;",
+        "public float outMax = 1;",
+        "public bool guiParams = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 81,
+      "cls": "Contrast200",
+      "name": "Contrast",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Contrast\", iconName=\"GeneratorIcons/Contrast\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Contrast\"",
+      "fields": [
+        "[Val(name=\"Intensity\")] public float brightness = 0f;",
+        "[Val(name=\"Contrast\")] public float contrast = 1f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 111,
+      "cls": "UnityCurve200",
+      "name": "Unity Curve",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Unity Curve\", iconName=\"GeneratorIcons/UnityCurve\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/UnityCurve\"",
+      "fields": [
+        "public AnimationCurve curve = new AnimationCurve( new Keyframe[] { new Keyframe(0,0,1,1), new Keyframe(1,1,1,1) } );",
+        "public Vector2 min = new Vector2(0,0);",
+        "public Vector2 max = new Vector2(1,1);"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 159,
+      "cls": "Mask200",
+      "name": "Mask",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Mask\", iconName=\"GeneratorIcons/MapMask\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Mask\"",
+      "fields": [
+        "[Val(\"Invert\")]\tpublic bool invert = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 360,
+      "cls": "Blur200",
+      "name": "Blur",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Blur\", iconName=\"GeneratorIcons/Blur\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Blur\"",
+      "fields": [
+        "[Val(\"Downsample\")] public float downsample = 10f;",
+        "[Val(\"Blur\")] public float blur = 3f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 394,
+      "cls": "Cavity200",
+      "name": "Cavity",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Cavity\", iconName=\"GeneratorIcons/Cavity\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Cavity\"",
+      "fields": [
+        "[Val(\"Type\")]\t\tpublic MatrixGenerators.Cavity200.CavityType type = MatrixGenerators.Cavity200.CavityType.Convex;",
+        "[Val(\"Intensity\")]\tpublic float intensity = 3;",
+        "[Val(\"Spread\")]\t\tpublic float spread = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 424,
+      "cls": "Slope200",
+      "name": "Slope",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Slope\", iconName=\"GeneratorIcons/Slope\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Slope\"",
+      "fields": [
+        "[Val(\"From\")]\t\t\tpublic float from = 30;",
+        "[Val(\"To\")]\t\t\t\tpublic float to = 90;",
+        "[Val(\"Smooth Range\")]\tpublic float range = 30f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 452,
+      "cls": "Selector200",
+      "name": "Selector",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Selector\", iconName=\"GeneratorIcons/Selector\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Selector\"",
+      "fields": [
+        "public enum RangeDet { Transition, MinMax}",
+        "public RangeDet rangeDet = RangeDet.Transition;",
+        "public enum Units { Map, World }",
+        "public Units units = Units.Map;",
+        "public Vector2 from = new Vector2(0.4f, 0.6f);",
+        "public Vector2 to = new Vector2(1f, 1f);"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 486,
+      "cls": "Terrace200",
+      "name": "Terrace",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Terrace\", iconName=\"GeneratorIcons/Terrace\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Terrace\"",
+      "fields": [
+        "[Val(\"Seed\")]\t\t public int seed = 12345;",
+        "[Val(\"Num\")]\t\t public int num = 10;",
+        "[Val(\"Uniformity\")] public float uniformity = 0.5f;",
+        "[Val(\"Steepness\")]\t public float steepness = 0.5f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 524,
+      "cls": "Erosion200",
+      "name": "Erosion",
+      "menu": "Map Set",
+      "attributes": "menu=\"Map Set\", name =\"Erosion\", iconName=\"GeneratorIcons/Erosion\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Erosion\"",
+      "fields": [
+        "[Val(\"Iterations\")]\t\t public int iterations = 3;",
+        "[Val(\"Durability\")] public float terrainDurability=0.9f;",
+        "public float erosionAmount=1f;",
+        "[Val(\"Sediment\")]\t public float sedimentAmount=0.75f;",
+        "[Val(\"Fluidity\")] public int fluidityIterations=3;",
+        "[Val(\"Relax\")]\t\tpublic float relax=0.0f;",
+        "public float Complexity {get{ return iterations*2; }}"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsGenerators.cs",
+      "line": 561,
+      "cls": "Parallax210",
+      "name": "Parallax",
+      "menu": "Map Set",
+      "attributes": "menu = \"Map Set\", name = \"Parallax\", section=2, colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/Parallax\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Parallax\"",
+      "fields": [
+        "[Val(\"Offset\")] public Vector2D offset;",
+        "public enum Interpolation { None, Always, OnTransitions }",
+        "[Val(\"Interpolation\")] public Interpolation interpolation = Interpolation.Always;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/TexturesSetsInOut.cs",
+      "line": 20,
+      "cls": "BrushReadTextureSet",
+      "name": "Textures",
+      "menu": "Brush/Input",
+      "attributes": "menu = \"Brush/Input\", name = \"Textures\", section=2, colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/BrushTexturesIn\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/HeightInOut\"",
+      "fields": [
+        "public string Name { get => \"Maps Set\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/TexturesSetsInOut.cs",
+      "line": 75,
+      "cls": "BrushWriteTextureSet",
+      "name": "Textures",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Textures\", section=2, colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/BrushTexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/HeightInOut\"",
+      "fields": [
+        "public string Name { get => \"Maps Set\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsSpecial.cs",
+      "line": 19,
+      "cls": "Add210",
+      "name": "Add",
+      "menu": "Map Set",
+      "attributes": "menu = \"Map Set\", name = \"Add\", colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/MapSetAdd\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixSetGenerators/Add\"",
+      "fields": [
+        "public PrototypeType prototypeType = PrototypeType.TerrainLayer;",
+        "public TerrainLayer terrainLayer = null;",
+        "public Texture2D texture = null;",
+        "public GameObject prefab = null;",
+        "public int instanceNum = 0;",
+        "public enum Mode { Set, Add, AddNormalize };",
+        "public Mode mode = Mode.Add;",
+        "public float opacity = 1;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsSpecial.cs",
+      "line": 86,
+      "cls": "Pick210",
+      "name": "Pick",
+      "menu": "Map Set",
+      "attributes": "menu = \"Map Set\", name = \"Pick\", colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/MapSetPick\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixSetGenerators/Pick\"",
+      "fields": [
+        "public PrototypeType prototypeType = PrototypeType.TerrainLayer;",
+        "public TerrainLayer terrainLayer = null;",
+        "public Texture2D texture = null;",
+        "public GameObject prefab = null;",
+        "public int instanceNum = 0;",
+        "public bool createIfNotExists = true;",
+        "public float opacity = 1;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsSpecial.cs",
+      "line": 144,
+      "cls": "Create210",
+      "name": "Create",
+      "menu": "Map Set",
+      "attributes": "menu = \"Map Set\", name = \"Create\", colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/MapSetCreate\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixSetGenerators/Create\"",
+      "fields": [
+        "public PrototypeType prototypeType = PrototypeType.TerrainLayer;",
+        "public TerrainLayer terrainLayer = null;",
+        "public Texture2D texture = null;",
+        "public GameObject prefab = null;",
+        "public int instanceNum = 0;",
+        "public float Opacity { get; set; }",
+        "public Generator Gen { get; private set; }",
+        "public ulong id;",
+        "public ulong Id { get{return id;} set{id=value;} }",
+        "public ulong LinkedOutletId { get; set; }",
+        "public ulong LinkedGenId { get; set; }",
+        "public Layer[] layers = new Layer[0];",
+        "public Layer[] Layers => layers;",
+        "public int guiExpanded;",
+        "public enum Normalize { None, Sum, Layered }",
+        "public Normalize normalize = Normalize.None;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/MatrixSets/Runtime/MatrixSetsSpecial.cs",
+      "line": 264,
+      "cls": "Combine210",
+      "name": "Combine",
+      "menu": "Map Set",
+      "attributes": "menu = \"Map Set\", name = \"Combine\", colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/MapSetCombine\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixSetGenerators/Combine\"",
+      "fields": [
+        "public Generator Gen { get; private set; }",
+        "public ulong id;",
+        "public ulong Id { get{return id;} set{id=value;} }",
+        "public ulong LinkedOutletId { get; set; }",
+        "public ulong LinkedGenId { get; set; }",
+        "public Layer[] layers = new Layer[0];",
+        "public Layer[] Layers => layers;",
+        "public bool normalize = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsPortals.cs",
+      "line": 12,
+      "cls": "ObjectsPortalEnter",
+      "name": "Enter",
+      "menu": "Objects/Portals",
+      "attributes": "menu = \"Objects/Portals\", name = \"Enter\", iconName = \"GeneratorIcons/PortalIn\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsPortals.cs",
+      "line": 13,
+      "cls": "ObjectsPortalExit",
+      "name": "Exit",
+      "menu": "Objects/Portals",
+      "attributes": "menu = \"Objects/Portals\", name =\"Exit\", iconName = \"GeneratorIcons/PortalOut\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/Loop.cs",
+      "line": 16,
+      "cls": "Loop210",
+      "name": "Loop",
+      "menu": "Functions",
+      "attributes": "menu=\"Functions\", name =\"Loop\", iconName=\"GeneratorIcons/Function\", priority = 1, colorType = typeof(IBiome)",
+      "fields": [
+        "public int iterations = 1;",
+        "public float Complexity => subGraph!=null ? subGraph.GetGenerateComplexity()*iterations : 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 14,
+      "cls": "Adjust200",
+      "name": "Adjust",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Adjust\", iconName=\"GeneratorIcons/Adjust\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Adjust\"",
+      "fields": [
+        "public bool useRandom = false;",
+        "public int seed = 12345;",
+        "public float sizeFactor = 0;",
+        "public enum Relativeness { absolute, relative };",
+        "public Relativeness relativeness = Relativeness.relative;",
+        "public Vector2 height = Vector2.zero;",
+        "public Vector2 rotation = Vector2.zero;",
+        "public Vector2 scale = Vector2.one;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 119,
+      "cls": "Randomize211",
+      "name": "Randomize",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu = \"Objects/Modifiers\", name = \"Randomize\", iconName = \"GeneratorIcons/Random\", colorType = typeof(TransitionsList), disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Split\"",
+      "fields": [
+        "[Val(\"Seed\")] public int seed = 12345;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 147,
+      "cls": "Mask200",
+      "name": "Mask",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Mask\", iconName=\"GeneratorIcons/ObjectsMask\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Clean_Up\"",
+      "fields": [
+        "[Val(\"Seed\")]\tpublic int seed = 12345;",
+        "[Val(\"Invert\")]\tpublic bool invert = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 203,
+      "cls": "Lerp210",
+      "name": "Lerp",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Lerp\", iconName=\"GeneratorIcons/ObjectsMask\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Clean_Up\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 262,
+      "cls": "Floor200",
+      "name": "Floor",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Floor\", iconName=null, disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Clean_Up\"",
+      "fields": [
+        "public enum Relativity{ absolute, relative };",
+        "[Val(\"Relativity\")] public Relativity relativity = Relativity.absolute;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 315,
+      "cls": "Split200",
+      "name": "Split",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Split\", iconName=\"GeneratorIcons/Split\", colorType = typeof(TransitionsList), disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Split\"",
+      "fields": [
+        "public string name = \"Object Layer\";",
+        "public bool heightConditionActive = false;",
+        "public Vector2 heightCondition = new Vector2(0,1);",
+        "public bool rotationConditionActive = false;",
+        "public Vector2 rotationCondition = new Vector2(0,360);",
+        "public bool scaleConditionActive = false;",
+        "public Vector2 scaleCondition = new Vector2(0,100);",
+        "public float chance = 1;",
+        "public Generator Gen { get; private set; }",
+        "public ulong id;",
+        "public ulong Id { get{return id;} set{id=value;} }",
+        "public SplitLayer[] layers = new SplitLayer[0];",
+        "public IList<IUnit> Layers { get => layers; set {return;} }",
+        "public bool Inversed => true;",
+        "public bool HideFirst => false;",
+        "public int guiExpanded = -1;",
+        "public enum MatchType { layered, random };",
+        "[Val(\"Match\")]\tpublic MatchType matchType = MatchType.random;",
+        "[Val(\"Seed\")]\tpublic int seed = 12345;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 447,
+      "cls": "Rarefy200",
+      "name": "Rarefy",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Rarefy\", iconName=\"GeneratorIcons/Rarefy\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Rerefy\"",
+      "fields": [
+        "public Inlet<TransitionsList> inlet;",
+        "public ulong id;",
+        "[Val(\"Dist\")] public float distance;",
+        "[Val(\"SF\")] public float sizeFactor;",
+        "public Layer[] layers = new Layer[0];",
+        "public bool self = true;",
+        "public float distance = 1;",
+        "public float sizeFactor = 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 535,
+      "cls": "Combine200",
+      "name": "Combine",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Combine\", iconName=\"GeneratorIcons/Combine\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Combine\"",
+      "fields": [
+        "public Inlet<TransitionsList>[] inlets = new Inlet<TransitionsList>[2] { new Inlet<TransitionsList>(), new Inlet<TransitionsList>() };"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 567,
+      "cls": "Spread200",
+      "name": "Spread",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Spread\", iconName=\"GeneratorIcons/Spread\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Propagate\"",
+      "fields": [
+        "public bool retainOriginals = true;",
+        "public int seed = 12345;",
+        "public UnityEngine.Vector2 growth = new UnityEngine.Vector2(2,3);",
+        "public UnityEngine.Vector2 distance = new UnityEngine.Vector2(1,2);",
+        "public float sizeFactor = 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 725,
+      "cls": "Flatten200",
+      "name": "Flatten",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Flatten\", iconName=\"GeneratorIcons/Flatten\", disengageable = true, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Flatten\"",
+      "fields": [
+        "[Val(\"Radius\")]\t\t\tpublic float radius = 1;",
+        "[Val(\"Hardness\")]\t\tpublic float hardness = 0.5f;",
+        "[Val(\"Size Factor\")]\tpublic float sizeFactor = 0;",
+        "public bool noiseFallof = false;",
+        "public float noiseAmount = 1f;",
+        "public float noiseSize = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 817,
+      "cls": "Stroke200",
+      "name": "Stroke",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Stroke\", iconName=\"GeneratorIcons/Flatten\", disengageable = true, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Stroke\"",
+      "fields": [
+        "[Val(\"Radius\")]\t\t\tpublic float radius = 1;",
+        "[Val(\"Hardness\")]\t\tpublic float hardness = 0.5f;",
+        "[Val(\"Size Factor\")]\tpublic float sizeFactor = 0;",
+        "public bool noiseFallof = false;",
+        "public float noiseAmount = 10f;",
+        "public float noiseSize = 5f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 898,
+      "cls": "Stamp200",
+      "name": "Stamp",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Stamp\", iconName=\"GeneratorIcons/Stamp\", disengageable = true, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Stamp\"",
+      "fields": [
+        "[Val(\"Size\", \"Custom\")]\tpublic float size = 1;",
+        "[Val(\"Intensity\", \"Custom\")]\tpublic float intensity = 1;",
+        "[Val(\"Hardness\", \"UseFallof\")]\tpublic float hardness = 0.8f;",
+        "[Val(\"Size Factor\", \"Custom\")]\tpublic float sizeFactor = 1;",
+        "[Val(\"Intensity Factor\", \"Custom\")]\tpublic float intensityFactor = 1;",
+        "public enum BlendType { Max, Add }",
+        "public BlendType blendType = BlendType.Max;",
+        "[Val(\"Use Rotation\", \"Custom\", isLeft = true)]\tpublic bool useRotation = true;",
+        "[Val(\"Use Falloff\", \"Custom\", isLeft = true)]\tpublic bool useFalloff = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 1039,
+      "cls": "Forest200",
+      "name": "Forest",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Forest\", iconName=\"GeneratorIcons/Forest\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Forest\"",
+      "fields": [
+        "[Val(\"Years\")]\t\t\tpublic int years = 100;",
+        "[Val(\"Density\")]\t\tpublic float density = 10000;",
+        "[Val(\"Fecundity\")]\t\tpublic float fecundity = 0.5f;",
+        "[Val(\"Seed Dist\")]\t\tpublic float seedDist = 15;",
+        "[Val(\"Reproductive Age\")]public float reproductiveAge = 10;",
+        "[Val(\"Survival Rate\")]\tpublic float survivalRate = 0.95f;",
+        "[Val(\"Life Age\")]\t\tpublic float lifeAge = 100;",
+        "[Val(\"Size Is Age\")]\tpublic bool sizeIsLife = true;",
+        "[Val(\"Seed\")]\t\t\tpublic int seed = 12345;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 1195,
+      "cls": "SlideGenerator200",
+      "name": "Slide",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu=\"Objects/Modifiers\", name =\"Slide\", iconName=\"GeneratorIcons/Slide\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/object_generators/Slide\"",
+      "fields": [
+        "[Val(\"Blur\")]\t\tpublic int smooth = 2;",
+        "[Val(\"Iterations\")]\tpublic int iterations = 100;",
+        "[Val(\"Move Factor\")]\tpublic float moveFactor = 0.2f;",
+        "[Val(\"Stop Slope\")]\tpublic float stopSlope = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 1279,
+      "cls": "Move210",
+      "name": "Move",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu = \"Objects/Modifiers\", name = \"Move\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/Move\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Move\"",
+      "fields": [
+        "[Val(\"Direction\")] public Vector2D direction;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 1324,
+      "cls": "ShrinkScale210",
+      "name": "Shrink Scale",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu = \"Objects/Modifiers\", name = \"Shrink Scale\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/ShrinkScale\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/ShrinkScale\"",
+      "fields": [
+        "[Val(\"Multiply\")] public float multiply = 0.001f;",
+        "[Val(\"Invert\")] public bool invert;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsModifiers.cs",
+      "line": 1361,
+      "cls": "SafeBorders218",
+      "name": "Safe Borders",
+      "menu": "Objects/Modifiers",
+      "attributes": "menu = \"Objects/Modifiers\", name = \"Safe Borders\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/SafeBorders\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/ShrinkScale\"",
+      "fields": [
+        "[Val(\"Edge Dist\")] public float edgeDist = 10f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/BiomesSet.cs",
+      "line": 40,
+      "cls": "BiomesSet200",
+      "name": "Biomes Set",
+      "menu": "Biomes",
+      "attributes": "menu=\"Biomes\", name =\"Biomes Set\", iconName=\"GeneratorIcons/Biome\", priority = 1, colorType = typeof(IBiome)",
+      "fields": [
+        "public BiomeLayer[] layers = new BiomeLayer[0];",
+        "public IList<IUnit> Layers { get => layers; set => layers=ArrayTools.Convert<BiomeLayer,IUnit>(value); }",
+        "public bool Inversed => true;",
+        "public bool HideFirst => true;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/GrassInOut.cs",
+      "line": 20,
+      "cls": "BrushReadGrassSet",
+      "name": "Grass",
+      "menu": "Brush/Input",
+      "attributes": "menu = \"Brush/Input\", name = \"Grass\", section=2, colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/BrushGrassIn\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/GrassInOut\"",
+      "fields": [
+        "public string Name { get => \"Grass\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/GrassInOut.cs",
+      "line": 82,
+      "cls": "BrushWriteGrassSet",
+      "name": "Grass",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Grass\", section=2, colorType = typeof(MatrixSet), iconName=\"GeneratorIcons/BrushGrassOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/GrassInOut\"",
+      "fields": [
+        "public string Name { get => \"Grass\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/TexturesOut.cs",
+      "line": 105,
+      "cls": "TexturesOutput200",
+      "name": "Textures",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"Textures\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "[Val(\"Layer\", cat:\"Layer\")] public TerrainLayer prototype;",
+        "public Color color = new Color(0.75f, 0.75f, 0.75f, 1);",
+        "public bool guiProperties;",
+        "public bool guiRemapping;",
+        "public bool guiTileSettings;",
+        "[SerializeField] public int guiExpanded;",
+        "public float[,,] splats;",
+        "public TerrainLayer[] prototypes;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/TexturesOut.cs",
+      "line": 282,
+      "cls": "CustomShaderOutput200",
+      "name": "Custom Material",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"Custom Material\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "public Color[][] textureColors;",
+        "public string[] textureNames;",
+        "public string[] altTextureNames= null;",
+        "public TextureFormat textureFormat;",
+        "public float textureBaseMapDistance;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/TexturesOut.cs",
+      "line": 563,
+      "cls": "DirectTexturesOutput200",
+      "name": "Direct Textures",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"Direct Textures\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "public Color[][] textureColors;",
+        "public string[] textureNames;",
+        "public TextureFormat textureFormat;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/TexturesOut.cs",
+      "line": 744,
+      "cls": "DirectMatricesOutput200",
+      "name": "DirectMatrices",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"DirectMatrices\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "public DictionaryOrdered<string,MatrixWorld> dict;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/Whittaker.cs",
+      "line": 57,
+      "cls": "Whittaker200",
+      "name": "Whittaker",
+      "menu": "Biomes",
+      "attributes": "menu=\"Biomes\", name =\"Whittaker\", iconName=\"GeneratorIcons/Whittaker\", priority = 1, colorType = typeof(IBiome)",
+      "fields": [
+        "[Val(\"Sharpness\")] public float sharpness = 0.6f;",
+        "public WhittakerLayer[] layers = new WhittakerLayer[]",
+        "public IList<IUnit> Layers { get => layers; set {return;} }",
+        "public bool Inversed => false;",
+        "public bool HideFirst => false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/TreesInOut.cs",
+      "line": 20,
+      "cls": "BrushReadTrees",
+      "name": "Trees",
+      "menu": "Brush/Input",
+      "attributes": "menu = \"Brush/Input\", name = \"Trees\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/TreesIn\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/TreesInOut\"",
+      "fields": [
+        "public bool specificPrefabs = false;",
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public string Name { get => \"Trees\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/TreesInOut.cs",
+      "line": 60,
+      "cls": "BrushTransferTrees",
+      "name": "Transfer Trees",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Transfer Trees\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/BrushTreesOut\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/TreesInOut\"",
+      "fields": [
+        "public bool specificPrefabs = false;",
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public PositioningSettings posSettings = new PositioningSettings() { relativeHeight = false };",
+        "public bool guiProperties;",
+        "public Color color = Color.white;",
+        "public Color lightmapColor = Color.white;",
+        "public float bendFactor;",
+        "public string Name { get => \"Move Trees\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/TreesInOut.cs",
+      "line": 127,
+      "cls": "BrushWriteTrees",
+      "name": "Write Trees",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Write Trees\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/BrushTreesOut\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/TreesInOut\"",
+      "fields": [
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public PositioningSettings posSettings = new PositioningSettings() { relativeHeight = false };",
+        "public bool guiProperties;",
+        "public bool useOriginalPrototype = false;",
+        "public Color color = Color.white;",
+        "public Color lightmapColor = Color.white;",
+        "public float bendFactor;",
+        "public string Name { get => \"Trees\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/FunctionPortals.cs",
+      "line": 13,
+      "cls": "MatrixFnEnter",
+      "name": "Enter",
+      "menu": "Functions/Enter",
+      "attributes": "menu = \"Functions/Enter\", menuName = \"Map\", name = \"Enter\", iconName = \"GeneratorIcons/FunctionIn\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/FunctionPortals.cs",
+      "line": 14,
+      "cls": "MatrixFnExit",
+      "name": "Exit",
+      "menu": "Functions/Exit",
+      "attributes": "menu = \"Functions/Exit\", menuName = \"Map\", name = \"Exit\", iconName = \"GeneratorIcons/FunctionOut\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/FunctionPortals.cs",
+      "line": 15,
+      "cls": "ObjectsFnEnter",
+      "name": "Enter",
+      "menu": "Functions/Enter",
+      "attributes": "menu = \"Functions/Enter\", menuName = \"Objects\", name = \"Enter\", iconName = \"GeneratorIcons/FunctionIn\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/FunctionPortals.cs",
+      "line": 16,
+      "cls": "ObjectsFnExit",
+      "name": "Exit",
+      "menu": "Functions/Exit",
+      "attributes": "menu = \"Functions/Exit\", menuName = \"Objects\", name = \"Exit\", iconName = \"GeneratorIcons/FunctionOut\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/FunctionPortals.cs",
+      "line": 19,
+      "cls": "SplineFunctionInput",
+      "name": "Enter",
+      "menu": "Functions/Enter",
+      "attributes": "menu = \"Functions/Enter\", menuName = \"Spline\", name = \"Enter\", iconName = \"GeneratorIcons/FunctionIn\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/FunctionPortals.cs",
+      "line": 20,
+      "cls": "SplineFunctionOutput",
+      "name": "Exit",
+      "menu": "Functions/Exit",
+      "attributes": "menu = \"Functions/Exit\", menuName = \"Spline\", name = \"Exit\", iconName = \"GeneratorIcons/FunctionOut\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/VegetationStudioObjects/Runtime/VSProObjectsOut.cs",
+      "line": 24,
+      "cls": "VSProObjectsOut",
+      "name": "VS Pro Objs",
+      "menu": "Objects/Outputs",
+      "attributes": "menu = \"Objects/Outputs\", name = \"VS Pro Objs\", section =2, drawButtons = false, colorType = typeof(TransitionsList), helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Grass\"",
+      "fields": [
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public PositioningSettings posSettings = null;",
+        "public BiomeBlend biomeBlend = BiomeBlend.Random;",
+        "public string id;",
+        "public string lastUsedName;",
+        "public string lastUsedType;",
+        "public Layer[] layers = new Layer[] { new Layer() };",
+        "public bool objHeight = true;",
+        "public bool relativeHeight = true;",
+        "public bool guiHeight;",
+        "public bool useRotation = true;",
+        "public bool takeTerrainNormal = false;",
+        "public bool rotateYonly = false;",
+        "public bool regardPrefabRotation = false;",
+        "public bool guiRotation;",
+        "public bool useScale = true;",
+        "public bool scaleYonly = false;",
+        "public bool regardPrefabScale = false;",
+        "public bool guiScale;",
+        "public VegetationSystemPro srcSystem;",
+        "public VegetationPackagePro package;",
+        "public bool copyVS;",
+        "public List<Transition>[] trns;",
+        "public string[] ids;",
+        "public int Resolution {get{ return 0; }}"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/RTP/RTPOutput.cs",
+      "line": 13,
+      "cls": "RTPOutput200",
+      "name": "RTP",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"RTP\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName = \"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "public ReliefTerrain rtp = null;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 17,
+      "cls": "Manual210",
+      "name": "Manual",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Manual\", iconName=\"GeneratorIcons/Constant\", colorType = typeof(SplineSys), disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "public Vector3[] positions = new Vector3[1];"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 43,
+      "cls": "Interlink200",
+      "name": "Interlink",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Interlink\", iconName=\"GeneratorIcons/Constant\", colorType = typeof(SplineSys), disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Iterations\")]\t\tpublic int iterations = 8;",
+        "[Val(\"Max Links\")]\t\tpublic int maxLinks = 4;",
+        "[Val(\"Within Tile\")]\tpublic bool withinTile = true;",
+        "public enum Clamp { Off, Full, Active }",
+        "[Val(\"Clamp\")]\tpublic Clamp clamp;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 196,
+      "cls": "Pathfinding200",
+      "name": "Pathfinding",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Pathfinding\", iconName=null, disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Resolution\")]\t\t\tpublic int resolution = 32;",
+        "[Val(\"Distance Factor\")]\t\tpublic float distanceFactor = 1f;",
+        "[Val(\"Elevation Factor\")]\t\tpublic float elevationFactor = 1f;",
+        "[Val(\"Straighten Factor\")]\t\tpublic float straightenFactor = 1f;",
+        "[Val(\"Max Elevation\")]\t\tpublic float maxElevation = 0.1f;",
+        "[Val(\"Max Iterations\")]\t\tpublic int maxIterations = 1000000;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 325,
+      "cls": "Stroke200",
+      "name": "Stroke",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Stroke\", iconName=\"GeneratorIcons/Constant\", disengageable = true, colorType = typeof(SplineSys), helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Width\")]\t  public float width = 10;",
+        "[Val(\"Hardness\")] public float hardness = 0.0f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 398,
+      "cls": "Align200",
+      "name": "Align",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Align\", iconName=\"GeneratorIcons/Constant\", colorType = typeof(SplineSys), disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Range\")] public float range = 30;",
+        "[Val(\"Flat\")] public float flat = 0.25f;",
+        "[Val(\"Detail\")] public float detail = 0f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 500,
+      "cls": "Stamp200",
+      "name": "Stamp",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Stamp\", iconName=\"GeneratorIcons/Constant\", colorType = typeof(SplineSys), disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "public enum Algorithm { Flatten, Detail, Both };",
+        "public Algorithm algorithm;",
+        "public float flatRange = 2;",
+        "public float blendRange = 16;",
+        "public float detailRange = 32;",
+        "public int detail = 1;",
+        "public float fallof = 1;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 612,
+      "cls": "Optimize200",
+      "name": "Optimize",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Optimize\", iconName=null, disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Split\")] public int split = 3;",
+        "[Val(\"Deviation\")] public float deviation = 1;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 638,
+      "cls": "Relax200",
+      "name": "Relax",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Relax\", iconName=null, disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Blur\")] public float blur = 1;",
+        "[Val(\"Iterations\")] public int iterations = 3;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 664,
+      "cls": "Combine217",
+      "name": "Combine",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Combine\", iconName=\"GeneratorIcons/Blend\", disengageable = true, colorType = typeof(SplineSys), helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Blend\"",
+      "fields": [
+        "public Layer[] layers = new Layer[] { new Layer(), new Layer() };",
+        "public Layer[] Layers => layers;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 715,
+      "cls": "WeldClose200",
+      "name": "Weld Close",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Weld Close\", iconName=null, disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Threshold\")] public float threshold = 25;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 740,
+      "cls": "Floor200",
+      "name": "Floor",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Floor\", iconName=null, disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 795,
+      "cls": "Avoid200",
+      "name": "Avoid",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Avoid\", iconName=null, disengageable = true, helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Distance\")] public float distance = 10;",
+        "[Val(\"Size Factor\")] public int sizeFactor = 0;",
+        "[Val(\"Iterations\")] public int iterations = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 837,
+      "cls": "Push200",
+      "name": "Push",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Push\", iconName=null, disengageable = true, colorType = typeof(SplineSys), helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Distance\")] public float distance = 10;",
+        "[Val(\"Size Factor\")] public int sizeFactor = 0;",
+        "[Val(\"Iterations\")] public int iterations = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 885,
+      "cls": "Isoline200",
+      "name": "Isoline",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Isoline\", iconName=null, disengageable = true, colorType = typeof(SplineSys), helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Splines/Runtime/SplinesGenerators.cs",
+      "line": 906,
+      "cls": "Silhouette200",
+      "name": "Silhouette",
+      "menu": "Spline/Standard",
+      "attributes": "menu=\"Spline/Standard\", name =\"Silhouette\", iconName=null, disengageable = true, colorType = typeof(SplineSys), helpLink =\"https://gitlab.com/denispahunov/mapmagic/wikis/map_generators/constant\"",
+      "fields": [
+        "[Val(\"Width\")] public float width = 10;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/ObjectsInOut.cs",
+      "line": 20,
+      "cls": "BrushReadObjects",
+      "name": "Objects",
+      "menu": "Brush/Input",
+      "attributes": "menu = \"Brush/Input\", name = \"Objects\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/BrushObjectsIn\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/ObjectsInOut\"",
+      "fields": [
+        "public bool specificPrefabs = false;",
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public string Name { get => \"Objects\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/ObjectsInOut.cs",
+      "line": 70,
+      "cls": "BrushTransferObjects",
+      "name": "Transfer Objects",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Transfer Objects\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/BrushObjectsOut\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "public bool specificPrefabs = false;",
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public PositioningSettings posSettings = new PositioningSettings() { relativeHeight = false };",
+        "public string Name { get => \"Objects\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Brush/Generators/ObjectsInOut.cs",
+      "line": 125,
+      "cls": "BrushWriteObjects",
+      "name": "Objects",
+      "menu": "Brush/Output",
+      "attributes": "menu = \"Brush/Output\", name = \"Objects\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/BrushObjectsOut\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/Brush/ObjectsInOut\"",
+      "fields": [
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public PositioningSettings posSettings = new PositioningSettings() {relativeHeight=false};",
+        "public bool instantiateClones = false;",
+        "public bool guiProperties;",
+        "public string Name { get => \"Objects\"; set {} }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/MicroSplat/MicroSplatOutput.cs",
+      "line": 19,
+      "cls": "MicroSplatOutput200",
+      "name": "MicroSplat",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"MicroSplat\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "[NonSerialized] public TerrainLayer prototype = null;",
+        "public bool assignComponent;",
+        "public MicroSplatPropData propData;",
+        "public bool assignComponent;",
+        "public MicroSplatPropData propData;",
+        "public Material materialTemplate;",
+        "public Color[][] colors;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/MegaSplat/MegaSplatOutput.cs",
+      "line": 15,
+      "cls": "MegaSplatOutput200",
+      "name": "MegaSplat",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"MegaSplat\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/GrassOut.cs",
+      "line": 15,
+      "cls": "GrassOutput200",
+      "name": "Grass",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"Grass\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/GrassOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Grass\"",
+      "fields": [
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public float density = 0.5f;",
+        "public DetailPrototype prototype = new DetailPrototype() { dryColor = new Color(0.95f, 1f, 0.65f), healthyColor = new Color(0.5f, 0.65f, 0.35f) };",
+        "public enum GrassRenderMode { Grass, Billboard, MeshVertexLit, MeshUnlit };",
+        "public GrassRenderMode renderMode;",
+        "public int[][,] detailLayers;",
+        "public DetailPrototype[] detailPrototypes;",
+        "public int patchResolution = 16;",
+        "public int Resolution => detailLayers.Length != 0 ? detailLayers[0].GetLength(0) : 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/Function.cs",
+      "line": 37,
+      "cls": "Function210",
+      "name": "Function",
+      "menu": "Functions",
+      "attributes": "menu=\"Functions\", name =\"Function\", iconName=\"GeneratorIcons/Function\", priority = 1, colorType = typeof(IBiome)",
+      "fields": [
+        "public float Complexity => subGraph!=null ? subGraph.GetGenerateComplexity() : 0;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Biomes/Runtime/Function.cs",
+      "line": 229,
+      "cls": "Function200",
+      "name": "Function Outdated",
+      "menu": "",
+      "attributes": "name =\"Function Outdated\", iconName=\"GeneratorIcons/Function\", priority = 1, colorType = typeof(IBiome), disabled = true",
+      "fields": [
+        "public Graph srcGraph;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/VegetationStudioObjects/Placeholders/VSProObjectsPlaceholder.cs",
+      "line": 19,
+      "cls": "VSProObjectsOut",
+      "name": "VS Pro Objs",
+      "menu": "",
+      "attributes": "name = \"VS Pro Objs\", section =2, drawButtons = false, colorType = typeof(TransitionsList)",
+      "fields": [
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public PositioningSettings posSettings = null;",
+        "public BiomeBlend biomeBlend = BiomeBlend.Random;",
+        "public string id;",
+        "public string lastUsedName;",
+        "public string lastUsedType;",
+        "public Layer[] layers = new Layer[] { new Layer() };",
+        "public bool objHeight = true;",
+        "public bool relativeHeight = true;",
+        "public bool guiHeight;",
+        "public bool useRotation = true;",
+        "public bool takeTerrainNormal = false;",
+        "public bool rotateYonly = false;",
+        "public bool regardPrefabRotation = false;",
+        "public bool guiRotation;",
+        "public bool useScale = true;",
+        "public bool scaleYonly = false;",
+        "public bool regardPrefabScale = false;",
+        "public bool guiScale;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsOut.cs",
+      "line": 47,
+      "cls": "ObjectsOutput",
+      "name": "Objects",
+      "menu": "Objects/Outputs",
+      "attributes": "menu = \"Objects/Outputs\", name = \"Objects\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/ObjectsOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Objects\"",
+      "fields": [
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public PositioningSettings posSettings = null;",
+        "public BiomeBlend biomeBlend = BiomeBlend.Random;",
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public bool guiMultiprefab;",
+        "public bool guiProperties;",
+        "public bool allowReposition = true;",
+        "public bool instantiateClones = false;",
+        "public int seed = 12345;",
+        "public bool objHeight = true;",
+        "public bool relativeHeight = true;",
+        "public bool guiHeight;",
+        "public bool useRotation = true;",
+        "public bool takeTerrainNormal = false;",
+        "public bool rotateYonly = false;",
+        "public bool regardPrefabRotation = false;",
+        "public bool guiRotation;",
+        "public bool useScale = true;",
+        "public bool scaleYonly = false;",
+        "public bool regardPrefabScale = false;",
+        "public bool guiScale;",
+        "public ObjectsPool.Prototype[] prototypes;",
+        "public List<Transition>[] transitions;",
+        "public float terrainHeight;",
+        "public int objsPerIteration=500;",
+        "public int Resolution {get{ return 0; }}"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Objects/Runtime/ObjectsOut.cs",
+      "line": 245,
+      "cls": "TreesOutput",
+      "name": "Trees",
+      "menu": "Objects/Outputs",
+      "attributes": "menu = \"Objects/Outputs\", name = \"Trees\", section=2, colorType = typeof(TransitionsList), iconName=\"GeneratorIcons/TreesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Objects\"",
+      "fields": [
+        "public GameObject[] prefabs = new GameObject[1];",
+        "public PositioningSettings posSettings = null;",
+        "public BiomeBlend biomeBlend = BiomeBlend.Random;",
+        "public OutputLevel outputLevel = OutputLevel.Main;",
+        "public bool guiMultiprefab;",
+        "public bool guiProperties;",
+        "public int seed = 12345;",
+        "public Color color = Color.white;",
+        "public Color lightmapColor = Color.white;",
+        "public float bendFactor;",
+        "public bool objHeight = true;",
+        "public bool relativeHeight = true;",
+        "public bool guiHeight;",
+        "public bool useRotation = true;",
+        "public bool takeTerrainNormal = false;",
+        "public bool rotateYonly = false;",
+        "public bool regardPrefabRotation = false;",
+        "public bool guiRotation;",
+        "public bool useScale = true;",
+        "public bool scaleYonly = false;",
+        "public bool regardPrefabScale = false;",
+        "public bool guiScale;",
+        "public TreeInstance[] treeInstances;",
+        "public TreePrototype[] treePrototypes;",
+        "public int Resolution {get{ return 0; }}"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixInitial.cs",
+      "line": 16,
+      "cls": "Constant200",
+      "name": "Constant",
+      "menu": "Map/Initial",
+      "attributes": "menu=\"Map/Initial\", name =\"Constant\", iconName=\"GeneratorIcons/Constant\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Constant\"",
+      "fields": [
+        "[Val(\"Level\", min:0)] public float level;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixInitial.cs",
+      "line": 32,
+      "cls": "Noise200",
+      "name": "Noise",
+      "menu": "Map/Initial",
+      "attributes": "menu=\"Map/Initial\", name =\"Noise\", iconName=\"GeneratorIcons/Noise\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Noise\"",
+      "fields": [
+        "public enum Type { Unity=0, Linear=1, Perlin=2, Simplex=3 };",
+        "[Val(\"Type\")] public Type type = Type.Perlin;",
+        "[Val(\"Seed\")]\t\tpublic int seed = 12345;",
+        "[Val(\"Intensity\")]\tpublic float intensity = 1f;",
+        "[Val(\"Size\")]\t\tpublic float size = 200f;",
+        "[Val(\"Detail\")]\t\tpublic float detail = 0.5f;",
+        "[Val(\"Turbulence\")] public float turbulence = 0f;",
+        "[Val(\"Offset\")]\t\tpublic Vector2D offset = new Vector2D(0,0);"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixInitial.cs",
+      "line": 105,
+      "cls": "Voronoi200",
+      "name": "Voronoi",
+      "menu": "Map/Initial",
+      "attributes": "menu=\"Map/Initial\", name =\"Voronoi\", iconName=\"GeneratorIcons/Voronoi\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Voronoi\"",
+      "fields": [
+        "[Val(\"Intensity\")]\tpublic float intensity = 1f;",
+        "[Val(\"Cell Size\", min:0)]\tpublic int cellSize = 50;",
+        "[Val(\"Uniformity\")]\tpublic float uniformity = 0;",
+        "[Val(\"Seed\")]\tpublic int seed = 12345;",
+        "public enum BlendType { flat, closest, secondClosest, cellular, organic }",
+        "[Val(\"Blend Type\")]\tpublic BlendType blendType = BlendType.cellular;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixInitial.cs",
+      "line": 183,
+      "cls": "SimpleForm200",
+      "name": "Simple Form",
+      "menu": "Map/Initial",
+      "attributes": "menu=\"Map/Initial\", name =\"Simple Form\", iconName=\"GeneratorIcons/SimpleForm\", disengageable = true, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/SimpleForm\"",
+      "fields": [
+        "public enum FormType { GradientX, GradientZ, Pyramid, Cone }",
+        "[Val(\"Type\")]\t\tpublic FormType type = FormType.Cone;",
+        "[Val(\"Intensity\")]\tpublic float intensity = 1;",
+        "[Val(\"Scale\")]\t\tpublic float scale = 1;",
+        "[Val(\"Offset\")]\t\tpublic Vector2 offset;",
+        "[Val(\"Wrap\")]\t\tpublic CoordRect.TileMode wrap = CoordRect.TileMode.Tile;",
+        "public bool hideDefaultToolGizmo { get; set; }",
+        "public bool drawOffsetScaleGizmo = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixInitial.cs",
+      "line": 312,
+      "cls": "Import200",
+      "name": "Import",
+      "menu": "Map/Initial",
+      "attributes": "menu=\"Map/Initial\", name =\"Import\", iconName=\"GeneratorIcons/Import\", disengageable = true, disabled = false, helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Import\"",
+      "fields": [
+        "[Val(\"Map\", priority = 10, type = typeof(MatrixAsset))]\tpublic MatrixAsset matrixAsset;",
+        "[Val(\"Wrap Mode\", priority = 4)]\tpublic CoordRect.TileMode wrapMode = CoordRect.TileMode.Clamp;",
+        "[Val(\"Scale\", priority = 3)]\t\tpublic float scale = 1;",
+        "[Val(\"Offset\", priority = 2)]\t\tpublic Vector2 offset;",
+        "public bool hideDefaultToolGizmo { get; set; }",
+        "public bool drawOffsetScaleGizmo = false;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Generators/Matrix/Runtime/MatrixInitial.cs",
+      "line": 462,
+      "cls": "Spot210",
+      "name": "Spot",
+      "menu": "Map/Initial",
+      "attributes": "menu = \"Map/Initial\", name = \"Spot\", section=2, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/Spot\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/-/wikis/MatrixGenerators/Spot\"",
+      "fields": [
+        "[Val(\"Intensity\")] public float intensity = 1;",
+        "[Val(\"Position\")] public Vector2D position;",
+        "[Val(\"Radius\")] public float radius = 30;",
+        "[Val(\"Hardness\")] public float hardness = 0.5f;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Compatibility/MicroSplat/Placeholders/MicroSplatOutputPlaceholder.cs",
+      "line": 14,
+      "cls": "MicroSplatOutput200",
+      "name": "MicroSplat",
+      "menu": "Map/Output",
+      "attributes": "menu = \"Map/Output\", name = \"MicroSplat\", section =2, drawButtons = false, colorType = typeof(MatrixWorld), iconName=\"GeneratorIcons/TexturesOut\", helpLink = \"https://gitlab.com/denispahunov/mapmagic/wikis/output_generators/Textures\"",
+      "fields": [
+        "[NonSerialized] public TerrainLayer prototype = null;"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Portals.cs",
+      "line": 12,
+      "cls": "MatrixPortalEnter",
+      "name": "Enter",
+      "menu": "Map/Portals",
+      "attributes": "menu = \"Map/Portals\", name = \"Enter\", iconName = \"GeneratorIcons/PortalIn\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Portals.cs",
+      "line": 13,
+      "cls": "MatrixPortalExit",
+      "name": "Exit",
+      "menu": "Map/Portals",
+      "attributes": "menu = \"Map/Portals\", name =\"Exit\", iconName = \"GeneratorIcons/PortalOut\", lookLikePortal=true",
+      "fields": []
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Portals.cs",
+      "line": 41,
+      "cls": "PortalEnter",
+      "name": "Generic Portal Enter",
+      "menu": "",
+      "attributes": "name = \"Generic Portal Enter\"",
+      "fields": [
+        "public string name = \"Portal\";",
+        "public string Name { get{ return name; } set{ name = value; } }"
+      ]
+    },
+    {
+      "plugin": "MapMagic 2 Bundle v2.1.11",
+      "path": "Assets/MapMagic/Nodes/Portals.cs",
+      "line": 52,
+      "cls": "PortalExit",
+      "name": "Generic Portal Exit",
+      "menu": "",
+      "attributes": "name =\"Generic Portal Exit\"",
+      "fields": [
+        "public PortalEnter<T> enter;",
+        "public IPortalEnter<T> Enter => enter;"
+      ]
+    }
+  ],
+  "totals": {
+    "files": 2460,
+    "declarations": 11281,
+    "nodes": 129
+  }
+}

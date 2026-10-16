@@ -1090,6 +1090,9 @@ if(NOT ANDROID)
     ../tests/native/test_terrain_reedit.cpp ../tests/native/test_terrain_ui.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
+  add_executable(aether_buffer_updates_tests ../tests/native/family_base_main.cpp ../tests/native/test_buffer_updates.cpp)
+  target_include_directories(aether_buffer_updates_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_buffer_updates_tests PRIVATE aether_core)
   add_executable(aether_gui_tests ../tests/native/family_base_main.cpp ../tests/native/test_gui.cpp ../tests/native/test_gui_expansion.cpp
     ../tests/native/test_scene_gui.cpp
     ../tests/native/test_character_authoring.cpp

@@ -1,8 +1,16 @@
 #pragma once
 
 #include "rhi/memory_allocator.h"
+#include "core/buffer_updates.h"
 
 namespace ae::rhi {
+struct BufferRangeUpload {
+  std::span<const u8> source;
+  std::span<const BufferUpdateRange> ranges;
+  VulkanBuffer *destination = nullptr;
+  VkPipelineStageFlags stage = 0;
+  VkAccessFlags access = 0;
+};
 
 // Contexto síncrono de upload usado na criação/importação de recursos, nunca
 // no caminho de frame. O contrato já centraliza staging e transições; a versão
@@ -36,6 +44,9 @@ public:
                     u64 sourceSizeBytes, VulkanBuffer &destination,
                     VkPipelineStageFlags destinationStage,
                     VkAccessFlags destinationAccess);
+  // Caller has retired every reader of this buffer. Validate and stage all
+  // ranges before one submission; unchanged bytes and allocation stay intact.
+  bool uploadBufferRanges(VulkanMemoryAllocator &allocator, std::span<const BufferRangeUpload> updates);
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;

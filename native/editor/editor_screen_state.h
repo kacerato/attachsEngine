@@ -1141,7 +1141,8 @@ struct EditorScreenState final {
   float terrainSpacing=.2f;
   std::vector<std::array<float,6>> terrainCursorLines;
   u32 terrainPreviewUpdates=0;
-  u32 terrainTab=0,terrainPage=0;
+  u32 terrainTab=0,terrainPage=0,terrainPath=0,terrainPathPoint=0,terrainProfilePoint=0;
+  std::shared_ptr<const resources::TerrainBuild> terrainPreviewBuild;
   EditorEntityId terrainTarget=0;
   resources::TerrainRecipe terrainDraft;
   resources::TerrainStroke terrainBrush;

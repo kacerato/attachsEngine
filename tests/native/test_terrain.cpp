@@ -443,14 +443,17 @@ AE_TEST(terrain_native_ui_controls_and_capture) {
   f.session.initialize(&font, &icons);
   std::filesystem::create_directories("build/terrain-evidence");
   for (u32 width : {1280u, 655u})
-    for (u32 tab = 0; tab < 4; ++tab) {
+    for (u32 tab = 0; tab < 5; ++tab)
+    for (u32 section=0;section<(tab==4 || tab==1?3u:1u);++section) {
       const u32 height = width == 1280 ? 720 : 300;
       f.session.setSurface({0, 0, float(width), float(height)}, {});
       f.session.update();
       auto state = f.session.screen();
       state.terrainOpen = true;
       state.terrainTab = tab;
+      state.terrainSection = section;
       state.terrainPage = 0;
+      if(tab==4){resources::TerrainPath path;path.points={{-12,4,-10,false},{0,8,0,true},{12,12,10,false}};state.terrainDraft.paths={path};}
       ui::UiDrawList list;
       list.begin(state.surface, font.metrics(ui::UiFontWeight::Regular));
       ui::UiInputRouter router;
@@ -472,7 +475,7 @@ AE_TEST(terrain_native_ui_controls_and_capture) {
       target.resize(width, height, .16f, .18f, .2f);
       test::rasterizeUi(instances, font, icons, target);
       std::ofstream file("build/terrain-evidence/ui-" + std::to_string(width) +
-                             "-" + std::to_string(tab) + ".ppm",
+                             "-" + std::to_string(tab) + (section?"-s"+std::to_string(section):"") + ".ppm",
                          std::ios::binary);
       file << "P6\n" << width << ' ' << height << "\n255\n";
       for (usize i = 0; i < target.pixels.size(); i += 4)
@@ -759,4 +762,202 @@ AE_TEST(terrain_solid_editor_reopen_and_side_bottom_collision) {
   AE_EXPECT_TRUE(play.physics().rayCast(bottomOrigin, bottomDirection, {}, hit),
                  "Jolt collides with the underside");
   play.stop();
+}
+
+AE_TEST(terrain_extended_brush_shape_boundary_and_serialization) {
+  resources::TerrainRecipe r;
+  resources::TerrainStroke brush;
+  brush.aspect=1.7f;brush.verticalAspect=.6f;brush.depthAspect=2.2f;
+  brush.rotation=37;brush.pitch=29;brush.roll=-23;brush.opacity=.37f;
+  brush.surfaceDepth=2.4f;brush.lockHeight=true;brush.dimensionsLinked=false;
+  brush.filterRadius=3;brush.application=resources::TerrainBrushApplication::Target;
+  std::string error;
+  for(u32 shape=0;shape<5;++shape)for(bool inverted:{false,true}) {
+    brush.shape=resources::TerrainBrushShape(shape);brush.inverted=inverted;
+    for(u32 ring=0;ring<3;++ring)for(u32 segment=1;segment<48;++segment) {
+      // Half-space caps and the cone apex have an intentional one-sided boundary.
+      if(shape==2 || shape==3)continue;
+      auto p=resources::terrainBrushOutline(brush,ring,segment/48.f);
+      const float d=resources::terrainBrushDistance(brush,p[0],p[1],p[2],true);
+      AE_EXPECT_TRUE(std::abs(d-1)<.0001f,"rotated XYZ outline matches the operator boundary");
+    }
+    r.strokes={brush};resources::TerrainRecipe loaded;
+    const auto encoded=resources::serializeTerrainRecipe(r);
+    AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
+    AE_EXPECT_EQ(resources::serializeTerrainRecipe(loaded),encoded,"all advanced properties survive save/reopen");
+  }
+  brush.pitch=std::numeric_limits<float>::infinity();r.strokes={brush};
+  AE_EXPECT_TRUE(!resources::validTerrainRecipe(r,error),"reject nonfinite orientation before generating");
+}
+AE_TEST(terrain_target_paint_caps_weight_and_preserves_other_ratios) {
+  resources::TerrainRecipe r;r.cells=16;r.height=0;
+  resources::TerrainStroke b;b.tool=resources::TerrainTool::Paint;b.layer=3;b.radius=200;
+  b.hardness=1;b.opacity=.35f;b.application=resources::TerrainBrushApplication::Target;
+  r.strokes={b};resources::TerrainMesh once,many;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,once,error),error.c_str());
+  r.strokes.assign(12,b);
+  AE_EXPECT_TRUE(resources::generateTerrain(r,many,error),error.c_str());
+  AE_EXPECT_EQ(digest(once),digest(many),"target paint is idempotent instead of accumulating to opaque");
+  for(const auto &part:many.parts)for(const auto &v:part.vertices) {
+    AE_EXPECT_TRUE(std::abs(v.weights[3]-.35f)<.0001f,"selected layer reaches chosen opacity");
+    float sum=0;for(float w:v.weights)sum+=w;
+    AE_EXPECT_TRUE(std::abs(sum-1)<.0001f,"remaining weights stay normalized");
+  }
+}
+AE_TEST(terrain_density_target_is_idempotent_but_accumulation_changes_volume) {
+  resources::TerrainRecipe r;r.mode=resources::TerrainMode::SmoothVoxel;r.cells=r.verticalCells=16;r.size=32;r.height=0;
+  resources::TerrainStroke b;b.tool=resources::TerrainTool::Dig;b.y=4;b.radius=7;b.strength=.3f;b.gesture=1;
+  b.application=resources::TerrainBrushApplication::Target;
+  r.strokes={b};resources::TerrainMesh once,many;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,once,error),error.c_str());
+  r.strokes.assign(8,b);AE_EXPECT_TRUE(resources::generateTerrain(r,many,error),error.c_str());
+  AE_EXPECT_EQ(digest(once),digest(many),"same gesture target does not overshoot with extra events");
+  b.application=resources::TerrainBrushApplication::Accumulate;r.strokes={b};
+  AE_EXPECT_TRUE(resources::generateTerrain(r,once,error),error.c_str());
+  r.strokes.assign(8,b);AE_EXPECT_TRUE(resources::generateTerrain(r,many,error),error.c_str());
+  AE_EXPECT_TRUE(digest(once)!=digest(many),"accumulative volume operator adds density change");
+}
+
+AE_TEST(terrain_incremental_chunks_match_full_rebuild_including_seams) {
+  for(auto mode:{resources::TerrainMode::Heightfield,resources::TerrainMode::SmoothVoxel,resources::TerrainMode::BlockVoxel}) {
+    resources::TerrainRecipe r;r.mode=mode;r.cells=64;r.verticalCells=16;r.size=64;r.height=0;
+    resources::TerrainBuild base,edited;resources::TerrainMesh full;std::string error;
+    AE_EXPECT_TRUE(resources::updateTerrain(r,nullptr,base,error),error.c_str());
+    resources::TerrainStroke stroke;stroke.tool=mode==resources::TerrainMode::Heightfield?resources::TerrainTool::Raise:resources::TerrainTool::Dig;
+    stroke.x=-16;stroke.y=4;stroke.z=-16;stroke.radius=3;stroke.gesture=1;
+    r.strokes={stroke};
+    AE_EXPECT_TRUE(resources::updateTerrain(r,&base,edited,error),error.c_str());
+    AE_EXPECT_TRUE(resources::generateTerrain(r,full,error),error.c_str());
+    AE_EXPECT_EQ(digest(edited.mesh),digest(full),"localized publication matches full vertices, normals and weights");
+    AE_EXPECT_TRUE(edited.mesh.reusedChunks>0 && edited.mesh.rebuiltChunks>0,"unaffected chunks reused; seam dependencies rebuilt");
+    base=std::move(edited);stroke.tool=resources::TerrainTool::Paint;stroke.layer=3;stroke.opacity=.3f;stroke.gesture=2;
+    r.strokes.push_back(stroke);
+    AE_EXPECT_TRUE(resources::updateTerrain(r,&base,edited,error),error.c_str());
+    AE_EXPECT_TRUE(resources::generateTerrain(r,full,error),error.c_str());
+    AE_EXPECT_EQ(digest(edited.mesh),digest(full),"material-only edits invalidate affected chunks too");
+  }
+}
+AE_TEST(terrain_persistent_paths_roundtrip_reedit_and_independent_channels) {
+  resources::TerrainRecipe r;r.cells=64;r.size=64;r.height=0;
+  resources::TerrainPath path;path.id=9;path.name="Rio / Caminho 01";
+  path.points={{-20,6,-10,true},{0,8,0,false},{20,10,12,false}};
+  path.width=5;path.shoulderWidth=12;path.elevation=1;path.uniformRamp=1;
+  path.profile={{0,1},{.3f,.8f},{.7f,.2f},{1,0}};
+  r.paths={path};std::string error;resources::TerrainRecipe restored;
+  AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(resources::serializeTerrainRecipe(r),restored,error),error.c_str());
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(restored),resources::serializeTerrainRecipe(r),"resource points, profiles and names roundtrip");
+  resources::TerrainMesh shaped,textured,original,reshaped;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,shaped,error),error.c_str());
+  r.paths[0].shape=false;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,textured,error),error.c_str());
+  for(const auto &part:textured.parts)for(const auto &v:part.vertices)AE_EXPECT_TRUE(std::abs(v.position[1]-r.base)<.0001f,"texture-only path does not change elevations");
+  r.paths[0].texture=false;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,original,error),error.c_str());
+  AE_EXPECT_TRUE(digest(textured)!=digest(original),"independent texturing switch changes real surface weights");
+  r.paths[0]=path;r.paths[0].points[1].z=20;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,reshaped,error),error.c_str());
+  AE_EXPECT_TRUE(digest(reshaped)!=digest(shaped),"moving retained point rebuilds the path");
+  r.paths[0]=path;AE_EXPECT_TRUE(resources::generateTerrain(r,reshaped,error),error.c_str());
+  AE_EXPECT_EQ(digest(reshaped),digest(shaped),"restoring points has no residual baked old path");
+}
+
+AE_TEST(terrain_incremental_volume_filters_match_boundaries_and_restore) {
+  resources::TerrainRecipe r;r.mode=resources::TerrainMode::SmoothVoxel;r.cells=32;r.verticalCells=16;r.size=32;r.height=0;
+  resources::TerrainBuild previous,next;resources::TerrainMesh full;std::string error;
+  AE_EXPECT_TRUE(resources::updateTerrain(r,nullptr,previous,error),error.c_str());
+  for(auto tool:{resources::TerrainTool::Dig,resources::TerrainTool::Smooth,resources::TerrainTool::Sharpen,resources::TerrainTool::Restore}) {
+    resources::TerrainStroke b;b.tool=tool;b.x=-16;b.z=-16;b.y=4;b.radius=6;b.filterRadius=3;b.gesture=u32(r.strokes.size()+1);
+    r.strokes.push_back(b);
+    AE_EXPECT_TRUE(resources::updateTerrain(r,&previous,next,error),error.c_str());
+    AE_EXPECT_TRUE(resources::generateTerrain(r,full,error),error.c_str());
+    AE_EXPECT_EQ(digest(next.mesh),digest(full),"finite-volume border and filter halo match ordered replay");
+    previous=std::move(next);
+  }
+}
+AE_TEST(terrain_path_curve_and_surface_sampling_are_consistent) {
+  resources::TerrainPath path;path.points={{-8,4,-8,true},{0,4,8,false},{8,4,-8,false}};
+  const auto curved=resources::terrainPathPolyline(path,.5f);path.points[0].curved=false;
+  const auto straight=resources::terrainPathPolyline(path,.5f);
+  AE_EXPECT_EQ(curved.front(),straight.front(),"curve preserves the first point");
+  AE_EXPECT_EQ(curved.back(),straight.back(),"curve preserves the final point");
+  AE_EXPECT_TRUE(curved!=straight,"curved segments are visible in the actual preview samples");
+  resources::TerrainField field;field.width=field.depth=2;field.step=2;field.heights={0,2,4,6};
+  AE_EXPECT_TRUE(std::abs(resources::terrainFieldHeight(field,0,0)-3)<.00001f,"preview height uses bilinear interpolation");
+  AE_EXPECT_EQ(resources::terrainFieldHeight(field,-5,-5),0.f,"outside sample clamps to terrain border");
+}
+
+AE_TEST(terrain_indexed_export_preserves_triangles_and_supports_locked_border_lods) {
+  resources::TerrainRecipe r;r.cells=32;r.height=0;
+  resources::TerrainMesh mesh;std::string error;std::vector<u8> bytes;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+  AE_EXPECT_TRUE(resources::writeTerrainGlb(r,mesh,{},bytes,error),error.c_str());
+  resources::GltfImportLimits limits;limits.generateLods=true;limits.optimizePolygonOrder=false;
+  resources::GltfImport model;AE_EXPECT_TRUE(resources::importGlb(bytes,limits,{},model),model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.vertices.size()/renderer::MapVertexStride<mesh.triangles*3/2,"lossless sharing reduces resident vertex data by more than half");
+  AE_EXPECT_TRUE(!model.meshLods.empty(),"indexed topology supports actual border-locked LOD reduction");
+  for(usize part=0;part<mesh.parts.size();++part) {
+    const auto &draw=model.draws[part];
+    AE_EXPECT_EQ(draw.indexCount,mesh.parts[part].vertices.size(),"all source triangles retained in level zero");
+    for(u32 i=0;i<draw.indexCount;++i) {
+      const auto index=draw.vertexOffset+model.indices[draw.firstIndex+i];
+      float position[3];std::memcpy(position,model.vertices.data()+index*renderer::MapVertexStride,12);
+      for(u32 axis=0;axis<3;++axis)AE_EXPECT_EQ(position[axis],mesh.parts[part].vertices[i].position[axis],"indexed export preserves exact triangle positions");
+    }
+  }
+}
+
+AE_TEST(terrain_path_point_heights_ramps_and_crest_have_independent_effects) {
+  resources::TerrainRecipe r;r.cells=64;r.size=64;r.height=0;
+  resources::TerrainPath p;p.points={{-16,6,0,false},{0,14,0,false},{16,10,0,false}};
+  p.autoRamp=false;p.width=4;p.shoulderWidth=12;p.followTerrain=false;r.paths={p};
+  resources::TerrainField field;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_EQ(resources::terrainFieldHeight(field,0,0),14.f,"intermediate point Y controls the actual road height");
+  r.paths[0].uniformRamp=1;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_TRUE(std::abs(resources::terrainFieldHeight(field,0,0)-8)<.001f,"uniform ramp connects endpoint heights by horizontal length");
+  r.paths[0].uniformRamp=.5f;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_TRUE(std::abs(resources::terrainFieldHeight(field,0,0)-11)<.001f,"ramp blend is continuous");
+  r.paths[0].uniformRamp=0;r.paths[0].followTerrain=true;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_EQ(resources::terrainFieldHeight(field,0,0),r.base,"follow mode uses the sculpted surface");
+  r.paths[0].useDefinedHeight=true;r.paths[0].definedHeight=8;
+  r.paths[0].profile={{0,1},{.5f,1.5f},{1,0}};
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_EQ(resources::terrainFieldHeight(field,0,4),10.f,"crest profile rises above the road without changing the lane");
+  r.paths[0].profile[1].y=-.5f;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_EQ(resources::terrainFieldHeight(field,0,4),2.f,"negative profile creates a shoulder ditch");
+  r.paths[0].textureProfile[0].y=1.5f;
+  AE_EXPECT_TRUE(!resources::validTerrainRecipe(r,error),"signed geometry range never leaks into texture opacity");
+  r.paths[0].textureProfile[0].y=1;r.paths[0].followTerrain=false;
+  resources::TerrainRecipe loaded;auto encoded=resources::serializeTerrainRecipe(r);
+  AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
+  AE_EXPECT_TRUE(!loaded.paths[0].followTerrain,"point-height mode persists");
+  encoded.replace(0,10,"AETERRAIN4");encoded.resize(encoded.rfind(' '));
+  AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
+  AE_EXPECT_TRUE(loaded.paths[0].followTerrain,"version 4 migration preserves the previous follow behavior");
+}
+
+AE_TEST(terrain_path_smart_crossings_preserve_strongest_without_order_residue) {
+  resources::TerrainRecipe r;r.cells=32;r.height=0;
+  resources::TerrainPath a;a.id=1;a.shape=false;a.points={{-20,4,0,false},{20,4,0,false}};
+  a.width=8;a.shoulderWidth=12;a.surfaceLayer=2;a.shoulderLayer=2;a.textureOpacity=a.shoulderOpacity=.3f;
+  auto b=a;b.id=2;b.surfaceLayer=b.shoulderLayer=3;b.textureOpacity=b.shoulderOpacity=.7f;
+  r.paths={a,b};resources::TerrainMesh forward,reverse;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,forward,error),error.c_str());
+  std::reverse(r.paths.begin(),r.paths.end());
+  AE_EXPECT_TRUE(resources::generateTerrain(r,reverse,error),error.c_str());
+  AE_EXPECT_EQ(digest(forward),digest(reverse),"smart crossings choose the strongest coverage before painting, independent of ordering");
+  r.paths[0].textureOpacity=r.paths[0].shoulderOpacity=.3f;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,forward,error),error.c_str());
+  std::reverse(r.paths.begin(),r.paths.end());
+  AE_EXPECT_TRUE(resources::generateTerrain(r,reverse,error),error.c_str());
+  AE_EXPECT_EQ(digest(forward),digest(reverse),"equal coverage resolves by stable path ID");
+  for(auto &path:r.paths)path.smartPaint=false;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,forward,error),error.c_str());
+  std::reverse(r.paths.begin(),r.paths.end());
+  AE_EXPECT_TRUE(resources::generateTerrain(r,reverse,error),error.c_str());
+  AE_EXPECT_TRUE(digest(forward)!=digest(reverse),"explicit ordered-overpaint mode still respects path order");
 }

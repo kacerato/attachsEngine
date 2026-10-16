@@ -1,4 +1,5 @@
 #include "rhi/upload_context.h"
+#include <limits>
 
 #include <cstring>
 #include <array>
@@ -143,7 +144,8 @@ bool VulkanUploadContext::uploadSampledMipChain(VulkanMemoryAllocator &allocator
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &commandBuffer_;
-  if (vkQueueSubmit(queue_, 1, &submitInfo, fence_) != VK_SUCCESS) return false;
+  if (vkResetFences(device_, 1, &fence_) != VK_SUCCESS ||
+      vkQueueSubmit(queue_, 1, &submitInfo, fence_) != VK_SUCCESS) return false;
   destination.uploadSubmitted_ = true;
   const VkResult waitResult = vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
   if (waitResult != VK_SUCCESS) {
@@ -152,7 +154,7 @@ bool VulkanUploadContext::uploadSampledMipChain(VulkanMemoryAllocator &allocator
     vkQueueWaitIdle(queue_);
     return false;
   }
-  return vkResetFences(device_, 1, &fence_) == VK_SUCCESS;
+  return true;
 }
 
 bool VulkanUploadContext::uploadBuffer(VulkanMemoryAllocator &allocator, const void *sourceBytes,
@@ -197,13 +199,67 @@ bool VulkanUploadContext::uploadBuffer(VulkanMemoryAllocator &allocator, const v
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &commandBuffer_;
-  if (vkQueueSubmit(queue_, 1, &submitInfo, fence_) != VK_SUCCESS) return false;
+  if (vkResetFences(device_, 1, &fence_) != VK_SUCCESS ||
+      vkQueueSubmit(queue_, 1, &submitInfo, fence_) != VK_SUCCESS) return false;
   const VkResult waitResult = vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
   if (waitResult != VK_SUCCESS) {
     vkQueueWaitIdle(queue_);
     return false;
   }
-  return vkResetFences(device_, 1, &fence_) == VK_SUCCESS;
+  return true;
 }
 
+bool VulkanUploadContext::uploadBufferRanges(VulkanMemoryAllocator &allocator,
+    std::span<const BufferRangeUpload> updates) {
+  if(device_==VK_NULL_HANDLE || !allocator.isReady() || allocator.device()!=device_)return false;
+  u64 stagedBytes=0;
+  for(const auto &update:updates) {
+    const auto *destination=update.destination;
+    if(!destination || destination->owner_!=&allocator || !destination->isReady() ||
+       update.source.size()!=destination->sizeBytes() || !update.stage || !update.access ||
+       !(destination->usage_&VK_BUFFER_USAGE_TRANSFER_DST_BIT))return false;
+    u64 end=0;
+    for(const auto &range:update.ranges) {
+      if(!range.bytes || range.offset%4 || range.bytes%4 || range.offset<end ||
+         range.offset>update.source.size() || range.bytes>update.source.size()-range.offset)return false;
+      end=range.offset+range.bytes;
+      if(range.bytes>std::numeric_limits<u64>::max()-stagedBytes)return false;
+      stagedBytes+=range.bytes;
+    }
+  }
+  if(!stagedBytes)return true;
+  BufferDesc desc{};desc.sizeBytes=stagedBytes;desc.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  desc.memoryClass=MemoryClass::Staging;desc.cpuAccess=CpuAccess::SequentialWrite;desc.preferDeviceMemory=false;
+  VulkanBuffer staging;
+  if(!allocator.createBuffer(desc,&staging) || !staging.mappedData())return false;
+  std::vector<std::vector<VkBufferCopy>> copies(updates.size());
+  std::vector<VkBufferMemoryBarrier> barriers;
+  u64 offset=0;VkPipelineStageFlags stages=0;
+  for(usize i=0;i<updates.size();++i) {
+    const auto &update=updates[i];if(update.ranges.empty())continue;
+    copies[i].reserve(update.ranges.size());
+    for(const auto &range:update.ranges) {
+      std::memcpy(static_cast<u8 *>(staging.mappedData())+offset,update.source.data()+range.offset,range.bytes);
+      copies[i].push_back({offset,range.offset,range.bytes});offset+=range.bytes;
+    }
+    VkBufferMemoryBarrier barrier{};barrier.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=update.access;
+    barrier.srcQueueFamilyIndex=barrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer=update.destination->handle();barrier.size=update.destination->sizeBytes();
+    barriers.push_back(barrier);stages|=update.stage;
+  }
+  if(!allocator.flushBuffer(staging) || vkResetCommandPool(device_,commandPool_,0)!=VK_SUCCESS)return false;
+  VkCommandBufferBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;begin.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  if(vkBeginCommandBuffer(commandBuffer_,&begin)!=VK_SUCCESS)return false;
+  for(usize i=0;i<updates.size();++i)if(!copies[i].empty())
+    vkCmdCopyBuffer(commandBuffer_,staging.handle(),updates[i].destination->handle(),u32(copies[i].size()),copies[i].data());
+  vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_TRANSFER_BIT,stages,0,0,nullptr,u32(barriers.size()),barriers.data(),0,nullptr);
+  if(vkEndCommandBuffer(commandBuffer_)!=VK_SUCCESS)return false;
+  VkSubmitInfo submit{};submit.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO;submit.commandBufferCount=1;submit.pCommandBuffers=&commandBuffer_;
+  if(vkResetFences(device_,1,&fence_)!=VK_SUCCESS || vkQueueSubmit(queue_,1,&submit,fence_)!=VK_SUCCESS)return false;
+  if(vkWaitForFences(device_,1,&fence_,VK_TRUE,UINT64_MAX)!=VK_SUCCESS){vkQueueWaitIdle(queue_);return false;}
+  // No fallible operation after successful in-place publication. The next
+  // upload resets this completed fence before submitting.
+  return true;
+}
 } // namespace ae::rhi

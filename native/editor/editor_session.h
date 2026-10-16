@@ -164,8 +164,10 @@ public:
   bool publishTerrainPreview(const resources::TerrainMesh &,std::string &);
   struct TerrainPreviewJob;
   std::shared_ptr<TerrainPreviewJob> terrainPreviewJob_;
+  std::shared_ptr<const resources::TerrainBuild> terrainPreviewCache_;
   u32 terrainPreviewFirst_=0,terrainPreviewCount_=0;
   usize terrainPreviewSamples_=0;
+  std::string terrainPreviewRecipe_;
   u64 terrainPreviewEpoch_=0;
   struct TerrainJob;
   std::shared_ptr<TerrainJob> terrainJob_;

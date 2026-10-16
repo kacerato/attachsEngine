@@ -113,6 +113,8 @@ public:
   u32 lastReusedTextures() const { return lastReusedTextures_; }
   u32 lastUploadedTextures() const { return lastUploadedTextures_; }
   bool lastGeometryReused() const { return lastGeometryReused_; }
+  u64 lastGeometryUploadBytes() const { return lastGeometryUploadBytes_; }
+  u32 lastGeometryUploadRanges() const { return lastGeometryUploadRanges_; }
   // Caller waits for in-flight draws before replacing these descriptor resources.
   bool setEnvironmentMap(rhi::VulkanDevice &, rhi::VulkanUploadContext &,
                          renderer::SharedEnvironmentMap);
@@ -217,6 +219,8 @@ private:
   float authoringAnisotropy_ = 1.0f;
   u32 lastReusedTextures_ = 0, lastUploadedTextures_ = 0;
   bool lastGeometryReused_ = false;
+  u64 lastGeometryUploadBytes_ = 0;
+  u32 lastGeometryUploadRanges_ = 0;
   rhi::VulkanImage environmentImage_;
   rhi::VulkanSampler environmentSampler_;
   rhi::VulkanImage environmentSpecularImage_;

@@ -442,10 +442,15 @@ AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
     f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   AE_EXPECT_TRUE(f.session.screen().terrainLivePreview,f.session.screen().terrainMessage.c_str());
-  for(u32 i=0;i<5000 && f.session.screen().terrainPreviewUpdates<2;++i) {
+  const auto firstPreview=f.session.screen().terrainPreviewUpdates;
+  // Down and the first Move may correctly coalesce before the worker finishes.
+  // A subsequent move must publish NEW geometry, without requiring redundant
+  // publication of an unchanged draft just to satisfy a timing-dependent count.
+  f.session.handlePointer({25,ui::UiPointerPhase::Move,from,5.2});
+  for(u32 i=0;i<5000 && f.session.screen().terrainPreviewUpdates==firstPreview;++i) {
     f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  AE_EXPECT_TRUE(f.session.screen().terrainPreviewUpdates>=2,"coalesced drag publishes newer geometry while gesture remains captured");
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewUpdates>firstPreview,"a later drag sample publishes new geometry while gesture remains captured");
   AE_EXPECT_TRUE(f.session.screen().terrainCursorVisible && f.session.screen().terrainCursorLines.size()>=96,
                  "surface cursor includes outer boundary and falloff ring");
   AE_EXPECT_TRUE(f.draws.size()>publishedDraws,"live preview publishes additional real mesh draws");
@@ -467,12 +472,42 @@ AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
   AE_EXPECT_EQ(files(),filesBefore,"preview cannot create files");
   AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),serialized,"preview keeps draft immutable");
   AE_EXPECT_EQ(scene::importLink(f.session.document().find(root)->components)->source,source,"preview keeps source link");
-  f.session.handlePointer({25,ui::UiPointerPhase::Cancel,to,5.2});
+  f.session.handlePointer({25,ui::UiPointerPhase::Cancel,from,5.3});
   f.session.refreshTerrainJob();
   AE_EXPECT_TRUE(!f.session.screen().terrainLivePreview && !f.session.screen().terrainCursorVisible,"cancel clears preview and cursor");
   AE_EXPECT_EQ(f.draws.size(),publishedDraws,"cancel restores original render package immediately");
   AE_EXPECT_EQ(f.session.document().revision(),revision,"cancel preserves document");
   AE_EXPECT_EQ(f.session.assets().serialize(),registry,"cancel preserves registry");
+}
+
+AE_TEST(terrain_live_preview_does_not_feed_displacement_into_stationary_brush) {
+  for (const auto mode : {resources::TerrainMode::Heightfield, resources::TerrainMode::SmoothVoxel}) {
+    ReeditFixture f;
+    AE_EXPECT_TRUE(f.ready,"fixture initialized");
+    resources::TerrainRecipe recipe;
+    recipe.mode=mode;recipe.cells=recipe.verticalCells=16;recipe.height=0;recipe.base=4;
+    std::string error;
+    AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+    const auto tool=mode==resources::TerrainMode::Heightfield?resources::TerrainTool::Raise:resources::TerrainTool::Dig;
+    f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(tool)));
+    AE_EXPECT_TRUE(f.session.setTerrainNumber(9,16) && f.session.setTerrainNumber(10,3),"configure brush");
+    ui::UiPoint from,to;
+    AE_EXPECT_TRUE(f.brushPoints(from,to),"pickable surface");
+    const ui::UiPoint point{std::lerp(from.x,to.x,.5f),std::lerp(from.y,to.y,.5f)};
+    f.session.handlePointer({27,ui::UiPointerPhase::Down,point,6});
+    for(u32 i=0;i<5000 && !f.session.screen().terrainLivePreview;++i) {
+      f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    AE_EXPECT_TRUE(f.session.screen().terrainLivePreview,"deformed mesh published before subsequent pointer events");
+    for(u32 i=0;i<20;++i) {
+      f.session.handlePointer({27,ui::UiPointerPhase::Move,point,6.1+i*.01});
+      f.session.refreshTerrainJob();
+    }
+    f.session.handlePointer({27,ui::UiPointerPhase::Up,point,7});
+    AE_EXPECT_TRUE(f.finishGeneration(),"stationary gesture completes");
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(),usize(1),
+                 "preview displacement and stationary move events cannot add authoring samples");
+  }
 }
 
 AE_TEST(terrain_open_from_geometry_context_dismisses_creation_overlay) {

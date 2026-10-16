@@ -226,7 +226,10 @@ mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
 }
 void main() {
   if(OPAQUE_NO_CLIP==0u && aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
-  uint flags=frame.materialFlags.x;
+  // Surface identities use bits above 15 (terrain is bit 19). A mediump local
+  // can truncate those bits on mobile GPUs even though the push constant is
+  // highp, making splat weights render as ordinary red/green vertex tint.
+  highp uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
   aetherWriteTemporalMasks(0.0,0.0);
   // The specialized solid family has already validated water/impostor/LOD

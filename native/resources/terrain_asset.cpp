@@ -6,6 +6,7 @@
 #include <limits>
 #include <locale>
 #include <sstream>
+#include <unordered_map>
 
 namespace ae::resources {
 namespace {
@@ -59,18 +60,122 @@ u32 word(std::span<const u8> b, usize p) {
   return u32(b[p]) | u32(b[p + 1]) << 8 | u32(b[p + 2]) << 16 |
          u32(b[p + 3]) << 24;
 }
-} // namespace
-float terrainBrushDistance(const TerrainStroke &s, float dx, float dy, float dz, bool volume) {
-  const float a=s.rotation*.01745329252f, c=std::cos(a), t=std::sin(a);
-  const float x=(dx*c+dz*t)/s.aspect, z=-dx*t+dz*c;
-  if (s.shape==TerrainBrushShape::Box)
-    return std::max({std::abs(x),std::abs(z),volume?std::abs(dy):0.f})/s.radius;
-  if (volume && s.shape==TerrainBrushShape::Hemisphere && dy<0) return 2;
-  if (volume && s.shape==TerrainBrushShape::Cone) {
-    if(dy<0 || dy>s.radius*2) return 2;
-    return std::sqrt(x*x+z*z)/std::max(.001f,s.radius-dy*.5f);
+std::string pathNameToken(std::string_view name) {
+  constexpr char hex[]="0123456789abcdef";std::string result;
+  for(unsigned char c:name){result+=hex[c>>4];result+=hex[c&15];}return result.empty()?"-":result;
+}
+bool readPathName(std::string_view token,std::string &name) {
+  if(token=="-"){name.clear();return true;}if(token.size()>512 || token.size()%2)return false;
+  const auto digit=[](char c)->int{return c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:-1;};
+  name.clear();for(usize i=0;i<token.size();i+=2){const int a=digit(token[i]),b=digit(token[i+1]);if(a<0||b<0)return false;name+=char(a*16+b);}return true;
+}
+float pathCurve(const std::vector<TerrainCurvePoint> &curve,float t) {
+  t=std::clamp(t,0.f,1.f);
+  for(usize i=1;i<curve.size();++i)if(t<=curve[i].x) {
+    const auto &a=curve[i-1],&b=curve[i];return std::lerp(a.y,b.y,(t-a.x)/(b.x-a.x));
   }
-  return std::sqrt(x*x+z*z+(volume?dy*dy:0))/s.radius;
+  return curve.back().y;
+}
+struct PathSample {V p;float length;};
+std::vector<PathSample> samplePath(const TerrainPath &path,float step) {
+  std::vector<PathSample> samples;if(!path.enabled || path.points.size()<2)return samples;
+  const auto point=[&](usize i){const auto &p=path.points[i];return V{p.x,p.y,p.z};};
+  float length=0;
+  for(usize i=1;i<path.points.size();++i) {
+    const auto a=point(i-1),b=point(i),prev=point(i>1?i-2:0),next=point(std::min(i+1,path.points.size()-1));
+    const u32 count=std::min(2048u,std::max(1u,u32(std::ceil(std::sqrt(dot(b-a,b-a))/std::max(.1f,step)))));
+    for(u32 j=i==1?0:1;j<=count;++j) {
+      const float t=float(j)/count;V p=a*(1-t)+b*t;
+      if(path.points[i-1].curved) p=(a*2+(b-prev)*t+(prev*2-a*5+b*4-next)*(t*t)+(a*3-b*3+next-prev)*(t*t*t))*.5f;
+      if(!samples.empty()){const auto d=p-samples.back().p;length+=std::sqrt(d.x*d.x+d.z*d.z);}
+      samples.push_back({p,length});
+    }
+  }
+  return samples;
+}
+struct PathHit {float distance=INFINITY,y=0,t=0;};
+PathHit pathHit(const TerrainPath &path,const std::vector<PathSample> &samples,float x,float z) {
+  PathHit hit;
+  for(usize i=1;i<samples.size();++i) {
+    const auto &a=samples[i-1],&b=samples[i];const auto d=b.p-a.p;
+    const float denominator=d.x*d.x+d.z*d.z;if(denominator<1e-10f)continue;
+    const float raw=((x-a.p.x)*d.x+(z-a.p.z)*d.z)/denominator;
+    if(path.cap==TerrainPathCap::Flat && ((i==1 && raw<0)||(i+1==samples.size()&&raw>1)))continue;
+    const float extra=path.cap==TerrainPathCap::Square?path.width*.5f/std::sqrt(denominator):0;
+    const float t=std::clamp(raw,i==1?-extra:0.f,i+1==samples.size()?1+extra:1.f);
+    const float dx=x-a.p.x-d.x*t,dz=z-a.p.z-d.z*t,distance=std::sqrt(dx*dx+dz*dz);
+    if(distance<hit.distance)hit={distance,std::lerp(a.p.y,b.p.y,std::clamp(t,0.f,1.f)),
+      std::lerp(a.length,b.length,std::clamp(t,0.f,1.f))/std::max(.0001f,samples.back().length)};
+  }
+  return hit;
+}
+} // namespace
+namespace {
+V brushRotation(V p, const TerrainStroke &s, bool inverse) {
+  const auto rotate=[](float &a,float &b,float degrees) {
+    const float angle=degrees*.01745329252f,c=std::cos(angle),t=std::sin(angle);
+    const float x=a*c-b*t;b=a*t+b*c;a=x;
+  };
+  if(inverse) { rotate(p.x,p.z,-s.rotation);rotate(p.y,p.z,-s.pitch);rotate(p.x,p.y,-s.roll); }
+  else { rotate(p.x,p.y,s.roll);rotate(p.y,p.z,s.pitch);rotate(p.x,p.z,s.rotation); }
+  return p;
+}
+}
+float terrainBrushDistance(const TerrainStroke &s, float dx, float dy, float dz, bool volume) {
+  // A planar brush never gains a vertical dependency from pitch or roll.
+  auto orientation=s;
+  if(!volume)orientation.pitch=orientation.roll=0;
+  const auto q=brushRotation({dx,volume?dy:0,dz},orientation,true);
+  const float x=q.x/(s.radius*s.aspect),z=q.z/(s.radius*s.depthAspect);
+  const float y=volume?q.y/(s.radius*s.verticalAspect)*(s.inverted?-1.f:1.f):0;
+  if(s.shape==TerrainBrushShape::Box)return std::max({std::abs(x),std::abs(z),std::abs(y)});
+  if(s.shape==TerrainBrushShape::RoundedBox) {
+    const float r=s.roundness;
+    const float ax=std::abs(x)-(1-r),ay=volume?std::abs(y)-(1-r):-1.f,az=std::abs(z)-(1-r);
+    const float outside=std::sqrt(std::max(0.f,ax)*std::max(0.f,ax)+std::max(0.f,ay)*std::max(0.f,ay)+std::max(0.f,az)*std::max(0.f,az));
+    return 1+outside+std::min(0.f,std::max({ax,ay,az}))-r;
+  }
+  if(volume && s.shape==TerrainBrushShape::Hemisphere && y<0)return 2;
+  if(volume && s.shape==TerrainBrushShape::Cone) {
+    if(y<0 || y>2)return 2;
+    return std::sqrt(x*x+z*z)/std::max(.00001f,1-y*.5f);
+  }
+  return std::sqrt(x*x+y*y+z*z);
+}
+std::array<float,3> terrainBrushOutline(const TerrainStroke &s,u32 ring,float phase) {
+  const float theta=phase*6.28318530718f;
+  float x=std::cos(theta),z=std::sin(theta),y=0;
+  if(ring==1){y=z;z=0;}else if(ring==2){y=x;x=0;}
+  if(s.shape==TerrainBrushShape::Box) {
+    const float m=std::max({std::abs(x),std::abs(y),std::abs(z)});x/=m;y/=m;z/=m;
+  } else if(s.shape==TerrainBrushShape::RoundedBox) {
+    // Intersect each radial ray with the exact rounded-box distance field.
+    auto unit=s;unit.radius=unit.aspect=unit.verticalAspect=unit.depthAspect=1;
+    unit.rotation=unit.pitch=unit.roll=0;unit.inverted=false;
+    float lo=0,hi=1.733f;
+    for(int i=0;i<18;++i){const float t=(lo+hi)*.5f;if(terrainBrushDistance(unit,x*t,y*t,z*t,true)<1)lo=t;else hi=t;}
+    const float t=(lo+hi)*.5f;x*=t;y*=t;z*=t;
+  }
+  if(s.shape==TerrainBrushShape::Hemisphere)y=std::abs(y);
+  if(s.shape==TerrainBrushShape::Cone && ring>0) {
+    const float t=phase*3;float radial;
+    if(t<1){radial=1-t;y=2*t;}else if(t<2){radial=1-t;y=2*(2-t);}else{radial=2*t-5;y=0;}
+    x=ring==1?radial:0;z=ring==2?radial:0;
+  }
+  const auto q=brushRotation({x*s.radius*s.aspect,y*s.radius*s.verticalAspect*(s.inverted?-1.f:1.f),z*s.radius*s.depthAspect},s,false);
+  return {q.x,q.y,q.z};
+}
+bool validTerrainStroke(const TerrainStroke &s,std::string &error) {
+  const float values[]{s.x,s.y,s.z,s.radius,s.strength,s.hardness,s.rotation,s.aspect,s.verticalAspect,s.depthAspect,s.pitch,s.roll,s.roundness,s.opacity,s.surfaceDepth};
+  for(float v:values)if(!std::isfinite(v)){error="Pincel não finito.";return false;}
+  if(u32(s.tool)>12 || u32(s.shape)>4 || u32(s.application)>2 || s.hardness<0 || s.hardness>1 ||
+     s.aspect<.1f || s.aspect>10 || s.verticalAspect<.1f || s.verticalAspect>10 || s.depthAspect<.1f || s.depthAspect>10 ||
+     std::abs(s.rotation)>360 || std::abs(s.pitch)>360 || std::abs(s.roll)>360 || s.roundness<0 || s.roundness>1 ||
+     s.opacity<0 || s.opacity>1 || std::abs(s.surfaceDepth)>2048 || s.filterRadius<1 || s.filterRadius>4 || s.layer>3 || s.radius<.1f || s.radius>2048 ||
+     s.strength<0 || s.strength>128 || std::abs(s.x)>4096 || std::abs(s.z)>4096 || std::abs(s.y)>2048) {
+    error="Pincel fora dos limites.";return false;
+  }
+  return true;
 }
 float terrainBrushWeight(const TerrainStroke &s,float d) {
   if(d>=1) return 0;
@@ -107,19 +212,28 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
     error = "Volume excede 600 mil amostras; reduza a resolução.";
     return false;
   }
-  for (const auto &s : r.strokes) {
-    const float v[]{s.x, s.y, s.z, s.radius, s.strength, s.hardness, s.rotation, s.aspect};
-    for (float n : v)
-      if (!std::isfinite(n)) {
-        error = "Pincel não finito.";
-        return false;
-      }
-    if (u32(s.tool) > 12 || u32(s.shape)>3 || s.hardness<0 || s.hardness>1 || s.aspect<.1f || s.aspect>10 || std::abs(s.rotation)>360 || s.layer > 3 || s.radius < .1f || s.radius > 2048 ||
-        s.strength < 0 || s.strength > 128 || std::abs(s.x) > 4096 ||
-        std::abs(s.z) > 4096 || std::abs(s.y) > 2048) {
-      error = "Pincel fora dos limites.";
-      return false;
+  if(r.paths.size()>64){error="Limite de 64 caminhos por terreno.";return false;}
+  std::vector<u32> pathIds;
+  for(const auto &p:r.paths) {
+    const float values[]{p.width,p.shoulderWidth,p.elevation,p.slopeLimit,p.uniformRamp,p.definedHeight,p.textureOpacity,p.shoulderOpacity,p.textureTransition,p.vegetationTransition};
+    for(float v:values)if(!std::isfinite(v)){error="Parâmetro não finito no caminho.";return false;}
+    if(!p.id || std::find(pathIds.begin(),pathIds.end(),p.id)!=pathIds.end() || p.name.size()>256 || p.points.size()>1024 ||
+      p.width<.1f || p.shoulderWidth<p.width || p.shoulderWidth>2048 || p.slopeLimit<0 || p.slopeLimit>89.9f ||
+      std::abs(p.elevation)>512 || std::abs(p.definedHeight)>2048 || p.uniformRamp<0 || p.uniformRamp>1 ||
+      p.textureOpacity<0 || p.textureOpacity>1 || p.shoulderOpacity<0 || p.shoulderOpacity>1 ||
+      p.textureTransition<0 || p.textureTransition>512 || p.vegetationTransition<0 || p.vegetationTransition>512 ||
+      p.surfaceLayer>3 || p.shoulderLayer>3 || u32(p.cap)>2) {error="Propriedade do caminho fora do limite.";return false;}
+    pathIds.push_back(p.id);
+    for(const auto &point:p.points)if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z)||std::abs(point.x)>4096||std::abs(point.z)>4096||std::abs(point.y)>2048){error="Ponto de caminho inválido.";return false;}
+    for(const auto *curve:{&p.profile,&p.textureProfile,&p.vegetationProfile}) {
+      if(curve->size()<2 || curve->size()>32 || curve->front().x!=0 || curve->back().x!=1){error="Curva precisa cobrir 0–1 com 2–32 pontos.";return false;}
+      float last=-1;
+      const bool geometry=curve==&p.profile;
+      for(const auto &v:*curve){if(!std::isfinite(v.x)||!std::isfinite(v.y)||v.x<=last||v.x<0||v.x>1||v.y<(geometry?-1.f:0.f)||v.y>(geometry?2.f:1.f)){error="Curva de transição inválida.";return false;}last=v.x;}
     }
+  }
+  for (const auto &s : r.strokes) {
+    if(!validTerrainStroke(s,error))return false;
     if (r.mode == TerrainMode::Heightfield &&
         (s.tool == TerrainTool::Dig || s.tool == TerrainTool::Add)) {
       error = "Escavar/adicionar volume exige modo voxel.";
@@ -136,19 +250,38 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
 std::string serializeTerrainRecipe(const TerrainRecipe &r) {
   std::ostringstream s;
   s.imbue(std::locale::classic());
-  s << std::setprecision(9) << "AETERRAIN3 " << u32(r.mode) << ' ' << r.seed
+  s << std::setprecision(9) << "AETERRAIN5 " << u32(r.mode) << ' ' << r.seed
     << ' ' << r.cells << ' ' << r.verticalCells << ' ' << r.octaves << ' '
     << r.size << ' ' << r.height << ' ' << r.base << ' ' << r.frequency << ' '
     << r.textureScale << ' ' << r.island << ' ' << r.collision << ' '
     << r.solidBase << ' ' << r.baseDepth << ' ' << r.blendedSurface << ' ' << r.macroVariation << ' ' << r.strokes.size();
   for (const auto &v : r.strokes)
     s << ' ' << u32(v.tool) << ' ' << v.x << ' ' << v.y << ' ' << v.z << ' '
-      << v.radius << ' ' << v.strength << ' ' << v.layer << ' ' << u32(v.shape) << ' ' << v.hardness << ' ' << v.rotation << ' ' << v.aspect << ' ' << v.gesture;
+      << v.radius << ' ' << v.strength << ' ' << v.layer << ' ' << u32(v.shape) << ' ' << v.hardness << ' ' << v.rotation << ' ' << v.aspect << ' ' << v.gesture
+      << ' ' << v.verticalAspect << ' ' << v.depthAspect << ' ' << v.pitch << ' ' << v.roll
+      << ' ' << v.roundness << ' ' << v.opacity << ' ' << v.filterRadius << ' ' << u32(v.application)
+      << ' ' << v.inverted << ' ' << v.restoreGeometry << ' ' << v.restoreWeights
+      << ' ' << v.surfaceDepth << ' ' << v.lockHeight << ' ' << v.dimensionsLinked;
+  s << ' ' << r.paths.size();
+  for(const auto &p:r.paths) {
+    s << ' ' << p.id << ' ' << pathNameToken(p.name) << ' ' << p.width << ' ' << p.shoulderWidth << ' ' << p.elevation
+      << ' ' << p.slopeLimit << ' ' << p.uniformRamp << ' ' << p.definedHeight << ' ' << p.textureOpacity << ' ' << p.shoulderOpacity
+      << ' ' << p.textureTransition << ' ' << p.vegetationTransition << ' ' << p.surfaceLayer << ' ' << p.shoulderLayer
+      << ' ' << p.enabled << ' ' << p.shape << ' ' << p.texture << ' ' << p.keepWidthRatio << ' ' << p.autoRamp
+      << ' ' << p.useDefinedHeight << ' ' << p.reverseRamp << ' ' << p.smartPaint << ' ' << p.clearGrass << ' ' << p.clearTrees
+      << ' ' << p.showVegetation << ' ' << u32(p.cap) << ' ' << p.points.size();
+    for(const auto &point:p.points)s << ' ' << point.x << ' ' << point.y << ' ' << point.z << ' ' << point.curved;
+    for(const auto *curve:{&p.profile,&p.textureProfile,&p.vegetationProfile}) {
+      s << ' ' << curve->size();for(const auto &v:*curve)s << ' ' << v.x << ' ' << v.y;
+    }
+    s << ' ' << p.followTerrain;
+  }
   return s.str();
 }
 bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
                               std::string &error) {
-  if (text.size() > 1048576) {
+  // 64 paths with 1024 full-precision points plus 4096 brush samples.
+  if (text.size() > 8 * 1048576) {
     error = "Receita muito grande.";
     return false;
   }
@@ -160,13 +293,13 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
   if (!(s >> magic >> mode >> r.seed >> r.cells >> r.verticalCells >>
         r.octaves >> r.size >> r.height >> r.base >> r.frequency >>
         r.textureScale >> r.island >> r.collision) ||
-      (magic != "AETERRAIN1" && magic != "AETERRAIN2" && magic != "AETERRAIN3")) {
+      (magic != "AETERRAIN1" && magic != "AETERRAIN2" && magic != "AETERRAIN3" && magic != "AETERRAIN4" && magic != "AETERRAIN5")) {
     error = "Receita de terreno inválida.";
     return false;
   }
   r.blendedSurface = false;
   if ((magic != "AETERRAIN1" && !(s >> r.solidBase >> r.baseDepth)) ||
-      (magic == "AETERRAIN3" && !(s >> r.blendedSurface >> r.macroVariation)) ||
+      ((magic == "AETERRAIN3" || magic == "AETERRAIN4" || magic == "AETERRAIN5") && !(s >> r.blendedSurface >> r.macroVariation)) ||
       !(s >> count) || count > 4096) {
     error = "Receita de terreno inválida.";
     return false;
@@ -180,13 +313,36 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
       error = "Operação truncada.";
       return false;
     }
-    if (magic == "AETERRAIN3") {
+    if (magic == "AETERRAIN3" || magic == "AETERRAIN4" || magic == "AETERRAIN5") {
       u32 shape=0;
       if (!(s >> shape >> v.hardness >> v.rotation >> v.aspect >> v.gesture)) { error="Pincel truncado.";return false; }
       v.shape=TerrainBrushShape(shape);
     }
+    if(magic=="AETERRAIN4" || magic=="AETERRAIN5") {
+      u32 application=0;
+      if(!(s >> v.verticalAspect >> v.depthAspect >> v.pitch >> v.roll >> v.roundness >> v.opacity >> v.filterRadius >> application >> v.inverted >> v.restoreGeometry >> v.restoreWeights >> v.surfaceDepth >> v.lockHeight >> v.dimensionsLinked)) {error="Propriedades do pincel truncadas.";return false;}
+      v.application=TerrainBrushApplication(application);
+    }
     v.tool = TerrainTool(tool);
-    if(magic!="AETERRAIN3" && (v.tool==TerrainTool::Dig || v.tool==TerrainTool::Add))v.hardness=1;
+    if(magic!="AETERRAIN3" && magic!="AETERRAIN4" && magic!="AETERRAIN5" && (v.tool==TerrainTool::Dig || v.tool==TerrainTool::Add))v.hardness=1;
+  }
+  if(magic=="AETERRAIN4" || magic=="AETERRAIN5") {
+    u32 paths=0;if(!(s>>paths)||paths>64){error="Lista de caminhos inválida.";return false;}
+    r.paths.resize(paths);
+    for(auto &p:r.paths) {
+      std::string name;u32 cap=0,points=0;
+      if(!(s >> p.id >> name >> p.width >> p.shoulderWidth >> p.elevation >> p.slopeLimit >> p.uniformRamp >> p.definedHeight
+        >> p.textureOpacity >> p.shoulderOpacity >> p.textureTransition >> p.vegetationTransition >> p.surfaceLayer >> p.shoulderLayer
+        >> p.enabled >> p.shape >> p.texture >> p.keepWidthRatio >> p.autoRamp >> p.useDefinedHeight >> p.reverseRamp >> p.smartPaint
+        >> p.clearGrass >> p.clearTrees >> p.showVegetation >> cap >> points) || points>1024 || !readPathName(name,p.name)) {error="Caminho truncado.";return false;}
+      p.cap=TerrainPathCap(cap);p.points.resize(points);
+      for(auto &point:p.points)if(!(s>>point.x>>point.y>>point.z>>point.curved)){error="Pontos truncados.";return false;}
+      for(auto *curve:{&p.profile,&p.textureProfile,&p.vegetationProfile}) {
+        u32 count=0;if(!(s>>count)||count<2||count>32){error="Curva inválida.";return false;}curve->resize(count);
+        for(auto &v:*curve)if(!(s>>v.x>>v.y)){error="Curva truncada.";return false;}
+      }
+      if(magic=="AETERRAIN5" && !(s>>p.followTerrain)){error="Modo de altura truncado.";return false;}
+    }
   }
   s >> std::ws;
   if (!s.eof()) {
@@ -198,9 +354,23 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
   out = std::move(r);
   return true;
 }
-bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
-                     std::string &error,
-                     const std::function<bool(float)> &progress) {
+std::vector<std::array<float,3>> terrainPathPolyline(const TerrainPath &path,float step) {
+  std::vector<std::array<float,3>> result;
+  if(!std::isfinite(step) || step<=0)return result;
+  for(const auto &sample:samplePath(path,step))result.push_back({sample.p.x,sample.p.y,sample.p.z});
+  return result;
+}
+float terrainFieldHeight(const TerrainField &field,float x,float z) {
+  if(field.width<2 || field.depth<2 || field.step<=0 || field.heights.size()!=usize(field.width)*field.depth)return 0;
+  const float gx=std::clamp(x/field.step+(field.width-1)*.5f,0.f,float(field.width-1));
+  const float gz=std::clamp(z/field.step+(field.depth-1)*.5f,0.f,float(field.depth-1));
+  const u32 ix=std::min(u32(gx),field.width-2),iz=std::min(u32(gz),field.depth-2);
+  const auto at=[&](u32 a,u32 b){return field.heights[usize(b)*field.width+a];};
+  return std::lerp(std::lerp(at(ix,iz),at(ix+1,iz),gx-ix),std::lerp(at(ix,iz+1),at(ix+1,iz+1),gx-ix),gz-iz);
+}
+static bool buildTerrainField(const TerrainRecipe &r, TerrainField &out,
+                     std::string &error,const std::function<bool(float)> &progress,
+                     const TerrainField *seed=nullptr,usize firstStroke=0) {
   if (!validTerrainRecipe(r, error))
     return false;
   const u32 n = r.cells + 1,
@@ -209,10 +379,11 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
               bottom = -std::max(4.f, r.height * .25f),
               top = r.base + r.height + std::max(4.f, r.height * .25f),
               dy = (top - bottom) / float(r.verticalCells);
-  std::vector<float> heights(usize(n) * n);
-  std::vector<u8> layers(heights.size()), holes(heights.size());
+  std::vector<float> heights=seed?seed->heights:std::vector<float>(usize(n)*n);
+  std::vector<u8> layers=seed?seed->legacyLayers:std::vector<u8>(heights.size());
+  std::vector<u8> holes=seed?seed->holes:std::vector<u8>(heights.size());
   std::vector<TerrainStroke> strokes;
-  for (usize i = 0; i < r.strokes.size(); ++i) {
+  for (usize i = firstStroke; i < r.strokes.size(); ++i) {
     const auto &s = r.strokes[i];
     if(s.strength == 0) continue;
     if (i && s.tool == TerrainTool::Path &&
@@ -239,10 +410,18 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
     strokes.push_back(s);
   }
   const auto hidx = [&](u32 x, u32 z) { return usize(z) * n + x; };
-  for (u32 z = 0; z < n; ++z)
+  if(!seed)for (u32 z = 0; z < n; ++z)
     for (u32 x = 0; x < n; ++x)
       heights[hidx(x, z)] = height(r, float(x) * step - r.size * .5f,
                                    float(z) * step - r.size * .5f);
+  const auto bounds=[&](const TerrainStroke &s,bool volume) {
+    const float radius=s.radius*std::max({s.aspect,s.verticalAspect,s.depthAspect})*2;
+    const auto low=[](float p,float origin,float step,u32 limit){return u32(std::clamp(std::floor((p-origin)/step),0.f,float(limit)));};
+    const auto high=[](float p,float origin,float step,u32 limit){return u32(std::clamp(std::ceil((p-origin)/step)+1,0.f,float(limit)));};
+    return std::array<u32,6>{low(s.x-radius,-r.size*.5f,step,n),high(s.x+radius,-r.size*.5f,step,n),
+      volume?low(s.y-radius,bottom,dy,ny):0,volume?high(s.y+radius,bottom,dy,ny):1,
+      low(s.z-radius,-r.size*.5f,step,n),high(s.z+radius,-r.size*.5f,step,n)};
+  };
   // Shared boundary samples ensure adjacent chunks evaluate identical geometry.
   for (const auto &s : strokes)
     if (s.tool != TerrainTool::Dig && s.tool != TerrainTool::Add) {
@@ -253,11 +432,12 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
       }
       const auto previous =
           (s.tool == TerrainTool::Smooth || s.tool == TerrainTool::Sharpen) ? heights : std::vector<float>{};
-      for (u32 z = 0; z < n; ++z)
-        for (u32 x = 0; x < n; ++x) {
+      const auto region=bounds(s,false);
+      for (u32 z = region[4]; z < region[5]; ++z)
+        for (u32 x = region[0]; x < region[1]; ++x) {
           float dx = float(x) * step - r.size * .5f - s.x,
                 dz = float(z) * step - r.size * .5f - s.z;
-          float w=terrainBrushWeight(s,terrainBrushDistance(s,dx,0,dz,false));
+          float w=s.opacity*terrainBrushWeight(s,terrainBrushDistance(s,dx,0,dz,false));
           if(w<=0) continue;
           auto &h = heights[hidx(x, z)];
           switch (s.tool) {
@@ -278,8 +458,8 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
                      // walls.
             float sum = 0;
             u32 count = 0;
-            for (i32 oz = -1; oz <= 1; ++oz)
-              for (i32 ox = -1; ox <= 1; ++ox) {
+            for (i32 oz = -i32(s.filterRadius); oz <= i32(s.filterRadius); ++oz)
+              for (i32 ox = -i32(s.filterRadius); ox <= i32(s.filterRadius); ++ox) {
                 const auto xx = u32(std::clamp(i32(x) + ox, 0, i32(n) - 1)),
                            zz = u32(std::clamp(i32(z) + oz, 0, i32(n) - 1));
                 sum += previous[hidx(xx, zz)];
@@ -297,8 +477,8 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
             h=std::lerp(h,std::round(h/interval)*interval,w);break;
           }
           case TerrainTool::Restore:
-            h=std::lerp(h,height(r,float(x)*step-r.size*.5f,float(z)*step-r.size*.5f),std::min(1.f,w*s.strength));
-            if(w*s.strength>.5f){holes[hidx(x,z)]=0;layers[hidx(x,z)]=0;}break;
+            if(s.restoreGeometry)h=std::lerp(h,height(r,float(x)*step-r.size*.5f,float(z)*step-r.size*.5f),std::min(1.f,w*s.strength));
+            if(w*s.strength>.5f){if(s.restoreGeometry)holes[hidx(x,z)]=0;if(s.restoreWeights)layers[hidx(x,z)]=0;}break;
           case TerrainTool::Hole:
             if(w*s.strength>.5f)holes[hidx(x,z)]=1;break;
           default:
@@ -309,22 +489,52 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
             layers[hidx(x, z)] = u8(s.layer + 1);
         }
     }
+  // Paths remain separate authored objects. Every rebuild starts from the
+  // sculpted base; changing a point never bakes the old road into that base.
+  const auto sculpted=heights;
+  const auto ground=[&](float x,float z) {
+    const float gx=std::clamp((x+r.size*.5f)/step,0.f,float(n-1)),gz=std::clamp((z+r.size*.5f)/step,0.f,float(n-1));
+    const u32 ix=std::min(u32(gx),n-2),iz=std::min(u32(gz),n-2);
+    return std::lerp(std::lerp(sculpted[hidx(ix,iz)],sculpted[hidx(ix+1,iz)],gx-ix),
+                     std::lerp(sculpted[hidx(ix,iz+1)],sculpted[hidx(ix+1,iz+1)],gx-ix),gz-iz);
+  };
+  for(const auto &path:r.paths)if(path.enabled && path.shape && path.points.size()>1) {
+    auto samples=samplePath(path,step*.5f);
+    if(samples.empty())continue;
+    float first=path.useDefinedHeight?path.definedHeight:path.points.front().y;
+    float last=path.useDefinedHeight?path.definedHeight:path.points.back().y;
+    if(path.reverseRamp)std::swap(first,last);
+    const float maximum=std::tan(path.slopeLimit*.01745329252f);
+    if(path.autoRamp)last=first+std::clamp(last-first,-maximum*samples.back().length,maximum*samples.back().length);
+    for(auto &sample:samples) {
+      const float t=sample.length/std::max(.0001f,samples.back().length);
+      const float follow=path.useDefinedHeight?path.definedHeight:path.followTerrain?ground(sample.p.x,sample.p.z):sample.p.y;
+      sample.p.y=std::lerp(follow,std::lerp(first,last,t),path.uniformRamp)+path.elevation;
+    }
+    if(path.autoRamp)for(usize i=1;i<samples.size();++i) {
+      const float maximumDelta=maximum*(samples[i].length-samples[i-1].length);
+      samples[i].p.y=std::clamp(samples[i].p.y,samples[i-1].p.y-maximumDelta,samples[i-1].p.y+maximumDelta);
+    }
+    for(u32 z=0;z<n;++z)for(u32 x=0;x<n;++x) {
+      const auto hit=pathHit(path,samples,x*step-r.size*.5f,z*step-r.size*.5f);
+      const float half=path.width*.5f,shoulder=path.shoulderWidth*.5f;
+      if(hit.distance>shoulder)continue;
+      const float influence=hit.distance<=half?1:pathCurve(path.profile,(hit.distance-half)/std::max(.0001f,shoulder-half));
+      auto &h=heights[hidx(x,z)];h=std::lerp(h,hit.y,influence);
+    }
+  }
   const bool closedHeightfield = ny == 1 && r.solidBase;
   const float solidBottom =
       closedHeightfield
           ? *std::min_element(heights.begin(), heights.end()) - r.baseDepth
           : 0.f;
-  const auto nearest = [&](float p) {
-    return u32(
-        std::clamp(std::lround((p + r.size * .5f) / step), 0l, long(n - 1)));
-  };
   const auto index = [&](u32 x, u32 y, u32 z) {
     return (usize(z) * ny + y) * n + x;
   };
-  std::vector<float> field;
+  std::vector<float> field=seed?seed->density:std::vector<float>{};
   if (ny > 1) {
     field.resize(usize(n) * n * ny);
-    for (u32 z = 0; z < n; ++z) {
+    if(!seed)for (u32 z = 0; z < n; ++z) {
       if (progress && !progress(float(z) / float(n) * .35f)) {
         error = "Geração cancelada.";
         return false;
@@ -336,20 +546,24 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
           field[index(x, y, z)] = p.y - heights[hidx(x, z)];
         }
     }
-    for (const auto &s : r.strokes) {
+    std::vector<float> gestureField;
+    u32 densityGesture=~0u;
+    for (const auto &s : strokes) {
+      if(s.gesture!=densityGesture || !s.gesture){gestureField=field;densityGesture=s.gesture;}
       if(s.strength == 0) continue;
       if (s.tool != TerrainTool::Dig && s.tool != TerrainTool::Add &&
           s.tool != TerrainTool::Smooth && s.tool != TerrainTool::Sharpen && s.tool != TerrainTool::Restore)
         continue;
       const auto previous =
           (s.tool == TerrainTool::Smooth || s.tool == TerrainTool::Sharpen) ? field : std::vector<float>{};
-      for (u32 z = 0; z < n; ++z) {
+      const auto region=bounds(s,true);
+      for (u32 z = region[4]; z < region[5]; ++z) {
         if (progress && !progress(.3f)) {
           error = "Geração cancelada.";
           return false;
         }
-        for (u32 y = 0; y < ny; ++y)
-          for (u32 x = 0; x < n; ++x) {
+        for (u32 y = region[2]; y < region[3]; ++y)
+          for (u32 x = region[0]; x < region[1]; ++x) {
             V p{float(x) * step - r.size * .5f, bottom + float(y) * dy,
                 float(z) * step - r.size * .5f};
             V q = p - V{s.x, s.y, s.z};
@@ -357,15 +571,15 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
             auto &d = field[index(x, y, z)];
             if (s.tool == TerrainTool::Restore) {
               float w=terrainBrushWeight(s,distance/s.radius);
-              d=std::lerp(d,p.y-height(r,p.x,p.z),std::min(1.f,w*s.strength));
+              if(s.restoreGeometry)d=std::lerp(d,p.y-height(r,p.x,p.z),std::min(1.f,w*s.strength*s.opacity));
             } else if (s.tool == TerrainTool::Smooth || s.tool == TerrainTool::Sharpen) {
               if (distance >= s.radius)
                 continue;
               float sum = 0;
               u32 count = 0;
-              for (i32 a = -1; a <= 1; ++a)
-                for (i32 b = -1; b <= 1; ++b)
-                  for (i32 c = -1; c <= 1; ++c) {
+              for (i32 a = -i32(s.filterRadius); a <= i32(s.filterRadius); ++a)
+                for (i32 b = -i32(s.filterRadius); b <= i32(s.filterRadius); ++b)
+                  for (i32 c = -i32(s.filterRadius); c <= i32(s.filterRadius); ++c) {
                     sum += previous[index(
                         u32(std::clamp(i32(x) + a, 0, i32(n) - 1)),
                         u32(std::clamp(i32(y) + b, 0, i32(ny) - 1)),
@@ -374,13 +588,21 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
                   }
               d = std::lerp(
                   d, s.tool==TerrainTool::Sharpen?2*d-sum/float(count):sum/float(count),
-                  std::clamp(terrainBrushWeight(s,distance/s.radius) * s.strength, 0.f,
+                  std::clamp(terrainBrushWeight(s,distance/s.radius) * s.strength*s.opacity, 0.f,
                              1.f));
             } else {
+              if(s.application==TerrainBrushApplication::Accumulate) {
+                const float amount=std::max(0.f,s.radius-distance)*s.strength*s.opacity*terrainBrushWeight(s,distance/s.radius);
+                d+=s.tool==TerrainTool::Dig?amount:-amount;continue;
+              }
               float sphere = distance - s.radius;
-              float changed = s.tool == TerrainTool::Dig ? std::max(d, -sphere)
-                                                         : std::min(d, sphere);
-              d = std::lerp(d, changed, std::clamp(s.strength*terrainBrushWeight(s,distance/s.radius),0.f,1.f));
+              const float before=s.application==TerrainBrushApplication::Target?gestureField[index(x,y,z)]:d;
+              float changed = s.tool == TerrainTool::Dig ? std::max(before, -sphere) : std::min(before, sphere);
+              if(s.application==TerrainBrushApplication::Target) {
+                const float target=std::lerp(before,changed,std::clamp(s.opacity*s.strength*terrainBrushWeight(s,distance/s.radius),0.f,1.f));
+                d=s.tool==TerrainTool::Dig?std::max(d,target):std::min(d,target);continue;
+              }
+              d = std::lerp(d, changed, std::clamp(s.strength*s.opacity*terrainBrushWeight(s,distance/s.radius),0.f,1.f));
             }
           }
       }
@@ -397,6 +619,34 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
             d = std::max(d, std::min(step, dy) * .01f - edge);
           }
   }
+  TerrainField result;
+  result.width=result.depth=n;result.height=ny;result.step=step;result.verticalStep=dy;
+  result.bottom=bottom;result.solidBottom=solidBottom;
+  result.heights=std::move(heights);result.density=std::move(field);
+  result.legacyLayers=std::move(layers);result.holes=std::move(holes);
+  if(seed)result.paintSamples=seed->paintSamples;
+  result.paintSamples.insert(result.paintSamples.end(),strokes.begin(),strokes.end());
+  out=std::move(result);error.clear();return true;
+}
+bool generateTerrainField(const TerrainRecipe &r,TerrainField &out,std::string &error,
+                          const std::function<bool(float)> &progress) {
+  return buildTerrainField(r,out,error,progress);
+}
+bool meshTerrainField(const TerrainRecipe &r,const TerrainField &data,TerrainMesh &out,
+                      std::string &error,const std::function<bool(float)> &progress,
+                      const TerrainMesh *previous,std::span<const TerrainChunkKey> dirty) {
+  if(!validTerrainRecipe(r,error))return false;
+  const u32 n=r.cells+1,ny=r.mode==TerrainMode::Heightfield?1:r.verticalCells+1;
+  if(data.width!=n || data.depth!=n || data.height!=ny || data.heights.size()!=usize(n)*n ||
+     data.legacyLayers.size()!=usize(n)*n || data.holes.size()!=usize(n)*n ||
+     data.density.size()!=(ny>1?usize(n)*n*ny:0)) {error="Dados do terreno incompatíveis com a malha.";return false;}
+  const auto &heights=data.heights;const auto &field=data.density;
+  const auto &layers=data.legacyLayers;const auto &holes=data.holes;const auto &strokes=data.paintSamples;
+  const float step=data.step,dy=data.verticalStep,bottom=data.bottom,solidBottom=data.solidBottom;
+  const bool closedHeightfield=ny==1 && r.solidBase;
+  const auto hidx=[&](u32 x,u32 z){return usize(z)*n+x;};
+  const auto index=[&](u32 x,u32 y,u32 z){return (usize(z)*ny+y)*n+x;};
+  const auto nearest=[&](float p){return u32(std::clamp(std::lround((p+r.size*.5f)/step),0l,long(n-1)));};
   const auto sample = [&](i32 x, i32 y, i32 z) {
     return field[index(u32(std::clamp(x, 0, i32(n) - 1)),
                        u32(std::clamp(y, 0, i32(ny) - 1)),
@@ -419,9 +669,12 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
                     (sample(x, y + 1, z) - sample(x, y - 1, z)) / (2 * dy),
                     (sample(x, y, z + 1) - sample(x, y, z - 1)) / (2 * step)});
   };
+  std::vector<std::vector<PathSample>> pathSamples;
+  for(const auto &path:r.paths)pathSamples.push_back(samplePath(path,step*.5f));
   TerrainMesh mesh;
   mesh.samples = u32(heights.size() + field.size());
   bool budget = false;
+  std::vector<const TerrainStroke *> localPaint;
   const auto emit = [&](std::array<TerrainPart, 4> &parts, V a, V b, V c,
                         V wanted, bool flat, u32 fixedLayer = 4) {
     V face = cross(b - a, c - a);
@@ -466,14 +719,50 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
         float soil=(1-rock)*(.10f+.25f*noise(p.x*.13f,p.z*.13f,r.seed+73));
         v.weights[0]=1-rock-soil;v.weights[1]=rock;v.weights[2]=soil;v.weights[3]=0;
         if(fixedLayer<4) {std::fill_n(v.weights,4,0);v.weights[fixedLayer]=1;}
-        else for(const auto &brush:strokes) {
+        else for(const auto *candidate:localPaint) {
+          const auto &brush=*candidate;
+          if(brush.tool==TerrainTool::Restore && !brush.restoreWeights)continue;
           if(brush.tool!=TerrainTool::Paint && brush.tool!=TerrainTool::Path && brush.tool!=TerrainTool::Restore)continue;
           const float d=terrainBrushDistance(brush,p.x-brush.x,p.y-brush.y,p.z-brush.z,ny>1 && brush.tool!=TerrainTool::Path);
           const float w=std::clamp(terrainBrushWeight(brush,d)*brush.strength,0.f,1.f);
           if(w<=0)continue;
           const float natural[]{1-rock-soil,rock,soil,0};
-          for(u32 l=0;l<4;++l)v.weights[l]=std::lerp(v.weights[l],brush.tool==TerrainTool::Restore?natural[l]:(l==brush.layer?1.f:0.f),w);
+          if(brush.tool!=TerrainTool::Restore && brush.application==TerrainBrushApplication::Target) {
+            // Target weight is absolute, with smooth spatial edges. Repeated stamps
+            // at the same location cannot keep driving the selected weight to 1.
+            const float target=brush.opacity*terrainBrushWeight(brush,d);
+            const float old=v.weights[brush.layer],other=1-old;
+            for(u32 l=0;l<4;++l)if(l!=brush.layer)v.weights[l]=other>.000001f?v.weights[l]*((1-target)/other):(1-target)/3;
+            v.weights[brush.layer]=target;continue;
+          }
+          for(u32 l=0;l<4;++l)v.weights[l]=std::lerp(v.weights[l],brush.tool==TerrainTool::Restore?natural[l]:(l==brush.layer?1.f:0.f),w*brush.opacity);
         }
+        const TerrainPath *strongestPath=nullptr;
+        float strongestLane=0,strongestShoulder=0,strongestTotal=0;
+        const auto paintPath=[&](const TerrainPath &path,float lane,float shoulder) {
+          for(u32 l=0;l<4;++l)v.weights[l]*=1-lane-shoulder;
+          v.weights[path.surfaceLayer]+=lane;v.weights[path.shoulderLayer]+=shoulder;
+        };
+        const auto flushSmart=[&] {
+          if(strongestPath)paintPath(*strongestPath,strongestLane,strongestShoulder);
+          strongestPath=nullptr;strongestTotal=0;
+        };
+        for(usize i=0;i<r.paths.size();++i) {
+          const auto &path=r.paths[i];if(!path.enabled || !path.texture)continue;
+          const auto hit=pathHit(path,pathSamples[i],p.x,p.z);
+          const float half=path.width*.5f,outer=path.shoulderWidth*.5f+path.textureTransition;
+          if(hit.distance>outer)continue;
+          const float lane=1-fade(std::clamp((hit.distance-half)/std::max(.001f,path.textureTransition),0.f,1.f));
+          const float shoulder=pathCurve(path.textureProfile,std::clamp((hit.distance-half)/std::max(.001f,outer-half),0.f,1.f));
+          const float laneWeight=lane*path.textureOpacity,shoulderWeight=(1-lane)*shoulder*path.shoulderOpacity;
+          const float total=laneWeight+shoulderWeight;
+          if(path.smartPaint) {
+            if(total>strongestTotal || (total==strongestTotal && strongestPath && path.id<strongestPath->id)) {
+              strongestPath=&path;strongestTotal=total;strongestLane=laneWeight;strongestShoulder=shoulderWeight;
+            }
+          } else {flushSmart();paintPath(path,laneWeight,shoulderWeight);}
+        }
+        flushSmart();
         v.uv[0]=p.x/r.textureScale;v.uv[1]=p.z/r.textureScale;
         v.uv1[0]=p.y/r.textureScale;v.uv1[1]=r.macroVariation;
       }
@@ -495,6 +784,31 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
           error = "Geração cancelada.";
           return false;
         }
+        const TerrainChunkKey key{cx/16,cy/16,cz/16};
+        // Reject non-overlapping paint volumes once per chunk, preserving the
+        // exact stroke order and the full-resolution samples. The conservative
+        // radius also contains rotated boxes and ellipsoids. A vertex shared
+        // by two chunks therefore receives the same relevant operations.
+        localPaint.clear();
+        if(r.blendedSurface)for(const auto &brush:strokes) {
+          if(brush.tool!=TerrainTool::Paint && brush.tool!=TerrainTool::Path &&
+             !(brush.tool==TerrainTool::Restore && brush.restoreWeights))continue;
+          const float extent=2*brush.radius*std::max({brush.aspect,brush.verticalAspect,brush.depthAspect})+.0001f;
+          if(brush.x+extent<cx*step-r.size*.5f || brush.x-extent>std::min(cx+16,r.cells)*step-r.size*.5f ||
+             brush.z+extent<cz*step-r.size*.5f || brush.z-extent>std::min(cz+16,r.cells)*step-r.size*.5f)continue;
+          if(ny>1 && brush.tool!=TerrainTool::Path &&
+             (brush.y+extent<bottom+cy*dy || brush.y-extent>bottom+std::min(cy+16,r.verticalCells)*dy))continue;
+          localPaint.push_back(&brush);
+        }
+        if(previous && std::find(dirty.begin(),dirty.end(),key)==dirty.end()) {
+          bool nonempty=false;
+          for(const auto &part:previous->parts)if(part.x==key.x && part.y==key.y && part.z==key.z) {
+            mesh.parts.push_back(part);mesh.triangles+=u32(part.vertices.size()/3);nonempty=true;
+          }
+          if(nonempty)++mesh.chunks;
+          ++mesh.reusedChunks;continue;
+        }
+        ++mesh.rebuiltChunks;
         std::array<TerrainPart, 4> parts;
         for (u32 i = 0; i < 4; ++i) {
           parts[i].x = cx / 16;
@@ -630,6 +944,97 @@ bool generateTerrain(const TerrainRecipe &r, TerrainMesh &out,
   error.clear();
   return true;
 }
+bool generateTerrain(const TerrainRecipe &r,TerrainMesh &out,std::string &error,
+                     const std::function<bool(float)> &progress) {
+  TerrainField field;
+  return generateTerrainField(r,field,error,progress) && meshTerrainField(r,field,out,error,progress);
+}
+bool updateTerrain(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBuild &out,
+                   std::string &error,const std::function<bool(float)> &progress) {
+  TerrainBuild next;next.recipe=r;
+  bool incremental=false;
+  if(previous && r.strokes.size()>=previous->recipe.strokes.size()) {
+    auto prefix=r;prefix.strokes.resize(previous->recipe.strokes.size());
+    incremental=r.paths.empty() && serializeTerrainRecipe(prefix)==serializeTerrainRecipe(previous->recipe);
+    // Changing height under an existing carved volume requires replay; material
+    // and density-only edits keep their exact ordered semantics incrementally.
+    for(usize i=previous->recipe.strokes.size();incremental && i<r.strokes.size();++i) {
+      const auto &stroke=r.strokes[i];const auto tool=stroke.tool;
+      if(r.mode!=TerrainMode::Heightfield && tool!=TerrainTool::Paint && tool!=TerrainTool::Dig && tool!=TerrainTool::Add &&
+         tool!=TerrainTool::Smooth && tool!=TerrainTool::Sharpen && tool!=TerrainTool::Restore)incremental=false;
+      // A target uses its pre-gesture field. Replaying that gesture preserves
+      // the cap when the previous preview ended halfway through the gesture.
+      if(stroke.application==TerrainBrushApplication::Target && i && stroke.gesture==r.strokes[i-1].gesture)incremental=false;
+      // Stored smooth-volume fields have a closed finite outer boundary.
+      // Any density operator touching it must read pre-closure values (even
+      // partial-opacity CSG can differ). Replay that field; interior density
+      // edits and regional mesh invalidation keep their incremental path.
+      if(r.mode==TerrainMode::SmoothVoxel && tool!=TerrainTool::Paint) {
+        const auto &field=previous->field;
+        const float radius=stroke.radius*std::max({stroke.aspect,stroke.verticalAspect,stroke.depthAspect})*2;
+        const float halo=(tool==TerrainTool::Smooth || tool==TerrainTool::Sharpen)?float(stroke.filterRadius):0;
+        const float horizontal=radius+halo*field.step;
+        const float vertical=radius+halo*field.verticalStep;
+        if(std::abs(stroke.x)+horizontal>=r.size*.5f || std::abs(stroke.z)+horizontal>=r.size*.5f ||
+           stroke.y-vertical<=field.bottom || stroke.y+vertical>=field.bottom+(field.height-1)*field.verticalStep)
+          incremental=false;
+      }
+    }
+  }
+  if(!buildTerrainField(r,next.field,error,progress,incremental?&previous->field:nullptr,
+                       incremental?previous->recipe.strokes.size():0))return false;
+  bool compatible=previous!=nullptr;
+  if(previous) {
+    auto a=r,b=previous->recipe;a.strokes.clear();b.strokes.clear();
+    compatible=serializeTerrainRecipe(a)==serializeTerrainRecipe(b) &&
+      next.field.solidBottom==previous->field.solidBottom && next.field.heights.size()==previous->field.heights.size() &&
+      next.field.density.size()==previous->field.density.size();
+  }
+  const u32 nx=(r.cells+15)/16,ny=r.mode==TerrainMode::Heightfield?1:(r.verticalCells+15)/16;
+  std::vector<u8> changed(usize(nx)*nx*ny,!compatible);
+  const auto mark=[&](i32 x,i32 y,i32 z) {
+    if(x<0 || z<0 || y<0 || x>=i32(r.cells) || z>=i32(r.cells) || y>=i32(r.mode==TerrainMode::Heightfield?1:r.verticalCells))return;
+    changed[(usize(z/16)*ny+u32(y/16))*nx+u32(x/16)]=1;
+  };
+  if(compatible) {
+    const auto &a=next.field,&b=previous->field;
+    // One-cell halo accounts for central-difference normals and cells that
+    // reference a changed corner on the other side of a chunk boundary.
+    for(u32 z=0;z<a.depth;++z)for(u32 x=0;x<a.width;++x) {
+      const usize i=usize(z)*a.width+x;
+      if(a.height==1 && (a.heights[i]!=b.heights[i] || a.holes[i]!=b.holes[i] || a.legacyLayers[i]!=b.legacyLayers[i]))
+        for(i32 dz=-2;dz<=1;++dz)for(i32 dx=-2;dx<=1;++dx)mark(i32(x)+dx,0,i32(z)+dz);
+      if(a.height>1)for(u32 y=0;y<a.height;++y) {
+        const usize j=(usize(z)*a.height+y)*a.width+x;
+        if(a.density[j]!=b.density[j])for(i32 dz=-2;dz<=1;++dz)for(i32 dy=-2;dy<=1;++dy)for(i32 dx=-2;dx<=1;++dx)
+          mark(i32(x)+dx,i32(y)+dy,i32(z)+dz);
+      }
+    }
+    // Material operations do not necessarily move density. Mark both old and
+    // new influence when a stroke was edited, removed, reordered or appended.
+    const auto same=[](const TerrainStroke &a,const TerrainStroke &b) {
+      TerrainRecipe x,y;x.strokes={a};y.strokes={b};return serializeTerrainRecipe(x)==serializeTerrainRecipe(y);
+    };
+    usize prefix=0;while(prefix<r.strokes.size() && prefix<previous->recipe.strokes.size() && same(r.strokes[prefix],previous->recipe.strokes[prefix]))++prefix;
+    const auto paintRegions=[&](const std::vector<TerrainStroke> &strokes) {
+      for(usize i=prefix;i<strokes.size();++i) {
+        const auto &brush=strokes[i];
+        if(brush.tool!=TerrainTool::Paint && brush.tool!=TerrainTool::Path && brush.tool!=TerrainTool::Restore)continue;
+        const float radius=brush.radius*std::max({brush.aspect,brush.verticalAspect,brush.depthAspect})*2;
+        const i32 x0=i32(std::floor((brush.x-radius+r.size*.5f)/a.step))-2,x1=i32(std::ceil((brush.x+radius+r.size*.5f)/a.step))+1;
+        const i32 z0=i32(std::floor((brush.z-radius+r.size*.5f)/a.step))-2,z1=i32(std::ceil((brush.z+radius+r.size*.5f)/a.step))+1;
+        for(i32 z=std::max(0,z0);z<=std::min(i32(r.cells)-1,z1);++z)
+          for(i32 x=std::max(0,x0);x<=std::min(i32(r.cells)-1,x1);++x)
+            for(u32 y=0;y<ny;++y)mark(x,i32(y*16),z);
+      }
+    };
+    paintRegions(r.strokes);paintRegions(previous->recipe.strokes);
+  }
+  for(u32 z=0;z<nx;++z)for(u32 y=0;y<ny;++y)for(u32 x=0;x<nx;++x)
+    if(changed[(usize(z)*ny+y)*nx+x])next.dirty.push_back({x,y,z});
+  if(!meshTerrainField(r,next.field,next.mesh,error,progress,compatible?&previous->mesh:nullptr,next.dirty))return false;
+  out=std::move(next);return true;
+}
 bool writeTerrainGlb(const TerrainRecipe &r, const TerrainMesh &mesh,
                      const std::array<std::vector<u8>, 4> &textures,
                      std::vector<u8> &out, std::string &error) {
@@ -690,7 +1095,25 @@ bool writeTerrainGlb(const TerrainRecipe &r, const TerrainMesh &mesh,
       error = "Parte de terreno inválida.";
       return false;
     }
-    u32 v = view(p.vertices.data(), p.vertices.size() * sizeof(TerrainVertex),
+    // Share only bit-identical vertices, including normals, UVs and all
+    // material weights. This reduces storage/GPU traffic without changing
+    // silhouettes, texture resolution, hard edges or splat boundaries.
+    using VertexKey=std::array<u32,sizeof(TerrainVertex)/sizeof(u32)>;
+    struct VertexHash {usize operator()(const VertexKey &key)const noexcept {
+      usize hash=1469598103934665603ull;
+      for(u32 word:key){hash^=word;hash*=1099511628211ull;}return hash;
+    }};
+    std::unordered_map<VertexKey,u32,VertexHash> lookup;
+    lookup.reserve(p.vertices.size());
+    std::vector<TerrainVertex> unique;
+    std::vector<u32> indices;indices.reserve(p.vertices.size());
+    for(const auto &vertex:p.vertices) {
+      VertexKey key{};std::memcpy(key.data(),&vertex,sizeof(vertex));
+      const auto [found,inserted]=lookup.emplace(key,u32(unique.size()));
+      if(inserted)unique.push_back(vertex);
+      indices.push_back(found->second);
+    }
+    u32 v = view(unique.data(), unique.size() * sizeof(TerrainVertex),
                  sizeof(TerrainVertex));
     float lo[3]{INFINITY, INFINITY, INFINITY},
         hi[3]{-INFINITY, -INFINITY, -INFINITY};
@@ -704,7 +1127,7 @@ bool writeTerrainGlb(const TerrainRecipe &r, const TerrainMesh &mesh,
       if (accessorCount++)
         accessors << ',';
       accessors << "{\"bufferView\":" << v << ",\"byteOffset\":" << (attr==0?0:attr==1?12:attr==2?24:attr==3?32:40)
-                << ",\"componentType\":5126,\"count\":" << p.vertices.size()
+                << ",\"componentType\":5126,\"count\":" << unique.size()
                 << ",\"type\":\"" << (attr == 4 ? "VEC4" : attr>=2 ? "VEC2" : "VEC3") << '"';
       if (attr == 0)
         accessors << ",\"min\":[" << lo[0] << ',' << lo[1] << ',' << lo[2]
@@ -712,6 +1135,9 @@ bool writeTerrainGlb(const TerrainRecipe &r, const TerrainMesh &mesh,
                   << ']';
       accessors << '}';
     }
+    const u32 indexView=view(indices.data(),indices.size()*sizeof(u32),0);
+    const u32 indexAccessor=accessorCount++;
+    accessors << ",{\"bufferView\":" << indexView << ",\"componentType\":5125,\"count\":" << indices.size() << ",\"type\":\"SCALAR\"}";
     if (i) {
       nodes << ',';
       meshes << ',';
@@ -721,7 +1147,7 @@ bool writeTerrainGlb(const TerrainRecipe &r, const TerrainMesh &mesh,
     meshes << "{\"primitives\":[{\"attributes\":{\"POSITION\":" << first
            << ",\"NORMAL\":" << first + 1 << ",\"TEXCOORD_0\":" << first + 2
            << ",\"TEXCOORD_1\":" << first+3 << ",\"COLOR_0\":" << first+4
-           << "},\"material\":" << p.layer << "}]}";
+           << "},\"indices\":" << indexAccessor << ",\"material\":" << p.layer << "}]}";
   }
   while (binary.size() % 4)
     binary.push_back(0);

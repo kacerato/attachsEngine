@@ -414,10 +414,14 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   auto &allocator=device.memoryAllocator();
   // R2/R4: geometria com os mesmos bytes da publicada mantém os buffers da GPU.
   // Trocar só textura ou material não reenvia vértices nem índices.
-  const bool sameGeometry=vertices_.handle()!=VK_NULL_HANDLE && indices_.handle()!=VK_NULL_HANDLE &&
-                          vertices==pickingVertices_ && indices==pickingIndices_;
+  const auto indexBytes=std::span<const u8>(reinterpret_cast<const u8 *>(indices.data()),indices.size()*sizeof(u32));
+  const auto oldIndexBytes=std::span<const u8>(reinterpret_cast<const u8 *>(pickingIndices_.data()),pickingIndices_.size()*sizeof(u32));
+  const auto vertexUpdate=planBufferUpdate(pickingVertices_,vertices),indexUpdate=planBufferUpdate(oldIndexBytes,indexBytes);
+  if(!vertexUpdate.valid || !indexUpdate.valid)return false;
+  const bool patchGeometry=vertices_.isReady() && indices_.isReady() && !vertexUpdate.replace && !indexUpdate.replace;
+  const bool sameGeometry=patchGeometry && vertexUpdate.ranges.empty() && indexUpdate.ranges.empty();
   rhi::VulkanBuffer nextVertices,nextIndices;
-  if(!sameGeometry) {
+  if(!patchGeometry) {
     rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
     // STORAGE: o compute de skin lê daqui os vértices de repouso (G6-B).
     buffer.sizeBytes=vertices.size();
@@ -525,6 +529,16 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
     if(!createAuthoringSampler(device,*texture,nextResidency[t].levels,nextSamplers[t]))
       return refuseTexture("Falha ao criar sampler da textura autoral residente.");
   }
+  // Stage every changed vertex/index range together, after texture allocation
+  // has succeeded. One queue submission updates the existing allocations; a
+  // validation/staging failure cannot leave half a geometry revision applied.
+  if(patchGeometry && !sameGeometry) {
+    const rhi::BufferRangeUpload updates[]{
+      {vertices,vertexUpdate.ranges,&vertices_,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+       VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT|VK_ACCESS_SHADER_READ_BIT},
+      {indexBytes,indexUpdate.ranges,&indices_,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT}};
+    if(!upload.uploadBufferRanges(allocator,updates))return false;
+  }
   // Tudo o que é novo existe e subiu: só agora as imagens reaproveitadas mudam de
   // dono. Uma falha acima deixou a biblioteca anterior intacta.
   for(usize t=0;t<extraTextures.size();++t) {
@@ -533,7 +547,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
     nextImages[t]=std::move(authoringImages_[previous]);
     if(samplerReused[t]) nextSamplers[t]=std::move(authoringSamplers_[previous]);
   }
-  if(!sameGeometry) {vertices_=std::move(nextVertices);indices_=std::move(nextIndices);}
+  if(!patchGeometry) {vertices_=std::move(nextVertices);indices_=std::move(nextIndices);}
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
   authoringResidency_=std::move(nextResidency);
   authoringLods_=std::move(lods);libraryLodBegin_=std::move(lodBegin);
@@ -544,6 +558,8 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   authoringResidencyMipBias_=textureResidencyMipBias_;
   authoringTextureResidency_=residency;
   lastReusedTextures_=plan.reused;lastUploadedTextures_=plan.uploaded;lastGeometryReused_=sameGeometry;
+  lastGeometryUploadBytes_=patchGeometry?vertexUpdate.uploadedBytes+indexUpdate.uploadedBytes:vertices.size()+indexBytes.size();
+  lastGeometryUploadRanges_=patchGeometry?u32(vertexUpdate.ranges.size()+indexUpdate.ranges.size()):2;
   pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
   draws_=std::move(draws);materials_=std::move(materials);
   header_.vertexStride=renderer::MapVertexStride;

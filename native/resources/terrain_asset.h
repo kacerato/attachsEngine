@@ -23,7 +23,8 @@ enum class TerrainTool : u32 {
   Sharpen,
   Hole
 };
-enum class TerrainBrushShape : u32 { Circle, Box, Hemisphere, Cone };
+enum class TerrainBrushShape : u32 { Circle, Box, Hemisphere, Cone, RoundedBox };
+enum class TerrainBrushApplication : u32 { Legacy, Accumulate, Target };
 struct TerrainStroke {
   TerrainTool tool = TerrainTool::Raise;
   float x = 0, y = 0, z = 0, radius = 4, strength = 1;
@@ -31,6 +32,38 @@ struct TerrainStroke {
   TerrainBrushShape shape = TerrainBrushShape::Circle;
   float hardness = 0, rotation = 0, aspect = 1;
   u32 gesture = 0;
+  // Local ellipsoid axes. Legacy radius/aspect retain their exact meaning.
+  float verticalAspect = 1, depthAspect = 1, pitch = 0, roll = 0;
+  float roundness = .25f, opacity = 1;
+  u32 filterRadius = 1;
+  TerrainBrushApplication application = TerrainBrushApplication::Legacy;
+  bool inverted = false, restoreGeometry = true, restoreWeights = true;
+  float surfaceDepth = 0;
+  bool lockHeight = false, dimensionsLinked = true;
+};
+struct TerrainCurvePoint { float x = 0, y = 0; };
+struct TerrainPathPoint {
+  float x = 0, y = 0, z = 0;
+  bool curved = false;
+};
+enum class TerrainPathCap : u32 { Round, Flat, Square };
+struct TerrainPath {
+  u32 id = 1;
+  std::string name = "Caminho";
+  std::vector<TerrainPathPoint> points;
+  float width = 4, shoulderWidth = 8, elevation = 0, slopeLimit = 45;
+  float uniformRamp = 0, definedHeight = 0, textureOpacity = 1, shoulderOpacity = 1;
+  float textureTransition = 1, vegetationTransition = 2;
+  u32 surfaceLayer = 3, shoulderLayer = 2;
+  bool enabled = true, shape = true, texture = true, keepWidthRatio = true;
+  bool autoRamp = true, useDefinedHeight = false, reverseRamp = false, smartPaint = true;
+  bool followTerrain = true;
+  bool clearGrass = false, clearTrees = false, showVegetation = true;
+  TerrainPathCap cap = TerrainPathCap::Round;
+  // All profiles use normalized distance from lane edge to shoulder edge.
+  std::vector<TerrainCurvePoint> profile{{0,1},{1,0}};
+  std::vector<TerrainCurvePoint> textureProfile{{0,1},{1,0}};
+  std::vector<TerrainCurvePoint> vegetationProfile{{0,1},{1,0}};
 };
 struct TerrainRecipe {
   TerrainMode mode = TerrainMode::Heightfield;
@@ -45,6 +78,7 @@ struct TerrainRecipe {
   bool blendedSurface = true;
   float macroVariation = .3f;
   std::vector<TerrainStroke> strokes;
+  std::vector<TerrainPath> paths;
 };
 struct TerrainVertex {
   float position[3]{}, normal[3]{}, uv[2]{};
@@ -53,6 +87,9 @@ struct TerrainVertex {
 // Shared by mesh generation and the viewport footprint. Coordinates are local.
 float terrainBrushDistance(const TerrainStroke &, float dx, float dy, float dz, bool volume);
 float terrainBrushWeight(const TerrainStroke &, float normalizedDistance);
+// The cursor and density operators share the same transformed shape boundary.
+std::array<float, 3> terrainBrushOutline(const TerrainStroke &, u32 ring, float phase);
+bool validTerrainStroke(const TerrainStroke &, std::string &);
 struct TerrainPart {
   u32 x = 0, y = 0, z = 0, layer = 0;
   std::vector<TerrainVertex> vertices;
@@ -60,7 +97,38 @@ struct TerrainPart {
 struct TerrainMesh {
   std::vector<TerrainPart> parts;
   u32 samples = 0, triangles = 0, chunks = 0;
+  u32 rebuiltChunks = 0, reusedChunks = 0;
 };
+// Authoring samples are independent of triangulation. A mesher can rebuild a
+// region without reconstructing the rest of the mesh or changing saved data.
+struct TerrainField {
+  u32 width = 0, depth = 0, height = 0;
+  float step = 0, verticalStep = 0, bottom = 0, solidBottom = 0;
+  std::vector<float> heights, density;
+  std::vector<u8> legacyLayers, holes;
+  std::vector<TerrainStroke> paintSamples;
+};
+// Exactly the same curve tessellation used by path deformation and painting.
+std::vector<std::array<float,3>> terrainPathPolyline(const TerrainPath &, float step);
+float terrainFieldHeight(const TerrainField &, float x, float z);
+struct TerrainChunkKey {
+  u32 x = 0, y = 0, z = 0;
+  bool operator==(const TerrainChunkKey &) const = default;
+};
+bool generateTerrainField(const TerrainRecipe &, TerrainField &, std::string &,
+                          const std::function<bool(float)> &progress = {});
+bool meshTerrainField(const TerrainRecipe &, const TerrainField &, TerrainMesh &, std::string &,
+                      const std::function<bool(float)> &progress = {},
+                      const TerrainMesh *previous = nullptr,
+                      std::span<const TerrainChunkKey> dirty = {});
+struct TerrainBuild {
+  TerrainRecipe recipe;
+  TerrainField field;
+  TerrainMesh mesh;
+  std::vector<TerrainChunkKey> dirty;
+};
+bool updateTerrain(const TerrainRecipe &, const TerrainBuild *previous, TerrainBuild &,
+                   std::string &, const std::function<bool(float)> &progress = {});
 bool validTerrainRecipe(const TerrainRecipe &, std::string &);
 std::string serializeTerrainRecipe(const TerrainRecipe &);
 bool deserializeTerrainRecipe(std::string_view, TerrainRecipe &, std::string &);

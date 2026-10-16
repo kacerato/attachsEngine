@@ -152,7 +152,7 @@ struct TerrainUiFixture {
   }
   bool visit(u32 tab, u32 section = 0) {
     return tap(id(Widget::TerrainTabBase, tab), false) &&
-           (tab >= 2 || tap(id(Widget::TerrainSectionBase, section), false));
+           ((tab==2 || tab==3) || tap(id(Widget::TerrainSectionBase, section), false));
   }
 };
 
@@ -191,18 +191,23 @@ std::set<u32> contentControls(u32 mode, u32 tab, u32 section) {
       result.insert(id(Widget::TerrainNumberBase,i));
       result.insert(id(Widget::TerrainSliderBase,i));
     }
-    fields(result,{16,17});
+    fields(result,{16,17,25});
     // Fixture opens Raise: volume-only shapes become enabled with Dig/Add.
     for(u32 i=0;i<2;++i)result.insert(id(Widget::TerrainShapeBase,i));
-  } else if (tab == 1) {
-    fields(result, {9, 10, 11, 12, 13,16,17,18});
+  } else if (tab == 1 && section==1) {
+    fields(result, {9, 10, 11, 12, 13,16,17,18,26,27});
+    result.insert(id(Widget::TerrainHeightLock));
     result.insert(id(Widget::TerrainStamp));
     result.insert(id(Widget::TerrainRemoveStroke));
     result.insert(id(Widget::TerrainTouchOffset));
+  } else if(tab==1) {
+    fields(result,{9,17,20,21,16,22,23});
+    result.insert(id(Widget::TerrainDimensionsLinked));
   } else if (tab == 2) {
     for (u32 i = 0; i < 4; ++i)
       result.insert(id(Widget::TerrainLayerBase, i));
-    fields(result, {8, 9, 10});
+    fields(result, {8, 9, 10,25});
+    result.insert(id(Widget::TerrainOpacityTarget));
     result.insert(id(Widget::TerrainBlend));
     result.insert(id(Widget::TerrainNumberBase,19));
     result.insert(id(Widget::TerrainSliderBase,19));
@@ -234,7 +239,7 @@ AE_TEST(
       chooseRaise.tapped=true;chooseRaise.widgetId=id(Widget::TerrainToolBase);
       f.session.handleTerrainInput({},chooseRaise);
       for (u32 tab = 0; tab < 4; ++tab) {
-        const u32 sections = tab == 0 ? 3 : tab == 1 ? 2 : 1;
+        const u32 sections = tab < 2 ? 3 : 1;
         for (u32 section = 0; section < sections; ++section) {
           AE_EXPECT_TRUE(f.visit(tab, section),
                          "tabs and subsections respond to actual touch");
@@ -541,4 +546,100 @@ AE_TEST(terrain_ui_armed_brush_replaces_gizmo_hit_without_moving_root) {
   for(float y=0;y<720;y+=4)for(float x=0;x<1280;x+=4)
     gizmoReturned|=isGizmo(f.router.hitTest({x,y}).widgetId);
   AE_EXPECT_TRUE(gizmoReturned,"normal object transform controls return outside terrain editing");
+}
+
+AE_TEST(terrain_path_ui_create_edit_preview_apply_and_reopen) {
+  TerrainUiFixture f(1280,720);AE_EXPECT_TRUE(f.ready,"UI fixture ready");
+  resources::TerrainRecipe r;r.cells=16;r.height=0;std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(f.visit(4),"Caminhos is reachable by touch");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPathNew)),"create persistent path");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths.size(),usize(1),"path exists as a separate resource");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPointInsert)),"insert retained point");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths[0].points.size(),usize(3),"inserted point retained");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(46,8),"move selected point");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPointCurve)),"curve the outgoing segment");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPathFollowTerrain)),"select authored point heights through UI");
+  AE_EXPECT_TRUE(!f.session.screen().terrainDraft.paths[0].followTerrain,"height mode changes real recipe");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(45,12),"intermediate point height editable");
+  AE_EXPECT_TRUE(f.visit(4,1),"profile section opens");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(32,6),"path width edits independently of brush");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths[0].shoulderWidth,12.f,"linked shoulder follows width ratio");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPathRatio)),"unlink widths");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(33,16),"set shoulder width");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths[0].width,6.f,"unlinked shoulder preserves road width");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(34,2),"raise path relative to terrain");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainProfileInsert)),"insert a retained curve node");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(50,.3),"edit the selected node position");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(51,.8),"edit the selected node value");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainProfileInsert)),"insert another independent curve node");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths[0].profile.size(),usize(4),"editing keeps all curve nodes");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(51,.2),"edit the fourth-node profile");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths[0].profile[1].y,.8f,"unselected node is not overwritten");
+  f.render();ui::UiPoint curvePoint;
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainPathNew)+0x500+1,curvePoint),"curve node has a direct touch target");
+  const auto profileBefore=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  f.time+=1;
+  f.session.handlePointer({72,ui::UiPointerPhase::Down,curvePoint,f.time});
+  const ui::UiPoint moved{curvePoint.x,curvePoint.y+12};
+  f.session.handlePointer({72,ui::UiPointerPhase::Move,moved,f.time+.1});
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.paths[0].profile[1].y<.8f,"dragging a curve node changes its actual influence");
+  f.session.handlePointer({72,ui::UiPointerPhase::Cancel,moved,f.time+.2});
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),profileBefore,"cancel restores the complete curve draft");
+  AE_EXPECT_TRUE(f.visit(4,2),"open independent material curve");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths[0].textureProfile.size(),usize(2),"geometry curve edits do not modify texture curve");
+
+  for(u32 i=0;i<5000 && !f.session.screen().terrainLivePreview;++i){f.session.update();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+  AE_EXPECT_TRUE(f.session.screen().terrainLivePreview,"configuration preview is visible before Apply");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate)),"Apply remains reachable");
+  AE_EXPECT_TRUE(f.finish(),"path generation completes");
+  const auto serialized=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen terrain editor");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),serialized,"path and properties survive GLB reediting");
+}
+
+AE_TEST(terrain_compact_path_profiles_fit_before_scrolling) {
+  TerrainUiFixture f;AE_EXPECT_TRUE(f.ready,"compact UI fixture");
+  AE_EXPECT_TRUE(f.visit(4) && f.tap(id(Widget::TerrainPathNew)),"new path");
+  for(u32 section:{1u,2u}) {
+    AE_EXPECT_TRUE(f.visit(4,section),"profile opens without scroll");f.render();
+    for(u32 index:{0u,1u}) {ui::UiPoint at;
+      AE_EXPECT_TRUE(f.point(id(Widget::TerrainPathNew)+0x500+index,at),"both ends of the complete curve are touch reachable on compact screen");
+    }
+  }
+}
+
+AE_TEST(terrain_path_handles_follow_applied_surface_and_reopen_without_gpu_preview) {
+  TerrainUiFixture f(1280,720);AE_EXPECT_TRUE(f.ready,"fixture");
+  resources::TerrainRecipe r;r.cells=32;r.height=0;
+  resources::TerrainPath path;path.elevation=8;path.points={{-12,0,0,false},{0,0,0,false},{12,0,0,false}};r.paths={path};
+  std::string error;AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(f.visit(4),"open applied path");f.render();
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild!=nullptr,"committed field retained for handles");
+  const float at[]{0,12.05f,0};const auto projected=editor::projectWorldToScreen(f.session.view(),at);
+  AE_EXPECT_TRUE(projected.valid,"raised path projects into the viewport");
+  AE_EXPECT_EQ(f.router.hitTest(projected.screen).widgetId,id(Widget::TerrainPathNew)+0x101,"handle follows applied height instead of raw authored Y");
+  const auto before=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  const auto historyBefore=f.session.history().undoDepth();
+  f.time+=1;f.session.handlePointer({74,ui::UiPointerPhase::Down,projected.screen,f.time});
+  const ui::UiPoint moved{projected.screen.x+24,projected.screen.y};
+  f.session.handlePointer({74,ui::UiPointerPhase::Move,moved,f.time+.1});
+  const auto &point=f.session.screen().terrainDraft.paths[0].points[1];
+  AE_EXPECT_TRUE(point.x!=0 || point.z!=0,"viewport drag moves actual path point");
+  AE_EXPECT_EQ(point.y,0.f,"surface-plane drag preserves authored Y");
+  f.session.handlePointer({74,ui::UiPointerPhase::Cancel,moved,f.time+.2});
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),before,"cancel restores XYZ and recipe");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),historyBefore,"draft drag does not create committed history");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainClose)),"close authoring");f.session.update();
+  AE_EXPECT_TRUE(!f.session.screen().terrainPreviewBuild,"closing releases the authoring field");
+  AE_EXPECT_TRUE(f.session.openTerrain(root) && f.visit(4),"reopen applied path");
+  const auto publications=f.session.screen().terrainPreviewUpdates;
+  for(u32 i=0;i<5000 && !f.session.screen().terrainPreviewBuild;++i){f.session.update();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+  f.render();
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild!=nullptr,"reopen reconstructs authoring field asynchronously");
+  AE_EXPECT_TRUE(!f.session.screen().terrainLivePreview && f.session.screen().terrainPreviewUpdates==publications,"reconstructing handles does not publish duplicate geometry");
+  const auto reopened=editor::projectWorldToScreen(f.session.view(),at);
+  AE_EXPECT_EQ(f.router.hitTest(reopened.screen).widgetId,id(Widget::TerrainPathNew)+0x101,"reopened handle retains surface alignment");
 }
