@@ -53,6 +53,7 @@
 #include "scene/path_follow.h"
 #include "ui_software_raster.h"
 #include "kyle_carry_project_fixture.h"
+#include "editor/editor_studio_tools.h"
 #include "core/sha256.h"
 #include "editor/editor_library.h"
 
@@ -1172,6 +1173,19 @@ int main(int argc, char **argv) {
     const auto group=session->history().createEntity(graph,graph.root(),editor::EditorEntityKind::Folder,"Carregar caixa");
     if(!group||!session->addCarrySetupInTransaction(stage.kyle,group,error)) {std::fprintf(stderr,"CARRY: %s\n",error.c_str());session->history().cancel(graph);return 1;}
     session->history().end();
+    // argv[6]=="lookat": aplica a receita Olhar para alvo antes do Play (o
+    // projeto do aparelho tinha as duas) e mostra onde o alvo nasceu em
+    // relação à cabeça.
+    if(argc>6&&std::string(argv[6])=="lookat") {
+      std::string summary;
+      if(!editor::EditorStudio::setupCharacter(*session,stage.kyle,editor::EditorStudio::CharacterRecipe::LookAt,summary,error)) {std::fprintf(stderr,"LOOKAT: %s\n",error.c_str());return 1;}
+      std::vector<editor::EditorEntityId> ids;graph.collectSubtree(stage.kyle,ids);
+      for(const auto id:ids) {
+        const auto *o=graph.find(id);if(!o)continue;
+        const std::string name(o->name);
+        if(name=="Head"||name.rfind("Olhar",0)==0) {float m[16];runtime::worldMatrix(graph,id,m);std::fprintf(stderr,"%s: (%.3f %.3f %.3f) +Z=(%.2f %.2f %.2f)\n",name.c_str(),m[12],m[13],m[14],m[8],m[9],m[10]);}
+      }
+    }
     if(!session->startPlay()) {std::fprintf(stderr,"PLAY: %s\n",session->screen().status.c_str());return 1;}
     const auto &g=session->playScene().document();
     const auto find=[&](const char *name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(const auto id:ids)if(std::string_view(g.find(id)->name)==name)return id;return runtime::ObjectId{};};

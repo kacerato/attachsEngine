@@ -1943,6 +1943,15 @@ AE_TEST(character_recipes_in_create_menu_build_ik_from_the_selection) {
   // Cada receita cria só a sua parte.
   AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::LookAt,summary,error),error.c_str());
   AE_EXPECT_TRUE(doc.find(b.top)->components.find(scene::LookAtIk::descriptor)&&!doc.find(b.a3)->components.find(scene::TwoBoneIk::descriptor),"look-at only touches the head");
+  {
+    // O alvo nasce na FRENTE do personagem (sem braços pelo nome: o +Z do
+    // objeto), não ao longo do eixo arbitrário do osso da cabeça.
+    const auto *look=static_cast<const scene::LookAtIk*>(doc.find(b.top)->components.find(scene::LookAtIk::descriptor));
+    float head[16],target[16];
+    AE_EXPECT_TRUE(look&&runtime::worldMatrix(doc,b.top,head)&&runtime::worldMatrix(doc,static_cast<EditorEntityId>(look->target),target),"look target exists");
+    AE_EXPECT_TRUE(std::abs(target[12]-head[12])<1e-3f&&std::abs(target[13]-head[13])<1e-3f&&std::abs(target[14]-head[14]-2)<1e-3f,"look target sits 2 m in front of the head along the character's forward");
+    AE_EXPECT_EQ(look->axis,2u,"the head axis that faces forward is chosen");
+  }
   AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Aim,summary,error),error.c_str());
   const auto *aim=static_cast<const scene::AimIk*>(doc.find(b.a3)->components.find(scene::AimIk::descriptor));
   AE_EXPECT_TRUE(aim&&aim->target&&doc.find(static_cast<EditorEntityId>(aim->target))&&doc.find(static_cast<EditorEntityId>(aim->target))->parent==b.bot,"aim target is created under the character");

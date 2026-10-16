@@ -185,6 +185,25 @@ bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,Characte
     const auto *e=doc.find(tip);const auto *m=e?doc.find(e->parent):nullptr;const auto *r=m?doc.find(m->parent):nullptr;
     return r&&m->id!=owner&&r->id!=doc.root();
   };
+  // Frente do personagem: perpendicular à linha dos ombros (esquerda × cima),
+  // como no carregar; sem braços pelo nome, o +Z do próprio objeto. Os eixos
+  // dos ossos são arbitrários (no Kyle o +Z da cabeça aponta para o lado), por
+  // isso o alvo nasce na frente do personagem e o eixo do osso que olha ou
+  // mira é o que mais se alinha com essa frente.
+  float forward[3]{0,0,1};
+  {
+    const auto bones=findHumanoidBones(doc,owner);float l[16],r[16],m[16];
+    if(bones.upperArm[0]&&bones.upperArm[1]&&runtime::worldMatrix(doc,bones.upperArm[0],l)&&runtime::worldMatrix(doc,bones.upperArm[1],r)&&std::hypot(l[12]-r[12],l[14]-r[14])>.05f) {
+      const float sx=l[12]-r[12],sz=l[14]-r[14],len=std::hypot(sx,sz);forward[0]=-sz/len;forward[1]=0;forward[2]=sx/len;
+    } else if(runtime::worldMatrix(doc,owner,m)&&std::hypot(m[8],m[10])>1e-4f) {
+      const float len=std::hypot(m[8],m[10]);forward[0]=m[8]/len;forward[1]=0;forward[2]=m[10]/len;
+    }
+  }
+  const auto frontAxis=[&](const float world[16]) {
+    u32 best=2;float bestDot=-2;
+    for(u32 axis=0;axis<6;++axis) {float d[3];runtime::ikAxisWorld(world,axis,d);const float dot=d[0]*forward[0]+d[1]*forward[1]+d[2]*forward[2];if(dot>bestDot){bestDot=dot;best=axis;}}
+    return best;
+  };
   if(wantHands)for(const auto tip:hands) {
     if(!ok||!chainOk(tip)||doc.find(tip)->components.find(scene::TwoBoneIk::descriptor))continue;
     float tipWorld[16];runtime::worldMatrix(doc,tip,tipWorld);
@@ -207,11 +226,10 @@ bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,Characte
   if(wantLook&&ok&&head&&!doc.find(head)->components.find(scene::LookAtIk::descriptor)) {
     float headWorld[16];runtime::worldMatrix(doc,head,headWorld);
     const auto target=s.history_.createEntity(doc,owner,EditorEntityKind::Folder,"Olhar · "+std::string(doc.find(head)->name));
-    float forward[3];runtime::ikAxisWorld(headWorld,2,forward);
     float targetWorld[16]{1,0,0,0,0,1,0,0,0,0,1,0,headWorld[12]+forward[0]*2,headWorld[13]+forward[1]*2,headWorld[14]+forward[2]*2,1};
     ok=target&&place(target,targetWorld);
     if(ok) {auto values=*doc.find(head);auto *look=static_cast<scene::LookAtIk*>(values.components.add(scene::LookAtIk::descriptor));
-      ok=look;if(ok){look->target=target;look->chainLength=3;ok=s.history_.applyValues(doc,head,values);}}
+      ok=look;if(ok){look->target=target;look->chainLength=3;look->axis=frontAxis(headWorld);ok=s.history_.applyValues(doc,head,values);}}
     if(ok)++looks;
   }
   // Mirar (Final IK AimIK, Unity MultiAimConstraint): a mão aponta o eixo +Z
@@ -220,11 +238,10 @@ bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,Characte
     if(!ok||!chainOk(tip)||doc.find(tip)->components.find(scene::AimIk::descriptor))continue;
     float tipWorld[16];runtime::worldMatrix(doc,tip,tipWorld);
     const auto target=s.history_.createEntity(doc,owner,EditorEntityKind::Folder,"Mira · "+std::string(doc.find(tip)->name));
-    float forward[3];runtime::ikAxisWorld(tipWorld,2,forward);
     float targetWorld[16]{1,0,0,0,0,1,0,0,0,0,1,0,tipWorld[12]+forward[0]*1.5f,tipWorld[13]+forward[1]*1.5f,tipWorld[14]+forward[2]*1.5f,1};
     ok=target&&place(target,targetWorld);
     if(ok) {auto values=*doc.find(tip);auto *aim=static_cast<scene::AimIk*>(values.components.add(scene::AimIk::descriptor));
-      ok=aim;if(ok){aim->target=target;aim->chainLength=2;ok=s.history_.applyValues(doc,tip,values);}}
+      ok=aim;if(ok){aim->target=target;aim->chainLength=2;aim->axis=frontAxis(tipWorld);ok=s.history_.applyValues(doc,tip,values);}}
     if(ok)++aims;
   }
   // Corpo inteiro (Final IK FullBodyBipedIK): pelve, peito e até quatro
