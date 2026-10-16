@@ -8,6 +8,7 @@
 #include "renderer/authoring_texture.h"
 #include "resources/gltf_import.h"
 #include "resources/terrain_asset.h"
+#include "resources/terrain_vertex_index.h"
 #include "resources/terrain_textures.generated.h"
 #include "scene/collider.h"
 #include "scene/import_link.h"
@@ -20,6 +21,24 @@
 #include <limits>
 #include <map>
 #include <thread>
+
+AE_TEST(terrain_indexing_preserves_seams_and_all_vertex_attributes) {
+  using namespace ae;
+  resources::TerrainVertex base;
+  base.position[0]=3; base.normal[1]=1; base.uv[0]=.25f;
+  std::vector<resources::TerrainVertex> source(6,base);
+  source[2].normal[1]=-1;
+  source[3].uv1[0]=.75f;
+  source[4].weights[0]=.5f; source[4].weights[1]=.5f;
+  std::vector<resources::TerrainVertex> vertices;
+  std::vector<u32> indices;
+  resources::indexTerrainVertices(source,vertices,indices);
+  AE_EXPECT_EQ(vertices.size(),4u,"only identical attributes share vertices");
+  AE_EXPECT_EQ(indices.size(),source.size(),"no triangle corners removed");
+  for(usize i=0;i<source.size();++i)
+    AE_EXPECT_TRUE(std::memcmp(&source[i],&vertices[indices[i]],sizeof(source[i]))==0,
+                   "indexed reconstruction preserves every attribute bit");
+}
 
 using namespace ae;
 namespace {

@@ -15,7 +15,7 @@ Branch: `codex/terrain-voxel-generator`. ADB suspenso por solicitação do propr
 ## Ainda necessários para fechar o bloco
 
 - Completar publicação localizada no renderer, histórico/checkpoints/GC, interface altura↔voxel e LOD com bordas contínuas/colisão.
-- Completar manipulação dos pontos no viewport, curvas editáveis com todos os nós, contratos de vizinhança e resoluções independentes dos mapas.
+- Completar contratos de vizinhança e resoluções independentes dos mapas. Pontos no viewport e nós individuais das curvas já têm implementação e validação local; falta a conferência no aparelho.
 - Biblioteca de materiais e assets originais com perfis opcionais; consumidores PBR, height blend, projeções, noises, distance resampling e clusters M01–M08.
 - Conferência de todos os controles e suas propriedades; regressões, medições, capturas executáveis, APK, publicação da branch e nota pública sanitizada.
 
@@ -28,7 +28,7 @@ Branch: `codex/terrain-voxel-generator`. ADB suspenso por solicitação do propr
 - A divergência dos filtros na borda finita foi corrigida e a rodada completa posterior passou em 43/43 cenários (`block1-host-tests10.log`). A revisão seguinte passou em 47/47 cenários (`block1-host-tests14.log`), incluindo reabertura e arraste dos pontos na superfície aplicada.
 - Exportação GLB passou a compartilhar somente vértices idênticos em todos os atributos. Não há redução de triângulos no nível original nem redução de texturas. O teste compara posições de todos os índices e verifica LOD com bordas presas.
 - Perfis de caminho agora têm edição dos nós individuais, incluindo inserção, remoção e coordenadas, sem substituir a curva toda. A prévia usa a mesma curva da geração e mostra pista, acostamento e caps. Capturas posteriores: `ui-1280-4-s1.png` e `ui-655-4-s1.png`; a revisão compacta passou no teste de acesso aos dois extremos do gráfico sem rolar.
-- As alterações funcionais deste bloco têm validação local; a checagem Android e a publicação desta revisão ainda estão em andamento. Não há APK novo validado nem confirmação de entrega completa.
+- Revisão funcional `ea85ce0` publicada na branch. Checagem de compilação de seis unidades Android ARM64 passou em 6/6 (`block1-android-source-check.log`). Isso não equivale a execução no aparelho. O APK seguinte está em compilação; não há confirmação de entrega completa.
 
 ## Disco e eficiência da execução
 
@@ -53,3 +53,9 @@ Referências oficiais e fontes/versionamento dos plugins: [auditoria](auditoria.
 - Contratos de material: `block1-material-contracts.log`, 6/6. Isso valida interpretação dos canais e preservação dos dados do catálogo; ainda não valida um consumidor PBR de terreno.
 - Cruzamentos Smart escolhem a cobertura mais forte antes de compor, com desempate por ID estável. O modo de sobrepintura por ordem continua disponível. Seguir terreno passou a interpolar a altura, evitando amostragem em degraus.
 - O campo aplicado é mantido para alinhar os handles. Fechar libera esse cache; reabrir reconstrói apenas o campo em worker, sem republicar uma malha duplicada. O teste de toque roteado move o ponto no viewport e cancela restaurando XYZ sem criar histórico confirmado.
+
+## Prévia indexada sem perda
+
+- A prévia durante o gesto agora compartilha o mesmo indexador sem perda do GLB. Somente vértices idênticos em todos os 14 atributos são compartilhados, preservando costuras, normais, UVs e pesos distintos.
+- `block1-host-tests15.log`: 48/48 cenários. A reconstrução indexada é comparada por bytes; o cenário de arraste confere cada posição, normal empacotada, UV e peso publicado, mantém os triângulos e exige redução de vértices na prévia.
+- Essa otimização não reduz resolução de assets nem decima geometria. Não representa medição de FPS Android.

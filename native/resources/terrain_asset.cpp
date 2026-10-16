@@ -1,4 +1,5 @@
 #include "resources/terrain_asset.h"
+#include "resources/terrain_vertex_index.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -1098,21 +1099,9 @@ bool writeTerrainGlb(const TerrainRecipe &r, const TerrainMesh &mesh,
     // Share only bit-identical vertices, including normals, UVs and all
     // material weights. This reduces storage/GPU traffic without changing
     // silhouettes, texture resolution, hard edges or splat boundaries.
-    using VertexKey=std::array<u32,sizeof(TerrainVertex)/sizeof(u32)>;
-    struct VertexHash {usize operator()(const VertexKey &key)const noexcept {
-      usize hash=1469598103934665603ull;
-      for(u32 word:key){hash^=word;hash*=1099511628211ull;}return hash;
-    }};
-    std::unordered_map<VertexKey,u32,VertexHash> lookup;
-    lookup.reserve(p.vertices.size());
     std::vector<TerrainVertex> unique;
-    std::vector<u32> indices;indices.reserve(p.vertices.size());
-    for(const auto &vertex:p.vertices) {
-      VertexKey key{};std::memcpy(key.data(),&vertex,sizeof(vertex));
-      const auto [found,inserted]=lookup.emplace(key,u32(unique.size()));
-      if(inserted)unique.push_back(vertex);
-      indices.push_back(found->second);
-    }
+    std::vector<u32> indices;
+    indexTerrainVertices(p.vertices, unique, indices);
     u32 v = view(unique.data(), unique.size() * sizeof(TerrainVertex),
                  sizeof(TerrainVertex));
     float lo[3]{INFINITY, INFINITY, INFINITY},

@@ -454,6 +454,31 @@ AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
   AE_EXPECT_TRUE(f.session.screen().terrainCursorVisible && f.session.screen().terrainCursorLines.size()>=96,
                  "surface cursor includes outer boundary and falloff ring");
   AE_EXPECT_TRUE(f.draws.size()>publishedDraws,"live preview publishes additional real mesh draws");
+  const auto &previewBuild=*f.session.screen().terrainPreviewBuild;
+  usize previewVertices=0,previewCorners=0;
+  for(usize part=0;part<previewBuild.mesh.parts.size();++part) {
+    const auto &mesh=f.draws[publishedDraws+part];
+    const auto &sourceVertices=previewBuild.mesh.parts[part].vertices;
+    AE_EXPECT_EQ(mesh.indexCount,sourceVertices.size(),"preview preserves every triangle corner");
+    u32 maximum=0;
+    for(u32 corner=0;corner<mesh.indexCount;++corner) {
+      const auto index=f.indices[mesh.firstIndex+corner];maximum=std::max(maximum,index);
+      const auto *packed=f.vertices.data()+(mesh.vertexOffset+index)*renderer::MapVertexStride;
+      const auto &expected=sourceVertices[corner];
+      AE_EXPECT_TRUE(std::memcmp(packed,expected.position,12)==0,"preview indexing preserves positions");
+      AE_EXPECT_TRUE(std::memcmp(packed+28,expected.uv,8)==0 && std::memcmp(packed+36,expected.uv1,8)==0,
+                     "preview indexing preserves both texture coordinates");
+      for(u32 axis=0;axis<3;++axis) {
+        i16 normal;std::memcpy(&normal,packed+12+axis*2,2);
+        AE_EXPECT_EQ(normal,i16(std::clamp(expected.normal[axis],-1.f,1.f)*32767),"preview preserves packed normals");
+      }
+      for(u32 layer=0;layer<4;++layer)
+        AE_EXPECT_EQ(packed[44+layer],u8(std::lround(std::clamp(expected.weights[layer],0.f,1.f)*255)),
+                     "preview preserves all paint weights");
+    }
+    previewVertices+=maximum+1;previewCorners+=mesh.indexCount;
+  }
+  AE_EXPECT_TRUE(previewVertices<previewCorners,"live preview shares vertices without decimation");
   std::vector<renderer::MapDrawState> visible;
   AE_EXPECT_TRUE(f.session.extractMap(visible),"extract live scene");
   bool previewVisible=false,raised=false;

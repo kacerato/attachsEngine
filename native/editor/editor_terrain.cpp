@@ -3,6 +3,7 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
 #include "resources/terrain_textures.generated.h"
+#include "resources/terrain_vertex_index.h"
 #include "scene/collider.h"
 #include "scene/import_link.h"
 #include "scene/physics_body.h"
@@ -194,8 +195,11 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainMesh &mesh,std
     draw.vertexOffset=u32(preview.vertices.size()/sizeof(Vertex));draw.materialIndex=part.layer;
     draw.model[0]=draw.model[5]=draw.model[10]=draw.model[15]=1;
     float lo[3]{INFINITY,INFINITY,INFINITY},hi[3]{-INFINITY,-INFINITY,-INFINITY};
-    for(u32 i=0;i<part.vertices.size();++i) {
-      const auto &v=part.vertices[i];Vertex packed{};
+    std::vector<resources::TerrainVertex> unique;
+    std::vector<u32> indices;
+    resources::indexTerrainVertices(part.vertices, unique, indices);
+    for(const auto &v:unique) {
+      Vertex packed{};
       for(u32 a=0;a<3;++a) {
         packed.p[a]=v.position[a];packed.n[a]=i16(std::clamp(v.normal[a],-1.f,1.f)*32767);
         lo[a]=std::min(lo[a],v.position[a]);hi[a]=std::max(hi[a],v.position[a]);
@@ -204,8 +208,9 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainMesh &mesh,std
       std::copy_n(v.uv,2,packed.uv);std::copy_n(v.uv1,2,packed.uv1);
       for(u32 a=0;a<4;++a)packed.color[a]=u8(std::lround(std::clamp(v.weights[a],0.f,1.f)*255));
       auto offset=preview.vertices.size();preview.vertices.resize(offset+sizeof(packed));
-      std::memcpy(preview.vertices.data()+offset,&packed,sizeof(packed));preview.indices.push_back(i);
+      std::memcpy(preview.vertices.data()+offset,&packed,sizeof(packed));
     }
+    preview.indices.insert(preview.indices.end(),indices.begin(),indices.end());
     float radius2=0;
     for(u32 a=0;a<3;++a){draw.boundsCenter[a]=(lo[a]+hi[a])*.5f;radius2+=(hi[a]-lo[a])*(hi[a]-lo[a])*.25f;}
     draw.boundsRadius=std::sqrt(radius2);draw.lodGroupId=u32(preview.draws.size());
