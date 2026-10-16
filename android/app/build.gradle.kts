@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import java.util.Properties
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -315,7 +316,7 @@ android {
                 // Também por `astra.ccache=<caminho>` em android/local.properties
                 // (fora do Git), para não depender da variável em cada terminal.
                 val astraCcache = System.getenv("ASTRA_CCACHE") ?: rootProject.file("local.properties").takeIf { it.exists() }?.let { local ->
-                    java.util.Properties().apply { local.inputStream().use { load(it) } }.getProperty("astra.ccache")
+                    Properties().apply { local.inputStream().use { stream -> load(stream) } }.getProperty("astra.ccache")
                 }
                 astraCcache?.takeIf { it.isNotBlank() && file(it).exists() }?.let {
                     arguments += listOf("-DCMAKE_C_COMPILER_LAUNCHER=$it", "-DCMAKE_CXX_COMPILER_LAUNCHER=$it")
