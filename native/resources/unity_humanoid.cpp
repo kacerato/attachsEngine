@@ -491,6 +491,13 @@ bool appendUnityHumanoidTracks(const UnityHumanoidCurves &curves,const UnityHuma
     V rootT{0,1,0};Q rootQ;
     if(curves.hasRootT) rootT={-sample(curves.rootT[0],time,0),sample(curves.rootT[1],time,1),sample(curves.rootT[2],time,0)};
     if(curves.hasRootQ) rootQ=norm(Q{sample(curves.rootQ[0],time,0),-sample(curves.rootQ[1],time,0),-sample(curves.rootQ[2],time,0),sample(curves.rootQ[3],time,1)});
+    // Root Transform Rotation › Offset da Unity: giro em volta de Y da Unity
+    // aplicado por fora do corpo; no espelho X deste importador o sentido inverte.
+    if(curves.orientationOffsetY!=0) {
+      const double half=-curves.orientationOffsetY*3.14159265358979323846/360;
+      const Q yaw{0,std::sin(half),0,std::cos(half)};rootQ=norm(mul(yaw,rootQ));
+      rootT=rotate(yaw,rootT);
+    }
     std::array<Q,UnityHumanBoneCount> local{},global{};V hips;
     referencePose(muscles,rootT,rootQ,local,global,hips);
     // Alvo: osso humano recebe o mesmo giro de mundo que o da referência fez
@@ -517,6 +524,8 @@ bool appendUnityHumanoidTracks(const UnityHumanoidCurves &curves,const UnityHuma
     build(nullptr);
     V massCenter{};double massSum=0;
     for(u32 bone=0;bone<UnityHumanBoneCount;++bone)if(node[bone]>=0&&boneMass[bone]>0) {
+      // Posição da junta, não o meio do segmento: o meio desceu o centro e
+      // afundou os pés do Kyle (medido em 16/10/2026 contra o projeto UMotion).
       const auto &m=poseMatrix[static_cast<usize>(node[bone])];massCenter=massCenter+V{m[12],m[13],m[14]}*boneMass[bone];massSum+=boneMass[bone];
     }
     const V hipsNow{poseMatrix[hipsNode][12],poseMatrix[hipsNode][13],poseMatrix[hipsNode][14]};

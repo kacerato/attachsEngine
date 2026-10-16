@@ -48,6 +48,9 @@ struct UnityHumanoidCurves {
   std::array<AnimationCurve,4> rootQ{};
   bool hasRootT=false,hasRootQ=false;
   u32 muscleCurves=0;
+  // Root Transform Rotation › Offset (m_OrientationOffsetY, graus em volta de Y
+  // da Unity): gira o corpo inteiro, como a Unity gira a raiz ao reproduzir.
+  double orientationOffsetY=0;
 };
 
 // O personagem, pais antes dos filhos; o nó 0 é o dono do clipe (caminho

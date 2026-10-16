@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <map>
 
 using namespace ae;
 using namespace ae::resources;
@@ -109,6 +110,92 @@ AE_TEST(unity_humanoid_retarget_to_the_reference_skeleton_returns_its_rotations)
   }
   AE_EXPECT_EQ(checked,UnityHumanBoneCount,"one rotation track per human bone");
   AE_EXPECT_TRUE(clip.valid(&error),error.c_str());
+}
+
+// Pacote real (opcional): AE_BOZO_PACK aponta para Assets/BoZo_StylizedModularCharacters
+// do BoZo 2.2. O rig Humanoid (BodyRig.fbx, Avatar com 52 ossos no .meta) recebe o
+// clipe Humanoid BMAC_M_Idle.anim: segundo personagem da conversão músculos -> ossos,
+// com proporções estilizadas (cabeça grande, pernas curtas).
+AE_TEST(unity_humanoid_bozo_rig_plays_the_idle_clip_on_its_feet) {
+  const char *pack=std::getenv("AE_BOZO_PACK");
+  if(!pack){std::fprintf(stderr,"  AE_BOZO_PACK ausente: BoZo nao verificado\n");return;}
+  namespace fs=std::filesystem;using namespace editor;
+  const fs::path source=fs::path(pack);
+  const auto project=fs::temp_directory_path()/("astra-bozo-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code ec;fs::remove_all(path,ec);}} cleanup{project};
+  fs::create_directories(project/".astra/import-staging/unity");
+  std::vector<LibrarySourceFile> files;
+  const auto add=[&](const fs::path &from,const std::string &relative) {
+    std::vector<u8> bytes;if(!EditorImportTransaction::read(from,bytes))return false;
+    const auto target=project/".astra/import-staging/unity"/relative;fs::create_directories(target.parent_path());
+    if(!EditorImportTransaction::write(target,bytes))return false;
+    files.push_back({relative,Sha256::hex(bytes),bytes.size(),{}});return true;
+  };
+  const auto model=source/"Outfits/Common/Body/BodyRig.fbx",clip=source/"Animations/BMAC_M_Idle.anim";
+  EditorSession session;
+  std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+  renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials);
+  session.importMap(draws,materials,false,vertices,indices,0);
+  session.setGeometryPublisher([&](std::span<const u8> v,std::span<const u32> i,std::span<const renderer::MapDrawRecord> d,
+      std::span<const renderer::MapMaterialRecord> m,std::span<const renderer::SharedAuthoringTexture>,EditorSession::PublishedGeometry &out) {
+    vertices.clear();indices.clear();draws.clear();materials.clear();
+    if(!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials))return false;
+    const auto vb=static_cast<u32>(vertices.size()/renderer::MapVertexStride),ib=static_cast<u32>(indices.size()),mb=static_cast<u32>(materials.size());
+    vertices.insert(vertices.end(),v.begin(),v.end());indices.insert(indices.end(),i.begin(),i.end());materials.insert(materials.end(),m.begin(),m.end());
+    for(auto draw:d){draw.firstIndex+=ib;draw.vertexOffset+=vb;draw.materialIndex+=mb;draw.lodGroupId=static_cast<u32>(draws.size());draws.push_back(draw);}
+    out={draws,materials,vertices,indices};return true;
+  });
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.string().c_str()),"project");
+  AE_EXPECT_TRUE(add(model,"BoZo/BodyRig.fbx")&&add(fs::path(model.string()+".meta"),"BoZo/BodyRig.fbx.meta")&&
+                 add(clip,"BoZo/BMAC_M_Idle.anim")&&add(fs::path(clip.string()+".meta"),"BoZo/BMAC_M_Idle.anim.meta"),"package files");
+  std::string error;auto package=prepareLibraryPackage(project.string(),".astra/import-staging/unity","BoZo",files);
+  AE_EXPECT_TRUE(package.accepted,package.diagnostic.c_str());
+  AE_EXPECT_TRUE(package.accepted&&session.importLibraryPackage(package,error),error.c_str());
+  LibraryItem modelItem,clipItem;
+  for(const auto &item:package.package.items){if(item.path.ends_with("BodyRig.fbx"))modelItem=item;if(item.path.ends_with("BMAC_M_Idle.anim"))clipItem=item;}
+  std::vector<u8> bytes;AE_EXPECT_TRUE(EditorImportTransaction::read(model,bytes),"FBX bytes");
+  GltfImport converted;ImportProfile profile;
+  // O skin do BoZo tem mais de quatro influências por vértice: a redução a
+  // quatro é autorizada explicitamente, como a receita de importação faria.
+  auto limits=applyImportProfile(session.importLimits(),profile);limits.fbxDeformation=true;limits.fbxReduceWeights=true;
+  AE_EXPECT_TRUE(importModelSource(bytes,limits,{},converted),converted.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(bytes,converted,modelItem.path,Sha256::hex(bytes),report,ImportAmbiguityPolicy::Refuse,{},{},{},{},&profile),report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source,report),report.diagnostic.c_str());
+  const auto owner=session.selection();auto &document=session.document();
+  std::vector<EditorEntityId> ids;document.collectSubtree(owner,ids);
+  std::fprintf(stderr,"  BoZo: %zu nós sob o modelo\n",ids.size());
+  const auto converted_clip=session.importUnityAsset(clipItem.path,owner,UnityReimportPolicy::RefuseConflict,error);
+  AE_EXPECT_TRUE(converted_clip.valid(),error.c_str());if(!converted_clip.valid())return;
+  const auto *asset=session.animationClipAsset(converted_clip);AE_EXPECT_TRUE(asset!=nullptr,"converted clip resource");if(!asset)return;
+  std::fprintf(stderr,"  clipe: %.2f s, %zu trilhas\n",asset->duration,asset->tracks.size());
+  AnimationClipPreview preview;AE_EXPECT_TRUE(preview.begin(document,owner,*asset,error),error.c_str());
+  // Ossos pelo Avatar do .meta: hips, pés e cabeça.
+  std::map<std::string,std::string> human;
+  {std::string text;std::vector<u8> metaBytes;EditorImportTransaction::read(fs::path(model.string()+".meta"),metaBytes);text.assign(metaBytes.begin(),metaBytes.end());
+   std::string bone;usize at=0;
+   while((at=text.find("boneName: ",at))!=std::string::npos) {const auto end=text.find('\n',at);bone=text.substr(at+10,end-at-10);while(!bone.empty()&&(bone.back()=='\r'||bone.back()==' '))bone.pop_back();
+     const auto h=text.find("humanName: ",end);if(h==std::string::npos)break;const auto hend=text.find('\n',h);auto name=text.substr(h+11,hend-h-11);while(!name.empty()&&(name.back()=='\r'||name.back()==' '))name.pop_back();human[name]=bone;at=hend;}}
+  const auto named=[&](const std::string &humanName) {
+    const auto it=human.find(humanName);if(it==human.end())return EditorEntityId{};
+    for(const auto id:ids)if(const auto *e=document.find(id);e&&it->second==e->name)return id;
+    return EditorEntityId{};
+  };
+  const auto hips=named("Hips"),leftFoot=named("LeftFoot"),rightFoot=named("RightFoot"),head=named("Head");
+  std::fprintf(stderr,"  Avatar: %zu ossos humanos; Hips=%s LeftFoot=%s Head=%s\n",human.size(),human.count("Hips")?human["Hips"].c_str():"-",human.count("LeftFoot")?human["LeftFoot"].c_str():"-",human.count("Head")?human["Head"].c_str():"-");
+  AE_EXPECT_TRUE(hips&&leftFoot&&rightFoot&&head,"BoZo bones by Avatar names");if(!(hips&&leftFoot&&rightFoot&&head))return;
+  const auto at=[&](EditorEntityId id){float m[16];runtime::worldMatrix(preview.scene(),id,m);return std::array<float,3>{m[12],m[13],m[14]};};
+  float ownerMatrix[16];runtime::worldMatrix(document,owner,ownerMatrix);
+  float worstFeet=0,lowestHead=9;
+  for(float t=0;t<=asset->duration+1e-4f;t+=.1f) {
+    preview.seek(std::min(t,asset->duration),error);
+    const float feet=std::min(at(leftFoot)[1],at(rightFoot)[1])-ownerMatrix[13],headY=at(head)[1]-at(hips)[1];
+    worstFeet=std::max(worstFeet,std::fabs(feet));lowestHead=std::min(lowestHead,headY);
+    if(std::getenv("AE_UMOTION_TRACE"))std::fprintf(stderr,"  t=%.1f pes y=%.3f cabeca-quadril=%.3f quadril=(%.3f %.3f %.3f)\n",t,feet,headY,at(hips)[0],at(hips)[1],at(hips)[2]);
+  }
+  std::fprintf(stderr,"  parado: pior |pés| %.3f m, cabeça acima do quadril no mínimo %.3f m\n",worstFeet,lowestHead);
+  AE_EXPECT_TRUE(worstFeet<.12f,"feet stay near the ground through the idle");
+  AE_EXPECT_TRUE(lowestHead>.2f,"head stays above the hips");
 }
 
 // Pacote real (opcional): AE_UMOTION_EXAMPLES aponta para a pasta UMotionExamples

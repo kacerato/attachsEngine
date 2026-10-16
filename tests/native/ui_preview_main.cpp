@@ -1105,7 +1105,7 @@ int main(int argc, char **argv) {
   editor::EditorEntityId selection = editor::kInvalidEntity;
   // No synthetic scene. An optional repository-relative AEMAP uses the same
   // import contract as Android, so every hierarchy row has package geometry.
-  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4])=="play-kyle-carry"||std::string(argv[4])=="play-project"||std::string(argv[4]).starts_with("library-"));
+  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4])=="play-kyle-carry"||std::string(argv[4])=="play-project"||std::string(argv[4])=="import-models"||std::string(argv[4]).starts_with("library-"));
   if(argc>5&&!kylePreview) {
     std::vector<u8> bytes;renderer::MapPackageView package;
     if(!readAsset(argv[5],bytes) || !renderer::decodeMapPackage(bytes,package) ||
@@ -1166,6 +1166,45 @@ int main(int argc, char **argv) {
   // Play do "Carregar caixa" com o Robot Kyle real por 20 s: imprime a altura
   // da caixa, da mesa e do quadril a cada meio segundo, com o pai da caixa e
   // o erro de quadro, para flagrar a caixa voltando pela mesa num reinício.
+  // import-models <pasta> [máximo]: importa cada FBX/GLB da pasta num projeto
+  // temporário e relata aceito/recusado com o diagnóstico (pacotes de terceiros,
+  // ex.: POLYGON Icons da Synty, antes de levar ao aparelho).
+  if(argc>5 && std::string(argv[4])=="import-models") {
+    namespace fs=std::filesystem;const fs::path dir=fs::absolute(argv[5]);const int limit=argc>6?std::atoi(argv[6]):50;
+    const auto project=fs::temp_directory_path()/("astra-import-models-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    static test::KyleStage stage;
+    fs::create_directories(project/"scenes");fs::create_directories(project/"Sources");
+    if(!session->setProjectDirectory(project.generic_string().c_str())||!stage.library()||!session->importMap(stage.draws,stage.materials,false,stage.vertices,stage.indices,0)) {std::fprintf(stderr,"projeto\n");return 1;}
+    session->setGeometryPublisher([](std::span<const u8> v,std::span<const u32> i,std::span<const renderer::MapDrawRecord> d,std::span<const renderer::MapMaterialRecord> m,std::span<const renderer::SharedAuthoringTexture>,editor::EditorSession::PublishedGeometry &published) {
+      if(!stage.library())return false;
+      const auto vb=static_cast<u32>(stage.vertices.size()/renderer::MapVertexStride),ib=static_cast<u32>(stage.indices.size()),mb=static_cast<u32>(stage.materials.size());
+      stage.vertices.insert(stage.vertices.end(),v.begin(),v.end());stage.indices.insert(stage.indices.end(),i.begin(),i.end());stage.materials.insert(stage.materials.end(),m.begin(),m.end());
+      for(auto draw:d){draw.firstIndex+=ib;draw.vertexOffset+=vb;draw.materialIndex+=mb;stage.draws.push_back(draw);}
+      published={stage.draws,stage.materials,stage.vertices,stage.indices};return true;
+    });
+    std::vector<fs::path> models;std::error_code ec;
+    for(const auto &entry:fs::recursive_directory_iterator(dir,ec)) {
+      if(!entry.is_regular_file())continue;
+      auto ext=entry.path().extension().string();for(auto &c:ext)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if(ext==".fbx"||ext==".glb"||ext==".gltf")models.push_back(entry.path());
+    }
+    std::sort(models.begin(),models.end());if(static_cast<int>(models.size())>limit)models.resize(static_cast<usize>(limit));
+    u32 ok=0,refused=0;
+    for(const auto &path:models) {
+      std::vector<u8> bytes;if(!editor::EditorImportTransaction::read(path,bytes)) {std::fprintf(stderr,"  ? %s (leitura)\n",path.filename().string().c_str());continue;}
+      const std::string source="Sources/"+path.filename().string();
+      editor::EditorImportTransaction::write(project/source,bytes);
+      editor::EditorSession::ModelImportReport report;
+      if(session->importModel(bytes,source,{},report)) {++ok;std::fprintf(stderr,"  ok %-40s %s\n",path.filename().string().c_str(),report.diagnostic.c_str());}
+      else {++refused;std::fprintf(stderr,"  RECUSADO %-34s %s\n",path.filename().string().c_str(),report.diagnostic.c_str());}
+    }
+    std::fprintf(stderr,"modelos: %u aceitos, %u recusados de %zu\n",ok,refused,models.size());
+    session->update();state=session->screen();
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+    std::error_code rm;fs::remove_all(project,rm);
+  }
   // play-project <dir> <personagem> [clipe] [quadros]: abre um projeto real
   // (ex.: puxado do aparelho), toca o clipe no Play e mede, quadro a quadro, o
   // maior giro local entre quadros de cada osso do personagem. Saltos acima de
