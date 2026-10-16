@@ -33,6 +33,11 @@ bool contains(const std::string &name,std::initializer_list<const char*> words) 
   for(const char *w:words)if(name.find(w)!=std::string::npos)return true;
   return false;
 }
+// Nome (já em minúsculas) de um alvo criado pelas receitas de personagem.
+bool recipeTarget(const std::string &name) {
+  for(const char *prefix:{"olhar · ","mira · ","alvo ik · ","alvo · "})if(name.rfind(prefix,0)==0)return true;
+  return false;
+}
 struct Sampled {std::vector<float> values;};
 // Chaves de um canal (rotacao quaternion ou translacao) num clipe candidato.
 bool writeTrack(resources::AnimationClipAsset &clip,const runtime::SceneGraph &document,EditorEntityId owner,EditorEntityId object,
@@ -120,6 +125,10 @@ bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,Characte
   for(const auto id:bones) {
     const auto *o=doc.find(id);if(!o||id==owner)continue;
     const auto name=lower(o->name);const auto *parent=doc.find(o->parent);const auto parentName=parent?lower(parent->name):std::string();
+    // Alvos criados pelas próprias receitas ("Olhar · Head", "Mira · …",
+    // "Alvo IK · …", "Alvo · …") não são ossos: sem isto, "Olhar · Head" era
+    // tomado por cabeça na segunda passada e ganhava um LookAt próprio.
+    if(recipeTarget(name))continue;
     if(!pelvis&&contains(name,{"hip","pelvis","quadril","pelve"}))pelvis=id;
     if(!head&&contains(name,{"head","cabeca","cabeça"}))head=id;
     if(contains(name,{"hand","paw","mao","mão","wrist","pulso"})&&!contains(parentName,{"hand","paw","mao","mão"}))hands.push_back(id);
@@ -145,7 +154,7 @@ bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,Characte
     for(usize at=0;at<queue.size();++at) {
       const auto children=doc.childrenOf(queue[at]);
       if(!pelvis&&queue[at]!=owner&&children.size()>=2)pelvis=queue[at];
-      if(children.empty()&&queue[at]!=owner)leaves.push_back(queue[at]);
+      if(children.empty()&&queue[at]!=owner&&!recipeTarget(lower(doc.find(queue[at])->name)))leaves.push_back(queue[at]);
       for(const auto c:children)queue.push_back(c);
     }
     const auto depth=[&](EditorEntityId id){u32 d=0;for(const auto *o=doc.find(id);o&&o->id!=owner;o=doc.find(o->parent))++d;return d;};

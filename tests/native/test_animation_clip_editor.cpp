@@ -1952,6 +1952,13 @@ AE_TEST(character_recipes_in_create_menu_build_ik_from_the_selection) {
     AE_EXPECT_TRUE(std::abs(target[12]-head[12])<1e-3f&&std::abs(target[13]-head[13])<1e-3f&&std::abs(target[14]-head[14]-2)<1e-3f,"look target sits 2 m in front of the head along the character's forward");
     AE_EXPECT_EQ(look->axis,2u,"the head axis that faces forward is chosen");
   }
+  // A segunda receita não pode tomar "Olhar · J2" por cabeça nem por ponta.
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::LookAt,summary,error)&&summary.find("Já montado")!=std::string::npos,"look-at twice reports already built instead of targeting its own target");
+  {
+    std::vector<EditorEntityId> ids;doc.collectSubtree(b.bot,ids);u32 nested=0;
+    for(const auto id:ids)if(std::string(doc.find(id)->name).rfind("Olhar · Olhar",0)==0)++nested;
+    AE_EXPECT_EQ(nested,0u,"recipe targets are never treated as bones");
+  }
   AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Aim,summary,error),error.c_str());
   const auto *aim=static_cast<const scene::AimIk*>(doc.find(b.a3)->components.find(scene::AimIk::descriptor));
   AE_EXPECT_TRUE(aim&&aim->target&&doc.find(static_cast<EditorEntityId>(aim->target))&&doc.find(static_cast<EditorEntityId>(aim->target))->parent==b.bot,"aim target is created under the character");
