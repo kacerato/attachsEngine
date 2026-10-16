@@ -49,5 +49,22 @@ tudo por toque via ADB com captura antes de cada passo. Capturas nesta pasta
    (rodapé do rig) e "Travas XYZ locais · intervalo inclui as fronteiras"
    (folha de autoria de pose). Ficam para a rodada de limpeza de textos.
 
+## Conferência das correções (code 91 e 92)
+
+- Rig › ×: o painel do osso volta no lugar (`v91_rig_fechado.png`).
+- Code 91 revelou mais um defeito: rodar "Olhar para alvo" de novo tomava o
+  próprio alvo "Olhar · Head" por cabeça (o nome contém "head") e criava
+  "Olhar · Olhar · Head" com um LookAt no alvo; os alvos "Alvo IK · …_Wrist"
+  seriam tomados por mãos do mesmo jeito. Corrigido no commit 2bfa48b4: alvos
+  de receita nunca entram na detecção por nome nem por estrutura. O alvo
+  extraviado foi removido do projeto pela própria UI (menu do componente ›
+  Remover) e "Olhar · Head" foi levado para a frente pelos campos do
+  Inspector (0 / 1,615 / 2,0).
+- Code 92: "Mirar com as mãos" cria "Mira · Left_Wrist_Joint_01" e
+  "Mira · Right_Wrist_Joint_01" à frente das mãos (`v92_mirar2.png`); no Play
+  o Kyle fica ereto olhando para a frente com o alvo corrigido (`v92_play.png`)
+  e, com o Mirar ligado junto do carregar, as mãos apontam para os alvos
+  enquanto seguram a caixa (`v92_play2.png`).
+
 Não reproduzido: a caixa atravessando a mesa no reinício. Em 40 s de Play
 (cena) e 20 s no host, a caixa fica no ponto de carregar.
