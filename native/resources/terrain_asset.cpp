@@ -495,7 +495,8 @@ static bool buildTerrainField(const TerrainRecipe &r, TerrainField &out,
             if(s.restoreGeometry)h=std::lerp(h,height(r,float(x)*step-r.size*.5f,float(z)*step-r.size*.5f),std::min(1.f,w*s.strength));
             if(w*s.strength>.5f){if(s.restoreGeometry)holes[hidx(x,z)]=0;if(s.restoreWeights)layers[hidx(x,z)]=0;}break;
           case TerrainTool::Hole:
-            if(w*s.strength>.5f)holes[hidx(x,z)]=1;break;
+            if(w*s.strength>.5f)holes[hidx(x,z)]=1;
+            break;
           default:
             break;
           }
