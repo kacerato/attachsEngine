@@ -980,3 +980,35 @@ AE_TEST(terrain_path_smart_crossings_preserve_strongest_without_order_residue) {
   AE_EXPECT_TRUE(resources::generateTerrain(r,reverse,error),error.c_str());
   AE_EXPECT_TRUE(digest(forward)!=digest(reverse),"explicit ordered-overpaint mode still respects path order");
 }
+
+AE_TEST(terrain_path_caps_clip_geometry_and_paint_at_terminal_planes) {
+  resources::TerrainRecipe r;r.cells=64;r.size=64;r.height=0;r.base=4;
+  resources::TerrainPath path;path.points={{-16,4,0,false},{16,4,0,false}};
+  path.width=8;path.shoulderWidth=12;path.elevation=6;path.autoRamp=false;
+  path.surfaceLayer=path.shoulderLayer=3;
+  std::string error;
+  for(bool duplicateEndpoints:{false,true}) {
+  if(duplicateEndpoints)path.points={{-16,4,0,false},{-16,4,0,false},{16,4,0,false},{16,4,0,false}};
+  for(const auto cap:{resources::TerrainPathCap::Round,resources::TerrainPathCap::Flat,resources::TerrainPathCap::Square}) {
+    path.cap=cap;r.paths={path};resources::TerrainField field;
+    AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+    const auto changed=[&](float x,float z){return resources::terrainFieldHeight(field,x,z)>r.base+.01f;};
+    for(float sign:{-1.f,1.f}) {
+      AE_EXPECT_TRUE(changed(sign*15,0),"lane interior remains shaped");
+      AE_EXPECT_EQ(changed(sign*17,0),cap!=resources::TerrainPathCap::Flat,"flat cap ends at the endpoint plane");
+      AE_EXPECT_EQ(changed(sign*20,5),cap==resources::TerrainPathCap::Square,"square cap retains its shoulder corner");
+      AE_EXPECT_EQ(changed(sign*21,0),cap==resources::TerrainPathCap::Round,"square cap does not gain an extra rounded extension");
+    }
+    resources::TerrainMesh mesh;
+    AE_EXPECT_TRUE(resources::meshTerrainField(r,field,mesh,error),error.c_str());
+    bool sampled=false;
+    for(const auto &part:mesh.parts)for(const auto &v:part.vertices) {
+      if(std::abs(v.position[0]-21)<.001f && std::abs(v.position[2])<.001f) {
+        sampled=true;
+        AE_EXPECT_EQ(v.weights[3]>.01f,cap==resources::TerrainPathCap::Round,"paint observes the same terminal cap as shape");
+      }
+    }
+    AE_EXPECT_TRUE(sampled,"paint probe exists in exported surface");
+  }
+  }
+}

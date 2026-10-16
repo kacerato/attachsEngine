@@ -97,17 +97,31 @@ std::vector<PathSample> samplePath(const TerrainPath &path,float step) {
 struct PathHit {float distance=INFINITY,y=0,t=0;};
 PathHit pathHit(const TerrainPath &path,const std::vector<PathSample> &samples,float x,float z) {
   PathHit hit;
-  for(usize i=1;i<samples.size();++i) {
+  bool beyondCap=false;
+  if(samples.size()<2)return hit;
+  usize first=1,last=samples.size()-1;
+  const auto horizontalLength2=[&](usize i) {
+    const auto d=samples[i].p-samples[i-1].p;return d.x*d.x+d.z*d.z;
+  };
+  while(first<=last && horizontalLength2(first)<1e-10f)++first;
+  while(last>first && horizontalLength2(last)<1e-10f)--last;
+  for(usize i=first;i<=last;++i) {
     const auto &a=samples[i-1],&b=samples[i];const auto d=b.p-a.p;
     const float denominator=d.x*d.x+d.z*d.z;if(denominator<1e-10f)continue;
     const float raw=((x-a.p.x)*d.x+(z-a.p.z)*d.z)/denominator;
-    if(path.cap==TerrainPathCap::Flat && ((i==1 && raw<0)||(i+1==samples.size()&&raw>1)))continue;
     const float extra=path.cap==TerrainPathCap::Square?path.width*.5f/std::sqrt(denominator):0;
-    const float t=std::clamp(raw,i==1?-extra:0.f,i+1==samples.size()?1+extra:1.f);
+    const float t=std::clamp(raw,i==first?-extra:0.f,i==last?1+extra:1.f);
     const float dx=x-a.p.x-d.x*t,dz=z-a.p.z-d.z*t,distance=std::sqrt(dx*dx+dz*dz);
-    if(distance<hit.distance)hit={distance,std::lerp(a.p.y,b.p.y,std::clamp(t,0.f,1.f)),
-      std::lerp(a.length,b.length,std::clamp(t,0.f,1.f))/std::max(.0001f,samples.back().length)};
+    if(distance<hit.distance) {
+      hit={distance,std::lerp(a.p.y,b.p.y,std::clamp(t,0.f,1.f)),
+        std::lerp(a.length,b.length,std::clamp(t,0.f,1.f))/std::max(.0001f,samples.back().length)};
+      // Pick the nearest segment BEFORE clipping the terminal plane. Skipping
+      // it in the search lets the next tessellated segment paint a round end.
+      beyondCap=path.cap!=TerrainPathCap::Round &&
+        ((i==first && raw < -extra)||(i==last && raw > 1+extra));
+    }
   }
+  if(beyondCap)hit.distance=INFINITY;
   return hit;
 }
 } // namespace
