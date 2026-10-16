@@ -1,5 +1,5 @@
-# bin/
-# obj/
+bin/
+obj/
 build/
 android/.gradle/
 # android/local.properties

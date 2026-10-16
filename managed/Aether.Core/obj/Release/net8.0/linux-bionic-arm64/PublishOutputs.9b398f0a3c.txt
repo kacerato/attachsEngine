@@ -1,4 +1,0 @@
-C:\Users\jamaa\AppData\Local\Temp\aether-core-publish\Aether.Core.dll
-C:\Users\jamaa\AppData\Local\Temp\aether-core-publish\Aether.Core.deps.json
-C:\Users\jamaa\AppData\Local\Temp\aether-core-publish\Aether.Core.runtimeconfig.json
-C:\Users\jamaa\AppData\Local\Temp\aether-core-publish\Aether.Core.pdb
