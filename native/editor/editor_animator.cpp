@@ -120,6 +120,7 @@ bool EditorSession::editAnimatorInstance(const std::function<bool(scene::Animato
   if(!c||&c->type()!=&scene::Animator::descriptor) return false;
   auto &a=scene::animator(*c);
   if(!change(a)) return false;
+  a.synchronizeLayers();
   if(!a.valid()) {state_.status="Mudança recusada: o grafo ficaria inválido";return false;}
   return history_.applyValues(document_,entity->id,values);
 }
@@ -132,6 +133,7 @@ bool EditorSession::editAnimator(const std::function<bool(scene::Animator &)> &c
   }
   const auto *asset=resources::findAnimatorController(animatorControllers_,current->controller);if(!asset) return false;
   auto candidate=*asset;if(!change(candidate.graph)) return false;
+  candidate.graph.synchronizeLayers();
   candidate.graph=resources::AnimatorControllerAsset::portableGraph(candidate.graph);++candidate.revision;
   std::string diagnostic;const bool ok=commitAnimatorController(candidate,diagnostic);
   state_.status=ok?"Recurso atualizado · todas as instâncias":diagnostic;return ok;
@@ -392,6 +394,12 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
     const auto index=code-w::Navigate;if(index<path.size()) {state_.animatorPicker=0;navigateAnimator(path[index]);}return true;
   }
   if(code==w::Navigate+scene::Animator::MaximumDepth+1) {state_.animatorPicker=0x90000u;state_.animatorPickerPage=0;return true;}
+  // Camada sincronizada: a estrutura (estados, máquinas, transições, padrão)
+  // só se edita na camada de origem; motions, peso, máscara e composição são dela.
+  if(layer.syncSource&&(code==w::AddState||code==w::AddMachine||code==w::Connect||code==w::Delete||code==w::Duplicate||code==w::SetDefault||code==w::NodeParent||
+     code==w::StateName||code==w::StateKind||code==w::StateKind+1||code==w::StateKind+2||code==w::ConditionAdd||code==w::TransitionTarget||code==w::EventAdd)) {
+    state_.status="Camada sincronizada: edite a estrutura na camada de origem";return true;
+  }
   if(code==w::EnterMachine) {if(layer.machine(state_.animatorState)) navigateAnimator(state_.animatorState);return true;}
   if(code==w::NodeParent&&!readOnly&&layer.node(state_.animatorState)) {state_.animatorPicker=0x70000u;state_.animatorPickerPage=0;return true;}
   if(code==w::TransitionTarget&&!readOnly) {state_.animatorPicker=0x80000u;state_.animatorPickerPage=0;return true;}
@@ -595,6 +603,19 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
       } else if(!readOnly) editAnimator([&](scene::Animator &edit){auto &l=edit.layers[layerIndex];l.blend=l.blend==scene::AnimatorLayerBlend::Override?scene::AnimatorLayerBlend::Additive:scene::AnimatorLayerBlend::Override;return true;});
       return true;
     }
+    case w::LayerSync: {
+      // Sincronizar com: cicla pelas outras camadas que não são elas mesmas
+      // sincronizadas (nenhuma → primeira elegível → … → nenhuma).
+      if(readOnly||playing) return true;
+      editAnimator([&](scene::Animator &edit){
+        auto &l=edit.layers[layerIndex];std::vector<u64> options{0};
+        for(const auto &other:edit.layers) if(other.id!=l.id&&!other.syncSource) options.push_back(other.id);
+        usize at=0;for(usize k=0;k<options.size();++k) if(options[k]==l.syncSource) at=k;
+        l.syncSource=options[(at+1)%options.size()];
+        return true;});
+      state_.animatorState=state_.animatorTransition=0;state_.animatorMachine=0;
+      return true;
+    }
     case w::LayerReferenceClip: if(!readOnly||playing) {state_.animatorPicker=0x60000u;state_.animatorPickerPage=0;}return true;
     case w::LayerReferenceReset: {
       if(playing) {runtime::SceneAnimatorGraphs::LayerSettings out;auto &graphs=playScene_.animatorGraphs();graphs.layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,4,0,{},out);graphs.layerControl(playScene_.world(),state_.animatorEntity,state_.animatorInstance,layerIndex,3,0,{},out);}
@@ -733,6 +754,11 @@ bool EditorSession::handleAnimatorEditor(const ui::UiPointerEvent &input,const u
     if(code==w::StateBlendX||code==w::StateBlendY) {
       editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);auto &slot=code==w::StateBlendX?x->blendX:x->blendY;slot=cycleParameter(edit,slot,false);return true;});
       if(!cycleParameter(*a,0,false)) state_.status="Crie um parâmetro Float para guiar a mistura";
+      return true;
+    }
+    if(code==w::StateBlendMode) {
+      // Modo da mistura 2D: Triangulação → Direcional simples → Direcional livre → Cartesiano livre.
+      editAnimator([&](scene::Animator &edit){auto *x=edit.layers[layerIndex].state(s->id);x->blend2D=static_cast<scene::AnimatorBlend2D>((static_cast<u32>(x->blend2D)+1)%4);return true;});
       return true;
     }
     if(code==w::StateSpeed) {beginAnimatorNumber(code,s->speed);return true;}

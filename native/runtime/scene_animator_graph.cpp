@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace ae::runtime {
 namespace animator_detail {
@@ -38,8 +39,94 @@ float projection(P a,P b,P q,float &distance) {
 }
 } // namespace
 
-void blend2D(const std::vector<scene::AnimatorMotion> &motions,float x,float y,std::vector<WeightedMotion> &out) {
+namespace {
+// Pesos normalizados; sem peso algum, o ponto mais próximo vale sozinho.
+void finish(const std::vector<u32> &index,const std::vector<P> &points,P q,std::vector<float> &w,std::vector<WeightedMotion> &out) {
+  float sum=0;for(float v:w) sum+=v;
+  if(sum<=1e-9f) {
+    u32 best=0;float bestD=1e30f;
+    for(u32 i=0;i<points.size();++i) {const float d=(points[i].x-q.x)*(points[i].x-q.x)+(points[i].y-q.y)*(points[i].y-q.y);if(d<bestD){bestD=d;best=i;}}
+    out.push_back({index[best],1});return;
+  }
+  for(u32 i=0;i<w.size();++i) if(w[i]>1e-6f) out.push_back({index[i],w[i]/sum});
+}
+float magnitude(P p) {return std::sqrt(p.x*p.x+p.y*p.y);}
+float signedAngle(P a,P b) {return std::atan2(a.x*b.y-a.y*b.x,a.x*b.x+a.y*b.y);}
+// Bandas de gradiente (Johansen 2009, usado pela Unity nos modos livres):
+// o peso de i é o menor, sobre todos os j, de 1 - projeção de (p - p_i) em
+// (p_j - p_i); `nu` muda o espaço (cartesiano ou polar).
+template<class Nu> void gradientBands(const std::vector<P> &points,P q,Nu nu,std::vector<float> &w) {
+  const usize n=points.size();w.assign(n,0);
+  for(u32 i=0;i<n;++i) {
+    float wi=1;
+    for(u32 j=0;j<n;++j) {
+      if(j==i) continue;
+      const P pip=nu(q,points[i]),pij=nu(points[j],points[i]);
+      const float len=pij.x*pij.x+pij.y*pij.y;
+      if(len<1e-12f) {wi=0;break;}
+      wi=std::min(wi,std::clamp(1-(pip.x*pij.x+pip.y*pij.y)/len,0.f,1.f));
+    }
+    w[i]=wi;
+  }
+}
+} // namespace
+
+void blend2D(const std::vector<scene::AnimatorMotion> &motions,float x,float y,std::vector<WeightedMotion> &out,scene::AnimatorBlend2D mode) {
   out.clear();
+  if(mode!=scene::AnimatorBlend2D::Triangulation) {
+    std::vector<u32> index;std::vector<P> points;
+    for(u32 i=0;i<motions.size();++i) {
+      const P p{motions[i].x,motions[i].y};bool repeated=false;
+      for(const auto &q:points) repeated=repeated||(std::fabs(q.x-p.x)<1e-6f&&std::fabs(q.y-p.y)<1e-6f);
+      if(!repeated) {index.push_back(i);points.push_back(p);}
+    }
+    const P q{x,y};std::vector<float> w;
+    if(points.empty()) return;
+    if(points.size()==1) {out.push_back({index[0],1});return;}
+    if(mode==scene::AnimatorBlend2D::FreeformCartesian) {
+      gradientBands(points,q,[](P a,P b){return P{a.x-b.x,a.y-b.y};},w);
+    } else if(mode==scene::AnimatorBlend2D::FreeformDirectional) {
+      // Polar: diferença relativa de magnitude e ângulo com sinal (alpha 2);
+      // com um dos vetores nulo o ângulo não existe e vale zero.
+      gradientBands(points,q,[](P a,P b){
+        const float ma=magnitude(a),mb=magnitude(b),mean=(ma+mb)*.5f;
+        const float dm=mean>1e-6f?(ma-mb)/mean:0,da=(ma>1e-6f&&mb>1e-6f)?2.f*signedAngle(b,a):0;
+        return P{dm,da};},w);
+    } else {
+      // Direcional simples: um clipe por direção, mais um centro opcional. As
+      // duas direções vizinhas do ângulo da entrada repartem o peso pelo
+      // setor; a magnitude da entrada frente ao anel das amostras dá o peso
+      // do centro (parado) contra o das direções.
+      w.assign(points.size(),0);
+      std::vector<u32> directional;u32 center=UINT32_MAX;float centerD=1e30f;
+      for(u32 i=0;i<points.size();++i) {const float m=magnitude(points[i]);if(m<1e-6f) {if(m<centerD){centerD=m;center=i;}} else directional.push_back(i);}
+      const float mq=magnitude(q);
+      if(directional.empty()) {out.push_back({index[center],1});return;}
+      if(mq<1e-6f) {
+        if(center!=UINT32_MAX) {out.push_back({index[center],1});return;}
+        for(const auto d:directional) w[d]=1;
+        finish(index,points,q,w,out);return;
+      }
+      const float theta=std::atan2(q.y,q.x);
+      u32 a=directional[0],b=directional[0];float before=1e30f,after=1e30f;
+      for(const auto d:directional) {
+        float delta=std::atan2(points[d].y,points[d].x)-theta;
+        while(delta>3.14159265f) delta-=6.2831853f;
+        while(delta<-3.14159265f) delta+=6.2831853f;
+        if(delta<=0&&-delta<before) {before=-delta;a=d;}
+        if(delta>=0&&delta<after) {after=delta;b=d;}
+      }
+      // Sem vizinho de um lado (entrada fora do leque): o outro vizinho vale sozinho.
+      if(before>=1e30f) a=b;
+      if(after>=1e30f) b=a;
+      const float span=before+after;const float t=(a==b||span<1e-6f)?0:after/span;
+      const float ring=(1-t)*magnitude(points[a])+t*magnitude(points[b]);
+      const float radial=center!=UINT32_MAX?std::clamp(ring>1e-6f?mq/ring:1.f,0.f,1.f):1.f;
+      w[a]+=(1-t)*radial;w[b]+=t*radial;
+      if(center!=UINT32_MAX) w[center]+=1-radial;
+    }
+    finish(index,points,q,w,out);return;
+  }
   // Pontos distintos (o primeiro de cada posição repetida vale).
   std::vector<u32> index;std::vector<P> points;
   for(u32 i=0;i<motions.size();++i) {
@@ -297,7 +384,7 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
       weights.clear();
       if(s.kind==scene::AnimatorMotionKind::Clip) {if(!s.motions.empty()) weights.push_back({0,1});}
       else if(s.kind==scene::AnimatorMotionKind::Blend1D) animator_detail::blend1D(s.motions,value(s.blendX,0),weights);
-      else animator_detail::blend2D(s.motions,value(s.blendX,0),value(s.blendY,0),weights);
+      else animator_detail::blend2D(s.motions,value(s.blendX,0),value(s.blendY,0),weights,s.blend2D);
       duration=0;float known=0;
       for(const auto &w:weights) if(const float d=clipDuration(library,s.motions[w.motion].clip);d>0) {duration+=w.weight*d;known+=w.weight;}
       duration=known>0?duration/known:1;

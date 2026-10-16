@@ -349,6 +349,59 @@ AE_TEST(animator_blend_1d_and_2d_weights) {
   blend::blend2D(collinear,1.5f,.3f,w);
   AE_EXPECT_TRUE(w.size()==2&&near(w[0].weight+w[1].weight,1)&&((w[0].motion==1&&near(w[0].weight,.5f))||(w[1].motion==1&&near(w[1].weight,.5f))),"pontos colineares viram 1D");
   AE_EXPECT_TRUE(blend::crossed(.8f,1.3f,.2f,true)&&!blend::crossed(.3f,.8f,.2f,true)&&blend::crossed(.3f,.8f,.5f,false)&&!blend::crossed(1.1f,1.3f,.5f,false),"passagem por marca em laço e sem laço");
+  // Modos 2D da Unity sobre a mesma cruz. Direcional simples: entre frente e
+  // direita, metade de cada; na metade do raio, o centro fica com a outra
+  // metade do peso. Direcional livre e cartesiano livre: em cima de uma
+  // amostra só ela pesa; entre duas amostras adjacentes, as duas repartem.
+  const auto weightOf=[&](u32 motion){float v=0;for(const auto &x:w) if(x.motion==motion) v+=x.weight;return v;};
+  const auto total=[&](){float v=0;for(const auto &x:w) v+=x.weight;return v;};
+  blend::blend2D(cross,.5f,.5f,w,scene::AnimatorBlend2D::SimpleDirectional);
+  AE_EXPECT_TRUE(near(total(),1)&&near(weightOf(1),.5f*std::sqrt(.5f))&&near(weightOf(2),.5f*std::sqrt(.5f))&&near(weightOf(0),1-std::sqrt(.5f)),"direcional simples: setor frente/direita e centro pela magnitude");
+  blend::blend2D(cross,0,1,w,scene::AnimatorBlend2D::SimpleDirectional);
+  AE_EXPECT_TRUE(near(total(),1)&&near(weightOf(1),1),"direcional simples: na amostra da frente só ela");
+  blend::blend2D(cross,0,0,w,scene::AnimatorBlend2D::SimpleDirectional);
+  AE_EXPECT_TRUE(w.size()==1&&w[0].motion==0,"direcional simples: parado é o centro");
+  for(const auto mode:{scene::AnimatorBlend2D::FreeformDirectional,scene::AnimatorBlend2D::FreeformCartesian}) {
+    blend::blend2D(cross,0,1,w,mode);AE_EXPECT_TRUE(near(total(),1)&&near(weightOf(1),1),"livre: na amostra só ela");
+    blend::blend2D(cross,.5f,.5f,w,mode);
+    AE_EXPECT_TRUE(near(total(),1)&&near(weightOf(1),weightOf(2))&&weightOf(1)>.3f&&weightOf(3)<1e-4f&&weightOf(4)<1e-4f,"livre: entre frente e direita, as duas repartem e as opostas não entram");
+    blend::blend2D(cross,0,0,w,mode);AE_EXPECT_TRUE(near(total(),1)&&near(weightOf(0),1),"livre: no centro só o centro");
+  }
+  // Arquivo: o modo persiste e a versão 5 continua legível sem ele.
+  scene::Animator a;scene::AnimatorLayer l;l.id=1;l.name="Base";scene::AnimatorState s;s.id=2;s.name="Andar";s.kind=scene::AnimatorMotionKind::Blend2D;s.blend2D=scene::AnimatorBlend2D::FreeformDirectional;
+  l.states.push_back(s);l.defaultState=2;a.layers.push_back(l);a.nextId=3;
+  std::ostringstream out;a.write(out);scene::Animator back;std::istringstream in(out.str());
+  AE_EXPECT_TRUE(back.read(in,6)&&back.layers[0].states[0].blend2D==scene::AnimatorBlend2D::FreeformDirectional,"modo 2D persiste na versão 6");
+}
+
+AE_TEST(animator_sync_layer_mirrors_structure_and_keeps_own_motions) {
+  // Camada sincronizada (Unity: Sync): copia máquinas/estados/transições da
+  // origem com ids próprios, remapeia referências, guarda as motions locais,
+  // acompanha mudanças da origem e sobrevive ao arquivo.
+  scene::Animator a;a.nextId=1;
+  const auto id=[&](){return a.nextId++;};
+  scene::AnimatorLayer base;base.id=id();base.name="Base";
+  scene::AnimatorState idle;idle.id=id();idle.name="Idle";idle.motions={{resources::assetGuidFromSeed("idle"),0,0,0}};
+  scene::AnimatorState walk;walk.id=id();walk.name="Walk";walk.motions={{resources::assetGuidFromSeed("walk"),0,0,0}};
+  scene::AnimatorTransition t;t.id=id();t.from=idle.id;t.to=walk.id;
+  base.states={idle,walk};base.transitions={t};base.defaultState=idle.id;
+  scene::AnimatorLayer upper;upper.id=id();upper.name="Braços";upper.syncSource=base.id;upper.weight=.5f;
+  a.layers={base,upper};a.synchronizeLayers();
+  AE_EXPECT_TRUE(a.valid(),"ids únicos depois de sincronizar");
+  auto &u=a.layers[1];
+  AE_EXPECT_TRUE(u.states.size()==2&&u.transitions.size()==1&&u.states[0].syncOf==idle.id&&u.states[0].id!=idle.id&&u.transitions[0].from==u.states[0].id&&u.transitions[0].to==u.states[1].id&&u.defaultState==u.states[0].id,"estrutura copiada e remapeada com ids próprios");
+  AE_EXPECT_TRUE(u.states[1].motions.size()==1&&u.states[1].motions[0].clip==resources::assetGuidFromSeed("walk"),"motions nascem iguais às da origem");
+  // Motions próprias na cópia; nova origem ganha um estado; a cópia acompanha sem perder as motions.
+  u.states[1].motions={{resources::assetGuidFromSeed("walk-arms"),0,0,0}};const auto walkCopyId=u.states[1].id;
+  scene::AnimatorState run;run.id=id();run.name="Run";run.motions={{resources::assetGuidFromSeed("run"),0,0,0}};a.layers[0].states.push_back(run);
+  a.synchronizeLayers();
+  AE_EXPECT_TRUE(a.layers[1].states.size()==3&&a.layers[1].states[1].id==walkCopyId&&a.layers[1].states[1].motions[0].clip==resources::assetGuidFromSeed("walk-arms")&&a.layers[1].states[2].name=="Run","a cópia acompanha a origem e guarda as motions próprias");
+  AE_EXPECT_TRUE(a.layers[1].weight==.5f&&a.layers[1].name=="Braços","peso e nome continuam da camada sincronizada");
+  std::ostringstream out;a.write(out);scene::Animator back;std::istringstream in(out.str());
+  AE_EXPECT_TRUE(back.read(in,6)&&back.layers[1].syncSource==base.id&&back.layers[1].states[1].syncOf==walk.id&&back.layers[1].states[1].motions[0].clip==resources::assetGuidFromSeed("walk-arms"),"origem e vínculos persistem na versão 6");
+  // Uma origem já sincronizada não serve de origem: o vínculo cai.
+  scene::AnimatorLayer third;third.id=id();third.name="Terceira";third.syncSource=upper.id;a.layers.push_back(third);a.synchronizeLayers();
+  AE_EXPECT_TRUE(a.layers[2].syncSource==0,"sincronizar com uma camada sincronizada é recusado");
 }
 
 AE_TEST(animator_contract_round_trip_and_validation) {
@@ -362,7 +415,7 @@ AE_TEST(animator_contract_round_trip_and_validation) {
   transition(a,a.layers[0].defaultState,a.layers[0].states.back().id,.25f,{{speedId,scene::AnimatorConditionMode::Greater,.5f}});
   AE_EXPECT_TRUE(a.valid(),"grafo válido");
   std::stringstream text;a.write(text);scene::Animator back;
-  AE_EXPECT_TRUE(back.read(text,5)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
+  AE_EXPECT_TRUE(back.read(text,6)&&back.parameters==a.parameters&&back.layers==a.layers&&back.nextId==a.nextId,"relido igual");
   back.layers[0].transitions[0].conditions[0].mode=scene::AnimatorConditionMode::Equals;
   AE_EXPECT_TRUE(!back.valid(),"Float não aceita Igual");
   back.layers[0].transitions[0].conditions[0]={back.parameters[1].id,scene::AnimatorConditionMode::IfNot,0};
@@ -468,7 +521,7 @@ AE_TEST(animator_shared_controller_overrides_pose_archive_missing_and_revision) 
   AE_EXPECT_TRUE(play.graphs.parameter(play.world,second,secondInstance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::SetFloat,7,result)==SceneAnimatorGraphs::Status::Ok,"shared parameter API reaches effective graph");
   AE_EXPECT_TRUE(play.graphs.parameter(play.world,rig.owner,instance,"Ajuste",SceneAnimatorGraphs::ParameterOperation::Get,0,result)==SceneAnimatorGraphs::Status::Ok&&result==0,"runtime parameters independent");
   std::ostringstream out;secondGraph.write(out);std::istringstream in(out.str());scene::Animator back;
-  AE_EXPECT_TRUE(back.read(in,5)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
+  AE_EXPECT_TRUE(back.read(in,6)&&back.controller==asset.guid&&back.clipOverrides==secondGraph.clipOverrides,"instance reference and substitutions persist");
   back.clipOverrides.push_back(back.clipOverrides.front());AE_EXPECT_TRUE(!back.valid(),"duplicate override authorities rejected");
   auto revision=asset;++revision.revision;revision.graph.layers[0].states[0].speed=2;
   play.graphs.setControllers(std::span(&revision,1));play.step(.1f);
@@ -489,7 +542,7 @@ AE_TEST(animator_v2_binding_roundtrip_and_v1_manual_migration) {
   speed.source=scene::AnimatorParameterSource::PlanarSpeed;speed.response=.15f;speed.scale=.5f;
   auto &ground=param(a,"Apoio",scene::AnimatorParameterType::Bool);ground.source=scene::AnimatorParameterSource::Grounded;
   std::stringstream stream;a.write(stream);scene::Animator restored;
-  AE_EXPECT_TRUE(restored.read(stream,5)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
+  AE_EXPECT_TRUE(restored.read(stream,6)&&restored.motionSource==42&&restored.parameters==a.parameters,"typed sources and response survive archive");
   auto v2=stream.str();v2.resize(v2.rfind(" - 0"));std::stringstream legacy(v2);scene::Animator migratedV2;
   AE_EXPECT_TRUE(migratedV2.read(legacy,2)&&!migratedV2.controller.valid()&&migratedV2.clipOverrides.empty()&&migratedV2.parameters==a.parameters,"v2 remains inline with physical bindings preserved");
   std::stringstream old("1 0 0 1 4 1 3 \"Peso\" 0 0.5 1 1 \"Base\" 1 0 2 1 2 \"Parado\" 0 0 0 1 0 1 0 0 0 0 0");

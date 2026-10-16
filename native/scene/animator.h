@@ -29,6 +29,14 @@ namespace ae::scene {
 
 enum class AnimatorParameterType : u32 {Float=0,Int=1,Bool=2,Trigger=3};
 enum class AnimatorMotionKind : u32 {Clip=0,Blend1D=1,Blend2D=2};
+// Como a mistura 2D pesa os clipes (Unity 6000.0 Blend Trees, 2D blending;
+// Godot 4.3 AnimationNodeBlendSpace2D). Triangulação é o comportamento
+// original (Godot); os três outros seguem os modos 2D da Unity.
+enum class AnimatorBlend2D : u32 {Triangulation=0,SimpleDirectional=1,FreeformDirectional=2,FreeformCartesian=3};
+inline const char *animatorBlend2DName(AnimatorBlend2D mode) {
+  static constexpr const char *names[]{"Triangulação","Direcional simples","Direcional livre","Cartesiano livre"};
+  return names[static_cast<u32>(mode)<=3?static_cast<u32>(mode):0];
+}
 enum class AnimatorLayerBlend : u32 {Override=0,Additive=1};
 enum class AnimatorInterruption : u32 {None=0,Current=1,Next=2,CurrentThenNext=3,NextThenCurrent=4};
 enum class AnimatorConditionMode : u32 {If=0,IfNot=1,Greater=2,Less=3,Equals=4,NotEqual=5};
@@ -64,12 +72,14 @@ struct AnimatorStateEvent {
 };
 struct AnimatorState {
   u64 id=0;std::string name;AnimatorMotionKind kind=AnimatorMotionKind::Clip;
+  AnimatorBlend2D blend2D=AnimatorBlend2D::Triangulation;
   std::vector<AnimatorMotion> motions;
   u64 blendX=0,blendY=0;          // parâmetros Float das misturas
   float speed=1;u64 speedParameter=0;bool loop=true;
   float x=0,y=0;                  // posição no grafo do editor
   std::vector<AnimatorStateEvent> events;
   u64 machine=0;                 // zero: root of this layer
+  u64 syncOf=0;                  // numa camada sincronizada: id do estado de origem
   bool operator==(const AnimatorState &) const=default;
 };
 struct AnimatorCondition {
@@ -85,10 +95,12 @@ struct AnimatorTransition {
   bool orderedInterruption=true,canTransitionToSelf=false;
   float offset=0;bool fixedDuration=true;
   bool entry=false;              // from zero is Entry rather than Any State
+  u64 syncOf=0;                  // numa camada sincronizada: id da transição de origem
   bool operator==(const AnimatorTransition &) const=default;
 };
 struct AnimatorMachine {
   u64 id=0,parent=0,defaultState=0;std::string name;float x=0,y=0;
+  u64 syncOf=0;                  // numa camada sincronizada: id da máquina de origem
   bool operator==(const AnimatorMachine &) const=default;
 };
 struct AnimatorLayer {
@@ -96,6 +108,9 @@ struct AnimatorLayer {
   AnimatorLayerBlend blend=AnimatorLayerBlend::Override;
   resources::AssetGuid referenceClip{};
   float referenceTime=0; // seconds; invalid GUID uses initial object pose
+  // Camada sincronizada (Unity: Sync): estados, máquinas e transições são a
+  // cópia da camada de origem; só as motions de cada estado são desta camada.
+  u64 syncSource=0;
   std::vector<AnimatorState> states;std::vector<AnimatorTransition> transitions;
   std::vector<AnimatorMachine> machines;
   bool operator==(const AnimatorLayer &) const=default;
@@ -205,6 +220,51 @@ public:
   const AnimatorLayer *layer(u64 id) const {for(const auto &l:layers) if(l.id==id) return &l;return nullptr;}
   AnimatorLayer *layer(u64 id) {for(auto &l:layers) if(l.id==id) return &l;return nullptr;}
 
+  // Camadas sincronizadas (Unity 6000.0, Animator Layers › Sync): a camada
+  // copia máquinas, estados e transições da origem com ids próprios (os ids
+  // são únicos no Animator), remapeando pai, padrão, origem e destino; cada
+  // estado guarda as suas motions. O que sumiu da origem some da cópia; o que
+  // nasceu nela nasce aqui com as motions da origem. Uma origem não pode ser
+  // ela mesma sincronizada.
+  void synchronizeLayers() {
+    for(auto &l:layers) {
+      if(!l.syncSource||l.syncSource==l.id) continue;
+      const auto *src=layer(l.syncSource);
+      if(!src||src->syncSource) {l.syncSource=0;continue;}
+      const auto source=*src;  // cópia: `layers` pode realocar ao criar nada, mas o alias é frágil
+      std::vector<std::pair<u64,u64>> map;  // id da origem -> id local
+      const auto local=[&](u64 id){for(const auto &[from,to]:map) if(from==id) return to;return u64{0};};
+      // Máquinas.
+      std::vector<AnimatorMachine> machines;
+      for(const auto &m:source.machines) {
+        AnimatorMachine copy=m;u64 id=0;
+        for(const auto &mine:l.machines) if(mine.syncOf==m.id) id=mine.id;
+        if(!id) id=nextId++;
+        copy.id=id;copy.syncOf=m.id;machines.push_back(copy);map.push_back({m.id,id});
+      }
+      // Estados: motions locais preservadas por origem.
+      std::vector<AnimatorState> states;
+      for(const auto &s:source.states) {
+        AnimatorState copy=s;u64 id=0;
+        for(const auto &mine:l.states) if(mine.syncOf==s.id) {id=mine.id;copy.motions=mine.motions;copy.blend2D=mine.blend2D;}
+        if(!id) id=nextId++;
+        copy.id=id;copy.syncOf=s.id;states.push_back(copy);map.push_back({s.id,id});
+      }
+      std::vector<AnimatorTransition> transitions;
+      for(const auto &t:source.transitions) {
+        AnimatorTransition copy=t;u64 id=0;
+        for(const auto &mine:l.transitions) if(mine.syncOf==t.id) id=mine.id;
+        if(!id) id=nextId++;
+        copy.id=id;copy.syncOf=t.id;transitions.push_back(copy);map.push_back({t.id,id});
+      }
+      for(auto &m:machines) {m.parent=local(m.parent);m.defaultState=local(m.defaultState);}
+      for(auto &s:states) s.machine=local(s.machine);
+      for(auto &t:transitions) {t.from=local(t.from);t.to=local(t.to);t.machine=local(t.machine);}
+      l.machines=std::move(machines);l.states=std::move(states);l.transitions=std::move(transitions);
+      l.defaultState=local(source.defaultState);
+    }
+  }
+
   bool valid() const override {
     if(clipOverrides.size()>MaximumOverrides||(!controller.valid()&&!clipOverrides.empty())) return false;
     for(usize k=0;k<clipOverrides.size();++k) {
@@ -301,9 +361,18 @@ public:
       o<<' '<<l.transitions.size();for(const auto &t:l.transitions)
         o<<' '<<t.id<<' '<<t.machine<<' '<<static_cast<u32>(t.interruption)<<' '<<t.orderedInterruption<<' '<<t.canTransitionToSelf<<' '<<t.offset<<' '<<t.fixedDuration<<' '<<t.entry;
     }
+    // v6, no fim como os blocos anteriores (um leitor antigo para antes):
+    // camada de origem da sincronização e modo da mistura 2D por estado.
+    o<<' '<<layers.size();
+    for(const auto &l:layers) {
+      o<<' '<<l.id<<' '<<l.syncSource<<' '<<l.states.size();
+      for(const auto &s:l.states) o<<' '<<s.id<<' '<<static_cast<u32>(s.blend2D)<<' '<<s.syncOf;
+      o<<' '<<l.machines.size();for(const auto &m:l.machines) o<<' '<<m.id<<' '<<m.syncOf;
+      o<<' '<<l.transitions.size();for(const auto &t:l.transitions) o<<' '<<t.id<<' '<<t.syncOf;
+    }
   }
   bool read(std::istream &i,u32 version) override {
-    if(version<1||version>5) return false;
+    if(version<1||version>6) return false;
     controller={};clipOverrides.clear();
     parameters.clear();layers.clear();
     usize count=0;
@@ -378,8 +447,21 @@ public:
         }
       }
     }
+    if(version>=6) {
+      usize n=0;if(!(i>>n)||n!=layers.size()) return false;
+      for(auto &l:layers) {
+        u64 id=0;usize count=0;
+        if(!(i>>id>>l.syncSource>>count)||id!=l.id||count!=l.states.size()) return false;
+        for(auto &s:l.states) {u32 mode=0;if(!(i>>id>>mode>>s.syncOf)||id!=s.id||mode>3) return false;s.blend2D=static_cast<AnimatorBlend2D>(mode);}
+        if(!(i>>count)||count!=l.machines.size()) return false;
+        for(auto &m:l.machines) if(!(i>>id>>m.syncOf)||id!=m.id) return false;
+        if(!(i>>count)||count!=l.transitions.size()) return false;
+        for(auto &t:l.transitions) if(!(i>>id>>t.syncOf)||id!=t.id) return false;
+      }
+    }
     // Versions 1-3 always evaluated the base layer at full weight.
     if(version<4&&!layers.empty()) layers[0].weight=1;
+    synchronizeLayers();
     return valid();
   }
 };
@@ -472,7 +554,7 @@ inline constexpr std::array<ComponentResourceBinding,1> animatorResources{{
    },{"Animator","","Grafo compartilhado; ausente interrompe a avaliação e expõe diagnóstico"}},
 }};
 inline const ComponentType Animator::descriptor{
-  "astra.animation.animator",5,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
+  "astra.animation.animator",6,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
   animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},animatorResources,{},{},{},animatorMethods,animatorEvents};
 
 } // namespace ae::scene

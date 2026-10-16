@@ -3231,7 +3231,8 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     if(!readOnly) button(takeTop(side,34),s->id==layer.defaultOf(state.animatorMachine)?"Estado padrão":"Definir como padrão",w::SetDefault,false,s->id!=layer.defaultOf(state.animatorMachine));
     valueRow("Local",s->machine?layer.path(s->machine):layer.name,w::NodeParent);
     if(s->kind==scene::AnimatorMotionKind::Blend1D) valueRow("Parâmetro",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);
-    if(s->kind==scene::AnimatorMotionKind::Blend2D) {valueRow("Parâmetro X",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);valueRow("Parâmetro Y",parameterName(s->blendY,"Escolher Float"),w::StateBlendY);}
+    if(s->kind==scene::AnimatorMotionKind::Blend2D) {valueRow("Parâmetro X",parameterName(s->blendX,"Escolher Float"),w::StateBlendX);valueRow("Parâmetro Y",parameterName(s->blendY,"Escolher Float"),w::StateBlendY);
+      valueRow("Modo 2D",scene::animatorBlend2DName(s->blend2D),w::StateBlendMode);}
     if(s->kind!=scene::AnimatorMotionKind::Clip&&!s->motions.empty()) {
       auto plot=takeTop(side,156);plot=deflate(plot,UiInsets::all(8));list.addRect(plot,theme.color.canvas,2);
       const auto parameterValue=[&](u64 id){const auto *p=a.parameter(id);float v=p?p->value:0;
@@ -3340,6 +3341,11 @@ void buildAnimatorEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
     const float referenceTime=runtimeLayer&&runtimeLayer->timeOverride?runtimeLayer->runtimeReferenceTime:layer.referenceTime;
     valueRow("Composição",blendMode==scene::AnimatorLayerBlend::Additive?"Aditiva":"Substituição",w::LayerBlend);
     valueRow("Peso",number(effectiveWeight),w::LayerWeight);
+    if(layerIndex>0||layer.syncSource) {
+      // Sincronizar (Unity Sync): estrutura copiada de outra camada, motions próprias.
+      std::string source="—";if(const auto *src=a.layer(layer.syncSource)) source=src->name;
+      valueRow("Sincronizar com",source,w::LayerSync);
+    }
     if(blendMode==scene::AnimatorLayerBlend::Additive) {
       std::string name=referenceClip.valid()?"Clipe ausente":"Pose inicial";
       if(state.resources) for(const auto &clip:state.resources->clipCatalog()) if(clip.clip==referenceClip) {name=clip.name;break;}
