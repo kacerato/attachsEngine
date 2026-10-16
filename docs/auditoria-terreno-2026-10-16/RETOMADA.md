@@ -35,3 +35,5 @@ Pausa solicitada pelo proprietário para encerrar a sessão. Nada foi mesclado n
 - 1.932 intermediários Android retirados do índice e ignorados (`2fca165`); arquivos locais preservados para reaproveitar compilação.
 - Não repetir a exclusão física de caches bloqueada pela revisão automática. Nenhuma limpeza física ocorreu nessas tentativas.
 - Usar um compilador por vez. Última investigação detectou download em segundo plano do instalador Visual Studio e paginação do Windows nos picos; não encerrar processos externos ao trabalho.
+
+Checkpoint das Docs publicado: https://github.com/kacerato/AstraDocs/tree/codex/terrain-block1-checkpoint-20261016 — commit c6f5590. Cobertura de Atualizações validada; publicação em produção continua pendente.
