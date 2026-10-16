@@ -1099,7 +1099,7 @@ int main(int argc, char **argv) {
   editor::EditorEntityId selection = editor::kInvalidEntity;
   // No synthetic scene. An optional repository-relative AEMAP uses the same
   // import contract as Android, so every hierarchy row has package geometry.
-  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4]).starts_with("library-"));
+  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4])=="play-kyle-carry"||std::string(argv[4]).starts_with("library-"));
   if(argc>5&&!kylePreview) {
     std::vector<u8> bytes;renderer::MapPackageView package;
     if(!readAsset(argv[5],bytes) || !renderer::decodeMapPackage(bytes,package) ||
@@ -1155,6 +1155,38 @@ int main(int argc, char **argv) {
     session->update();state=session->screen();
     // O main aponta state.document para o documento local: ele vira uma cópia
     // do da sessão, com os mesmos ids, para hierarquia, inspector e menu.
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+  }
+  // Play do "Carregar caixa" com o Robot Kyle real por 20 s: imprime a altura
+  // da caixa, da mesa e do quadril a cada meio segundo, com o pai da caixa e
+  // o erro de quadro, para flagrar a caixa voltando pela mesa num reinício.
+  if(argc>5 && std::string(argv[4])=="play-kyle-carry") {
+    namespace fs=std::filesystem;
+    const auto out=fs::temp_directory_path()/("astra-carry-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    static test::KyleStage stage;
+    if(const int code=stage.open(fs::absolute(argv[5]),out,*session)) {std::fprintf(stderr,"kyle: %d\n",code);return 1;}
+    auto &graph=session->document();std::string error;
+    if(!session->history().begin("Carregar caixa"))return 1;
+    const auto group=session->history().createEntity(graph,graph.root(),editor::EditorEntityKind::Folder,"Carregar caixa");
+    if(!group||!session->addCarrySetupInTransaction(stage.kyle,group,error)) {std::fprintf(stderr,"CARRY: %s\n",error.c_str());session->history().cancel(graph);return 1;}
+    session->history().end();
+    if(!session->startPlay()) {std::fprintf(stderr,"PLAY: %s\n",session->screen().status.c_str());return 1;}
+    const auto &g=session->playScene().document();
+    const auto find=[&](const char *name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(const auto id:ids)if(std::string_view(g.find(id)->name)==name)return id;return runtime::ObjectId{};};
+    const auto height=[&](runtime::ObjectId id){float m[16];if(!id||!runtime::worldMatrix(g,id,m))return -99.f;return m[13];};
+    std::vector<renderer::MapDrawState> draws;
+    for(u32 i=0;i<=1200;++i) {
+      session->advanceClock(10+float(i)/60.f);session->extractPlayMap(draws);
+      if(i%30==0) {
+        const auto box=find("Caixa"),table=find("Mesa"),hip=find("Hip"),point=find("Ponto de carregar");
+        const auto *b=g.find(box);const auto *parent=b?g.find(b->parent):nullptr;
+        std::fprintf(stderr,"t=%5.1f caixa=%.3f mesa=%.3f quadril=%.3f ponto=%.3f pai=%s erro=%s\n",double(i)/60.0,height(box),height(table),height(hip),height(point),
+          parent?parent->name:"?",session->playScene().frameError().c_str());
+      }
+    }
+    session->update();state=session->screen();
     document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
   }
   // Biblioteca sobre o pacote UMotion real (argv[5] = pasta UMotionExamples):

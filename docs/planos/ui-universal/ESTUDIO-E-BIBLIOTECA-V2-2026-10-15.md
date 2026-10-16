@@ -166,6 +166,14 @@ codificar.
 - O modo `scene-kyle-menu` do preview mostra "Criar" em vez das ações do
   objeto por um artefato de seleção do preview, não do editor.
 
+- Caixa atravessando a mesa no reinício (visto no aparelho na primeira
+  rodada): no host, o modo `play-kyle-carry` do `aether_ui_preview` (Kyle real,
+  mesa, caixa, interação) roda 20 s de Play com a caixa parada no ponto de
+  carregar (1,094 m) desde 1,5 s, pai Robot Kyle, sem erro de quadro — o
+  carregar puro não reinicia. A reprodução fica para o aparelho com o projeto
+  real (ali havia também o clipe "Clipe" gravado no estúdio, em loop de 2 s,
+  que pode estar reposicionando o corpo a cada volta).
+
 ## 7. E4 — plugins pelo filtro "só entra o que tem fluxo completo no editor"
 
 Levantamento sobre o código (15/10/2026), não sobre a lista de 11/10:
