@@ -170,6 +170,29 @@ private:
     float m[16];if(!worldMatrix(world.graph(),static_cast<ObjectId>(target),m))return false;
     out[0]=m[12];out[1]=m[13];out[2]=m[14];return true;
   }
+  // Polo derivado do repouso: a dobra do meio no espaço do osso raiz (fora do
+  // eixo raiz->ponta do repouso), levada ao mundo pelas colunas do osso raiz
+  // atual e somada à posição atual do meio com um quarto do osso superior.
+  // Falso quando a cadeia é reta no repouso ou não tem repouso capturado.
+  bool restBendPole(ObjectId midId,ObjectId tipId,const float rootWorld[16],const float midWorld[16],float out[3]) const {
+    const auto rm=rest_.find(midId),rt=rest_.find(tipId);if(rm==rest_.end()||rt==rest_.end())return false;
+    float midLocal[16],tipLocal[16],tipInRoot[16];transformMatrix(rm->second,midLocal);transformMatrix(rt->second,tipLocal);multiplyMatrix(midLocal,tipLocal,tipInRoot);
+    const float m[3]{midLocal[12],midLocal[13],midLocal[14]},t[3]{tipInRoot[12],tipInRoot[13],tipInRoot[14]};
+    const float tl=std::sqrt(t[0]*t[0]+t[1]*t[1]+t[2]*t[2]);if(!(tl>1e-6f))return false;
+    const float u[3]{t[0]/tl,t[1]/tl,t[2]/tl},d=m[0]*u[0]+m[1]*u[1]+m[2]*u[2];
+    float b[3]{m[0]-u[0]*d,m[1]-u[1]*d,m[2]-u[2]*d};const float bl=std::sqrt(b[0]*b[0]+b[1]*b[1]+b[2]*b[2]);
+    if(!(bl>tl*1e-3f))return false;
+    for(float &v:b)v/=bl;
+    float w[3]{0,0,0};
+    for(int c=0;c<3;++c) {
+      const float ax[3]{rootWorld[c*4],rootWorld[c*4+1],rootWorld[c*4+2]};const float al=std::sqrt(ax[0]*ax[0]+ax[1]*ax[1]+ax[2]*ax[2]);
+      if(!(al>1e-7f))return false;
+      for(int k=0;k<3;++k)w[k]+=ax[k]/al*b[c];
+    }
+    const float dx=midWorld[12]-rootWorld[12],dy=midWorld[13]-rootWorld[13],dz=midWorld[14]-rootWorld[14],upper=std::sqrt(dx*dx+dy*dy+dz*dz);
+    for(int k=0;k<3;++k)out[k]=midWorld[12+k]+w[k]*upper*.25f;
+    return std::isfinite(out[0])&&std::isfinite(out[1])&&std::isfinite(out[2]);
+  }
   bool solveLimb(GameWorld &world,ObjectId end,const float target[3],const float *pole,float weight,std::map<ObjectId,bool> &touched,float *endWorldOut=nullptr) {
     const auto *e=world.graph().find(end);const auto *m=e?world.graph().find(e->parent):nullptr;const auto *r=m?world.graph().find(m->parent):nullptr;
     if(!r||m->id==world.graph().root()||r->id==world.graph().root()) {diagnostics_.push_back({end,Issue::ShortChain});return false;}
@@ -178,8 +201,15 @@ private:
     if(!worldMatrix(world.graph(),r->id,root)||!worldMatrix(world.graph(),m->id,mid)||!worldMatrix(world.graph(),end,tip)) {diagnostics_.push_back({end,Issue::InvalidPose});return false;}
     // Peso: alvo interpolado entre a ponta de entrada e o alvo; uma unica solucao.
     const float goal[3]{tip[12]+(target[0]-tip[12])*weight,tip[13]+(target[1]-tip[13])*weight,tip[14]+(target[2]-tip[14])*weight};
+    // Sem polo, a dobra vinha só da pose animada: com o braço quase reto rumo
+    // ao alvo ela troca de lado entre quadros e o antebraço gira 130-160° num
+    // quadro. O repouso no referencial do osso raiz dá o lado da dobra
+    // (Final IK, LimbIK: bend normal relativo ao osso raiz); a pose animada
+    // continua mandando quando dobra de verdade.
+    float restPole[3];const float *usedPole=pole;
+    if(!pole&&restBendPole(m->id,end,root,mid,restPole))usedPole=restPole;
     TwoBoneIkResult solved;
-    if(!solveTwoBoneIk(root,mid,tip,goal,solved,pole)) {diagnostics_.push_back({end,Issue::Degenerate});return false;}
+    if(!solveTwoBoneIk(root,mid,tip,goal,solved,usedPole)) {diagnostics_.push_back({end,Issue::Degenerate});return false;}
     // Raiz primeiro; o meio e escrito relativo ao pai ja resolvido.
     if(!writeBone(world,r->id,solved.root,1)||!writeBone(world,m->id,solved.mid,1)) {diagnostics_.push_back({end,Issue::InvalidPose});return false;}
     if(solved.clamped)diagnostics_.push_back({end,Issue::NotConverged,0});
@@ -936,10 +966,21 @@ private:
       const auto *object=component<scene::InteractionObject>(world,e.object);float target[3];
       if(object&&gripPosition(world,e,*object,target))bySystem[e.system].push_back({e.effector,{target[0],target[1],target[2],e.weight}});
     }
+    for(auto it=crouches_.begin();it!=crouches_.end();)it=bySystem.count(it->first)?std::next(it):crouches_.erase(it);
     for(auto &[id,effectors]:bySystem) {
       const auto *c=component<scene::InteractionSystem>(world,id);if(!c||!c->enabled)continue;
       const ObjectId pelvis=static_cast<ObjectId>(c->pelvis),chest=static_cast<ObjectId>(c->chest);
       float weight=0;for(const auto &[tip,t]:effectors)weight=std::max(weight,t[3]);
+      // O braco volta a pose animada antes de medir: sem isso a mao ainda
+      // carrega o IK do quadro anterior (ou o osso que a animacao nao escreve),
+      // a inclinacao e o agachamento variam a cada quadro e a pelve oscila
+      // (Kyle: 27 cm num quadro, de volta no seguinte).
+      for(const auto &[tip,t]:effectors) {
+        std::vector<ObjectId> member;
+        if(!ancestors(world.graph(),tip,static_cast<u32>(c->limbBones),member))continue;
+        for(const auto bone:member)beginBone(world,bone,touched);
+        beginBone(world,tip,touched);
+      }
       if(pelvis&&world.graph().find(pelvis))beginBone(world,pelvis,touched);
       if(chest&&world.graph().find(chest)&&c->lean>0) {
         beginBone(world,chest,touched);
@@ -970,11 +1011,21 @@ private:
         for(usize k=0;k+1<member.size();++k){float a[16],b[16];if(worldMatrix(world.graph(),member[k],a)&&worldMatrix(world.graph(),member[k+1],b)){const float d[3]{b[12]-a[12],b[13]-a[13],b[14]-a[14]};reach+=length3(d);}}
         // Desce ate o alvo ficar ao alcance (so a componente vertical).
         const float dx=t[0]-root[12],dz=t[2]-root[14],dy=t[1]-root[13],flat=std::sqrt(dx*dx+dz*dz);
-        reach*=.98f;if(flat>=reach||dy>=0)continue;
-        const float need=-dy-std::sqrt(std::max(0.f,reach*reach-flat*flat));
+        reach*=.98f;if(dy>=0)continue;
+        // Alvo fora do alcance horizontal nao pede agachar; entre 80% e 100%
+        // do alcance o pedido cai a zero em rampa. Com o degrau antigo
+        // (tudo ou nada em flat==reach), a mao animada que cruzava a borda
+        // fazia a pelve pular ~20 cm num quadro e voltar no seguinte.
+        const float inside=flat>=reach?0.f:flat<=reach*.8f?1.f:(reach-flat)/(reach*.2f);
+        if(inside<=0)continue;
+        const float need=(-dy-std::sqrt(std::max(0.f,reach*reach-flat*flat)))*inside;
         down=std::max(down,need*t[3]);
       }
-      down=std::min(down,c->crouch);
+      down=std::min(std::max(down,0.f),c->crouch);
+      // O corpo desce e sobe a no maximo 2 m/s: nenhum quadro move a pelve
+      // mais de 3,3 cm, como a suavizacao de peso dos solvers do Final IK.
+      auto &crouch=crouches_[id];const float step=2.f*dt_;
+      crouch+=std::clamp(down-crouch,-step,step);down=crouch;
       if(down>1e-5f) {float m[16];if(worldMatrix(world.graph(),body,m)){m[13]-=down;if(!writeWorld(world,body,m))diagnostics_.push_back({id,Issue::InvalidPose});}}
     }
   }
@@ -983,6 +1034,7 @@ private:
   std::set<ObjectId> autoStarted_;
   struct FootLock {bool locked=false;float point[3]{};};
   std::map<ObjectId,FootLock> footLocks_;
+  std::map<ObjectId,float> crouches_; // agachamento atual por Sistema de interacao (m)
   std::map<ObjectId,Spring> springs_;
   std::map<ObjectId,Tilt> tilts_;
   std::map<ObjectId,Transform> ampRest_;

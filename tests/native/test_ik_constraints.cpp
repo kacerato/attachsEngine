@@ -398,6 +398,58 @@ AE_TEST(ik_interaction_trigger_fires_when_the_character_is_in_range) {
 
 // Final IK 2.2, InteractionLookAt: a cabeca olha o objeto enquanto a mao vai
 // ate ele e volta depois. Referencia oficial: Godot 4.3 LookAtModifier3D.
+// 16/10/2026, cena do Kyle no aparelho: a mao animada cruzava a borda do
+// alcance horizontal e o agachamento do Sistema de interacao ligava e
+// desligava a cada quadro (pelve 27 cm num quadro, de volta no seguinte).
+// O pedido agora cai em rampa perto da borda e o corpo move no maximo 2 m/s.
+AE_TEST(ik_interaction_crouch_never_moves_the_body_more_than_a_step_per_frame) {
+  Leg leg;
+  auto *system=addComponent<scene::InteractionSystem>(leg.g,leg.owner);system->pelvis=leg.hip;system->crouch=.5f;system->lean=0;
+  const auto prop=leg.g.createEntity(leg.g.root(),ObjectKind::Folder,"Caixa");
+  // Alvo no limite do alcance horizontal (ossos 1,005+1 ⇒ 1,965 util) e bem abaixo do ombro.
+  Transform at;at.position[0]=1.95f;at.position[1]=.3f;leg.g.setTransform(prop,at);
+  auto *object=addComponent<scene::InteractionObject>(leg.g,prop);object->reachTime=.3f;object->releaseTime=.1f;object->holdPoint=leg.owner;
+  GameWorld world;world.load(leg.g);SceneIk ik;ik.captureRest(world.graph());step(world,ik);
+  bool started=false;AE_EXPECT_TRUE(ik.interactionStart(world,leg.owner,leg.foot,prop,started)==WorldStatus::Ok&&started,"interaction starts");
+  float previous=-1,worstStep=0,worstKnee=0,lowest=9;float lastKnee[4]{0,0,0,1};
+  for(u32 i=0;i<60;++i) {
+    // "Animacao": o ombro oscila 6 cm para os lados, cruzando a borda do alcance a cada poucos quadros.
+    Transform hip=world.graph().find(leg.hip)->transform;hip.position[0]=.06f*std::sin(float(i)*.9f);hip.position[1]=2;world.setLocalTransform(world.handle(leg.hip),hip);
+    step(world,ik);
+    float m[16];worldMatrix(world.graph(),leg.hip,m);
+    if(previous>=0)worstStep=std::max(worstStep,std::abs(m[13]-previous));
+    previous=m[13];lowest=std::min(lowest,m[13]);
+    float q[4];transformRotationQuaternion(world.graph().find(leg.knee)->transform,q);
+    if(i)worstKnee=std::max(worstKnee,2*std::acos(std::min(1.f,std::abs(q[0]*lastKnee[0]+q[1]*lastKnee[1]+q[2]*lastKnee[2]+q[3]*lastKnee[3])))*57.29578f);
+    std::copy(q,q+4,lastKnee);
+  }
+  char message[160];std::snprintf(message,sizeof message,"body step per frame %.4f m (max 0.034), knee %.1f deg (max 30)",worstStep,worstKnee);
+  AE_EXPECT_TRUE(worstStep<=.034f&&worstKnee<30,message); // perto da reta o joelho gira muito por cm; o que nao pode e o vai-e-volta de 70°
+  AE_EXPECT_TRUE(lowest<2-.05f,"the body did crouch toward the low target");
+}
+
+// Dois ossos sem polo: a dobra vinha so da pose animada; com a cadeia quase
+// reta rumo ao alvo, um desvio de 1 mm trocava o lado do cotovelo a cada
+// quadro (giro de 130-160° num quadro). O repouso no referencial do osso raiz
+// decide o lado (Final IK, LimbIK: bend normal relativo ao osso raiz).
+AE_TEST(ik_two_bone_without_pole_keeps_the_rest_bend_side_when_the_chain_is_straight) {
+  Leg leg;leg.ik(1,false);
+  // Alvo quase na ponta do alcance, na reta coxa->pe.
+  Transform a;a.position[1]=2-1.99f;leg.g.setTransform(leg.target,a);
+  GameWorld world;world.load(leg.g);SceneIk ik;ik.captureRest(world.graph());
+  float worst=0;float last[4]{0,0,0,1};bool first=true;u32 behind=0;
+  for(u32 i=0;i<40;++i) {
+    Transform knee=world.graph().find(leg.knee)->transform;knee.position[2]=i%2?-.001f:.001f;world.setLocalTransform(world.handle(leg.knee),knee);
+    step(world,ik);
+    float m[16];worldMatrix(world.graph(),leg.knee,m);if(m[14]<0)++behind;
+    float q[4];transformRotationQuaternion(world.graph().find(leg.hip)->transform,q);
+    if(!first)worst=std::max(worst,2*std::acos(std::min(1.f,std::abs(q[0]*last[0]+q[1]*last[1]+q[2]*last[2]+q[3]*last[3])))*57.29578f);
+    std::copy(q,q+4,last);first=false;
+  }
+  char message[120];std::snprintf(message,sizeof message,"hip turn per frame %.1f deg, knee behind on %u frames",worst,behind);
+  AE_EXPECT_TRUE(worst<10&&behind==0,message);
+}
+
 AE_TEST(ik_interaction_look_at_turns_the_head_while_reaching) {
   Spine s;auto *system=addComponent<scene::InteractionSystem>(s.g,s.owner);system->lookAt=s.head;system->lookSpeed=8;system->lookTurn=30;
   auto *look=addComponent<scene::LookAtIk>(s.g,s.head);look->target=0;look->chainLength=1;look->headWeight=1;look->axis=2;
