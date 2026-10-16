@@ -1,0 +1,15 @@
+APK export dependencies
+
+ARSCLib 1.4.0 — Copyright (C) 2022 github.com/REAndroid
+https://github.com/REAndroid/ARSCLib — Apache License 2.0 (included).
+
+Android apksig 8.7.3 — The Android Open Source Project
+https://android.googlesource.com/platform/tools/apksig/ — Apache License 2.0
+(same license terms as the included ARSCLib-Apache-2.0.txt).
+
+Bouncy Castle bcpkix/bcprov/bcutil 1.86
+Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.
+https://www.bouncycastle.org — MIT License (included).
+
+The exported player currently shares the editor's libraries. These notices
+therefore remain in exported games even when export tools are not reachable.

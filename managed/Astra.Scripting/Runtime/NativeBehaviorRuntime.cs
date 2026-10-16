@@ -1461,7 +1461,11 @@ public static unsafe class NativeBehaviorRuntime
             var project = NativeCompiler.LoadApplied(directory);
             var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(new ReadOnlySpan<byte>(json, jsonLength))
                 ?? throw new InvalidDataException("Behavior attachment data is empty.");
-            _saveStore = new SaveStore(directory);
+            // The standalone Android bootstrap owns this stable, app-private root.
+            // Project payloads are versioned independently; updating an APK must
+            // not create a fresh save namespace or ship the author's Play saves.
+            var playerData = Environment.GetEnvironmentVariable("ASTRA_PLAYER_DATA_ROOT");
+            _saveStore = new SaveStore(string.IsNullOrEmpty(playerData) ? directory : playerData);
             _scene = new(*access); Graphics.Bind(_scene); _world = new(); _world.Start(project, _scene, attachments, bindComponentState: true, saveStore: _saveStore);
             RefreshDiagnostics(); return 0;
         }

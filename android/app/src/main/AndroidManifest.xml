@@ -27,6 +27,7 @@
         android:icon="@mipmap/ic_astra"
         android:label="${astraApplicationLabel}"
         android:theme="@style/AetherTheme">
+        <profileable android:shell="${astraProfileable}" />
         <!-- Sem este meta-data o GameManager nao enxerga o game-mode-config e
              o app fica em STANDARD. A diferenca medida entre STANDARD e
              PERFORMANCE, mesma cena e mesmo APK, foi 10,204 contra 7,284 ms de
@@ -57,5 +58,12 @@
                 android:name="android.app.lib_name"
                 android:value="aether_android" />
         </activity>
+        <activity android:name="dev.aether.editor.GameBootstrapActivity"
+            android:exported="false" android:screenOrientation="sensorLandscape"
+            android:launchMode="singleTask" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode" />
+        <activity android:name="dev.aether.editor.GameExportActivity"
+            android:exported="false" android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

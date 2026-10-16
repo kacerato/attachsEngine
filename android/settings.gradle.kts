@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AetherAndroid"
 include(":app")
+include(":export-core")
