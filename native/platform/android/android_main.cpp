@@ -3016,11 +3016,23 @@ void android_main(android_app *app) {
                 const auto name=lower(relative.substr(relative.find_last_of('/')==std::string::npos?0:relative.find_last_of('/')+1));
                 if(name.empty())return false;
                 ae::usize visited=0;
+                // 3) Fonte de trabalho que o pacote nao traz (PSD/TIF do atlas, como
+                //    nos pacotes POLYGON da Synty): a primeira imagem exportada com
+                //    o mesmo radical, "Atlas_01.psd" -> "Atlas_01_A.png".
+                const auto dot=name.find_last_of('.');const std::string stem=dot==std::string::npos?name:name.substr(0,dot);
+                std::filesystem::path sibling;std::string siblingName;
                 for(std::filesystem::recursive_directory_iterator it(files.package,std::filesystem::directory_options::skip_permission_denied,error),end;
                     !error&&it!=end&&visited<8192;it.increment(error),++visited) {
-                  if(!it->is_regular_file(error)||lower(it->path().filename().string())!=name)continue;
-                  if(ae::editor::EditorImportTransaction::read(it->path(),bytes,64ull<<20))return true;
+                  if(!it->is_regular_file(error))continue;
+                  const auto file=lower(it->path().filename().string());
+                  if(file==name) {if(ae::editor::EditorImportTransaction::read(it->path(),bytes,64ull<<20))return true;continue;}
+                  const auto fileDot=file.find_last_of('.');if(fileDot==std::string::npos||stem.empty())continue;
+                  const auto extension=file.substr(fileDot+1),fileStem=file.substr(0,fileDot);
+                  if(extension!="png"&&extension!="jpg"&&extension!="jpeg"&&extension!="tga")continue;
+                  if(fileStem!=stem&&!fileStem.starts_with(stem+"_"))continue;
+                  if(siblingName.empty()||file<siblingName) {siblingName=file;sibling=it->path();}
                 }
+                if(!sibling.empty()&&ae::editor::EditorImportTransaction::read(sibling,bytes,64ull<<20))return true;
                 return false;
               };
               result.accepted=ae::resources::importModelSource(result.bytes,limits,progress,result.model);
