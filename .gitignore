@@ -3,8 +3,10 @@
 build/
 android/.gradle/
 # android/local.properties
-# android/app/.cxx/
-# android/app/build/
+# Intermediários de build do Android: eram rastreados (1.932 arquivos, ~22 GB de
+# cache LFS) e inflavam cada commit; desde 16/10/2026 ficam fora do Git.
+android/app/.cxx/
+android/app/build/
 # .aether/
 # *.user
 # __pycache__/
