@@ -1955,6 +1955,8 @@ AE_TEST(character_recipes_in_create_menu_build_ik_from_the_selection) {
   AE_EXPECT_TRUE(body&&body->pelvis==b.core&&body->tips[0]==b.a3&&body->tips[1]==b.l3&&body->targets[0]&&body->targets[1],"full body wires pelvis, tips and new targets");
   const auto entitiesAfter=doc.entityCount();
   AE_EXPECT_TRUE(!EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Carry,summary,error)&&!error.empty()&&doc.entityCount()==entitiesAfter,"carry refuses a robot without humanoid arms and leaves nothing behind");
+  const auto depth=session.history().undoDepth();
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Ground,summary,error)&&summary.find("Já montado")!=std::string::npos&&session.history().undoDepth()==depth,"a recipe already applied reports it without an empty history step");
   // Um passo de histórico por receita.
   for(u32 i=0;i<5;++i)AE_EXPECT_TRUE(session.history().undo(doc),"undo step");
   AE_EXPECT_TRUE(!doc.find(b.top)->components.find(scene::LookAtIk::descriptor)&&!doc.find(b.a3)->components.find(scene::AimIk::descriptor)&&

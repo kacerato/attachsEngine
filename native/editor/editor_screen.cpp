@@ -6699,7 +6699,7 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
     // Menu Cena: os espaços de trabalho, pelos widgets de sempre.
     title="Cena";
     items.push_back({UiIcon::SceneObject,"Voltar à edição",widgetId(EditorWidget::TabScene),state.workspace!=EditorWorkspace::Scene});
-    items.push_back({UiIcon::AssetsImport,"Recursos importados",widgetId(EditorWidget::TabAssets),state.assetCount!=0});
+    items.push_back({UiIcon::AssetsFileMesh,"Malhas do projeto",widgetId(EditorWidget::TabAssets),state.assetCount!=0});
     items.push_back({UiIcon::AssetsSourcePackage,"Biblioteca de pacotes",widgetId(EditorWidget::LibraryOpen)});
     items.push_back({UiIcon::LightingSky,"Ambiente da cena",widgetId(EditorWidget::TabLighting)});
     items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
@@ -10847,8 +10847,9 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     list.pushClip(hit);builder.label({hit.x,hit.y+30,hit.width,22},text,enabled?theme.color.textDim:theme.color.textFaint,theme.type.caption,UiAlign::Center);list.popClip();
     if(enabled)router.addRegion(hit,widget);
   };
-  constexpr const char *kinds[]{"Todos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers"};
-  constexpr UiIcon kindIcons[]{UiIcon::AssetsGrid,UiIcon::AssetsFileMesh,UiIcon::AssetsAnimation,UiIcon::AssetsMaterial,UiIcon::AssetsTexture,UiIcon::ScenePrefab,UiIcon::SceneObject,UiIcon::AssetsFile,UiIcon::AssetsDocs,UiIcon::AssetsFile,UiIcon::AnimationController};
+  constexpr const char *kinds[]{"Todos","Modelos","Clipes","Materiais","Texturas","Prefabs","Cenas","Código","Documentos","Outros","Controllers","Projeto"};
+  constexpr UiIcon kindIcons[]{UiIcon::AssetsGrid,UiIcon::AssetsFileMesh,UiIcon::AssetsAnimation,UiIcon::AssetsMaterial,UiIcon::AssetsTexture,UiIcon::ScenePrefab,UiIcon::SceneObject,UiIcon::AssetsFile,UiIcon::AssetsDocs,UiIcon::AssetsFile,UiIcon::AnimationController,UiIcon::AssetsImport};
+  constexpr u32 kindCount=12;
   auto content=deflate(area,UiInsets::symmetric(12,6));
   auto heading=takeTop(content,48);
   iconButton(takeLeft(heading,48),EditorWidget::LibraryClose,UiIcon::UiArrowLeft);
@@ -10857,11 +10858,11 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
   const bool wide=content.width>=900;
   if(!wide)iconButton(takeRight(heading,48),EditorWidget::LibraryKinds,UiIcon::AssetsFilter,true,state.libraryKind!=0);
   std::string package="Todos os pacotes";for(const auto &entry:state.libraryPackages)if(entry.id==state.libraryPackage)package=entry.name;
-  list.pushClip(heading);builder.label(deflate(heading,UiInsets::symmetric(8,0)),std::string(state.libraryKind?kinds[state.libraryKind%11]:"Biblioteca")+" · "+package+(state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.text,theme.type.cardName);list.popClip();
+  list.pushClip(heading);builder.label(deflate(heading,UiInsets::symmetric(8,0)),std::string(state.libraryKind?kinds[state.libraryKind%kindCount]:"Biblioteca")+" · "+package+(state.libraryQuery.empty()?"":" · "+state.libraryQuery),theme.color.text,theme.type.cardName);list.popClip();
   const bool detail=state.libraryDetailItem.valid()&&!state.libraryDetailName.empty();
   if(wide) {
     auto rail=takeLeft(content,200);takeLeft(content,8);
-    for(u32 k=0;k<11;++k) {
+    for(u32 k=0;k<kindCount;++k) {
       if(k&&!state.libraryKindCounts[k])continue;
       auto row=takeTop(rail,44);const bool active=state.libraryKind==k;
       if(active)list.addRect(deflate(row,UiInsets::all(2)),withAlpha(theme.color.accent,.16f),theme.radius.control);
@@ -10887,10 +10888,18 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
       tileButton(actions,"Receber origem",widgetId(EditorWidget::LibraryReceiveSource),UiIcon::AssetsImport);
     } else {
       u32 index=0;bool found=false;for(;index<state.libraryRows.size();++index)if(state.libraryRows[index].id==state.libraryDetailItem){found=true;break;}
-      tileButton(takeLeft(actions,w),"Abrir",found?widgetId(EditorWidget::LibraryItemBase)+index:0u,UiIcon::AssetsFolderOpen,found);
-      tileButton(takeLeft(actions,w),"Instanciar",widgetId(EditorWidget::LibraryInstantiate),UiIcon::ScenePrefab,state.libraryCanInstantiate);
-      tileButton(takeLeft(actions,w),"Vincular",widgetId(EditorWidget::LibraryControllerAssign),UiIcon::AnimationController,state.libraryCanAssignController);
-      tileButton(actions,"Reimportar",widgetId(EditorWidget::LibraryReimport),UiIcon::AssetsImport,state.libraryCanReimport);
+      const auto *row=found?&state.libraryRows[index]:nullptr;
+      if(row&&row->projectAsset!=~0u) {
+        // Malha do projeto: a única ação é ir para a cena (toque ou arrasto).
+        tileButton(takeLeft(actions,w),"Na cena",widgetId(EditorWidget::AssetRowBase)+row->projectAsset,UiIcon::SceneObjectAdd);
+      } else if(row&&row->unregistered) {
+        tileButton(takeLeft(actions,w*2),"Importar modelo",widgetId(EditorWidget::ImportModel),UiIcon::AssetsImport);
+      } else {
+        tileButton(takeLeft(actions,w),"Abrir",found?widgetId(EditorWidget::LibraryItemBase)+index:0u,UiIcon::AssetsFolderOpen,found);
+        tileButton(takeLeft(actions,w),"Instanciar",widgetId(EditorWidget::LibraryInstantiate),UiIcon::ScenePrefab,state.libraryCanInstantiate);
+        tileButton(takeLeft(actions,w),"Vincular",widgetId(EditorWidget::LibraryControllerAssign),UiIcon::AnimationController,state.libraryCanAssignController);
+        tileButton(actions,"Reimportar",widgetId(EditorWidget::LibraryReimport),UiIcon::AssetsImport,state.libraryCanReimport);
+      }
     }
     takeTop(panel,6);
     // Diagnóstico em chips, uma linha por fato, rolando pelo dedo.
@@ -10935,7 +10944,7 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     if(selected)list.addBorder(card,theme.color.accent,1,theme.radius.card);
     const u32 k=static_cast<u32>(item.kind)+1;
     list.addRect({card.x+10,card.y+12,48,48},theme.color.silhouette,theme.radius.control);
-    list.addImage({card.x+22,card.y+24,24,24},static_cast<UiImageId>(kindIcons[k<11?k:0]),registered?theme.color.accent:theme.color.text);
+    list.addImage({card.x+22,card.y+24,24,24},static_cast<UiImageId>(kindIcons[k<kindCount?k:0]),registered?theme.color.accent:theme.color.text);
     const UiRect text{card.x+68,card.y+10,std::max(0.f,card.width-68-56),card.height-20};
     list.pushClip(text);builder.label({text.x,text.y,text.width,26},fitMiddle(list,item.name,text.width,theme.type.body),theme.color.text,theme.type.body);
     builder.label({text.x,text.y+26,text.width,22},item.context.c_str(),theme.color.textMuted,theme.type.caption);list.popClip();
@@ -10945,8 +10954,14 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     list.addImage({badge.x+4,badge.y+4,16,16},static_cast<UiImageId>(registered?UiIcon::UiCheck:refused?UiIcon::UiWarning:UiIcon::AssetsImport),registered?theme.color.accent:refused?theme.color.warning:theme.color.textDim);
     router.addRegion(card,widgetId(EditorWidget::LibraryItemBase)+i);
     const UiRect details{card.right()-44,card.bottom()-40,40,36};
-    list.addImage(centred(details,18,18),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
-    router.addRegion(details,widgetId(EditorWidget::LibraryItemDetailsBase)+i);
+    if(item.projectAsset!=~0u) {
+      // Malha do projeto: o canto do cartão vai "Na cena" (toque) ou arrasta.
+      list.addImage(centred(details,18,18),static_cast<UiImageId>(UiIcon::SceneObjectAdd),theme.color.accent);
+      router.addRegion(details,widgetId(EditorWidget::AssetRowBase)+item.projectAsset);
+    } else {
+      list.addImage(centred(details,18,18),static_cast<UiImageId>(UiIcon::UiInfo),theme.color.textDim);
+      router.addRegion(details,widgetId(EditorWidget::LibraryItemDetailsBase)+i);
+    }
   }
   router.popClip();list.popClip();
 }
@@ -11362,37 +11377,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widgetId(actions[i]));
     }
   }
-  if(state.workspace==EditorWorkspace::Assets) {
-    list.addRect(layout.viewport,theme.color.surface);router.addBlocker(layout.viewport);
-    UiRect content=deflate(layout.viewport,UiInsets::all(8));
-    UiRect title=takeTop(content,44);
-    builder.label(title,"Malhas disponíveis",theme.color.text,theme.type.body);
-    if(creationAvailable(state,4) || creationAvailable(state,5)) {
-      UiRect waterRow=takeTop(content,44);
-      if(creationAvailable(state,4)) {
-        const auto finite=takeLeft(waterRow,creationAvailable(state,5)?waterRow.width*.5f:waterRow.width);
-        builder.label(finite,"Criar agua finita",theme.color.text,theme.type.body,UiAlign::Center);
-        router.addRegion(finite,widgetId(EditorWidget::CreateFiniteWater));
-      }
-      if(creationAvailable(state,5)) {
-        builder.label(waterRow,"Criar oceano",theme.color.text,theme.type.body,UiAlign::Center);
-        router.addRegion(waterRow,widgetId(EditorWidget::CreateOceanWater));
-      }
-    }
-    const u32 pageRows=static_cast<u32>(std::max(0.0f,content.height-48)/44);
-    for(u32 row=0;row<pageRows && state.assetScroll+row<state.assetCount;++row) {
-      const u32 index=state.assetScroll+row;
-      const auto slot=takeTop(content,44);
-      char label[64];std::snprintf(label,sizeof(label),"Adicionar malha %u",index);
-      builder.label(slot,label,theme.color.text,theme.type.body);
-      router.addRegion(slot,widgetId(EditorWidget::AssetRowBase)+index);
-    }
-    UiRect footer{layout.viewport.x+8,layout.viewport.bottom()-48,layout.viewport.width-16,40};
-    const auto previous=takeLeft(footer,footer.width*0.5f);
-    builder.label(previous,"Anterior",theme.color.text,theme.type.body,UiAlign::Center);
-    builder.label(footer,"Proxima",theme.color.text,theme.type.body,UiAlign::Center);
-    router.addRegion(previous,widgetId(EditorWidget::AssetsPrevious));router.addRegion(footer,widgetId(EditorWidget::AssetsNext));
-  }
+  // "Recursos importados" (lista de texto "Adicionar malha N") foi absorvido
+  // pela Biblioteca, no trilho Projeto: buildLibraryWorkspace.
   // S5: estatísticas do quadro, como a janela Statistics do Game View da Unity.
   // Só leitura e sem região de toque: gestos da cena passam por baixo.
   if(state.sceneStatisticsVisible && state.workspace==EditorWorkspace::Scene && !layout.viewport.isEmpty()) {

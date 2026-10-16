@@ -144,8 +144,14 @@ codificar.
   linha de chaves-mestras e o toque longo na chave ficam para E2; o compacto
   (< 900 px) mantém Pose/Novo no cabeçalho por não ter painel lateral.
 - E3 entregue (commit 41216ee1): Importar universal na barra, Biblioteca com
-  trilho/cartões/detalhe. "Recursos importados" (malhas do projeto) ainda é um
-  espaço à parte; a união fica para a próxima rodada.
+  trilho/cartões/detalhe. União com "Recursos importados" feita em 15/10: as
+  malhas do projeto viram cartões no trilho **Projeto** (contagem no trilho,
+  "Na cena" no canto do cartão e no detalhe, pelo mesmo widget do arrasto para
+  a cena), o item do menu Cena passa a "Malhas do projeto" e abre a Biblioteca
+  nesse trilho; a lista de texto "Adicionar malha N" foi removida. Selo
+  **origem sem registro**: um cartão de aviso por raiz importada cuja origem
+  não está em `.astra/assets.astra` (projeto copiado sem a pasta `.astra`), com
+  o diagnóstico em chips e a ação "Importar modelo".
 - Evidência: capturas do preview do host em `estudio-v2/` (studio-kyle*,
   library-*); suítes 71/71, 1569/1569, 126/126, 24/24. Sem aparelho (ADB off).
 - E2 entregue: linha de chaves-mestras na metade de baixo da régua (um losango

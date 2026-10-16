@@ -138,6 +138,11 @@ struct EditorScreenState final {
     resources::AssetGuid id{};std::string name,context,diagnostic;
     resources::LibraryResolutionState state=resources::LibraryResolutionState::Pending;
     resources::LibraryItemKind kind=resources::LibraryItemKind::Other;
+    // Malha do projeto (índice no pacote carregado): o cartão vai "Na cena"
+    // em vez de abrir um item de pacote. ~0u para itens de pacote.
+    u32 projectAsset=~0u;
+    // Modelo que a cena referencia sem registro em .astra/assets.astra.
+    bool unregistered=false;
   };
   struct LibraryPackageRow {resources::AssetGuid id{};std::string name;};
   std::vector<LibraryRow> libraryRows;
@@ -150,7 +155,8 @@ struct EditorScreenState final {
   std::string libraryDetailName;
   u32 libraryKind=0;
   // Itens por tipo (0 = todos) no pacote/busca atuais, para o trilho de tipos.
-  u32 libraryKindCounts[11]{};
+  // Trilho: Todos, dez tipos de pacote e Projeto (malhas do projeto).
+  u32 libraryKindCounts[12]{};
   // Lista e diagnóstico da Biblioteca rolam pelo dedo (coluna, sem páginas).
   float libraryScroll=0,libraryDiagnosticScroll=0;
   bool libraryImportRequested=false,searchingLibrary=false;

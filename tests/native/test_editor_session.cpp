@@ -1344,6 +1344,11 @@ AE_TEST(session_asset_browser_recreates_geometry_in_an_empty_document) {
   AE_EXPECT_TRUE(f.session.importMap({&draw,1}),"import resource library");
   f.session.document().reset();f.session.update();
   tapWidget(f,widgetId(EditorWidget::TabAssets));
+  // "Malhas do projeto" vive na Biblioteca, no trilho Projeto: um cartão por
+  // malha, com "Na cena" no canto (o mesmo widget do arrasto).
+  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Library&&f.session.screen().libraryKind==11,"project meshes open the Library on the Projeto rail");
+  AE_EXPECT_TRUE(!f.session.screen().libraryRows.empty()&&f.session.screen().libraryRows[0].projectAsset==0,"the project mesh is a Library card");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::LibraryItemBase)).x>=0,"card is reachable");
   tapWidget(f,widgetId(EditorWidget::AssetRowBase));
   AE_EXPECT_EQ(f.session.document().entityCount(),2u,"one authored instance plus root");
   std::vector<renderer::MapDrawState> extracted;
@@ -2636,7 +2641,9 @@ AE_TEST(session_water_creation_is_reachable_by_touch_from_empty_scene) {
   std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
   AE_EXPECT_TRUE(renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials),"geometry library");
   AE_EXPECT_TRUE(fixture.session.importMap(draws,materials,false),"empty scene");
-  tapWidget(fixture,widgetId(EditorWidget::TabAssets));
+  // A água mora em Criar › Água (o antigo atalho de "Recursos importados" saiu
+  // junto com aquela lista de texto).
+  tapWidget(fixture,widgetId(EditorWidget::HierarchyAdd));
   tapWidget(fixture,widgetId(EditorWidget::CreateFiniteWater));
   AE_EXPECT_EQ(fixture.session.document().entityCount(),2u,"touch creates actual surface");
   AE_EXPECT_EQ(fixture.session.history().undoDepth(),1u,"one creation command");

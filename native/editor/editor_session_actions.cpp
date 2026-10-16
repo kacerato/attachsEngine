@@ -1612,12 +1612,21 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::LibraryOpen)) {
       if(!isPlaying()){cameraPreview_.close();state_.workspace=EditorWorkspace::Library;refreshLibraryRows();}return true;
     }
+    // Malhas do projeto: a Biblioteca no trilho Projeto (o antigo espaço de
+    // "Recursos importados" era uma lista de texto à parte).
+    if(key==widgetId(EditorWidget::TabAssets)) {
+      if(!isPlaying()&&mapScene_.assetCount()) {
+        cameraPreview_.close();state_.contextMenu=false;state_.workspace=EditorWorkspace::Library;
+        state_.libraryKind=11;state_.libraryScroll=0;state_.libraryPackage={};refreshLibraryRows();
+      }
+      return true;
+    }
     if(key==widgetId(EditorWidget::LibraryClose)) {state_.workspace=EditorWorkspace::Scene;return true;}
     if(key==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
     if(key==widgetId(EditorWidget::LibrarySearch)) {state_.searchingLibrary=true;return true;}
     if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticScroll=0;state_.libraryConflict=false;state_.libraryDetailItem={};state_.libraryDetailName.clear();return true;}
-    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%11;state_.libraryScroll=0;refreshLibraryRows();return true;}
-    if(key>=widgetId(EditorWidget::LibraryKindBase)&&key<widgetId(EditorWidget::LibraryKindBase)+11) {
+    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%12;state_.libraryScroll=0;refreshLibraryRows();return true;}
+    if(key>=widgetId(EditorWidget::LibraryKindBase)&&key<widgetId(EditorWidget::LibraryKindBase)+12) {
       state_.libraryKind=key-widgetId(EditorWidget::LibraryKindBase);state_.libraryScroll=0;refreshLibraryRows();return true;
     }
     if(key==widgetId(EditorWidget::LibraryReimport)||key==widgetId(EditorWidget::LibraryKeepLocal)||key==widgetId(EditorWidget::LibraryReceiveSource)) {
@@ -1668,6 +1677,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key>=widgetId(EditorWidget::LibraryItemBase)&&key<widgetId(EditorWidget::LibraryItemBase)+resources::LibraryIndex::MaximumItems) {
       const auto row=key-widgetId(EditorWidget::LibraryItemBase);std::string error;
+      if(row<state_.libraryRows.size()&&(state_.libraryRows[row].projectAsset!=~0u||state_.libraryRows[row].unregistered)) {
+        // Malha do projeto ou origem sem registro: detalhe próprio, sem item de pacote.
+        const auto &item=state_.libraryRows[row];
+        state_.libraryDetailItem=item.id;state_.libraryDetailName=item.name;state_.libraryConflict=false;
+        state_.libraryCanInstantiate=state_.libraryCanAssignController=state_.libraryCanReimport=false;
+        state_.libraryDiagnostic=item.diagnostic;state_.libraryDiagnosticScroll=0;return true;
+      }
       if(row<state_.libraryRows.size()) {const auto id=state_.libraryRows[row].id;if(!openLibraryItem(id,error)) {
         state_.libraryConflict=error.find("Manter local ou Receber origem")!=error.npos;
         state_.status=error;state_.libraryDiagnostic=error;state_.libraryDiagnosticScroll=0;

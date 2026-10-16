@@ -255,6 +255,12 @@ bool EditorStudio::setupCharacter(EditorSession &s,EditorEntityId owner,Characte
     std::string carryError;ok=group&&s.addCarrySetupInTransaction(owner,group,carryError);
     if(!ok&&!carryError.empty())error=carryError;
   }
+  // Nada novo (o personagem já tinha tudo): sem passo de histórico vazio.
+  if(ok&&!wantCarry&&limbs+grounded+looks+aims+bodyTips==0) {
+    s.history_.cancel(doc);
+    summary=all?"Membros, pés e olhar já montados neste personagem":"Já montado neste personagem";
+    return true;
+  }
   s.history_.end();
   if(!ok) {s.history_.undo(doc);if(error.empty())error="Não foi possível criar todos os componentes; nada foi alterado";return false;}
   if(recipe==CharacterRecipe::LookAt)summary="Cabeça olha o alvo · mova o alvo e dê Play";
