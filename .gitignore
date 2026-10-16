@@ -3,8 +3,8 @@
 build/
 android/.gradle/
 # android/local.properties
-# android/app/.cxx/
-# android/app/build/
+android/app/.cxx/
+android/app/build/
 # .aether/
 # *.user
 # __pycache__/
