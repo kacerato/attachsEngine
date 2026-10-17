@@ -36,7 +36,9 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         "aether.camera_z", "aether.camera_yaw", "aether.camera_pitch"
     };
     private static final String[] STRING_MEASUREMENT_OPTIONS = {
-        "aether.anti_aliasing", "aether.upscaling", "aether.temporal_quality"
+        "aether.anti_aliasing", "aether.upscaling", "aether.temporal_quality",
+        "aether.quality_preset", "aether.quality_shadows", "aether.quality_ambient",
+        "aether.quality_post", "aether.quality_textures", "aether.reference_resolution"
     };
     private static final String[] INTEGER_MEASUREMENT_OPTIONS = {
         "aether.gpu_isolation"

@@ -260,6 +260,42 @@ TemporalUpscalerQuality parseTemporalUpscalerQuality(const char *name) {
   return TemporalUpscalerQuality::Inherit;
 }
 
+bool parseReferenceResolution(const char *text, u32 &width, u32 &height) {
+  if (text == nullptr) return false;
+  constexpr u32 MaximumSide = 16384;
+  u32 values[2]{};
+  const char *cursor = text;
+  for (u32 index = 0; index < 2; ++index) {
+    if (*cursor < '0' || *cursor > '9') return false;
+    u32 value = 0;
+    while (*cursor >= '0' && *cursor <= '9') {
+      value = value * 10u + static_cast<u32>(*cursor - '0');
+      if (value > MaximumSide) return false;
+      ++cursor;
+    }
+    if (value == 0) return false;
+    values[index] = value;
+    if (index == 0) {
+      if (*cursor != 'x' && *cursor != 'X') return false;
+      ++cursor;
+    }
+  }
+  if (*cursor != '\0') return false;
+  width = values[0];
+  height = values[1];
+  return true;
+}
+
+float referenceResolutionScale(u32 surfaceWidth, u32 surfaceHeight, u32 referenceWidth,
+                               u32 referenceHeight) {
+  if (surfaceWidth == 0 || surfaceHeight == 0 || referenceWidth == 0 || referenceHeight == 0)
+    return 0.0f;
+  const double surface = static_cast<double>(surfaceWidth) * surfaceHeight;
+  const double reference = static_cast<double>(referenceWidth) * referenceHeight;
+  const float scale = static_cast<float>(std::sqrt(reference / surface));
+  return std::clamp(scale, 0.5f, 1.0f);
+}
+
 const char *temporalUpscalerQualityName(TemporalUpscalerQuality quality) {
   switch (quality) {
     case TemporalUpscalerQuality::Quality: return "quality";

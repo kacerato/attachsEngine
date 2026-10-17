@@ -422,6 +422,16 @@ AntiAliasingMode parseAntiAliasingMode(const char *name);
 UpscalingFilter parseUpscalingFilter(const char *name);
 TemporalUpscalerQuality parseTemporalUpscalerQuality(const char *name);
 
+// Resolução de referência de bancada ("1600x720"): emula a contagem de pixels
+// de um aparelho alvo numa superfície maior. Orientação não importa, só a área.
+// Recusa texto malformado, zero e lados acima de 16384.
+bool parseReferenceResolution(const char *text, u32 &width, u32 &height);
+// Escala por eixo que leva a superfície à área de referência, no mesmo intervalo
+// [0,5; 1] que a política aceita. Referência maior que a superfície devolve 1:
+// a bancada nunca amplia acima da resolução nativa. Entrada inválida devolve 0.
+float referenceResolutionScale(u32 surfaceWidth, u32 surfaceHeight, u32 referenceWidth,
+                               u32 referenceHeight);
+
 const char *shadowQualityName(ShadowQuality quality);
 const char *ambientQualityName(AmbientQuality quality);
 const char *postQualityName(PostQuality quality);

@@ -748,3 +748,22 @@ AE_TEST(temporal_upscaler_probe_names_the_first_missing_device_requirement) {
   probe.shaderFloat16=false;
   AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::Available,"sem float16 o FSR 2 usa 32 bits");
 }
+
+AE_TEST(reference_resolution_emulates_target_pixel_count) {
+  u32 width=0,height=0;
+  AE_EXPECT_TRUE(parseReferenceResolution("1600x720",width,height),"largura x altura");
+  AE_EXPECT_EQ(width,1600u,"largura");AE_EXPECT_EQ(height,720u,"altura");
+  AE_EXPECT_TRUE(parseReferenceResolution("720X1600",width,height),"X maiúsculo e retrato");
+  AE_EXPECT_TRUE(!parseReferenceResolution("1600x",width,height),"altura ausente");
+  AE_EXPECT_TRUE(!parseReferenceResolution("0x720",width,height),"lado zero");
+  AE_EXPECT_TRUE(!parseReferenceResolution("1600x720 ",width,height),"sobra de texto");
+  AE_EXPECT_TRUE(!parseReferenceResolution("16385x720",width,height),"lado acima do limite");
+  AE_EXPECT_TRUE(!parseReferenceResolution(nullptr,width,height),"texto ausente");
+  // POCO F7 (2772x1280) emulando um celular 1600x720: mesma área, só a orientação muda.
+  const float scale=referenceResolutionScale(2772,1280,1600,720);
+  AE_EXPECT_TRUE(scale>0.5693f&&scale<0.5703f,"raiz da razão de áreas");
+  AE_EXPECT_EQ(referenceResolutionScale(1280,2772,720,1600),scale,"orientação não importa");
+  AE_EXPECT_EQ(referenceResolutionScale(1280,720,1920,1080),1.0f,"nunca amplia acima do nativo");
+  AE_EXPECT_EQ(referenceResolutionScale(3840,2160,640,360),0.5f,"limite inferior da política");
+  AE_EXPECT_EQ(referenceResolutionScale(0,720,1600,720),0.0f,"superfície inválida");
+}

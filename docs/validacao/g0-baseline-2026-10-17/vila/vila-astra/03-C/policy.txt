@@ -1,0 +1,5 @@
+[ReferenceResolution] superficie=2772x1280 referencia=1600x720 escala=0.5698 interna=1579x729.
+[RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+[RenderPolicy] preset=c perfil=0 sombras=on(4 cascatas @4096, 25/9 taps, cache=static margem=1.05 blend=0.10 fade=0.12) ambiente=hemisferio+especular+split-sum pos=passe+bloom malha_agua=low(88 seg) textura_mip_bias=0 aniso=8.0 escala=0.57 dinamica=off[0.55,0.57] clamps=1
+[RenderPolicy] shadows.cascadeResolution reduzido por capability.
+[RenderPolicy] lod=on erro_solido=4.00px erro_coverage=6.00px histerese=0.70 normal_ate=60.0 specular_ate=120.0 mr_ate=90.0 emissive_ate=120.0 variantes_material=off aa=fxaa bloom=1 sharpen=0.40 contraste=1.04 saturacao=1.03

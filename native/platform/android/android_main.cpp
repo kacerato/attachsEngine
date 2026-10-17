@@ -352,6 +352,9 @@ struct AndroidShell final {
   bool renderingCapabilitiesReady = false;
   bool thermalPolicyApplied = false;
   bool profileLockRenderingQuality=false;
+  // Bancada G0: área de um aparelho alvo (aether.reference_resolution=1600x720).
+  // Zero desliga; a escala sai da superfície real a cada recriação.
+  ae::u32 referenceResolutionWidth=0,referenceResolutionHeight=0;
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
   bool windowResizePending = false;
@@ -1423,7 +1426,25 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
 // disso `deviceFeatures()` é o valor default e todo aparelho pareceria perfil C.
 // Esta é a "época de configuração" da ADR-014 — uma resolução por criação de
 // device, imutável enquanto ela durar.
+void applyReferenceResolution(AndroidShell &shell) {
+  if(shell.referenceResolutionWidth==0||shell.app==nullptr||shell.app->window==nullptr) return;
+  const int32_t width=ANativeWindow_getWidth(shell.app->window),height=ANativeWindow_getHeight(shell.app->window);
+  if(width<=0||height<=0) return;
+  const float scale=ae::renderer::referenceResolutionScale(static_cast<ae::u32>(width),static_cast<ae::u32>(height),
+      shell.referenceResolutionWidth,shell.referenceResolutionHeight);
+  if(scale<=0.0f) return;
+  // Entra como escala de opção de lançamento: o painel não a sobrescreve e a
+  // medição registra a origem, como qualquer outro override de diagnóstico.
+  shell.renderingSettings.resolutionScale=scale;
+  shell.activeRenderingSettings.resolutionScale=scale;
+  __android_log_print(ANDROID_LOG_INFO,LogTag,
+      "[ReferenceResolution] superficie=%dx%d referencia=%ux%u escala=%.4f interna=%dx%d.",
+      width,height,shell.referenceResolutionWidth,shell.referenceResolutionHeight,static_cast<double>(scale),
+      static_cast<int>(std::lround(width*scale)),static_cast<int>(std::lround(height*scale)));
+}
+
 void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
+  applyReferenceResolution(shell);
   const auto &device = shell.vulkanSurface.device();
   const auto &features = device.deviceFeatures();
   auto &capabilities = shell.renderingCapabilities;
@@ -2278,6 +2299,17 @@ void android_main(android_app *app) {
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
   shell.profileLockRenderingQuality=shell.frameProfiler.enabled() &&
       ae::platform::android::readBooleanLaunchOption(app->activity,"aether.lock_rendering_quality");
+  {
+    char reference[32]{};
+    if(ae::platform::android::readStringLaunchOption(app->activity,"aether.reference_resolution",
+                                                     reference,sizeof(reference))&&
+       !ae::renderer::parseReferenceResolution(reference,shell.referenceResolutionWidth,
+                                               shell.referenceResolutionHeight)) {
+      shell.referenceResolutionWidth=shell.referenceResolutionHeight=0;
+      __android_log_print(ANDROID_LOG_WARN,LogTag,
+          "[ReferenceResolution] '%s' recusado; use LARGURAxALTURA, por exemplo 1600x720.",reference);
+    }
+  }
   if(shell.profileLockRenderingQuality) __android_log_print(ANDROID_LOG_INFO,LogTag,
       "[ProfileQuality] qualidade autoral fixa para A/B; monitor térmico e proteções do Android ativos.");
   shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
