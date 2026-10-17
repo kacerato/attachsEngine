@@ -23,6 +23,33 @@ function(aether_add_terrain_core_tests)
   endif()
 endfunction()
 
+# Optional boundary test uses the real importer and every codec it links to.
+# Keep the geometry-only iteration free of these dependencies by default.
+function(aether_add_terrain_import_tests)
+  add_executable(aether_terrain_import_tests EXCLUDE_FROM_ALL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/family_base_main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/gltf_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/json_reader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/gltf_codecs.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/image_decode.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/tiff_decode.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/texture_compression.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/mesh_lod_build.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/skeletal_animation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/animation_curve.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/asset_registry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/authoring_texture.cpp)
+  target_link_libraries(aether_terrain_import_tests PRIVATE aether_codecs aether_astcenc)
+  target_include_directories(aether_terrain_import_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(aether_terrain_import_tests PRIVATE
+      -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
+  endif()
+endfunction()
+
 function(aether_add_terrain_surface_preview)
   add_executable(aether_terrain_surface_preview EXCLUDE_FROM_ALL
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/terrain_surface_preview_main.cpp

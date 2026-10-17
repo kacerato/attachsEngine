@@ -95,3 +95,32 @@ mapas independentes, biblioteca/PBR e módulos MicroSplat, vegetação ATG com
 limpeza por caminhos, grafo/nós/tiles MapMagic e cenários de aceite continuam
 obrigatórios. Controles de vegetação persistidos ainda não têm consumidor.
 Encontrar os pacotes e avançar D07/D08 não fecha essas dependências.
+
+## Complemento: importador real e publicação
+
+Depois das verificações acima, `terrain-import.log` confirmou **3/3 cenários**
+com `importGlb` e codecs reais. Os casos foram extraídos da suíte integrada,
+sem duplicar nomes nem retirar a cobertura dela. Incluem os três modos,
+decodificação dos quatro albedos, pesos/bindings e LOD autoral na importação
+fria. A receita com um nível também vence um perfil genérico que pede quatro.
+Isso encerra a pendência do importador isolado, não a sessão/salvar/reabrir nem
+o renderer final. Os registros anteriores continuam como evidência histórica.
+
+O alvo opcional `TerrainImport` usa as definições existentes de Draco,
+meshoptimizer, Basis e ASTC, movidas sem alteração para
+`native/cmake/ImportCodecs.cmake`. Não há codecs falsos ou dependência do editor,
+Jolt ou APK. O primeiro build compila os codecs uma vez, com um job; a iteração
+de geometria continua no alvo `TerrainCore`, que dispensa esses codecs.
+
+```powershell
+cmake -S native -B build/terrain-core -DAETHER_TERRAIN_CORE_ONLY=ON -DAETHER_TERRAIN_IMPORT_TESTS=ON
+.\tools\build-editor.ps1 -Target TerrainImport -BuildDirectory build/terrain-core -RunTests
+```
+
+Nota pública de desenvolvimento `2026-10-17-terreno-lod-autoral-host` publicada
+no AstraDocs, commit `e7d4989da98a5f1aa97b93a2d727dc4395a572bf`, deploy
+`dpl_FJjkTFM1cmeJPki6yTJEV2v19Trk` **READY**, domínio `astraengine.com.br`.
+Build exportou 2.430 páginas Markdown/JSON; 593.490 links verificados, zero
+erros. Nota, busca no histórico e disponibilidade conferidas no site público.
+A nota preserva o estado da validação no momento em que foi publicada, anterior
+ao complemento de importação acima. Não foi reescrita após publicação.
