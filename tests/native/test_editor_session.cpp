@@ -4781,6 +4781,33 @@ AE_TEST(multi_selection_edits_common_components_in_one_undo_step) {
   AE_EXPECT_TRUE(state.selectionSet.size()>=4,"tudo selecionado");
 }
 
+// Adicionar componente com vários selecionados acrescenta nos outros sem
+// apagar o que eles já tinham (malhas de um modelo importado recebendo Colisor).
+AE_TEST(multi_selection_add_component_keeps_existing_components) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto post=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Poste");
+  {auto value=*doc.find(post);value.components.add(scene::Light::descriptor);doc.applyEntityValues(post,value);}
+  f.session.setSelection(f.cube);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyMultiToggle));
+  tapWidget(f,hierarchyRowWidget(post));
+  AE_EXPECT_EQ(f.session.screen().selectionSet.size(),2u,"dois selecionados");
+  f.session.update();history.clear();
+  const usize cubeCount=doc.find(f.cube)->components.size();
+  tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
+  selectComponentFamily(f,scene::ComponentFamily::Physics3D);
+  revealAddEntry(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.collider"));
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+editorComponentIndex("astra.physics.collider"));
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
+  AE_EXPECT_TRUE(doc.find(post)->components.find(scene::Collider::descriptor),"colisor no ativo");
+  AE_EXPECT_TRUE(doc.find(f.cube)->components.find(scene::Collider::descriptor),"colisor no outro");
+  AE_EXPECT_TRUE(runtime::meshRenderer(*doc.find(f.cube)),"o outro mantém a malha");
+  AE_EXPECT_EQ(doc.find(f.cube)->components.size(),cubeCount+1,"só o colisor foi acrescentado");
+  AE_EXPECT_TRUE(doc.find(post)->components.find(scene::Light::descriptor),"o ativo mantém a luz");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo de Desfazer");
+  AE_EXPECT_TRUE(history.undo(doc) && !doc.find(f.cube)->components.find(scene::Collider::descriptor) &&
+                 runtime::meshRenderer(*doc.find(f.cube)),"Desfazer tira o colisor e preserva a malha");
+}
+
 // Gizmo na multisseleção (Unity: Pivot): as outras raízes seguem o ativo pelo
 // mesmo delta, num passo de Desfazer.
 AE_TEST(multi_selection_gizmo_moves_every_selected_root) {

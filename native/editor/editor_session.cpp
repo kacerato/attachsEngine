@@ -2392,8 +2392,14 @@ void EditorSession::replicateEdit(EditorEntityId id,const EditorEntity &before,u
       const auto *target=matchComponent(values.components,kind,occurrence);
       if(!old) {
         if(target || scene::scriptBehavior(&mine)) continue;
-        auto plan=scene::planComponentAddition(values.components,mine.type().id,false,false);
-        if(plan.ready) {values.components=std::move(plan.candidate);changed=true;}
+        // Materializar: o plano sem candidato devolveria a coleção vazia e
+        // apagaria os componentes que o outro objeto já tinha.
+        auto plan=scene::planComponentAddition(values.components,mine.type().id);
+        if(!plan.ready) continue;
+        values.components=std::move(plan.candidate);changed=true;
+        // O Colisor do ativo foi ajustado à malha dele; cada outro ajusta à sua.
+        if(&mine.type()==&EditorCollider::descriptor && meshAsset(values))
+          if(auto *collider=editCollider(values,plan.requestedInstance)) fitEditorCollider(mapScene_,document_,otherId,*collider);
         continue;
       }
       if(!target || !multiEditable(mine)) continue;
