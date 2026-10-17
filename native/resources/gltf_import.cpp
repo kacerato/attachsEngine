@@ -3,6 +3,7 @@
 #include "resources/gltf_codecs.h"
 #include "resources/texture_compression.h"
 #include "resources/mesh_lod_build.h"
+#include "resources/terrain_lod.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2420,17 +2421,21 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     result.keys[i]+="@node:"+std::to_string(result.drawNodes[i]);
   // S3: ordem de índices e LOD na própria malha, depois de toda a geometria
   // (normais, tangentes, espelhamento) estar pronta.
-  if (limits.generateLods || limits.optimizePolygonOrder) {
+  MeshLodSettings lod;
+  lod.generate = limits.generateLods;
+  lod.optimizeOrder = limits.optimizePolygonOrder;
+  lod.maximumLevels = limits.maximumLodLevels;
+  lod.maximumAddedIndices = limits.maximumIndices;
+  if(const auto *extras=document.member(*root,"extras")) {
+    std::string error;
+    if(!applyTerrainLodRecipe(document.string(*extras,"astraTerrain"),lod,error))return giveUp(error.c_str());
+  }
+  if (lod.generate || lod.optimizeOrder) {
     importer.report(.99f, "Gerando níveis de detalhe");
     std::vector<u8> deformed(result.draws.size(), 0);
     for (usize d = 0; d < deformed.size(); ++d)
       deformed[d] = (d < result.drawSkins.size() && result.drawSkins[d] >= 0) ||
                     (d < result.drawMorphs.size() && result.drawMorphs[d] >= 0);
-    MeshLodSettings lod;
-    lod.generate = limits.generateLods;
-    lod.optimizeOrder = limits.optimizePolygonOrder;
-    lod.maximumLevels = limits.maximumLodLevels;
-    lod.maximumAddedIndices = limits.maximumIndices;
     MeshLodReport lodReport;
     std::string lodDiagnostic;
     if (!buildMeshLods(result.vertices, result.indices, result.draws, deformed, lod, result.meshLods, lodReport,

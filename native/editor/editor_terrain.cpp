@@ -53,8 +53,9 @@ double number(const EditorScreenState &s, u32 i) {
                         b.strength,
                         b.x,
                         b.y,
-                        b.z, r.baseDepth, b.hardness, b.rotation, b.aspect, s.terrainSpacing, r.macroVariation, b.verticalAspect, b.depthAspect, b.pitch, b.roll, b.roundness, b.opacity, double(b.filterRadius), b.surfaceDepth};
-  return i < 28 ? values[i] : 0;
+                        b.z, r.baseDepth, b.hardness, b.rotation, b.aspect, s.terrainSpacing, r.macroVariation, b.verticalAspect, b.depthAspect, b.pitch, b.roll, b.roundness, b.opacity, double(b.filterRadius), b.surfaceDepth,
+                        double(r.lodLevels),double(r.lodRelativeError)*100};
+  return i < 30 ? values[i] : 0;
 }
 u64 terrainCandidateBytes(const resources::GltfImport &model) {
   // Terrain GLBs are static. Count the retained geometry, decoded textures and
@@ -384,7 +385,7 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   if (!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) ||
       field >= 52)
     return false;
-  if ((field == 0 || field == 2 || field == 6 || field == 7) &&
+  if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28) &&
       (value < 0 || value > 4294967295.0 || std::floor(value) != value))
     return false;
   auto r = state_.terrainDraft;
@@ -475,6 +476,8 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   case 25: b.opacity=f;break;
   case 26: if(f<1 || f>4 || std::floor(f)!=f)return false;b.filterRadius=u32(f);break;
   case 27: b.surfaceDepth=f;break;
+  case 28: r.lodLevels=u32(value);break;
+  case 29: r.lodRelativeError=f*.01f;break;
   default:
     return false;
   }
@@ -486,7 +489,7 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   }
   state_.terrainDraft = std::move(r);
   state_.terrainBrush = b;
-  state_.terrainMessage = (field >= 9 && field <= 13) || (field>=15 && field<=18) || field>=20
+  state_.terrainMessage = (field >= 9 && field <= 13) || (field>=15 && field<=18) || (field>=20 && field<=27)
       ? "Pincel ajustado · use o terreno ou Aplicar na posição XYZ"
       : "Rascunho alterado · toque Aplicar alterações para atualizar";
   return true;
@@ -1173,7 +1176,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     const bool increase = id >= plus;
     const u32 field = id - (increase ? plus : minus);
     const double steps[]{1,8,8,1,1,.25,1,8,.5,.5,.25,1,1,1,1,.1,15,.25,.05,.1,.25,.25,15,15,.1,.1,1,.25};
-    setTerrainNumber(field, number(state_,field) + (field<28?steps[field]:field==35?5:field==36||field==38||field==39||field>=47?.1:1) * (increase ? 1 : -1));
+    setTerrainNumber(field, number(state_,field) + (field<28?steps[field]:field==35?5:field==29||field==36||field==38||field==39||field>=47?.1:1) * (increase ? 1 : -1));
     return true;
   }
   if (id >= widgetId(EditorWidget::TerrainSectionBase) && id < widgetId(EditorWidget::TerrainSectionBase) + 3) {

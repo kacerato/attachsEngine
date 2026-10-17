@@ -23,6 +23,9 @@ namespace ae::resources {
 struct MeshLodSettings {
   bool generate = false;
   bool optimizeOrder = false;
+  // Terrain splat weights live in COLOR_0. Position-only reduction can erase
+  // a painted path on a flat surface even when geometric error is zero.
+  bool preserveSurfaceAttributes = false;
   u32 maximumLevels = renderer::MeshLodMaximumLevels; // conta o nível 0
   u32 minimumTriangles = 256;
   u32 stopTriangles = 64;

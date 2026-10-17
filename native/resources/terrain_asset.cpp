@@ -205,7 +205,7 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
     return false;
   }
   const float values[]{r.size, r.height, r.base, r.frequency, r.textureScale,
-                       r.baseDepth, r.macroVariation};
+                       r.baseDepth, r.macroVariation, r.lodRelativeError};
   for (float v : values)
     if (!std::isfinite(v)) {
       error = "Parâmetro não finito.";
@@ -218,6 +218,9 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
     return false;
   }
   if (r.macroVariation < 0 || r.macroVariation > 1) { error="Variação deve estar entre 0 e 1."; return false; }
+  if (r.lodLevels < 1 || r.lodLevels > 4 || r.lodRelativeError < .0001f || r.lodRelativeError > .1f) {
+    error="LOD: 1–4 níveis; erro relativo entre 0,0001 e 0,1.";return false;
+  }
   if (r.baseDepth < .1f || r.baseDepth > 512) {
     error = "Espessura mínima da base: 0,1–512 unidades.";
     return false;
@@ -265,7 +268,7 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
 std::string serializeTerrainRecipe(const TerrainRecipe &r) {
   std::ostringstream s;
   s.imbue(std::locale::classic());
-  s << std::setprecision(9) << "AETERRAIN5 " << u32(r.mode) << ' ' << r.seed
+  s << std::setprecision(9) << "AETERRAIN6 " << u32(r.mode) << ' ' << r.seed
     << ' ' << r.cells << ' ' << r.verticalCells << ' ' << r.octaves << ' '
     << r.size << ' ' << r.height << ' ' << r.base << ' ' << r.frequency << ' '
     << r.textureScale << ' ' << r.island << ' ' << r.collision << ' '
@@ -291,6 +294,7 @@ std::string serializeTerrainRecipe(const TerrainRecipe &r) {
     }
     s << ' ' << p.followTerrain;
   }
+  s << ' ' << r.lodLevels << ' ' << r.lodRelativeError;
   return s.str();
 }
 bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
@@ -308,13 +312,14 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
   if (!(s >> magic >> mode >> r.seed >> r.cells >> r.verticalCells >>
         r.octaves >> r.size >> r.height >> r.base >> r.frequency >>
         r.textureScale >> r.island >> r.collision) ||
-      (magic != "AETERRAIN1" && magic != "AETERRAIN2" && magic != "AETERRAIN3" && magic != "AETERRAIN4" && magic != "AETERRAIN5")) {
+      (magic.size()!=10 || magic.substr(0,9)!="AETERRAIN" || magic[9]<'1' || magic[9]>'6')) {
     error = "Receita de terreno inválida.";
     return false;
   }
+  const u32 version=u32(magic[9]-'0');
   r.blendedSurface = false;
-  if ((magic != "AETERRAIN1" && !(s >> r.solidBase >> r.baseDepth)) ||
-      ((magic == "AETERRAIN3" || magic == "AETERRAIN4" || magic == "AETERRAIN5") && !(s >> r.blendedSurface >> r.macroVariation)) ||
+  if ((version>=2 && !(s >> r.solidBase >> r.baseDepth)) ||
+      (version>=3 && !(s >> r.blendedSurface >> r.macroVariation)) ||
       !(s >> count) || count > 4096) {
     error = "Receita de terreno inválida.";
     return false;
@@ -328,20 +333,20 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
       error = "Operação truncada.";
       return false;
     }
-    if (magic == "AETERRAIN3" || magic == "AETERRAIN4" || magic == "AETERRAIN5") {
+    if (version>=3) {
       u32 shape=0;
       if (!(s >> shape >> v.hardness >> v.rotation >> v.aspect >> v.gesture)) { error="Pincel truncado.";return false; }
       v.shape=TerrainBrushShape(shape);
     }
-    if(magic=="AETERRAIN4" || magic=="AETERRAIN5") {
+    if(version>=4) {
       u32 application=0;
       if(!(s >> v.verticalAspect >> v.depthAspect >> v.pitch >> v.roll >> v.roundness >> v.opacity >> v.filterRadius >> application >> v.inverted >> v.restoreGeometry >> v.restoreWeights >> v.surfaceDepth >> v.lockHeight >> v.dimensionsLinked)) {error="Propriedades do pincel truncadas.";return false;}
       v.application=TerrainBrushApplication(application);
     }
     v.tool = TerrainTool(tool);
-    if(magic!="AETERRAIN3" && magic!="AETERRAIN4" && magic!="AETERRAIN5" && (v.tool==TerrainTool::Dig || v.tool==TerrainTool::Add))v.hardness=1;
+    if(version<3 && (v.tool==TerrainTool::Dig || v.tool==TerrainTool::Add))v.hardness=1;
   }
-  if(magic=="AETERRAIN4" || magic=="AETERRAIN5") {
+  if(version>=4) {
     u32 paths=0;if(!(s>>paths)||paths>64){error="Lista de caminhos inválida.";return false;}
     r.paths.resize(paths);
     for(auto &p:r.paths) {
@@ -356,9 +361,10 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
         u32 count=0;if(!(s>>count)||count<2||count>32){error="Curva inválida.";return false;}curve->resize(count);
         for(auto &v:*curve)if(!(s>>v.x>>v.y)){error="Curva truncada.";return false;}
       }
-      if(magic=="AETERRAIN5" && !(s>>p.followTerrain)){error="Modo de altura truncado.";return false;}
+      if(version>=5 && !(s>>p.followTerrain)){error="Modo de altura truncado.";return false;}
     }
   }
+  if(version>=6 && !(s>>r.lodLevels>>r.lodRelativeError)){error="Configuração de LOD truncada.";return false;}
   s >> std::ws;
   if (!s.eof()) {
     error = "Dados extras na receita.";
@@ -1002,6 +1008,11 @@ bool updateTerrain(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBu
   bool compatible=previous!=nullptr;
   if(previous) {
     auto a=r,b=previous->recipe;a.strokes.clear();b.strokes.clear();
+    // Path geometry is covered by field differences below. Material-only
+    // changes additionally dirty the old AND new path footprints. Keeping
+    // paths here used to invalidate every chunk on any point/profile edit.
+    a.paths.clear();b.paths.clear();
+    a.lodLevels=b.lodLevels=1;a.lodRelativeError=b.lodRelativeError=.01f;
     compatible=serializeTerrainRecipe(a)==serializeTerrainRecipe(b) &&
       next.field.solidBottom==previous->field.solidBottom && next.field.heights.size()==previous->field.heights.size() &&
       next.field.density.size()==previous->field.density.size();
@@ -1045,6 +1056,35 @@ bool updateTerrain(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBu
       }
     };
     paintRegions(r.strokes);paintRegions(previous->recipe.strokes);
+    usize pathPrefix=0;
+    while(pathPrefix<r.paths.size() && pathPrefix<previous->recipe.paths.size() &&
+          r.paths[pathPrefix]==previous->recipe.paths[pathPrefix])++pathPrefix;
+    const auto pathRegions=[&](const std::vector<TerrainPath> &paths) {
+      // Reordering may change ordered overpaint and Smart group composition.
+      // Include the whole changed suffix instead of matching only path IDs.
+      for(usize i=pathPrefix;i<paths.size();++i) {
+        const auto &path=paths[i];
+        if(!path.enabled || !path.texture || path.points.size()<2)continue;
+        const auto samples=samplePath(path,a.step*.5f);
+        if(samples.empty())continue;
+        float xmin=INFINITY,xmax=-INFINITY,zmin=INFINITY,zmax=-INFINITY;
+        for(const auto &sample:samples) {
+          xmin=std::min(xmin,sample.p.x);xmax=std::max(xmax,sample.p.x);
+          zmin=std::min(zmin,sample.p.z);zmax=std::max(zmax,sample.p.z);
+        }
+        // Includes square-cap extension, shoulder and texture falloff. An
+        // extra cell covers shared chunk vertices exactly on the footprint.
+        const float radius=path.width*.5f+path.shoulderWidth*.5f+path.textureTransition;
+        const i32 x0=i32(std::floor((xmin-radius+r.size*.5f)/a.step))-2;
+        const i32 x1=i32(std::ceil((xmax+radius+r.size*.5f)/a.step))+1;
+        const i32 z0=i32(std::floor((zmin-radius+r.size*.5f)/a.step))-2;
+        const i32 z1=i32(std::ceil((zmax+radius+r.size*.5f)/a.step))+1;
+        for(i32 z=std::max(0,z0);z<=std::min(i32(r.cells)-1,z1);++z)
+          for(i32 x=std::max(0,x0);x<=std::min(i32(r.cells)-1,x1);++x)
+            for(u32 y=0;y<ny;++y)mark(x,i32(y*16),z);
+      }
+    };
+    pathRegions(r.paths);pathRegions(previous->recipe.paths);
   }
   for(u32 z=0;z<nx;++z)for(u32 y=0;y<ny;++y)for(u32 x=0;x<nx;++x)
     if(changed[(usize(z)*ny+y)*nx+x])next.dirty.push_back({x,y,z});

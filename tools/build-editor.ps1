@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Editor', 'Preview', 'Tests', 'Terrain', 'TerrainCore', 'AllChecks')]
+    [ValidateSet('Editor', 'Preview', 'Tests', 'Terrain', 'TerrainCore', 'TerrainSurface', 'AllChecks')]
     [string]$Target = 'Editor',
     [string]$BuildDirectory = 'build/editor-host',
     [ValidateRange(1, 64)]
@@ -69,7 +69,7 @@ try {
         & $ninja -C $buildPath -t recompact
         if ($LASTEXITCODE -ne 0) { throw 'Falha ao recuperar as dependencias; backup preservado.' }
     }
-    $targets = @{Editor='aether_editor'; Preview='aether_ui_preview'; Tests='aether_tests'; Terrain='aether_terrain_tests'; TerrainCore='aether_terrain_core_tests'; AllChecks='aether_host_checks'}
+    $targets = @{Editor='aether_editor'; Preview='aether_ui_preview'; Tests='aether_tests'; Terrain='aether_terrain_tests'; TerrainCore='aether_terrain_core_tests'; TerrainSurface='aether_terrain_surface_preview'; AllChecks='aether_host_checks'}
     $cmakeLine = Get-Content -LiteralPath $cachePath | Where-Object { $_ -like 'CMAKE_COMMAND:INTERNAL=*' } | Select-Object -First 1
     $cmake = if ($cmakeLine) { $cmakeLine.Substring($cmakeLine.IndexOf('=') + 1) } else { 'cmake' }
     Write-Host "Compilando $($targets[$Target]) com $Jobs tarefa(s); executar testes: $RunTests."

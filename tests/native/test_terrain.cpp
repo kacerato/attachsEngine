@@ -474,11 +474,12 @@ AE_TEST(terrain_solid_editor_reopen_and_side_bottom_collision) {
 }
 
 AE_TEST(terrain_indexed_export_preserves_triangles_and_supports_locked_border_lods) {
-  resources::TerrainRecipe r;r.cells=32;r.height=0;
+  resources::TerrainRecipe r;r.cells=32;r.height=0;r.lodLevels=3;
   resources::TerrainMesh mesh;std::string error;std::vector<u8> bytes;
   AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
   AE_EXPECT_TRUE(resources::writeTerrainGlb(r,mesh,{},bytes,error),error.c_str());
-  resources::GltfImportLimits limits;limits.generateLods=true;limits.optimizePolygonOrder=false;
+  // No caller flags: a cold import must recover the authored policy itself.
+  resources::GltfImportLimits limits;
   resources::GltfImport model;AE_EXPECT_TRUE(resources::importGlb(bytes,limits,{},model),model.diagnostic.c_str());
   AE_EXPECT_TRUE(model.vertices.size()/renderer::MapVertexStride<mesh.triangles*3/2,"lossless sharing reduces resident vertex data by more than half");
   AE_EXPECT_TRUE(!model.meshLods.empty(),"indexed topology supports actual border-locked LOD reduction");

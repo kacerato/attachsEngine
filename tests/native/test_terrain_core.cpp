@@ -422,6 +422,33 @@ AE_TEST(terrain_persistent_paths_roundtrip_reedit_and_independent_channels) {
   AE_EXPECT_EQ(terrainDigest(reshaped),terrainDigest(shaped),"restoring points has no residual baked old path");
 }
 
+AE_TEST(terrain_path_edits_reuse_chunks_without_old_geometry_or_paint) {
+  for(auto mode:{resources::TerrainMode::Heightfield,resources::TerrainMode::SmoothVoxel,resources::TerrainMode::BlockVoxel}) {
+    resources::TerrainRecipe r;r.mode=mode;r.cells=64;r.verticalCells=16;r.size=64;r.height=0;
+    resources::TerrainPath path;path.points={{-24,4,-24,true},{-16,6,-18,false},{-12,4,-24,false}};
+    path.width=2;path.shoulderWidth=4;path.textureTransition=.5f;path.elevation=2;path.autoRamp=false;
+    r.paths={path};resources::TerrainBuild previous,next;resources::TerrainMesh full;std::string error;
+    AE_EXPECT_TRUE(resources::updateTerrain(r,nullptr,previous,error),error.c_str());
+    for(u32 edit=0;edit<7;++edit) {
+      switch(edit) {
+      case 0:r.paths[0].points[1].z+=4;break;
+      case 1:r.paths[0].surfaceLayer=1;r.paths[0].shoulderLayer=3;break;
+      case 2:r.paths[0].shape=false;r.paths[0].textureOpacity=.35f;break;
+      case 3:{auto crossing=r.paths[0];crossing.id=2;crossing.surfaceLayer=2;crossing.smartPaint=false;
+        crossing.points[1].x-=4;r.paths[0].smartPaint=false;r.paths.push_back(crossing);break;}
+      case 4:std::reverse(r.paths.begin(),r.paths.end());break;
+      case 5:r.paths[0].enabled=false;break;
+      case 6:r.paths.clear();break;
+      }
+      AE_EXPECT_TRUE(resources::updateTerrain(r,&previous,next,error),error.c_str());
+      AE_EXPECT_TRUE(resources::generateTerrain(r,full,error),error.c_str());
+      AE_EXPECT_EQ(terrainDigest(next.mesh),terrainDigest(full),"point/material/channel/order/delete edits match a clean rebuild");
+      AE_EXPECT_TRUE(next.mesh.reusedChunks>0,"distant chunks are reused in all three mesh modes");
+      previous=std::move(next);
+    }
+  }
+}
+
 AE_TEST(terrain_incremental_volume_filters_match_boundaries_and_restore) {
   resources::TerrainRecipe r;r.mode=resources::TerrainMode::SmoothVoxel;r.cells=32;r.verticalCells=16;r.size=32;r.height=0;
   resources::TerrainBuild previous,next;resources::TerrainMesh full;std::string error;
@@ -477,7 +504,9 @@ AE_TEST(terrain_path_point_heights_ramps_and_crest_have_independent_effects) {
   resources::TerrainRecipe loaded;auto encoded=resources::serializeTerrainRecipe(r);
   AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
   AE_EXPECT_TRUE(!loaded.paths[0].followTerrain,"point-height mode persists");
-  encoded.replace(0,10,"AETERRAIN4");encoded.resize(encoded.rfind(' '));
+  // Remove v6 LOD fields, then v5 followTerrain, to exercise an actual v4 record.
+  encoded.replace(0,10,"AETERRAIN4");
+  for(u32 i=0;i<3;++i)encoded.resize(encoded.rfind(' '));
   AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
   AE_EXPECT_TRUE(loaded.paths[0].followTerrain,"version 4 migration preserves the previous follow behavior");
 }

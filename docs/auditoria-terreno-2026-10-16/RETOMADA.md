@@ -1,5 +1,8 @@
 # Retomada — 16/10/2026
 
+Atualização de 17/10: [fontes locais confirmadas, caminhos regionais e LOD autoral](PROGRESSO-2026-10-17.md).
+Esse registro mais recente complementa o checkpoint histórico abaixo; o plano integral permanece aberto.
+
 Pausa solicitada pelo proprietário para encerrar a sessão. Nada foi mesclado na main da engine. ADB continua suspenso.
 
 ## Escopo preservado
