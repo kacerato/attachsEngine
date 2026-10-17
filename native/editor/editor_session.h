@@ -15,6 +15,7 @@
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
 #include "resources/rig_asset.h"
+#include "resources/terrain_stroke_sampler.h"
 #include "scene/animator.h"
 #include <optional>
 #include <functional>
@@ -179,7 +180,8 @@ public:
   };
   std::string terrainAccessProject_;
   std::vector<TerrainSourceAccess> terrainAccess_;
-  bool terrainGestureActive_=false,terrainGestureOverflow_=false,terrainGestureConnected_=false;
+  bool terrainGestureActive_=false,terrainGestureOverflow_=false;
+  resources::TerrainStrokeSampler terrainGestureSampler_;
   u32 terrainGesturePointer_=0;
   u64 terrainGestureRevision_=0;
   EditorEntityId terrainGestureTarget_=0;

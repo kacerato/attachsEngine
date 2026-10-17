@@ -892,7 +892,8 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       terrainGestureBrush_.gesture=state_.terrainDraft.strokes.empty()?1:state_.terrainDraft.strokes.back().gesture+1;
       terrainGestureRecipe_ = resources::serializeTerrainRecipe(state_.terrainDraft);
       terrainGestureStrokes_.clear();
-      terrainGestureOverflow_ = terrainGestureConnected_ = false;
+      terrainGestureOverflow_ = false;
+      terrainGestureSampler_.reset(terrainGestureBrush_.radius * state_.terrainSpacing);
     }
     if (!terrainGestureActive_ || terrainGesturePointer_ != event.pointerId)
       return true;
@@ -1018,28 +1019,19 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
           if (!fixedLevel)
             sample.y = local[1];
           sample.z = local[2];
-          if (!terrainGestureConnected_ || terrainGestureStrokes_.empty()) {
-            append(sample);
-          } else {
-            const auto previous = terrainGestureStrokes_.back();
-            const float delta[]{sample.x-previous.x,sample.y-previous.y,sample.z-previous.z};
-            const float distance = std::sqrt(delta[0]*delta[0]+(volume?delta[1]*delta[1]:0.f)+delta[2]*delta[2]);
-            const float spacing = std::max(.1f, sample.radius * state_.terrainSpacing);
-            const u32 steps = static_cast<u32>(std::min(4097.f, std::floor(distance / spacing)));
-            for (u32 step = 1; step <= steps; ++step) {
-              auto between = sample;
-              const float t = std::min(1.f, step * spacing / distance);
-              between.x = previous.x + delta[0]*t;
-              between.y = previous.y + delta[1]*t;
-              between.z = previous.z + delta[2]*t;
-              if (!append(between)) break;
-            }
-            if (!terrainGestureOverflow_ && event.phase == ui::UiPointerPhase::Up &&
-                distance - steps * spacing > spacing * .1f)
-              append(sample);
+          if (!terrainGestureSampler_.sample({sample.x,sample.y,sample.z},volume,
+                event.phase == ui::UiPointerPhase::Up,[&](const auto &point) {
+                  auto between = sample;
+                  between.x=point[0];between.y=point[1];between.z=point[2];
+                  return append(between);
+                })) {
+            if (!terrainGestureOverflow_)
+              state_.terrainMessage = "Posição inválida · traço descartado; cena preservada";
+            terrainGestureOverflow_ = true;
+            terrainGestureStrokes_.clear();
+            clearTerrainPreview();
           }
-          terrainGestureConnected_ = true;
-          queueTerrainPreview();
+          if (!terrainGestureOverflow_) queueTerrainPreview();
           if (!terrainGestureOverflow_)
             state_.terrainMessage = "Traço · " + std::to_string(terrainGestureStrokes_.size()) +
                                     " amostras · prévia durante o gesto";
@@ -1050,12 +1042,12 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
               "Transformação com shear: ajuste o pai antes de pintar";
         }
       } else {
-        terrainGestureConnected_ = false;
+        terrainGestureSampler_.disconnect();
         state_.terrainCursorVisible=false;
         if (terrainGestureStrokes_.empty()) state_.terrainMessage = "Toque e arraste na superfície do terreno";
       }
     } else {
-      terrainGestureConnected_ = false;
+      terrainGestureSampler_.disconnect();
     }
     if (event.phase == ui::UiPointerPhase::Up && terrainGestureActive_) {
       terrainGestureActive_ = false;

@@ -4,6 +4,7 @@
 #include "terrain_test_helpers.h"
 #include "resources/terrain_asset.h"
 #include "resources/terrain_vertex_index.h"
+#include "resources/terrain_stroke_sampler.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -11,6 +12,86 @@
 #include <map>
 using namespace ae;
 using ae::test::terrainDigest;
+
+AE_TEST(terrain_stroke_sampling_preserves_polyline_exposure_and_saved_density) {
+  using Point=std::array<float,3>;
+  const std::array<Point,4> path{{{-4,3,-4},{-1,3,-4},{-1,4,-1},{2,4,-1}}};
+  const auto sampled=[&](u32 subdivisions,std::vector<Point> &points) {
+    resources::TerrainStrokeSampler sampler;sampler.reset(.8f);
+    const auto emit=[&](const Point &p){points.push_back(p);return true;};
+    AE_EXPECT_TRUE(sampler.sample(path.front(),true,false,emit),"first stamp");
+    for(usize segment=1;segment<path.size();++segment)
+      for(u32 step=1;step<=subdivisions;++step) {
+        Point p;for(u32 axis=0;axis<3;++axis)
+          p[axis]=std::lerp(path[segment-1][axis],path[segment][axis],float(step)/subdivisions);
+        AE_EXPECT_TRUE(sampler.sample(p,true,segment+1==path.size() && step==subdivisions,emit),"sample path");
+      }
+  };
+  std::vector<Point> sparse,dense;sampled(1,sparse);sampled(32,dense);
+  AE_EXPECT_TRUE(!ae::test::currentTestFailed(),"sampler accepts input");
+  AE_EXPECT_EQ(sparse.size(),dense.size(),"event frequency preserves stamp count");
+  for(usize i=0;i<sparse.size();++i)for(u32 axis=0;axis<3;++axis)
+    AE_EXPECT_TRUE(std::abs(sparse[i][axis]-dense[i][axis])<.00002f,"subdivision preserves position along polyline");
+  std::string error;
+  for(auto tool:{resources::TerrainTool::Dig,resources::TerrainTool::Add})
+    for(auto application:{resources::TerrainBrushApplication::Accumulate,resources::TerrainBrushApplication::Target}) {
+      resources::TerrainRecipe a;a.mode=resources::TerrainMode::SmoothVoxel;
+      a.size=16;a.cells=16;a.verticalCells=16;a.height=0;a.base=4;a.baseDepth=8;
+      auto b=a;
+      const auto populate=[&](auto &recipe,const auto &points) {
+        for(const auto &p:points) {
+          resources::TerrainStroke s;s.tool=tool;s.application=application;s.gesture=1;
+          s.x=p[0];s.y=p[1];s.z=p[2];s.radius=3;s.strength=.4f;s.opacity=.65f;
+          recipe.strokes.push_back(s);
+        }
+      };
+      populate(a,sparse);populate(b,dense);
+      resources::TerrainRecipe reopened;
+      AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(resources::serializeTerrainRecipe(b),reopened,error),error.c_str());
+      resources::TerrainField first,second;
+      AE_EXPECT_TRUE(resources::generateTerrainField(a,first,error),error.c_str());
+      AE_EXPECT_TRUE(resources::generateTerrainField(reopened,second,error),error.c_str());
+      AE_EXPECT_EQ(first.density.size(),second.density.size(),"same volume extent");
+      for(usize i=0;i<first.density.size();++i)
+        AE_EXPECT_TRUE(std::abs(first.density[i]-second.density[i])<.0002f,"Dig/Add density survives event subdivision and save/reopen");
+    }
+}
+
+AE_TEST(terrain_stroke_sampling_corners_gaps_stationary_and_budget) {
+  using Point=std::array<float,3>;
+  resources::TerrainStrokeSampler sampler;sampler.reset(1);
+  std::vector<Point> points;
+  const auto emit=[&](const Point &p){points.push_back(p);return true;};
+  AE_EXPECT_TRUE(sampler.sample({0,0,0},false,false,emit),"start");
+  AE_EXPECT_TRUE(sampler.sample({.75f,0,0},false,false,emit),"short first leg");
+  AE_EXPECT_TRUE(sampler.sample({.75f,0,.75f},false,false,emit),"short second leg");
+  AE_EXPECT_EQ(points.size(),2u,"arc length emits across corner");
+  AE_EXPECT_EQ(points.back()[0],.75f,"stamp stays on actual second leg");
+  AE_EXPECT_EQ(points.back()[2],.25f,"carry distance across corner");
+  for(u32 i=0;i<120;++i)AE_EXPECT_TRUE(sampler.sample({.75f,0,.75f},false,false,emit),"stationary input");
+  AE_EXPECT_EQ(points.size(),2u,"stationary events add no exposure");
+  AE_EXPECT_TRUE(sampler.sample({.75f,0,.75f},false,true,emit),"release flushes residual once");
+  AE_EXPECT_EQ(points.size(),3u,"single endpoint stamp");
+  sampler.reset(1);points.clear();
+  AE_EXPECT_TRUE(sampler.sample({0,0,0},true,false,emit),"volume start");
+  AE_EXPECT_TRUE(sampler.sample({0,2,0},true,false,emit),"vertical volume travel");
+  AE_EXPECT_EQ(points.size(),3u,"vertical distance affects volumetric tools");
+  sampler.disconnect();
+  AE_EXPECT_TRUE(sampler.sample({0,100,0},true,false,emit),"reentry");
+  AE_EXPECT_EQ(points.size(),4u,"missing hit never bridges the gap");
+  sampler.reset(1);points.clear();
+  AE_EXPECT_TRUE(sampler.sample({0,0,0},false,false,emit),"surface start");
+  AE_EXPECT_TRUE(sampler.sample({0,100,0},false,true,emit),"surface height changes");
+  AE_EXPECT_EQ(points.size(),1u,"heightfield spacing is horizontal");
+  sampler.reset(.1f);points.clear();
+  const auto bounded=[&](const Point &p){if(points.size()==8)return false;points.push_back(p);return true;};
+  AE_EXPECT_TRUE(sampler.sample({0,0,0},true,false,bounded),"bounded start");
+  AE_EXPECT_TRUE(!sampler.sample({1000,0,0},true,true,bounded),"abort immediately when gesture budget rejects sample");
+  AE_EXPECT_EQ(points.size(),8u,"no unbounded allocation or traversal");
+  sampler.reset(1);points.clear();
+  AE_EXPECT_TRUE(sampler.sample({7,0,0},true,true,emit),"new gesture resets rejected state");
+  AE_EXPECT_EQ(points.size(),1u,"no stale segment after reset");
+}
 
 AE_TEST(terrain_indexing_preserves_seams_and_all_vertex_attributes) {
   using namespace ae;

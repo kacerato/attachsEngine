@@ -160,3 +160,40 @@ da biblioteca ainda podem deslocar bytes seguintes. A chamada do renderer ainda
 espera os leitores globalmente; culling, filas e barreiras por chunk continuam
 pendentes. A sessão Android, rollback após falha de dispositivo e desempenho
 no aparelho não foram executados. Sem ADB, APK novo ou alteração de formato.
+
+Nota pública `2026-10-17-terreno-capacidade-gpu-host`: AstraDocs
+`9ca1930440787df1b025cd4c05c2ade58acf2f7c`, deploy
+`dpl_WDx3YcymwHMwBgEEzxxv9wfX5FLm` **READY**; 593.492 links conferidos,
+sem erros. Nota conferida no domínio público.
+
+## Continuação D01: distância percorrida pelo pincel
+
+O editor agora acumula o comprimento dos segmentos recebidos e preserva a
+distância residual entre eventos. Antes media uma corda do último carimbo até
+o toque atual: curvas curtas podiam perder percurso e deslocar os carimbos.
+`TerrainStrokeSampler` é estado transitório do gesto; a receita continua
+salvando os carimbos efetivamente aplicados, sem nova versão de formato.
+O espaçamento fica fixo durante o gesto. Ferramentas volumétricas medem XYZ;
+ferramentas de superfície medem XZ. Ausência de hit interrompe a continuidade,
+toques parados não acumulam carimbos e o último ponto segue a política anterior
+de completar resíduos maiores que 10% do espaçamento. A recusa por orçamento
+continua descartando o gesto inteiro e agora também remove sua prévia.
+
+Referência: [Unity Terrain Tools 5.0.6, Brush Spacing](https://docs.unity3d.com/Packages/com.unity.terrain-tools@5.0/manual/brush-controls-shortcut-keys.html),
+que separa distância entre aplicações de força/opacidade. A acumulação por arco
+é a correção do sampler da Astra, não uma alegação sobre o algoritmo da Unity.
+
+`terrain-stroke-sampling.log`: **2/2** cenários direcionados. A mesma polilinha,
+com cada segmento dividido em 32 eventos, conserva quantidade/posição das
+amostras e densidade real de Dig/Add em Accumulate e Target após salvar/reabrir
+(tolerâncias: 0,00002 na posição e 0,0002 na densidade). Casos de curva curta,
+contato parado, movimento vertical, lacuna sem hit, reinício e recusa por limite
+também passaram. Build incremental com um job, somente unidade de teste e link.
+`terrain-stroke-editor-arm64.log`: unidade consumidora `editor_terrain.cpp`
+passou checagem sintática ARM64 com NDK 27.1 e warnings como erros.
+
+**Limite:** subdividir a mesma polilinha não equivale a recuperar pontos que o
+dispositivo nunca entregou. Não há promessa de igualdade para trajetórias
+geométricas distintas, nem aplicação baseada em tempo/pressão do dedo. D01
+continua parcial até comparação completa com o pacote e aceitação de toque no
+aparelho. Nenhum plugin ou bloco integral foi encerrado nesta revisão.
