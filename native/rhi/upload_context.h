@@ -40,12 +40,15 @@ public:
   // Static geometry upload. Destination is device-local and already created
   // with TRANSFER_DST plus its final usage; completion is synchronous because
   // this context belongs to initialization/import, never the frame loop.
+  // Only sourceSizeBytes are initialized; any extra destination capacity must
+  // remain outside the caller's draw/dispatch ranges until explicitly uploaded.
   bool uploadBuffer(VulkanMemoryAllocator &allocator, const void *sourceBytes,
                     u64 sourceSizeBytes, VulkanBuffer &destination,
                     VkPipelineStageFlags destinationStage,
                     VkAccessFlags destinationAccess);
   // Caller has retired every reader of this buffer. Validate and stage all
   // ranges before one submission; unchanged bytes and allocation stay intact.
+  // source is the logical extent and may be smaller than destination capacity.
   bool uploadBufferRanges(VulkanMemoryAllocator &allocator, std::span<const BufferRangeUpload> updates);
 
 private:

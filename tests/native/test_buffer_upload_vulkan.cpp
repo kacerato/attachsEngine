@@ -65,3 +65,30 @@ AE_TEST(vulkan_buffer_ranges_publish_batch_and_reuse_fence) {
   AE_EXPECT_TRUE(f.upload.uploadBufferRanges(f.allocator,{&empty,1}),"unchanged buffer is a successful no-op");
   std::printf("Partial geometry: %llu bytes staged of %zu bytes\n",static_cast<unsigned long long>(v.uploadedBytes+i.uploadedBytes),old.size()+oldIndex.size());
 }
+AE_TEST(vulkan_buffer_capacity_preserves_handle_and_rejects_oversized_batch) {
+  VulkanUploadFixture f;AE_EXPECT_TRUE(f.ready,"real Vulkan device required");
+  constexpr auto stage=VK_PIPELINE_STAGE_HOST_BIT;constexpr auto access=VK_ACCESS_HOST_READ_BIT;
+  std::vector<u8> logical(4096,11),expected(8192,77);
+  rhi::VulkanBuffer buffer;AE_EXPECT_TRUE(f.buffer(expected.size(),buffer),"allocate spare capacity");
+  const auto handle=buffer.handle();
+  AE_EXPECT_TRUE(f.upload.uploadBuffer(f.allocator,expected.data(),expected.size(),buffer,stage,access),"initialize tail sentinel");
+  AE_EXPECT_TRUE(f.upload.uploadBuffer(f.allocator,logical.data(),logical.size(),buffer,stage,access),"full logical upload may be smaller than capacity");
+  std::copy(logical.begin(),logical.end(),expected.begin());
+  AE_EXPECT_TRUE(f.equals(buffer,expected),"initial upload leaves inactive tail untouched");
+  for(const usize size:{6000u,2000u,7000u}) {
+    auto next=logical;next.resize(size,u8(size/100));next[5]++;
+    const auto plan=planBufferUpdate(logical,next,buffer.sizeBytes());
+    const rhi::BufferRangeUpload update{next,plan.ranges,&buffer,stage,access};
+    AE_EXPECT_TRUE(plan.valid && !plan.replace && f.upload.uploadBufferRanges(f.allocator,{&update,1}),"resize patches existing allocation");
+    for(const auto &range:plan.ranges)std::memcpy(expected.data()+range.offset,next.data()+range.offset,range.bytes);
+    AE_EXPECT_TRUE(f.equals(buffer,expected),"readback verifies logical geometry and untouched inactive capacity");
+    AE_EXPECT_EQ(buffer.handle(),handle,"no Vulkan buffer replacement within capacity");
+    logical=std::move(next);
+  }
+  auto changed=logical;changed[0]++;
+  const auto plan=planBufferUpdate(logical,changed,buffer.sizeBytes());
+  std::vector<u8> oversized(8196,1);const BufferUpdateRange all{0,oversized.size()};
+  const rhi::BufferRangeUpload invalid[]{{changed,plan.ranges,&buffer,stage,access},{oversized,{&all,1},&buffer,stage,access}};
+  AE_EXPECT_TRUE(!f.upload.uploadBufferRanges(f.allocator,invalid),"oversized later destination rejects whole batch");
+  AE_EXPECT_TRUE(f.equals(buffer,expected),"preflight rejection preserves all prior GPU bytes");
+}

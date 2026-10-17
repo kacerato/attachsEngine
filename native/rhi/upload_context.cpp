@@ -162,7 +162,8 @@ bool VulkanUploadContext::uploadBuffer(VulkanMemoryAllocator &allocator, const v
     VkAccessFlags destinationAccess) {
   if (device_ == VK_NULL_HANDLE || sourceBytes == nullptr || sourceSizeBytes == 0 ||
       !allocator.isReady() || allocator.device() != device_ || destination.owner_ != &allocator ||
-      !destination.isReady() || destination.sizeBytes() != sourceSizeBytes ||
+      !destination.isReady() || destination.sizeBytes() < sourceSizeBytes || sourceSizeBytes%4 ||
+      !(destination.usage_&VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
       destinationStage == 0 || destinationAccess == 0) return false;
 
   BufferDesc stagingDesc{};
@@ -216,7 +217,7 @@ bool VulkanUploadContext::uploadBufferRanges(VulkanMemoryAllocator &allocator,
   for(const auto &update:updates) {
     const auto *destination=update.destination;
     if(!destination || destination->owner_!=&allocator || !destination->isReady() ||
-       update.source.size()!=destination->sizeBytes() || !update.stage || !update.access ||
+       update.source.empty() || update.source.size()>destination->sizeBytes() || update.source.size()%4 || !update.stage || !update.access ||
        !(destination->usage_&VK_BUFFER_USAGE_TRANSFER_DST_BIT))return false;
     u64 end=0;
     for(const auto &range:update.ranges) {

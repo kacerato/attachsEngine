@@ -4,19 +4,31 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$commonGit = & git -C $repoRoot rev-parse --path-format=absolute --git-common-dir
+if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the shared build lock.' }
+$terrainBuildLock = [IO.File]::Open((Join-Path $commonGit '.astra-native-build.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+try {
 $testOutput = Join-Path $repoRoot 'build/terrain-buffer-vulkan'
 New-Item -ItemType Directory -Force -Path $testOutput | Out-Null
 $env:PATH = $CompilerDirectory + ';' + $env:PATH
 $loader = Join-Path $env:WINDIR 'System32/vulkan-1.dll'
 if (!(Test-Path -LiteralPath $loader)) { throw 'Vulkan loader unavailable; this is a real GPU test, not a simulated pass.' }
-$exports = & (Join-Path $CompilerDirectory 'llvm-readobj.exe') --coff-exports $loader
+$clang = Test-Path -LiteralPath (Join-Path $CompilerDirectory 'clang++.exe')
+if ($clang) {
+    $exports = & (Join-Path $CompilerDirectory 'llvm-readobj.exe') --coff-exports $loader
+} else {
+    $exports = & (Join-Path $CompilerDirectory 'objdump.exe') -p $loader
+}
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read Vulkan loader exports.' }
-$names = @($exports | ForEach-Object { if ($_ -match '^\s+Name:\s+(vk\w+)\s*$') { $Matches[1] } })
+$names = @($exports | ForEach-Object {
+    if ($_ -match '^\s+Name:\s+(vk\w+)\s*$' -or $_ -match '^\s*\[.*\]\s+(?:\+base\[.*\]\s+\w+\s+)?(vk\w+)\s*$') { $Matches[1] }
+})
 if ($names.Count -lt 20) { throw 'Incomplete Vulkan loader exports.' }
 $definition = Join-Path $testOutput 'vulkan.def'
 @('LIBRARY vulkan-1.dll', 'EXPORTS') + $names | Set-Content -LiteralPath $definition -Encoding ascii
 $importLibrary = Join-Path $testOutput 'libvulkan-1.a'
-& (Join-Path $CompilerDirectory 'llvm-dlltool.exe') -m i386:x86-64 -d $definition -l $importLibrary
+$dlltool = if ($clang) { 'llvm-dlltool.exe' } else { 'dlltool.exe' }
+& (Join-Path $CompilerDirectory $dlltool) -m i386:x86-64 -d $definition -l $importLibrary
 if ($LASTEXITCODE -ne 0) { throw 'Cannot generate Vulkan import library.' }
 $sources = @(
     'tests/native/family_base_main.cpp',
@@ -28,7 +40,8 @@ $sources = @(
     'native/rhi/upload_context.cpp'
 ) | ForEach-Object { Join-Path $repoRoot $_ }
 $executable = Join-Path $testOutput 'buffer-vulkan-tests.exe'
-& (Join-Path $CompilerDirectory 'clang++.exe') -std=c++20 -O1 `
+$compiler = if ($clang) { 'clang++.exe' } else { 'g++.exe' }
+& (Join-Path $CompilerDirectory $compiler) -std=c++20 -O1 `
     '-I' (Join-Path $repoRoot 'native') `
     '-I' (Join-Path $repoRoot 'tests/native') `
     '-I' (Join-Path $repoRoot 'native/third_party/VulkanMemoryAllocator/include') `
@@ -36,3 +49,4 @@ $executable = Join-Path $testOutput 'buffer-vulkan-tests.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Vulkan buffer test compilation failed.' }
 & $executable
 if ($LASTEXITCODE -ne 0) { throw 'Vulkan buffer regression failed.' }
+} finally { $terrainBuildLock.Dispose() }

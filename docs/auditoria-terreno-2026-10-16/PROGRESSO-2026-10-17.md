@@ -124,3 +124,39 @@ Build exportou 2.430 páginas Markdown/JSON; 593.490 links verificados, zero
 erros. Nota, busca no histórico e disponibilidade conferidas no site público.
 A nota preserva o estado da validação no momento em que foi publicada, anterior
 ao complemento de importação acima. Não foi reescrita após publicação.
+
+## Continuação D07: capacidade dos buffers Vulkan
+
+O planner distingue extensão lógica de capacidade GPU. Crescimento dentro da
+reserva envia diferenças do prefixo e a cauda nova; redução não limpa bytes
+inativos. Crescer novamente sempre envia a região reativada, mesmo que ela
+contenha bytes de uma revisão anterior. O uso sem capacidade explícita mantém
+o contrato anterior de substituir em qualquer mudança de tamanho.
+
+`DirtRoadResources::rebuildAuthoringLibrary` aplica essa política ao consumidor
+real: substitui vértices e índices independentemente, mantém uploads parciais
+em lote depois de preparar texturas e só adota buffers novos no sucesso.
+Reserva de crescimento: 25%, mínimo de 4 KiB e máximo de 8 MiB por buffer.
+Redução que deixe mais de 8 MiB ociosos força compactação. Se a reserva opcional
+não couber no allocator, tenta o tamanho exato; se ele também falhar, recusa a
+publicação. Contadores existentes registram os bytes e faixas realmente enviados.
+As contagens de desenho, picking e colisão continuam seguindo a extensão lógica.
+
+Referências: [Godot 4.5 ArrayMesh](https://docs.godotengine.org/en/4.5/classes/class_arraymesh.html),
+[MeshStorage 4.5, atualização de regiões](https://github.com/godotengine/godot/blob/4.5-stable/servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp#L520)
+e [Vulkan, vkCmdCopyBuffer](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdCopyBuffer.html).
+Princípio: atualizar intervalos de buffers existentes, preservando limites e
+ownership; a reserva limitada é uma decisão da Astra para edição mobile.
+
+`terrain-capacity-vulkan.log`: **6/6** cenários (4 do planner, 2 Vulkan real),
+Intel UHD Graphics. Readback conferiu crescimento, redução, regrowth, bytes
+inativos, identidade do buffer e recusa do lote inválido antes de modificar a
+primeira faixa. O script usa o lock comum entre worktrees e aceita MinGW GCC
+ou LLVM. A unidade `dirt_road_resources.cpp` passou `-fsyntax-only`, C++20,
+`-Wall -Wextra -Werror`, NDK 27.1, alvo `aarch64-linux-android26`.
+
+**Limite:** não é uma arena com alocações estáveis por chunk. Inserções no meio
+da biblioteca ainda podem deslocar bytes seguintes. A chamada do renderer ainda
+espera os leitores globalmente; culling, filas e barreiras por chunk continuam
+pendentes. A sessão Android, rollback após falha de dispositivo e desempenho
+no aparelho não foram executados. Sem ADB, APK novo ou alteração de formato.
