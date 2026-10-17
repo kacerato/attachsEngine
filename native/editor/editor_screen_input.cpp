@@ -27,6 +27,12 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Partículas: a ordem dos módulos da Unity, não a ordem do tipo de controle.
+  if(type.id==std::string_view{"astra.effects.particle_system"}) {
+    static constexpr std::string_view order[]{"Principal","Emissão","Forma","Cor no tempo","Tamanho no tempo","Rotação no tempo","Renderização","Material"};
+    const auto rank=[](std::string_view group){for(u32 i=0;i<std::size(order);++i) if(order[i]==group) return i;return u32(std::size(order));};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Conexão de evento lê como frase: primeiro o gatilho, depois a resposta.
   if(&type==&scene::EventConnection::descriptor) {
     const auto rank=[](std::string_view group){return group=="Quando"?0:group=="Então"?1:2;};

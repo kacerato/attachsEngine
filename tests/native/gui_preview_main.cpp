@@ -12,6 +12,7 @@
 #include "scene/camera_follow.h"
 #include "scene/virtual_camera.h"
 #include "scene/character.h"
+#include "scene/particle_system.h"
 #include "resources/gltf_import.h"
 #include "runtime/primitive_object.h"
 #include "renderer/primitive_geometry.h"
@@ -579,8 +580,10 @@ int main(int argc,char **argv) {
   const bool convex=argc>5&&(std::string_view(argv[5])=="convex"||hierarchy);
   // Inspector em coluna, rasterizado no host: `- inspector [rolagem]`.
   const bool inspectorView=argc>5&&std::string_view(argv[5])=="inspector";
+  // Sistema de partículas (G5): `- particles [rolagem] [grupo]`.
+  const bool particleView=argc>5&&std::string_view(argv[5])=="particles";
   test::ConvexCpuLibrary convexLibrary;
-  editor::EditorSession session;session.initialize(&font,&icons);session.setSurface({0,0,float(width),float(height)},{});if(!convex&&!surfaces&&!owners&&!inspectorView)session.openGui();
+  editor::EditorSession session;session.initialize(&font,&icons);session.setSurface({0,0,float(width),float(height)},{});if(!convex&&!surfaces&&!owners&&!inspectorView&&!particleView)session.openGui();
   if(!session.gui().immediate().setFont(read(root/"assets/astra-visual/ui/gui-inter.ttf"))) return 5;
   if(convex) {
     const auto project=std::filesystem::absolute(argv[4]);std::error_code ec;
@@ -656,7 +659,24 @@ int main(int argc,char **argv) {
     session.setSelection(id);session.frameSelection();session.update();
     if(argc>6) const_cast<editor::EditorScreenState&>(session.screen()).inspectorScroll=std::strtof(argv[6],nullptr);
   }
-  if(argc>4&&!convex&&!surfaces&&!owners&&!inspectorView) {
+  if(particleView) {
+    std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+    if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials)||!session.importMap(draws,materials,false,vertices,indices,0))return 130;
+    auto &g=session.document();const auto id=g.createEntity(g.root(),runtime::ObjectKind::Folder,"Fogo");auto object=*g.find(id);
+    auto *system=static_cast<scene::ParticleSystem*>(object.components.add(scene::ParticleSystem::descriptor));
+    if(!system)return 131;
+    system->shapeRotation[0]=-90;system->sizeOverLifetimeEnabled=true;system->colorOverLifetimeEnabled=true;
+    system->startLifetime.mode=scene::ParticleCurveMode::TwoConstants;system->startLifetime.constantMin=0.6f;
+    system->burstCount=1;system->materialBlend=scene::ParticleBlend::Additive;system->materialTexture=scene::ParticleTexture::Flame;
+    if(!g.applyEntityValues(id,object))return 132;
+    session.setSelection(id);session.frameSelection();session.update();
+    if(argc>6) const_cast<editor::EditorScreenState&>(session.screen()).inspectorScroll=std::strtof(argv[6],nullptr);
+    if(argc>7) const_cast<editor::EditorScreenState&>(session.screen()).componentGroup=argv[7];
+    const float camera[3]{0,1,-6};renderer::particles::ParticleFrame frame;
+    for(u32 i=0;i<30;++i) session.updateParticles(1.f/30,camera,frame);
+    std::printf("Particles preview: %u vivas em %u sistemas\n",frame.alive,frame.systems);
+  }
+  if(argc>4&&!convex&&!surfaces&&!owners&&!inspectorView&&!particleView) {
     const auto folder=std::filesystem::path(argv[4]).parent_path();
     const auto project=folder.filename()=="UI"?folder.parent_path():folder;
     if(!session.setProjectDirectory(project.string().c_str()))return 14;

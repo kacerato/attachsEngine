@@ -133,6 +133,9 @@ struct AndroidShell final {
   ae::editor::EditorWaterPlay authoredWaterPlay;
   std::vector<ae::renderer::MapDrawState> authoredDraws;
   std::vector<ae::renderer::SceneLight> authoredLights;
+  // G5: quadro de partículas trocado com o renderer a cada quadro (sem cópia).
+  ae::renderer::particles::ParticleFrame particleFrame;
+  double particleClock = 0;
   std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
   ae::renderer::SceneEnvironment authoredEnvironment{};
   // Quantas luzes ficaram de fora no último aviso publicado. Sem isto o mesmo
@@ -3867,6 +3870,17 @@ void android_main(android_app *app) {
                          shell.editorSession.screen().resources,previewMaterialRevision))
         shell.instancedRenderer.requestCameraPreview(previewRequest);
       if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
+      if(editorActive && shell.editorMapImported) {
+        // Partículas na mesma câmera do quadro: a ordenação de trás para a frente
+        // e o tamanho máximo na tela dependem dela. Teto pelo perfil do aparelho.
+        const double particleNow=currentMonotonicNanoseconds()*1e-9;
+        const float particleDelta=shell.particleClock>0?static_cast<float>(std::clamp(particleNow-shell.particleClock,0.0,0.1)):0.0f;
+        shell.particleClock=particleNow;
+        const auto tier=static_cast<ae::renderer::particles::ParticleTier>(std::min<ae::u32>(3u,static_cast<ae::u32>(shell.renderingCapabilities.profile)));
+        shell.editorSession.setParticleBudget(ae::renderer::particles::particleTierBudget(tier));
+        shell.editorSession.updateParticles(particleDelta,sceneCamera.position,shell.particleFrame);
+        shell.instancedRenderer.queueParticles(shell.particleFrame);
+      }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
       const auto &autoExposureDiagnostic=shell.instancedRenderer.autoExposureDiagnostic();

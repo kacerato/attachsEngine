@@ -8,6 +8,7 @@
 #include "renderer/scene_environment.h"
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
+#include "renderer/particles/particle_gpu.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -267,6 +268,12 @@ public:
   // Desenhos com skin deformados pelo compute no último quadro.
   u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
+
+  // Partículas (G5, platform/android/instanced_particles.inl): o quadro da
+  // simulação, já ordenado, trocado por valor a cada quadro; o que o passe
+  // desenhou e quanto custou na GPU volta em `particleStats`.
+  void queueParticles(renderer::particles::ParticleFrame &frame);
+  const renderer::particles::ParticleRenderStats &particleStats() const;
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
   const ui::UiFont &uiFont() const { return uiFont_; }
@@ -625,6 +632,12 @@ private:
   bool createSpectralWaterResources();
   bool createSkyPipeline();
   bool createEditorGridPipeline();
+  struct ParticleResources;
+  ParticleResources *particles_ = nullptr;
+  bool createParticleResources();
+  void destroyParticleResources();
+  void recordParticlePass(u32 imageIndex, float timeSeconds);
+  bool particlesBlockSceneReuse() const;
   bool createRuntimeHudPipeline();
   bool createUiRenderPass();
   void recordRuntimeHud(u32 imageIndex, const renderer::RuntimeHudState &hud);

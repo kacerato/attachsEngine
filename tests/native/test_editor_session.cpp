@@ -3,6 +3,7 @@
 #include "script_publication_fixture.h"
 #include "renderer/primitive_geometry.h"
 #include "scene/path_follow.h"
+#include "scene/particle_system.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_property_tween.h"
@@ -3740,6 +3741,54 @@ AE_TEST(curve_editor_adds_moves_edits_keys_and_applies_once) {
                  stored.keys.size()==2 && stored.post==scene::CurveWrapMode::Loop && stored.keys[1].value==3.f,"gravado");
   AE_EXPECT_EQ(history.undoDepth(),1u,"aplicar é um passo");
   AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"PostWrapMode\":1")!=std::string::npos,"o Play recebe a curva");
+}
+
+// G5 P1: Partículas criadas pela receita, curva do módulo editada pelo editor
+// de curvas do projeto em um passo de histórico, salva/reaberta e simulada na
+// prévia da cena.
+AE_TEST(particle_editor_creates_edits_curve_saves_and_previews) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("effect.particles",&recipe),"receita Efeitos › Partículas");
+  AE_EXPECT_EQ(editorCreationCatalog[recipe].category,kEffectsCreationCategory,"categoria Efeitos");
+  history.clear();
+  const auto id=f.session.createRecipe(recipe,doc.root());
+  AE_EXPECT_TRUE(id!=0,"criado");
+  const auto *value=doc.find(id)->components.find(scene::ParticleSystem::descriptor);
+  AE_EXPECT_TRUE(value&&scene::particleSystem(*value).shapeRotation[0]==-90.f,"cone voltado para cima pela forma");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"criar é um passo");
+  f.session.setSelection(id);f.session.update();
+  const float camera[3]{0,1,-6};renderer::particles::ParticleFrame frame;
+  for(u32 i=0;i<20;++i) f.session.updateParticles(1.f/20,camera,frame);
+  AE_EXPECT_TRUE(frame.alive>0&&frame.systems==1,"prévia emite na edição (Tocar ao iniciar)");
+  // Curva de Tamanho no tempo: a linha da curva abre o editor do projeto.
+  auto &state=const_cast<EditorScreenState&>(f.session.screen());
+  state.componentGroup="Tamanho no tempo";
+  u32 slot=0;
+  for(u32 i=0;i<scene::ParticleSystem::curveSlots().size();++i) if(scene::ParticleSystem::curveSlots()[i].id=="size_over_lifetime.max") slot=i;
+  tapWidget(f,widgetId(EditorWidget::ParticleCurveRowBase)+slot);
+  AE_EXPECT_TRUE(f.session.screen().curveField!=0,"a linha abre o editor de curvas");
+  const auto draft=[&] {scene::ScriptCurve c;scene::parseScriptCurve(f.session.screen().curveDraft,c);return c;};
+  AE_EXPECT_EQ(draft().keys.size(),2u,"rascunho com a curva atual");
+  f.session.update();
+  const auto graph=f.session.layout().curveGraph;
+  const UiPoint middle{graph.x+graph.width*.5f,graph.y+graph.height*.2f};
+  f.session.handlePointer({96,UiPointerPhase::Down,middle,20});f.session.handlePointer({96,UiPointerPhase::Up,middle,20.05});
+  f.session.handlePointer({96,UiPointerPhase::Down,middle,20.2});f.session.handlePointer({96,UiPointerPhase::Up,middle,20.25});f.session.update();
+  AE_EXPECT_EQ(draft().keys.size(),3u,"toque duplo acrescenta a chave do meio");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"nada gravado antes de Aplicar");
+  tapWidget(f,widgetId(EditorWidget::CurveApply));
+  value=doc.find(id)->components.find(scene::ParticleSystem::descriptor);
+  AE_EXPECT_EQ(scene::particleSystem(*value).sizeOverLifetime.curveMax.keys.size(),usize(3),"curva gravada no componente");
+  AE_EXPECT_EQ(history.undoDepth(),2u,"aplicar é um passo");
+  // Salvar e reabrir preserva a curva; desfazer volta à curva anterior.
+  const auto archive=serializeEditorDocument(doc,0);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(archive,0,reopened),"cena reaberta");
+  const auto *again=reopened.find(id)?reopened.find(id)->components.find(scene::ParticleSystem::descriptor):nullptr;
+  AE_EXPECT_TRUE(again&&scene::particleSystem(*again).sizeOverLifetime.curveMax.keys.size()==3&&
+                 scene::particleSystem(*again).shapeRotation[0]==-90.f,"valores autorais preservados no arquivo");
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer");
+  value=doc.find(id)->components.find(scene::ParticleSystem::descriptor);
+  AE_EXPECT_EQ(scene::particleSystem(*value).sizeOverLifetime.curveMax.keys.size(),usize(2),"curva anterior de volta");
 }
 
 // Unity Manual/InspectorBarSliders no LOD Group: arrastar o divisor muda só

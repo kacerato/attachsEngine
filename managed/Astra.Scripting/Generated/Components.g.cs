@@ -10724,3 +10724,966 @@ public readonly struct NavModifier : IComponentFacade<NavModifier>
         set => Component.SetEnum("area", (uint)value);
     }
 }
+
+/// <summary>Sistema de partículas: Emite, simula e desenha partículas: fogo, faíscas, fumaça, magia. Família Efeitos · Partículas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/ParticleSystemModules.html</remarks>
+public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
+{
+    public static string TypeId => "astra.effects.particle_system";
+    public static ParticleSystem Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ParticleSystem(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Cor inicial. Cor linear RGB</summary>
+    public Vector3 StartColor
+    {
+        get => new(Component.GetFloat("start_color_r"), Component.GetFloat("start_color_g"), Component.GetFloat("start_color_b"));
+        set => Component.SetVector3("start_color", value);
+    }
+    /// <summary>Cor mínima. Cor linear RGB</summary>
+    public Vector3 StartColorMin
+    {
+        get => new(Component.GetFloat("start_color_min_r"), Component.GetFloat("start_color_min_g"), Component.GetFloat("start_color_min_b"));
+        set => Component.SetVector3("start_color_min", value);
+    }
+    /// <summary>Tamanho da caixa</summary>
+    public Vector3 ShapeBox
+    {
+        get => new(Component.GetFloat("shape_box_x"), Component.GetFloat("shape_box_y"), Component.GetFloat("shape_box_z"));
+        set => Component.SetVector3("shape_box", value);
+    }
+    /// <summary>Posição</summary>
+    public Vector3 ShapePosition
+    {
+        get => new(Component.GetFloat("shape_position_x"), Component.GetFloat("shape_position_y"), Component.GetFloat("shape_position_z"));
+        set => Component.SetVector3("shape_position", value);
+    }
+    /// <summary>Rotação</summary>
+    public Vector3 ShapeRotation
+    {
+        get => new(Component.GetFloat("shape_rotation_x"), Component.GetFloat("shape_rotation_y"), Component.GetFloat("shape_rotation_z"));
+        set => Component.SetVector3("shape_rotation", value);
+    }
+    /// <summary>Tinta. Cor linear RGB</summary>
+    public Vector3 MaterialTint
+    {
+        get => new(Component.GetFloat("material_tint_r"), Component.GetFloat("material_tint_g"), Component.GetFloat("material_tint_b"));
+        set => Component.SetVector3("material_tint", value);
+    }
+    /// <summary>Rolagem de UV</summary>
+    public Vector2 MaterialScroll
+    {
+        get => new(Component.GetFloat("material_scroll_x"), Component.GetFloat("material_scroll_y"));
+        set => Component.SetVector2("material_scroll", value);
+    }
+    /// <summary>Duração (s). Comprimento de um ciclo de emissão</summary>
+    /// <remarks>Faixa válida: 0.05 a 3600.</remarks>
+    public float Duration
+    {
+        get => Component.GetFloat("duration");
+        set => Component.SetFloat("duration", value);
+    }
+    /// <summary>Atraso inicial (s). Espera antes de começar a emitir</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float StartDelay
+    {
+        get => Component.GetFloat("start_delay");
+        set => Component.SetFloat("start_delay", value);
+    }
+    /// <summary>Atraso inicial mínimo (s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float StartDelayMin
+    {
+        get => Component.GetFloat("start_delay_min");
+        set => Component.SetFloat("start_delay_min", value);
+    }
+    /// <summary>Vida inicial (s). Quanto tempo cada partícula vive</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float StartLifetime
+    {
+        get => Component.GetFloat("start_lifetime");
+        set => Component.SetFloat("start_lifetime", value);
+    }
+    /// <summary>Vida inicial mínimo (s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float StartLifetimeMin
+    {
+        get => Component.GetFloat("start_lifetime_min");
+        set => Component.SetFloat("start_lifetime_min", value);
+    }
+    /// <summary>Vida inicial · multiplicador (s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float StartLifetimeMultiplier
+    {
+        get => Component.GetFloat("start_lifetime_multiplier");
+        set => Component.SetFloat("start_lifetime_multiplier", value);
+    }
+    /// <summary>Velocidade inicial (m/s). Velocidade na direção da forma</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float StartSpeed
+    {
+        get => Component.GetFloat("start_speed");
+        set => Component.SetFloat("start_speed", value);
+    }
+    /// <summary>Velocidade inicial mínimo (m/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float StartSpeedMin
+    {
+        get => Component.GetFloat("start_speed_min");
+        set => Component.SetFloat("start_speed_min", value);
+    }
+    /// <summary>Velocidade inicial · multiplicador (m/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float StartSpeedMultiplier
+    {
+        get => Component.GetFloat("start_speed_multiplier");
+        set => Component.SetFloat("start_speed_multiplier", value);
+    }
+    /// <summary>Tamanho inicial (m). Lado do quadrado da partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float StartSize
+    {
+        get => Component.GetFloat("start_size");
+        set => Component.SetFloat("start_size", value);
+    }
+    /// <summary>Tamanho inicial mínimo (m). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float StartSizeMin
+    {
+        get => Component.GetFloat("start_size_min");
+        set => Component.SetFloat("start_size_min", value);
+    }
+    /// <summary>Tamanho inicial · multiplicador (m). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float StartSizeMultiplier
+    {
+        get => Component.GetFloat("start_size_multiplier");
+        set => Component.SetFloat("start_size_multiplier", value);
+    }
+    /// <summary>Rotação inicial (°). Giro da partícula no plano da tela</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float StartRotation
+    {
+        get => Component.GetFloat("start_rotation");
+        set => Component.SetFloat("start_rotation", value);
+    }
+    /// <summary>Rotação inicial mínimo (°). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float StartRotationMin
+    {
+        get => Component.GetFloat("start_rotation_min");
+        set => Component.SetFloat("start_rotation_min", value);
+    }
+    /// <summary>Rotação inicial · multiplicador (°). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float StartRotationMultiplier
+    {
+        get => Component.GetFloat("start_rotation_multiplier");
+        set => Component.SetFloat("start_rotation_multiplier", value);
+    }
+    /// <summary>Opacidade inicial</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float StartColorA
+    {
+        get => Component.GetFloat("start_color_a");
+        set => Component.SetFloat("start_color_a", value);
+    }
+    /// <summary>Opacidade mínima</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float StartColorMinA
+    {
+        get => Component.GetFloat("start_color_min_a");
+        set => Component.SetFloat("start_color_min_a", value);
+    }
+    /// <summary>Gravidade (×). Fração da gravidade de 9,81 m/s² para baixo</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float GravityModifier
+    {
+        get => Component.GetFloat("gravity_modifier");
+        set => Component.SetFloat("gravity_modifier", value);
+    }
+    /// <summary>Gravidade mínimo (×). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float GravityModifierMin
+    {
+        get => Component.GetFloat("gravity_modifier_min");
+        set => Component.SetFloat("gravity_modifier_min", value);
+    }
+    /// <summary>Gravidade · multiplicador (×). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float GravityModifierMultiplier
+    {
+        get => Component.GetFloat("gravity_modifier_multiplier");
+        set => Component.SetFloat("gravity_modifier_multiplier", value);
+    }
+    /// <summary>Velocidade da simulação (×)</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float SimulationSpeed
+    {
+        get => Component.GetFloat("simulation_speed");
+        set => Component.SetFloat("simulation_speed", value);
+    }
+    /// <summary>Máximo de partículas. Teto autoral; o nível do aparelho pode reduzir sem apagar este valor</summary>
+    /// <remarks>Faixa válida: 1 a 100000.</remarks>
+    public float MaxParticles
+    {
+        get => Component.GetFloat("max_particles");
+        set => Component.SetFloat("max_particles", value);
+    }
+    /// <summary>Semente. Mesma semente, mesma sequência de partículas</summary>
+    /// <remarks>Faixa válida: 0 a 16777215.</remarks>
+    public float RandomSeed
+    {
+        get => Component.GetFloat("random_seed");
+        set => Component.SetFloat("random_seed", value);
+    }
+    /// <summary>Taxa por segundo (/s). Partículas novas por segundo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float EmissionRate
+    {
+        get => Component.GetFloat("emission_rate");
+        set => Component.SetFloat("emission_rate", value);
+    }
+    /// <summary>Taxa por segundo mínimo (/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float EmissionRateMin
+    {
+        get => Component.GetFloat("emission_rate_min");
+        set => Component.SetFloat("emission_rate_min", value);
+    }
+    /// <summary>Taxa por segundo · multiplicador (/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float EmissionRateMultiplier
+    {
+        get => Component.GetFloat("emission_rate_multiplier");
+        set => Component.SetFloat("emission_rate_multiplier", value);
+    }
+    /// <summary>Rajadas. Quantas rajadas o ciclo tem (até 4)</summary>
+    /// <remarks>Faixa válida: 0 a 4.</remarks>
+    public float BurstCount
+    {
+        get => Component.GetFloat("burst_count");
+        set => Component.SetFloat("burst_count", value);
+    }
+    /// <summary>Rajada 1 · tempo (s). Momento no ciclo</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Burst0Time
+    {
+        get => Component.GetFloat("burst_0_time");
+        set => Component.SetFloat("burst_0_time", value);
+    }
+    /// <summary>Rajada 1 · mínimo. Partículas, sorteadas até o máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst0CountMin
+    {
+        get => Component.GetFloat("burst_0_count_min");
+        set => Component.SetFloat("burst_0_count_min", value);
+    }
+    /// <summary>Rajada 1 · máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst0CountMax
+    {
+        get => Component.GetFloat("burst_0_count_max");
+        set => Component.SetFloat("burst_0_count_max", value);
+    }
+    /// <summary>Rajada 1 · ciclos. 0 repete enquanto emitir</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float Burst0Cycles
+    {
+        get => Component.GetFloat("burst_0_cycles");
+        set => Component.SetFloat("burst_0_cycles", value);
+    }
+    /// <summary>Rajada 1 · intervalo (s). Entre ciclos da mesma rajada</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float Burst0Interval
+    {
+        get => Component.GetFloat("burst_0_interval");
+        set => Component.SetFloat("burst_0_interval", value);
+    }
+    /// <summary>Rajada 1 · chance. Chance de cada ciclo emitir</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Burst0Probability
+    {
+        get => Component.GetFloat("burst_0_probability");
+        set => Component.SetFloat("burst_0_probability", value);
+    }
+    /// <summary>Rajada 2 · tempo (s). Momento no ciclo</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Burst1Time
+    {
+        get => Component.GetFloat("burst_1_time");
+        set => Component.SetFloat("burst_1_time", value);
+    }
+    /// <summary>Rajada 2 · mínimo. Partículas, sorteadas até o máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst1CountMin
+    {
+        get => Component.GetFloat("burst_1_count_min");
+        set => Component.SetFloat("burst_1_count_min", value);
+    }
+    /// <summary>Rajada 2 · máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst1CountMax
+    {
+        get => Component.GetFloat("burst_1_count_max");
+        set => Component.SetFloat("burst_1_count_max", value);
+    }
+    /// <summary>Rajada 2 · ciclos. 0 repete enquanto emitir</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float Burst1Cycles
+    {
+        get => Component.GetFloat("burst_1_cycles");
+        set => Component.SetFloat("burst_1_cycles", value);
+    }
+    /// <summary>Rajada 2 · intervalo (s). Entre ciclos da mesma rajada</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float Burst1Interval
+    {
+        get => Component.GetFloat("burst_1_interval");
+        set => Component.SetFloat("burst_1_interval", value);
+    }
+    /// <summary>Rajada 2 · chance. Chance de cada ciclo emitir</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Burst1Probability
+    {
+        get => Component.GetFloat("burst_1_probability");
+        set => Component.SetFloat("burst_1_probability", value);
+    }
+    /// <summary>Rajada 3 · tempo (s). Momento no ciclo</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Burst2Time
+    {
+        get => Component.GetFloat("burst_2_time");
+        set => Component.SetFloat("burst_2_time", value);
+    }
+    /// <summary>Rajada 3 · mínimo. Partículas, sorteadas até o máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst2CountMin
+    {
+        get => Component.GetFloat("burst_2_count_min");
+        set => Component.SetFloat("burst_2_count_min", value);
+    }
+    /// <summary>Rajada 3 · máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst2CountMax
+    {
+        get => Component.GetFloat("burst_2_count_max");
+        set => Component.SetFloat("burst_2_count_max", value);
+    }
+    /// <summary>Rajada 3 · ciclos. 0 repete enquanto emitir</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float Burst2Cycles
+    {
+        get => Component.GetFloat("burst_2_cycles");
+        set => Component.SetFloat("burst_2_cycles", value);
+    }
+    /// <summary>Rajada 3 · intervalo (s). Entre ciclos da mesma rajada</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float Burst2Interval
+    {
+        get => Component.GetFloat("burst_2_interval");
+        set => Component.SetFloat("burst_2_interval", value);
+    }
+    /// <summary>Rajada 3 · chance. Chance de cada ciclo emitir</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Burst2Probability
+    {
+        get => Component.GetFloat("burst_2_probability");
+        set => Component.SetFloat("burst_2_probability", value);
+    }
+    /// <summary>Rajada 4 · tempo (s). Momento no ciclo</summary>
+    /// <remarks>Faixa válida: 0 a 3600.</remarks>
+    public float Burst3Time
+    {
+        get => Component.GetFloat("burst_3_time");
+        set => Component.SetFloat("burst_3_time", value);
+    }
+    /// <summary>Rajada 4 · mínimo. Partículas, sorteadas até o máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst3CountMin
+    {
+        get => Component.GetFloat("burst_3_count_min");
+        set => Component.SetFloat("burst_3_count_min", value);
+    }
+    /// <summary>Rajada 4 · máximo</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float Burst3CountMax
+    {
+        get => Component.GetFloat("burst_3_count_max");
+        set => Component.SetFloat("burst_3_count_max", value);
+    }
+    /// <summary>Rajada 4 · ciclos. 0 repete enquanto emitir</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float Burst3Cycles
+    {
+        get => Component.GetFloat("burst_3_cycles");
+        set => Component.SetFloat("burst_3_cycles", value);
+    }
+    /// <summary>Rajada 4 · intervalo (s). Entre ciclos da mesma rajada</summary>
+    /// <remarks>Faixa válida: 0.01 a 3600.</remarks>
+    public float Burst3Interval
+    {
+        get => Component.GetFloat("burst_3_interval");
+        set => Component.SetFloat("burst_3_interval", value);
+    }
+    /// <summary>Rajada 4 · chance. Chance de cada ciclo emitir</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Burst3Probability
+    {
+        get => Component.GetFloat("burst_3_probability");
+        set => Component.SetFloat("burst_3_probability", value);
+    }
+    /// <summary>Raio (m). Na aresta, é meio comprimento</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ShapeRadius
+    {
+        get => Component.GetFloat("shape_radius");
+        set => Component.SetFloat("shape_radius", value);
+    }
+    /// <summary>Espessura do raio. 0 emite da borda; 1 emite do volume inteiro</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ShapeRadiusThickness
+    {
+        get => Component.GetFloat("shape_radius_thickness");
+        set => Component.SetFloat("shape_radius_thickness", value);
+    }
+    /// <summary>Ângulo (°). Abertura do cone</summary>
+    /// <remarks>Faixa válida: 0 a 90.</remarks>
+    public float ShapeAngle
+    {
+        get => Component.GetFloat("shape_angle");
+        set => Component.SetFloat("shape_angle", value);
+    }
+    /// <summary>Arco (°). Fatia da volta usada</summary>
+    /// <remarks>Faixa válida: 0 a 360.</remarks>
+    public float ShapeArc
+    {
+        get => Component.GetFloat("shape_arc");
+        set => Component.SetFloat("shape_arc", value);
+    }
+    /// <summary>Comprimento (m). Altura do volume do cone</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ShapeLength
+    {
+        get => Component.GetFloat("shape_length");
+        set => Component.SetFloat("shape_length", value);
+    }
+    /// <summary>Direção aleatória. Mistura a direção com uma direção sorteada</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ShapeRandomDirection
+    {
+        get => Component.GetFloat("shape_random_direction");
+        set => Component.SetFloat("shape_random_direction", value);
+    }
+    /// <summary>Direção esférica. Mistura a direção com a saída do centro</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ShapeSpherizeDirection
+    {
+        get => Component.GetFloat("shape_spherize_direction");
+        set => Component.SetFloat("shape_spherize_direction", value);
+    }
+    /// <summary>Tamanho no tempo (×)</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeOverLifetime
+    {
+        get => Component.GetFloat("size_over_lifetime");
+        set => Component.SetFloat("size_over_lifetime", value);
+    }
+    /// <summary>Tamanho no tempo mínimo (×). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeOverLifetimeMin
+    {
+        get => Component.GetFloat("size_over_lifetime_min");
+        set => Component.SetFloat("size_over_lifetime_min", value);
+    }
+    /// <summary>Tamanho no tempo · multiplicador (×). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeOverLifetimeMultiplier
+    {
+        get => Component.GetFloat("size_over_lifetime_multiplier");
+        set => Component.SetFloat("size_over_lifetime_multiplier", value);
+    }
+    /// <summary>Velocidade angular (°/s)</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float RotationOverLifetime
+    {
+        get => Component.GetFloat("rotation_over_lifetime");
+        set => Component.SetFloat("rotation_over_lifetime", value);
+    }
+    /// <summary>Velocidade angular mínimo (°/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float RotationOverLifetimeMin
+    {
+        get => Component.GetFloat("rotation_over_lifetime_min");
+        set => Component.SetFloat("rotation_over_lifetime_min", value);
+    }
+    /// <summary>Velocidade angular · multiplicador (°/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float RotationOverLifetimeMultiplier
+    {
+        get => Component.GetFloat("rotation_over_lifetime_multiplier");
+        set => Component.SetFloat("rotation_over_lifetime_multiplier", value);
+    }
+    /// <summary>Escala da velocidade (s). Comprimento extra por m/s</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float StretchVelocityScale
+    {
+        get => Component.GetFloat("stretch_velocity_scale");
+        set => Component.SetFloat("stretch_velocity_scale", value);
+    }
+    /// <summary>Escala do comprimento (×). Comprimento em tamanhos de partícula</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float StretchLengthScale
+    {
+        get => Component.GetFloat("stretch_length_scale");
+        set => Component.SetFloat("stretch_length_scale", value);
+    }
+    /// <summary>Ajuste de ordem (m). Desloca o sistema na ordem entre sistemas; positivo desenha antes (atrás)</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float SortingFudge
+    {
+        get => Component.GetFloat("sorting_fudge");
+        set => Component.SetFloat("sorting_fudge", value);
+    }
+    /// <summary>Tamanho máximo na tela. Fração da altura da tela; limita o custo de partículas perto da câmera</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float MaxParticleSize
+    {
+        get => Component.GetFloat("max_particle_size");
+        set => Component.SetFloat("max_particle_size", value);
+    }
+    /// <summary>Emissão (×). Intensidade HDR; acima de 1 alimenta o brilho estourado</summary>
+    /// <remarks>Faixa válida: 0 a 64.</remarks>
+    public float MaterialEmission
+    {
+        get => Component.GetFloat("material_emission");
+        set => Component.SetFloat("material_emission", value);
+    }
+    /// <summary>Escala do ruído (×)</summary>
+    /// <remarks>Faixa válida: 0.05 a 64.</remarks>
+    public float MaterialNoiseScale
+    {
+        get => Component.GetFloat("material_noise_scale");
+        set => Component.SetFloat("material_noise_scale", value);
+    }
+    /// <summary>Rolagem do ruído X (/s)</summary>
+    /// <remarks>Faixa válida: -64 a 64.</remarks>
+    public float MaterialNoiseScrollX
+    {
+        get => Component.GetFloat("material_noise_scroll_x");
+        set => Component.SetFloat("material_noise_scroll_x", value);
+    }
+    /// <summary>Rolagem do ruído Y (/s)</summary>
+    /// <remarks>Faixa válida: -64 a 64.</remarks>
+    public float MaterialNoiseScrollY
+    {
+        get => Component.GetFloat("material_noise_scroll_y");
+        set => Component.SetFloat("material_noise_scroll_y", value);
+    }
+    /// <summary>Recorte do ruído. Quanto o ruído apaga a opacidade</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float MaterialNoiseStrength
+    {
+        get => Component.GetFloat("material_noise_strength");
+        set => Component.SetFloat("material_noise_strength", value);
+    }
+    /// <summary>Distorção do ruído. Quanto o ruído desloca a textura principal</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float MaterialNoiseDistortion
+    {
+        get => Component.GetFloat("material_noise_distortion");
+        set => Component.SetFloat("material_noise_distortion", value);
+    }
+    /// <summary>Brilho central. Clareia o miolo denso, como fogo quente</summary>
+    /// <remarks>Faixa válida: 0 a 16.</remarks>
+    public float MaterialCenterGlow
+    {
+        get => Component.GetFloat("material_center_glow");
+        set => Component.SetFloat("material_center_glow", value);
+    }
+    /// <summary>Concentração do brilho</summary>
+    /// <remarks>Faixa válida: 1 a 32.</remarks>
+    public float MaterialCenterGlowPower
+    {
+        get => Component.GetFloat("material_center_glow_power");
+        set => Component.SetFloat("material_center_glow_power", value);
+    }
+    /// <summary>Partícula suave (m). Esmaece perto das superfícies; 0 desliga</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float MaterialSoftDistance
+    {
+        get => Component.GetFloat("material_soft_distance");
+        set => Component.SetFloat("material_soft_distance", value);
+    }
+    /// <summary>Repetir. Recomeça o ciclo ao terminar a duração</summary>
+    public bool Looping
+    {
+        get => Component.GetBool("looping");
+        set => Component.SetBool("looping", value);
+    }
+    /// <summary>Pré-aquecer. Começa como se já tivesse rodado um ciclo inteiro</summary>
+    public bool Prewarm
+    {
+        get => Component.GetBool("prewarm");
+        set => Component.SetBool("prewarm", value);
+    }
+    /// <summary>Tocar ao iniciar. Começa sozinho ao entrar em Play e na prévia da cena</summary>
+    public bool PlayOnAwake
+    {
+        get => Component.GetBool("play_on_awake");
+        set => Component.SetBool("play_on_awake", value);
+    }
+    /// <summary>Semente automática. Semente derivada do objeto; desligue para fixar</summary>
+    public bool AutoRandomSeed
+    {
+        get => Component.GetBool("auto_random_seed");
+        set => Component.SetBool("auto_random_seed", value);
+    }
+    /// <summary>Emissão ativa</summary>
+    public bool EmissionEnabled
+    {
+        get => Component.GetBool("emission_enabled");
+        set => Component.SetBool("emission_enabled", value);
+    }
+    /// <summary>Forma ativa. Desligada: nascem no centro, para a frente (+Z)</summary>
+    public bool ShapeEnabled
+    {
+        get => Component.GetBool("shape_enabled");
+        set => Component.SetBool("shape_enabled", value);
+    }
+    /// <summary>Cor no tempo ativa. Multiplica a cor pela idade da partícula</summary>
+    public bool ColorOverLifetimeEnabled
+    {
+        get => Component.GetBool("color_over_lifetime_enabled");
+        set => Component.SetBool("color_over_lifetime_enabled", value);
+    }
+    /// <summary>Tamanho no tempo ativo. Multiplica o tamanho pela idade da partícula</summary>
+    public bool SizeOverLifetimeEnabled
+    {
+        get => Component.GetBool("size_over_lifetime_enabled");
+        set => Component.SetBool("size_over_lifetime_enabled", value);
+    }
+    /// <summary>Rotação no tempo ativa</summary>
+    public bool RotationOverLifetimeEnabled
+    {
+        get => Component.GetBool("rotation_over_lifetime_enabled");
+        set => Component.SetBool("rotation_over_lifetime_enabled", value);
+    }
+    public enum StartDelayModeOption : uint
+    {
+        Constante = 0,
+        EntreDuasConstantes = 2,
+    }
+    /// <summary>Atraso inicial · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public StartDelayModeOption StartDelayMode
+    {
+        get => (StartDelayModeOption)Component.GetEnum("start_delay_mode");
+        set => Component.SetEnum("start_delay_mode", (uint)value);
+    }
+    public enum StartLifetimeModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Vida inicial · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public StartLifetimeModeOption StartLifetimeMode
+    {
+        get => (StartLifetimeModeOption)Component.GetEnum("start_lifetime_mode");
+        set => Component.SetEnum("start_lifetime_mode", (uint)value);
+    }
+    public enum StartSpeedModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade inicial · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public StartSpeedModeOption StartSpeedMode
+    {
+        get => (StartSpeedModeOption)Component.GetEnum("start_speed_mode");
+        set => Component.SetEnum("start_speed_mode", (uint)value);
+    }
+    public enum StartSizeModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Tamanho inicial · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public StartSizeModeOption StartSizeMode
+    {
+        get => (StartSizeModeOption)Component.GetEnum("start_size_mode");
+        set => Component.SetEnum("start_size_mode", (uint)value);
+    }
+    public enum StartRotationModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Rotação inicial · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public StartRotationModeOption StartRotationMode
+    {
+        get => (StartRotationModeOption)Component.GetEnum("start_rotation_mode");
+        set => Component.SetEnum("start_rotation_mode", (uint)value);
+    }
+    public enum StartColorModeOption : uint
+    {
+        Cor = 0,
+        Gradiente = 1,
+        EntreDuasCores = 2,
+        EntreDoisGradientes = 3,
+        CorAleatoria = 4,
+    }
+    /// <summary>Cor inicial · modo. Cor fixa, gradiente no tempo do ciclo, sorteio entre duas cores ou dois gradientes</summary>
+    public StartColorModeOption StartColorMode
+    {
+        get => (StartColorModeOption)Component.GetEnum("start_color_mode");
+        set => Component.SetEnum("start_color_mode", (uint)value);
+    }
+    public enum GravityModifierModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Gravidade · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public GravityModifierModeOption GravityModifierMode
+    {
+        get => (GravityModifierModeOption)Component.GetEnum("gravity_modifier_mode");
+        set => Component.SetEnum("gravity_modifier_mode", (uint)value);
+    }
+    public enum SimulationSpaceOption : uint
+    {
+        Local = 0,
+        Mundo = 1,
+    }
+    /// <summary>Espaço. Local: as partículas acompanham o objeto. Mundo: ficam onde nasceram</summary>
+    public SimulationSpaceOption SimulationSpace
+    {
+        get => (SimulationSpaceOption)Component.GetEnum("simulation_space");
+        set => Component.SetEnum("simulation_space", (uint)value);
+    }
+    public enum StopActionOption : uint
+    {
+        Nenhuma = 0,
+        DesativarObjeto = 1,
+        DestruirObjeto = 2,
+        EventoParou = 3,
+    }
+    /// <summary>Ao parar. O que acontece quando o sistema termina e não há partículas vivas</summary>
+    public StopActionOption StopAction
+    {
+        get => (StopActionOption)Component.GetEnum("stop_action");
+        set => Component.SetEnum("stop_action", (uint)value);
+    }
+    public enum EmissionRateModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Taxa por segundo · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public EmissionRateModeOption EmissionRateMode
+    {
+        get => (EmissionRateModeOption)Component.GetEnum("emission_rate_mode");
+        set => Component.SetEnum("emission_rate_mode", (uint)value);
+    }
+    public enum ShapeTypeOption : uint
+    {
+        Esfera = 0,
+        Hemisferio = 1,
+        Cone = 2,
+        Caixa = 3,
+        Circulo = 4,
+        Aresta = 5,
+    }
+    /// <summary>Forma</summary>
+    public ShapeTypeOption ShapeType
+    {
+        get => (ShapeTypeOption)Component.GetEnum("shape_type");
+        set => Component.SetEnum("shape_type", (uint)value);
+    }
+    public enum ShapeConeEmitFromOption : uint
+    {
+        Base = 0,
+        Volume = 1,
+    }
+    /// <summary>Emitir do</summary>
+    public ShapeConeEmitFromOption ShapeConeEmitFrom
+    {
+        get => (ShapeConeEmitFromOption)Component.GetEnum("shape_cone_emit_from");
+        set => Component.SetEnum("shape_cone_emit_from", (uint)value);
+    }
+    public enum ShapeBoxEmitFromOption : uint
+    {
+        Volume = 0,
+        Casca = 1,
+        Arestas = 2,
+    }
+    /// <summary>Emitir da</summary>
+    public ShapeBoxEmitFromOption ShapeBoxEmitFrom
+    {
+        get => (ShapeBoxEmitFromOption)Component.GetEnum("shape_box_emit_from");
+        set => Component.SetEnum("shape_box_emit_from", (uint)value);
+    }
+    public enum ColorOverLifetimeModeOption : uint
+    {
+        Gradiente = 1,
+        EntreDoisGradientes = 3,
+    }
+    /// <summary>Cor no tempo · modo</summary>
+    public ColorOverLifetimeModeOption ColorOverLifetimeMode
+    {
+        get => (ColorOverLifetimeModeOption)Component.GetEnum("color_over_lifetime_mode");
+        set => Component.SetEnum("color_over_lifetime_mode", (uint)value);
+    }
+    public enum SizeOverLifetimeModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Tamanho no tempo · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public SizeOverLifetimeModeOption SizeOverLifetimeMode
+    {
+        get => (SizeOverLifetimeModeOption)Component.GetEnum("size_over_lifetime_mode");
+        set => Component.SetEnum("size_over_lifetime_mode", (uint)value);
+    }
+    public enum RotationOverLifetimeModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade angular · modo. Constante, curva no tempo, ou sorteio entre dois valores por partícula</summary>
+    public RotationOverLifetimeModeOption RotationOverLifetimeMode
+    {
+        get => (RotationOverLifetimeModeOption)Component.GetEnum("rotation_over_lifetime_mode");
+        set => Component.SetEnum("rotation_over_lifetime_mode", (uint)value);
+    }
+    public enum RenderModeOption : uint
+    {
+        Billboard = 0,
+        BillboardEsticado = 1,
+    }
+    /// <summary>Modo. Billboard encara a câmera; esticado alonga na direção da velocidade</summary>
+    public RenderModeOption RenderMode
+    {
+        get => (RenderModeOption)Component.GetEnum("render_mode");
+        set => Component.SetEnum("render_mode", (uint)value);
+    }
+    public enum SortModeOption : uint
+    {
+        Nenhuma = 0,
+        PorDistancia = 1,
+        MaisAntigasNaFrente = 2,
+        MaisNovasNaFrente = 3,
+    }
+    /// <summary>Ordenação. Ordem das partículas deste sistema na mistura</summary>
+    public SortModeOption SortMode
+    {
+        get => (SortModeOption)Component.GetEnum("sort_mode");
+        set => Component.SetEnum("sort_mode", (uint)value);
+    }
+    public enum MaterialBlendOption : uint
+    {
+        Mistura = 0,
+        Aditivo = 1,
+    }
+    /// <summary>Mistura. Mistura cobre o fundo pela opacidade; Aditivo soma luz (fogo, magia)</summary>
+    public MaterialBlendOption MaterialBlend
+    {
+        get => (MaterialBlendOption)Component.GetEnum("material_blend");
+        set => Component.SetEnum("material_blend", (uint)value);
+    }
+    public enum MaterialTextureOption : uint
+    {
+        PontoSuave = 0,
+        Brilho = 1,
+        Chama = 2,
+        Fumaca = 3,
+        Faisca = 4,
+        Anel = 5,
+        Estrela = 6,
+        Quadrado = 7,
+    }
+    /// <summary>Textura. Textura própria da engine</summary>
+    public MaterialTextureOption MaterialTexture
+    {
+        get => (MaterialTextureOption)Component.GetEnum("material_texture");
+        set => Component.SetEnum("material_texture", (uint)value);
+    }
+    public enum MaterialNoiseOption : uint
+    {
+        Nenhum = 0,
+        Nuvens = 1,
+        Celulas = 2,
+        Faixas = 3,
+    }
+    /// <summary>Ruído. Textura de ruído que recorta e deforma a principal</summary>
+    public MaterialNoiseOption MaterialNoise
+    {
+        get => (MaterialNoiseOption)Component.GetEnum("material_noise");
+        set => Component.SetEnum("material_noise", (uint)value);
+    }
+    public enum MaterialMaskOption : uint
+    {
+        Nenhuma = 0,
+        Radial = 1,
+        DesvaneceParaCima = 2,
+        Anel = 3,
+    }
+    /// <summary>Máscara. Multiplica a opacidade por uma forma fixa na partícula</summary>
+    public MaterialMaskOption MaterialMask
+    {
+        get => (MaterialMaskOption)Component.GetEnum("material_mask");
+        set => Component.SetEnum("material_mask", (uint)value);
+    }
+    /// <summary>Tocar. Inicia ou retoma a simulação e a emissão</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Play() => Component.Invoke("play");
+    /// <summary>Parar. Para de emitir; as partículas vivas terminam a vida</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Stop() => Component.Invoke("stop");
+    /// <summary>Parar e limpar. Para de emitir e remove todas as partículas</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void StopAndClear() => Component.Invoke("stop_and_clear");
+    /// <summary>Pausar. Congela simulação e emissão</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Pause() => Component.Invoke("pause");
+    /// <summary>Limpar. Remove as partículas vivas sem mudar o estado de reprodução</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Clear() => Component.Invoke("clear");
+    /// <summary>Emitir. Emite partículas agora, pela forma, mesmo parado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void Emit(long count) => Component.Invoke("emit", ComponentValue.Integer(count));
+    /// <summary>Tocando. Verdadeiro enquanto toca (emitindo ou com partículas vivas)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool IsPlaying() => Component.Invoke("is_playing").AsBoolean();
+    /// <summary>Partículas vivas. Quantas partículas estão vivas neste quadro</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long ParticleCount() => Component.Invoke("particle_count").AsInteger();
+    /// <summary>Tempo. Tempo do ciclo atual em segundos</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public double Time() => Component.Invoke("time").AsNumber();
+    /// <summary>Parou. O sistema terminou: não emite mais e não há partículas vivas (Ação ao parar = Evento Parou)</summary>
+    public ComponentSubscription OnStopped(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "stopped", handler);
+}

@@ -62,6 +62,24 @@ bool EditorSession::loadAssets(std::string_view text) {
   return true;
 }
 
+void EditorSession::setParticleBudget(u32 total) {
+  particleBudget_ = total ? total : 1;
+  previewParticles_.setBudget(particleBudget_);
+  playScene_.particles().setBudget(particleBudget_);
+}
+
+void EditorSession::updateParticles(float deltaSeconds, const float (&camera)[3], renderer::particles::ParticleFrame &out) {
+  if (isPlaying() && playScene_.active()) {
+    playScene_.particles().setBudget(particleBudget_);
+    playScene_.particles().build(playScene_.document(), camera, out);
+    return;
+  }
+  previewParticles_.setPreviewLoop(true);
+  previewParticles_.setBudget(particleBudget_);
+  previewParticles_.advance(evaluatedEditorScene(), deltaSeconds);
+  previewParticles_.build(evaluatedEditorScene(), camera, out);
+}
+
 bool EditorSession::extractMap(std::vector<renderer::MapDrawState> &out) const {
   const auto &graph=evaluatedEditorScene();
   if(!mapScene_.extract(graph, out)) return false;

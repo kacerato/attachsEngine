@@ -106,6 +106,19 @@ def lod_group() -> str:
 <path d="M30 90v16M72 90v16M108 90v16" {stroke(5, ACCENT)}/>'''
 
 
+def particle_system() -> str:
+    # Emissor em cone (traço claro) soltando partículas de tamanhos diferentes e
+    # duas faíscas esticadas em lima: o que diferencia é o que sai do emissor.
+    return f'''<path d="M44 112h40L74 80H54z" {stroke(6)}/>
+<path d="M50 96h28" {stroke(3, extra='opacity=".7"')}/>
+<circle cx="64" cy="58" r="11" {stroke(5, ACCENT)}/>
+<circle cx="40" cy="40" r="7" {stroke(4, ACCENT)}/>
+<circle cx="88" cy="34" r="8" {stroke(4, ACCENT)}/>
+<circle cx="70" cy="22" r="4" fill="{ACCENT}"/>
+<circle cx="50" cy="16" r="3" fill="{ACCENT}"/>
+<path d="M30 74L18 58M100 70l12-18" {stroke(5, ACCENT)}/>'''
+
+
 def skinned_mesh() -> str:
     # A pele (contorno) deformada pela cadeia de ossos em lima.
     return f'''<path d="M22 104c-6-12 0-24 12-30l18-10 12-20c6-10 18-16 30-12 12 4 18 16 14 28-3 9-11 15-20 17l-18 4-12 16c-8 10-24 12-36 7z" {stroke(6)}/>
@@ -322,6 +335,7 @@ ICONS: dict[str, str] = {
 <circle cx="91" cy="52" r="5" fill="{ACCENT}"/><circle cx="102" cy="64" r="5" fill="{ACCENT}"/>
 <circle cx="55" cy="72" r="7" {stroke(4)}/><circle cx="73" cy="72" r="7" {stroke(4)}/>''',
     "component/lod-group": lod_group(),
+    "component/particle-system": particle_system(),
     "component/skinned-mesh": skinned_mesh(),
     "component/camera-follow": camera_follow(),
 }

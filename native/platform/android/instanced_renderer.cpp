@@ -5,6 +5,8 @@
 #include "renderer/spatial_render_chunks.h"
 
 #include "rhi/shaders/editor_grid_spirv.h"
+#include "rhi/shaders/particle_billboard_spirv.h"
+#include "rhi/shaders/particle_material_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
 #include "rhi/shaders/scene_preview_spirv.h"
@@ -510,6 +512,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_motion.inl"
 #include "platform/android/instanced_temporal_upscaler.inl"
 #include "platform/android/instanced_skinning.inl"
+#include "platform/android/instanced_particles.inl"
 
 bool InstancedRenderer::createPipeline() {
   VkShaderModule vertModule = dirtRoadPreview_
@@ -2973,6 +2976,7 @@ bool InstancedRenderer::createDepthImage() {
   graphInputs.temporalAaEnabled = temporalInputsActive_;
   graphInputs.postDepthEnabled = dirtRoadPreview_ && renderingPolicy_.post.dedicatedPass;
   graphInputs.waterDepthInputEnabled = waterSubpassActive_;
+  graphInputs.particleDepthEnabled = dirtRoadPreview_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
   if (!frameAttachmentPolicy_.valid) {
     // Falha aberta: sem política compilada, armazenar é o comportamento que
@@ -4589,6 +4593,11 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os framebuffers instanciados.");
     return false;
   }
+  // Partículas são opcionais: a cena continua sem elas e o log diz por quê.
+  if (!createParticleResources()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[Particles] passe de partículas indisponível.");
+    destroyParticleResources();
+  }
   // Opt-in and off by default (see setHzbOcclusionEnabled) -- a no-op that
   // returns true when disabled, so this never blocks initialization for the
   // renderer's existing, already-validated path.
@@ -4649,6 +4658,7 @@ void InstancedRenderer::shutdown() {
   activeEnvironmentMap_.reset();environmentMaps_.clear();environmentMapDiagnostic_.clear();
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
+  destroyParticleResources();
   destroyCameraPreview();
   if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
   previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
@@ -6066,7 +6076,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       !temporalInputsActive_ && !temporalUpscaler_.ready() &&
       waterDrawOrder_.empty() && skinnedDraws_.empty() && !pendingPreview_.requestId &&
       !textureStreamingDebugView_ &&
-      !cachedLook.autoExposure;
+      !cachedLook.autoExposure && !particlesBlockSceneReuse();
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
       (textureStreamingDebugView_?32u:0u);
@@ -6906,6 +6916,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // deferred store is incorrectly charged to the following motion pass.
   if(dirtRoadPreview_) endGpuRegion(GpuPassClass::Transparent);
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
+  if(dirtRoadPreview_) recordParticlePass(imageIndex,timeSeconds);
   if(sceneCacheEligible) {
     editorSceneCachedUniform_.resize(sizeof(DirtRoadFrameUniform));
     std::memcpy(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform));
