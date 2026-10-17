@@ -17,6 +17,11 @@ param(
     [switch]$Edit,
     # Pose fixa x,y,z,yaw,pitch (modo Edit). Sponza de 05/10: -6.101169,5.219586,-8.918053,.6,.45
     [float[]]$Pose=@(),
+    # Diagnóstico do G1: bits do passe de pós desligados (1 neblina, 2 AO, 4 bloom,
+    # 8 FXAA, 16 nitidez). Aplica-se a todas as rodadas desta chamada.
+    [ValidateRange(0,31)][int]$PostIsolation=0,
+    # Candidata do G1: névoa resolvida por texel antes do pós (aether.post_fog_resolve).
+    [switch]$FogResolve,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
@@ -80,6 +85,8 @@ try {
                     for($part=0;$part -lt 5;++$part) { $launch+=@('--ef',('aether.camera_'+$names[$part]),$Pose[$part].ToString($culture)) }
                 }
             }
+            if($PostIsolation) { $launch+=@('--ei','aether.post_isolation',[string]$PostIsolation) }
+            $launch+=@('--ez','aether.post_fog_resolve',$(if($FogResolve){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
             else { $launch+=@('--ef','aether.resolution_scale','1') }
             $started=(& $Adb @launch 2>&1 | Out-String)
@@ -107,8 +114,11 @@ try {
             }
             & $Adb logcat -d -s Aether.Android:I | Set-Content (Join-Path $run 'profile.log')
             $logText=Get-Content (Join-Path $run 'profile.log') -Raw
-            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls)\][^\r\n]*') | ForEach-Object Value
+            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve)\][^\r\n]*') | ForEach-Object Value
             $policy | Set-Content (Join-Path $run 'policy.txt')
+            if($PostIsolation -and !($policy -match "\[PostIsolation\] mask=$PostIsolation ")) {
+                throw "A máscara de pós $PostIsolation não foi aplicada ($project/$tier)."
+            }
             if(!($policy -match "\[RenderPolicy\] preset=$($tier.ToLowerInvariant()) ")) {
                 throw "O nível pedido não foi aplicado ($project/$tier); veja policy.txt."
             }
@@ -128,7 +138,9 @@ try {
             & $Adb pull /sdcard/astra-g0.png (Join-Path $run 'screen.png') | Out-Null
             & $Adb shell dumpsys battery | Set-Content (Join-Path $run 'battery-after.txt')
             & $Adb shell dumpsys thermalservice | Set-Content (Join-Path $run 'thermal-after.txt')
-            $row=[ordered]@{project=$project;round=$index+1;tier=$tier
+            $fogResolved=[bool]($policy -match '\[PostFogResolve\] .*por texel')
+            if($fogResolved -ne [bool]$FogResolve) { throw "Névoa resolvida=$fogResolved difere do pedido ($project/$tier)." }
+            $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;fogResolve=$fogResolved
                 displayedFps=if($summary){$summary.displayedFps}else{$null}
                 continuous=$state.continuous;internalFps=$capture.presentFps
                 width=$capture.context.width;height=$capture.context.height

@@ -1,0 +1,2 @@
+    versionCode=98 minSdk=26 targetSdk=35
+    versionName=0.3.0-dev.98-g1b

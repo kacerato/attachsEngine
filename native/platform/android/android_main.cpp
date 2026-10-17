@@ -2330,6 +2330,17 @@ void android_main(android_app *app) {
     shell.gpuCostIsolation = ae::renderer::sanitizeGpuCostIsolation(requestedIsolation);
   }
   shell.instancedRenderer.setGpuCostIsolation(shell.gpuCostIsolation);
+  // Promovida no A/B de 17/10/2026 (pós -38%, imagem equivalente); false volta ao caminho anterior.
+  shell.instancedRenderer.setFogResolveEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.post_fog_resolve", true));
+  {
+    ae::u32 postIsolation=0;
+    if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {
+      shell.instancedRenderer.setPostIsolation(postIsolation);
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[PostIsolation] mask=%u (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez).",
+                          shell.instancedRenderer.postIsolation());
+    }
+  }
   shell.instancedRenderer.setOpaqueNoClipEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.opaque_no_clip", true));
   shell.instancedRenderer.setFullDetailSamplingEnabled(ae::platform::android::readBooleanLaunchOption(

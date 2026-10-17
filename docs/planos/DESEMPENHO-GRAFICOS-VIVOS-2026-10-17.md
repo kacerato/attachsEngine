@@ -392,6 +392,14 @@ Ordem decidida pela atribuição de G0. Candidatas já justificadas pelo código
 10. Ritmo de quadro: pacing estável a 30/60 Hz (Android Frame Pacing / Swappy)
     para não oscilar entre 30 e 60 no nível C.
 
+**Execução (17/10/2026) — pós, primeira entrega:** atribuição por máscara de
+diagnóstico (`aether.post_isolation`) mostrou a névoa como 45% do pós, porque era
+reavaliada em cada amostra de FXAA/bloom/reconstrução. Pré-passe de névoa por texel
+promovido como padrão no Play: pós −38%, quadro −16,6%, FPS +19,9% no mesmo clock,
+imagem equivalente (≤ 3 níveis em 99,6% dos pixels estáticos; contorno de silhuetas
+mais correto). Evidência: `docs/validacao/g1-post-fog-resolve-2026-10-17/README.md`.
+Próximos no pós: bloom em cadeia de mips e AO em meia resolução (G2), depois CPU da Vila.
+
 Aceite: Vila e Sponza no modo nível C forçado do POCO com GPU ≤ 11 ms e CPU ≤ 10 ms;
 em campo (telemetria), mediana ≥ 58 FPS e p99 < 25 ms por 10 min em 3 GPUs do nível C;
 no POCO, Vila em Play ≥ 60 FPS na escala da política. Cada item com A/B/B/A próprio.

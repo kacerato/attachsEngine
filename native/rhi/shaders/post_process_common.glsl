@@ -79,7 +79,8 @@ vec2 temporalInputUv(vec2 uv) { return uv*environment.temporalParameters.zw; }
 vec3 applySceneFog(vec2 sourceUv, vec3 color) {
   // Depois do ampliador temporal a névoa já está na cor: aplicá-la de novo
   // dobraria a densidade, e com profundidade de outra resolução.
-  if(environment.sceneFog.x>0.5 && !postFlag(128.0)) {
+  // 512: a cor de entrada já recebeu a névoa por texel no pré-passe (256).
+  if(environment.sceneFog.x>0.5 && !postFlag(128.0) && !postFlag(512.0)) {
     float viewDepth=viewDistance(sourceUv);
     float falloff=environment.sceneFog.w;
     float opticalDepth;
@@ -522,6 +523,14 @@ bool temporalDiagnostic(vec2 sourceUv, float encodedDepth, float historyContribu
 }
 
 void main() {
+  if(postFlag(256.0)) {
+    // Pré-passe de névoa: avaliada uma vez por texel na resolução interna.
+    // Sem ele, FXAA, bloom e reconstrução repetem profundidade + log/exp em
+    // cada amostra (até ~22 por pixel); o passe principal lê esta cor com 512.
+    vec2 sourceUv=clampSourceUv(vUv*post.sourceTransform.xy);
+    outColor=vec4(sampleScene(sourceUv),1.0);
+    return;
+  }
   if(postFlag(64.0)) {
     // Composição antes do ampliador temporal: névoa e AO em HDR linear, na
     // resolução interna, alinhadas à profundidade que as produziu. Tonemap,

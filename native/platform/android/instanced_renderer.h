@@ -347,6 +347,14 @@ public:
   // precisam configurar nada para receber o caminho otimizado.
   void setCoveragePrepassEnabled(bool enabled) { coveragePrepassEnabled_ = enabled; }
   void setGpuCostIsolation(renderer::GpuCostIsolation mode) { gpuCostIsolation_ = mode; }
+  // Diagnóstico do G1: desliga etapas do passe de pós para atribuir custo no
+  // aparelho (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez). Nunca é opção de jogo.
+  void setPostIsolation(u32 mask) { postIsolation_ = mask & 31u; }
+  u32 postIsolation() const { return postIsolation_; }
+  // G1: névoa resolvida uma vez por texel antes do pós. Ligada por padrão desde
+  // o A/B de 17/10/2026; desligar só para comparação.
+  void setFogResolveEnabled(bool enabled) { fogResolveEnabled_ = enabled; }
+  bool fogResolvedLastFrame() const { return fogResolvedThisFrame_; }
   void setOpaqueNoClipEnabled(bool enabled) { opaqueNoClipEnabled_ = enabled; }
   bool opaqueNoClipLastFrame() const { return opaqueNoClipLastFrame_; }
   void setFullDetailSamplingEnabled(bool enabled) { fullDetailSamplingEnabled_ = enabled; }
@@ -694,6 +702,9 @@ private:
   bool createTemporalUpscalerResources();
   void destroyTemporalUpscalerResources();
   bool recordTemporalUpscale(const platform::FreeCameraState &camera, float timeSeconds);
+  bool createFogResolveResources();
+  void destroyFogResolveResources();
+  bool recordFogResolve(const platform::FreeCameraState &camera);
   // `upscaledInput`: a cor de entrada é a saída do Arm ASR/FSR 2 na resolução
   // final, já composta (névoa e AO); o pós só faz a parte de exibição.
   bool recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera,
@@ -938,6 +949,16 @@ private:
   VkFramebuffer compositeFramebuffer_ = VK_NULL_HANDLE;
   VkPipeline compositePipeline_ = VK_NULL_HANDLE;
   VkDescriptorSet upscaledDescriptorSet_ = VK_NULL_HANDLE;
+  // Névoa resolvida por texel antes do pós (instanced_post_fog.inl).
+  rhi::VulkanImage fogResolveColor_{};
+  VkRenderPass fogResolveRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer fogResolveFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline fogResolvePipeline_ = VK_NULL_HANDLE;
+  VkDescriptorSet fogResolveDescriptorSet_ = VK_NULL_HANDLE;
+  bool fogResolveEnabled_ = true;
+  bool fogActiveThisFrame_ = false;
+  bool fogResolvedThisFrame_ = false;
+  bool fogResolveReported_ = false;
   VkDescriptorSetLayout exposureExportSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool exposureExportPool_ = VK_NULL_HANDLE;
   VkDescriptorSet exposureExportSet_ = VK_NULL_HANDLE;
@@ -1151,6 +1172,7 @@ private:
   renderer::VisibilityTelemetry visibilityTelemetry_{};
   u64 renderedFrameCount_ = 0;
   renderer::GpuCostIsolation gpuCostIsolation_ = renderer::GpuCostIsolation::Full;
+  u32 postIsolation_ = 0;
   profiler::RenderPhaseTimings lastFrameTimings_{};
   // Limites para os quais os recursos foram realmente criados. A política
   // ativa abaixo pode apenas reduzir estes limites durante a época atual.

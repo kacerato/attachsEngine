@@ -509,6 +509,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_auto_exposure.inl"
 #include "platform/android/instanced_motion.inl"
 #include "platform/android/instanced_temporal_upscaler.inl"
+#include "platform/android/instanced_post_fog.inl"
 #include "platform/android/instanced_skinning.inl"
 
 bool InstancedRenderer::createPipeline() {
@@ -1977,14 +1978,14 @@ bool InstancedRenderer::createPostResources() {
   setLayout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
     return false;
-  // Três conjuntos: o pós normal, a composição antes do ampliador temporal e
-  // a exibição do resultado ampliado.
-  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 18},
-                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3}};
+  // Quatro conjuntos: o pós normal, a composição antes do ampliador temporal,
+  // a exibição do resultado ampliado e a entrada com névoa já resolvida.
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 24},
+                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  pool.maxSets = 3;
+  pool.maxSets = 4;
   pool.poolSizeCount = 3;
   pool.pPoolSizes = poolSizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &postDescriptorPool_) != VK_SUCCESS)
@@ -2113,6 +2114,12 @@ bool InstancedRenderer::createPostResources() {
   }
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
+  // Opcional: sem a névoa resolvida o pós segue pelo caminho original.
+  if (ok && fogResolveEnabled_ && !createFogResolveResources()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+                        "[PostFogResolve] recursos recusados; pós mantém a névoa por amostra.");
+    destroyFogResolveResources();
+  }
   return ok;
 }
 
@@ -2187,7 +2194,8 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipeline_);
   // Depois do Arm ASR/FSR 2 a entrada é a imagem ampliada, na resolução final.
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipelineLayout_,
-                          0, 1, upscaledInput ? &upscaledDescriptorSet_ : &postDescriptorSet_, 0, nullptr);
+                          0, 1, upscaledInput ? &upscaledDescriptorSet_ :
+                          fogResolvedThisFrame_ ? &fogResolveDescriptorSet_ : &postDescriptorSet_, 0, nullptr);
   PostPushConstants push{};
   const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
   const auto look=sceneEnvironment_.active?sceneEnvironment_:
@@ -2195,7 +2203,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
   push.texelFlags[0] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->width() : renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->height() : renderTargetHeight());
-  const bool bloom=postEffectsEnabled&&(authoredPost?look.bloom:renderingPolicy_.post.bloom);
+  const bool bloom=postEffectsEnabled&&!(postIsolation_&4u)&&(authoredPost?look.bloom:renderingPolicy_.post.bloom);
   push.texelFlags[2] = bloom ? 1.0f : 0.0f;
   if(renderingPolicy_.post.upscalingFilter==renderer::UpscalingFilter::CatmullRom &&
      (renderWidth()<swapchain_->width() || renderHeight()<swapchain_->height()))
@@ -2205,18 +2213,19 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   if(temporalStaticCoverage_) push.texelFlags[2] += 16.0f;
   if(temporalMasksActive_) push.texelFlags[2] += 32.0f;
   if(upscaledInput) push.texelFlags[2] += 128.0f;
+  else if(fogResolvedThisFrame_) push.texelFlags[2] += 512.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = upscaledInput ? 0.0f :
                        temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
                            ? 3.0f
-                           : temporalAaActive_ || renderingPolicy_.post.antiAliasing ==
-                                     renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
+                           : temporalAaActive_ || (renderingPolicy_.post.antiAliasing ==
+                                     renderer::AntiAliasingMode::Fxaa && !(postIsolation_&8u)) ? 1.0f : 0.0f;
   if (temporalDebugAvailable())
     push.texelFlags[3] += 4.0f * static_cast<float>(temporalDebugView_);
   push.bloom[0] = authoredPost?look.bloomThreshold:renderingPolicy_.post.bloomThreshold;
   push.bloom[1] = authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
   // FSR 1 e os ampliadores temporais aplicam o próprio RCAS com esta nitidez.
-  push.bloom[2] = postEffectsEnabled&&!fsrActive_&&!upscaledInput?renderingPolicy_.post.sharpen:0.0f;
+  push.bloom[2] = postEffectsEnabled&&!fsrActive_&&!upscaledInput&&!(postIsolation_&16u)?renderingPolicy_.post.sharpen:0.0f;
   push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost
       ? (look.vignette?look.vignetteIntensity:0.0f)
       : (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
@@ -2335,6 +2344,7 @@ bool InstancedRenderer::recordTemporalHistoryCopy() {
 }
 
 void InstancedRenderer::destroyPostResources() {
+  destroyFogResolveResources();
   destroyFsrResources();
   destroyAutoExposureResources();
   if (postPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_, postPipeline_, nullptr);
@@ -5785,6 +5795,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           look,mapDescription,static_cast<bool>(activeEnvironmentMap_),renderingPolicy_.ambient.splitSumBrdf,
           editorFog,editorPost,lights,atmosphereGroundCache_))
       return rhi::SwapchainStatus::FatalError;
+    // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
+    if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
+    if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
+    fogActiveThisFrame_=frame->sceneFog[0]>0.5f;
     frame->scenePost[2]=hdrSceneColor_?1.0f:0.0f;
     const auto basis=renderer::buildCameraViewBasis(camera.yaw,camera.pitch,camera.roll);
     const float row0[4] = {basis.row0[0],basis.row0[1],basis.row0[2],sceneOrthographicHalfHeight_};
@@ -6950,6 +6964,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(!renderer::isTemporalUpscaler(temporalUpscalerRequested_))
     executedUpscalerStatus_=renderer::TemporalUpscalerAvailability::Available;
   beginGpuRegion(GpuPassClass::Post);
+  // Dentro da região Post: o A/B compara o custo do pré-passe somado ao do pós.
+  if (!upscaledFrame && recordFogResolve(camera) && !fogResolveReported_) {
+    fogResolveReported_ = true;
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "[PostFogResolve] névoa resolvida por texel antes do pós (%ux%u).",
+                        renderWidth(), renderHeight());
+  }
   postUiFusedLastFrame_ = recordPostProcess(imageIndex, camera, upscaledFrame);
   if (!postUiFusedLastFrame_) {
     endGpuRegion(GpuPassClass::Post);
