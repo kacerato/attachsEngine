@@ -2333,6 +2333,11 @@ void android_main(android_app *app) {
   // Promovida no A/B de 17/10/2026 (pós -38%, imagem equivalente); false volta ao caminho anterior.
   shell.instancedRenderer.setFogResolveEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_fog_resolve", true));
+  // Candidatas do G1/G2, desligadas até o A/B no aparelho.
+  shell.instancedRenderer.setBloomChainEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.post_bloom_chain"));
+  shell.instancedRenderer.setHalfAmbientOcclusionEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.post_half_ao"));
   {
     ae::u32 postIsolation=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {

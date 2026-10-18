@@ -9,6 +9,9 @@ layout(set=0,binding=2) uniform sampler2D sceneDepth;
 layout(set=0,binding=5) uniform sampler2D temporalVelocity;
 layout(set=0,binding=6) uniform sampler2D reactiveMask;
 layout(set=0,binding=7) uniform sampler2D compositionMask;
+// G2 no G1: bloom em cadeia de mips (nível 1/2 já acumulado) e AO em 1/2.
+layout(set=0,binding=8) uniform sampler2D bloomChain;
+layout(set=0,binding=9) uniform sampler2D halfAmbientOcclusion;
 layout(set=0,binding=4,std430) readonly buffer ExposureState {
   float ev; float targetEv; float meteredEv; uint valid;
 } automaticExposure;
@@ -234,6 +237,29 @@ float screenSpaceAmbientOcclusion(vec2 uv) {
   return pow(visibility,max(environment.sceneAo.w,0.1));
 }
 
+// AO calculada em 1/2 (bit 2048) e reconstruída aqui com as quatro amostras
+// do filtro bilinear, ponderadas pela profundidade para não vazar em bordas.
+float upsampledAmbientOcclusion(vec2 uv) {
+  if(environment.sceneAo.x<0.5 || postFlag(128.0)) return 1.0;
+  vec2 size=vec2(textureSize(halfAmbientOcclusion,0));
+  vec2 pixel=uv*size-0.5;
+  vec2 base=floor(pixel);
+  vec2 f=pixel-base;
+  vec4 ao=textureGather(halfAmbientOcclusion,(base+1.0)/size,0); // (0,1)(1,1)(1,0)(0,0)
+  vec2 offsets[4]=vec2[4](vec2(0,1),vec2(1,1),vec2(1,0),vec2(0,0));
+  float bilinear[4]=float[4]((1.0-f.x)*f.y,f.x*f.y,f.x*(1.0-f.y),(1.0-f.x)*(1.0-f.y));
+  float center=viewDistance(uv);
+  float sum=0.0,weightSum=0.0,nearest=1e30,nearestAo=1.0;
+  for(int index=0;index<4;++index) {
+    float depth=viewDistance((base+offsets[index]+0.5)/size);
+    float relative=abs(depth-center)/max(center,1.0e-3);
+    float weight=bilinear[index]*max(0.0,1.0-relative*20.0);
+    sum+=ao[index]*weight;weightSum+=weight;
+    if(relative<nearest){nearest=relative;nearestAo=ao[index];}
+  }
+  return weightSum>1.0e-4?sum/weightSum:nearestAo;
+}
+
 vec3 sampleFxaa(vec2 uv, out vec3 unfiltered, out vec3 crossAverage) {
   vec2 px = post.texelFlags.xy;
   float aaMode=mod(post.texelFlags.w,4.0);
@@ -289,8 +315,12 @@ vec3 sampleFxaa(vec2 uv, out vec3 unfiltered, out vec3 crossAverage) {
   return (farLuma < minimum || farLuma > maximum) ? candidateNear : candidateFar;
 }
 
+const float kBloomLevels=5.0;
 vec3 bloomNeighborhood(vec2 uv) {
   if (mod(post.texelFlags.z,2.0) < 0.5 || post.bloom.y <= 0.0) return vec3(0.0);
+  // 1024: a cadeia já espalhou o brilho por cinco oitavas; cada nível somou
+  // a subida do seguinte, por isso a média divide pelo número de níveis.
+  if (postFlag(1024.0)) return texture(bloomChain,uv).rgb*(post.bloom.y/kBloomLevels);
   vec2 px = post.texelFlags.xy * 2.0;
   vec3 sum = vec3(0.0);
   const vec2 offsets[8] = vec2[8](
@@ -523,6 +553,54 @@ bool temporalDiagnostic(vec2 sourceUv, float encodedDepth, float historyContribu
 }
 
 void main() {
+  if(postFlag(2048.0)) {
+    // AO em 1/2: mesma integração, um quarto dos pixels. Os texels da
+    // profundidade continuam os de resolução cheia (post.texelFlags).
+    outColor=vec4(screenSpaceAmbientOcclusion(clampSourceUv(vUv*post.sourceTransform.xy)),0.0,0.0,1.0);
+    return;
+  }
+  if(postFlag(8192.0)) {
+    // Bloom, descida (filtro duplo de Kawase, ARM 2015): 4 diagonais a um
+    // texel da fonte, cada uma média bilinear 2x2, mais o centro com peso 4.
+    // 16384 é o pré-filtro: limiar suave e média de Karis contra vagalumes.
+    vec2 uv=clampSourceUv(vUv*post.sourceTransform.xy);
+    vec2 texel=post.texelFlags.xy;
+    vec3 taps[5]=vec3[5](texture(sceneColor,uv).rgb,
+        texture(sceneColor,clampSourceUv(uv+vec2(-texel.x,-texel.y))).rgb,
+        texture(sceneColor,clampSourceUv(uv+vec2( texel.x,-texel.y))).rgb,
+        texture(sceneColor,clampSourceUv(uv+vec2(-texel.x, texel.y))).rgb,
+        texture(sceneColor,clampSourceUv(uv+vec2( texel.x, texel.y))).rgb);
+    const float weights[5]=float[5](4.0,1.0,1.0,1.0,1.0);
+    vec3 sum=vec3(0.0);float total=0.0;
+    bool prefilter=postFlag(16384.0);
+    for(int index=0;index<5;++index) {
+      vec3 value=taps[index];float weight=weights[index];
+      if(prefilter) {
+        float brightness=luma(value);
+        value*=smoothstep(post.bloom.x,post.bloom.x+0.25,brightness);
+        weight/=1.0+luma(value);
+      }
+      sum+=value*weight;total+=weight;
+    }
+    outColor=vec4(sum/max(total,1.0e-6),1.0);
+    return;
+  }
+  if(postFlag(32768.0)) {
+    // Bloom, subida: tenda de 8 amostras sobre o nível de baixo, somada ao
+    // nível atual pela mistura aditiva da pipeline.
+    vec2 uv=clampSourceUv(vUv*post.sourceTransform.xy);
+    vec2 half_=post.texelFlags.xy*0.5;
+    vec3 sum=texture(sceneColor,clampSourceUv(uv+vec2(-half_.x*2.0,0.0))).rgb+
+             texture(sceneColor,clampSourceUv(uv+vec2( half_.x*2.0,0.0))).rgb+
+             texture(sceneColor,clampSourceUv(uv+vec2(0.0,-half_.y*2.0))).rgb+
+             texture(sceneColor,clampSourceUv(uv+vec2(0.0, half_.y*2.0))).rgb+
+             2.0*(texture(sceneColor,clampSourceUv(uv+vec2(-half_.x, half_.y))).rgb+
+                  texture(sceneColor,clampSourceUv(uv+vec2( half_.x, half_.y))).rgb+
+                  texture(sceneColor,clampSourceUv(uv+vec2( half_.x,-half_.y))).rgb+
+                  texture(sceneColor,clampSourceUv(uv+vec2(-half_.x,-half_.y))).rgb);
+    outColor=vec4(sum/12.0,1.0);
+    return;
+  }
   if(postFlag(256.0)) {
     // Pré-passe de névoa: avaliada uma vez por texel na resolução interna.
     // Sem ele, FXAA, bloom e reconstrução repetem profundidade + log/exp em
@@ -559,7 +637,7 @@ void main() {
     // rather than multiplying every FXAA/bloom neighbourhood by nine taps.
     center=max(vec3(0),center+reconstructScene(sourceUv)-unfiltered);
   }
-  float ao=screenSpaceAmbientOcclusion(sourceUv);
+  float ao=postFlag(4096.0)?upsampledAmbientOcclusion(sourceUv):screenSpaceAmbientOcclusion(sourceUv);
   center *= ao;
   vec3 bloomColor=bloomNeighborhood(sourceUv);
   vec3 color = center + bloomColor;

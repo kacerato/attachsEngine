@@ -156,7 +156,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     allocate.descriptorPool=previewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&environmentSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
 
-    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,6},
+    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,8},
                                      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
                                      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1}};
     pool.maxSets=1;pool.poolSizeCount=3;pool.pPoolSizes=postSizes;
@@ -169,7 +169,7 @@ bool InstancedRenderer::prepareCameraPreview() {
       {postDepthSampler_.handle(),previewDepth_.view(),VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
       {postDepthSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
     VkDescriptorBufferInfo postBuffer{previewUniform_.handle(),0,sizeof(DirtRoadFrameUniform)};
-    VkWriteDescriptorSet postWrites[8]{};
+    VkWriteDescriptorSet postWrites[kPostBindingCount]{};
     for(u32 index=0;index<3;++index) {
       postWrites[index].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       postWrites[index].dstSet=previewPostSet_;postWrites[index].dstBinding=index;
@@ -191,7 +191,10 @@ bool InstancedRenderer::prepareCameraPreview() {
     // diagnóstico/TAA que a prévia nunca liga, mas o descritor precisa ser válido.
     postWrites[6]=postWrites[5];postWrites[6].dstBinding=6;
     postWrites[7]=postWrites[5];postWrites[7].dstBinding=7;
-    vkUpdateDescriptorSets(device_,8,postWrites,0,nullptr);
+    // Bloom em cadeia e AO em 1/2 não rodam na prévia; o descritor só precisa ser válido.
+    postWrites[8]=postWrites[5];postWrites[8].dstBinding=8;
+    postWrites[9]=postWrites[5];postWrites[9].dstBinding=9;
+    vkUpdateDescriptorSets(device_,kPostBindingCount,postWrites,0,nullptr);
     bindAutoExposureSource(1,previewSceneColor_.view());
     uiRenderer_.setCameraPreview(previewColor_.view());
   }

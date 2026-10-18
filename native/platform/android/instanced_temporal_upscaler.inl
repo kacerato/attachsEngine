@@ -158,8 +158,8 @@ bool InstancedRenderer::createTemporalUpscalerResources() {
   if(vkAllocateDescriptorSets(device_,&allocate,&upscaledDescriptorSet_)!=VK_SUCCESS)
     return refuse(renderer::TemporalUpscalerAvailability::ContextCreationFailed,"descritores de exibição");
   {
-    std::array<VkCopyDescriptorSet,8> copies{};
-    for(u32 binding=0;binding<8;++binding) {
+    std::array<VkCopyDescriptorSet,kPostBindingCount> copies{};
+    for(u32 binding=0;binding<kPostBindingCount;++binding) {
       copies[binding].sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
       copies[binding].srcSet=postDescriptorSet_;copies[binding].dstSet=upscaledDescriptorSet_;
       copies[binding].srcBinding=copies[binding].dstBinding=binding;copies[binding].descriptorCount=1;

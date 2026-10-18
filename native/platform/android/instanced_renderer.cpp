@@ -203,6 +203,10 @@ struct RuntimeHudPushConstants {
 };
 static_assert(sizeof(RuntimeHudPushConstants) == 64);
 
+} // namespace
+
+// Fora do namespace anônimo: os passes do pós em modo (instanced_post_*.inl)
+// a recebem por parâmetro de método, declarado no cabeçalho.
 struct PostPushConstants {
   float texelFlags[4]{};
   float bloom[4]{};
@@ -214,6 +218,8 @@ struct PostPushConstants {
   float previousPositionFar[4]{};
 };
 static_assert(sizeof(PostPushConstants) == 128);
+
+namespace {
 
 float halton(u64 index, u32 base) {
   float result = 0.0f;
@@ -510,6 +516,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_motion.inl"
 #include "platform/android/instanced_temporal_upscaler.inl"
 #include "platform/android/instanced_post_fog.inl"
+#include "platform/android/instanced_post_chain.inl"
 #include "platform/android/instanced_skinning.inl"
 
 bool InstancedRenderer::createPipeline() {
@@ -1949,9 +1956,10 @@ bool InstancedRenderer::createPostResources() {
     return false;
 
   // 0 cor, 1 histórico, 2 profundidade, 3 UBO, 4 exposição, 5 vetor RG16F,
-  // 6 reatividade, 7 composição (entradas temporais unificadas).
-  VkDescriptorSetLayoutBinding bindings[8]{};
-  constexpr u32 bindingCount = 8;
+  // 6 reatividade, 7 composição (entradas temporais unificadas), 8 bloom em
+  // cadeia (nível 1/2), 9 AO em 1/2.
+  VkDescriptorSetLayoutBinding bindings[kPostBindingCount]{};
+  constexpr u32 bindingCount = kPostBindingCount;
   for (u32 index = 0; index < 3; ++index) {
     bindings[index].binding = index;
     bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1966,7 +1974,7 @@ bool InstancedRenderer::createPostResources() {
   bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   bindings[4].descriptorCount = 1;
   bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  for (u32 index = 5; index < 8; ++index) {
+  for (u32 index = 5; index < kPostBindingCount; ++index) {
     bindings[index].binding = index;
     bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[index].descriptorCount = 1;
@@ -1978,14 +1986,16 @@ bool InstancedRenderer::createPostResources() {
   setLayout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
     return false;
-  // Quatro conjuntos: o pós normal, a composição antes do ampliador temporal,
-  // a exibição do resultado ampliado e a entrada com névoa já resolvida.
-  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 24},
-                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4}};
+  // Conjuntos: o pós normal, a exibição do resultado ampliado, a entrada com
+  // névoa resolvida, o de pré-passe e os da cadeia de bloom (cena, névoa e um
+  // por nível). Cada um tem oito amostradores, um UBO e um SSBO.
+  constexpr u32 postSetCapacity = 5 + kBloomLevelCount + 2;
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8 * postSetCapacity},
+                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, postSetCapacity},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, postSetCapacity}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  pool.maxSets = 4;
+  pool.maxSets = postSetCapacity;
   pool.poolSizeCount = 3;
   pool.pPoolSizes = poolSizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &postDescriptorPool_) != VK_SUCCESS)
@@ -2015,7 +2025,7 @@ bool InstancedRenderer::createPostResources() {
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo environmentBuffer{environmentUniform_.handle(), 0,
                                             sizeof(DirtRoadFrameUniform)};
-  VkWriteDescriptorSet writes[8]{};
+  VkWriteDescriptorSet writes[kPostBindingCount]{};
   for (u32 index = 0; index < 3; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = postDescriptorSet_;
@@ -2041,6 +2051,12 @@ bool InstancedRenderer::createPostResources() {
   writes[5].pImageInfo=&images[3];
   writes[6]=writes[5];writes[6].dstBinding=6;writes[6].pImageInfo=&images[4];
   writes[7]=writes[5];writes[7].dstBinding=7;writes[7].pImageInfo=&images[5];
+  // Bloom e AO em 1/2 começam apontando para a cor da cena; createPostResources
+  // troca pelos alvos reais quando a cadeia é criada.
+  const VkDescriptorImageInfo auxiliary{postSampler_.handle(), postSceneColor_.view(),
+                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  writes[8]=writes[5];writes[8].dstBinding=8;writes[8].pImageInfo=&auxiliary;
+  writes[9]=writes[5];writes[9].dstBinding=9;writes[9].pImageInfo=&auxiliary;
   vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
@@ -2114,13 +2130,40 @@ bool InstancedRenderer::createPostResources() {
   }
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
-  // Opcional: sem a névoa resolvida o pós segue pelo caminho original.
-  if (ok && fogResolveEnabled_ && !createFogResolveResources()) {
+  if (!ok) return false;
+  // Opcionais: sem eles o pós segue pelos caminhos originais.
+  if ((bloomChainEnabled_ || halfAmbientOcclusionEnabled_) && !createPostChainResources()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+                        "[PostChain] recursos recusados; bloom e AO seguem no passe único.");
+    destroyPostChainResources();
+  }
+  {
+    const VkDescriptorImageInfo images[2]{
+        {postSampler_.handle(), postBloomView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {postSampler_.handle(), postAmbientOcclusionView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkWriteDescriptorSet auxiliary[2]{};
+    for (u32 index = 0; index < 2; ++index) {
+      auxiliary[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      auxiliary[index].dstSet = postDescriptorSet_;
+      auxiliary[index].dstBinding = 8 + index;
+      auxiliary[index].descriptorCount = 1;
+      auxiliary[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      auxiliary[index].pImageInfo = &images[index];
+    }
+    vkUpdateDescriptorSets(device_, 2, auxiliary, 0, nullptr);
+  }
+  if (fogResolveEnabled_ && !createFogResolveResources()) {
     __android_log_print(ANDROID_LOG_WARN, LogTag,
                         "[PostFogResolve] recursos recusados; pós mantém a névoa por amostra.");
     destroyFogResolveResources();
   }
-  return ok;
+  if (!createPostChainSets()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+                        "[PostChain] conjuntos recusados; pré-passes desligados.");
+    destroyFogResolveResources();
+    destroyPostChainResources();
+  }
+  return true;
 }
 
 bool InstancedRenderer::recordPostProcess(u32 imageIndex,
@@ -2203,7 +2246,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
   push.texelFlags[0] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->width() : renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->height() : renderTargetHeight());
-  const bool bloom=postEffectsEnabled&&!(postIsolation_&4u)&&(authoredPost?look.bloom:renderingPolicy_.post.bloom);
+  const bool bloom=postBloomState().active;
   push.texelFlags[2] = bloom ? 1.0f : 0.0f;
   if(renderingPolicy_.post.upscalingFilter==renderer::UpscalingFilter::CatmullRom &&
      (renderWidth()<swapchain_->width() || renderHeight()<swapchain_->height()))
@@ -2213,7 +2256,11 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   if(temporalStaticCoverage_) push.texelFlags[2] += 16.0f;
   if(temporalMasksActive_) push.texelFlags[2] += 32.0f;
   if(upscaledInput) push.texelFlags[2] += 128.0f;
-  else if(fogResolvedThisFrame_) push.texelFlags[2] += 512.0f;
+  else {
+    if(fogResolvedThisFrame_) push.texelFlags[2] += 512.0f;
+    if(bloomChainThisFrame_) push.texelFlags[2] += 1024.0f;
+    if(halfAmbientOcclusionThisFrame_) push.texelFlags[2] += 4096.0f;
+  }
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = upscaledInput ? 0.0f :
                        temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
@@ -2345,6 +2392,7 @@ bool InstancedRenderer::recordTemporalHistoryCopy() {
 
 void InstancedRenderer::destroyPostResources() {
   destroyFogResolveResources();
+  destroyPostChainResources();
   destroyFsrResources();
   destroyAutoExposureResources();
   if (postPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_, postPipeline_, nullptr);
@@ -5799,6 +5847,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
     fogActiveThisFrame_=frame->sceneFog[0]>0.5f;
+    aoActiveThisFrame_=frame->sceneAo[0]>0.5f;
     frame->scenePost[2]=hdrSceneColor_?1.0f:0.0f;
     const auto basis=renderer::buildCameraViewBasis(camera.yaw,camera.pitch,camera.roll);
     const float row0[4] = {basis.row0[0],basis.row0[1],basis.row0[2],sceneOrthographicHalfHeight_};
@@ -6964,11 +7013,23 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(!renderer::isTemporalUpscaler(temporalUpscalerRequested_))
     executedUpscalerStatus_=renderer::TemporalUpscalerAvailability::Available;
   beginGpuRegion(GpuPassClass::Post);
-  // Dentro da região Post: o A/B compara o custo do pré-passe somado ao do pós.
-  if (!upscaledFrame && recordFogResolve(camera) && !fogResolveReported_) {
-    fogResolveReported_ = true;
-    __android_log_print(ANDROID_LOG_INFO, LogTag, "[PostFogResolve] névoa resolvida por texel antes do pós (%ux%u).",
-                        renderWidth(), renderHeight());
+  // Dentro da região Post: o A/B compara o custo dos pré-passes somado ao do pós.
+  bloomChainThisFrame_ = halfAmbientOcclusionThisFrame_ = fogResolvedThisFrame_ = false;
+  if (!upscaledFrame && renderingPolicy_.post.dedicatedPass && postPipeline_ != VK_NULL_HANDLE) {
+    preparePostChainTargets();
+    if (recordFogResolve(camera) && !fogResolveReported_) {
+      fogResolveReported_ = true;
+      __android_log_print(ANDROID_LOG_INFO, LogTag, "[PostFogResolve] névoa resolvida por texel antes do pós (%ux%u).",
+                          renderWidth(), renderHeight());
+    }
+    recordHalfAmbientOcclusion(camera);
+    const auto bloom = postBloomState();
+    if (bloom.active && bloom.intensity > 0.0f) recordBloomChain(camera, bloom.threshold);
+    if ((bloomChainThisFrame_ || halfAmbientOcclusionThisFrame_) && !postChainReported_) {
+      postChainReported_ = true;
+      __android_log_print(ANDROID_LOG_INFO, LogTag, "[PostChain] bloom em cadeia=%d AO em meia resolucao=%d.",
+                          bloomChainThisFrame_ ? 1 : 0, halfAmbientOcclusionThisFrame_ ? 1 : 0);
+    }
   }
   postUiFusedLastFrame_ = recordPostProcess(imageIndex, camera, upscaledFrame);
   if (!postUiFusedLastFrame_) {

@@ -10,33 +10,30 @@
 // (que já têm a própria composição) e com névoa ativa no quadro. Fora disso, o
 // caminho original. Promovida no A/B de 17/10/2026 (POCO F7, Vila em Play):
 // pós -38%, quadro -17%; imagem difere só no contorno de 1 px das silhuetas.
+//
+// Os auxiliares abaixo também servem à cadeia de bloom e à AO em 1/2
+// (instanced_post_chain.inl): todos são o shader do pós em um modo, num alvo
+// próprio, com o conjunto do pós copiado e a entrada (binding 0) trocada.
 
-bool InstancedRenderer::createFogResolveResources() {
-  if(postPipelineLayout_==VK_NULL_HANDLE||postDescriptorPool_==VK_NULL_HANDLE||
-     postDescriptorSet_==VK_NULL_HANDLE) return false;
-  rhi::ImageDesc image{};
-  image.width=renderTargetWidth();image.height=renderTargetHeight();
-  image.format=VK_FORMAT_R16G16B16A16_SFLOAT;
-  image.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
-  image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
-  image.memoryClass=rhi::MemoryClass::RenderTarget;
-  if(!memoryAllocator_->createImage(image,&fogResolveColor_)) return false;
-
+bool InstancedRenderer::createPostTargetRenderPass(VkFormat format,bool load,VkRenderPass &out) {
   VkAttachmentDescription attachment{};
-  attachment.format=VK_FORMAT_R16G16B16A16_SFLOAT;attachment.samples=VK_SAMPLE_COUNT_1_BIT;
-  attachment.loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachment.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
+  attachment.format=format;attachment.samples=VK_SAMPLE_COUNT_1_BIT;
+  // load: a subida do bloom soma sobre o conteúdo do nível, já amostrável.
+  attachment.loadOp=load?VK_ATTACHMENT_LOAD_OP_LOAD:VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
   attachment.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachment.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachment.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachment.finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  attachment.initialLayout=load?VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:VK_IMAGE_LAYOUT_UNDEFINED;
+  attachment.finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   VkAttachmentReference reference{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
   VkSubpassDescription subpass{};subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount=1;subpass.pColorAttachments=&reference;
   VkSubpassDependency dependencies[2]{};
-  // A leitura do quadro anterior pelo pós termina antes de sobrescrever o alvo.
+  // Leituras anteriores (quadro anterior ou passe anterior) terminam antes da escrita.
   dependencies[0].srcSubpass=VK_SUBPASS_EXTERNAL;dependencies[0].dstSubpass=0;
   dependencies[0].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  dependencies[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;
+  dependencies[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   dependencies[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependencies[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dependencies[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   dependencies[1].srcSubpass=0;dependencies[1].dstSubpass=VK_SUBPASS_EXTERNAL;
   dependencies[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   dependencies[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -46,17 +43,14 @@ bool InstancedRenderer::createFogResolveResources() {
   renderPass.attachmentCount=1;renderPass.pAttachments=&attachment;
   renderPass.subpassCount=1;renderPass.pSubpasses=&subpass;
   renderPass.dependencyCount=2;renderPass.pDependencies=dependencies;
-  if(vkCreateRenderPass(device_,&renderPass,nullptr,&fogResolveRenderPass_)!=VK_SUCCESS) return false;
-  const VkImageView view=fogResolveColor_.view();
-  VkFramebufferCreateInfo framebuffer{};framebuffer.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  framebuffer.renderPass=fogResolveRenderPass_;framebuffer.attachmentCount=1;framebuffer.pAttachments=&view;
-  framebuffer.width=renderTargetWidth();framebuffer.height=renderTargetHeight();framebuffer.layers=1;
-  if(vkCreateFramebuffer(device_,&framebuffer,nullptr,&fogResolveFramebuffer_)!=VK_SUCCESS) return false;
+  return vkCreateRenderPass(device_,&renderPass,nullptr,&out)==VK_SUCCESS;
+}
 
+bool InstancedRenderer::createPostShaderPipeline(VkRenderPass renderPass,bool additive,VkPipeline &out) {
   VkShaderModule vert=createShaderModule(device_,rhi::shaders::kPost_ProcessVertSpirv,rhi::shaders::kPost_ProcessVertSpirvSize);
   VkShaderModule frag=createShaderModule(device_,rhi::shaders::kPost_ProcessFragSpirv,rhi::shaders::kPost_ProcessFragSpirvSize);
-  bool pipelineReady=vert&&frag;
-  if(pipelineReady) {
+  bool ready=vert&&frag;
+  if(ready) {
     VkPipelineShaderStageCreateInfo stages[]{
       {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_VERTEX_BIT,vert,"main",nullptr},
       {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_FRAGMENT_BIT,frag,"main",nullptr}};
@@ -72,6 +66,11 @@ bool InstancedRenderer::createFogResolveResources() {
     VkPipelineDepthStencilStateCreateInfo depth{};depth.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     VkPipelineColorBlendAttachmentState blend{};
     blend.colorWriteMask=VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT;
+    if(additive) {
+      blend.blendEnable=VK_TRUE;
+      blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;blend.colorBlendOp=VK_BLEND_OP_ADD;
+      blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;blend.alphaBlendOp=VK_BLEND_OP_ADD;
+    }
     VkPipelineColorBlendStateCreateInfo colorBlend{};colorBlend.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlend.attachmentCount=1;colorBlend.pAttachments=&blend;
     const VkDynamicState dynamicStates[]{VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
@@ -81,33 +80,78 @@ bool InstancedRenderer::createFogResolveResources() {
     pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&vertex;
     pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewport;pipeline.pRasterizationState=&raster;
     pipeline.pMultisampleState=&multisample;pipeline.pDepthStencilState=&depth;pipeline.pColorBlendState=&colorBlend;
-    pipeline.pDynamicState=&dynamic;pipeline.layout=postPipelineLayout_;pipeline.renderPass=fogResolveRenderPass_;
-    pipelineReady=vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,&fogResolvePipeline_)==VK_SUCCESS;
+    pipeline.pDynamicState=&dynamic;pipeline.layout=postPipelineLayout_;pipeline.renderPass=renderPass;
+    ready=vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,&out)==VK_SUCCESS;
   }
   if(vert) vkDestroyShaderModule(device_,vert,nullptr);
   if(frag) vkDestroyShaderModule(device_,frag,nullptr);
-  if(!pipelineReady) return false;
+  return ready;
+}
 
-  // Mesmo conjunto do pós; só a cor de entrada (binding 0) aponta para a névoa resolvida.
+bool InstancedRenderer::allocatePostSet(VkImageView input,VkImageView bloom,VkImageView ambientOcclusion,
+                                        VkDescriptorSet &out) {
   VkDescriptorSetAllocateInfo allocate{};allocate.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   allocate.descriptorPool=postDescriptorPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&postSetLayout_;
-  if(vkAllocateDescriptorSets(device_,&allocate,&fogResolveDescriptorSet_)!=VK_SUCCESS) {
-    fogResolveDescriptorSet_=VK_NULL_HANDLE;
-    return false;
-  }
-  std::array<VkCopyDescriptorSet,8> copies{};
-  for(u32 binding=0;binding<8;++binding) {
+  if(vkAllocateDescriptorSets(device_,&allocate,&out)!=VK_SUCCESS) {out=VK_NULL_HANDLE;return false;}
+  std::array<VkCopyDescriptorSet,kPostBindingCount> copies{};
+  for(u32 binding=0;binding<kPostBindingCount;++binding) {
     copies[binding].sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
-    copies[binding].srcSet=postDescriptorSet_;copies[binding].dstSet=fogResolveDescriptorSet_;
+    copies[binding].srcSet=postDescriptorSet_;copies[binding].dstSet=out;
     copies[binding].srcBinding=copies[binding].dstBinding=binding;copies[binding].descriptorCount=1;
   }
   vkUpdateDescriptorSets(device_,0,nullptr,static_cast<u32>(copies.size()),copies.data());
-  const VkDescriptorImageInfo resolved{postSampler_.handle(),fogResolveColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  write.dstSet=fogResolveDescriptorSet_;write.dstBinding=0;write.descriptorCount=1;
-  write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&resolved;
-  vkUpdateDescriptorSets(device_,1,&write,0,nullptr);
+  const VkDescriptorImageInfo images[3]{
+      {postSampler_.handle(),input,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+      {postSampler_.handle(),bloom,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+      {postSampler_.handle(),ambientOcclusion,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+  constexpr u32 bindings[3]{0,8,9};
+  VkWriteDescriptorSet writes[3]{};
+  for(u32 index=0;index<3;++index) {
+    writes[index].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[index].dstSet=out;
+    writes[index].dstBinding=bindings[index];writes[index].descriptorCount=1;
+    writes[index].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[index].pImageInfo=&images[index];
+  }
+  vkUpdateDescriptorSets(device_,3,writes,0,nullptr);
   return true;
+}
+
+void InstancedRenderer::fillSceneAuxPush(const platform::FreeCameraState &camera,PostPushConstants &push) const {
+  // Os mesmos campos que o passe principal envia para névoa e AO.
+  push.texelFlags[0]=1.0f/static_cast<float>(renderTargetWidth());
+  push.texelFlags[1]=1.0f/static_cast<float>(renderTargetHeight());
+  push.grade[3]=static_cast<float>(packSurfaceTransform(swapchain_->surfaceTransform()));
+  push.sourceTransform[0]=static_cast<float>(renderWidth())/static_cast<float>(renderTargetWidth());
+  push.sourceTransform[1]=static_cast<float>(renderHeight())/static_cast<float>(renderTargetHeight());
+  push.sourceTransform[2]=dirtRoadPreview_?1.0f/std::tan(sceneFieldOfView()*.5f):1.732050808f;
+  if(sceneOrthographicHalfHeight_>0) push.sourceTransform[2]=-1.0f;
+  push.sourceTransform[3]=sceneAspectRatio();
+  push.currentCamera[0]=camera.yaw;push.currentCamera[1]=camera.pitch;
+  std::memcpy(push.currentPositionNear,camera.position,sizeof(camera.position));
+  push.currentPositionNear[3]=dirtRoadPreview_?sceneNearPlane():0.1f;
+  push.previousCamera[2]=camera.roll;
+  std::memcpy(push.previousPositionFar,camera.position,sizeof(camera.position));
+  push.previousPositionFar[3]=dirtRoadPreview_?sceneFarPlane():1000.0f;
+}
+
+bool InstancedRenderer::createFogResolveResources() {
+  if(postPipelineLayout_==VK_NULL_HANDLE||postDescriptorPool_==VK_NULL_HANDLE||
+     postDescriptorSet_==VK_NULL_HANDLE) return false;
+  rhi::ImageDesc image{};
+  image.width=renderTargetWidth();image.height=renderTargetHeight();
+  image.format=VK_FORMAT_R16G16B16A16_SFLOAT;
+  image.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+  image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+  image.memoryClass=rhi::MemoryClass::RenderTarget;
+  if(!memoryAllocator_->createImage(image,&fogResolveColor_)) return false;
+  if(!createPostTargetRenderPass(VK_FORMAT_R16G16B16A16_SFLOAT,false,fogResolveRenderPass_)) return false;
+  const VkImageView view=fogResolveColor_.view();
+  VkFramebufferCreateInfo framebuffer{};framebuffer.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  framebuffer.renderPass=fogResolveRenderPass_;framebuffer.attachmentCount=1;framebuffer.pAttachments=&view;
+  framebuffer.width=renderTargetWidth();framebuffer.height=renderTargetHeight();framebuffer.layers=1;
+  if(vkCreateFramebuffer(device_,&framebuffer,nullptr,&fogResolveFramebuffer_)!=VK_SUCCESS) return false;
+  if(!createPostShaderPipeline(fogResolveRenderPass_,false,fogResolvePipeline_)) return false;
+  // O passe principal lê esta cor; bloom e AO continuam os do conjunto do pós.
+  return allocatePostSet(fogResolveColor_.view(),postBloomView(),postAmbientOcclusionView(),fogResolveDescriptorSet_);
 }
 
 void InstancedRenderer::destroyFogResolveResources() {
@@ -136,24 +180,10 @@ bool InstancedRenderer::recordFogResolve(const platform::FreeCameraState &camera
   vkCmdSetViewport(commandBuffer_,0,1,&viewport);vkCmdSetScissor(commandBuffer_,0,1,&scissor);
   vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,fogResolvePipeline_);
   vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipelineLayout_,0,1,
-                          &postDescriptorSet_,0,nullptr);
-  // A névoa lê exatamente os mesmos campos que o passe principal enviaria.
+                          &postPrepassDescriptorSet_,0,nullptr);
   PostPushConstants push{};
-  push.texelFlags[0]=1.0f/static_cast<float>(renderTargetWidth());
-  push.texelFlags[1]=1.0f/static_cast<float>(renderTargetHeight());
+  fillSceneAuxPush(camera,push);
   push.texelFlags[2]=256.0f;
-  push.grade[3]=static_cast<float>(packSurfaceTransform(swapchain_->surfaceTransform()));
-  push.sourceTransform[0]=static_cast<float>(renderWidth())/static_cast<float>(renderTargetWidth());
-  push.sourceTransform[1]=static_cast<float>(renderHeight())/static_cast<float>(renderTargetHeight());
-  push.sourceTransform[2]=dirtRoadPreview_?1.0f/std::tan(sceneFieldOfView()*.5f):1.732050808f;
-  if(sceneOrthographicHalfHeight_>0) push.sourceTransform[2]=-1.0f;
-  push.sourceTransform[3]=sceneAspectRatio();
-  push.currentCamera[0]=camera.yaw;push.currentCamera[1]=camera.pitch;
-  std::memcpy(push.currentPositionNear,camera.position,sizeof(camera.position));
-  push.currentPositionNear[3]=dirtRoadPreview_?sceneNearPlane():0.1f;
-  push.previousCamera[2]=camera.roll;
-  std::memcpy(push.previousPositionFar,camera.position,sizeof(camera.position));
-  push.previousPositionFar[3]=dirtRoadPreview_?sceneFarPlane():1000.0f;
   vkCmdPushConstants(commandBuffer_,postPipelineLayout_,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(push),&push);
   vkCmdDraw(commandBuffer_,3,1,0,0);
   vkCmdEndRenderPass(commandBuffer_);

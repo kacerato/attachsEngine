@@ -400,6 +400,13 @@ imagem equivalente (≤ 3 níveis em 99,6% dos pixels estáticos; contorno de si
 mais correto). Evidência: `docs/validacao/g1-post-fog-resolve-2026-10-17/README.md`.
 Próximos no pós: bloom em cadeia de mips e AO em meia resolução (G2), depois CPU da Vila.
 
+**Bloom em cadeia e AO em 1/2 (18/10/2026):** implementados como candidatas,
+desligados por padrão. Bloom em cadeia: custo neutro (pós −1,5%) e aparência mais
+espalhada; decisão visual, segue para o G2. AO em 1/2: pós −13,9%, quadro −4,7%,
+imagem equivalente; abaixo do limite de 5%, fica opcional até os dados de campo.
+Evidência: `docs/validacao/g1-post-bloom-ao-2026-10-17/README.md`. O pós da Vila
+em S caiu de 15–18 ms para 8–9,5 ms; próximos alvos do G1: CPU (18–21 ms) e opaco (~15 ms).
+
 Aceite: Vila e Sponza no modo nível C forçado do POCO com GPU ≤ 11 ms e CPU ≤ 10 ms;
 em campo (telemetria), mediana ≥ 58 FPS e p99 < 25 ms por 10 min em 3 GPUs do nível C;
 no POCO, Vila em Play ≥ 60 FPS na escala da política. Cada item com A/B/B/A próprio.

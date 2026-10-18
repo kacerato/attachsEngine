@@ -54,6 +54,8 @@
 
 namespace ae::platform::android {
 
+struct PostPushConstants;
+
 // Diagnóstico das entradas temporais. Histórico e rejeição só existem no TAA
 // nativo; profundidade, vetor e máscaras também valem com Arm ASR e FSR 2.
 enum class TemporalDebugView : u32 { Final = 0, Depth = 1, HistoryWeight = 2,
@@ -355,6 +357,10 @@ public:
   // o A/B de 17/10/2026; desligar só para comparação.
   void setFogResolveEnabled(bool enabled) { fogResolveEnabled_ = enabled; }
   bool fogResolvedLastFrame() const { return fogResolvedThisFrame_; }
+  // Candidatas do G1/G2: bloom em cadeia de mips e AO em 1/2. Desligadas por
+  // padrão até o A/B; precisam valer antes da criação dos recursos do pós.
+  void setBloomChainEnabled(bool enabled) { bloomChainEnabled_ = enabled; }
+  void setHalfAmbientOcclusionEnabled(bool enabled) { halfAmbientOcclusionEnabled_ = enabled; }
   void setOpaqueNoClipEnabled(bool enabled) { opaqueNoClipEnabled_ = enabled; }
   bool opaqueNoClipLastFrame() const { return opaqueNoClipLastFrame_; }
   void setFullDetailSamplingEnabled(bool enabled) { fullDetailSamplingEnabled_ = enabled; }
@@ -705,6 +711,23 @@ private:
   bool createFogResolveResources();
   void destroyFogResolveResources();
   bool recordFogResolve(const platform::FreeCameraState &camera);
+  // Auxiliares dos passes do pós em modo (névoa, bloom, AO em 1/2).
+  bool createPostTargetRenderPass(VkFormat format, bool load, VkRenderPass &out);
+  bool createPostShaderPipeline(VkRenderPass renderPass, bool additive, VkPipeline &out);
+  bool allocatePostSet(VkImageView input, VkImageView bloom, VkImageView ambientOcclusion, VkDescriptorSet &out);
+  void fillSceneAuxPush(const platform::FreeCameraState &camera, PostPushConstants &push) const;
+  bool createPostChainResources();
+  bool createPostChainSets();
+  void destroyPostChainResources();
+  void preparePostChainTargets();
+  void recordPostChainPass(VkRenderPass pass, VkFramebuffer framebuffer, VkPipeline pipeline, VkDescriptorSet set,
+                           u32 width, u32 height, const PostPushConstants &push);
+  bool recordHalfAmbientOcclusion(const platform::FreeCameraState &camera);
+  bool recordBloomChain(const platform::FreeCameraState &camera, float threshold);
+  VkImageView postBloomView() const;
+  VkImageView postAmbientOcclusionView() const;
+  struct PostBloomState { bool active = false; float threshold = 1.0f; float intensity = 0.0f; };
+  PostBloomState postBloomState() const;
   // `upscaledInput`: a cor de entrada é a saída do Arm ASR/FSR 2 na resolução
   // final, já composta (névoa e AO); o pós só faz a parte de exibição.
   bool recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera,
@@ -959,6 +982,31 @@ private:
   bool fogActiveThisFrame_ = false;
   bool fogResolvedThisFrame_ = false;
   bool fogResolveReported_ = false;
+  // Bloom em cadeia de mips e AO em 1/2 (instanced_post_chain.inl).
+  static constexpr u32 kPostBindingCount = 10;
+  static constexpr u32 kBloomLevelCount = 5;
+  std::array<rhi::VulkanImage, kBloomLevelCount> bloomLevels_{};
+  std::array<VkExtent2D, kBloomLevelCount> bloomLevelExtents_{};
+  std::array<VkFramebuffer, kBloomLevelCount> bloomFramebuffers_{};
+  std::array<VkDescriptorSet, kBloomLevelCount> bloomLevelSets_{};
+  VkDescriptorSet bloomSceneSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet bloomFogSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet postPrepassDescriptorSet_ = VK_NULL_HANDLE;
+  VkRenderPass bloomDownRenderPass_ = VK_NULL_HANDLE;
+  VkRenderPass bloomUpRenderPass_ = VK_NULL_HANDLE;
+  VkPipeline bloomDownPipeline_ = VK_NULL_HANDLE;
+  VkPipeline bloomUpPipeline_ = VK_NULL_HANDLE;
+  rhi::VulkanImage halfAmbientOcclusion_{};
+  VkRenderPass halfAmbientOcclusionRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer halfAmbientOcclusionFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline halfAmbientOcclusionPipeline_ = VK_NULL_HANDLE;
+  bool bloomChainEnabled_ = false;
+  bool halfAmbientOcclusionEnabled_ = false;
+  bool bloomChainThisFrame_ = false;
+  bool halfAmbientOcclusionThisFrame_ = false;
+  bool aoActiveThisFrame_ = false;
+  bool postChainLayoutsReady_ = false;
+  bool postChainReported_ = false;
   VkDescriptorSetLayout exposureExportSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool exposureExportPool_ = VK_NULL_HANDLE;
   VkDescriptorSet exposureExportSet_ = VK_NULL_HANDLE;
