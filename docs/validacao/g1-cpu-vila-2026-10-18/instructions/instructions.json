@@ -1,0 +1,42 @@
+[
+  {
+    "round": 1,
+    "variant": "A",
+    "internalFps": 20.482645018706712,
+    "processCpuMs": 24.7118,
+    "instructions": 16719660145.0,
+    "cycles": 8969389642.0,
+    "instructionsPerFrame": 32651369.25378535,
+    "cyclesPerFrame": 17516076.920355346
+  },
+  {
+    "round": 2,
+    "variant": "B",
+    "internalFps": 20.499908826416327,
+    "processCpuMs": 19.5284,
+    "instructions": 11532886008.0,
+    "cycles": 6583621416.0,
+    "instructionsPerFrame": 22503292.293941606,
+    "cyclesPerFrame": 12846147.700942552
+  },
+  {
+    "round": 3,
+    "variant": "B",
+    "internalFps": 20.206474819405987,
+    "processCpuMs": 21.2298,
+    "instructions": 11624122751.0,
+    "cycles": 6493374829.0,
+    "instructionsPerFrame": 23010689.10809989,
+    "cyclesPerFrame": 12854047.79811244
+  },
+  {
+    "round": 4,
+    "variant": "A",
+    "internalFps": 20.27773991624263,
+    "processCpuMs": 25.8911,
+    "instructions": 16796292471.0,
+    "cycles": 9034012813.0,
+    "instructionsPerFrame": 33132474.408641636,
+    "cyclesPerFrame": 17820551.699183565
+  }
+]

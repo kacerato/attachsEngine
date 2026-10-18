@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
+#include <span>
 #include <unordered_set>
 
 namespace ae::runtime {
@@ -32,7 +34,151 @@ void decompose(const Transform &transform, float t[3], float q[4], float s[3]) {
   std::copy(transform.scale, transform.scale + 3, s);
   transformRotationQuaternion(transform, q);
 }
+
+// Vetor com os primeiros N elementos em linha. Translação, rotação e escala
+// cabem sem tocar o heap; pesos de blend shape longos usam o vetor de reserva.
+// A mistura de animação criava milhares destes por quadro com std::vector.
+template <class T, usize N>
+class SmallVector {
+public:
+  SmallVector() = default;
+  explicit SmallVector(usize count, const T &value = T{}) { resize(count, value); }
+  SmallVector(std::span<const T> values) { assign(values.begin(), values.end()); }
+  SmallVector &operator=(std::span<const T> values) { assign(values.begin(), values.end()); return *this; }
+  usize size() const { return size_; }
+  bool empty() const { return size_ == 0; }
+  T *data() { return heap_.empty() ? inline_.data() : heap_.data(); }
+  const T *data() const { return heap_.empty() ? inline_.data() : heap_.data(); }
+  T *begin() { return data(); }
+  T *end() { return data() + size_; }
+  const T *begin() const { return data(); }
+  const T *end() const { return data() + size_; }
+  T &operator[](usize index) { return data()[index]; }
+  const T &operator[](usize index) const { return data()[index]; }
+  T &front() { return data()[0]; }
+  const T &front() const { return data()[0]; }
+  void clear() { size_ = 0; heap_.clear(); }
+  void resize(usize count, const T &value = T{}) {
+    if (count > N || !heap_.empty()) {
+      if (heap_.empty()) heap_.assign(inline_.begin(), inline_.begin() + size_);
+      heap_.resize(count, value);
+    } else {
+      for (usize i = size_; i < count; ++i) inline_[i] = value;
+    }
+    size_ = count;
+  }
+  template <class It> void assign(It first, It last) {
+    const usize count = static_cast<usize>(std::distance(first, last));
+    heap_.clear();
+    if (count > N) {
+      heap_.assign(first, last);
+    } else {
+      std::copy(first, last, inline_.begin());
+    }
+    size_ = count;
+  }
+  void push_back(const T &value) {
+    if (size_ < N && heap_.empty()) inline_[size_] = value;
+    else {
+      if (heap_.empty()) heap_.assign(inline_.begin(), inline_.begin() + size_);
+      heap_.push_back(value);
+    }
+    ++size_;
+  }
+
+private:
+  std::array<T, N> inline_{};
+  std::vector<T> heap_;
+  usize size_ = 0;
+};
+using AnimationValue = SmallVector<float, 4>;
+
+// Índice u64 -> u32 por endereçamento aberto. clear() mantém a tabela; só o
+// crescimento aloca, então depois do primeiro quadro não há nós de hash.
+class FlatIndex {
+public:
+  static constexpr u32 Missing = 0xffffffffu;
+  void clear(usize expected) {
+    usize capacity = 64;
+    while (capacity < expected * 2) capacity *= 2;
+    if (keys_.size() < capacity) { keys_.assign(capacity, 0); values_.assign(capacity, 0); }
+    else std::fill(keys_.begin(), keys_.end(), 0);
+    count_ = 0;
+  }
+  u32 find(u64 key) const {
+    const usize mask = keys_.size() - 1;
+    for (usize slot = hash(key) & mask;; slot = (slot + 1) & mask) {
+      if (keys_[slot] == 0) return Missing;
+      if (keys_[slot] == key + 1) return values_[slot];
+    }
+  }
+  // Devolve o valor existente ou insere `value`; `inserted` diz qual.
+  u32 insert(u64 key, u32 value, bool &inserted) {
+    if ((count_ + 1) * 2 > keys_.size()) grow();
+    const usize mask = keys_.size() - 1;
+    for (usize slot = hash(key) & mask;; slot = (slot + 1) & mask) {
+      if (keys_[slot] == key + 1) { inserted = false; return values_[slot]; }
+      if (keys_[slot] == 0) {
+        keys_[slot] = key + 1; values_[slot] = value; ++count_; inserted = true; return value;
+      }
+    }
+  }
+
+private:
+  static usize hash(u64 key) {
+    key ^= key >> 33; key *= 0xff51afd7ed558ccdull; key ^= key >> 33;
+    return static_cast<usize>(key);
+  }
+  void grow() {
+    std::vector<u64> keys(std::max<usize>(64, keys_.size() * 2), 0);
+    std::vector<u32> values(keys.size(), 0);
+    const usize mask = keys.size() - 1;
+    for (usize i = 0; i < keys_.size(); ++i) if (keys_[i]) {
+      usize slot = hash(keys_[i] - 1) & mask;
+      while (keys[slot]) slot = (slot + 1) & mask;
+      keys[slot] = keys_[i]; values[slot] = values_[i];
+    }
+    keys_.swap(keys); values_.swap(values);
+  }
+  std::vector<u64> keys_;
+  std::vector<u32> values_;
+  usize count_ = 0;
+};
+
+struct AnimatorContribution {
+  u32 layer = 0;
+  float weight = 0;
+  AnimationValue value;
+  bool additive = false;
+  AnimationValue reference;
+  bool relative = false;
+  ObjectId sourceOwner = kInvalidObject; u64 sourceInstance = 0; float coverage = 0;
+};
+struct AnimatorProperty {
+  ObjectId object = kInvalidObject;
+  AnimationPath path{};
+  std::vector<AnimatorContribution> list;
+};
+struct AnimatorPose {
+  float t[3], q[4], s[3];
+  bool changed = false;
+};
 } // namespace
+
+struct SceneAnimator::AdvanceScratch {
+  std::vector<ObjectId> ids;
+  std::vector<std::pair<ObjectId, u64>> live;
+  // Propriedades do quadro: os primeiros `propertyCount` valem; os demais
+  // guardam a capacidade das listas para o próximo quadro.
+  std::vector<AnimatorProperty> properties;
+  usize propertyCount = 0;
+  FlatIndex propertyIndex;
+  // Pares (dono<<32|camada, alvo<<2|caminho) já vistos neste quadro.
+  FlatIndex bindingSeen;
+  std::vector<std::pair<ObjectId, AnimatorPose>> poses;
+  FlatIndex poseIndex;
+  std::vector<ExternalBinding> nextBindings;
+};
 
 void resolveAnimationTargets(const SceneGraph &graph, ObjectId owner, const SourceAnimations &source,
                              std::vector<ObjectId> &targets) {
@@ -378,11 +524,15 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   if (!graph_ || !library_ || !std::isfinite(delta) || delta < 0) return graph_ == nullptr;
   auto &graph = *graph_;
   layerPoses_.clear();
+  if (!scratch_) scratch_ = std::make_shared<AdvanceScratch>();
+  auto &scratch = *scratch_;
 
   // Componentes vivos; um jogador cujo componente sumiu sai junto.
-  std::vector<ObjectId> ids;
+  auto &ids = scratch.ids;
+  ids.clear();
   graph.collectSubtree(graph.root(), ids);
-  std::vector<std::pair<ObjectId, u64>> live;
+  auto &live = scratch.live;
+  live.clear();
   for (const auto id : ids) {
     const auto *object = graph.find(id);
     if (!object) continue;
@@ -396,21 +546,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   });
 
   // Uma entrada por propriedade animada neste quadro.
-  struct Contribution {
-    u32 layer;
-    float weight;
-    std::vector<float> value;
-    bool additive=false;
-    std::vector<float> reference;
-    bool relative=false;
-    ObjectId sourceOwner=kInvalidObject;u64 sourceInstance=0;float coverage=0;
-  };
-  struct Property {
-    ObjectId object;
-    AnimationPath path;
-    std::vector<Contribution> list;
-  };
-  std::vector<Property> properties;
+  auto &properties = scratch.properties;
+  scratch.propertyCount = 0;
+  scratch.propertyIndex.clear(std::max<usize>((external_.size() + live.size()) * 64, properties.size()));
   std::vector<AnimationPropertyContribution> typedProperties;bool typedValid=true;
   std::vector<AnimationDriverRequest> driverRequests;
   const ExternalSample *contributionSource=nullptr;
@@ -453,19 +591,33 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       typedProperties.push_back(std::move(contribution));
     }
   };
-  std::unordered_map<u64, usize> propertyIndex;
-  const auto contribute = [&](ObjectId object, AnimationPath path, u32 layer, float weight, std::vector<float> value,
-                              bool additive=false,std::vector<float> reference=std::vector<float>{},bool relative=false) {
+  const auto contribute = [&](ObjectId object, AnimationPath path, u32 layer, float weight, std::span<const float> value,
+                              bool additive=false,std::span<const float> reference={},bool relative=false) {
     const u64 key = (u64(object) << 2) | static_cast<u64>(path);
-    auto found = propertyIndex.find(key);
-    if (found == propertyIndex.end()) {
-      found = propertyIndex.emplace(key, properties.size()).first;
-      properties.push_back({object, path, {}});
+    bool inserted = false;
+    const u32 index = scratch.propertyIndex.insert(key, static_cast<u32>(scratch.propertyCount), inserted);
+    if (inserted) {
+      if (scratch.propertyCount < properties.size()) {
+        auto &reused = properties[scratch.propertyCount];
+        reused.object = object; reused.path = path; reused.list.clear();
+      } else {
+        properties.push_back({object, path, {}});
+      }
+      ++scratch.propertyCount;
     }
     const auto *source=contributionSource;
-    properties[found->second].list.push_back({layer,source?weight*source->layerWeight:weight,std::move(value),additive,std::move(reference),relative,
-      source?source->controllerOwner:kInvalidObject,source?source->instance:0,source?weight:0});
+    auto &entry = properties[index].list.emplace_back();
+    entry.layer = layer;
+    entry.weight = source?weight*source->layerWeight:weight;
+    entry.value = value;
+    entry.additive = additive;
+    entry.reference = reference;
+    entry.relative = relative;
+    entry.sourceOwner = source?source->controllerOwner:kInvalidObject;
+    entry.sourceInstance = source?source->instance:0;
+    entry.coverage = source?weight:0;
   };
+  const auto hasProperty = [&](u64 key) { return scratch.propertyIndex.find(key) != FlatIndex::Missing; };
 
   for (const auto &[owner, instance] : live) {
     if (!graph.activeInHierarchy(owner)) continue;
@@ -526,11 +678,11 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
         if (channel.node >= targets.size() || targets[channel.node] == kInvalidObject) continue;
         const ObjectId target = targets[channel.node];
         if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
-        std::vector<float> value(channel.components());
+        AnimationValue value(channel.components());
         if(!sampleChannel(*view.source,channel,local,value)) {
           compositionDiagnostic_="Canal não produz valor válido: "+state.clip.text()+" · nó "+std::to_string(channel.node);continue;
         }
-        contribute(target, channel.path, state.layer, state.weight, std::move(value));
+        contribute(target, channel.path, state.layer, state.weight, value);
       }
     }
   }
@@ -540,8 +692,22 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   for(const auto &sample:external_) if(graph.exists(sample.owner)) {
     activeLayers.insert((u64(sample.owner)<<32)|sample.layer);
   }
-  std::vector<ExternalBinding> nextBindings;
-  std::unordered_map<u64,std::unordered_set<u64>> bindingIndex;
+  auto &nextBindings = scratch.nextBindings;
+  nextBindings.clear();
+  scratch.bindingSeen.clear(externalBindings_.size());
+  // Primeira vez que (dono, camada) liga (alvo, caminho) neste quadro.
+  const auto firstBinding = [&](ObjectId owner, u32 layer, ObjectId target, AnimationPath path) {
+    const u64 key = (((u64(owner) << 32) | layer) * 0x9e3779b97f4a7c15ull) ^ ((u64(target) << 2) | static_cast<u64>(path));
+    bool inserted = false;
+    scratch.bindingSeen.insert(key, 0, inserted);
+    if (!inserted) {
+      // Colisão do hash combinado: confirma pelos dados antes de recusar.
+      return std::none_of(nextBindings.begin(), nextBindings.end(), [&](const ExternalBinding &b) {
+        return b.owner == owner && b.layer == layer && b.target == target && b.path == path;
+      });
+    }
+    return true;
+  };
   for(const auto &binding:externalBindings_) {
     if(!graph.exists(binding.owner)||!graph.exists(binding.target)) continue;
     if(!activeLayers.contains((u64(binding.owner)<<32)|binding.layer)) {
@@ -567,7 +733,7 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
           const auto *entity=graph.find(id);if(!entity||id==graph.root()) break;id=entity->parent;
         }
         if(!allowed) continue;
-        if(bindingIndex[(u64(sample.owner)<<32)|sample.layer].insert((u64(channel.target)<<2)|static_cast<u64>(channel.path)).second)
+        if(firstBinding(sample.owner,sample.layer,channel.target,channel.path))
           nextBindings.push_back({sample.owner,sample.layer,channel.target,channel.path,channel.value.size()});
         contribute(channel.target,channel.path,sample.layer,sample.weight*channel.coverage,channel.value,channel.additive,{},channel.additive);
       }
@@ -584,9 +750,9 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       std::vector<ObjectId> refTargets;resolveAnimationTargets(graph,sample.owner,*ref.source,refTargets);
       for(const auto &channel:ref.clip->channels) {
         if(channel.node>=refTargets.size()||refTargets[channel.node]==kInvalidObject) continue;
-        std::vector<float> value(channel.components());
+        AnimationValue value(channel.components());
         if(sampleChannel(*ref.source,channel,std::clamp(sample.referenceTime,0.f,ref.clip->duration),value))
-          references.emplace((u64(refTargets[channel.node])<<2)|static_cast<u64>(channel.path),std::move(value));
+          references.emplace((u64(refTargets[channel.node])<<2)|static_cast<u64>(channel.path),std::vector<float>(value.begin(),value.end()));
         else compositionDiagnostic_="Canal de referência não produz valor válido: "+sample.referenceClip.text()+" · nó "+std::to_string(channel.node);
       }
       }
@@ -615,37 +781,38 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       if (channel.node >= targets.size() || targets[channel.node] == kInvalidObject) continue;
       const ObjectId target = targets[channel.node];
       if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
-      std::vector<float> value(channel.components());
+      AnimationValue value(channel.components());
       if(!sampleChannel(*view.source,channel,sample.time,value)) {
         compositionDiagnostic_="Canal não produz valor válido: "+sample.clip.text()+" · nó "+std::to_string(channel.node);continue;
       }
-      if(bindingIndex[(u64(sample.owner)<<32)|sample.layer].insert((u64(target)<<2)|static_cast<u64>(channel.path)).second)
+      if(firstBinding(sample.owner,sample.layer,target,channel.path))
         nextBindings.push_back({sample.owner,sample.layer,target,channel.path,value.size()});
       if(!masked(target)) {
-        if(rest_.contains(target)) contribute(target,channel.path,sample.layer,0,std::move(value));
+        if(rest_.contains(target)) contribute(target,channel.path,sample.layer,0,value);
         continue;
       }
-      std::vector<float> ref;
+      std::span<const float> ref;
       if(sample.additive&&sample.referenceClip.valid()) {
         const auto foundRef=references.find((u64(target)<<2)|static_cast<u64>(channel.path));
         if(foundRef==references.end()||foundRef->second.size()!=value.size()) {
           if(compositionDiagnostic_.empty()) compositionDiagnostic_="Referência sem canal compatível: objeto "+std::to_string(target);
-          contribute(target,channel.path,sample.layer,0,std::move(value));continue;
+          contribute(target,channel.path,sample.layer,0,value);continue;
         }
         ref=foundRef->second;
       }
-      contribute(target,channel.path,sample.layer,sample.weight,std::move(value),sample.additive,std::move(ref));
+      contribute(target,channel.path,sample.layer,sample.weight,value,sample.additive,ref);
     }
   }
   contributionSource=nullptr;
   for(const auto &binding:externalBindings_) {
     if(!graph.exists(binding.target)||!activeLayers.contains((u64(binding.owner)<<32)|binding.layer)) continue;
-    if(propertyIndex.contains((u64(binding.target)<<2)|static_cast<u64>(binding.path))) continue;
+    if(hasProperty((u64(binding.target)<<2)|static_cast<u64>(binding.path))) continue;
     if(binding.path==AnimationPath::Weights||!writable||writable(binding.target))
-      contribute(binding.target,binding.path,binding.layer,0,std::vector<float>(binding.width,0));
+      contribute(binding.target,binding.path,binding.layer,0,AnimationValue(binding.width,0.f));
   }
   external_.clear();
-  externalBindings_=std::move(nextBindings);
+  // Troca de buffers: os dois vetores mantêm a capacidade entre quadros.
+  externalBindings_.swap(nextBindings);
   if(!typedValid)return false;
   std::vector<AnimationPropertyContribution> driven;
   // O misturador limpa seu erro; diagnosticos TRS ja reportados neste quadro
@@ -682,15 +849,14 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     return rest;
   };
 
-  struct Pose {
-    float t[3], q[4], s[3];
-    bool changed = false;
-  };
-  std::unordered_map<ObjectId, Pose> poses;
-  for (auto &property : properties) {
+  auto &poses = scratch.poses;
+  poses.clear();
+  scratch.poseIndex.clear(scratch.propertyCount);
+  for (usize propertyIndexValue = 0; propertyIndexValue < scratch.propertyCount; ++propertyIndexValue) {
+    auto &property = properties[propertyIndexValue];
     const auto object = property.object;
     auto &rest = restOf(object);
-    std::vector<float> restValue;
+    AnimationValue restValue;
     float restT[3], restQ[4], restS[3];
     decompose(rest.transform, restT, restQ, restS);
     switch (property.path) {
@@ -710,11 +876,15 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       if(found==layerPoses_.end()) {layerPoses_.push_back({seed.sourceOwner,seed.sourceInstance,seed.layer,std::make_shared<LayerPose>()});found=std::prev(layerPoses_.end());}
       auto &channels=found->pose->channels;
       if(std::any_of(channels.begin(),channels.end(),[&](const PoseChannel &c){return c.target==object&&c.path==property.path&&c.additive==seed.additive;})) continue;
-      std::vector<float> mixed(width,0),first;float sum=0;
+      std::vector<float> mixed(width,0);AnimationValue first;float sum=0;
       for(const auto &c:property.list) if(c.sourceOwner==seed.sourceOwner&&c.sourceInstance==seed.sourceInstance&&c.layer==seed.layer&&c.additive==seed.additive&&c.coverage>0) {
-        std::vector<float> v=c.value;
+        AnimationValue v=c.value;
         if(v.size()!=width) continue;
-        if(c.additive&&!c.relative&&!resources::relativeAnimationPose(property.path,v,c.reference.empty()?restValue:c.reference,v)) continue;
+        if(c.additive&&!c.relative) {
+          std::vector<float> relative;
+          if(!resources::relativeAnimationPose(property.path,v,c.reference.empty()?restValue:c.reference,relative)) continue;
+          v.assign(relative.begin(),relative.end());
+        }
         if(property.path==AnimationPath::Rotation) {
           if(first.empty()) first=v;
           float dot=0;for(usize k=0;k<width;++k) dot+=first[k]*v[k];if(dot<0) for(float &f:v) f=-f;
@@ -724,10 +894,10 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       }
       if(sum>0) {for(float &f:mixed) f/=sum;channels.push_back({object,property.path,std::move(mixed),sum,seed.additive});}
     }
-    std::vector<float> result(width, 0.0f);
+    AnimationValue result(width, 0.0f);
     const bool rotation = property.path == AnimationPath::Rotation;
     const float *reference = nullptr;
-    const auto accumulate = [&](const std::vector<float> &value, float weight) {
+    const auto accumulate = [&](std::span<const float> value, float weight) {
       if (value.size() != width || weight <= 0) return;
       float sign = 1;
       if (rotation) {
@@ -738,18 +908,18 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       }
       for (usize i = 0; i < width; ++i) result[i] += weight * sign * value[i];
     };
-    std::vector<u32> layers;
+    SmallVector<u32, 8> layers;
     for (const auto &c : property.list) if (std::find(layers.begin(), layers.end(), c.layer) == layers.end()) layers.push_back(c.layer);
     std::sort(layers.begin(), layers.end(), std::greater<>());
     float remaining = 1;
-    struct AdditiveLayer {std::vector<float> delta;float weight;};
+    struct AdditiveLayer {AnimationValue delta;float weight;};
     std::vector<AdditiveLayer> additions;
     for (const auto layer : layers) {
-      float additiveSum=0;std::vector<float> delta(width,0.f);
+      float additiveSum=0;AnimationValue delta(width,0.f);
       for(const auto &c:property.list) if(c.layer==layer&&c.additive) {
         if(c.weight<=0) continue;
         std::vector<float> relative;
-        if(c.relative) relative=c.value;
+        if(c.relative) relative.assign(c.value.begin(),c.value.end());
         else if(!resources::relativeAnimationPose(property.path,c.value,c.reference.empty()?restValue:c.reference,relative)) {
           compositionDiagnostic_="Referência inválida (escala zero ou quaternion): objeto "+std::to_string(object);continue;
         }
@@ -793,13 +963,14 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       if (changed) ++posed_;
       continue;
     }
-    auto found = poses.find(object);
-    if (found == poses.end()) {
-      Pose pose;
+    bool insertedPose = false;
+    const u32 poseSlot = scratch.poseIndex.insert(object, static_cast<u32>(poses.size()), insertedPose);
+    if (insertedPose) {
+      AnimatorPose pose;
       decompose(graph.find(object)->transform, pose.t, pose.q, pose.s);
-      found = poses.emplace(object, pose).first;
+      poses.emplace_back(object, pose);
     }
-    auto &pose = found->second;
+    auto &pose = poses[poseSlot].second;
     if (property.path == AnimationPath::Translation) std::copy(result.begin(), result.end(), pose.t);
     else if (property.path == AnimationPath::Rotation) std::copy(result.begin(), result.end(), pose.q);
     else std::copy(result.begin(), result.end(), pose.s);

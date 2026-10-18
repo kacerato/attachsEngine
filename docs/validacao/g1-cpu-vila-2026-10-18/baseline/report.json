@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "status": "captured",
+  "package": "dev.aether.editor.u07",
+  "serial": "adb-53e1eb7-cDkkst (2)._adb-tls-connect._tcp",
+  "event": "task-clock:u",
+  "frequency": 500,
+  "requestedSeconds": 20,
+  "startedAtUtc": "2026-10-18T15:38:41.8792268Z",
+  "pid": "18438",
+  "error": null,
+  "limitation": "Amostragem de CPU de usuário, não delta completo de CPU do processo nem atribuição exata de cada spike. JIT .NET pode aparecer como unknown.",
+  "simpleperfVersion": "simpleperf I command.cpp:262] Simpleperf version 1.build.OS3.0.303.0.WOLMIXM",
+  "managedBuildId": "3ccf47df2d88977666e059f25a04b420cda6a24384934c22ce75625c749f9250",
+  "pidAfter": "18438",
+  "sha256": "4F375735D61DE4935C0514F78575113B277BB17B205E76E511ED27DBEB7F7075",
+  "samples": 5894,
+  "finishedAtUtc": "2026-10-18T15:39:06.9739228Z"
+}

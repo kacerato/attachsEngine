@@ -1,0 +1,1 @@
+simpleperf E command.cpp:65] Unknown option --symfilter. Try `simpleperf help report`.

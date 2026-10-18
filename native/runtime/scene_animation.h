@@ -204,6 +204,10 @@ private:
   struct ExternalBinding {ObjectId owner;u32 layer;ObjectId target;resources::AnimationPath path;usize width;};
   std::vector<ExternalBinding> externalBindings_;
   u32 playing_ = 0, posed_ = 0;
+  // Rascunho de advance() reutilizado entre quadros: listas, índices e tabelas
+  // mantêm a capacidade, então o quadro estável não aloca por canal (G1, CPU).
+  struct AdvanceScratch;
+  std::shared_ptr<AdvanceScratch> scratch_;
 };
 
 } // namespace ae::runtime

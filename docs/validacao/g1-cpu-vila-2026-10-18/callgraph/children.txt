@@ -1,0 +1,48 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e task-clock:u -f 1000 --call-graph fp --duration 15
+Arch: arm64
+Event: task-clock:u (type 1, config 1)
+Samples: 8367
+Error Callchains: 416, 4.971913%
+Event count: 8367000000
+
+Children  Self   Symbol
+94.71%    0.00%  __pthread_start(void*)
+94.71%    0.00%  __start_thread
+93.46%    0.00%  libaether_android.so[+eb342e]
+93.32%    0.23%  android_main
+76.84%    0.01%  ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+63.64%    0.01%  ae::editor::EditorPlayScene::advanceFrame(double, bool)
+54.56%    0.02%  ae::editor::EditorPlayScene::animate(float, float)
+50.97%    8.77%  ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+15.48%    0.25%  operator new(unsigned long)
+15.43%    0.62%  malloc
+14.82%    1.69%  scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::deallocate(void*, scudo::Chunk::Origin, unsigned long, unsigned long)
+14.66%    0.29%  scudo_malloc
+14.46%    2.90%  scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+13.12%    1.89%  scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::quarantineOrDeallocateChunk(scudo::Options const&, void*, scudo::Chunk::UnpackedHeader*, unsigned long)
+9.87%     0.66%  ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+8.81%     0.14%  ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+8.13%     0.12%  ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+6.61%     6.61%  __aarch64_cas4_acq
+5.06%     5.06%  ae::runtime::worldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*)
+4.95%     4.95%  scudo::HybridMutex::tryLock()
+4.89%     4.89%  scudo::HybridMutex::unlock()
+4.46%     4.46%  __aarch64_ldadd4_rel
+4.29%     2.41%  ae::editor::resolveSceneCamera(ae::runtime::SceneGraph const&, unsigned int, bool)
+3.88%     3.47%  ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+3.71%     0.00%  libaether_android.so[+f83bba]
+3.67%     0.39%  std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<unsigned long, unsigned long>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<unsigned long, unsigned long>, std::__ndk1::__unordered_map_hasher<unsigned long, std::__ndk1::__hash_value_type<unsigned long, unsigned long>, std::__ndk1::hash<unsigned long>, std::__ndk1::equal_to<unsigned long>, true>, std::__ndk1::__unordered_map_equal<unsigned long, std::__ndk1::__hash_value_type<unsigned long, unsigned long>, std::__ndk1::equal_to<unsigned long>, std::__ndk1::hash<unsigned long>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<unsigned long, unsigned long>>>::__emplace_unique_key_args<unsigned long, unsigned long const&, unsigned long>(unsigned long const&, unsigned long const&, unsigned long&&)
+3.53%     0.07%  ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+3.06%     0.05%  ae::editor::EditorSession::update()
+2.76%     0.53%  std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<unsigned long, void*>*>, bool> std::__ndk1::__hash_table<unsigned long, std::__ndk1::hash<unsigned long>, std::__ndk1::equal_to<unsigned long>, std::__ndk1::allocator<unsigned long>>::__emplace_unique_key_args<unsigned long, unsigned long>(unsigned long const&, unsigned long&&)
+2.63%     2.63%  sincosf
+2.37%     0.02%  ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+2.34%     1.61%  ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+2.31%     1.31%  ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+2.28%     0.00%  libaether_android.so[+f83e8e]
+2.13%     2.13%  @plt
+2.07%     0.01%  qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+1.97%     0.10%  !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+1.74%     0.06%  scudo::SizeClassAllocatorLocalCache<scudo::SizeClassAllocator64<scudo::PrimaryConfig<scudo::AndroidNormalConfig>>>::drain(scudo::SizeClassAllocatorLocalCache<scudo::SizeClassAllocator64<scudo::PrimaryConfig<scudo::AndroidNormalConfig>>>::PerClass*, unsigned long)
+1.70%     0.01%  scudo::SizeClassAllocatorLocalCache<scudo::SizeClassAllocator64<scudo::PrimaryConfig<scudo::AndroidNormalConfig>>>::refill(scudo::SizeClassAllocatorLocalCache<scudo::SizeClassAllocator64<scudo::PrimaryConfig<scudo::AndroidNormalConfig>>>::PerClass*, unsigned long, unsigned short)
+1.66%     0.04%  scudo::SizeClassAllocator64<scudo::PrimaryConfig<scudo::AndroidNormalConfig>>::popBlocks(scudo::SizeClassAllocatorLocalCache<scudo::SizeClassAllocator64<scudo::PrimaryConfig<scudo::AndroidNormalConfig>>>*, unsigned long, unsigned int*, unsigned short)

@@ -407,6 +407,14 @@ imagem equivalente; abaixo do limite de 5%, fica opcional até os dados de campo
 Evidência: `docs/validacao/g1-post-bloom-ao-2026-10-17/README.md`. O pós da Vila
 em S caiu de 15–18 ms para 8–9,5 ms; próximos alvos do G1: CPU (18–21 ms) e opaco (~15 ms).
 
+**CPU da Vila (18/10/2026):** perfil com simpleperf mostrou 98% da CPU numa thread,
+~31% em alocação e `SceneAnimator::advance` com 51% (milhares de vetores por quadro).
+O animador passou a usar valores em linha e rascunho reutilizado entre quadros, com a
+mesma lógica de mistura (84/84 testes). Medido por instruções de usuário por quadro,
+independente do clock: **−30,8% instruções, −27,3% ciclos**. Evidência:
+`docs/validacao/g1-cpu-vila-2026-10-18/README.md`. Próximos: anexação JNI por quadro,
+`deformedPose`/`extract`, `worldMatrix` sem cache.
+
 Aceite: Vila e Sponza no modo nível C forçado do POCO com GPU ≤ 11 ms e CPU ≤ 10 ms;
 em campo (telemetria), mediana ≥ 58 FPS e p99 < 25 ms por 10 min em 3 GPUs do nível C;
 no POCO, Vila em Play ≥ 60 FPS na escala da política. Cada item com A/B/B/A próprio.
