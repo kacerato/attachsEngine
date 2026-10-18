@@ -18,6 +18,7 @@
 #include "runtime/input_actions.h"
 #include "scene/components.h"
 
+#include <atomic>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -85,6 +86,24 @@ using ObjectCloneMap = std::unordered_map<ObjectId,ObjectId>;
 bool remapObjectReferences(SceneObject &object,const ObjectCloneMap &mapping);
 bool remapSubtreeReferences(std::span<SceneObject> objects,const ObjectCloneMap &mapping);
 
+// Identidade única por instância: nova ao construir, copiar, mover para outro
+// objeto ou recomeçar. Caches derivados (worldMatrix) usam (identidade, revisão);
+// só a revisão não basta, porque duas cópias ou um grafo reiniciado podem
+// repetir o mesmo número com conteúdo diferente.
+class SceneGraphIdentity final {
+public:
+  SceneGraphIdentity() noexcept : value_(next()) {}
+  SceneGraphIdentity(const SceneGraphIdentity &) noexcept : value_(next()) {}
+  SceneGraphIdentity &operator=(const SceneGraphIdentity &) noexcept { value_ = next(); return *this; }
+  u64 value() const noexcept { return value_; }
+private:
+  static u64 next() noexcept {
+    static std::atomic<u64> counter{1};
+    return counter.fetch_add(1, std::memory_order_relaxed);
+  }
+  u64 value_;
+};
+
 class SceneGraph {
 public:
   static constexpr u32 kMaximumObjects = 65536;
@@ -151,6 +170,7 @@ public:
   // Sobe a cada mutação aceita. É o que diz ao renderer e à UI que a extração do
   // frame anterior não vale mais, sem que ninguém precise comparar estado.
   u64 revision() const noexcept { return revision_; }
+  u64 identity() const noexcept { return identity_.value(); }
 
   // Estado de CENA, não de objeto: as camadas de gameplay do projeto viajam com
   // o documento, são copiadas para o mundo de execução junto com a hierarquia e
@@ -208,6 +228,7 @@ private:
   ObjectId nextId_ = 1;
   u32 aliveCount_ = 0;
   u64 revision_ = 0;
+  SceneGraphIdentity identity_{};
 };
 
 } // namespace ae::runtime

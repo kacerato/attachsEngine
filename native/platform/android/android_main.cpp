@@ -260,6 +260,7 @@ struct AndroidShell final {
   bool textureImportPicker=false;
   bool waveImportPicker=false;
   jmethodID audioDemandMethod=nullptr,audioFocusMethod=nullptr;
+  int lastAudioDemand=-1; // -1: ainda não enviada ao Java
   // R1 — abertura do projeto sem tela preta. As fontes registradas são lidas e
   // interpretadas num worker; o loop continua apresentando quadros do editor.
   // A publicação (uma só, para todas as fontes) e a recuperação da cena salva
@@ -1815,7 +1816,14 @@ void updateAndroidAudioFocus(AndroidShell &shell,bool demand) {
   if(!env){shell.editorSession.setAudioFocus(false);return;}
   if(!shell.audioDemandMethod||!shell.audioFocusMethod){auto cls=env->GetObjectClass(activity->clazz);if(cls){shell.audioDemandMethod=env->GetMethodID(cls,"setPlayAudioDemand","(Z)V");if(!env->ExceptionCheck())shell.audioFocusMethod=env->GetMethodID(cls,"getPlayAudioFocusState","()I");env->DeleteLocalRef(cls);}}
   int state=0;
-  if(!env->ExceptionCheck()&&shell.audioDemandMethod&&shell.audioFocusMethod){env->CallVoidMethod(activity->clazz,shell.audioDemandMethod,demand?JNI_TRUE:JNI_FALSE);if(!env->ExceptionCheck())state=env->CallIntMethod(activity->clazz,shell.audioFocusMethod);}
+  if(!env->ExceptionCheck()&&shell.audioDemandMethod&&shell.audioFocusMethod){
+    // A demanda só cruza o JNI quando muda; o estado do foco continua lido a
+    // cada quadro, porque o sistema pode retirá-lo a qualquer momento.
+    if(shell.lastAudioDemand!=(demand?1:0)){
+      env->CallVoidMethod(activity->clazz,shell.audioDemandMethod,demand?JNI_TRUE:JNI_FALSE);
+      if(!env->ExceptionCheck())shell.lastAudioDemand=demand?1:0;
+    }
+    if(!env->ExceptionCheck())state=env->CallIntMethod(activity->clazz,shell.audioFocusMethod);}
   if(env->ExceptionCheck()){env->ExceptionClear();state=0;}
   shell.editorSession.setAudioFocus(demand&&state==1);
   if(detach)activity->vm->DetachCurrentThread();
@@ -2167,7 +2175,34 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 
 } // namespace
 
+namespace {
+// G1 (CPU): a thread do jogo fica anexada à JVM durante todo o android_main.
+// Antes, cada consulta JNI por quadro (foco de áudio) anexava e desanexava a
+// thread: no POCO eram ~30 objetos Thread Java novos por segundo, com trabalho
+// de GC, e o perfil via a thread trocar de nome a cada quadro. Declarada antes
+// do shell, é a última coisa destruída; os GetEnv dos demais pontos encontram a
+// thread anexada e não anexam/desanexam mais.
+class GameThreadJvmAttachment final {
+public:
+  explicit GameThreadJvmAttachment(ANativeActivity *activity) : vm_(activity ? activity->vm : nullptr) {
+    JNIEnv *env = nullptr;
+    if (vm_ == nullptr || vm_->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_EDETACHED) return;
+    JavaVMAttachArgs arguments{JNI_VERSION_1_6, "AstraGame", nullptr};
+    attached_ = vm_->AttachCurrentThread(&env, &arguments) == JNI_OK;
+    if (!attached_)
+      __android_log_print(ANDROID_LOG_WARN, LogTag, "[Jvm] thread do jogo não anexada; JNI anexa por chamada.");
+  }
+  ~GameThreadJvmAttachment() { if (attached_) vm_->DetachCurrentThread(); }
+  GameThreadJvmAttachment(const GameThreadJvmAttachment &) = delete;
+  GameThreadJvmAttachment &operator=(const GameThreadJvmAttachment &) = delete;
+private:
+  JavaVM *vm_ = nullptr;
+  bool attached_ = false;
+};
+} // namespace
+
 void android_main(android_app *app) {
+  const GameThreadJvmAttachment jvmAttachment(app->activity);
   AndroidShell shell{};
   shell.app = app;
   shell.editorSession.setAudioFocus(false);

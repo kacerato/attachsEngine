@@ -132,6 +132,7 @@ void SceneGraph::reset() {
   nextId_ = 1;
   aliveCount_ = 0;
   revision_ = 0;
+  identity_ = SceneGraphIdentity{};
   rootId_ = nextId_++;
   records_.resize(rootId_ + 1);
   Record &root = records_[rootId_];

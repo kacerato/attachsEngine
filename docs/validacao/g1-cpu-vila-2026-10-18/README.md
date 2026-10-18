@@ -65,3 +65,37 @@ caminhada e em movimento entre dois quadros a 3 s de distância.
   também é mais fraca.
 - Próximos na CPU: anexar/desanexar JNI por quadro; `deformedPose`/`extract`;
   `worldMatrix` sem cache por quadro; `resolveSceneCamera` e `collectSubtree` por quadro.
+
+## 5. Segunda rodada: anexação JNI por quadro e `worldMatrix` com cache
+
+- **JNI:** `updateAndroidAudioFocus` rodava todo quadro e anexava/desanexava a thread
+  do jogo para duas chamadas Java (cada anexação cria um objeto `Thread` e lixo para o
+  GC; daí os 595 nomes). A thread do `android_main` agora fica anexada do início ao fim
+  (guarda RAII declarado antes do shell, nome "AstraGame"), e `setPlayAudioDemand` só
+  cruza o JNI quando a demanda muda. O estado do foco continua lido por quadro.
+- **`worldMatrix`:** subia até a raiz convertendo Euler -> matriz em cada ancestral, para
+  cada osso de cada personagem. Agora memoriza a matriz de mundo por objeto num cache
+  `thread_local` chaveado por (identidade do grafo, revisão). O `SceneGraph` ganhou uma
+  identidade única por instância, renovada em cópia, atribuição e `reset()`, para que
+  duas cópias com a mesma revisão nunca compartilhem entradas. Qualquer mutação aceita
+  sobe a revisão e invalida o cache.
+
+A/B/B/A por instruções (A = g1d, só o animador; B = 0.3.0-dev.100-g1e):
+
+| Rodada | FPS | Instruções/quadro | Ciclos/quadro |
+|---|---|---|---|
+| 1 A | 34,8 | 22,00 M | 11,65 M |
+| 2 B | 30,5 | 19,91 M | 7,56 M |
+| 3 B | 30,5 | 19,76 M | 10,51 M |
+| 4 A | 30,0 | 22,62 M | 11,92 M |
+
+**Instruções −11,1%** (ciclos variaram mais). Acumulado do dia na Vila:
+**32,9 M -> 19,8 M instruções por quadro (−40%)**.
+
+Perfil do B (`callgraph-C/`): uma thread só, "AstraGame" (97,3%); `deformedPose`
+12,2% -> 3,9%; `extract` 15% -> 6,8%; `worldMatrix` fora do topo; 4.860 amostras em 15 s
+contra 8.367 no início (mesmo FPS, limitado pela GPU). Restam no topo:
+`SceneAnimator::advance` 37%, `resolveSceneCamera` 7% e `collectSubtree` 6% por quadro.
+
+Testes de host após a mudança: `aether_animation_runtime_tests` 84/84 e `aether_tests`
+1574/1574. Imagem: `play-A01-B02-jni-world.png` (cena e moradores corretos em B).

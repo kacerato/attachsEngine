@@ -412,8 +412,11 @@ em S caiu de 15–18 ms para 8–9,5 ms; próximos alvos do G1: CPU (18–21 ms)
 O animador passou a usar valores em linha e rascunho reutilizado entre quadros, com a
 mesma lógica de mistura (84/84 testes). Medido por instruções de usuário por quadro,
 independente do clock: **−30,8% instruções, −27,3% ciclos**. Evidência:
-`docs/validacao/g1-cpu-vila-2026-10-18/README.md`. Próximos: anexação JNI por quadro,
-`deformedPose`/`extract`, `worldMatrix` sem cache.
+`docs/validacao/g1-cpu-vila-2026-10-18/README.md`. Segunda rodada: thread do jogo
+anexada à JVM uma vez (antes, anexava e desanexava a cada quadro) e `worldMatrix`
+memorizada por (identidade do grafo, revisão): **−11,1% instruções**; acumulado
+**−40%** (32,9 M -> 19,8 M por quadro). Próximos: `SceneAnimator::advance` (37%),
+`resolveSceneCamera` e `collectSubtree` por quadro; depois o opaco na GPU.
 
 Aceite: Vila e Sponza no modo nível C forçado do POCO com GPU ≤ 11 ms e CPU ≤ 10 ms;
 em campo (telemetria), mediana ≥ 58 FPS e p99 < 25 ms por 10 min em 3 GPUs do nível C;

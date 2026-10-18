@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace ae::runtime {
 
@@ -28,21 +29,57 @@ void transformRotationQuaternion(const Transform &t, float out[4]) {
   rotationQuaternionXYZ(t.rotationDegrees,out);
 }
 
-bool worldMatrix(const SceneGraph &graph, ObjectId id, float out[16]) {
-  const auto *object = graph.find(id);
-  if (!object) return false;
-  float accumulated[16];
-  transformMatrix(object->transform, accumulated);
-  for (u32 depth = 0; object->parent != kInvalidObject && depth < graph.entityCount(); ++depth) {
-    object = graph.find(object->parent);
-    if (!object) return false;
-    float parent[16];
-    transformMatrix(object->transform, parent);
-    multiplyMatrix(parent, accumulated, accumulated);
+namespace {
+// Matriz de mundo memorizada por objeto enquanto o grafo não muda. Antes cada
+// consulta subia até a raiz convertendo Euler -> matriz em cada ancestral; os
+// ossos de 11 personagens repetiam isso a cada quadro (G1, perfil da Vila).
+// Por thread: consultas concorrentes ao mesmo grafo const não se tocam. Uma
+// mutação aceita sobe a revisão e invalida tudo; nada fica velho.
+struct WorldMatrixCache {
+  u64 identity = 0, revision = 0, stamp = 1;
+  struct Entry { float matrix[16]; u64 stamp = 0; bool valid = false; };
+  std::vector<Entry> entries;
+};
+thread_local WorldMatrixCache worldCache;
+
+bool cachedWorldMatrix(const SceneGraph &graph, ObjectId id, float out[16], u32 depth) {
+  auto &cache = worldCache;
+  if (id < cache.entries.size() && cache.entries[id].stamp == cache.stamp) {
+    const auto &entry = cache.entries[id];
+    if (!entry.valid) return false;
+    std::copy(entry.matrix, entry.matrix + 16, out);
+    return true;
   }
-  for (u32 i = 0; i < 16; ++i) if (!std::isfinite(accumulated[i])) return false;
-  std::copy(accumulated, accumulated + 16, out);
+  const auto *object = graph.find(id);
+  if (!object || depth > graph.entityCount()) return false;
+  float world[16];
+  transformMatrix(object->transform, world);
+  bool valid = true;
+  if (object->parent != kInvalidObject) {
+    float parent[16];
+    valid = cachedWorldMatrix(graph, object->parent, parent, depth + 1);
+    if (valid) multiplyMatrix(parent, world, world);
+  }
+  for (u32 i = 0; valid && i < 16; ++i) valid = std::isfinite(world[i]);
+  if (id >= cache.entries.size()) cache.entries.resize(static_cast<usize>(id) + 1);
+  auto &entry = cache.entries[id];
+  entry.stamp = cache.stamp;
+  entry.valid = valid;
+  if (!valid) return false;
+  std::copy(world, world + 16, entry.matrix);
+  std::copy(world, world + 16, out);
   return true;
+}
+} // namespace
+
+bool worldMatrix(const SceneGraph &graph, ObjectId id, float out[16]) {
+  auto &cache = worldCache;
+  if (cache.identity != graph.identity() || cache.revision != graph.revision()) {
+    cache.identity = graph.identity();
+    cache.revision = graph.revision();
+    ++cache.stamp;
+  }
+  return cachedWorldMatrix(graph, id, out, 0);
 }
 
 bool parentWorldMatrix(const SceneGraph &graph, ObjectId id, float out[16]) {
