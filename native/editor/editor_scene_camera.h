@@ -32,10 +32,15 @@ inline bool editorOpticalFrame(const float *world,float *pose) {
 }
 // Projeção de câmera da cena: +Z para frente, hierarquia completa e nenhum
 // controlador implícito. Maior prioridade vence; menor ID desempata.
+// Objetos com componente de câmera, em pré-ordem, enquanto a estrutura do grafo
+// não muda (cache por thread em editor_session_render.cpp). O Play resolvia a
+// câmera várias vezes por quadro percorrendo o grafo inteiro (perfil da Vila, G1).
+const std::vector<EditorEntityId> &sceneCameraEntities(const runtime::SceneGraph &document);
+
 inline SceneCameraPose resolveSceneCamera(const runtime::SceneGraph &document,EditorEntityId requested=0,bool preview=false) {
   SceneCameraPose result;
-  std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
-  for(auto id:ids) {
+  // A escolha (maior prioridade; no empate, menor id) não depende da ordem.
+  for(auto id:sceneCameraEntities(document)) {
     const auto *entity=document.find(id);
     if(!entity || (requested && id!=requested)) continue;
     const auto *camera=cameraComponent(*entity);

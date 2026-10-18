@@ -1,0 +1,16 @@
+Performance counter statistics:
+
+#          count  event_name       # count / runtime
+  17,389,744,606  instructions:u   # 1.277 G/sec 
+   9,749,272,163  cpu-cycles:u     # 0.716223 GHz
+
+Total test time: 25.025872 seconds.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+simpleperf E workload.cpp:36] Running child command in app uid isn't allowed.
+

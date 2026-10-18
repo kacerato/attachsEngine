@@ -99,3 +99,34 @@ contra 8.367 no início (mesmo FPS, limitado pela GPU). Restam no topo:
 
 Testes de host após a mudança: `aether_animation_runtime_tests` 84/84 e `aether_tests`
 1574/1574. Imagem: `play-A01-B02-jni-world.png` (cena e moradores corretos em B).
+
+## 6. Terceira rodada: estrutura em cache, repouso decomposto, fim da busca quadrática
+
+- **Revisão estrutural no `SceneGraph`:** `structureRevision() = revisão − mudanças só de
+  transformação`. Toda mutação aceita que não seja `setTransform` (objetos, hierarquia,
+  atividade, componentes, dados da cena) a faz subir; poses não.
+- **`resolveSceneCamera`:** percorria o grafo inteiro em cada chamada (várias por quadro).
+  Agora a lista de objetos com câmera fica em cache por (identidade, revisão estrutural);
+  a escolha (maior prioridade, menor id no empate) não depende da ordem.
+- **`SceneAnimator`:** a lista de componentes `Animation` vivos também fica em cache por
+  (identidade, revisão estrutural); o TRS do repouso é decomposto uma vez; a captura das
+  poses de camada deixou de varrer todos os canais da camada para cada propriedade.
+
+Perfil do B (`callgraph-D/`): `resolveSceneCamera` saiu da lista (era 7,1%);
+`collectSubtree` 6,0% -> 4,1%.
+
+Instruções por quadro, 8 rodadas A B B A A B B A (A = g1e, B = 0.3.0-dev.100-g1f):
+29,93 / 19,45 / 18,13 / 19,99 / 19,93 / 18,52 / 18,26 / 19,66 M. A rodada 1 é aquecimento
+pós-instalação (scripts e caches) e fica fora: mediana A 19,93 M, B 18,39 M,
+**−7,7%** (todas as rodadas B abaixo de todas as A); ciclos −4,8%. Uma primeira tentativa
+(`instructions-structure/`) parou porque o app deixou de responder durante a abertura
+da Vila no build A; não se repetiu em 12 aberturas seguintes. Fica registrado como
+travamento intermitente a observar.
+
+**Acumulado do dia na Vila: 32,9 M -> ~18,4 M instruções por quadro (−44%).**
+
+Testes de host desta rodada: `aether_animation_runtime_tests` 84/84 e `aether_tests`
+1574/1574. O primeiro build de host falhou no link do MinGW (variável `inline
+thread_local` em cabeçalho duplica a rotina de TLS; o clang do Android aceitava); o
+cache das câmeras passou para `editor_session_render.cpp`, com só a declaração no
+cabeçalho.

@@ -132,6 +132,7 @@ void SceneGraph::reset() {
   nextId_ = 1;
   aliveCount_ = 0;
   revision_ = 0;
+  transformRevisions_ = 0;
   identity_ = SceneGraphIdentity{};
   rootId_ = nextId_++;
   records_.resize(rootId_ + 1);
@@ -326,6 +327,7 @@ bool SceneGraph::setTransform(ObjectId id, const Transform &transform) {
   if (!isTransformValid(transform)) return false;
   found->object.transform = transform;
   ++revision_;
+  ++transformRevisions_;
   return true;
 }
 

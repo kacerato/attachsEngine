@@ -415,8 +415,10 @@ independente do clock: **−30,8% instruções, −27,3% ciclos**. Evidência:
 `docs/validacao/g1-cpu-vila-2026-10-18/README.md`. Segunda rodada: thread do jogo
 anexada à JVM uma vez (antes, anexava e desanexava a cada quadro) e `worldMatrix`
 memorizada por (identidade do grafo, revisão): **−11,1% instruções**; acumulado
-**−40%** (32,9 M -> 19,8 M por quadro). Próximos: `SceneAnimator::advance` (37%),
-`resolveSceneCamera` e `collectSubtree` por quadro; depois o opaco na GPU.
+**−40%** (32,9 M -> 19,8 M por quadro). Terceira rodada: revisão estrutural no grafo
+(câmeras da cena e animadores vivos em cache), repouso decomposto uma vez e fim da busca
+quadrática nas poses de camada: **−7,7%** (8 rodadas); acumulado **−44%**. Próximo alvo
+de G1: o opaco na GPU (~15 ms), que limita o FPS da Vila.
 
 Aceite: Vila e Sponza no modo nível C forçado do POCO com GPU ≤ 11 ms e CPU ≤ 10 ms;
 em campo (telemetria), mediana ≥ 58 FPS e p99 < 25 ms por 10 min em 3 GPUs do nível C;

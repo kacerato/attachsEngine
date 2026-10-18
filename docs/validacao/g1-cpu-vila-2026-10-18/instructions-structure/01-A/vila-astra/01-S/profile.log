@@ -1,0 +1,82 @@
+--------- beginning of main
+10-18 15:46:29.724  1119 10432 I Aether.Android: [SceneSelection] assets=other controller=free/locked hud=0
+10-18 15:46:29.724  1119 10432 I Aether.Android: [FramePolicy] painel m├íximo=120.00 Hz.
+10-18 15:46:29.724  1119 10432 I Aether.Android: [PerformancePolicy] sustained requested=true supported=false.
+10-18 15:46:29.740  1119 10432 I Aether.Android: [PerformancePolicy] ADPF prefer_power_efficiency=false resultado=0.
+10-18 15:46:29.740  1119 10432 I Aether.Android: [PerformancePolicy] ADPF ativo thread=10432 target_ms=16.667 update_ms=16.667 game_mode=1 gpu_work=true.
+10-18 15:46:29.743  1119 10432 I Aether.Android: [ThermalPolicy] sample=1 status=0 headroom=0.647 forecast_s=10 pressure=none changed=false.
+10-18 15:46:29.743  1119 10432 I Aether.Android: [ProfileQuality] qualidade autoral fixa para A/B; monitor t├®rmico e prote├º├Áes do Android ativos.
+10-18 15:46:29.745  1119 10432 I Aether.Android: [FrameProfile] KEEP_SCREEN_ON na janela de medi├º├úo.
+10-18 15:46:29.745  1119 10432 I Aether.Android: Shell nativo iniciado.
+10-18 15:46:29.745  1119 10432 I Aether.Android: [FramePolicy] render=60 Hz (16.667 ms), fixed tick=60 Hz, CPU<=13.000 ms, GPU<=14.667 ms.
+10-18 15:46:29.747  1119 10432 I Aether.Android: [FramePacer] VSYNC do Android controla a admiss├úo de frames.
+10-18 15:46:29.747  1119 10432 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=996635097.910 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+10-18 15:46:29.747  1119 10432 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=996635097.929 elapsed_ms=0.021 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+10-18 15:46:29.750  1119 10432 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=996635100.769 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-18 15:46:29.750  1119 10432 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=996635100.783 elapsed_ms=0.014 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-18 15:46:29.755  1119 10432 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=996635106.108 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-18 15:46:29.755  1119 10432 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=996635106.143 elapsed_ms=0.036 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+10-18 15:46:29.761  1119 10432 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=996635111.635 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.761  1119 10432 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=996635111.647
+10-18 15:46:29.768  1119 10432 I Aether.Android: [FramePolicy] solicita├º├úo da surface=60 Hz resultado=0.
+10-18 15:46:29.783  1119 10432 I Aether.Android: Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+10-18 15:46:29.832  1119 10432 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+10-18 15:46:29.832  1119 10432 I Aether.Android: [TemporalUpscaler] arm-asr=available fsr2=available
+10-18 15:46:29.832  1119 10432 I Aether.Android: [RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+10-18 15:46:29.832  1119 10432 I Aether.Android: [RenderPolicy] preset=s perfil=3 sombras=on(4 cascatas @4096, 25/9 taps, cache=static margem=1.05 blend=0.10 fade=0.12) ambiente=hemisferio+especular+split-sum pos=passe+bloom malha_agua=ultra(236 seg) textura_mip_bias=0 aniso=8.0 escala=1.00 dinamica=off[0.85,1.00] clamps=1
+10-18 15:46:29.832  1119 10432 I Aether.Android: [RenderPolicy] shadows.cascadeResolution reduzido por capability.
+10-18 15:46:29.832  1119 10432 I Aether.Android: [RenderPolicy] lod=on erro_solido=1.00px erro_coverage=2.00px histerese=0.80 normal_ate=0.0 specular_ate=0.0 mr_ate=0.0 emissive_ate=0.0 variantes_material=on aa=fxaa bloom=1 sharpen=0.40 contraste=1.04 saturacao=1.03
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=996635182.974
+10-18 15:46:29.832  1119 10432 I Aether.Android: [EmptyWorkspace] initialization=loading
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=996635183.108 elapsed_ms=0.134
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=996635183.112 elapsed_ms=71.465
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=996635183.116 elapsed_ms=71.481 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=996635183.147 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=996635183.159 elapsed_ms=0.012 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=996635183.166 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=996635183.169 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=996635183.174 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=996635183.177 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=8 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=996635183.182 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.832  1119 10432 I Aether.Android: [Lifecycle] seq=8 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=996635183.185 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+10-18 15:46:29.834  1119 10438 I Aether.Android: [Textures] anisotropia de material=8.0
+10-18 15:46:29.847  1119 10438 I Aether.Android: [Authoring] primitive_library=1 packages=0 water=0 authored_objects=0
+10-18 15:46:29.850  1119 10438 I Aether.Android: [FrameGraph] depth 1280x2772: store=sim sampled=sim memoryless_pedido=nao lazily_allocated_concedido=nao.
+10-18 15:46:29.955  1119 10438 I Aether.Android: [Shadow] PCF de hardware ativo: filtro=linear compare=LESS_OR_EQUAL.
+10-18 15:46:32.677  1119 10438 I Aether.Android: [UI] pronta: fonte 2048x1024 icones 1024x3726 capacidade=16384.
+10-18 15:46:32.677  1119 10438 I Aether.Android: Descritores: caminho=bindless, capacidade bindless=16777216.
+10-18 15:46:32.677  1119 10438 I Aether.Android: RHI/VMA: buffer de inst├óncias=1152 bytes; uso=2953728, limite=2411094835 bytes.
+10-18 15:46:32.677  1119 10438 I Aether.Android: InstancedRenderer pronto: capacidade=6, modo=empty-scene.
+10-18 15:46:32.677  1119 10438 I Aether.Android: [DirtRoad] passes solid=6 coverage=0 transparent=0 coverage_prepass=on; frustum_culling=conservador indirect=multi-draw.
+10-18 15:46:32.677  1119 10438 I Aether.Android: RHI/VMA [buffer]: uso=2953728, pico=2953728 bytes.
+10-18 15:46:32.677  1119 10438 I Aether.Android: RHI/VMA [texture]: uso=23773568, pico=23773568 bytes.
+10-18 15:46:32.677  1119 10438 I Aether.Android: RHI/VMA [render-target]: uso=386646016, pico=386646016 bytes.
+10-18 15:46:32.677  1119 10438 I Aether.Android: RHI/VMA [staging]: uso=0, pico=15261696 bytes.
+10-18 15:46:32.689  1119 10432 I Aether.Android: [Material] culling por material (dupla face): sim.
+10-18 15:46:32.689  1119 10432 I Aether.Android: [Import] KTX2 com mips vira ASTC 4x4.
+10-18 15:46:32.710  1119 10432 I Aether.Android: [Open] preparando 21 fonte(s) em segundo plano.
+10-18 15:46:32.710  1119 10432 I Aether.Android: [Editor] independent resources=6 fingerprint=0 managed=off
+10-18 15:46:32.710  1119 10432 I Aether.Android: [Editor] sessao pronta: 1 entidades no documento.
+10-18 15:46:32.710  1119 10432 I Aether.Android: [ThermalPolicy] applied=none lod=1.00/2.00 shadow=on/4c@4096/25t post=pass+bloom scale=1.00 dynamic=[0.85,1.00]
+10-18 15:46:32.710  1119 10432 I Aether.Android: [EmptyWorkspace] initialization=ready
+10-18 15:46:33.012  1119 10705 I Aether.Android: [Open] fonte preparada: Cenario/Vila.glb bytes=7605536 cache=acerto leitura_fonte_hash_ms=88 leitura_derivado_ms=214 preparo_ms=301 gravacao_derivado_ms=0
+10-18 15:46:33.090  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Lanterna.glb bytes=1939880 cache=acerto leitura_fonte_hash_ms=21 leitura_derivado_ms=56 preparo_ms=78 gravacao_derivado_ms=0
+10-18 15:46:33.177  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Carrinho.glb bytes=1681192 cache=acerto leitura_fonte_hash_ms=19 leitura_derivado_ms=69 preparo_ms=88 gravacao_derivado_ms=0
+10-18 15:46:33.216  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Barril.glb bytes=812460 cache=acerto leitura_fonte_hash_ms=9 leitura_derivado_ms=30 preparo_ms=39 gravacao_derivado_ms=0
+10-18 15:46:33.257  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Cesto.glb bytes=1017400 cache=acerto leitura_fonte_hash_ms=11 leitura_derivado_ms=30 preparo_ms=41 gravacao_derivado_ms=0
+10-18 15:46:33.307  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Caixa.glb bytes=1306896 cache=acerto leitura_fonte_hash_ms=15 leitura_derivado_ms=34 preparo_ms=50 gravacao_derivado_ms=0
+10-18 15:46:33.348  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Caixote.glb bytes=913704 cache=acerto leitura_fonte_hash_ms=10 leitura_derivado_ms=31 preparo_ms=41 gravacao_derivado_ms=0
+10-18 15:46:33.383  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Vaso.glb bytes=553416 cache=acerto leitura_fonte_hash_ms=9 leitura_derivado_ms=25 preparo_ms=35 gravacao_derivado_ms=0
+10-18 15:46:33.427  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Gato.glb bytes=1431444 cache=acerto leitura_fonte_hash_ms=16 leitura_derivado_ms=28 preparo_ms=44 gravacao_derivado_ms=0
+10-18 15:46:33.465  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Rocha.glb bytes=860120 cache=acerto leitura_fonte_hash_ms=11 leitura_derivado_ms=26 preparo_ms=38 gravacao_derivado_ms=0
+10-18 15:46:33.519  1119 10705 I Aether.Android: [Open] fonte preparada: Props/Pedra.glb bytes=1180848 cache=acerto leitura_fonte_hash_ms=16 leitura_derivado_ms=39 preparo_ms=55 gravacao_derivado_ms=0
+10-18 15:46:33.578  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Ben.glb bytes=2051236 cache=acerto leitura_fonte_hash_ms=28 leitura_derivado_ms=31 preparo_ms=59 gravacao_derivado_ms=0
+10-18 15:46:33.626  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Chloe.glb bytes=1916468 cache=acerto leitura_fonte_hash_ms=25 leitura_derivado_ms=24 preparo_ms=48 gravacao_derivado_ms=0
+10-18 15:46:33.674  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Dave.glb bytes=1919684 cache=acerto leitura_fonte_hash_ms=24 leitura_derivado_ms=24 preparo_ms=48 gravacao_derivado_ms=0
+10-18 15:46:33.721  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Jennifer.glb bytes=1809208 cache=acerto leitura_fonte_hash_ms=24 leitura_derivado_ms=23 preparo_ms=46 gravacao_derivado_ms=0
+10-18 15:46:33.765  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/John.glb bytes=1661540 cache=acerto leitura_fonte_hash_ms=21 leitura_derivado_ms=23 preparo_ms=44 gravacao_derivado_ms=0
+10-18 15:46:33.816  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Mary.glb bytes=1843400 cache=acerto leitura_fonte_hash_ms=24 leitura_derivado_ms=27 preparo_ms=51 gravacao_derivado_ms=0
+10-18 15:46:33.864  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Sally.glb bytes=1849008 cache=acerto leitura_fonte_hash_ms=26 leitura_derivado_ms=22 preparo_ms=48 gravacao_derivado_ms=0
+10-18 15:46:33.913  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Tristian.glb bytes=2009108 cache=acerto leitura_fonte_hash_ms=27 leitura_derivado_ms=22 preparo_ms=49 gravacao_derivado_ms=0
+10-18 15:46:33.999  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/RobotKyle.glb bytes=1202236 cache=acerto leitura_fonte_hash_ms=16 leitura_derivado_ms=70 preparo_ms=86 gravacao_derivado_ms=0
+10-18 15:46:34.044  1119 10705 I Aether.Android: [Open] fonte preparada: Personagens/Viking.glb bytes=733312 cache=acerto leitura_fonte_hash_ms=14 leitura_derivado_ms=30 preparo_ms=45 gravacao_derivado_ms=0

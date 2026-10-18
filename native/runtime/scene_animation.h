@@ -178,6 +178,9 @@ private:
     Transform transform{};
     std::vector<float> weights;
     bool hasTransform = false, hasWeights = false;
+    // TRS do repouso, decomposto uma vez: o repouso não muda depois de capturado.
+    float t[3]{}, q[4]{}, s[3]{};
+    bool decomposed = false;
   };
   Player *player(ObjectId owner, u64 instance, AnimationCommandStatus &status);
   const Player *findPlayer(ObjectId owner, u64 instance) const;

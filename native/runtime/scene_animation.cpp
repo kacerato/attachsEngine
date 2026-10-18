@@ -167,7 +167,11 @@ struct AnimatorPose {
 
 struct SceneAnimator::AdvanceScratch {
   std::vector<ObjectId> ids;
+  // Componentes Animation vivos, válidos enquanto (identidade, estrutura) do grafo
+  // não mudam: quadros que só mexem em poses não percorrem o grafo de novo.
   std::vector<std::pair<ObjectId, u64>> live;
+  u64 liveIdentity = 0, liveStructure = 0;
+  bool liveValid = false;
   // Propriedades do quadro: os primeiros `propertyCount` valem; os demais
   // guardam a capacidade das listas para o próximo quadro.
   std::vector<AnimatorProperty> properties;
@@ -528,17 +532,21 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   auto &scratch = *scratch_;
 
   // Componentes vivos; um jogador cujo componente sumiu sai junto.
-  auto &ids = scratch.ids;
-  ids.clear();
-  graph.collectSubtree(graph.root(), ids);
   auto &live = scratch.live;
-  live.clear();
-  for (const auto id : ids) {
-    const auto *object = graph.find(id);
-    if (!object) continue;
-    for (usize i = 0; i < object->components.size(); ++i) {
-      const auto *value = object->components.at(i);
-      if (&value->type() == &scene::Animation::descriptor) live.emplace_back(id, value->instanceId());
+  if (!scratch.liveValid || scratch.liveIdentity != graph.identity() || scratch.liveStructure != graph.structureRevision()) {
+    scratch.liveValid = true;
+    scratch.liveIdentity = graph.identity();
+    scratch.liveStructure = graph.structureRevision();
+    auto &ids = scratch.ids;
+    graph.collectSubtree(graph.root(), ids);
+    live.clear();
+    for (const auto id : ids) {
+      const auto *object = graph.find(id);
+      if (!object) continue;
+      for (usize i = 0; i < object->components.size(); ++i) {
+        const auto *value = object->components.at(i);
+        if (&value->type() == &scene::Animation::descriptor) live.emplace_back(id, value->instanceId());
+      }
     }
   }
   std::erase_if(players_, [&](const Player &p) {
@@ -857,8 +865,16 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     const auto object = property.object;
     auto &rest = restOf(object);
     AnimationValue restValue;
+    if (!rest.decomposed && rest.hasTransform) {
+      decompose(rest.transform, rest.t, rest.q, rest.s);
+      rest.decomposed = true;
+    }
     float restT[3], restQ[4], restS[3];
-    decompose(rest.transform, restT, restQ, restS);
+    if (rest.decomposed) {
+      std::copy(rest.t, rest.t + 3, restT); std::copy(rest.q, rest.q + 4, restQ); std::copy(rest.s, rest.s + 3, restS);
+    } else {
+      decompose(rest.transform, restT, restQ, restS);
+    }
     switch (property.path) {
     case AnimationPath::Translation: restValue.assign(restT, restT + 3); break;
     case AnimationPath::Rotation: restValue.assign(restQ, restQ + 4); break;
@@ -871,11 +887,15 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     const usize width = restValue.size();
     // Cache this layer's own composition, including sparse-channel coverage,
     // before higher layers or the rest pose affect it. Frozen deltas stay deltas.
+    // (objeto, caminho) é único por propriedade: basta lembrar o que esta
+    // propriedade já emitiu, em vez de varrer todos os canais da camada.
+    SmallVector<std::pair<const LayerPose *, bool>, 4> emitted;
     for(const auto &seed:property.list) if(seed.sourceOwner!=kInvalidObject&&seed.coverage>0) {
       auto found=std::find_if(layerPoses_.begin(),layerPoses_.end(),[&](const CapturedLayer &e){return e.owner==seed.sourceOwner&&e.instance==seed.sourceInstance&&e.layer==seed.layer;});
       if(found==layerPoses_.end()) {layerPoses_.push_back({seed.sourceOwner,seed.sourceInstance,seed.layer,std::make_shared<LayerPose>()});found=std::prev(layerPoses_.end());}
       auto &channels=found->pose->channels;
-      if(std::any_of(channels.begin(),channels.end(),[&](const PoseChannel &c){return c.target==object&&c.path==property.path&&c.additive==seed.additive;})) continue;
+      const LayerPose *capturedPose=found->pose.get();
+      if(std::any_of(emitted.begin(),emitted.end(),[&](const auto &e){return e.first==capturedPose&&e.second==seed.additive;})) continue;
       std::vector<float> mixed(width,0);AnimationValue first;float sum=0;
       for(const auto &c:property.list) if(c.sourceOwner==seed.sourceOwner&&c.sourceInstance==seed.sourceInstance&&c.layer==seed.layer&&c.additive==seed.additive&&c.coverage>0) {
         AnimationValue v=c.value;
@@ -892,7 +912,7 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
         for(usize k=0;k<width;++k) mixed[k]+=v[k]*c.coverage;
         sum+=c.coverage;
       }
-      if(sum>0) {for(float &f:mixed) f/=sum;channels.push_back({object,property.path,std::move(mixed),sum,seed.additive});}
+      if(sum>0) {for(float &f:mixed) f/=sum;channels.push_back({object,property.path,std::move(mixed),sum,seed.additive});emitted.push_back({capturedPose,seed.additive});}
     }
     AnimationValue result(width, 0.0f);
     const bool rotation = property.path == AnimationPath::Rotation;

@@ -1,0 +1,82 @@
+[
+  {
+    "round": 1,
+    "variant": "A",
+    "internalFps": 19.995632142783872,
+    "processCpuMs": 19.3146,
+    "instructions": 14960592011.0,
+    "cycles": 10051598762.0,
+    "instructionsPerFrame": 29927720.022393104,
+    "cyclesPerFrame": 20107588.877858955
+  },
+  {
+    "round": 2,
+    "variant": "B",
+    "internalFps": 19.910891474592315,
+    "processCpuMs": 19.1138,
+    "instructions": 9679499853.0,
+    "cycles": 5421079174.0,
+    "instructionsPerFrame": 19445638.31378764,
+    "cyclesPerFrame": 10890680.974114444
+  },
+  {
+    "round": 3,
+    "variant": "B",
+    "internalFps": 20.035311792249917,
+    "processCpuMs": 17.2762,
+    "instructions": 9081152781.0,
+    "cycles": 5309772931.0,
+    "instructionsPerFrame": 18130294.90165016,
+    "cyclesPerFrame": 10600829.148172144
+  },
+  {
+    "round": 4,
+    "variant": "A",
+    "internalFps": 19.61057588125785,
+    "processCpuMs": 18.7657,
+    "instructions": 9798103061.0,
+    "cycles": 5622174969.0,
+    "instructionsPerFrame": 19985344.888039127,
+    "cyclesPerFrame": 11467638.692595877
+  },
+  {
+    "round": 5,
+    "variant": "A",
+    "internalFps": 19.674967360529337,
+    "processCpuMs": 19.4468,
+    "instructions": 9801365070.0,
+    "cycles": 5683047321.0,
+    "instructionsPerFrame": 19926569.41258845,
+    "cyclesPerFrame": 11553863.784091387
+  },
+  {
+    "round": 6,
+    "variant": "B",
+    "internalFps": 20.182992224677772,
+    "processCpuMs": 17.6772,
+    "instructions": 9343986490.0,
+    "cycles": 5599713339.0,
+    "instructionsPerFrame": 18518535.578832746,
+    "cyclesPerFrame": 11097885.341606034
+  },
+  {
+    "round": 7,
+    "variant": "B",
+    "internalFps": 20.115286125856898,
+    "processCpuMs": 17.3066,
+    "instructions": 9183799949.0,
+    "cycles": 5688013530.0,
+    "instructionsPerFrame": 18262330.23291639,
+    "cyclesPerFrame": 11310827.983079847
+  },
+  {
+    "round": 8,
+    "variant": "A",
+    "internalFps": 19.482250771366818,
+    "processCpuMs": 19.5397,
+    "instructions": 9573657102.0,
+    "cycles": 5679681081.0,
+    "instructionsPerFrame": 19656162.348696306,
+    "cyclesPerFrame": 11661242.117563667
+  }
+]

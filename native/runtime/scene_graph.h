@@ -171,6 +171,11 @@ public:
   // frame anterior não vale mais, sem que ninguém precise comparar estado.
   u64 revision() const noexcept { return revision_; }
   u64 identity() const noexcept { return identity_.value(); }
+  // Sobe a cada mutação aceita que não seja só setTransform: objetos, hierarquia,
+  // atividade, componentes e dados da cena. Caches de estrutura (câmeras da cena,
+  // componentes de animação vivos) usam (identidade, revisão estrutural) e
+  // sobrevivem aos quadros em que só poses mudam.
+  u64 structureRevision() const noexcept { return revision_ - transformRevisions_; }
 
   // Estado de CENA, não de objeto: as camadas de gameplay do projeto viajam com
   // o documento, são copiadas para o mundo de execução junto com a hierarquia e
@@ -228,6 +233,7 @@ private:
   ObjectId nextId_ = 1;
   u32 aliveCount_ = 0;
   u64 revision_ = 0;
+  u64 transformRevisions_ = 0;
   SceneGraphIdentity identity_{};
 };
 

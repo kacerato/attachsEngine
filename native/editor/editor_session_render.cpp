@@ -2,6 +2,27 @@
 
 namespace ae::editor {
 
+namespace {
+// Cache por thread de sceneCameraEntities (editor_scene_camera.h). Fica num .cpp:
+// variável thread_local inline em cabeçalho duplica a rotina de TLS no MinGW.
+struct SceneCameraCandidates {
+  u64 identity = 0, structure = 0;
+  bool valid = false;
+  std::vector<EditorEntityId> ids, scratch;
+};
+thread_local SceneCameraCandidates sceneCameraCandidates;
+} // namespace
+
+const std::vector<EditorEntityId> &sceneCameraEntities(const runtime::SceneGraph &document) {
+  auto &cache=sceneCameraCandidates;
+  if(!cache.valid||cache.identity!=document.identity()||cache.structure!=document.structureRevision()) {
+    cache.identity=document.identity();cache.structure=document.structureRevision();cache.valid=true;
+    cache.ids.clear();document.collectSubtree(document.root(),cache.scratch);
+    for(auto id:cache.scratch) if(const auto *entity=document.find(id); entity&&cameraComponent(*entity)) cache.ids.push_back(id);
+  }
+  return cache.ids;
+}
+
 runtime::GameView EditorSession::gameView() const {
   runtime::GameView view;
   const auto rect=layout_.viewport;
