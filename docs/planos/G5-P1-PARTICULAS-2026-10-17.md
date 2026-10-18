@@ -66,5 +66,54 @@ copiada: renderer e material de partícula vivem no mesmo componente.
 
 ## Testado
 
-Ver a seção de evidências no relatório da sessão; esta seção é atualizada com
-números reais do aparelho quando medidos.
+### Host (Windows, MinGW)
+
+- `aether_particle_tests`: 10/10 — registro e contrato de propriedades, ida e volta do
+  arquivo (curvas, gradientes HDR, rajadas, identidade), recusa de versão futura/id
+  desconhecido/valor fora do domínio, determinismo por semente (bytes iguais), taxa,
+  rajadas com ciclos/probabilidade/atraso/repetição, Play/Stop/Pause/Clear/Emit e fim,
+  6 formas dentro do volume, curvas/gradientes ao longo da vida, ordenação, teto por
+  nível repartido, texturas determinísticas e sem costura.
+- `aether_curve_gradient_family_tests`: 6/6, incluindo
+  `particle_editor_creates_edits_curve_saves_and_previews` (receita Efeitos › Partículas,
+  curva de Tamanho no tempo pelo editor de curvas em um passo de histórico, desfazer,
+  salvar/reabrir, prévia emitindo).
+- Fachada C# gerada compila (`dotnet build managed/Astra.Scripting`, 0 aviso).
+- Android arm64 (clang, `-Werror`): `aether_android` compila.
+
+### POCO F7 (Astra Dev versionCode 99, 17/10/2026, estado térmico 0)
+
+Fluxo feito pela tela, sem script: projeto novo `ParticulasG5` → Criar › Efeitos ›
+Partículas (já emite na prévia) → editado até virar **fogo** (vida 1,1 s, velocidade
+1,8, tamanho 0,9, gravidade −0,25, taxa 45/s, cone 12°/0,25 m, Cor no tempo com
+gradiente branco→laranja→vermelho editado no editor de gradiente, Aditivo, textura
+Chama, emissão 2,5, ruído Nuvens rolando −1,2/s com recorte 0,7 e distorção 0,15,
+brilho central 1,5, partícula suave 0,4 m) → segundo sistema editado até virar
+**faísca** (rajada de 40–60, vida 0,7 s, velocidade 6, gravidade 1,2, cone 40°,
+Billboard esticado 0,05 s, Aditivo, textura Faísca, tinta âmbar, emissão 4) → app
+reiniciado abrindo o projeto: os dois voltam com os valores → Play executa → 9
+desfazer restauram o estado após a bancada. Capturas em
+`docs/validacao/evidencias/g5-p1-particulas-20261017/`.
+
+Custo medido pela linha `[Particles]` do logcat (timestamps próprios do passe na GPU;
+CPU = simulação + montagem do quadro, thread do editor), ~10 amostras de 2 s cada,
+câmera parada, perfil do aparelho com teto 8.000. Não é o protocolo A/B/B/A da bancada:
+
+| Cena | Vivas | GPU do passe | CPU (sim + montagem) |
+|---|---|---|---|
+| Faíscas pequenas (esticadas, aditivo) | 1.000 | 0,24–0,36 ms (mediana ~0,26) | ~0,02–0,03 + 0,05–0,10 ms |
+| Faíscas pequenas | 8.000 | 0,83–0,96 ms (mediana ~0,87) | ~0,07–0,24 + 0,33–0,67 ms |
+| Fogo autorado (quads grandes, ruído, suave) | 50 | 0,18–0,24 ms | ~0,01 + 0,01 ms |
+| Fogo com 1.000 partículas grandes | 1.000 | 3,1–3,3 ms | ~0,02 + 0,06–0,18 ms |
+
+Leitura: o passe tem custo fixo de ~0,2 ms (carregar/guardar cor e profundidade num
+render pass próprio) e o resto é preenchimento. 1.000 partículas pequenas cabem no
+orçamento do nível C (≤ 1,5 ms); 1.000 partículas grandes não — é exatamente o
+caso do P5 (meia resolução no nível C, LOD/tamanho na tela). Nada disso foi medido
+num aparelho de nível C.
+
+### Não testado
+
+- Validação Vulkan (o APK é release, sem camada de validação).
+- TAA/ampliador temporal ligado junto com partículas (máscaras de reatividade não escritas).
+- Script C# chamando Play/Stop/Emit no aparelho (coberto só pela fachada gerada e pelas operações no host).

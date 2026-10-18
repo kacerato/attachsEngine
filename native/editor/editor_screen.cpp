@@ -4992,7 +4992,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         const auto &p=entry.type->numbers[field];
         builder.list.addRect(deflate(area,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
         if(top) builder.label(takeTop(area,15),top,theme.color.textDim,theme.type.caption,UiAlign::Center);
-        char value[32];std::snprintf(value,sizeof value,"%.4g%s%s",static_cast<double>(p.read(*component)),
+        char value[32];std::snprintf(value,sizeof value,"%.6g%s%s",static_cast<double>(p.read(*component)),
                                      p.presentation.unit.empty()||top?"":" ",top?"":std::string(p.presentation.unit).c_str());
         builder.label(area,builder.mixed(multiKey(component->instanceId(),p.id))?"\xE2\x80\x94":value,theme.color.text,theme.type.caption,UiAlign::Center);
         if(p.presentation.isEditable(*component)) builder.router.addRegion(area,widgetId(EditorWidget::ComponentNumberBase)+index+(field<<8));

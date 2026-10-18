@@ -135,7 +135,7 @@ struct AndroidShell final {
   std::vector<ae::renderer::SceneLight> authoredLights;
   // G5: quadro de partículas trocado com o renderer a cada quadro (sem cópia).
   ae::renderer::particles::ParticleFrame particleFrame;
-  double particleClock = 0;
+  double particleClock = 0, particleLogClock = 0;
   std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
   ae::renderer::SceneEnvironment authoredEnvironment{};
   // Quantas luzes ficaram de fora no último aviso publicado. Sem isto o mesmo
@@ -3880,6 +3880,15 @@ void android_main(android_app *app) {
         shell.editorSession.setParticleBudget(ae::renderer::particles::particleTierBudget(tier));
         shell.editorSession.updateParticles(particleDelta,sceneCamera.position,shell.particleFrame);
         shell.instancedRenderer.queueParticles(shell.particleFrame);
+        // Bancada: uma linha a cada 2 s com o custo medido do quadro anterior
+        // (simulação e montagem na CPU, passe próprio na GPU por timestamps).
+        const auto &stats=shell.instancedRenderer.particleStats();
+        if(stats.alive && particleNow-shell.particleLogClock>=2.0) {
+          shell.particleLogClock=particleNow;
+          __android_log_print(ANDROID_LOG_INFO,LogTag,"[Particles] sistemas=%u vivas=%u desenhadas=%u lotes=%u teto=%u sim_ms=%.3f build_ms=%.3f gpu_ms=%.3f suave=%s",
+              stats.systems,stats.alive,stats.drawn,stats.batches,stats.budget,static_cast<double>(stats.simulationMs),
+              static_cast<double>(stats.buildMs),static_cast<double>(stats.gpuMs),stats.softAvailable?"sim":"nao");
+        }
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
