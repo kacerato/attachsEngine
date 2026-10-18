@@ -389,6 +389,7 @@ add_library(aether_core STATIC
   core/job_system.cpp
   profiler/frame_pressure.cpp
   profiler/frame_statistics.cpp
+  profiler/telemetry_window.cpp
 )
 target_include_directories(aether_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 add_dependencies(aether_core aether_component_codegen_check)
@@ -1132,6 +1133,10 @@ if(NOT ANDROID)
     target_compile_options(aether_spline_frame_family_tests PRIVATE -Wa,-mbig-obj -g1)
   endif()
   add_executable(aether_family_base_tests ../tests/native/family_base_main.cpp ../tests/native/test_family_base.cpp ../tests/native/test_runtime_world.cpp)
+  # Telemetria dos testadores (GT): só o núcleo; compila e roda em segundos.
+  add_executable(aether_telemetry_tests ../tests/native/family_base_main.cpp ../tests/native/test_telemetry_window.cpp)
+  target_include_directories(aether_telemetry_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_telemetry_tests PRIVATE aether_core)
   # Curve/resource invariants do not need Vulkan, physics or a full editor link.
   # The same cases are also part of aether_tests for integration builds.
   add_executable(aether_animation_clip_resource_tests ../tests/native/family_base_main.cpp

@@ -20,6 +20,9 @@ param(
     # Diagnóstico do G1: bits do passe de pós desligados (1 neblina, 2 AO, 4 bloom,
     # 8 FXAA, 16 nitidez). Aplica-se a todas as rodadas desta chamada.
     [ValidateRange(0,31)][int]$PostIsolation=0,
+    # Diagnóstico do opaco (renderer::GpuCostIsolation): 0 completo, 1 sem normal map,
+    # 2 sem IBL especular, 3 só cor base, 4 sem luzes pontuais, 5 sem sombra do sol.
+    [ValidateRange(0,5)][int]$GpuIsolation=0,
     # Candidata do G1: névoa resolvida por texel antes do pós (aether.post_fog_resolve).
     [switch]$FogResolve,
     # Candidatas do G1/G2: bloom em cadeia de mips e AO em meia resolução.
@@ -89,6 +92,7 @@ try {
                 }
             }
             if($PostIsolation) { $launch+=@('--ei','aether.post_isolation',[string]$PostIsolation) }
+            if($GpuIsolation) { $launch+=@('--ei','aether.gpu_isolation',[string]$GpuIsolation) }
             $launch+=@('--ez','aether.post_fog_resolve',$(if($FogResolve){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_bloom_chain',$(if($BloomChain){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
@@ -139,6 +143,10 @@ try {
             $capture=Get-FrameProfileCapture -Windows $windows -Contexts $contexts -MinimumSeconds 15 -Scene $scene
             if(!$capture) { throw "Captura curta demais: $project/$tier." }
             $capture | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $run 'capture.json')
+            $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow')[$GpuIsolation]
+            if($capture.context.gpu_isolation -ne $expectedIsolation) {
+                throw "Isolamento de GPU executado ($($capture.context.gpu_isolation)) difere do pedido ($expectedIsolation)."
+            }
             & $Adb shell screencap -p /sdcard/astra-g0.png
             & $Adb pull /sdcard/astra-g0.png (Join-Path $run 'screen.png') | Out-Null
             & $Adb shell dumpsys battery | Set-Content (Join-Path $run 'battery-after.txt')
@@ -150,7 +158,7 @@ try {
             if($bloomChained -ne [bool]$BloomChain -or $halfAoRan -ne [bool]$HalfAo) {
                 throw "Caminho do pós (bloom=$bloomChained, AO=$halfAoRan) difere do pedido ($project/$tier)."
             }
-            $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;fogResolve=$fogResolved
+            $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;gpuIsolation=$GpuIsolation;fogResolve=$fogResolved
                 displayedFps=if($summary){$summary.displayedFps}else{$null}
                 continuous=$state.continuous;internalFps=$capture.presentFps
                 width=$capture.context.width;height=$capture.context.height

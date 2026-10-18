@@ -334,6 +334,16 @@ por dia.
 - Verificação antes de liberar: avisos de segurança do Supabase (advisors) sem
   pendência; teste de que a chave pública não lê nem grava nada diretamente.
 
+**Execução (18/10/2026), parte local:** janela agregada no app
+(`native/profiler/telemetry_window.{h,cpp}`, JSON `astra.telemetry.window/1`, GPU não
+medida sai como null; `aether_telemetry_tests` 3/3, alvo pequeno que compila em ~13 s);
+migração SQL (esquema `telemetry`, RLS sem políticas, agregado por GPU, gravação só por
+funções `SECURITY DEFINER` executáveis pelo `service_role`, retenção de 180 dias via
+pg_cron) e Edge Function `ingest` com validação do lote, em `services/telemetry/`.
+Nada publicado: criar o projeto e publicar a função aguardam autorização. Pendentes no
+app: consentimento, fila local e envio, envelope do aparelho, ligação ao laço de
+quadros, "Apagar meus dados" e remoção no jogo exportado.
+
 Referências: [Supabase Edge Functions](https://supabase.com/docs/guides/functions),
 [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security),
 [pg_cron](https://supabase.com/docs/guides/database/extensions/pg_cron).
