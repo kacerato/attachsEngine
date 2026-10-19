@@ -46,6 +46,46 @@ Continuação dos 71 itens, sem fechamento do primeiro bloco.
 
 ## Escopo ainda aberto
 
+### Validação Android posterior à autorização
+
+APK 108 instalado por atualização no POCO F7. Projeto isolado `TerrainQA108`:
+criação plana com base sólida, raio 8 e altura por amostra 0,25 conferidos;
+dois gestos produziram 33 operações. Capturas `device108-created.png`,
+`device108-held.png` e `device108-hill-held.png` mostram a base e a prévia
+texturizada antes de soltar. Desfazer voltou a 9 operações; Refazer restaurou
+o segundo gesto. Salvar, reiniciar o processo, selecionar a raiz e tocar
+Editar terreno reabriu a receita com 33 operações e o relevo preservado.
+`device108-reedit.png` mostra a elevação com topo arredondado.
+
+O teste encontrou um defeito: reiniciar o editor restabelecia raio 4/força 1
+ao abrir terreno existente. A inicialização do estado do editor foi alinhada
+a raio 8/força 0,25, sem alterar o formato ou os carimbos salvos. O teste host
+de escultura agora cobre também o estado de uma aplicação recém-iniciada.
+Validação dessa correção registrada abaixo após o novo APK.
+
+### Correção e aceite específico do APK 109
+
+- Código `e8cc94fa`; 59/59 testes host passaram, incluindo sessão nova.
+- APK 109 / `0.3.1-dev.terrain.20261019.4`, compilado e auditado, instalado
+  por atualização. SHA256 `8b99546abccbc12ebd25ae5944af79d1cf54bd833e60499fc9abb1c7debefeae`.
+- Após nova inicialização e Editar terreno, `device109-reopen-defaults.png`
+  confirmou raio 8 e altura por amostra 0,25. Receita carregada com 1034
+  operações: o proprietário confirmou ter editado o projeto durante o build;
+  esse total e o buraco visível não pertencem aos gestos automatizados acima.
+- Nenhum gesto novo foi aplicado sobre essas edições na conferência 109.
+  O teste específico valida inicialização/reedição, não repete todo o roteiro 108.
+- `device109-reopen-logcat.log`: sem FATAL EXCEPTION/Fatal signal.
+- Nota nova `2026-10-19-terreno-pincel-reinicio`, AstraDocs `b409b13`:
+  build e 594.217 links sem erros; Vercel `dpl_C4kLR8rZJPZTHfbTS5f1PdY39Zhw`
+  READY, nota e versão 109 confirmadas em `astraengine.com.br/atualizacoes/`.
+- Capturas/logs permanecem locais em `build/terrain-evidence`; APK em
+  `build/artifacts/Astra-Terreno-109-arm64.apk`. Limite ELF16K anterior permanece.
+
+No log do processo 108 não houve FATAL EXCEPTION/Fatal signal. Há mensagens
+de erro do framework/vendor; não se afirma log inteiramente limpo. A textura
+continua repetitiva e o raio/força exigem rolagem na seção Ferramentas;
+esta revisão não representa aceite global dos materiais ou de toda a UI.
+
 Não é qualidade AAA, erosão, composição de biomas ou biblioteca PBR concluída.
 Raios pequenos e malhas pouco densas ainda podem gerar facetas. D09 permanece
 prioritário para a saturação do projeto antigo; D07, materiais e demais itens
