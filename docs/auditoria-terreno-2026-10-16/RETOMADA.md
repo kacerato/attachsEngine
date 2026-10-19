@@ -3,9 +3,11 @@
 Continuação de 19/10: [aplicação da prévia e integração Android](APLICACAO-2026-10-19.md).
 ADB reautorizado pelo proprietário para validar depois da implementação.
 As restrições de ADB nos checkpoints abaixo são históricas.
-Revisão atual: 58/58 cenários host; Astra Terreno 106 compilado, auditado e
-instalado por atualização. Testes de toque/renderização pendentes porque o
-aparelho permanece bloqueado. Primeiro bloco e plano completo ainda abertos.
+Revisão atual: 58/58 cenários host; Astra Terreno 107 compilado, auditado e
+instalado por atualização. ADB desbloqueado: prévia branca corrigida e validada
+no projeto antigo; escultura/aplicação/histórico testados no novo. Permanecem
+saturação da biblioteca antiga e teto CPU ao aplicar (D09). Veja o registro
+acima para evidências e limites; primeiro bloco e plano completo ainda abertos.
 
 Atualização de 19/10: [integração do outro PC e validação no Windows](PROGRESSO-2026-10-19.md).
 Engine publicada em `62547f30`: 56/56 testes integrados, 4/4 do planejador de

@@ -21,6 +21,7 @@ struct ReeditFixture {
   std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
+  std::vector<renderer::SharedAuthoringTexture> textures;
   std::vector<renderer::MeshLodLevel> publishedLods;
   std::filesystem::path path;
   bool ready = false;
@@ -35,10 +36,11 @@ struct ReeditFixture {
         [this](std::span<const u8> v, std::span<const u32> i,
                std::span<const renderer::MapDrawRecord> d,
                std::span<const renderer::MapMaterialRecord> m,
-               std::span<const renderer::SharedAuthoringTexture>,
+               std::span<const renderer::SharedAuthoringTexture> t,
                editor::EditorSession::PublishedGeometry &out) {
           const auto lods=session.skinningPublication().meshLods;
           publishedLods.assign(lods.begin(),lods.end());
+          textures.assign(t.begin(),t.end());
           vertices.clear(); indices.clear(); draws.clear(); materials.clear();
           renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials);
           const auto vb = u32(vertices.size() / renderer::MapVertexStride);
@@ -496,6 +498,8 @@ AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
   };
   const auto filesBefore=files();
   const auto publishedDraws=f.draws.size();
+  const auto publishedTextures=f.textures;
+  const auto publishedMaterials=f.materials;
   f.session.handlePointer({25,ui::UiPointerPhase::Down,from,5});
   f.session.handlePointer({25,ui::UiPointerPhase::Move,to,5.1});
   for(u32 i=0;i<5000 && !f.session.screen().terrainLivePreview;++i) {
@@ -514,10 +518,15 @@ AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
   AE_EXPECT_TRUE(f.session.screen().terrainCursorVisible && f.session.screen().terrainCursorLines.size()>=96,
                  "surface cursor includes outer boundary and falloff ring");
   AE_EXPECT_TRUE(f.draws.size()>publishedDraws,"live preview publishes additional real mesh draws");
+  AE_EXPECT_TRUE(f.textures==publishedTextures,"preview shares exact resident images without allocating additional texture slots");
   const auto &previewBuild=*f.session.screen().terrainPreviewBuild;
   usize previewVertices=0,previewCorners=0;
   for(usize part=0;part<previewBuild.mesh.parts.size();++part) {
     const auto &mesh=f.draws[publishedDraws+part];
+    const auto &material=f.materials[mesh.materialIndex];
+    const auto &original=publishedMaterials[1+previewBuild.mesh.parts[part].layer];
+    for(u32 slot=0;slot<4;++slot)
+      AE_EXPECT_EQ(material.textureIndices[slot],original.textureIndices[slot],"preview preserves original layer bindings");
     const auto &sourceVertices=previewBuild.mesh.parts[part].vertices;
     AE_EXPECT_EQ(mesh.indexCount,sourceVertices.size(),"preview preserves every triangle corner");
     u32 maximum=0;

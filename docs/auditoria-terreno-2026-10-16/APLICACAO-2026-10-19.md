@@ -44,11 +44,28 @@ nova implementação do exportador. A compilação Java passou após a correçã
   alinhamento ZIP, ELF idêntico à saída nativa, assemblies e 397 ícones conferidos.
   SHA-256: `b01ab536badb57c8feb85d62eb2c14d120212b674e61f20bfe46a786ae525f71`.
   Arquivo local: `build/artifacts/Astra-Terreno-106-arm64.apk`.
-- Instalado por atualização via ADB no POCO F7: `Success`, identidade 106
-  confirmada pelo Android. Shell iniciado, processo presente; buffer de crash
-  consultado vazio. **Não é aceite do renderer nem do terreno**: keyguard indica
-  `showing=true`/`mInputRestricted=true`. Foi solicitado desbloqueio ao usuário.
-  Toque, aparência, reedição e desempenho no aparelho continuam pendentes.
+- APK 106 instalado inicialmente; após desbloqueio, testados criação, elevação
+  com prévia, aplicação, Undo/Redo, salvar e reabrir no projeto TerrainQA106.
+- O projeto antigo TerrenoQA_1510 (795 operações) revelou prévia branca:
+  log confirmou 260 texturas para 255 slots disponíveis. O fix compartilha os
+  bindings originais da fonte na biblioteca e conserva o perfil de importação.
+  Não acrescenta texturas, não reduz resolução nem altera o histórico.
+- 58/58 cenários passaram após o fix, agora verificando também igualdade das
+  imagens compartilhadas e de todos os bindings de camada na prévia.
+- APK **107**, `0.3.1-dev.terrain.20261019.2`, 116.331.384 bytes, compilado,
+  auditado e instalado com Success; versão confirmada pelo Android.
+  SHA-256: `4cb5239334613059e224bdb1b0e1a87cc28c62a7d6d4c7acf370fb0e99989aa1`.
+  Arquivo: `build/artifacts/Astra-Terreno-107-arm64.apk`.
+- No 107, prévia com grama/rocha confirmada no mesmo projeto antigo, antes da
+  soltura. Log: 256 texturas reaproveitadas, zero enviadas; ainda existe um
+  descritor excedido na própria biblioteca antiga. Aplicar continua recusado
+  pelo orçamento agregado de 128 MiB CPU. Não houve exclusão de revisões.
+- No projeto novo, 107 confirmou elevação texturizada durante gesto, aplicação
+  (14 para 28 operações), Undo (14), Redo e salvamento. Capturas reais no
+  diretório local de evidências; gizmo de mover ausente na autoria do terreno.
+  Os controles principais são legíveis e acessíveis em paisagem; a mensagem
+  longa de orçamento fica cortada no rodapé. Não declarar aceite integral da UI,
+  de voxel, transições LOD, todos os pincéis ou desempenho nesta rodada.
 - Compilação com um worker Gradle e pool nativo de um compilador. O APK não
   passou no critério agregado ELF de 16 KB; não declarar essa compatibilidade.
 - Logs locais: `build/terrain-evidence/apply-cache-20261019.log`,
@@ -59,3 +76,19 @@ nova implementação do exportador. A compilação Java passou após a correçã
 O primeiro bloco de 28 itens continua incompleto. Materiais/PBR extensíveis,
 mapas independentes, altura-volume, GC/checkpoints, vizinhança e demais lacunas
 do aceite permanecem obrigatórios.
+
+## Evidências posteriores ao desbloqueio
+
+- `preview-textures-20261019.log`: 58/58.
+- `android107-build.log`: build incremental com um compilador, sucesso.
+- `device107-identity.log`, `device107-apk-audit.json`: identidade e pacote.
+- `device106-bindless-before.log`: falha de descritores reproduzida.
+- `device107-old-held.png`, `device107-old-logcat.log`: prévia corrigida.
+- `device107-old-release.png`: orçamento continua protegendo o projeto antigo.
+- `device107-fresh-held.png`, `device107-fresh-applied.png`, `device107-undo.png`:
+  escultura e histórico no projeto novo.
+
+Próximo ponto obrigatório: D09, residência/histórico por referências, sem apagar
+recursos usados em cenas ou Undo; D07 continua parcial. A biblioteca antiga ainda
+satura o limite do renderer. Não resolver aumentando limites ou cortando assets
+sem estudar o gerenciamento. O plano e as propriedades comprometidas permanecem.

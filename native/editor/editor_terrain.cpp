@@ -219,10 +219,23 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainMesh &mesh,std
     preview.names.push_back("Prévia de terreno");preview.draws.push_back(draw);
   }
   auto sources=importedSources_;
-  usize previous=0;for(const auto &s:sources)previous+=s.draws.size();
+  usize previous=0,materialBase=0,textureBase=0,sourceTextureBase=0;
+  for(const auto &s:sources) {
+    if(s.guid==terrainSource_)sourceTextureBase=textureBase;
+    previous+=s.draws.size();materialBase+=s.materials.size();textureBase+=s.textures.size();
+  }
   sources.push_back(std::move(preview));
+  auto library=flattenSources(sources);
+  // The preview uses the committed source's exact textures and import profile.
+  // Do not consume extra residency or bindless slots for identical images on
+  // every brush update; large histories can already occupy the descriptor pool.
+  for(usize i=materialBase;i<library.materials.size();++i)
+    for(auto &texture:library.materials[i].textureIndices)
+      if(texture!=renderer::InvalidMapTexture)
+        texture=u32(sourceTextureBase)+(texture-u32(textureBase));
+  library.textures.resize(textureBase);library.textureSources.resize(textureBase);
   usize primitives=0;
-  if(!publishAndAdopt(flattenSources(sources),error,&primitives,true))return false;
+  if(!publishAndAdopt(library,error,&primitives,true))return false;
   terrainPreviewFirst_=u32(primitives+previous);terrainPreviewCount_=u32(mesh.parts.size());
   terrainPreviewEpoch_=sceneEpoch_;state_.terrainLivePreview=true;++state_.terrainPreviewUpdates;
   appearanceChanged_=true;
