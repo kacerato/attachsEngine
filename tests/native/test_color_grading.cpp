@@ -229,10 +229,11 @@ AE_TEST(environment_profile_v8_reads_with_neutral_grading) {
   auto profile = resources::environmentLookProfile(resources::EnvironmentLook::Neutral);
   profile.values.contrast = 1.2f;
   auto text = profile.serialize();
-  // Um arquivo v8 é o v9 sem os 31 números da gradação no fim.
-  text.replace(text.find(" 9 "), 3, " 8 ");
+  // Um arquivo v8 é o atual sem os 31 números da gradação e os 5 dos corpos
+  // celestes (v10), que são os últimos.
+  text.replace(text.find(" 10 "), 4, " 8 ");
   auto cut = text.size() - 1;
-  for (u32 removed = 0; removed < 31; ++removed) cut = text.rfind(' ', cut - 1);
+  for (u32 removed = 0; removed < 36; ++removed) cut = text.rfind(' ', cut - 1);
   text = text.substr(0, cut) + "\n";
   resources::EnvironmentProfile parsed;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, parsed), "v8 lido");
@@ -273,10 +274,11 @@ AE_TEST(environment_component_v12_archive_reads_neutral_and_v13_round_trips) {
   AE_EXPECT_TRUE(reread.read(in, scene::Environment::descriptor.version), "v13 relido");
   AE_EXPECT_TRUE(reread.values.grading == authored.values.grading && reread.values.contrast == authored.values.contrast,
                  "gradação atravessa a cena");
-  // v12: a mesma linha sem os 31 números da gradação, que são os últimos.
+  // v12: a mesma linha sem os 31 números da gradação e os 5 dos corpos
+  // celestes (v14), que são os últimos.
   auto text = written.str();
   auto cut = text.size();
-  for (u32 removed = 0; removed < 31; ++removed) cut = text.rfind(' ', cut - 1);
+  for (u32 removed = 0; removed < 36; ++removed) cut = text.rfind(' ', cut - 1);
   scene::Environment old;
   std::istringstream oldIn(text.substr(0, cut));oldIn.imbue(std::locale::classic());
   AE_EXPECT_TRUE(old.read(oldIn, 12), "v12 lido");

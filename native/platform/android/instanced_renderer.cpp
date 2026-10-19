@@ -164,8 +164,14 @@ struct DirtRoadFrameUniform {
   float temporalJitter[4]{};          // atual xy, anterior zw, NDC físico
   float temporalSurface[4]{1,0,0,1};  // pré-transformação xx xy yx yy
   float temporalParameters[4]{};      // meia altura ortográfica, histórico válido
+  // G4, corpos celestes (só o céu lê; ver dirt_road_sky.frag): auréola do sol,
+  // fase da lua, raio angular da lua em rad, brilho da lua; brilho das estrelas.
+  float celestialParameters[4]{};
+  float celestialStars[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 3488);
+static_assert(sizeof(DirtRoadFrameUniform) == 3520);
+static_assert(offsetof(DirtRoadFrameUniform, celestialParameters) == 3488);
+static_assert(offsetof(DirtRoadFrameUniform, celestialStars) == 3504);
 static_assert(offsetof(DirtRoadFrameUniform, temporalCurrentView) == 3328);
 static_assert(offsetof(DirtRoadFrameUniform, temporalPreviousView) == 3376);
 static_assert(offsetof(DirtRoadFrameUniform, temporalProjection) == 3424);
@@ -1616,6 +1622,11 @@ bool applySceneEnvironmentLook(
   frame.sceneSky[1]=look.sunDiskDegrees*0.5f*0.0174532925199433f;
   frame.sceneSky[2]=look.sunDiskIntensity;
   frame.sceneSky[3]=look.active?static_cast<float>(look.sky):0.0f;
+  frame.celestialParameters[0]=look.sunGlare;
+  frame.celestialParameters[1]=look.moonPhase;
+  frame.celestialParameters[2]=look.moonSizeDegrees*0.5f*0.0174532925199433f;
+  frame.celestialParameters[3]=look.moonIntensity;
+  frame.celestialStars[0]=look.starIntensity;
   frame.atmosphereScattering[0]=look.physicalSkyIntensity;
   frame.atmosphereScattering[1]=look.airDensity;
   frame.atmosphereScattering[2]=look.aerosolDensity;

@@ -43,7 +43,7 @@ public:
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 13) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 14) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -97,7 +97,17 @@ public:
     if(version<12) values.fogLightEnergy=1.0f;
     // v13 (G2): gradação de cor. Cena antiga fica neutra: sem LUT, mesma imagem.
     if(version<13) values.grading={};
+    // v14 (G4): sol, lua e estrelas. Cena antiga recebe os padrões novos: o céu
+    // dela ganha auréola, lua e estrelas -- é a correção pedida, não um estilo.
+    if(version<14) {
+      const renderer::SceneEnvironment defaults{};
+      values.sunGlare=defaults.sunGlare;values.moonPhase=defaults.moonPhase;
+      values.moonSizeDegrees=defaults.moonSizeDegrees;values.moonIntensity=defaults.moonIntensity;
+      values.starIntensity=defaults.starIntensity;
+    }
     for (const auto &property : descriptor.numbers) {
+      if(version<14 && (property.id.starts_with("sun_glare") || property.id.starts_with("moon_") ||
+                        property.id.starts_with("star_"))) continue;
       if(version<13 && property.id.starts_with("grading_")) continue;
       if(version<12 && property.id=="fog_light_energy") continue;
       if(version<11 && property.id.starts_with("auto_exposure_")) continue;
@@ -187,6 +197,7 @@ inline bool environmentUsesAmbientOcclusion(const ComponentValue &value) {
 #include "scene/generated/environment_environmentHdriNumbers.inc"
 #include "scene/generated/environment_environmentAutoExposureNumbers.inc"
 #include "scene/generated/environment_environmentGradingNumbers.inc"
+#include "scene/generated/environment_environmentCelestialNumbers.inc"
 
 // ComponentType recebe um span contínuo. Juntar as duas partes em um único
 // array constexpr evita uma tabela paralela apenas para a paginação do editor.
@@ -194,7 +205,7 @@ inline constexpr auto environmentAllNumbers = [] {
   std::array<ComponentNumber, environmentNumbers.size() + environmentTailNumbers.size()+
       environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+
       environmentPhysicalAtmosphereNumbers.size()+environmentAutoExposureNumbers.size()+environmentHdriNumbers.size()+
-      environmentGradingNumbers.size()> out{};
+      environmentGradingNumbers.size()+environmentCelestialNumbers.size()> out{};
   for (usize i = 0; i < environmentNumbers.size(); ++i) out[i] = environmentNumbers[i];
   for (usize i = 0; i < environmentTailNumbers.size(); ++i)
     out[environmentNumbers.size() + i] = environmentTailNumbers[i];
@@ -210,13 +221,15 @@ inline constexpr auto environmentAllNumbers = [] {
         environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+i]=environmentPhysicalAtmosphereNumbers[i];
   // Exposição, HDRI e gradação ficam no fim, nessa ordem: o arquivo grava os
   // números na ordem da tabela, e cada versão só acrescentou no fim.
-  const usize tail=environmentHdriNumbers.size()+environmentGradingNumbers.size();
+  const usize tail=environmentHdriNumbers.size()+environmentGradingNumbers.size()+environmentCelestialNumbers.size();
   for(usize i=0;i<environmentAutoExposureNumbers.size();++i)
     out[out.size()-tail-environmentAutoExposureNumbers.size()+i]=environmentAutoExposureNumbers[i];
   for(usize i=0;i<environmentHdriNumbers.size();++i)
     out[out.size()-tail+i]=environmentHdriNumbers[i];
   for(usize i=0;i<environmentGradingNumbers.size();++i)
-    out[out.size()-environmentGradingNumbers.size()+i]=environmentGradingNumbers[i];
+    out[out.size()-environmentCelestialNumbers.size()-environmentGradingNumbers.size()+i]=environmentGradingNumbers[i];
+  for(usize i=0;i<environmentCelestialNumbers.size();++i)
+    out[out.size()-environmentCelestialNumbers.size()+i]=environmentCelestialNumbers[i];
   return out;
 }();
 
@@ -268,7 +281,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 13,
+  "astra.render.environment", 14,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

@@ -157,6 +157,14 @@ struct SceneEnvironment final {
   float indirectDiffuse = 1.0f;
   float indirectSpecular = 1.0f;
   ColorGrading grading{};
+  // G4: corpos celestes do céu procedural e físico. Zero desliga cada um.
+  // A direção da lua sai da do sol e da fase (oposta na cheia), então quem move
+  // o sol -- luz direcional hoje, TimeOfDay depois -- move a lua junto.
+  float sunGlare = 0.6f;          // auréola em volta do disco solar
+  float moonPhase = 0.5f;         // 0 nova, 0.5 cheia, 1 nova de novo
+  float moonSizeDegrees = 1.2f;   // diâmetro aparente (o real é ~0,52°)
+  float moonIntensity = 1.0f;
+  float starIntensity = 1.0f;
 
   bool valid() const noexcept {
     if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid()) return false;
@@ -172,7 +180,8 @@ struct SceneEnvironment final {
                           ambientOcclusionPower, ambientOcclusionBias, indirectDiffuse, indirectSpecular,
                           physicalSkyIntensity, airDensity, aerosolDensity, aerosolAnisotropy,
                           planetRadiusKm, observerHeightKm, rayleighScaleHeightKm,
-                          aerosolScaleHeightKm, atmosphereHeightKm, groundAlbedo};
+                          aerosolScaleHeightKm, atmosphereHeightKm, groundAlbedo,
+                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity};
     for (float value : scalars) if (!std::isfinite(value)) return false;
     for (const float *color : {skyZenith, skyHorizon, ground, fogColor})
       for (u32 channel = 0; channel < 3; ++channel)
@@ -205,6 +214,10 @@ struct SceneEnvironment final {
            ambientOcclusionBias >= 0.0f && ambientOcclusionBias <= 1.0f &&
            indirectDiffuse >= 0.0f && indirectDiffuse <= 4.0f &&
            indirectSpecular >= 0.0f && indirectSpecular <= 4.0f &&
+           sunGlare >= 0.0f && sunGlare <= 4.0f && moonPhase >= 0.0f && moonPhase <= 1.0f &&
+           moonSizeDegrees >= 0.1f && moonSizeDegrees <= 10.0f &&
+           moonIntensity >= 0.0f && moonIntensity <= 8.0f &&
+           starIntensity >= 0.0f && starIntensity <= 8.0f &&
            physicalSkyIntensity >= 0.0f && physicalSkyIntensity <= 16.0f &&
            airDensity >= 0.0f && airDensity <= 8.0f &&
            aerosolDensity >= 0.0f && aerosolDensity <= 8.0f &&

@@ -2301,6 +2301,119 @@
           }
         }
       }
+    },
+    {
+      "name": "environmentCelestialNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "sun_glare",
+          "label": "Auréola do sol",
+          "member": "values.sunGlare",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "4"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "moon_phase",
+          "label": "Fase da lua",
+          "member": "values.moonPhase",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "moon_size",
+          "label": "Diâmetro da lua",
+          "member": "values.moonSizeDegrees",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": "°"
+          }
+        },
+        {
+          "id": "moon_intensity",
+          "label": "Brilho da lua",
+          "member": "values.moonIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "star_intensity",
+          "label": "Brilho das estrelas",
+          "member": "values.starIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Sol e lua",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesProceduralSky"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.environment.celestial",
+          "consumer": "rhi/shaders/dirt_road_sky.frag",
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      }
     }
   ],
   "field_groups": [

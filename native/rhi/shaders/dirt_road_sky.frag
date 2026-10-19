@@ -23,6 +23,10 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   // Irradiância hemisférica incidente no solo, integrada na CPU e atualizada
   // apenas quando atmosfera ou sol mudam. w fica reservado para evolução ABI.
   layout(offset=3312) vec4 atmosphereGroundIrradiance;
+  // G4: auréola do sol, fase da lua, raio angular da lua (rad), brilho da lua;
+  // brilho das estrelas. Fim do bloco; os outros shaders não os declaram.
+  layout(offset=3488) vec4 celestialParameters;
+  layout(offset=3504) vec4 celestialStars;
 } environment;
 layout(set=0,binding=1) uniform sampler2D environmentMap;
 layout(location=0) in vec3 vDirection;
@@ -38,6 +42,7 @@ vec3 linearToSrgb(vec3 color) {
              greaterThan(color,vec3(.0031308)));
 }
 #include "tone_mapping.glsl"
+#include "sky_celestial.glsl"
 
 vec2 raySphere(vec3 origin,vec3 direction,float radius) {
   // Solve in radius-normalized coordinates. At Earth scale the unnormalized
@@ -117,7 +122,7 @@ vec3 integrateSingleScattering(vec3 origin,vec3 direction,float distance,
   return scattered;
 }
 
-vec3 physicalAtmosphere(vec3 viewDirection) {
+vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
   float intensity=environment.atmosphereScattering.x;
   float airDensity=max(environment.atmosphereScattering.y,0.0);
   float aerosolDensity=max(environment.atmosphereScattering.z,0.0);
@@ -185,8 +190,8 @@ vec3 physicalAtmosphere(vec3 viewDirection) {
     float cosine=clamp(dot(viewDirection,sunDirection),-1.0,1.0);
     float angularDistance=acos(cosine);
     float radius=max(environment.sceneSky.y,0.0001);
-    float edge=max(fwidth(angularDistance)*1.5,radius*0.10);
-    float disc=1.0-smoothstep(radius-edge,radius+edge,angularDistance);
+    vec3 disc=celestialSunDisc(angularDistance,radius,pixelAngle)+
+              vec3(celestialSunGlare(angularDistance,cosine,radius));
     vec2 sunDepth=opticalDepthToAtmosphere(origin,sunDirection,planetRadius,
                                            atmosphereRadius,scaleHeights,lightSteps);
     vec3 sunTransmittance=exp(-(betaRayleigh*sunDepth.x+
@@ -213,9 +218,12 @@ void main() {
     // continuam usando o panorama integral.
     visibleDirection.y=-visibleDirection.y;
   }
+  // Tamanho angular do pixel, fora de qualquer desvio: derivadas dentro de
+  // ramos divergentes são indefinidas. Serve ao sol, à lua e às estrelas.
+  float pixelAngle=length(fwidth(visibleDirection));
   vec3 color=textureLod(environmentMap,environmentUv(visibleDirection),0.0).rgb;
   if(environment.sceneSky.w>1.5) {
-    color=physicalAtmosphere(visibleDirection);
+    color=physicalAtmosphere(visibleDirection,pixelAngle);
   } else if(environment.sceneSky.w>0.5) {
     float altitude=visibleDirection.y;
     float height=clamp(altitude,0.0,1.0);
@@ -250,16 +258,24 @@ void main() {
                       horizonBand*0.14*environment.sceneSky.x);
     float angularDistance=acos(alignment);
     float radius=max(environment.sceneSky.y,0.0001);
-    float edge=max(fwidth(angularDistance)*1.5,radius*0.10);
-    float disc=1.0-smoothstep(radius-edge,radius+edge,angularDistance);
-    float corona=pow(max(alignment,0.0),256.0)*(0.3+0.7*horizonBand);
-    atmosphereSky+=sunTint*(disc*environment.sceneSky.z+
-                            corona*environment.sceneSky.z*0.18);
+    vec3 disc=celestialSunDisc(angularDistance,radius,pixelAngle);
+    float glare=celestialSunGlare(angularDistance,alignment,radius)*(0.6+0.4*horizonBand);
+    atmosphereSky+=sunTint*(disc+vec3(glare))*environment.sceneSky.z;
     color=mix(color,atmosphereSky,clamp(environment.sceneSky.x,0.0,1.0));
   }
   // HDRI e o céu legado usam a proporção relativa skyScale. O modo físico já
   // integra a intensidade atual do sol e não pode recebê-la uma segunda vez.
   if(environment.sceneSky.w<1.5) color*=environment.sceneAoDetail.z;
+  // Lua e estrelas sobre os céus procedural e físico (o HDRI já traz o seu).
+  if(environment.sceneSky.w>0.5) {
+    vec3 sunDirection=normalize(environment.sunDirectionIntensity.xyz);
+    float moonCoverage;
+    vec3 moon=celestialMoon(visibleDirection,sunDirection,pixelAngle,moonCoverage);
+    float aboveHorizon=smoothstep(-0.012,0.012,visibleDirection.y);
+    color+=moon*aboveHorizon;
+    color+=celestialStars(visibleDirection,sunDirection,color,pixelAngle,frame.cameraFrame.w)*
+           (1.0-moonCoverage*aboveHorizon);
+  }
   if(environment.scenePost.z<0.5)
     color=astraToneMap(color*environment.parameters.x*exp2(environment.scenePost.x),environment.scenePost.y);
   if((frame.materialFlags.z&1u)!=0u) color=linearToSrgb(color);

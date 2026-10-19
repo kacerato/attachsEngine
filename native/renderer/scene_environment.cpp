@@ -77,6 +77,11 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.atmosphere=mix(result.atmosphere,target.atmosphere,amount);
     result.sunDiskDegrees=mix(result.sunDiskDegrees,target.sunDiskDegrees,amount);
     result.sunDiskIntensity=mix(result.sunDiskIntensity,target.sunDiskIntensity,amount);
+    result.sunGlare=mix(result.sunGlare,target.sunGlare,amount);
+    result.moonPhase=mix(result.moonPhase,target.moonPhase,amount);
+    result.moonSizeDegrees=mix(result.moonSizeDegrees,target.moonSizeDegrees,amount);
+    result.moonIntensity=mix(result.moonIntensity,target.moonIntensity,amount);
+    result.starIntensity=mix(result.starIntensity,target.starIntensity,amount);
     result.physicalSkyIntensity=mix(result.physicalSkyIntensity,target.physicalSkyIntensity,amount);
     result.airDensity=mix(result.airDensity,target.airDensity,amount);
     result.aerosolDensity=mix(result.aerosolDensity,target.aerosolDensity,amount);

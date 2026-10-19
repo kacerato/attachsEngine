@@ -73,6 +73,8 @@ std::string EnvironmentProfile::serialize() const {
      <<' '<<values.autoExposureSpeedDown<<' '<<values.autoExposureCenterWeighted
      <<' '<<values.fogLightEnergy;
   writeGrading(out,values.grading);
+  out<<' '<<values.sunGlare<<' '<<values.moonPhase<<' '<<values.moonSizeDegrees
+     <<' '<<values.moonIntensity<<' '<<values.starIntensity;
   out<<'\n';
   return out.str();
 }
@@ -123,6 +125,10 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
       candidate.values.autoExposureCenterWeighted)) return false;
   if(version>=8 && !(in>>candidate.values.fogLightEnergy)) return false;
   if(version>=9 && !readGrading(in,candidate.values.grading)) return false;
+  // v10 (G4): corpos celestes. Perfil antigo fica com os padrões novos.
+  if(version>=10 && !(in>>candidate.values.sunGlare>>candidate.values.moonPhase>>
+                      candidate.values.moonSizeDegrees>>candidate.values.moonIntensity>>
+                      candidate.values.starIntensity)) return false;
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }
@@ -184,6 +190,9 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
       normalized.ambientOcclusionIntensity==expected.ambientOcclusionIntensity&&
       normalized.ambientOcclusionPower==expected.ambientOcclusionPower&&
       normalized.ambientOcclusionBias==expected.ambientOcclusionBias&&
-      normalized.grading==expected.grading;
+      normalized.grading==expected.grading&&
+      normalized.sunGlare==expected.sunGlare&&normalized.moonPhase==expected.moonPhase&&
+      normalized.moonSizeDegrees==expected.moonSizeDegrees&&
+      normalized.moonIntensity==expected.moonIntensity&&normalized.starIntensity==expected.starIntensity;
 }
 } // namespace ae::resources

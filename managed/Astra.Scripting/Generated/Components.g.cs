@@ -4475,6 +4475,41 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("grading_highlights_end");
         set => Component.SetFloat("grading_highlights_end", value);
     }
+    /// <summary>Auréola do sol</summary>
+    /// <remarks>Faixa válida: 0 a 4.</remarks>
+    public float SunGlare
+    {
+        get => Component.GetFloat("sun_glare");
+        set => Component.SetFloat("sun_glare", value);
+    }
+    /// <summary>Fase da lua</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float MoonPhase
+    {
+        get => Component.GetFloat("moon_phase");
+        set => Component.SetFloat("moon_phase", value);
+    }
+    /// <summary>Diâmetro da lua (°)</summary>
+    /// <remarks>Faixa válida: 0.1 a 10.</remarks>
+    public float MoonSize
+    {
+        get => Component.GetFloat("moon_size");
+        set => Component.SetFloat("moon_size", value);
+    }
+    /// <summary>Brilho da lua</summary>
+    /// <remarks>Faixa válida: 0 a 8.</remarks>
+    public float MoonIntensity
+    {
+        get => Component.GetFloat("moon_intensity");
+        set => Component.SetFloat("moon_intensity", value);
+    }
+    /// <summary>Brilho das estrelas</summary>
+    /// <remarks>Faixa válida: 0 a 8.</remarks>
+    public float StarIntensity
+    {
+        get => Component.GetFloat("star_intensity");
+        set => Component.SetFloat("star_intensity", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {

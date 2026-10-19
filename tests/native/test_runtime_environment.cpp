@@ -292,6 +292,11 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
                  "peso abaixo do limiar conserva o mapa anterior e sua orientação");
 }
 
+// Campos de cena v13 (gradação) e v14 (sol, lua e estrelas): um arquivo antigo não os tem.
+static bool newerThanV12(std::string_view id) {
+  return id.starts_with("grading_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity";
+}
+
 AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
   scene::Environment source;source.values.exposureEv=2.25f;source.values.groundAlbedo=.3f;
   std::ostringstream legacy;
@@ -304,7 +309,7 @@ AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
   for(const auto &property:scene::Environment::descriptor.numbers) {
     if(property.id.starts_with("hdri_")||property.id.starts_with("auto_exposure_")||
        property.id=="fog_base_height"||property.id=="fog_height_falloff"||
-       property.id=="fog_light_energy") continue;
+       property.id=="fog_light_energy"||newerThanV12(property.id)) continue;
     legacy<<' '<<property.read(source);
   }
   scene::Environment restored;restored.values.hdriRotationDegrees=88;
@@ -327,7 +332,7 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
      <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
      <<" -";
   for(const auto &property:scene::Environment::descriptor.numbers)
-    if(!property.id.starts_with("auto_exposure_")&&property.id!="fog_light_energy")
+    if(!property.id.starts_with("auto_exposure_")&&property.id!="fog_light_energy"&&!newerThanV12(property.id))
       old<<' '<<property.read(source);
   scene::Environment restored;restored.values.autoExposure=true;
   restored.values.autoExposureMinEv=-12;restored.values.autoExposureCenterWeighted=true;
@@ -348,7 +353,9 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   std::vector<std::string> fields;
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
-  fields[1]="6";fields.resize(fields.size()-10);
+  // v7..v10 acrescentaram no fim: 9 de exposição + energia da neblina (v7, v8),
+  // 31 de gradação (v9) e 5 dos corpos celestes (v10).
+  fields[1]="6";fields.resize(fields.size()-46);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';
   resources::EnvironmentProfile migrated;

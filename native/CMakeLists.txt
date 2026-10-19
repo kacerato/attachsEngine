@@ -1166,7 +1166,8 @@ if(NOT ANDROID)
   # Reuse the environment integration scenarios without rebuilding/running the
   # entire native test catalogue for a sky authoring change.
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
-    ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp)
+    ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
+    ../tests/native/test_sky_celestial.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)

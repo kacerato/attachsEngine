@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 42> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 43> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -134,6 +134,9 @@ inline constexpr std::array<EngineCapability, 42> engineCapabilities{{
    "Até 4 influências por vértice e 256 juntas por skin; morph targets não são importados"},
 
   // --- Céu e atmosfera ----------------------------------------------------
+  {"render.environment.celestial", "Sol, lua e estrelas no céu", CapabilityState::Implemented,
+   "rhi/shaders/dirt_road_sky.frag",
+   "Disco solar com limbo e auréola, lua com fase iluminada pelo sol e estrelas noturnas; lua e estrelas ainda sem órbita astronômica nem cintilação por turbulência real"},
   {"render.environment.atmosphere", "Céu atmosférico", CapabilityState::Implemented,
    "runtime/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag", ""},
   {"render.environment.physical_atmosphere", "Céu físico Rayleigh/Mie", CapabilityState::Implemented,
