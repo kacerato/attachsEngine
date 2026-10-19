@@ -162,6 +162,35 @@ struct ReeditFixture {
 };
 } // namespace
 
+AE_TEST(terrain_new_canvas_flat_and_soft_sculpt_preserves_saved_relief) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  const auto blank=f.session.screen().terrainDraft;
+  auto brush=f.session.screen().terrainBrush;
+  resources::TerrainField field;
+  std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrainField(blank,field,error),error.c_str());
+  for(float height:field.heights)AE_EXPECT_EQ(height,blank.base,"new terrain is exactly flat");
+  AE_EXPECT_TRUE(brush.radius/(blank.size/blank.cells)>=8,"soft footprint spans sufficient grid samples");
+  auto sculpted=blank;
+  brush.x=brush.z=0;
+  sculpted.strokes.push_back(brush);
+  AE_EXPECT_TRUE(resources::generateTerrainField(sculpted,field,error),error.c_str());
+  const float center=resources::terrainFieldHeight(field,0,0)-blank.base;
+  const float shoulder=resources::terrainFieldHeight(field,brush.radius*.5f,0)-blank.base;
+  AE_EXPECT_TRUE(center>0 && center<=.3f,"default dab makes a gentle measurable elevation");
+  AE_EXPECT_TRUE(shoulder>center*.35f && shoulder<center*.65f,"rounded shoulder instead of an isolated spike");
+  AE_EXPECT_EQ(resources::terrainFieldHeight(field,brush.radius+2,0),blank.base,"outside remains untouched");
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainPresetBase)+2));
+  const auto mountains=f.session.screen().terrainDraft;
+  AE_EXPECT_TRUE(mountains.height>0,"procedural mountain preset remains available");
+  AE_EXPECT_TRUE(f.session.applyTerrain(mountains,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  f.action(editor::EditorWidget::TerrainClose);
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"saved relief can reopen");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),resources::serializeTerrainRecipe(mountains),"new defaults never flatten saved terrain");
+}
+
 AE_TEST(terrain_reedit_inspector_touch_for_root_and_chunks_all_modes) {
   for (u32 mode = 0; mode < 3; ++mode) {
     ReeditFixture f;

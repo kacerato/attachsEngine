@@ -1,5 +1,9 @@
 # Retomada — 16/10/2026
 
+Última continuação: [base plana e escultura suave, APK 108](ESCULTURA-2026-10-19.md).
+59/59 testes; APK compilado. Validação Android 108 aguarda aparelho livre.
+O relato do 107 abaixo permanece como evidência da revisão anterior.
+
 Continuação de 19/10: [aplicação da prévia e integração Android](APLICACAO-2026-10-19.md).
 ADB reautorizado pelo proprietário para validar depois da implementação.
 As restrições de ADB nos checkpoints abaixo são históricas.

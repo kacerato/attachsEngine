@@ -369,7 +369,15 @@ bool EditorSession::openTerrain(EditorEntityId target) {
                             " operações";
   } else {
     state_.terrainDraft = {};
+    // A blank canvas with enough samples across the initial soft brush.
+    // Saved recipes retain their own amplitude and resolution on reopening.
+    state_.terrainDraft.height = 0;
+    state_.terrainDraft.cells = 64;
     state_.terrainDraft.solidBase = true;
+    state_.terrainBrush = {};
+    state_.terrainBrush.radius = 8;
+    state_.terrainBrush.strength = .25f;
+    state_.terrainSpacing = .2f;
     state_.terrainTarget = 0;
     terrainSource_ = {};
     state_.terrainMessage = "Novo terreno · configure e gere";
@@ -1146,6 +1154,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     } else if(routing.tapped || (routing.dragging && event.phase==ui::UiPointerPhase::Move)) {
       auto area=terrainContentRect(state_,terrainPanelRect(state_));
       float t=std::clamp((event.position.x-area.x-8)/std::max(1.f,area.width-96),0.f,1.f);
+      if(field==10)t*=t; // More touch travel for gentle strengths; full range retained.
       const float low=field==9?.1f:field==10?.05f:0;
       const float high=field==9?std::max(8.f,state_.terrainDraft.size*.25f):field==10?8.f:1.f;
       if(field==9 || field==10 || field==15 || field==19)setTerrainNumber(field,std::lerp(low,high,t));
