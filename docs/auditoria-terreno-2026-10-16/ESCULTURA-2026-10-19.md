@@ -36,7 +36,15 @@ Continuação dos 71 itens, sem fechamento do primeiro bloco.
 - Aparelho saiu da Astra durante preparação; solicitada disponibilidade para
   testes sem interferir no uso do proprietário. Instalação/teste 108 pendentes.
 
-## Pendências preservadas
+## Publicação desta revisão
+
+- Engine: `c0129bcc`, publicada em `codex/terrain-voxel-generator`, sem merge na main.
+- AstraDocs: `8145b8e`, build e 594.215 links verificados sem erros.
+- Vercel: `dpl_6SZsND31K4ik6qh9GMnmmjK8BCuU`, estado READY, domínio
+  `astraengine.com.br`. Nota `2026-10-19-terreno-plano-pincel-suave` publicada
+  como desenvolvimento, com validação Android pendente.
+
+## Escopo ainda aberto
 
 Não é qualidade AAA, erosão, composição de biomas ou biblioteca PBR concluída.
 Raios pequenos e malhas pouco densas ainda podem gerar facetas. D09 permanece
