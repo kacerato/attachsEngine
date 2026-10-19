@@ -163,6 +163,9 @@ struct ReeditFixture {
 } // namespace
 
 AE_TEST(terrain_new_canvas_flat_and_soft_sculpt_preserves_saved_relief) {
+  const editor::EditorScreenState freshEditor;
+  AE_EXPECT_EQ(freshEditor.terrainBrush.radius,8.f,"fresh app uses gentle brush even when reopening an existing terrain");
+  AE_EXPECT_EQ(freshEditor.terrainBrush.strength,.25f,"fresh app never restores aggressive legacy strength");
   ReeditFixture f;
   AE_EXPECT_TRUE(f.ready,"fixture initialized");
   const auto blank=f.session.screen().terrainDraft;

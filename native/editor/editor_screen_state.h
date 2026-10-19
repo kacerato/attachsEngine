@@ -1154,7 +1154,12 @@ struct EditorScreenState final {
   std::shared_ptr<const resources::TerrainBuild> terrainPreviewBuild;
   EditorEntityId terrainTarget=0;
   resources::TerrainRecipe terrainDraft;
-  resources::TerrainStroke terrainBrush;
+  resources::TerrainStroke terrainBrush=[] {
+    resources::TerrainStroke brush;
+    brush.radius=8;
+    brush.strength=.25f;
+    return brush;
+  }();
   std::string terrainMessage="Configure e gere o terreno";
   float terrainProgress=0;
   float terrainScroll=0;
